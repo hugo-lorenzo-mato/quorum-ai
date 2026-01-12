@@ -244,10 +244,11 @@ func TestWorkflow_Duration(t *testing.T) {
 		t.Fatal("expected 0 duration before start")
 	}
 
-	// Duration after start should be positive
+	// Duration after start should be non-negative
+	// (may be 0 on some platforms with low time resolution)
 	_ = wf.Start()
-	if wf.Duration() <= 0 {
-		t.Fatal("expected positive duration after start")
+	if wf.Duration() < 0 {
+		t.Fatal("expected non-negative duration after start")
 	}
 }
 

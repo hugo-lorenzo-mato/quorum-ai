@@ -6,12 +6,16 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/logging"
 	"golang.org/x/sync/errgroup"
 )
+
+// idCounter provides additional uniqueness for workflow IDs
+var idCounter uint64
 
 // WorkflowRunner orchestrates the complete workflow execution.
 type WorkflowRunner struct {
@@ -936,7 +940,8 @@ func (w *WorkflowRunner) rebuildDAG(state *core.WorkflowState) error {
 }
 
 func generateWorkflowID() string {
-	return fmt.Sprintf("wf-%d", time.Now().UnixNano())
+	counter := atomic.AddUint64(&idCounter, 1)
+	return fmt.Sprintf("wf-%d-%d", time.Now().UnixNano(), counter)
 }
 
 // GetState returns the current workflow state (for testing).
