@@ -92,3 +92,6 @@ go.work.sum
 
 # Initial markdown formated issues
 tasks*/*
+
+# File storing user-specific quorum configuration
+.quorum.yaml
