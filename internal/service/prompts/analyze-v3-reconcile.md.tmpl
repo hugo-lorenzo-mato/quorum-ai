@@ -1,0 +1,39 @@
+# Reconciliation Analysis
+
+## Original Request
+{{.Prompt}}
+
+## Analysis V1
+{{.V1Analysis}}
+
+## Analysis V2
+{{.V2Analysis}}
+
+## Identified Divergences
+{{range .Divergences}}
+### {{.Category}} (Score: {{printf "%.2f" .JaccardScore}})
+- **{{.Agent1}}**: {{range .Agent1Items}}{{.}}, {{end}}
+- **{{.Agent2}}**: {{range .Agent2Items}}{{.}}, {{end}}
+{{end}}
+
+## Instructions
+Reconcile the analyses above. For each divergence:
+1. Evaluate the merits of each position
+2. Determine the correct interpretation
+3. Provide a synthesized conclusion
+
+## Response Format
+```json
+{
+  "claims": ["..."],
+  "risks": ["..."],
+  "recommendations": ["..."],
+  "reconciliations": [
+    {
+      "topic": "...",
+      "resolution": "...",
+      "reasoning": "..."
+    }
+  ]
+}
+```

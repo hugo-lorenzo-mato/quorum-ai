@@ -1,0 +1,30 @@
+# Critical Review
+
+## Original Request
+{{.Prompt}}
+
+## Previous Analysis (by {{.AgentName}})
+{{.V1Analysis}}
+
+## Instructions
+Review the analysis above and provide your own independent analysis.
+Focus on:
+- Areas where you agree with the previous analysis
+- Areas where you disagree or have concerns
+- Additional insights not covered
+
+{{if .Constraints}}
+## Constraints
+{{range .Constraints}}- {{.}}
+{{end}}{{end}}
+
+## Response Format
+```json
+{
+  "claims": ["..."],
+  "risks": ["..."],
+  "recommendations": ["..."],
+  "agreements": ["..."],
+  "disagreements": ["..."]
+}
+```

@@ -1,0 +1,38 @@
+# Task Plan Generation
+
+## Original Request
+{{.Prompt}}
+
+## Consolidated Analysis
+{{.ConsolidatedAnalysis}}
+
+{{if .Constraints}}
+## Constraints
+{{range .Constraints}}- {{.}}
+{{end}}{{end}}
+
+## Instructions
+Based on the analysis above, generate an execution plan with discrete tasks.
+
+Requirements:
+- Maximum {{.MaxTasks}} tasks
+- Each task should be independently executable
+- Tasks should have clear dependencies
+- Estimate complexity (low/medium/high)
+
+## Response Format
+```json
+{
+  "tasks": [
+    {
+      "id": "task-1",
+      "name": "Task name",
+      "description": "What this task accomplishes",
+      "dependencies": [],
+      "complexity": "low|medium|high",
+      "agent": "preferred agent name"
+    }
+  ],
+  "execution_order": ["task-1", "task-2"]
+}
+```

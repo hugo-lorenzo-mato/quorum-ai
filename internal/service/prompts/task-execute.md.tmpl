@@ -1,0 +1,41 @@
+# Task Execution
+
+## Task Details
+- **ID:** {{.Task.ID}}
+- **Name:** {{.Task.Name}}
+- **Description:** {{.Task.Description}}
+- **Phase:** {{.Task.Phase}}
+
+## Working Directory
+{{.WorkDir}}
+
+## Context
+{{.Context}}
+
+{{if .Constraints}}
+## Constraints
+{{range .Constraints}}- {{.}}
+{{end}}{{end}}
+
+## Instructions
+Execute the task described above. Follow these guidelines:
+1. Make minimal, focused changes
+2. Ensure code compiles and tests pass
+3. Document any significant decisions
+4. Report any blockers or issues
+
+## Response Format
+```json
+{
+  "status": "completed|failed|blocked",
+  "changes": [
+    {
+      "file": "path/to/file",
+      "action": "create|modify|delete",
+      "description": "what changed"
+    }
+  ],
+  "notes": "Any additional context",
+  "blockers": []
+}
+```

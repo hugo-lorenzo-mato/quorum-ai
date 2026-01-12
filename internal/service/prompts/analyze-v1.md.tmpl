@@ -1,0 +1,29 @@
+# Analysis Request
+
+## User Prompt
+{{.Prompt}}
+
+## Project Context
+{{.Context}}
+
+## Instructions
+Analyze the request above and provide a structured response with:
+
+1. **Claims**: Factual findings about the codebase
+2. **Risks**: Potential issues or concerns
+3. **Recommendations**: Suggested approach
+
+{{if .Constraints}}
+## Constraints
+{{range .Constraints}}- {{.}}
+{{end}}{{end}}
+
+## Response Format
+Provide your analysis in the following JSON structure:
+```json
+{
+  "claims": ["..."],
+  "risks": ["..."],
+  "recommendations": ["..."]
+}
+```

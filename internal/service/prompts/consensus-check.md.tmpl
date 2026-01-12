@@ -1,0 +1,33 @@
+# Consensus Evaluation
+
+## Analyses Submitted
+{{range .Analyses}}
+### {{.AgentName}}
+
+**Claims:**
+{{range .Claims}}- {{.}}
+{{end}}
+
+**Risks:**
+{{range .Risks}}- {{.}}
+{{end}}
+
+**Recommendations:**
+{{range .Recommendations}}- {{.}}
+{{end}}
+{{end}}
+
+## Consensus Score
+Overall: {{printf "%.2f" .Result.Score}}
+
+### Category Scores
+{{range $cat, $score := .Result.CategoryScores}}- {{$cat}}: {{printf "%.2f" $score}}
+{{end}}
+
+{{if .Result.NeedsV3}}
+**Action Required:** V3 reconciliation needed
+{{end}}
+
+{{if .Result.NeedsHumanReview}}
+**Action Required:** Human review needed
+{{end}}
