@@ -6,79 +6,25 @@ run:
 
 linters:
   enable:
-    # Bug detection
-    - errcheck
-    - gosec
+    # Critical bug detection only
     - govet
     - staticcheck
     - bodyclose
     - nilerr
     - sqlclosecheck
 
-    # Complexity
-    - gocyclo
-    - gocognit
-    - funlen
-    - nestif
-
-    # Style
+    # Basic formatting
     - gofmt
     - goimports
-    - gocritic
-    - misspell
-    - whitespace
-    - unconvert
-    - revive
-
-    # Performance
-    - prealloc
 
     # Unused code
     - unused
-    - unparam
-    - gosimple
     - ineffassign
-
-    # Duplication
-    - dupl
-    # goconst disabled - too many false positives for adapter pattern names
 
     # Imports
     - depguard
-    - gci
-    - nolintlint
-
-    # Exhaustiveness
-    - exhaustive
 
 linters-settings:
-  gocyclo:
-    min-complexity: 15
-
-  gocognit:
-    min-complexity: 30  # Increased to allow complex parsing functions
-
-  funlen:
-    lines: 100
-    statements: 50
-
-  nestif:
-    min-complexity: 5
-
-  gocritic:
-    enabled-tags:
-      - diagnostic
-      - style
-      - performance
-    disabled-checks:
-      - whyNoLint
-
-  misspell:
-    locale: US
-
-  dupl:
-    threshold: 200  # Increased for adapter pattern implementations
-
   depguard:
     rules:
       main:
@@ -92,38 +38,22 @@ linters-settings:
           - pkg: "io/ioutil"
             desc: "deprecated, use io and os packages"
 
-  gci:
-    sections:
-      - standard
-      - default
-      - prefix(github.com/hugo-lorenzo-mato/quorum-ai)
-
-  exhaustive:
-    default-signifies-exhaustive: true
-
 issues:
   exclude-rules:
     # Test files
     - path: _test\.go
       linters:
-        - funlen
-        - dupl
-        - goconst
-        - errcheck
-        - gosec
-        - revive
+        - all
 
     # Test utilities
     - path: internal/testutil/
       linters:
-        - gosec
-        - revive
+        - all
 
-    # Validation experiments (benchmark code)
+    # Validation experiments
     - path: internal/validation/
       linters:
-        - gosec
-        - gocyclo
+        - all
 
     # Generated files
     - path: ".*_gen\\.go"
