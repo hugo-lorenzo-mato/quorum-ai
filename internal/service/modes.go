@@ -59,7 +59,7 @@ func NewModeEnforcer(mode ExecutionMode) *ModeEnforcer {
 }
 
 // CanExecute checks if an operation can be executed.
-func (e *ModeEnforcer) CanExecute(ctx context.Context, op Operation) error {
+func (e *ModeEnforcer) CanExecute(_ context.Context, op Operation) error {
 	// Check dry-run
 	if e.mode.DryRun && op.HasSideEffects {
 		e.logOperation("BLOCKED (dry-run)", op)

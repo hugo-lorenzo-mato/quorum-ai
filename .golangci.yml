@@ -111,11 +111,19 @@ issues:
         - goconst
         - errcheck
         - gosec
+        - revive
 
     # Test utilities
     - path: internal/testutil/
       linters:
         - gosec
+        - revive
+
+    # Validation experiments (benchmark code)
+    - path: internal/validation/
+      linters:
+        - gosec
+        - gocyclo
 
     # Generated files
     - path: ".*_gen\\.go"

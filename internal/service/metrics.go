@@ -194,7 +194,7 @@ func (m *MetricsCollector) RecordConsensus(result ConsensusResult, phase core.Ph
 }
 
 // RecordSkipped records a skipped task.
-func (m *MetricsCollector) RecordSkipped(taskID core.TaskID) {
+func (m *MetricsCollector) RecordSkipped(_ core.TaskID) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.workflow.TasksSkipped++

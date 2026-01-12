@@ -65,7 +65,7 @@ output:
   verbose: false
 `
 
-	if err := os.WriteFile(configPath, []byte(defaultConfig), 0644); err != nil {
+	if err := os.WriteFile(configPath, []byte(defaultConfig), 0644); err != nil { //nolint:gosec // Config file needs to be readable
 		return fmt.Errorf("writing config: %w", err)
 	}
 

@@ -76,8 +76,8 @@ func (t *Task) WithDependencies(deps ...TaskID) *Task {
 }
 
 // WithMaxRetries sets the maximum retry count.
-func (t *Task) WithMaxRetries(max int) *Task {
-	t.MaxRetries = max
+func (t *Task) WithMaxRetries(maxRetries int) *Task {
+	t.MaxRetries = maxRetries
 	return t
 }
 
