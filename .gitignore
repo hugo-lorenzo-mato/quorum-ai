@@ -83,6 +83,10 @@ __debug_bin
 go.work
 go.work.sum
 
+# Go cache directories
+.gocache/
+.gomodcache/
+
 # Local binary (root only)
 /quorum
 
