@@ -237,8 +237,8 @@ func (m *MetricsCollector) GetTaskMetrics(taskID core.TaskID) (*TaskMetrics, boo
 	if !ok {
 		return nil, false
 	}
-	copy := *tm
-	return &copy, true
+	taskCopy := *tm
+	return &taskCopy, true
 }
 
 // GetAllTaskMetrics returns metrics for all tasks.
@@ -248,8 +248,8 @@ func (m *MetricsCollector) GetAllTaskMetrics() []*TaskMetrics {
 
 	result := make([]*TaskMetrics, 0, len(m.tasks))
 	for _, tm := range m.tasks {
-		copy := *tm
-		result = append(result, &copy)
+		taskCopy := *tm
+		result = append(result, &taskCopy)
 	}
 	return result
 }
@@ -261,8 +261,8 @@ func (m *MetricsCollector) GetAgentMetrics() map[string]*AgentMetrics {
 
 	result := make(map[string]*AgentMetrics)
 	for k, v := range m.agents {
-		copy := *v
-		result[k] = &copy
+		agentCopy := *v
+		result[k] = &agentCopy
 	}
 	return result
 }

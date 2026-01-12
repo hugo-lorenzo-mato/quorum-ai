@@ -25,7 +25,7 @@ func init() {
 	initCmd.Flags().BoolVar(&initForce, "force", false, "Overwrite existing configuration")
 }
 
-func runInit(cmd *cobra.Command, args []string) error {
+func runInit(_ *cobra.Command, _ []string) error {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("getting current directory: %w", err)
@@ -65,7 +65,7 @@ output:
   verbose: false
 `
 
-	if err := os.WriteFile(configPath, []byte(defaultConfig), 0644); err != nil { //nolint:gosec // Config file needs to be readable
+	if err := os.WriteFile(configPath, []byte(defaultConfig), 0o644); err != nil { //nolint:gosec // Config file needs to be readable
 		return fmt.Errorf("writing config: %w", err)
 	}
 
@@ -77,7 +77,7 @@ output:
 	}
 
 	for _, dir := range dirs {
-		if err := os.MkdirAll(filepath.Join(cwd, dir), 0755); err != nil {
+		if err := os.MkdirAll(filepath.Join(cwd, dir), 0o755); err != nil {
 			return fmt.Errorf("creating directory %s: %w", dir, err)
 		}
 	}

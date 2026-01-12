@@ -37,7 +37,7 @@ func init() {
 	runCmd.Flags().IntVar(&runMaxRetries, "max-retries", 3, "Maximum retry attempts")
 }
 
-func runWorkflow(cmd *cobra.Command, args []string) error {
+func runWorkflow(_ *cobra.Command, args []string) error {
 	// Get prompt
 	prompt, err := getPrompt(args, runFile)
 	if err != nil {
@@ -57,28 +57,8 @@ func runWorkflow(cmd *cobra.Command, args []string) error {
 		cancel()
 	}()
 
-	// TODO: Load config and create runner when service package is ready
-	// cfg, err := loadConfig()
-	// if err != nil {
-	//     return err
-	// }
-
-	// runner, err := service.NewWorkflowRunner(cfg)
-	// if err != nil {
-	//     return fmt.Errorf("creating runner: %w", err)
-	// }
-
-	// opts := service.RunOptions{
-	//     DryRun:     runDryRun,
-	//     Yolo:       runYolo,
-	//     MaxRetries: runMaxRetries,
-	// }
-
-	// if runResume {
-	//     return runner.Resume(ctx, opts)
-	// }
-
-	// return runner.Run(ctx, prompt, opts)
+	// TODO(future): Integrate with service.WorkflowRunner when ready
+	// This stub simulates the workflow for now
 
 	fmt.Printf("Would run workflow with prompt: %s\n", truncatePrompt(prompt, 50))
 	fmt.Printf("Options: dry-run=%v, yolo=%v, resume=%v, max-retries=%d\n",
@@ -108,9 +88,9 @@ func getPrompt(args []string, file string) (string, error) {
 	return "", fmt.Errorf("prompt required: provide as argument or use --file")
 }
 
-func truncatePrompt(s string, max int) string {
-	if len(s) <= max {
+func truncatePrompt(s string, maxLen int) string {
+	if len(s) <= maxLen {
 		return s
 	}
-	return s[:max] + "..."
+	return s[:maxLen] + "..."
 }

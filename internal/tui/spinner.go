@@ -46,8 +46,7 @@ func (s SpinnerModel) Tick() tea.Cmd {
 
 // Update updates the spinner state.
 func (s SpinnerModel) Update(msg tea.Msg) (SpinnerModel, tea.Cmd) {
-	switch msg.(type) {
-	case SpinnerTickMsg:
+	if _, ok := msg.(SpinnerTickMsg); ok {
 		s.index = (s.index + 1) % len(s.frames)
 		return s, s.Tick()
 	}

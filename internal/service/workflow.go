@@ -243,7 +243,9 @@ func (w *WorkflowRunner) runAnalyzePhase(ctx context.Context, state *core.Workfl
 		}
 
 		// Re-evaluate consensus
-		allOutputs := append(v1Outputs, v2Outputs...)
+		allOutputs := make([]AnalysisOutput, 0, len(v1Outputs)+len(v2Outputs))
+		allOutputs = append(allOutputs, v1Outputs...)
+		allOutputs = append(allOutputs, v2Outputs...)
 		consensusResult = w.consensus.Evaluate(allOutputs)
 		if err := w.checkpoint.ConsensusCheckpoint(ctx, state, consensusResult); err != nil {
 			w.logger.Warn("failed to create V2 consensus checkpoint", "error", err)

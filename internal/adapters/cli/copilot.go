@@ -83,7 +83,9 @@ func (c *CopilotAdapter) Execute(ctx context.Context, opts core.ExecuteOptions) 
 
 	// Create command
 	cmdParts := strings.Fields(c.config.Path)
-	allArgs := append(cmdParts[1:], args...)
+	allArgs := make([]string, 0, len(cmdParts[1:])+len(args))
+	allArgs = append(allArgs, cmdParts[1:]...)
+	allArgs = append(allArgs, args...)
 
 	cmd := exec.CommandContext(ctx, cmdParts[0], allArgs...) //nolint:gosec // Command path is from trusted config
 	cmd.Dir = opts.WorkDir
@@ -140,7 +142,7 @@ func (c *CopilotAdapter) Execute(ctx context.Context, opts core.ExecuteOptions) 
 }
 
 // buildArgs constructs CLI arguments for Copilot.
-func (c *CopilotAdapter) buildArgs(opts core.ExecuteOptions) []string {
+func (c *CopilotAdapter) buildArgs(_ core.ExecuteOptions) []string {
 	args := []string{"suggest"}
 
 	// Specify shell type

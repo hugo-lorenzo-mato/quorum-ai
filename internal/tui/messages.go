@@ -48,7 +48,7 @@ func waitForWorkflowUpdate() tea.Cmd {
 }
 
 // retryTask creates a command to retry a task.
-func retryTask(id core.TaskID) tea.Cmd {
+func retryTask(_ core.TaskID) tea.Cmd {
 	return func() tea.Msg {
 		// Signal retry to workflow runner (would use channel in real impl)
 		return nil

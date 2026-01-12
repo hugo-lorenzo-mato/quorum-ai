@@ -155,7 +155,7 @@ func (p *RetryPolicy) CalculateDelayNoJitter(attempt int) time.Duration {
 }
 
 // addJitter adds random jitter to a delay.
-func addJitter(delay float64, factor float64) float64 {
+func addJitter(delay, factor float64) float64 {
 	jitter := delay * factor
 	// Random value between -jitter and +jitter
 	randomJitter := (rand.Float64()*2 - 1) * jitter //nolint:gosec // Non-security random for jitter

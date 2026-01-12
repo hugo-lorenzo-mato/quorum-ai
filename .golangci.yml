@@ -7,12 +7,21 @@ run:
 linters:
   disable-all: true
   enable:
-    # Critical bug detection only
+    # Critical bug detection
     - govet
     - staticcheck
     - bodyclose
     - nilerr
     - sqlclosecheck
+    - errcheck
+
+    # Security
+    - gosec
+
+    # Code quality
+    - gocritic
+    - revive
+    - gocyclo
 
     # Basic formatting
     - gofmt
@@ -39,22 +48,46 @@ linters-settings:
           - pkg: "io/ioutil"
             desc: "deprecated, use io and os packages"
 
+  gocyclo:
+    min-complexity: 15
+
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - style
+    disabled-checks:
+      - ifElseChain  # Sometimes if-else chains are more readable
+
+  revive:
+    rules:
+      - name: unused-parameter
+        severity: warning
+      - name: redefines-builtin-id
+        severity: error
+
 issues:
   exclude-rules:
-    # Test files
+    # Test files - only exclude specific linters that don't apply
     - path: _test\.go
       linters:
-        - all
+        - errcheck     # Test code often intentionally ignores errors
+        - gosec        # Test code may use insecure patterns intentionally
+        - gocyclo      # Test functions can be complex
 
     # Test utilities
     - path: internal/testutil/
       linters:
-        - all
+        - errcheck
+        - gosec
+        - revive
 
     # Validation experiments
     - path: internal/validation/
       linters:
-        - all
+        - errcheck
+        - gosec
+        - revive
+        - gocritic
 
     # Generated files
     - path: ".*_gen\\.go"

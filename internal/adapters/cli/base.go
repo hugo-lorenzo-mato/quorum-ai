@@ -234,7 +234,7 @@ func (b *BaseAdapter) ExtractJSON(output string) string {
 }
 
 // ExtractByPattern extracts content matching a regex pattern.
-func (b *BaseAdapter) ExtractByPattern(output string, pattern string) ([]string, error) {
+func (b *BaseAdapter) ExtractByPattern(output, pattern string) ([]string, error) {
 	re, err := regexp.Compile(pattern)
 	if err != nil {
 		return nil, fmt.Errorf("invalid pattern: %w", err)
@@ -262,7 +262,7 @@ func (b *BaseAdapter) GetVersion(ctx context.Context, versionArg string) (string
 }
 
 // CheckAvailability verifies the CLI is installed and accessible.
-func (b *BaseAdapter) CheckAvailability(ctx context.Context) error {
+func (b *BaseAdapter) CheckAvailability(_ context.Context) error {
 	cmdPath := b.config.Path
 	if cmdPath == "" {
 		return core.ErrValidation("NO_PATH", "adapter path not configured")

@@ -117,7 +117,7 @@ func (a *AiderAdapter) buildArgs(opts core.ExecuteOptions) []string {
 }
 
 // parseOutput parses Aider CLI output.
-func (a *AiderAdapter) parseOutput(result *CommandResult, format core.OutputFormat) (*core.ExecuteResult, error) {
+func (a *AiderAdapter) parseOutput(result *CommandResult, _ core.OutputFormat) (*core.ExecuteResult, error) {
 	output := result.Stdout
 
 	// Clean Aider-specific output markers

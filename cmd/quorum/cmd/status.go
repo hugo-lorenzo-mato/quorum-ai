@@ -27,7 +27,7 @@ func init() {
 	statusCmd.Flags().BoolVar(&statusJSON, "json", false, "Output as JSON")
 }
 
-func runStatus(cmd *cobra.Command, args []string) error {
+func runStatus(cmd *cobra.Command, _ []string) error {
 	stateManager := state.NewJSONStateManager(".quorum/state")
 
 	if !stateManager.Exists() {

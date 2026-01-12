@@ -62,10 +62,10 @@ type stateEnvelope struct {
 }
 
 // Save persists workflow state atomically.
-func (m *JSONStateManager) Save(ctx context.Context, state *core.WorkflowState) error {
+func (m *JSONStateManager) Save(_ context.Context, state *core.WorkflowState) error {
 	// Ensure directory exists
 	dir := filepath.Dir(m.path)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("creating state directory: %w", err)
 	}
 
@@ -107,7 +107,7 @@ func (m *JSONStateManager) Save(ctx context.Context, state *core.WorkflowState) 
 	}
 
 	// Atomic write
-	if err := atomicWriteFile(m.path, data, 0644); err != nil {
+	if err := atomicWriteFile(m.path, data, 0o644); err != nil {
 		return fmt.Errorf("writing state file: %w", err)
 	}
 
@@ -115,7 +115,7 @@ func (m *JSONStateManager) Save(ctx context.Context, state *core.WorkflowState) 
 }
 
 // Load retrieves workflow state.
-func (m *JSONStateManager) Load(ctx context.Context) (*core.WorkflowState, error) {
+func (m *JSONStateManager) Load(_ context.Context) (*core.WorkflowState, error) {
 	if !m.Exists() {
 		return nil, nil
 	}
@@ -167,7 +167,7 @@ func (m *JSONStateManager) createBackup() error {
 	if err != nil {
 		return err
 	}
-	return atomicWriteFile(m.backupPath, data, 0644)
+	return atomicWriteFile(m.backupPath, data, 0o644)
 }
 
 // Exists checks if state file exists.
@@ -177,7 +177,7 @@ func (m *JSONStateManager) Exists() bool {
 }
 
 // Backup creates a backup of the current state.
-func (m *JSONStateManager) Backup(ctx context.Context) error {
+func (m *JSONStateManager) Backup(_ context.Context) error {
 	if !m.Exists() {
 		return nil
 	}
@@ -185,7 +185,7 @@ func (m *JSONStateManager) Backup(ctx context.Context) error {
 }
 
 // Restore restores from the most recent backup.
-func (m *JSONStateManager) Restore(ctx context.Context) (*core.WorkflowState, error) {
+func (m *JSONStateManager) Restore(_ context.Context) (*core.WorkflowState, error) {
 	return m.loadFromPath(m.backupPath)
 }
 
@@ -197,10 +197,10 @@ type lockInfo struct {
 }
 
 // AcquireLock acquires an exclusive lock.
-func (m *JSONStateManager) AcquireLock(ctx context.Context) error {
+func (m *JSONStateManager) AcquireLock(_ context.Context) error {
 	// Ensure directory exists
 	dir := filepath.Dir(m.lockPath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("creating lock directory: %w", err)
 	}
 
@@ -235,7 +235,7 @@ func (m *JSONStateManager) AcquireLock(ctx context.Context) error {
 	}
 
 	// Write lock file exclusively
-	f, err := os.OpenFile(m.lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
+	f, err := os.OpenFile(m.lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
 	if err != nil {
 		if os.IsExist(err) {
 			return core.ErrState("LOCK_ACQUIRE_FAILED", "lock file created by another process")
@@ -253,7 +253,7 @@ func (m *JSONStateManager) AcquireLock(ctx context.Context) error {
 }
 
 // ReleaseLock releases the lock.
-func (m *JSONStateManager) ReleaseLock(ctx context.Context) error {
+func (m *JSONStateManager) ReleaseLock(_ context.Context) error {
 	// Verify we own the lock
 	data, err := os.ReadFile(m.lockPath)
 	if err != nil {

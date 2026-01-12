@@ -28,7 +28,7 @@ development tasks. It uses consensus mechanisms to reduce hallucinations
 and improve output quality through V1/V2/V3 validation protocol.`,
 	SilenceUsage:  true,
 	SilenceErrors: true,
-	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+	PersistentPreRunE: func(_ *cobra.Command, _ []string) error {
 		return initConfig()
 	},
 }

@@ -105,17 +105,18 @@ func parseStatus(output string) *Status {
 	}
 
 	for _, line := range strings.Split(output, "\n") {
-		if strings.HasPrefix(line, "# branch.head ") {
+		switch {
+		case strings.HasPrefix(line, "# branch.head "):
 			status.Branch = strings.TrimPrefix(line, "# branch.head ")
-		} else if strings.HasPrefix(line, "# branch.upstream ") {
+		case strings.HasPrefix(line, "# branch.upstream "):
 			status.Upstream = strings.TrimPrefix(line, "# branch.upstream ")
-		} else if strings.HasPrefix(line, "# branch.ab ") {
+		case strings.HasPrefix(line, "# branch.ab "):
 			parts := strings.Fields(line)
 			if len(parts) >= 4 {
 				_, _ = fmt.Sscanf(parts[2], "+%d", &status.Ahead)
 				_, _ = fmt.Sscanf(parts[3], "-%d", &status.Behind)
 			}
-		} else if len(line) > 2 {
+		case len(line) > 2:
 			// Parse status lines
 			switch line[0] {
 			case '1': // Ordinary changed entry

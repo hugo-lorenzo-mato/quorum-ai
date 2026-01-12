@@ -60,7 +60,7 @@ type Worktree struct {
 // Create creates a new worktree for a branch.
 func (m *WorktreeManager) Create(ctx context.Context, name, branch string) (*Worktree, error) {
 	// Ensure base directory exists
-	if err := os.MkdirAll(m.baseDir, 0755); err != nil {
+	if err := os.MkdirAll(m.baseDir, 0o755); err != nil {
 		return nil, fmt.Errorf("creating worktree directory: %w", err)
 	}
 
@@ -124,7 +124,7 @@ func (m *WorktreeManager) Create(ctx context.Context, name, branch string) (*Wor
 
 // CreateFromCommit creates a detached worktree from a commit.
 func (m *WorktreeManager) CreateFromCommit(ctx context.Context, name, commit string) (*Worktree, error) {
-	if err := os.MkdirAll(m.baseDir, 0755); err != nil {
+	if err := os.MkdirAll(m.baseDir, 0o755); err != nil {
 		return nil, fmt.Errorf("creating worktree directory: %w", err)
 	}
 
@@ -186,23 +186,25 @@ func (m *WorktreeManager) parseWorktreeList(output string) []Worktree {
 	for _, line := range strings.Split(output, "\n") {
 		line = strings.TrimSpace(line)
 
-		if strings.HasPrefix(line, "worktree ") {
+		switch {
+		case strings.HasPrefix(line, "worktree "):
 			if current != nil {
 				worktrees = append(worktrees, *current)
 			}
 			current = &Worktree{
 				Path: strings.TrimPrefix(line, "worktree "),
 			}
-		} else if current != nil {
-			if strings.HasPrefix(line, "HEAD ") {
+		case current != nil:
+			switch {
+			case strings.HasPrefix(line, "HEAD "):
 				current.Commit = strings.TrimPrefix(line, "HEAD ")
-			} else if strings.HasPrefix(line, "branch ") {
+			case strings.HasPrefix(line, "branch "):
 				current.Branch = strings.TrimPrefix(line, "branch refs/heads/")
-			} else if line == "detached" {
+			case line == "detached":
 				current.Detached = true
-			} else if line == "locked" {
+			case line == "locked":
 				current.Locked = true
-			} else if line == "prunable" {
+			case line == "prunable":
 				current.Prunable = true
 			}
 		}
