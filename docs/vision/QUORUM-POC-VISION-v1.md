@@ -34,12 +34,6 @@ Single-agent LLM interactions suffer from:
 3. **No Dialectic Process**: Errors are not challenged or refined
 4. **Single Point of Failure**: One model's limitations become the user's limitations
 
-### 1.3 Decision Anchors
-
-Key POC decisions and constraints are consolidated in
-`docs/v3/ANALISIS-FINAL-CONSOLIDADO-v3.md` and are referenced throughout this
-vision document.
-
 ---
 
 ## 2. Hypothesis
@@ -277,7 +271,6 @@ The POC includes controlled experiments:
 - Hexagonal Architecture: Alistair Cockburn's Ports and Adapters pattern
 - Keep a Changelog: [keepachangelog.com](https://keepachangelog.com)
 - Semantic Versioning: [semver.org](https://semver.org)
-- Consolidated decisions: docs/v3/ANALISIS-FINAL-CONSOLIDADO-v3.md
 
 ---
 
