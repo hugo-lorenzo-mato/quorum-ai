@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://github.com/hugo-lorenzo-mato/quorum-ai/tree/main/docs
+    about: Read the architecture and usage documentation.
+  - name: Security policy
+    url: https://github.com/hugo-lorenzo-mato/quorum-ai/security/policy
+    about: Report security vulnerabilities privately.
