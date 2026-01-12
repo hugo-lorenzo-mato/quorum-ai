@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -533,9 +534,17 @@ func (w *WorkflowRunner) runPlanPhase(ctx context.Context, state *core.WorkflowS
 		return fmt.Errorf("rate limit for planning: %w", err)
 	}
 
+	constraints := []string{}
+	agentNames := append([]string(nil), w.agents.List()...)
+	if len(agentNames) > 0 {
+		sort.Strings(agentNames)
+		constraints = append(constraints, fmt.Sprintf("If you set agent/cli, use one of: %s", strings.Join(agentNames, ", ")))
+	}
+
 	prompt, err := w.prompts.RenderPlanGenerate(PlanParams{
 		Prompt:               state.Prompt,
 		ConsolidatedAnalysis: analysis,
+		Constraints:          constraints,
 		MaxTasks:             10,
 	})
 	if err != nil {
@@ -924,6 +933,7 @@ func (w *WorkflowRunner) parsePlan(output string) ([]*core.Task, error) {
 		if cli == "" {
 			cli = item.Agent
 		}
+		cli = w.resolveTaskAgent(cli)
 		task := &core.Task{
 			ID:          core.TaskID(item.ID),
 			Name:        item.Name,
@@ -941,6 +951,42 @@ func (w *WorkflowRunner) parsePlan(output string) ([]*core.Task, error) {
 	}
 
 	return tasks, nil
+}
+
+func (w *WorkflowRunner) resolveTaskAgent(candidate string) string {
+	cleaned := strings.TrimSpace(candidate)
+	if cleaned == "" {
+		return w.config.DefaultAgent
+	}
+
+	if isShellLikeAgent(cleaned) {
+		w.logger.Warn("plan used shell name as agent, defaulting",
+			"agent", cleaned,
+			"default", w.config.DefaultAgent,
+		)
+		return w.config.DefaultAgent
+	}
+
+	for _, name := range w.agents.List() {
+		if strings.EqualFold(name, cleaned) {
+			return name
+		}
+	}
+
+	w.logger.Warn("plan requested unknown agent, defaulting",
+		"agent", cleaned,
+		"default", w.config.DefaultAgent,
+	)
+	return w.config.DefaultAgent
+}
+
+func isShellLikeAgent(candidate string) bool {
+	switch strings.ToLower(strings.TrimSpace(candidate)) {
+	case "bash", "sh", "zsh", "fish", "powershell", "pwsh", "terminal", "shell", "command", "cli", "default", "auto":
+		return true
+	default:
+		return false
+	}
 }
 
 func parsePlanItems(output string) ([]TaskPlanItem, error) {
@@ -974,12 +1020,8 @@ func parsePlanItems(output string) ([]TaskPlanItem, error) {
 		if !ok {
 			continue
 		}
-		var candidate string
-		if err := json.Unmarshal(raw, &candidate); err == nil {
-			candidate = strings.TrimSpace(candidate)
-			if candidate != "" && candidate != cleaned {
-				return parsePlanItems(candidate)
-			}
+		if candidate := rawToText(raw); candidate != "" && candidate != cleaned {
+			return parsePlanItems(candidate)
 		}
 	}
 
@@ -1005,6 +1047,57 @@ func parsePlanItems(output string) ([]TaskPlanItem, error) {
 	}
 
 	return nil, fmt.Errorf("plan output missing tasks field")
+}
+
+func rawToText(raw json.RawMessage) string {
+	var direct string
+	if err := json.Unmarshal(raw, &direct); err == nil {
+		return strings.TrimSpace(direct)
+	}
+
+	var parts []struct {
+		Text string `json:"text"`
+	}
+	if err := json.Unmarshal(raw, &parts); err == nil {
+		var collected []string
+		for _, part := range parts {
+			if strings.TrimSpace(part.Text) != "" {
+				collected = append(collected, part.Text)
+			}
+		}
+		if len(collected) > 0 {
+			return strings.TrimSpace(strings.Join(collected, "\n"))
+		}
+	}
+
+	var obj struct {
+		Text    string `json:"text"`
+		Content string `json:"content"`
+		Parts   []struct {
+			Text string `json:"text"`
+		} `json:"parts"`
+	}
+	if err := json.Unmarshal(raw, &obj); err == nil {
+		if strings.TrimSpace(obj.Text) != "" {
+			return strings.TrimSpace(obj.Text)
+		}
+		if strings.TrimSpace(obj.Content) != "" {
+			return strings.TrimSpace(obj.Content)
+		}
+		if len(obj.Parts) > 0 {
+			var collected []string
+			for _, part := range obj.Parts {
+				if strings.TrimSpace(part.Text) != "" {
+					collected = append(collected, part.Text)
+				}
+			}
+			if len(collected) > 0 {
+				return strings.TrimSpace(strings.Join(collected, "\n"))
+			}
+		}
+	}
+
+	return ""
 }
 
 func extractJSON(output string) string {

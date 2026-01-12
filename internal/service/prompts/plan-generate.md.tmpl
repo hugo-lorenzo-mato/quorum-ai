@@ -20,6 +20,8 @@ Requirements:
 - Tasks should have clear dependencies
 - Estimate complexity (low/medium/high)
 - Return at least one task
+- If you set agent/cli, it must be a configured agent name (leave empty to use the default)
+- Return only JSON. Do not include markdown or extra text.
 
 ## Response Format
 ```json
@@ -31,7 +33,7 @@ Requirements:
       "description": "What this task accomplishes",
       "dependencies": [],
       "complexity": "low|medium|high",
-      "cli": "preferred agent name"
+      "agent": "preferred agent name"
     }
   ],
   "execution_order": ["task-1", "task-2"]

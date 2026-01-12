@@ -159,6 +159,7 @@ func (p *Planner) parsePlan(wctx *Context, output string) ([]*core.Task, error) 
 		if cli == "" {
 			cli = item.Agent
 		}
+		cli = resolveTaskAgent(wctx, cli)
 		task := &core.Task{
 			ID:          core.TaskID(item.ID),
 			Name:        item.Name,
@@ -176,6 +177,42 @@ func (p *Planner) parsePlan(wctx *Context, output string) ([]*core.Task, error) 
 	}
 
 	return tasks, nil
+}
+
+func resolveTaskAgent(wctx *Context, candidate string) string {
+	cleaned := strings.TrimSpace(candidate)
+	if cleaned == "" {
+		return wctx.Config.DefaultAgent
+	}
+
+	if isShellLikeAgent(cleaned) {
+		wctx.Logger.Warn("plan used shell name as agent, defaulting",
+			"agent", cleaned,
+			"default", wctx.Config.DefaultAgent,
+		)
+		return wctx.Config.DefaultAgent
+	}
+
+	for _, name := range wctx.Agents.List() {
+		if strings.EqualFold(name, cleaned) {
+			return name
+		}
+	}
+
+	wctx.Logger.Warn("plan requested unknown agent, defaulting",
+		"agent", cleaned,
+		"default", wctx.Config.DefaultAgent,
+	)
+	return wctx.Config.DefaultAgent
+}
+
+func isShellLikeAgent(candidate string) bool {
+	switch strings.ToLower(strings.TrimSpace(candidate)) {
+	case "bash", "sh", "zsh", "fish", "powershell", "pwsh", "terminal", "shell", "command", "cli", "default", "auto":
+		return true
+	default:
+		return false
+	}
 }
 
 func parsePlanItems(output string) ([]TaskPlanItem, error) {
@@ -209,12 +246,8 @@ func parsePlanItems(output string) ([]TaskPlanItem, error) {
 		if !ok {
 			continue
 		}
-		var candidate string
-		if err := json.Unmarshal(raw, &candidate); err == nil {
-			candidate = strings.TrimSpace(candidate)
-			if candidate != "" && candidate != cleaned {
-				return parsePlanItems(candidate)
-			}
+		if candidate := rawToText(raw); candidate != "" && candidate != cleaned {
+			return parsePlanItems(candidate)
 		}
 	}
 
@@ -240,6 +273,57 @@ func parsePlanItems(output string) ([]TaskPlanItem, error) {
 	}
 
 	return nil, fmt.Errorf("plan output missing tasks field")
+}
+
+func rawToText(raw json.RawMessage) string {
+	var direct string
+	if err := json.Unmarshal(raw, &direct); err == nil {
+		return strings.TrimSpace(direct)
+	}
+
+	var parts []struct {
+		Text string `json:"text"`
+	}
+	if err := json.Unmarshal(raw, &parts); err == nil {
+		var collected []string
+		for _, part := range parts {
+			if strings.TrimSpace(part.Text) != "" {
+				collected = append(collected, part.Text)
+			}
+		}
+		if len(collected) > 0 {
+			return strings.TrimSpace(strings.Join(collected, "\n"))
+		}
+	}
+
+	var obj struct {
+		Text    string `json:"text"`
+		Content string `json:"content"`
+		Parts   []struct {
+			Text string `json:"text"`
+		} `json:"parts"`
+	}
+	if err := json.Unmarshal(raw, &obj); err == nil {
+		if strings.TrimSpace(obj.Text) != "" {
+			return strings.TrimSpace(obj.Text)
+		}
+		if strings.TrimSpace(obj.Content) != "" {
+			return strings.TrimSpace(obj.Content)
+		}
+		if len(obj.Parts) > 0 {
+			var collected []string
+			for _, part := range obj.Parts {
+				if strings.TrimSpace(part.Text) != "" {
+					collected = append(collected, part.Text)
+				}
+			}
+			if len(collected) > 0 {
+				return strings.TrimSpace(strings.Join(collected, "\n"))
+			}
+		}
+	}
+
+	return ""
 }
 
 func extractJSON(output string) string {

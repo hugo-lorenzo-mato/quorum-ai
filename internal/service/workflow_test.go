@@ -658,6 +658,21 @@ func TestWorkflowRunner_ParsePlan_WrappedJSON(t *testing.T) {
 	}
 }
 
+func TestWorkflowRunner_ParsePlan_UnknownAgentDefaults(t *testing.T) {
+	runner, _, _ := createTestWorkflowRunner()
+
+	output := `[{"id":"task-1","name":"Task 1","description":"Do something","cli":"bash"}]`
+
+	tasks, err := runner.parsePlan(output)
+	if err != nil {
+		t.Fatalf("parsePlan() error = %v", err)
+	}
+
+	if tasks[0].CLI != "claude" {
+		t.Errorf("tasks[0].CLI = %s, want claude", tasks[0].CLI)
+	}
+}
+
 func TestWorkflowRunner_ParsePlan_InvalidJSON(t *testing.T) {
 	runner, _, _ := createTestWorkflowRunner()
 
