@@ -103,68 +103,24 @@ graph TB
 
 The innermost layer contains pure business logic with **zero external dependencies**.
 
-| Component | Responsibility |
-|-----------|---------------|
-| `domain.go` | Entity definitions: Task, Workflow, Phase, Artifact |
-| `ports.go` | Interface definitions: Agent, StateManager, GitClient, GitHubClient |
-| `errors.go` | Domain error types with categories and retry classification |
+Core responsibilities:
 
-**Key Entities:**
-
-```go
-// Task represents a unit of work in the workflow
-type Task struct {
-    ID           TaskID
-    Phase        Phase
-    Name         string
-    Status       TaskStatus
-    Dependencies []TaskID
-    Outputs      []Artifact
-}
-
-// Workflow represents the complete orchestration state
-type Workflow struct {
-    ID        WorkflowID
-    Prompt    string
-    Phase     Phase
-    Tasks     map[TaskID]*Task
-    CreatedAt time.Time
-}
-```
-
-**Key Ports (Interfaces):**
-
-```go
-// Agent represents an LLM CLI adapter
-type Agent interface {
-    Name() string
-    Capabilities() Capabilities
-    Ping(ctx context.Context) error
-    Execute(ctx context.Context, opts ExecuteOptions) (*ExecuteResult, error)
-}
-
-// StateManager handles workflow persistence
-type StateManager interface {
-    Save(ctx context.Context, state *WorkflowState) error
-    Load(ctx context.Context) (*WorkflowState, error)
-    AcquireLock(ctx context.Context) error
-    ReleaseLock(ctx context.Context) error
-}
-```
+- **Entities**: Task, Workflow, Phase, Artifact
+- **Ports**: Agent, StateManager, GitClient, GitHubClient
+- **Errors**: domain-specific error categories and classifications
 
 ### 2. Service Layer (`internal/service/`)
 
 Orchestrates business operations using core entities and ports.
 
-| Component | Responsibility |
-|-----------|---------------|
-| `workflow.go` | Main orchestrator: phases, task execution, state transitions |
-| `dag.go` | Dependency graph: topological sort, cycle detection, ready tasks |
-| `consensus.go` | Agreement measurement: Jaccard similarity, category weights |
-| `prompt.go` | Template rendering: phase-specific prompts |
-| `retry.go` | Resilience: exponential backoff with jitter |
-| `ratelimit.go` | Resource protection: token bucket per adapter |
-| `checkpoint.go` | Recovery: save/restore workflow state |
+Core responsibilities:
+
+- **Workflow orchestration** across analyze, plan, and execute phases
+- **Dependency management** with DAG construction and ready-task selection
+- **Consensus evaluation** using Jaccard similarity and category weights
+- **Prompt rendering** for phase-specific tasks
+- **Resilience controls** (retry and rate limiting)
+- **Checkpointing** for resume and recovery
 
 **Workflow Runner Flow:**
 
@@ -190,65 +146,39 @@ Implement ports by wrapping external systems.
 
 | Adapter | CLI Tool | Capabilities |
 |---------|----------|-------------|
-| `claude.go` | `claude` | Full analysis, planning, code generation |
-| `gemini.go` | `gemini` | Analysis, validation |
-| `codex.go` | `codex` | Code-focused tasks |
-| `copilot.go` | `gh copilot` | GitHub-integrated tasks (PTY required) |
-
-**Common Pattern:**
-
-```go
-func (a *ClaudeAdapter) Execute(ctx context.Context, opts ExecuteOptions) (*ExecuteResult, error) {
-    args := a.buildArgs(opts)
-    cmd := exec.CommandContext(ctx, "claude", args...)
-    output, err := cmd.Output()
-    if err != nil {
-        return nil, a.classifyError(err)
-    }
-    return a.parseOutput(output, opts.Format)
-}
-```
+| `claude` | `claude` | Full analysis, planning, code generation |
+| `gemini` | `gemini` | Analysis, validation |
+| `codex` | `codex` | Code-focused tasks |
+| `copilot` | `gh copilot` | GitHub-integrated tasks (PTY required) |
 
 #### State Adapter (`internal/adapters/state/`)
 
-| Component | Responsibility |
-|-----------|---------------|
-| `json.go` | JSON-based persistence with atomic writes (renameio) |
-| `lock.go` | Process lock with PID and stale detection |
+Responsibilities:
 
-**Atomic Write Pattern:**
-
-```go
-func (s *JSONStateManager) Save(ctx context.Context, state *WorkflowState) error {
-    data, err := json.MarshalIndent(state, "", "  ")
-    if err != nil {
-        return err
-    }
-    return renameio.WriteFile(s.path, data, 0644)
-}
-```
+- JSON-based persistence with atomic writes
+- Process lock management with stale detection
 
 #### Git Adapters (`internal/adapters/git/`)
 
-| Component | Responsibility |
-|-----------|---------------|
-| `client.go` | Git CLI wrapper: status, commit, push |
-| `worktree.go` | Worktree lifecycle: create, remove, cleanup |
+Responsibilities:
+
+- Git CLI wrapper for status, commit, and push
+- Worktree lifecycle management (create, remove, cleanup)
 
 #### GitHub Adapter (`internal/adapters/github/`)
 
-| Component | Responsibility |
-|-----------|---------------|
-| `client.go` | PR creation, issue management via `gh` CLI |
-| `checks.go` | CI status polling and wait |
+Responsibilities:
+
+- PR creation and issue management via `gh` CLI
+- CI status polling and wait
 
 ### 4. Configuration (`internal/config/`)
 
-| Component | Responsibility |
-|-----------|---------------|
-| `loader.go` | Configuration loading with precedence |
-| `validator.go` | Validation rules and error messages |
-| `defaults.go` | Default values for all settings |
+Responsibilities:
+
+- Configuration loading with defined precedence
+- Validation rules and error messages
+- Default values for all settings
 
 **Configuration Precedence (highest to lowest):**
 
@@ -260,19 +190,18 @@ func (s *JSONStateManager) Save(ctx context.Context, state *WorkflowState) error
 
 ### 5. TUI (`internal/tui/`)
 
-| Component | Responsibility |
-|-----------|---------------|
-| `model.go` | Bubbletea model: state, messages |
-| `view.go` | Rendering logic |
-| `styles.go` | Lipgloss styling |
-| `fallback.go` | Plain text output for non-TTY environments |
+Responsibilities:
+
+- Bubbletea model and update loop
+- Rendering and styling
+- Plain text fallback for non-TTY environments
 
 ### 6. Logging (`internal/logging/`)
 
-| Component | Responsibility |
-|-----------|---------------|
-| `logger.go` | slog wrapper with context propagation |
-| `sanitizer.go` | Secret pattern matching and redaction |
+Responsibilities:
+
+- slog wrapper with context propagation
+- Secret pattern matching and redaction
 
 ---
 
