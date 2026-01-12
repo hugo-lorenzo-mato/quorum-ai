@@ -112,8 +112,8 @@ func parseStatus(output string) *Status {
 		} else if strings.HasPrefix(line, "# branch.ab ") {
 			parts := strings.Fields(line)
 			if len(parts) >= 4 {
-				fmt.Sscanf(parts[2], "+%d", &status.Ahead)
-				fmt.Sscanf(parts[3], "-%d", &status.Behind)
+				_, _ = fmt.Sscanf(parts[2], "+%d", &status.Ahead)
+				_, _ = fmt.Sscanf(parts[3], "-%d", &status.Behind)
 			}
 		} else if len(line) > 2 {
 			// Parse status lines

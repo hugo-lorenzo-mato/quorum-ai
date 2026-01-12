@@ -1,12 +1,13 @@
-# QUORUM-AI: Consolidated Analysis
+# QUORUM-AI: POC Decision Summary
 
 ## Purpose
 
-This document consolidates architectural and product decisions used to scope the
-POC. It serves as a stable reference for the vision document and is intentionally
-short to avoid documentation drift.
+This document summarizes key POC scope and product decisions. Architectural
+decisions are recorded as ADRs in `docs/adr/`, and this summary links to them
+without duplicating the full rationale. It stays short to avoid documentation
+drift.
 
-## Decision Summary
+## Summary
 
 ### 1. Delivery Model
 

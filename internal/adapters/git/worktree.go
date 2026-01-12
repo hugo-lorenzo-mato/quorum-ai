@@ -327,8 +327,8 @@ func (m *WorktreeManager) CleanupStale(ctx context.Context, maxAge time.Duration
 		}
 	}
 
-	// Also run git prune
-	m.Prune(ctx, false)
+	// Also run git prune (errors are non-fatal for cleanup)
+	_, _ = m.Prune(ctx, false)
 
 	return cleaned, nil
 }

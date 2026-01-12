@@ -36,9 +36,9 @@ Single-agent LLM interactions suffer from:
 
 ### 1.3 Decision Anchors
 
-Key POC decisions and constraints are consolidated in
-`docs/decisions/analisis-final-consolidado.md` and are referenced throughout this
-vision document.
+Key POC scope decisions and constraints are summarized in
+`docs/vision/POC-DECISIONS.md`. Architectural decisions are tracked separately
+as ADRs in `docs/adr/`.
 
 ---
 
@@ -277,7 +277,7 @@ The POC includes controlled experiments:
 - Hexagonal Architecture: Alistair Cockburn's Ports and Adapters pattern
 - Keep a Changelog: [keepachangelog.com](https://keepachangelog.com)
 - Semantic Versioning: [semver.org](https://semver.org)
-- Consolidated decisions: docs/decisions/analisis-final-consolidado.md
+- POC decision summary: docs/vision/POC-DECISIONS.md
 
 ---
 

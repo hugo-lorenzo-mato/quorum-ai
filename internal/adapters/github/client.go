@@ -396,7 +396,7 @@ func (c *Client) CreateIssue(ctx context.Context, title, body string, labels []s
 	parts := strings.Split(output, "/")
 	if len(parts) > 0 {
 		var num int
-		fmt.Sscanf(parts[len(parts)-1], "%d", &num)
+		_, _ = fmt.Sscanf(parts[len(parts)-1], "%d", &num)
 		return num, nil
 	}
 
