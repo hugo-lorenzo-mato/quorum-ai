@@ -312,7 +312,7 @@ func (e *ExperimentRunner) calculateSummary(runs []RunResult) Summary {
 // SaveResult saves the experiment result to a file.
 func SaveResult(result *ExperimentResult, path string) error {
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("creating output directory: %w", err)
 	}
 
@@ -321,7 +321,7 @@ func SaveResult(result *ExperimentResult, path string) error {
 		return fmt.Errorf("marshaling result: %w", err)
 	}
 
-	if err := os.WriteFile(path, data, 0644); err != nil {
+	if err := os.WriteFile(path, data, 0o644); err != nil {
 		return fmt.Errorf("writing result file: %w", err)
 	}
 

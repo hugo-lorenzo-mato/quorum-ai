@@ -20,7 +20,7 @@ func TestGetPrompt_FromFile(t *testing.T) {
 	// Create temp file with prompt
 	tmpDir := t.TempDir()
 	promptFile := filepath.Join(tmpDir, "prompt.txt")
-	if err := os.WriteFile(promptFile, []byte("file prompt content"), 0600); err != nil {
+	if err := os.WriteFile(promptFile, []byte("file prompt content"), 0o600); err != nil {
 		t.Fatalf("failed to create temp file: %v", err)
 	}
 

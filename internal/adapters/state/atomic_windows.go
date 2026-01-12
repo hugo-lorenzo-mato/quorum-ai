@@ -12,7 +12,7 @@ import (
 func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
 	// Ensure directory exists
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
 

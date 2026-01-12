@@ -130,7 +130,7 @@ echo '{"output": "Mock Gemini analysis", "tokens_in": 100, "tokens_out": 50}'
 func writeMockScript(t *testing.T, dir, name, content string) {
 	t.Helper()
 	path := filepath.Join(dir, name)
-	err := os.WriteFile(path, []byte(content), 0755)
+	err := os.WriteFile(path, []byte(content), 0o755)
 	if err != nil {
 		t.Fatalf("writing mock script: %v", err)
 	}

@@ -189,7 +189,7 @@ func TestJSONStateManager_ChecksumVerification(t *testing.T) {
 		t.Fatalf("Marshal() error = %v", err)
 	}
 
-	if err := os.WriteFile(statePath, corruptedData, 0644); err != nil {
+	if err := os.WriteFile(statePath, corruptedData, 0o644); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 
@@ -292,7 +292,7 @@ func TestJSONStateManager_StaleLock(t *testing.T) {
 
 	// Create a stale lock file manually
 	lockPath := statePath + ".lock"
-	if err := os.MkdirAll(filepath.Dir(lockPath), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(lockPath), 0o755); err != nil {
 		t.Fatalf("MkdirAll() error = %v", err)
 	}
 
@@ -302,7 +302,7 @@ func TestJSONStateManager_StaleLock(t *testing.T) {
 		AcquiredAt: time.Now().Add(-time.Hour), // Old timestamp
 	}
 	data, _ := json.Marshal(staleLock)
-	if err := os.WriteFile(lockPath, data, 0644); err != nil {
+	if err := os.WriteFile(lockPath, data, 0o644); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 

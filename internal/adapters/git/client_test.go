@@ -266,7 +266,7 @@ func TestGitClient_Add(t *testing.T) {
 
 	// Create new file
 	newFile := filepath.Join(repo.Path, "new.txt")
-	os.WriteFile(newFile, []byte("content"), 0644)
+	os.WriteFile(newFile, []byte("content"), 0o644)
 
 	// Add it
 	err = client.Add(context.Background(), "new.txt")

@@ -106,7 +106,7 @@ agents:
 consensus:
   threshold: 0.85
 `
-	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+	if err := os.WriteFile(configPath, []byte(configContent), 0o644); err != nil {
 		t.Fatalf("Failed to write test config: %v", err)
 	}
 
@@ -147,7 +147,7 @@ func TestLoader_Precedence(t *testing.T) {
 log:
   level: warn
 `
-	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+	if err := os.WriteFile(configPath, []byte(configContent), 0o644); err != nil {
 		t.Fatalf("Failed to write test config: %v", err)
 	}
 
@@ -176,7 +176,7 @@ func TestLoader_InvalidConfigFile(t *testing.T) {
 log:
   level: [invalid yaml
 `
-	if err := os.WriteFile(configPath, []byte(invalidContent), 0644); err != nil {
+	if err := os.WriteFile(configPath, []byte(invalidContent), 0o644); err != nil {
 		t.Fatalf("Failed to write test config: %v", err)
 	}
 
@@ -195,7 +195,7 @@ func TestLoader_ConfigFileUsed(t *testing.T) {
 	configContent := `log:
   level: info
 `
-	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+	if err := os.WriteFile(configPath, []byte(configContent), 0o644); err != nil {
 		t.Fatalf("Failed to write test config: %v", err)
 	}
 
@@ -224,7 +224,7 @@ consensus:
     risks: 0.25
     recommendations: 0.25
 `
-	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+	if err := os.WriteFile(configPath, []byte(configContent), 0o644); err != nil {
 		t.Fatalf("Failed to write test config: %v", err)
 	}
 

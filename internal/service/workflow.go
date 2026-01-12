@@ -82,6 +82,11 @@ func NewWorkflowRunner(
 
 // Run executes a complete workflow from a user prompt.
 func (w *WorkflowRunner) Run(ctx context.Context, prompt string) error {
+	// Validate input
+	if err := w.validateRunInput(prompt); err != nil {
+		return err
+	}
+
 	// Apply timeout
 	ctx, cancel := context.WithTimeout(ctx, w.config.Timeout)
 	defer cancel()
@@ -954,4 +959,24 @@ func (w *WorkflowRunner) GetState(ctx context.Context) (*core.WorkflowState, err
 // SetDryRun enables or disables dry-run mode.
 func (w *WorkflowRunner) SetDryRun(enabled bool) {
 	w.config.DryRun = enabled
+}
+
+// Validation methods
+
+// validateRunInput validates the input for Run.
+func (w *WorkflowRunner) validateRunInput(prompt string) error {
+	if strings.TrimSpace(prompt) == "" {
+		return core.ErrValidation(core.CodeEmptyPrompt, "prompt cannot be empty")
+	}
+	if len(prompt) > core.MaxPromptLength {
+		return core.ErrValidation(core.CodePromptTooLong,
+			fmt.Sprintf("prompt exceeds maximum length of %d characters", core.MaxPromptLength))
+	}
+	if w.config.Timeout <= 0 {
+		return core.ErrValidation(core.CodeInvalidTimeout, "timeout must be positive")
+	}
+	if len(w.agents.List()) == 0 {
+		return core.ErrValidation(core.CodeNoAgents, "no agents configured")
+	}
+	return nil
 }

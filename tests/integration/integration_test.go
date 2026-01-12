@@ -74,7 +74,7 @@ workflow:
 `
 
 	configPath := filepath.Join(dir, ".quorum.yaml")
-	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+	if err := os.WriteFile(configPath, []byte(configContent), 0o644); err != nil {
 		t.Fatalf("writing config: %v", err)
 	}
 

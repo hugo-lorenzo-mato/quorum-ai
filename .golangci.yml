@@ -67,12 +67,14 @@ linters-settings:
 
 issues:
   exclude-rules:
-    # Test files - only exclude specific linters that don't apply
+    # Test files - exclude linters that don't apply well to test code
     - path: _test\.go
       linters:
         - errcheck     # Test code often intentionally ignores errors
         - gosec        # Test code may use insecure patterns intentionally
         - gocyclo      # Test functions can be complex
+        - revive       # Mock implementations often have unused params
+        - gocritic     # Test patterns differ from production code
 
     # Test utilities
     - path: internal/testutil/
@@ -88,6 +90,7 @@ issues:
         - gosec
         - revive
         - gocritic
+        - gocyclo
 
     # Generated files
     - path: ".*_gen\\.go"

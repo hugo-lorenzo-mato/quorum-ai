@@ -183,4 +183,20 @@ const (
 	CodeConsensusLow      = "CONSENSUS_BELOW_THRESHOLD"
 	CodeChecksFailed      = "CHECKS_FAILED"
 	CodeMergeConflict     = "MERGE_CONFLICT"
+
+	// Validation error codes
+	CodeEmptyPrompt    = "EMPTY_PROMPT"
+	CodePromptTooLong  = "PROMPT_TOO_LONG"
+	CodeInvalidConfig  = "INVALID_CONFIG"
+	CodeNoAgents       = "NO_AGENTS"
+	CodeInvalidTimeout = "INVALID_TIMEOUT"
+
+	// Execution error codes
+	CodeAgentFailed    = "AGENT_FAILED"
+	CodeExecutionStuck = "EXECUTION_STUCK"
+	CodeParseFailed    = "PARSE_FAILED"
+	CodeDAGCycle       = "DAG_CYCLE"
 )
+
+// MaxPromptLength is the maximum allowed prompt length.
+const MaxPromptLength = 100000
