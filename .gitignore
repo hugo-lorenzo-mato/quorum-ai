@@ -89,6 +89,3 @@ go.work.sum
 
 # Local binary (root only)
 /quorum
-
-# Task files (development only)
-tasks-v2/
