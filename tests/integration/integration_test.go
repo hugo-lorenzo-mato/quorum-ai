@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/adapters/state"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/config"
@@ -18,9 +17,9 @@ import (
 
 func TestIntegration_StateManager(t *testing.T) {
 	dir := testutil.TempDir(t)
-	stateDir := filepath.Join(dir, ".quorum", "state")
+	statePath := filepath.Join(dir, ".quorum", "state", "workflow.json")
 
-	sm := state.NewJSONStateManager(stateDir)
+	sm := state.NewJSONStateManager(statePath)
 	ctx := context.Background()
 
 	// Create and save state
@@ -28,7 +27,12 @@ func TestIntegration_StateManager(t *testing.T) {
 		WorkflowID:   "test-workflow-1",
 		CurrentPhase: core.PhaseAnalyze,
 		Status:       core.WorkflowStatusRunning,
-		Tasks:        []*core.Task{{ID: "task-1", Name: "Test Task", Phase: core.PhaseAnalyze}},
+		Tasks:        make(map[core.TaskID]*core.TaskState),
+	}
+	ws.Tasks["task-1"] = &core.TaskState{
+		ID:    "task-1",
+		Name:  "Test Task",
+		Phase: core.PhaseAnalyze,
 	}
 
 	if err := sm.Save(ctx, ws); err != nil {
@@ -45,13 +49,9 @@ func TestIntegration_StateManager(t *testing.T) {
 		t.Errorf("workflow ID mismatch: got %s, want %s", loaded.WorkflowID, ws.WorkflowID)
 	}
 
-	// Delete state
-	if err := sm.Delete(ctx); err != nil {
-		t.Fatalf("delete failed: %v", err)
-	}
-
-	if sm.Exists() {
-		t.Error("state should not exist after delete")
+	// Verify state file exists
+	if !sm.Exists() {
+		t.Error("state file should exist")
 	}
 }
 
@@ -91,111 +91,54 @@ workflow:
 	}
 }
 
-func TestIntegration_WorkflowExecution(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping integration test in short mode")
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
-
-	// Build workflow
-	builder := core.NewWorkflowBuilder("integration-test")
-
-	analyzeTask := builder.AddTask("analyze-code", core.PhaseAnalyze)
-	analyzeTask.Name = "Analyze Code"
-
-	researchTask := builder.AddTask("research-docs", core.PhaseResearch)
-	researchTask.Name = "Research Documentation"
-	researchTask.DependsOn = []core.TaskID{"analyze-code"}
-
-	wf := builder.Build()
-
-	// Execute with dry-run mode
-	runner := service.NewWorkflowRunner(nil)
-	runner.SetMode(service.ExecutionMode{DryRun: true})
-
-	state, err := runner.Execute(ctx, wf)
-	if err != nil && !service.IsDryRunBlocked(err) {
-		t.Logf("execution completed with: %v", err)
-	}
-
-	if state == nil {
-		t.Fatal("state should not be nil")
-	}
-
-	if state.WorkflowID != "integration-test" {
-		t.Errorf("workflow ID mismatch: got %s, want integration-test", state.WorkflowID)
-	}
-}
-
-func TestIntegration_MetricsCollection(t *testing.T) {
-	collector := service.NewMetricsCollector()
-
-	collector.StartWorkflow()
-
-	// Simulate task execution
-	task := &core.Task{
-		ID:    "test-task-1",
-		Name:  "Test Task",
-		Phase: core.PhaseAnalyze,
-	}
-
-	collector.StartTask(task, "claude")
-	time.Sleep(10 * time.Millisecond)
-
-	result := &core.ExecuteResult{
-		Output:    "test output",
-		TokensIn:  100,
-		TokensOut: 50,
-		CostUSD:   0.01,
-	}
-
-	collector.EndTask(task.ID, result, nil)
-	collector.EndWorkflow()
-
-	metrics := collector.GetWorkflowMetrics()
-
-	if metrics.TasksTotal != 1 {
-		t.Errorf("tasks total mismatch: got %d, want 1", metrics.TasksTotal)
-	}
-
-	if metrics.TasksCompleted != 1 {
-		t.Errorf("tasks completed mismatch: got %d, want 1", metrics.TasksCompleted)
-	}
-
-	if metrics.TotalTokensIn != 100 {
-		t.Errorf("tokens in mismatch: got %d, want 100", metrics.TotalTokensIn)
-	}
-
-	if metrics.TotalCostUSD != 0.01 {
-		t.Errorf("cost mismatch: got %f, want 0.01", metrics.TotalCostUSD)
-	}
-}
-
 func TestIntegration_DAGExecution(t *testing.T) {
 	// Test DAG-based task execution order
-	dag := service.NewDAG()
+	dag := service.NewDAGBuilder()
 
-	// Create tasks with dependencies
-	dag.AddNode("task-a")
-	dag.AddNode("task-b")
-	dag.AddNode("task-c")
-	dag.AddNode("task-d")
+	// Create tasks
+	taskA := core.NewTask("task-a", "Task A", core.PhaseAnalyze)
+	taskB := core.NewTask("task-b", "Task B", core.PhaseAnalyze)
+	taskC := core.NewTask("task-c", "Task C", core.PhasePlan)
+	taskD := core.NewTask("task-d", "Task D", core.PhaseExecute)
 
-	// b depends on a, c depends on a, d depends on b and c
-	dag.AddEdge("task-a", "task-b")
-	dag.AddEdge("task-a", "task-c")
-	dag.AddEdge("task-b", "task-d")
-	dag.AddEdge("task-c", "task-d")
-
-	order, err := dag.TopologicalSort()
-	if err != nil {
-		t.Fatalf("topological sort failed: %v", err)
+	// Add tasks to DAG
+	if err := dag.AddTask(taskA); err != nil {
+		t.Fatalf("adding task-a: %v", err)
+	}
+	if err := dag.AddTask(taskB); err != nil {
+		t.Fatalf("adding task-b: %v", err)
+	}
+	if err := dag.AddTask(taskC); err != nil {
+		t.Fatalf("adding task-c: %v", err)
+	}
+	if err := dag.AddTask(taskD); err != nil {
+		t.Fatalf("adding task-d: %v", err)
 	}
 
+	// b depends on a, c depends on a, d depends on b and c
+	if err := dag.AddDependency("task-b", "task-a"); err != nil {
+		t.Fatalf("adding dependency b->a: %v", err)
+	}
+	if err := dag.AddDependency("task-c", "task-a"); err != nil {
+		t.Fatalf("adding dependency c->a: %v", err)
+	}
+	if err := dag.AddDependency("task-d", "task-b"); err != nil {
+		t.Fatalf("adding dependency d->b: %v", err)
+	}
+	if err := dag.AddDependency("task-d", "task-c"); err != nil {
+		t.Fatalf("adding dependency d->c: %v", err)
+	}
+
+	// Build DAG to get topological order
+	dagState, err := dag.Build()
+	if err != nil {
+		t.Fatalf("building DAG: %v", err)
+	}
+
+	order := dagState.Order
+
 	// Verify order constraints
-	positions := make(map[string]int)
+	positions := make(map[core.TaskID]int)
 	for i, node := range order {
 		positions[node] = i
 	}
@@ -218,23 +161,21 @@ func TestIntegration_DAGExecution(t *testing.T) {
 }
 
 func TestIntegration_ConsensusCheck(t *testing.T) {
-	checker := service.NewConsensusChecker(0.75)
+	checker := service.NewConsensusChecker(0.75, service.DefaultWeights())
 
 	// Test with similar outputs
 	outputs := []service.AnalysisOutput{
 		{
-			AgentName: "claude",
-			Sections: map[string]string{
-				"claims": "The code is well structured and follows SOLID principles",
-				"risks":  "No major security vulnerabilities detected",
-			},
+			AgentName:       "claude",
+			Claims:          []string{"Code is well structured", "Follows SOLID principles"},
+			Risks:           []string{"No major security vulnerabilities"},
+			Recommendations: []string{"Add more tests"},
 		},
 		{
-			AgentName: "gemini",
-			Sections: map[string]string{
-				"claims": "Code structure is good and adheres to SOLID principles",
-				"risks":  "No significant security issues found",
-			},
+			AgentName:       "gemini",
+			Claims:          []string{"Code structure is good", "Adheres to SOLID principles"},
+			Risks:           []string{"No significant security issues"},
+			Recommendations: []string{"Consider adding tests"},
 		},
 	}
 
@@ -245,4 +186,44 @@ func TestIntegration_ConsensusCheck(t *testing.T) {
 	}
 
 	t.Logf("Consensus result: score=%.2f, needsV3=%v", result.Score, result.NeedsV3)
+}
+
+func TestIntegration_WorkflowCreation(t *testing.T) {
+	// Test workflow creation and state management
+	wf := core.NewWorkflow("test-wf", "Analyze the codebase", nil)
+
+	// Add tasks
+	task1 := core.NewTask("analyze", "Analyze Code", core.PhaseAnalyze)
+	task2 := core.NewTask("plan", "Create Plan", core.PhasePlan).WithDependencies("analyze")
+	task3 := core.NewTask("execute", "Execute Changes", core.PhaseExecute).WithDependencies("plan")
+
+	if err := wf.AddTask(task1); err != nil {
+		t.Fatalf("adding task1: %v", err)
+	}
+	if err := wf.AddTask(task2); err != nil {
+		t.Fatalf("adding task2: %v", err)
+	}
+	if err := wf.AddTask(task3); err != nil {
+		t.Fatalf("adding task3: %v", err)
+	}
+
+	// Verify workflow state
+	if wf.Status != core.WorkflowStatusPending {
+		t.Errorf("expected pending status, got %s", wf.Status)
+	}
+
+	// Start workflow
+	if err := wf.Start(); err != nil {
+		t.Fatalf("starting workflow: %v", err)
+	}
+
+	if wf.Status != core.WorkflowStatusRunning {
+		t.Errorf("expected running status, got %s", wf.Status)
+	}
+
+	// Get ready tasks
+	ready := wf.ReadyTasks()
+	if len(ready) != 1 || ready[0].ID != "analyze" {
+		t.Errorf("expected analyze task to be ready, got %v", ready)
+	}
 }

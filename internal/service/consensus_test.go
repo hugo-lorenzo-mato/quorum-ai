@@ -346,8 +346,8 @@ func TestConsensusChecker_CategoryScores(t *testing.T) {
 		{
 			AgentName:       "gemini",
 			Claims:          []string{"A", "B"}, // Perfect match
-			Risks:           []string{"Y"},     // No match
-			Recommendations: []string{"1"},     // 1/3 match
+			Risks:           []string{"Y"},      // No match
+			Recommendations: []string{"1"},      // 1/3 match
 		},
 	}
 

@@ -15,11 +15,11 @@ import (
 
 // mockAgent implements core.Agent for testing.
 type mockAgent struct {
-	name       string
-	result     *core.ExecuteResult
-	err        error
-	callCount  int
-	mu         sync.Mutex
+	name        string
+	result      *core.ExecuteResult
+	err         error
+	callCount   int
+	mu          sync.Mutex
 	executeFunc func(ctx context.Context, opts core.ExecuteOptions) (*core.ExecuteResult, error)
 }
 
@@ -869,4 +869,3 @@ func TestWorkflowRunner_RebuildDAG(t *testing.T) {
 		t.Error("task-2 should be ready after task-1 completes")
 	}
 }
-

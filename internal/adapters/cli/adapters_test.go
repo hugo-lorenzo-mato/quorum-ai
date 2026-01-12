@@ -498,24 +498,24 @@ func TestCopilotAdapter_ExtractSuggestion(t *testing.T) {
 	copilot := adapter.(*CopilotAdapter)
 
 	tests := []struct {
-		name   string
-		input  string
-		want   string
+		name  string
+		input string
+		want  string
 	}{
 		{
-			name:   "with suggestion marker",
-			input:  "Some intro\nSuggestion:\nls -la\nrm -rf /tmp\n? Continue?",
-			want:   "ls -la\nrm -rf /tmp",
+			name:  "with suggestion marker",
+			input: "Some intro\nSuggestion:\nls -la\nrm -rf /tmp\n? Continue?",
+			want:  "ls -la\nrm -rf /tmp",
 		},
 		{
-			name:   "no marker",
-			input:  "Direct output text",
-			want:   "Direct output text",
+			name:  "no marker",
+			input: "Direct output text",
+			want:  "Direct output text",
 		},
 		{
-			name:   "shell prompt end",
-			input:  "Suggestion:\ngit status\n$ ",
-			want:   "git status",
+			name:  "shell prompt end",
+			input: "Suggestion:\ngit status\n$ ",
+			want:  "git status",
 		},
 	}
 
@@ -541,12 +541,12 @@ func TestCopilotAdapter_IsOutputComplete(t *testing.T) {
 		input string
 		want  bool
 	}{
-		{"Some text $", false},                  // $ without space
-		{"Some text with Suggestion:", true},    // Ends with Suggestion:
-		{"Interactive ?", false},                // ? without space
-		{"Still waiting...", false},             // No markers
-		{"Another Suggestion:", true},           // Ends with Suggestion:
-		{"  Suggestion:  ", true},               // After trim ends with Suggestion:
+		{"Some text $", false},               // $ without space
+		{"Some text with Suggestion:", true}, // Ends with Suggestion:
+		{"Interactive ?", false},             // ? without space
+		{"Still waiting...", false},          // No markers
+		{"Another Suggestion:", true},        // Ends with Suggestion:
+		{"  Suggestion:  ", true},            // After trim ends with Suggestion:
 	}
 
 	for _, tt := range tests {

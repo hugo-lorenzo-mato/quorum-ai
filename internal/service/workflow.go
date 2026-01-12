@@ -380,9 +380,9 @@ func (w *WorkflowRunner) runV2Critique(ctx context.Context, state *core.Workflow
 		}
 
 		prompt, err := w.prompts.RenderAnalyzeV2(AnalyzeV2Params{
-			Prompt:    state.Prompt,
+			Prompt:     state.Prompt,
 			V1Analysis: v1.RawOutput,
-			AgentName: v1.AgentName,
+			AgentName:  v1.AgentName,
 		})
 		if err != nil {
 			w.logger.Warn("failed to render V2 prompt", "error", err)
@@ -480,10 +480,10 @@ func (w *WorkflowRunner) runV3Reconciliation(ctx context.Context, state *core.Wo
 
 	// Create a checkpoint with the V3 reconciliation result
 	return w.checkpoint.CreateCheckpoint(ctx, state, CheckpointType("v3_reconciliation"), map[string]interface{}{
-		"output":      result.Output,
-		"tokens_in":   result.TokensIn,
-		"tokens_out":  result.TokensOut,
-		"cost_usd":    result.CostUSD,
+		"output":     result.Output,
+		"tokens_in":  result.TokensIn,
+		"tokens_out": result.TokensOut,
+		"cost_usd":   result.CostUSD,
 	})
 }
 

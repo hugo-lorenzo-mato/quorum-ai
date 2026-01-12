@@ -155,21 +155,21 @@ func TestModeEnforcer_RequiresConfirmation(t *testing.T) {
 		expected bool
 	}{
 		{
-			name: "yolo mode skips confirmation",
-			mode: service.ExecutionMode{Yolo: true},
-			op:   service.Operation{RequiresConfirmation: true},
+			name:     "yolo mode skips confirmation",
+			mode:     service.ExecutionMode{Yolo: true},
+			op:       service.Operation{RequiresConfirmation: true},
 			expected: false,
 		},
 		{
-			name: "dry-run skips confirmation",
-			mode: service.ExecutionMode{DryRun: true},
-			op:   service.Operation{RequiresConfirmation: true},
+			name:     "dry-run skips confirmation",
+			mode:     service.ExecutionMode{DryRun: true},
+			op:       service.Operation{RequiresConfirmation: true},
 			expected: false,
 		},
 		{
-			name: "normal mode respects confirmation",
-			mode: service.ExecutionMode{},
-			op:   service.Operation{RequiresConfirmation: true},
+			name:     "normal mode respects confirmation",
+			mode:     service.ExecutionMode{},
+			op:       service.Operation{RequiresConfirmation: true},
 			expected: true,
 		},
 	}

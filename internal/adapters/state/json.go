@@ -11,7 +11,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/google/renameio/v2"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 )
 
@@ -108,7 +107,7 @@ func (m *JSONStateManager) Save(ctx context.Context, state *core.WorkflowState) 
 	}
 
 	// Atomic write
-	if err := renameio.WriteFile(m.path, data, 0644); err != nil {
+	if err := atomicWriteFile(m.path, data, 0644); err != nil {
 		return fmt.Errorf("writing state file: %w", err)
 	}
 
@@ -168,7 +167,7 @@ func (m *JSONStateManager) createBackup() error {
 	if err != nil {
 		return err
 	}
-	return renameio.WriteFile(m.backupPath, data, 0644)
+	return atomicWriteFile(m.backupPath, data, 0644)
 }
 
 // Exists checks if state file exists.

@@ -143,9 +143,9 @@ func TestSanitizer_SanitizeMap(t *testing.T) {
 	sanitizer := NewSanitizer()
 
 	input := map[string]interface{}{
-		"api_key":  `api_key="sk-1234567890abcdefghijklmnop"`,
-		"normal":   "hello world",
-		"number":   42,
+		"api_key": `api_key="sk-1234567890abcdefghijklmnop"`,
+		"normal":  "hello world",
+		"number":  42,
 		"nested": map[string]interface{}{
 			"secret": `secret="nested_secret_value_here123"`,
 		},

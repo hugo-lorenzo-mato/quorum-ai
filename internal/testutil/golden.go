@@ -88,7 +88,7 @@ func ScrubTimestamps(s string) string {
 	patterns := []string{
 		`\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[^\s]*`, // ISO format with timezone
 		`\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}`,       // Standard format
-		`\d{2}:\d{2}:\d{2}`,                          // Time only
+		`\d{2}:\d{2}:\d{2}`,                         // Time only
 	}
 
 	result := s

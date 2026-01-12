@@ -136,7 +136,7 @@ func TestChecksResult_Summary_Mixed(t *testing.T) {
 	}
 
 	summary := result.Summary()
-	testutil.AssertContains(t, summary, "2")  // passed
-	testutil.AssertContains(t, summary, "1")  // failed
-	testutil.AssertContains(t, summary, "3")  // total
+	testutil.AssertContains(t, summary, "2") // passed
+	testutil.AssertContains(t, summary, "1") // failed
+	testutil.AssertContains(t, summary, "3") // total
 }
