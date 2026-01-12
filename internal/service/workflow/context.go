@@ -29,6 +29,8 @@ type Config struct {
 	DenyTools    []string
 	DefaultAgent string
 	V3Agent      string
+	// AgentPhaseModels allows per-agent, per-phase model overrides.
+	AgentPhaseModels map[string]map[string]string
 }
 
 // PromptRenderer renders prompts for different phases.
@@ -121,4 +123,20 @@ func BuildContextString(state *core.WorkflowState) string {
 	}
 
 	return ctx.String()
+}
+
+// ResolvePhaseModel returns the model override for a given agent/phase.
+// Priority: phase override > task model > empty (use agent default).
+func ResolvePhaseModel(cfg *Config, agentName string, phase core.Phase, taskModel string) string {
+	if strings.TrimSpace(taskModel) != "" {
+		return taskModel
+	}
+	if cfg != nil && cfg.AgentPhaseModels != nil {
+		if phaseModels, ok := cfg.AgentPhaseModels[agentName]; ok {
+			if model, ok := phaseModels[phase.String()]; ok && strings.TrimSpace(model) != "" {
+				return model
+			}
+		}
+	}
+	return ""
 }

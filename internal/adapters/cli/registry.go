@@ -212,7 +212,7 @@ func defaultConfig(name string) AgentConfig {
 		"gemini": {
 			Name:        "gemini",
 			Path:        "gemini",
-			Model:       "gemini-2.0-flash",
+			Model:       "gemini-2.5-flash",
 			MaxTokens:   4096,
 			Temperature: 0.7,
 			Timeout:     5 * time.Minute,
@@ -220,7 +220,7 @@ func defaultConfig(name string) AgentConfig {
 		"codex": {
 			Name:        "codex",
 			Path:        "codex",
-			Model:       "gpt-4o",
+			Model:       "gpt-5.1-codex",
 			MaxTokens:   4096,
 			Temperature: 0.7,
 			Timeout:     5 * time.Minute,

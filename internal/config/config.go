@@ -40,11 +40,12 @@ type AgentsConfig struct {
 
 // AgentConfig configures a single AI agent.
 type AgentConfig struct {
-	Enabled     bool    `mapstructure:"enabled"`
-	Path        string  `mapstructure:"path"`
-	Model       string  `mapstructure:"model"`
-	MaxTokens   int     `mapstructure:"max_tokens"`
-	Temperature float64 `mapstructure:"temperature"`
+	Enabled     bool              `mapstructure:"enabled"`
+	Path        string            `mapstructure:"path"`
+	Model       string            `mapstructure:"model"`
+	PhaseModels map[string]string `mapstructure:"phase_models"`
+	MaxTokens   int               `mapstructure:"max_tokens"`
+	Temperature float64           `mapstructure:"temperature"`
 }
 
 // StateConfig configures state persistence.

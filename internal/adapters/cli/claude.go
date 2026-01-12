@@ -69,8 +69,11 @@ func (c *ClaudeAdapter) Ping(ctx context.Context) error {
 // Execute runs a prompt through Claude CLI.
 func (c *ClaudeAdapter) Execute(ctx context.Context, opts core.ExecuteOptions) (*core.ExecuteResult, error) {
 	args := c.buildArgs(opts)
+	if opts.Prompt != "" {
+		args = append(args, opts.Prompt)
+	}
 
-	result, err := c.ExecuteCommand(ctx, args, opts.Prompt)
+	result, err := c.ExecuteCommand(ctx, args, "")
 	if err != nil {
 		return nil, err
 	}
@@ -92,15 +95,6 @@ func (c *ClaudeAdapter) buildArgs(opts core.ExecuteOptions) []string {
 	}
 	if model != "" {
 		args = append(args, "--model", model)
-	}
-
-	// Max tokens
-	maxTokens := opts.MaxTokens
-	if maxTokens == 0 {
-		maxTokens = c.config.MaxTokens
-	}
-	if maxTokens > 0 {
-		args = append(args, "--max-tokens", strconv.Itoa(maxTokens))
 	}
 
 	// Output format

@@ -41,7 +41,7 @@ agents:
     path: /usr/bin/claude
   gemini:
     enabled: true
-    model: gemini-pro
+    model: gemini-2.5-pro
     path: /usr/bin/gemini
 workflow:
   timeout: 1h
@@ -194,11 +194,11 @@ func FuzzConfigMaxRetries(f *testing.F) {
 
 func FuzzConfigAgentModel(f *testing.F) {
 	f.Add("claude-3-opus")
-	f.Add("gemini-pro")
+	f.Add("gemini-2.5-pro")
 	f.Add("")
 	f.Add("unknown-model")
 	f.Add("claude-3-sonnet-20240229")
-	f.Add("gpt-4")
+	f.Add("gpt-5.1-codex")
 	f.Add("very-long-model-name-that-might-cause-issues")
 
 	f.Fuzz(func(t *testing.T, model string) {

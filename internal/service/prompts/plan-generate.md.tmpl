@@ -19,6 +19,7 @@ Requirements:
 - Each task should be independently executable
 - Tasks should have clear dependencies
 - Estimate complexity (low/medium/high)
+- Return at least one task
 
 ## Response Format
 ```json
@@ -30,7 +31,7 @@ Requirements:
       "description": "What this task accomplishes",
       "dependencies": [],
       "complexity": "low|medium|high",
-      "agent": "preferred agent name"
+      "cli": "preferred agent name"
     }
   ],
   "execution_order": ["task-1", "task-2"]

@@ -367,7 +367,7 @@ func TestJSONStateManager_RoundTrip(t *testing.T) {
 		Name:         "Second Task",
 		Status:       core.TaskStatusCompleted,
 		CLI:          "gemini",
-		Model:        "gemini-2.0-flash",
+		Model:        "gemini-2.5-flash",
 		Dependencies: []core.TaskID{"task-1"},
 		TokensIn:     500,
 		TokensOut:    200,

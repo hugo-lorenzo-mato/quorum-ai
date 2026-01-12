@@ -294,7 +294,7 @@ func TestGeminiAdapter_Capabilities(t *testing.T) {
 }
 
 func TestGeminiAdapter_BuildArgs(t *testing.T) {
-	cfg := AgentConfig{Model: "gemini-2.0-flash"}
+	cfg := AgentConfig{Model: "gemini-2.5-flash"}
 	adapter, _ := NewGeminiAdapter(cfg)
 	gemini := adapter.(*GeminiAdapter)
 
@@ -307,14 +307,11 @@ func TestGeminiAdapter_BuildArgs(t *testing.T) {
 	if !containsString(args, "--model") {
 		t.Error("should include --model")
 	}
-	if !containsString(args, "--json") {
-		t.Error("should include --json for JSON format")
+	if !containsString(args, "--output-format") {
+		t.Error("should include --output-format for JSON format")
 	}
-	if !containsString(args, "--non-interactive") {
-		t.Error("should include --non-interactive")
-	}
-	if !containsString(args, "--prompt") {
-		t.Error("should include --prompt")
+	if !containsString(args, "--approval-mode") {
+		t.Error("should include --approval-mode for headless execution")
 	}
 }
 
@@ -403,7 +400,7 @@ func TestCodexAdapter_Capabilities(t *testing.T) {
 
 func TestCodexAdapter_BuildArgs(t *testing.T) {
 	cfg := AgentConfig{
-		Model:       "gpt-4o",
+		Model:       "gpt-5.1-codex",
 		MaxTokens:   4096,
 		Temperature: 0.7,
 	}
@@ -419,17 +416,20 @@ func TestCodexAdapter_BuildArgs(t *testing.T) {
 	if !containsString(args, "--model") {
 		t.Error("should include --model")
 	}
-	if !containsString(args, "--max-tokens") {
-		t.Error("should include --max-tokens")
-	}
-	if !containsString(args, "--temperature") {
-		t.Error("should include --temperature")
+	if len(args) == 0 || args[0] != "exec" {
+		t.Error("should include exec subcommand for headless execution")
 	}
 	if !containsString(args, "--json") {
 		t.Error("should include --json for JSON format")
 	}
-	if !containsString(args, "--full-auto") {
-		t.Error("should include --full-auto")
+	if !containsString(args, `approval_policy="never"`) {
+		t.Error("should include approval_policy override")
+	}
+	if !containsString(args, `sandbox_mode="workspace-write"`) {
+		t.Error("should include sandbox_mode override")
+	}
+	if !containsString(args, `model_reasoning_effort="high"`) {
+		t.Error("should include model_reasoning_effort override")
 	}
 }
 
@@ -614,7 +614,7 @@ func TestAiderAdapter_BuildArgs_Claude(t *testing.T) {
 }
 
 func TestAiderAdapter_BuildArgs_GPT(t *testing.T) {
-	cfg := AgentConfig{Model: "gpt-4o"}
+	cfg := AgentConfig{Model: "gpt-5.1-codex"}
 	adapter, _ := NewAiderAdapter(cfg)
 	aider := adapter.(*AiderAdapter)
 

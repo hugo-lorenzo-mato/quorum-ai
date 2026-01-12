@@ -167,6 +167,7 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 		result, execErr = agent.Execute(ctx, core.ExecuteOptions{
 			Prompt:      prompt,
 			Format:      core.OutputFormatText,
+			Model:       ResolvePhaseModel(wctx.Config, agentName, core.PhaseExecute, task.Model),
 			Timeout:     10 * time.Minute,
 			Sandbox:     wctx.Config.Sandbox,
 			DeniedTools: e.denyTools,

@@ -91,3 +91,25 @@ func TestConfig_Defaults(t *testing.T) {
 		t.Errorf("V3Agent = %q, want %q", cfg.V3Agent, "claude")
 	}
 }
+
+func TestResolvePhaseModel(t *testing.T) {
+	cfg := &Config{
+		AgentPhaseModels: map[string]map[string]string{
+			"claude": {
+				"analyze": "claude-opus-4-20250514",
+			},
+		},
+	}
+
+	if got := ResolvePhaseModel(cfg, "claude", core.PhaseAnalyze, "task-model"); got != "task-model" {
+		t.Fatalf("ResolvePhaseModel() = %q, want %q (task override)", got, "task-model")
+	}
+
+	if got := ResolvePhaseModel(cfg, "claude", core.PhaseAnalyze, ""); got != "claude-opus-4-20250514" {
+		t.Fatalf("ResolvePhaseModel() = %q, want %q (phase override)", got, "claude-opus-4-20250514")
+	}
+
+	if got := ResolvePhaseModel(cfg, "claude", core.PhasePlan, ""); got != "" {
+		t.Fatalf("ResolvePhaseModel() = %q, want empty (no override)", got)
+	}
+}

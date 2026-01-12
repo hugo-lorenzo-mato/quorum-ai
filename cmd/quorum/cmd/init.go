@@ -53,10 +53,26 @@ agents:
     enabled: true
     path: "claude"
     model: "claude-sonnet-4-20250514"
+    phase_models:
+      analyze: "claude-opus-4-20250514"
+      plan: "claude-sonnet-4-20250514"
+      execute: "claude-3-5-haiku-20241022"
   gemini:
     enabled: true
     path: "gemini"
-    model: "gemini-2.0-flash"
+    model: "gemini-2.5-flash"
+    phase_models:
+      analyze: "gemini-2.5-pro"
+      plan: "gemini-2.5-flash"
+      execute: "gemini-2.5-flash"
+  codex:
+    enabled: false
+    path: "codex"
+    model: "gpt-5.1-codex"
+    phase_models:
+      analyze: "gpt-5.1-codex"
+      plan: "gpt-5.1-codex"
+      execute: "gpt-5.1-codex-mini"
 
 # Workflow settings
 workflow:

@@ -681,12 +681,12 @@ func TestWorkflowRunner_SelectCritiqueAgent(t *testing.T) {
 	runner, _, _ := createTestWorkflowRunner(agent1, agent2)
 
 	// Should select different agent
-	critique := runner.selectCritiqueAgent("claude")
+	critique := runner.selectCritiqueAgent(context.Background(), "claude")
 	if critique == "claude" {
 		t.Error("should select different agent for critique")
 	}
 
-	critique = runner.selectCritiqueAgent("gemini")
+	critique = runner.selectCritiqueAgent(context.Background(), "gemini")
 	if critique == "gemini" {
 		t.Error("should select different agent for critique")
 	}
@@ -698,7 +698,7 @@ func TestWorkflowRunner_SelectCritiqueAgent_SingleAgent(t *testing.T) {
 	runner, _, _ := createTestWorkflowRunner(agent)
 
 	// Should return same agent if only one available
-	critique := runner.selectCritiqueAgent("claude")
+	critique := runner.selectCritiqueAgent(context.Background(), "claude")
 	if critique != "claude" {
 		t.Errorf("critique = %s, want claude (only available agent)", critique)
 	}

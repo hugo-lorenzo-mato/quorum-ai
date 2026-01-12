@@ -35,12 +35,12 @@ func NewGeminiAdapter(cfg AgentConfig) (core.Agent, error) {
 			MaxContextTokens:  1000000, // 1M context window
 			MaxOutputTokens:   8192,
 			SupportedModels: []string{
-				"gemini-2.0-flash",
-				"gemini-2.0-flash-thinking",
-				"gemini-1.5-pro",
-				"gemini-1.5-flash",
+				"gemini-3-pro-preview",
+				"gemini-3-flash-preview",
+				"gemini-2.5-pro",
+				"gemini-2.5-flash",
 			},
-			DefaultModel: "gemini-2.0-flash",
+			DefaultModel: "gemini-2.5-flash",
 		},
 	}
 
@@ -70,8 +70,11 @@ func (g *GeminiAdapter) Ping(ctx context.Context) error {
 // Execute runs a prompt through Gemini CLI.
 func (g *GeminiAdapter) Execute(ctx context.Context, opts core.ExecuteOptions) (*core.ExecuteResult, error) {
 	args := g.buildArgs(opts)
+	if opts.Prompt != "" {
+		args = append(args, opts.Prompt)
+	}
 
-	result, err := g.ExecuteCommand(ctx, args, opts.Prompt)
+	result, err := g.ExecuteCommand(ctx, args, "")
 	if err != nil {
 		return nil, err
 	}
@@ -94,14 +97,11 @@ func (g *GeminiAdapter) buildArgs(opts core.ExecuteOptions) []string {
 
 	// Output format
 	if opts.Format == core.OutputFormatJSON {
-		args = append(args, "--json")
+		args = append(args, "--output-format", "json")
 	}
 
-	// Non-interactive mode
-	args = append(args, "--non-interactive")
-
-	// Add prompt marker
-	args = append(args, "--prompt")
+	// Headless auto-approval
+	args = append(args, "--approval-mode", "yolo")
 
 	return args
 }

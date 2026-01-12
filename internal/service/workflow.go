@@ -40,17 +40,20 @@ type WorkflowRunnerConfig struct {
 	DenyTools    []string
 	DefaultAgent string
 	V3Agent      string
+	// AgentPhaseModels allows per-agent, per-phase model overrides.
+	AgentPhaseModels map[string]map[string]string
 }
 
 // DefaultWorkflowRunnerConfig returns default configuration.
 func DefaultWorkflowRunnerConfig() *WorkflowRunnerConfig {
 	return &WorkflowRunnerConfig{
-		Timeout:      time.Hour,
-		MaxRetries:   3,
-		DryRun:       false,
-		Sandbox:      true,
-		DefaultAgent: "claude",
-		V3Agent:      "claude",
+		Timeout:          time.Hour,
+		MaxRetries:       3,
+		DryRun:           false,
+		Sandbox:          true,
+		DefaultAgent:     "claude",
+		V3Agent:          "claude",
+		AgentPhaseModels: map[string]map[string]string{},
 	}
 }
 
@@ -83,7 +86,7 @@ func NewWorkflowRunner(
 // Run executes a complete workflow from a user prompt.
 func (w *WorkflowRunner) Run(ctx context.Context, prompt string) error {
 	// Validate input
-	if err := w.validateRunInput(prompt); err != nil {
+	if err := w.validateRunInput(ctx, prompt); err != nil {
 		return err
 	}
 
@@ -280,7 +283,7 @@ func (w *WorkflowRunner) runAnalyzePhase(ctx context.Context, state *core.Workfl
 
 // runV1Analysis runs initial analysis with multiple agents in parallel.
 func (w *WorkflowRunner) runV1Analysis(ctx context.Context, state *core.WorkflowState) ([]AnalysisOutput, error) {
-	agentNames := w.agents.List()
+	agentNames := w.agents.Available(ctx)
 	if len(agentNames) == 0 {
 		return nil, core.ErrValidation("NO_AGENTS", "no agents available")
 	}
@@ -352,6 +355,7 @@ func (w *WorkflowRunner) runAnalysisWithAgent(ctx context.Context, state *core.W
 		result, execErr = agent.Execute(ctx, core.ExecuteOptions{
 			Prompt:  prompt,
 			Format:  core.OutputFormatJSON,
+			Model:   w.resolveModel(agentName, core.PhaseAnalyze, ""),
 			Timeout: 5 * time.Minute,
 			Sandbox: w.config.Sandbox,
 		})
@@ -375,7 +379,7 @@ func (w *WorkflowRunner) runV2Critique(ctx context.Context, state *core.Workflow
 
 	// Each agent critiques the other's output
 	for i, v1 := range v1Outputs {
-		critiqueAgent := w.selectCritiqueAgent(v1.AgentName)
+		critiqueAgent := w.selectCritiqueAgent(ctx, v1.AgentName)
 		agent, err := w.agents.Get(critiqueAgent)
 		if err != nil {
 			w.logger.Warn("critique agent not available",
@@ -408,6 +412,7 @@ func (w *WorkflowRunner) runV2Critique(ctx context.Context, state *core.Workflow
 			result, execErr = agent.Execute(ctx, core.ExecuteOptions{
 				Prompt:  prompt,
 				Format:  core.OutputFormatJSON,
+				Model:   w.resolveModel(critiqueAgent, core.PhaseAnalyze, ""),
 				Timeout: 5 * time.Minute,
 				Sandbox: w.config.Sandbox,
 			})
@@ -476,6 +481,7 @@ func (w *WorkflowRunner) runV3Reconciliation(ctx context.Context, state *core.Wo
 		result, execErr = agent.Execute(ctx, core.ExecuteOptions{
 			Prompt:  prompt,
 			Format:  core.OutputFormatJSON,
+			Model:   w.resolveModel(v3AgentName, core.PhaseAnalyze, ""),
 			Timeout: 10 * time.Minute,
 			Sandbox: w.config.Sandbox,
 		})
@@ -542,6 +548,7 @@ func (w *WorkflowRunner) runPlanPhase(ctx context.Context, state *core.WorkflowS
 		result, execErr = agent.Execute(ctx, core.ExecuteOptions{
 			Prompt:  prompt,
 			Format:  core.OutputFormatJSON,
+			Model:   w.resolveModel(w.config.DefaultAgent, core.PhasePlan, ""),
 			Timeout: 5 * time.Minute,
 			Sandbox: w.config.Sandbox,
 		})
@@ -733,6 +740,7 @@ func (w *WorkflowRunner) executeTask(ctx context.Context, state *core.WorkflowSt
 		result, execErr = agent.Execute(ctx, core.ExecuteOptions{
 			Prompt:      prompt,
 			Format:      core.OutputFormatText,
+			Model:       w.resolveModel(agentName, core.PhaseExecute, task.Model),
 			Timeout:     10 * time.Minute,
 			Sandbox:     w.config.Sandbox,
 			DeniedTools: w.config.DenyTools,
@@ -778,6 +786,20 @@ func (w *WorkflowRunner) executeTask(ctx context.Context, state *core.WorkflowSt
 
 // Helper methods
 
+func (w *WorkflowRunner) resolveModel(agentName string, phase core.Phase, taskModel string) string {
+	if strings.TrimSpace(taskModel) != "" {
+		return taskModel
+	}
+	if w.config != nil && w.config.AgentPhaseModels != nil {
+		if phaseModels, ok := w.config.AgentPhaseModels[agentName]; ok {
+			if model, ok := phaseModels[phase.String()]; ok && strings.TrimSpace(model) != "" {
+				return model
+			}
+		}
+	}
+	return ""
+}
+
 func (w *WorkflowRunner) handleError(ctx context.Context, state *core.WorkflowState, err error) error {
 	w.logger.Error("workflow error",
 		"workflow_id", state.WorkflowID,
@@ -812,8 +834,8 @@ func (w *WorkflowRunner) buildContext(state *core.WorkflowState) string {
 	return ctx.String()
 }
 
-func (w *WorkflowRunner) selectCritiqueAgent(original string) string {
-	agents := w.agents.List()
+func (w *WorkflowRunner) selectCritiqueAgent(ctx context.Context, original string) string {
+	agents := w.agents.Available(ctx)
 	for _, a := range agents {
 		if a != original {
 			return a
@@ -882,38 +904,33 @@ type TaskPlanItem struct {
 	Name         string   `json:"name"`
 	Description  string   `json:"description"`
 	CLI          string   `json:"cli"`
+	Agent        string   `json:"agent"`
 	Dependencies []string `json:"dependencies"`
 }
 
 func (w *WorkflowRunner) parsePlan(output string) ([]*core.Task, error) {
-	// Try to parse as JSON array
-	var planItems []TaskPlanItem
-	if err := json.Unmarshal([]byte(output), &planItems); err != nil {
-		// Try wrapping in tasks array
-		var wrapper struct {
-			Tasks []TaskPlanItem `json:"tasks"`
-		}
-		if err := json.Unmarshal([]byte(output), &wrapper); err != nil {
-			// Return error - plan parsing failure should not be silent
-			return nil, fmt.Errorf("failed to parse plan output as JSON: %w", err)
-		}
-		planItems = wrapper.Tasks
+	planItems, err := parsePlanItems(output)
+	if err != nil {
+		return nil, err
 	}
 
-	// Validate we have at least one task
 	if len(planItems) == 0 {
 		return nil, fmt.Errorf("plan produced no tasks")
 	}
 
 	tasks := make([]*core.Task, 0, len(planItems))
 	for _, item := range planItems {
+		cli := item.CLI
+		if cli == "" {
+			cli = item.Agent
+		}
 		task := &core.Task{
 			ID:          core.TaskID(item.ID),
 			Name:        item.Name,
 			Description: item.Description,
 			Phase:       core.PhaseExecute,
 			Status:      core.TaskStatusPending,
-			CLI:         item.CLI,
+			CLI:         cli,
 		}
 
 		for _, dep := range item.Dependencies {
@@ -924,6 +941,120 @@ func (w *WorkflowRunner) parsePlan(output string) ([]*core.Task, error) {
 	}
 
 	return tasks, nil
+}
+
+func parsePlanItems(output string) ([]TaskPlanItem, error) {
+	cleaned := strings.TrimSpace(output)
+	if cleaned == "" {
+		return nil, fmt.Errorf("plan output empty")
+	}
+
+	var planItems []TaskPlanItem
+	if err := json.Unmarshal([]byte(cleaned), &planItems); err == nil {
+		return planItems, nil
+	}
+
+	var wrapper map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(cleaned), &wrapper); err != nil {
+		if extracted := extractJSON(cleaned); extracted != "" && extracted != cleaned {
+			return parsePlanItems(extracted)
+		}
+		return nil, fmt.Errorf("failed to parse plan output as JSON: %w", err)
+	}
+
+	if rawTasks, ok := wrapper["tasks"]; ok {
+		if err := json.Unmarshal(rawTasks, &planItems); err != nil {
+			return nil, fmt.Errorf("failed to parse tasks field: %w", err)
+		}
+		return planItems, nil
+	}
+
+	for _, key := range []string{"result", "content", "text", "output"} {
+		raw, ok := wrapper[key]
+		if !ok {
+			continue
+		}
+		var candidate string
+		if err := json.Unmarshal(raw, &candidate); err == nil {
+			candidate = strings.TrimSpace(candidate)
+			if candidate != "" && candidate != cleaned {
+				return parsePlanItems(candidate)
+			}
+		}
+	}
+
+	var gemini struct {
+		Candidates []struct {
+			Content struct {
+				Parts []struct {
+					Text string `json:"text"`
+				} `json:"parts"`
+			} `json:"content"`
+		} `json:"candidates"`
+	}
+	if err := json.Unmarshal([]byte(cleaned), &gemini); err == nil && len(gemini.Candidates) > 0 {
+		var parts []string
+		for _, part := range gemini.Candidates[0].Content.Parts {
+			if strings.TrimSpace(part.Text) != "" {
+				parts = append(parts, part.Text)
+			}
+		}
+		if len(parts) > 0 {
+			return parsePlanItems(strings.Join(parts, "\n"))
+		}
+	}
+
+	return nil, fmt.Errorf("plan output missing tasks field")
+}
+
+func extractJSON(output string) string {
+	start := strings.IndexAny(output, "{[")
+	if start == -1 {
+		return ""
+	}
+
+	depth := 0
+	inString := false
+	escaped := false
+	openChar := output[start]
+	closeChar := byte('}')
+	if openChar == '[' {
+		closeChar = ']'
+	}
+
+	for i := start; i < len(output); i++ {
+		c := output[i]
+
+		if escaped {
+			escaped = false
+			continue
+		}
+
+		if c == '\\' && inString {
+			escaped = true
+			continue
+		}
+
+		if c == '"' {
+			inString = !inString
+			continue
+		}
+
+		if inString {
+			continue
+		}
+
+		if c == openChar {
+			depth++
+		} else if c == closeChar {
+			depth--
+			if depth == 0 {
+				return output[start : i+1]
+			}
+		}
+	}
+
+	return ""
 }
 
 func (w *WorkflowRunner) rebuildDAG(state *core.WorkflowState) error {
@@ -970,7 +1101,7 @@ func (w *WorkflowRunner) SetDryRun(enabled bool) {
 // Validation methods
 
 // validateRunInput validates the input for Run.
-func (w *WorkflowRunner) validateRunInput(prompt string) error {
+func (w *WorkflowRunner) validateRunInput(ctx context.Context, prompt string) error {
 	if strings.TrimSpace(prompt) == "" {
 		return core.ErrValidation(core.CodeEmptyPrompt, "prompt cannot be empty")
 	}
@@ -981,7 +1112,7 @@ func (w *WorkflowRunner) validateRunInput(prompt string) error {
 	if w.config.Timeout <= 0 {
 		return core.ErrValidation(core.CodeInvalidTimeout, "timeout must be positive")
 	}
-	if len(w.agents.List()) == 0 {
+	if len(w.agents.Available(ctx)) == 0 {
 		return core.ErrValidation(core.CodeNoAgents, "no agents configured")
 	}
 	return nil

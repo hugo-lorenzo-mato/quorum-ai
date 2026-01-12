@@ -34,12 +34,19 @@ func NewCodexAdapter(cfg AgentConfig) (core.Agent, error) {
 			MaxContextTokens:  128000,
 			MaxOutputTokens:   16384,
 			SupportedModels: []string{
-				"gpt-4o",
-				"gpt-4-turbo",
-				"gpt-4",
-				"gpt-3.5-turbo",
+				"gpt-5.2-codex",
+				"gpt-5.2",
+				"gpt-5.1-codex",
+				"gpt-5.1-codex-mini",
+				"gpt-5.1-codex-max",
+				"gpt-5-codex",
+				"gpt-5-codex-mini",
+				"gpt-5",
+				"gpt-4.1",
+				"o3",
+				"o4-mini",
 			},
-			DefaultModel: "gpt-4o",
+			DefaultModel: "gpt-5.1-codex",
 		},
 	}
 
@@ -70,7 +77,11 @@ func (c *CodexAdapter) Ping(ctx context.Context) error {
 func (c *CodexAdapter) Execute(ctx context.Context, opts core.ExecuteOptions) (*core.ExecuteResult, error) {
 	args := c.buildArgs(opts)
 
-	result, err := c.ExecuteCommand(ctx, args, opts.Prompt)
+	if opts.Prompt != "" {
+		args = append(args, opts.Prompt)
+	}
+
+	result, err := c.ExecuteCommand(ctx, args, "")
 	if err != nil {
 		return nil, err
 	}
@@ -80,7 +91,14 @@ func (c *CodexAdapter) Execute(ctx context.Context, opts core.ExecuteOptions) (*
 
 // buildArgs constructs CLI arguments for Codex.
 func (c *CodexAdapter) buildArgs(opts core.ExecuteOptions) []string {
-	args := []string{}
+	args := []string{"exec"}
+
+	// Headless approvals/sandbox via config overrides
+	args = append(args,
+		"-c", `approval_policy="never"`,
+		"-c", `sandbox_mode="workspace-write"`,
+		"-c", `model_reasoning_effort="high"`,
+	)
 
 	// Model selection
 	model := opts.Model
@@ -91,31 +109,13 @@ func (c *CodexAdapter) buildArgs(opts core.ExecuteOptions) []string {
 		args = append(args, "--model", model)
 	}
 
-	// Max tokens
-	maxTokens := opts.MaxTokens
-	if maxTokens == 0 {
-		maxTokens = c.config.MaxTokens
-	}
-	if maxTokens > 0 {
-		args = append(args, "--max-tokens", strconv.Itoa(maxTokens))
-	}
-
-	// Temperature
-	temp := opts.Temperature
-	if temp == 0 {
-		temp = c.config.Temperature
-	}
-	if temp > 0 {
-		args = append(args, "--temperature", strconv.FormatFloat(temp, 'f', 2, 64))
-	}
+	// Max tokens and temperature are configured via Codex config files,
+	// not as CLI flags for `codex exec`.
 
 	// Output format
 	if opts.Format == core.OutputFormatJSON {
 		args = append(args, "--json")
 	}
-
-	// Full auto mode for non-interactive
-	args = append(args, "--full-auto")
 
 	return args
 }

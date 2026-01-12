@@ -177,6 +177,7 @@ func (a *Analyzer) runAnalysisWithAgent(ctx context.Context, wctx *Context, agen
 		result, execErr = agent.Execute(ctx, core.ExecuteOptions{
 			Prompt:  prompt,
 			Format:  core.OutputFormatJSON,
+			Model:   ResolvePhaseModel(wctx.Config, agentName, core.PhaseAnalyze, ""),
 			Timeout: 5 * time.Minute,
 			Sandbox: wctx.Config.Sandbox,
 		})
@@ -233,6 +234,7 @@ func (a *Analyzer) runV2Critique(ctx context.Context, wctx *Context, v1Outputs [
 			result, execErr = agent.Execute(ctx, core.ExecuteOptions{
 				Prompt:  prompt,
 				Format:  core.OutputFormatJSON,
+				Model:   ResolvePhaseModel(wctx.Config, critiqueAgent, core.PhaseAnalyze, ""),
 				Timeout: 5 * time.Minute,
 				Sandbox: wctx.Config.Sandbox,
 			})
@@ -301,6 +303,7 @@ func (a *Analyzer) runV3Reconciliation(ctx context.Context, wctx *Context, v1, v
 		result, execErr = agent.Execute(ctx, core.ExecuteOptions{
 			Prompt:  prompt,
 			Format:  core.OutputFormatJSON,
+			Model:   ResolvePhaseModel(wctx.Config, v3AgentName, core.PhaseAnalyze, ""),
 			Timeout: 10 * time.Minute,
 			Sandbox: wctx.Config.Sandbox,
 		})

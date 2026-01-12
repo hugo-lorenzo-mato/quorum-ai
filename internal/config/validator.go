@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 )
 
 // ValidationError represents a configuration validation error.
@@ -143,12 +145,30 @@ func (v *Validator) validateAgent(prefix string, cfg *AgentConfig) {
 		v.addError(prefix+".path", cfg.Path, "path required when enabled")
 	}
 
+	v.validatePhaseModels(prefix+".phase_models", cfg.PhaseModels)
+
 	if cfg.MaxTokens < 0 || cfg.MaxTokens > 200000 {
 		v.addError(prefix+".max_tokens", cfg.MaxTokens, "must be between 0 and 200000")
 	}
 
 	if cfg.Temperature < 0 || cfg.Temperature > 2 {
 		v.addError(prefix+".temperature", cfg.Temperature, "must be between 0 and 2")
+	}
+}
+
+func (v *Validator) validatePhaseModels(prefix string, phaseModels map[string]string) {
+	if len(phaseModels) == 0 {
+		return
+	}
+
+	for phase, model := range phaseModels {
+		if !core.ValidPhase(core.Phase(phase)) {
+			v.addError(prefix, phase, "unknown phase")
+			continue
+		}
+		if strings.TrimSpace(model) == "" {
+			v.addError(prefix+"."+phase, model, "model cannot be empty")
+		}
 	}
 }
 

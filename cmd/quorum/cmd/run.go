@@ -13,6 +13,7 @@ import (
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/adapters/cli"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/adapters/state"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/config"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/logging"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service"
 )
@@ -75,7 +76,10 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 	registry := cli.NewRegistry()
 
 	// Configure agents from config
-	configureAgents(registry)
+	cfg, err := configureAgents(registry)
+	if err != nil {
+		return fmt.Errorf("configuring agents: %w", err)
+	}
 
 	// Create consensus checker
 	threshold := viper.GetFloat64("consensus.threshold")
@@ -103,6 +107,13 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 		DenyTools:    viper.GetStringSlice("workflow.deny_tools"),
 		DefaultAgent: viper.GetString("agents.default"),
 		V3Agent:      "claude",
+		AgentPhaseModels: map[string]map[string]string{
+			"claude":  cfg.Agents.Claude.PhaseModels,
+			"gemini":  cfg.Agents.Gemini.PhaseModels,
+			"codex":   cfg.Agents.Codex.PhaseModels,
+			"copilot": cfg.Agents.Copilot.PhaseModels,
+			"aider":   cfg.Agents.Aider.PhaseModels,
+		},
 	}
 	if runnerConfig.DefaultAgent == "" {
 		runnerConfig.DefaultAgent = "claude"
@@ -134,65 +145,86 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 	return runner.Run(ctx, prompt)
 }
 
-func configureAgents(registry *cli.Registry) {
+func configureAgents(registry *cli.Registry) (*config.Config, error) {
+	loader := config.NewLoader()
+	if cfgFile != "" {
+		loader.WithConfigFile(cfgFile)
+	}
+	cfg, err := loader.Load()
+	if err != nil {
+		return nil, err
+	}
+	isEnabled := func(key, envKey string, enabled bool) bool {
+		if !enabled {
+			return false
+		}
+		if loader.Viper().InConfig(key) {
+			return true
+		}
+		_, ok := os.LookupEnv(envKey)
+		return ok
+	}
+
 	// Configure Claude
-	if viper.GetBool("agents.claude.enabled") {
+	if isEnabled("agents.claude.enabled", "QUORUM_AGENTS_CLAUDE_ENABLED", cfg.Agents.Claude.Enabled) {
 		registry.Configure("claude", cli.AgentConfig{
 			Name:        "claude",
-			Path:        viper.GetString("agents.claude.path"),
-			Model:       viper.GetString("agents.claude.model"),
-			MaxTokens:   viper.GetInt("agents.claude.max_tokens"),
-			Temperature: viper.GetFloat64("agents.claude.temperature"),
+			Path:        cfg.Agents.Claude.Path,
+			Model:       cfg.Agents.Claude.Model,
+			MaxTokens:   cfg.Agents.Claude.MaxTokens,
+			Temperature: cfg.Agents.Claude.Temperature,
 			Timeout:     5 * time.Minute,
 		})
 	}
 
 	// Configure Gemini
-	if viper.GetBool("agents.gemini.enabled") {
+	if isEnabled("agents.gemini.enabled", "QUORUM_AGENTS_GEMINI_ENABLED", cfg.Agents.Gemini.Enabled) {
 		registry.Configure("gemini", cli.AgentConfig{
 			Name:        "gemini",
-			Path:        viper.GetString("agents.gemini.path"),
-			Model:       viper.GetString("agents.gemini.model"),
-			MaxTokens:   viper.GetInt("agents.gemini.max_tokens"),
-			Temperature: viper.GetFloat64("agents.gemini.temperature"),
+			Path:        cfg.Agents.Gemini.Path,
+			Model:       cfg.Agents.Gemini.Model,
+			MaxTokens:   cfg.Agents.Gemini.MaxTokens,
+			Temperature: cfg.Agents.Gemini.Temperature,
 			Timeout:     5 * time.Minute,
 		})
 	}
 
 	// Configure Codex
-	if viper.GetBool("agents.codex.enabled") {
+	if isEnabled("agents.codex.enabled", "QUORUM_AGENTS_CODEX_ENABLED", cfg.Agents.Codex.Enabled) {
 		registry.Configure("codex", cli.AgentConfig{
 			Name:        "codex",
-			Path:        viper.GetString("agents.codex.path"),
-			Model:       viper.GetString("agents.codex.model"),
-			MaxTokens:   viper.GetInt("agents.codex.max_tokens"),
-			Temperature: viper.GetFloat64("agents.codex.temperature"),
+			Path:        cfg.Agents.Codex.Path,
+			Model:       cfg.Agents.Codex.Model,
+			MaxTokens:   cfg.Agents.Codex.MaxTokens,
+			Temperature: cfg.Agents.Codex.Temperature,
 			Timeout:     5 * time.Minute,
 		})
 	}
 
 	// Configure Copilot
-	if viper.GetBool("agents.copilot.enabled") {
+	if isEnabled("agents.copilot.enabled", "QUORUM_AGENTS_COPILOT_ENABLED", cfg.Agents.Copilot.Enabled) {
 		registry.Configure("copilot", cli.AgentConfig{
 			Name:        "copilot",
-			Path:        viper.GetString("agents.copilot.path"),
-			MaxTokens:   viper.GetInt("agents.copilot.max_tokens"),
-			Temperature: viper.GetFloat64("agents.copilot.temperature"),
+			Path:        cfg.Agents.Copilot.Path,
+			MaxTokens:   cfg.Agents.Copilot.MaxTokens,
+			Temperature: cfg.Agents.Copilot.Temperature,
 			Timeout:     5 * time.Minute,
 		})
 	}
 
 	// Configure Aider
-	if viper.GetBool("agents.aider.enabled") {
+	if isEnabled("agents.aider.enabled", "QUORUM_AGENTS_AIDER_ENABLED", cfg.Agents.Aider.Enabled) {
 		registry.Configure("aider", cli.AgentConfig{
 			Name:        "aider",
-			Path:        viper.GetString("agents.aider.path"),
-			Model:       viper.GetString("agents.aider.model"),
-			MaxTokens:   viper.GetInt("agents.aider.max_tokens"),
-			Temperature: viper.GetFloat64("agents.aider.temperature"),
+			Path:        cfg.Agents.Aider.Path,
+			Model:       cfg.Agents.Aider.Model,
+			MaxTokens:   cfg.Agents.Aider.MaxTokens,
+			Temperature: cfg.Agents.Aider.Temperature,
 			Timeout:     5 * time.Minute,
 		})
 	}
+
+	return cfg, nil
 }
 
 func getPrompt(args []string, file string) (string, error) {

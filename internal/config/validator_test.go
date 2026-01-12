@@ -28,7 +28,7 @@ func validConfig() *Config {
 			Gemini: AgentConfig{
 				Enabled:     true,
 				Path:        "gemini",
-				Model:       "gemini-2.0-flash",
+				Model:       "gemini-2.5-flash",
 				MaxTokens:   4096,
 				Temperature: 0.7,
 			},
@@ -118,6 +118,23 @@ func TestValidator_InvalidFormat(t *testing.T) {
 
 	if !strings.Contains(err.Error(), "log.format") {
 		t.Errorf("error = %v, should mention log.format", err)
+	}
+}
+
+func TestValidator_InvalidPhaseModel(t *testing.T) {
+	cfg := validConfig()
+	cfg.Agents.Claude.PhaseModels = map[string]string{
+		"invalid": "claude-sonnet-4-20250514",
+	}
+
+	v := NewValidator()
+	err := v.Validate(cfg)
+	if err == nil {
+		t.Fatal("Validate() error = nil, want error for invalid phase model")
+	}
+
+	if !strings.Contains(err.Error(), "phase_models") {
+		t.Fatalf("error = %v, should mention phase_models", err)
 	}
 }
 

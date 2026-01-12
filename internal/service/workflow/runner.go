@@ -46,17 +46,20 @@ type RunnerConfig struct {
 	DenyTools    []string
 	DefaultAgent string
 	V3Agent      string
+	// AgentPhaseModels allows per-agent, per-phase model overrides.
+	AgentPhaseModels map[string]map[string]string
 }
 
 // DefaultRunnerConfig returns default configuration.
 func DefaultRunnerConfig() *RunnerConfig {
 	return &RunnerConfig{
-		Timeout:      time.Hour,
-		MaxRetries:   3,
-		DryRun:       false,
-		Sandbox:      true,
-		DefaultAgent: "claude",
-		V3Agent:      "claude",
+		Timeout:          time.Hour,
+		MaxRetries:       3,
+		DryRun:           false,
+		Sandbox:          true,
+		DefaultAgent:     "claude",
+		V3Agent:          "claude",
+		AgentPhaseModels: map[string]map[string]string{},
 	}
 }
 
@@ -270,11 +273,12 @@ func (r *Runner) createContext(state *core.WorkflowState) *Context {
 		RateLimits: r.rateLimits,
 		Logger:     r.logger,
 		Config: &Config{
-			DryRun:       r.config.DryRun,
-			Sandbox:      r.config.Sandbox,
-			DenyTools:    r.config.DenyTools,
-			DefaultAgent: r.config.DefaultAgent,
-			V3Agent:      r.config.V3Agent,
+			DryRun:           r.config.DryRun,
+			Sandbox:          r.config.Sandbox,
+			DenyTools:        r.config.DenyTools,
+			DefaultAgent:     r.config.DefaultAgent,
+			V3Agent:          r.config.V3Agent,
+			AgentPhaseModels: r.config.AgentPhaseModels,
 		},
 	}
 }
