@@ -90,7 +90,7 @@ func (w *WorkflowRunner) Run(ctx context.Context, prompt string) error {
 	if err := w.state.AcquireLock(ctx); err != nil {
 		return fmt.Errorf("acquiring lock: %w", err)
 	}
-	defer w.state.ReleaseLock(ctx)
+	defer func() { _ = w.state.ReleaseLock(ctx) }()
 
 	// Initialize state
 	state := &core.WorkflowState{
@@ -150,7 +150,7 @@ func (w *WorkflowRunner) Resume(ctx context.Context) error {
 	if err := w.state.AcquireLock(ctx); err != nil {
 		return fmt.Errorf("acquiring lock: %w", err)
 	}
-	defer w.state.ReleaseLock(ctx)
+	defer func() { _ = w.state.ReleaseLock(ctx) }()
 
 	// Load existing state
 	state, err := w.state.Load(ctx)
@@ -561,13 +561,13 @@ func (w *WorkflowRunner) runPlanPhase(ctx context.Context, state *core.WorkflowS
 			Dependencies: task.Dependencies,
 		}
 		state.TaskOrder = append(state.TaskOrder, task.ID)
-		w.dag.AddTask(task)
+		_ = w.dag.AddTask(task) // Errors are caught by dag.Build() below
 	}
 
 	// Build dependency graph
 	for _, task := range tasks {
 		for _, dep := range task.Dependencies {
-			w.dag.AddDependency(task.ID, dep)
+			_ = w.dag.AddDependency(task.ID, dep) // Errors are caught by dag.Build() below
 		}
 	}
 
@@ -781,7 +781,7 @@ func (w *WorkflowRunner) handleError(ctx context.Context, state *core.WorkflowSt
 	if err := w.checkpoint.ErrorCheckpoint(ctx, state, err); err != nil {
 		w.logger.Warn("failed to create error checkpoint", "checkpoint_error", err)
 	}
-	w.state.Save(ctx, state)
+	_ = w.state.Save(ctx, state) // Best-effort save on error path
 
 	return err
 }
@@ -926,13 +926,13 @@ func (w *WorkflowRunner) rebuildDAG(state *core.WorkflowState) error {
 			Model:        taskState.Model,
 			Dependencies: taskState.Dependencies,
 		}
-		w.dag.AddTask(task)
+		_ = w.dag.AddTask(task) // Errors are non-fatal during restoration
 	}
 
 	// Add dependencies
 	for _, taskState := range state.Tasks {
 		for _, dep := range taskState.Dependencies {
-			w.dag.AddDependency(taskState.ID, dep)
+			_ = w.dag.AddDependency(taskState.ID, dep) // Errors are non-fatal during restoration
 		}
 	}
 

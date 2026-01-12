@@ -323,7 +323,7 @@ type JSONEvent struct {
 }
 
 func (j *JSONOutput) emit(eventType string, data interface{}) {
-	j.enc.Encode(JSONEvent{
+	_ = j.enc.Encode(JSONEvent{ // Errors on stdout encoding are non-recoverable
 		Type:      eventType,
 		Timestamp: time.Now(),
 		Data:      data,

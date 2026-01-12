@@ -55,11 +55,11 @@ func init() {
 	rootCmd.PersistentFlags().BoolVarP(&quiet, "quiet", "q", false,
 		"suppress non-essential output")
 
-	// Bind flags to viper
-	viper.BindPFlag("log.level", rootCmd.PersistentFlags().Lookup("log-level"))
-	viper.BindPFlag("log.format", rootCmd.PersistentFlags().Lookup("log-format"))
-	viper.BindPFlag("no_color", rootCmd.PersistentFlags().Lookup("no-color"))
-	viper.BindPFlag("quiet", rootCmd.PersistentFlags().Lookup("quiet"))
+	// Bind flags to viper (errors are nil when flag exists)
+	_ = viper.BindPFlag("log.level", rootCmd.PersistentFlags().Lookup("log-level"))
+	_ = viper.BindPFlag("log.format", rootCmd.PersistentFlags().Lookup("log-format"))
+	_ = viper.BindPFlag("no_color", rootCmd.PersistentFlags().Lookup("no-color"))
+	_ = viper.BindPFlag("quiet", rootCmd.PersistentFlags().Lookup("quiet"))
 }
 
 func initConfig() error {

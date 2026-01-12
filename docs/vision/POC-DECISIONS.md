@@ -40,3 +40,6 @@ drift.
 - docs/vision/QUORUM-POC-VISION-v1.md
 - docs/ARCHITECTURE.md
 - docs/adr/0001-hexagonal-architecture.md
+- docs/adr/0002-consensus-protocol.md
+- docs/adr/0003-state-persistence-json.md
+- docs/adr/0004-worktree-isolation.md

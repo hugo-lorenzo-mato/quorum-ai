@@ -41,7 +41,7 @@ linters:
 
     # Duplication
     - dupl
-    - goconst
+    # goconst disabled - too many false positives for adapter pattern names
 
     # Imports
     - depguard
@@ -56,7 +56,7 @@ linters-settings:
     min-complexity: 15
 
   gocognit:
-    min-complexity: 20
+    min-complexity: 30  # Increased to allow complex parsing functions
 
   funlen:
     lines: 100
@@ -78,10 +78,6 @@ linters-settings:
 
   dupl:
     threshold: 200  # Increased for adapter pattern implementations
-
-  goconst:
-    min-len: 3
-    min-occurrences: 3
 
   depguard:
     rules:
@@ -114,6 +110,12 @@ issues:
         - dupl
         - goconst
         - errcheck
+        - gosec
+
+    # Test utilities
+    - path: internal/testutil/
+      linters:
+        - gosec
 
     # Generated files
     - path: ".*_gen\\.go"

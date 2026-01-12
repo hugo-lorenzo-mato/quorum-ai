@@ -344,6 +344,9 @@ quorum-ai/
 For detailed rationale behind architectural choices, see:
 
 - [ADR-0001: Hexagonal Architecture](adr/0001-hexagonal-architecture.md)
+- [ADR-0002: Consensus Protocol and Scoring](adr/0002-consensus-protocol.md)
+- [ADR-0003: JSON State Persistence for POC](adr/0003-state-persistence-json.md)
+- [ADR-0004: Worktree Isolation per Task](adr/0004-worktree-isolation.md)
 
 ---
 
