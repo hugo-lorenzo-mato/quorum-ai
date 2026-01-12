@@ -190,10 +190,12 @@ type StateMetrics struct {
 // Checkpoint represents a resumable point in execution.
 type Checkpoint struct {
 	ID        string    `json:"id"`
+	Type      string    `json:"type"`
 	Phase     Phase     `json:"phase"`
 	TaskID    TaskID    `json:"task_id,omitempty"`
 	Timestamp time.Time `json:"timestamp"`
-	Message   string    `json:"message"`
+	Message   string    `json:"message,omitempty"`
+	Data      []byte    `json:"data,omitempty"`
 }
 
 // CurrentStateVersion is the schema version for state files.

@@ -55,24 +55,20 @@ func FuzzConsensusEvaluate(f *testing.F) {
 	f.Add("special chars: @#$%", "more special: &*()", "unicode: 日本語")
 
 	f.Fuzz(func(t *testing.T, claims, risks, recs string) {
-		checker := service.NewConsensusChecker(0.75)
+		checker := service.NewConsensusChecker(0.75, service.DefaultWeights())
 
 		outputs := []service.AnalysisOutput{
 			{
-				AgentName: "agent1",
-				Sections: map[string]string{
-					"claims":          claims,
-					"risks":           risks,
-					"recommendations": recs,
-				},
+				AgentName:       "agent1",
+				Claims:          []string{claims},
+				Risks:           []string{risks},
+				Recommendations: []string{recs},
 			},
 			{
-				AgentName: "agent2",
-				Sections: map[string]string{
-					"claims":          claims,
-					"risks":           risks,
-					"recommendations": recs,
-				},
+				AgentName:       "agent2",
+				Claims:          []string{claims},
+				Risks:           []string{risks},
+				Recommendations: []string{recs},
 			},
 		}
 
@@ -98,16 +94,16 @@ func FuzzConsensusThreshold(f *testing.F) {
 			return
 		}
 
-		checker := service.NewConsensusChecker(threshold)
+		checker := service.NewConsensusChecker(threshold, service.DefaultWeights())
 
 		outputs := []service.AnalysisOutput{
 			{
 				AgentName: "agent1",
-				Sections:  map[string]string{"test": "identical content"},
+				Claims:    []string{"identical content"},
 			},
 			{
 				AgentName: "agent2",
-				Sections:  map[string]string{"test": "identical content"},
+				Claims:    []string{"identical content"},
 			},
 		}
 
@@ -116,6 +112,37 @@ func FuzzConsensusThreshold(f *testing.F) {
 		// Identical content should have high score
 		if result.Score < 0.9 {
 			t.Logf("surprisingly low score for identical content: %f", result.Score)
+		}
+	})
+}
+
+func FuzzNormalizeText(f *testing.F) {
+	f.Add("Hello World")
+	f.Add("UPPERCASE text")
+	f.Add("with   multiple   spaces")
+	f.Add("punctuation!@#$%^&*()")
+	f.Add("日本語テスト")
+	f.Add("")
+	f.Add("   leading and trailing   ")
+
+	f.Fuzz(func(t *testing.T, input string) {
+		// Should not panic
+		defer func() {
+			if r := recover(); r != nil {
+				t.Errorf("panic normalizing %q: %v", input, r)
+			}
+		}()
+
+		result := service.NormalizeText(input)
+
+		// Result should not have leading/trailing spaces
+		if result != strings.TrimSpace(result) {
+			t.Errorf("result has leading/trailing spaces: %q", result)
+		}
+
+		// Result should be lowercase
+		if result != strings.ToLower(result) {
+			t.Errorf("result is not lowercase: %q", result)
 		}
 	})
 }
