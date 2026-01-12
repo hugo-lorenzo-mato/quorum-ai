@@ -66,7 +66,7 @@ agents:
       plan: "gemini-2.5-flash"
       execute: "gemini-2.5-flash"
   codex:
-    enabled: false
+    enabled: true
     path: "codex"
     model: "gpt-5.1-codex"
     phase_models:

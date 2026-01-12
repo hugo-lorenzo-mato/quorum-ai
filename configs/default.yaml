@@ -59,7 +59,7 @@ agents:
 
   # OpenAI Codex CLI configuration (optional)
   codex:
-    enabled: false
+    enabled: true
     path: codex
     model: gpt-5.1-codex
     phase_models:
