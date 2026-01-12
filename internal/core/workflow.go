@@ -1,0 +1,261 @@
+package core
+
+import (
+	"fmt"
+	"time"
+)
+
+// WorkflowID uniquely identifies a workflow run.
+type WorkflowID string
+
+// WorkflowStatus represents the current state of a workflow.
+type WorkflowStatus string
+
+const (
+	WorkflowStatusPending   WorkflowStatus = "pending"
+	WorkflowStatusRunning   WorkflowStatus = "running"
+	WorkflowStatusPaused    WorkflowStatus = "paused"
+	WorkflowStatusCompleted WorkflowStatus = "completed"
+	WorkflowStatusFailed    WorkflowStatus = "failed"
+	WorkflowStatusAborted   WorkflowStatus = "aborted"
+)
+
+// Workflow represents a complete orchestration run.
+type Workflow struct {
+	ID             WorkflowID
+	Status         WorkflowStatus
+	CurrentPhase   Phase
+	Prompt         string
+	Tasks          map[TaskID]*Task
+	TaskOrder      []TaskID
+	Config         *WorkflowConfig
+	ConsensusScore float64
+	TotalCostUSD   float64
+	TotalTokensIn  int
+	TotalTokensOut int
+	CreatedAt      time.Time
+	StartedAt      *time.Time
+	CompletedAt    *time.Time
+	Error          string
+}
+
+// WorkflowConfig holds workflow-specific configuration.
+type WorkflowConfig struct {
+	ConsensusThreshold float64
+	MaxRetries         int
+	Timeout            time.Duration
+	DryRun             bool
+	Sandbox            bool
+}
+
+// NewWorkflow creates a new workflow instance.
+func NewWorkflow(id WorkflowID, prompt string, config *WorkflowConfig) *Workflow {
+	if config == nil {
+		config = &WorkflowConfig{
+			ConsensusThreshold: 0.75,
+			MaxRetries:         3,
+			Timeout:            time.Hour,
+		}
+	}
+	return &Workflow{
+		ID:           id,
+		Status:       WorkflowStatusPending,
+		CurrentPhase: PhaseAnalyze,
+		Prompt:       prompt,
+		Tasks:        make(map[TaskID]*Task),
+		TaskOrder:    make([]TaskID, 0),
+		Config:       config,
+		CreatedAt:    time.Now(),
+	}
+}
+
+// AddTask adds a task to the workflow.
+func (w *Workflow) AddTask(task *Task) error {
+	if task == nil {
+		return fmt.Errorf("task cannot be nil")
+	}
+	if _, exists := w.Tasks[task.ID]; exists {
+		return fmt.Errorf("task %s already exists", task.ID)
+	}
+	w.Tasks[task.ID] = task
+	w.TaskOrder = append(w.TaskOrder, task.ID)
+	return nil
+}
+
+// GetTask retrieves a task by ID.
+func (w *Workflow) GetTask(id TaskID) (*Task, bool) {
+	task, ok := w.Tasks[id]
+	return task, ok
+}
+
+// TasksByPhase returns all tasks for a given phase.
+func (w *Workflow) TasksByPhase(phase Phase) []*Task {
+	var tasks []*Task
+	for _, id := range w.TaskOrder {
+		if task := w.Tasks[id]; task.Phase == phase {
+			tasks = append(tasks, task)
+		}
+	}
+	return tasks
+}
+
+// CompletedTasks returns a map of completed task IDs.
+func (w *Workflow) CompletedTasks() map[TaskID]bool {
+	completed := make(map[TaskID]bool)
+	for id, task := range w.Tasks {
+		if task.Status == TaskStatusCompleted {
+			completed[id] = true
+		}
+	}
+	return completed
+}
+
+// ReadyTasks returns tasks that are ready to execute.
+func (w *Workflow) ReadyTasks() []*Task {
+	completed := w.CompletedTasks()
+	var ready []*Task
+	for _, id := range w.TaskOrder {
+		task := w.Tasks[id]
+		if task.IsReady(completed) {
+			ready = append(ready, task)
+		}
+	}
+	return ready
+}
+
+// UpdateMetrics recalculates aggregated metrics.
+func (w *Workflow) UpdateMetrics() {
+	w.TotalCostUSD = 0
+	w.TotalTokensIn = 0
+	w.TotalTokensOut = 0
+	for _, task := range w.Tasks {
+		w.TotalCostUSD += task.CostUSD
+		w.TotalTokensIn += task.TokensIn
+		w.TotalTokensOut += task.TokensOut
+	}
+}
+
+// Progress returns the completion percentage.
+func (w *Workflow) Progress() float64 {
+	if len(w.Tasks) == 0 {
+		return 0
+	}
+	completed := 0
+	for _, task := range w.Tasks {
+		if task.Status == TaskStatusCompleted || task.Status == TaskStatusSkipped {
+			completed++
+		}
+	}
+	return float64(completed) / float64(len(w.Tasks)) * 100
+}
+
+// Start transitions workflow to running state.
+func (w *Workflow) Start() error {
+	if w.Status != WorkflowStatusPending && w.Status != WorkflowStatusPaused {
+		return fmt.Errorf("cannot start workflow in %s state", w.Status)
+	}
+	w.Status = WorkflowStatusRunning
+	if w.StartedAt == nil {
+		now := time.Now()
+		w.StartedAt = &now
+	}
+	return nil
+}
+
+// Pause transitions workflow to paused state.
+func (w *Workflow) Pause() error {
+	if w.Status != WorkflowStatusRunning {
+		return fmt.Errorf("cannot pause workflow in %s state", w.Status)
+	}
+	w.Status = WorkflowStatusPaused
+	return nil
+}
+
+// Resume transitions workflow from paused to running.
+func (w *Workflow) Resume() error {
+	if w.Status != WorkflowStatusPaused {
+		return fmt.Errorf("cannot resume workflow in %s state", w.Status)
+	}
+	w.Status = WorkflowStatusRunning
+	return nil
+}
+
+// Complete transitions workflow to completed state.
+func (w *Workflow) Complete() error {
+	if w.Status != WorkflowStatusRunning {
+		return fmt.Errorf("cannot complete workflow in %s state", w.Status)
+	}
+	w.Status = WorkflowStatusCompleted
+	now := time.Now()
+	w.CompletedAt = &now
+	w.UpdateMetrics()
+	return nil
+}
+
+// Fail transitions workflow to failed state.
+func (w *Workflow) Fail(err error) error {
+	w.Status = WorkflowStatusFailed
+	w.Error = err.Error()
+	now := time.Now()
+	w.CompletedAt = &now
+	w.UpdateMetrics()
+	return nil
+}
+
+// Abort transitions workflow to aborted state.
+func (w *Workflow) Abort(reason string) error {
+	w.Status = WorkflowStatusAborted
+	w.Error = reason
+	now := time.Now()
+	w.CompletedAt = &now
+	w.UpdateMetrics()
+	return nil
+}
+
+// Duration returns the workflow execution duration.
+func (w *Workflow) Duration() time.Duration {
+	if w.StartedAt == nil {
+		return 0
+	}
+	end := time.Now()
+	if w.CompletedAt != nil {
+		end = *w.CompletedAt
+	}
+	return end.Sub(*w.StartedAt)
+}
+
+// IsTerminal returns true if the workflow is in a terminal state.
+func (w *Workflow) IsTerminal() bool {
+	return w.Status == WorkflowStatusCompleted ||
+		w.Status == WorkflowStatusFailed ||
+		w.Status == WorkflowStatusAborted
+}
+
+// AdvancePhase moves to the next phase.
+func (w *Workflow) AdvancePhase() error {
+	next := NextPhase(w.CurrentPhase)
+	if next == "" {
+		return fmt.Errorf("already at final phase: %s", w.CurrentPhase)
+	}
+	w.CurrentPhase = next
+	return nil
+}
+
+// Validate checks workflow invariants.
+func (w *Workflow) Validate() error {
+	if w.ID == "" {
+		return &DomainError{
+			Category: ErrCatValidation,
+			Code:     "WORKFLOW_ID_REQUIRED",
+			Message:  "workflow ID cannot be empty",
+		}
+	}
+	if w.Prompt == "" {
+		return &DomainError{
+			Category: ErrCatValidation,
+			Code:     "WORKFLOW_PROMPT_REQUIRED",
+			Message:  "workflow prompt cannot be empty",
+		}
+	}
+	return nil
+}

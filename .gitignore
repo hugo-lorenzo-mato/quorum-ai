@@ -1,34 +1,90 @@
-# If you prefer the allow list template instead of the deny list, see community template:
-# https://github.com/github/gitignore/blob/main/community/Golang/Go.AllowList.gitignore
-#
-# Binaries for programs and plugins
+# Go build artifacts
 *.exe
 *.exe~
 *.dll
 *.so
 *.dylib
-
-# Test binary, built with `go test -c`
 *.test
-
-# Code coverage profiles and other test artifacts
 *.out
-coverage.*
+bin/
+dist/
+
+# Coverage
 *.coverprofile
-profile.cov
+coverage.txt
+coverage.html
+coverage.out
 
-# Dependency directories (remove the comment below to include it)
-# vendor/
+# Dependency
+vendor/
 
-# Go workspace file
+# IDE and editors
+.vscode/
+!.vscode/settings.json.example
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+*.sublime-workspace
+*.sublime-project
+
+# OS specific
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# quorum-ai runtime
+.orchestrator/
+.worktrees/
+*.log
+quorum-state.json
+quorum-state.json.bak
+quorum-state.lock
+
+# Security sensitive
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+*.crt
+secrets/
+credentials.json
+*_secret*
+*_token*
+
+# CI/CD artifacts
+junit.xml
+test-results/
+release/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+
+# GoReleaser
+dist/
+
+# Debug
+__debug_bin
+*.prof
+
+# Go workspace
 go.work
 go.work.sum
 
-# env file
-.env
+# Local binary (root only)
+/quorum
 
-# Editor/IDE
-.idea/
-.vscode/
-
-tasks-v2
+# Task files (development only)
+tasks-v2/

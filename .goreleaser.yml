@@ -1,0 +1,99 @@
+version: 2
+
+project_name: quorum-ai
+
+before:
+  hooks:
+    - go mod tidy
+    - go mod verify
+
+builds:
+  - id: quorum
+    main: ./cmd/quorum
+    binary: quorum
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+    mod_timestamp: '{{ .CommitTimestamp }}'
+
+archives:
+  - id: default
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- .Version }}_
+      {{- .Os }}_
+      {{- .Arch }}
+    files:
+      - LICENSE
+      - README.md
+      - CHANGELOG.md
+
+checksum:
+  name_template: 'checksums.txt'
+  algorithm: sha256
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^ci:'
+      - '^chore:'
+      - Merge pull request
+      - Merge branch
+  groups:
+    - title: Features
+      regexp: '^feat'
+      order: 0
+    - title: Bug Fixes
+      regexp: '^fix'
+      order: 1
+    - title: Performance
+      regexp: '^perf'
+      order: 2
+    - title: Refactoring
+      regexp: '^refactor'
+      order: 3
+    - title: Others
+      order: 999
+
+release:
+  github:
+    owner: hugo-lorenzo-mato
+    name: quorum-ai
+  draft: false
+  prerelease: auto
+  name_template: "{{.Tag}}"
+  header: |
+    ## quorum-ai {{.Tag}}
+
+    See the [CHANGELOG](https://github.com/hugo-lorenzo-mato/quorum-ai/blob/main/CHANGELOG.md) for details.
+  footer: |
+    **Full Changelog**: https://github.com/hugo-lorenzo-mato/quorum-ai/compare/{{.PreviousTag}}...{{.Tag}}
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+report_sizes: true

@@ -1,0 +1,123 @@
+run:
+  timeout: 5m
+  tests: true
+  build-tags:
+    - integration
+
+linters:
+  enable:
+    # Bug detection
+    - errcheck
+    - gosec
+    - govet
+    - staticcheck
+    - bodyclose
+    - nilerr
+    - sqlclosecheck
+
+    # Complexity
+    - gocyclo
+    - gocognit
+    - funlen
+    - nestif
+
+    # Style
+    - gofmt
+    - goimports
+    - gocritic
+    - misspell
+    - whitespace
+    - unconvert
+    - revive
+
+    # Performance
+    - prealloc
+
+    # Unused code
+    - unused
+    - unparam
+    - gosimple
+    - ineffassign
+
+    # Duplication
+    - dupl
+    - goconst
+
+    # Imports
+    - depguard
+    - gci
+    - nolintlint
+
+    # Exhaustiveness
+    - exhaustive
+
+linters-settings:
+  gocyclo:
+    min-complexity: 15
+
+  gocognit:
+    min-complexity: 20
+
+  funlen:
+    lines: 100
+    statements: 50
+
+  nestif:
+    min-complexity: 5
+
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - style
+      - performance
+    disabled-checks:
+      - whyNoLint
+
+  misspell:
+    locale: US
+
+  dupl:
+    threshold: 100
+
+  goconst:
+    min-len: 3
+    min-occurrences: 3
+
+  depguard:
+    rules:
+      main:
+        deny:
+          - pkg: "github.com/sirupsen/logrus"
+            desc: "use log/slog instead"
+          - pkg: "github.com/rs/zerolog"
+            desc: "use log/slog instead"
+          - pkg: "github.com/pkg/errors"
+            desc: "use fmt.Errorf with %w instead"
+          - pkg: "io/ioutil"
+            desc: "deprecated, use io and os packages"
+
+  gci:
+    sections:
+      - standard
+      - default
+      - prefix(github.com/hugo-lorenzo-mato/quorum-ai)
+
+  exhaustive:
+    default-signifies-exhaustive: true
+
+issues:
+  exclude-rules:
+    # Test files
+    - path: _test\.go
+      linters:
+        - funlen
+        - dupl
+        - goconst
+
+    # Generated files
+    - path: ".*_gen\\.go"
+      linters:
+        - all
+
+  max-issues-per-linter: 0
+  max-same-issues: 0

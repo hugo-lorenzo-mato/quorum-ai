@@ -1,0 +1,80 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
+            ext: .exe
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Get version
+        id: version
+        run: echo "version=$(git describe --tags --always --dirty)" >> $GITHUB_OUTPUT
+
+      - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          go build -ldflags "-s -w \
+            -X main.version=${{ steps.version.outputs.version }} \
+            -X main.commit=${{ github.sha }} \
+            -X main.date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            -o quorum-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} \
+            ./cmd/quorum
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: quorum-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: quorum-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
+          retention-days: 7
+
+  verify:
+    name: Verify Build
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Linux artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: quorum-linux-amd64
+
+      - name: Verify binary
+        run: |
+          chmod +x quorum-linux-amd64
+          ./quorum-linux-amd64 version
