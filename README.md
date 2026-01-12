@@ -43,7 +43,7 @@ Or build from source:
 
 ```bash
 # Using go install
-go install github.com/hugolma/quorum-ai/cmd/quorum@latest
+go install github.com/hugo-lorenzo-mato/quorum-ai/cmd/quorum@latest
 
 # Or clone and build
 git clone https://github.com/hugo-lorenzo-mato/quorum-ai.git
@@ -58,15 +58,15 @@ Create a configuration file at `.quorum.yaml` in your project root:
 ```yaml
 # Minimal configuration
 agents:
-  - name: claude
+  claude:
     enabled: true
-  - name: gemini
+  gemini:
     enabled: true
 
 consensus:
   threshold: 0.80
 
-logging:
+log:
   level: info
 ```
 
@@ -78,11 +78,6 @@ quorum doctor
 
 # Run full workflow (analyze -> plan -> execute)
 quorum run "Implement user authentication with JWT tokens"
-
-# Run individual phases
-quorum analyze "Review the authentication module for security issues"
-quorum plan "Add rate limiting to the API endpoints"
-quorum execute
 
 # Check workflow status
 quorum status

@@ -16,7 +16,7 @@ Committed items for the initial release.
 
 | Status | Priority | Commitment | Item | Issues |
 | --- | --- | --- | --- | --- |
-| Complete | P0 | Committed | Core CLI with analyze/plan/execute commands | [#71](https://github.com/hugo-lorenzo-mato/quorum-ai/issues/71) |
+| Complete | P0 | Committed | Core CLI with run/doctor/status/init commands | [#71](https://github.com/hugo-lorenzo-mato/quorum-ai/issues/71) |
 | Complete | P0 | Committed | JSON-based state persistence | [#47](https://github.com/hugo-lorenzo-mato/quorum-ai/issues/47) |
 | Complete | P0 | Committed | Git worktree isolation | [#64](https://github.com/hugo-lorenzo-mato/quorum-ai/issues/64) |
 | In Progress | P0 | Committed | Claude and Gemini adapters | [#57](https://github.com/hugo-lorenzo-mato/quorum-ai/issues/57), [#58](https://github.com/hugo-lorenzo-mato/quorum-ai/issues/58) |

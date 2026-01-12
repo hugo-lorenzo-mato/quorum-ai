@@ -1,0 +1,10 @@
+Checking dependencies...
+
+  ✓ git
+  ✓ gh
+  ✓ claude
+  ✓ gemini
+  ✓ codex
+  ○ aider (optional)
+
+All dependencies available

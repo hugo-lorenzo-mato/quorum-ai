@@ -265,10 +265,9 @@ func TestValidator_AgentPathRequired(t *testing.T) {
 
 func TestValidator_DisabledAgentSkipsValidation(t *testing.T) {
 	cfg := validConfig()
-	cfg.Agents.Claude.Enabled = false
-	cfg.Agents.Claude.Path = "" // Would normally fail
+	// Keep claude enabled as default, but disable gemini
 	cfg.Agents.Gemini.Enabled = false
-	cfg.Agents.Gemini.Path = ""
+	cfg.Agents.Gemini.Path = "" // Would normally fail if enabled
 
 	v := NewValidator()
 	err := v.Validate(cfg)

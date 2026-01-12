@@ -75,9 +75,9 @@ agents:
 # State persistence configuration
 state:
   # Path to state file (relative to project root)
-  path: .orchestrator/state.json
+  path: .quorum/state/state.json
   # Path to backup file
-  backup_path: .orchestrator/state.json.bak
+  backup_path: .quorum/state/state.json.bak
   # Lock file TTL before considered stale
   lock_ttl: 1h
 

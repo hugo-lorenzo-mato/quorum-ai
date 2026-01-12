@@ -47,27 +47,6 @@ func TestGetPrompt_NoPrompt(t *testing.T) {
 	}
 }
 
-func TestTruncatePrompt_Short(t *testing.T) {
-	result := truncatePrompt("short", 10)
-	if result != "short" {
-		t.Errorf("expected 'short', got '%s'", result)
-	}
-}
-
-func TestTruncatePrompt_Long(t *testing.T) {
-	result := truncatePrompt("this is a very long prompt", 10)
-	if result != "this is a ..." {
-		t.Errorf("expected 'this is a ...', got '%s'", result)
-	}
-}
-
-func TestTruncatePrompt_ExactLength(t *testing.T) {
-	result := truncatePrompt("exactly10!", 10)
-	if result != "exactly10!" {
-		t.Errorf("expected 'exactly10!', got '%s'", result)
-	}
-}
-
 func TestRootCmd_Structure(t *testing.T) {
 	// Test that root command is properly configured
 	if rootCmd.Use != "quorum" {

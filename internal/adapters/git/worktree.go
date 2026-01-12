@@ -11,6 +11,9 @@ import (
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 )
 
+// Compile-time interface conformance check.
+var _ core.WorktreeManager = (*TaskWorktreeManager)(nil)
+
 // resolvePath resolves symlinks and returns an absolute path.
 // This is needed for cross-platform path comparison (e.g., macOS /var -> /private/var).
 func resolvePath(path string) string {
@@ -349,4 +352,114 @@ func (m *WorktreeManager) BaseDir() string {
 func (m *WorktreeManager) WithPrefix(prefix string) *WorktreeManager {
 	m.prefix = prefix
 	return m
+}
+
+// =============================================================================
+// TaskWorktreeManager - implements core.WorktreeManager
+// =============================================================================
+
+// TaskWorktreeManager wraps WorktreeManager to implement core.WorktreeManager.
+// It provides TaskID-based worktree management on top of the low-level WorktreeManager.
+type TaskWorktreeManager struct {
+	manager *WorktreeManager
+}
+
+// NewTaskWorktreeManager creates a new task-aware worktree manager.
+func NewTaskWorktreeManager(git *Client, baseDir string) *TaskWorktreeManager {
+	return &TaskWorktreeManager{
+		manager: NewWorktreeManager(git, baseDir),
+	}
+}
+
+// Create creates a new worktree for a task (implements core.WorktreeManager).
+func (m *TaskWorktreeManager) Create(ctx context.Context, taskID core.TaskID, branch string) (*core.WorktreeInfo, error) {
+	name := string(taskID)
+	wt, err := m.manager.Create(ctx, name, branch)
+	if err != nil {
+		return nil, err
+	}
+
+	return &core.WorktreeInfo{
+		TaskID:    taskID,
+		Path:      wt.Path,
+		Branch:    wt.Branch,
+		CreatedAt: wt.CreatedAt,
+		Status:    core.WorktreeStatusActive,
+	}, nil
+}
+
+// Get retrieves worktree info for a task (implements core.WorktreeManager).
+func (m *TaskWorktreeManager) Get(ctx context.Context, taskID core.TaskID) (*core.WorktreeInfo, error) {
+	name := string(taskID)
+	wt, err := m.manager.Get(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+
+	status := core.WorktreeStatusActive
+	if wt.Prunable {
+		status = core.WorktreeStatusStale
+	}
+
+	return &core.WorktreeInfo{
+		TaskID:    taskID,
+		Path:      wt.Path,
+		Branch:    wt.Branch,
+		CreatedAt: wt.CreatedAt,
+		Status:    status,
+	}, nil
+}
+
+// Remove cleans up a task's worktree (implements core.WorktreeManager).
+func (m *TaskWorktreeManager) Remove(ctx context.Context, taskID core.TaskID) error {
+	name := string(taskID)
+	wt, err := m.manager.Get(ctx, name)
+	if err != nil {
+		return err
+	}
+	return m.manager.Remove(ctx, wt.Path, false)
+}
+
+// CleanupStale removes worktrees for completed/failed tasks (implements core.WorktreeManager).
+func (m *TaskWorktreeManager) CleanupStale(ctx context.Context) error {
+	// Use a default max age of 24 hours for stale worktrees
+	_, err := m.manager.CleanupStale(ctx, 24*time.Hour)
+	return err
+}
+
+// List returns all managed worktrees (implements core.WorktreeManager).
+func (m *TaskWorktreeManager) List(ctx context.Context) ([]*core.WorktreeInfo, error) {
+	managed, err := m.manager.ListManaged(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]*core.WorktreeInfo, 0, len(managed))
+	for _, wt := range managed {
+		// Extract TaskID from path by removing prefix
+		name := filepath.Base(wt.Path)
+		if strings.HasPrefix(name, m.manager.prefix) {
+			name = strings.TrimPrefix(name, m.manager.prefix)
+		}
+
+		status := core.WorktreeStatusActive
+		if wt.Prunable {
+			status = core.WorktreeStatusStale
+		}
+
+		result = append(result, &core.WorktreeInfo{
+			TaskID:    core.TaskID(name),
+			Path:      wt.Path,
+			Branch:    wt.Branch,
+			CreatedAt: wt.CreatedAt,
+			Status:    status,
+		})
+	}
+
+	return result, nil
+}
+
+// Manager returns the underlying WorktreeManager for advanced operations.
+func (m *TaskWorktreeManager) Manager() *WorktreeManager {
+	return m.manager
 }

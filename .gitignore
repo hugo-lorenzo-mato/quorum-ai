@@ -43,6 +43,7 @@ Desktop.ini
 # quorum-ai runtime
 .orchestrator/
 .worktrees/
+.quorum/
 *.log
 quorum-state.json
 quorum-state.json.bak
@@ -90,4 +91,4 @@ go.work.sum
 /quorum
 
 # Initial markdown formated issues
-tasks-v2/*
+tasks*/*

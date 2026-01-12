@@ -115,6 +115,18 @@ func (v *Validator) validateAgents(cfg *AgentsConfig) {
 		v.addError("agents.default", cfg.Default, "unknown agent")
 	}
 
+	// Validate that default agent is enabled
+	defaultEnabled := map[string]bool{
+		"claude":  cfg.Claude.Enabled,
+		"gemini":  cfg.Gemini.Enabled,
+		"codex":   cfg.Codex.Enabled,
+		"copilot": cfg.Copilot.Enabled,
+		"aider":   cfg.Aider.Enabled,
+	}
+	if !defaultEnabled[cfg.Default] {
+		v.addError("agents.default", cfg.Default, "default agent must be enabled")
+	}
+
 	v.validateAgent("agents.claude", &cfg.Claude)
 	v.validateAgent("agents.gemini", &cfg.Gemini)
 	v.validateAgent("agents.codex", &cfg.Codex)

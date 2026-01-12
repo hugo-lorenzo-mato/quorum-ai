@@ -104,7 +104,8 @@ func (a *Analyzer) Run(ctx context.Context, wctx *Context) error {
 
 // runV1Analysis runs initial analysis with multiple agents in parallel.
 func (a *Analyzer) runV1Analysis(ctx context.Context, wctx *Context) ([]AnalysisOutput, error) {
-	agentNames := wctx.Agents.List()
+	// Use Available to get only agents that are actually reachable (pass Ping)
+	agentNames := wctx.Agents.Available(ctx)
 	if len(agentNames) == 0 {
 		return nil, core.ErrValidation(core.CodeNoAgents, "no agents available")
 	}
@@ -199,7 +200,7 @@ func (a *Analyzer) runV2Critique(ctx context.Context, wctx *Context, v1Outputs [
 
 	// Each agent critiques the other's output
 	for i, v1 := range v1Outputs {
-		critiqueAgent := a.selectCritiqueAgent(wctx, v1.AgentName)
+		critiqueAgent := a.selectCritiqueAgent(ctx, wctx, v1.AgentName)
 		agent, err := wctx.Agents.Get(critiqueAgent)
 		if err != nil {
 			wctx.Logger.Warn("critique agent not available",
@@ -340,9 +341,9 @@ func (a *Analyzer) consolidateAnalysis(wctx *Context, outputs []AnalysisOutput) 
 	})
 }
 
-// selectCritiqueAgent selects a different agent for critique.
-func (a *Analyzer) selectCritiqueAgent(wctx *Context, original string) string {
-	agents := wctx.Agents.List()
+// selectCritiqueAgent selects a different available agent for critique.
+func (a *Analyzer) selectCritiqueAgent(ctx context.Context, wctx *Context, original string) string {
+	agents := wctx.Agents.Available(ctx)
 	for _, ag := range agents {
 		if ag != original {
 			return ag

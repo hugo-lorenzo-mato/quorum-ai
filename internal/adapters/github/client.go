@@ -12,6 +12,9 @@ import (
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 )
 
+// Compile-time interface conformance check.
+var _ core.GitHubClient = (*Client)(nil)
+
 // Client wraps GitHub CLI operations.
 type Client struct {
 	repoOwner string
@@ -102,8 +105,8 @@ type PullRequest struct {
 	UpdatedAt time.Time
 }
 
-// CreatePR creates a new pull request.
-func (c *Client) CreatePR(ctx context.Context, opts PRCreateOptions) (*PullRequest, error) {
+// CreatePR creates a new pull request (implements core.GitHubClient).
+func (c *Client) CreatePR(ctx context.Context, opts core.CreatePROptions) (*core.PullRequest, error) {
 	args := []string{"pr", "create",
 		"--repo", fmt.Sprintf("%s/%s", c.repoOwner, c.repoName),
 		"--title", opts.Title,
@@ -120,8 +123,8 @@ func (c *Client) CreatePR(ctx context.Context, opts PRCreateOptions) (*PullReque
 		args = append(args, "--label", label)
 	}
 
-	for _, reviewer := range opts.Reviewers {
-		args = append(args, "--reviewer", reviewer)
+	for _, assignee := range opts.Assignees {
+		args = append(args, "--assignee", assignee)
 	}
 
 	output, err := c.run(ctx, args...)
@@ -130,10 +133,10 @@ func (c *Client) CreatePR(ctx context.Context, opts PRCreateOptions) (*PullReque
 	}
 
 	// Output is the PR URL
-	return c.GetPRByURL(ctx, output)
+	return c.getPRByURL(ctx, output)
 }
 
-// PRCreateOptions holds options for PR creation.
+// PRCreateOptions holds options for PR creation (local type, deprecated).
 type PRCreateOptions struct {
 	Title     string
 	Body      string
@@ -144,30 +147,93 @@ type PRCreateOptions struct {
 	Reviewers []string
 }
 
-// GetPR retrieves a PR by number.
-func (c *Client) GetPR(ctx context.Context, number int) (*PullRequest, error) {
+// GetPR retrieves a PR by number (implements core.GitHubClient).
+func (c *Client) GetPR(ctx context.Context, number int) (*core.PullRequest, error) {
 	output, err := c.run(ctx, "pr", "view", fmt.Sprintf("%d", number),
 		"--repo", fmt.Sprintf("%s/%s", c.repoOwner, c.repoName),
-		"--json", "number,title,body,url,state,isDraft,mergeable,headRefName,baseRefName,createdAt,updatedAt")
+		"--json", "number,title,body,url,state,isDraft,mergeable,headRefName,baseRefName,headRefOid,createdAt,updatedAt,mergedAt,labels,assignees")
 	if err != nil {
 		return nil, err
 	}
 
-	return c.parsePR(output)
+	return c.parseCorePR(output)
 }
 
-// GetPRByURL retrieves a PR by URL.
-func (c *Client) GetPRByURL(ctx context.Context, url string) (*PullRequest, error) {
+// getPRByURL retrieves a PR by URL (internal use).
+func (c *Client) getPRByURL(ctx context.Context, url string) (*core.PullRequest, error) {
 	output, err := c.run(ctx, "pr", "view", url,
-		"--json", "number,title,body,url,state,isDraft,mergeable,headRefName,baseRefName,createdAt,updatedAt")
+		"--json", "number,title,body,url,state,isDraft,mergeable,headRefName,baseRefName,headRefOid,createdAt,updatedAt,mergedAt,labels,assignees")
 	if err != nil {
 		return nil, err
 	}
 
-	return c.parsePR(output)
+	return c.parseCorePR(output)
 }
 
-// parsePR parses PR JSON output.
+// parseCorePR parses PR JSON output to core.PullRequest.
+func (c *Client) parseCorePR(output string) (*core.PullRequest, error) {
+	var data struct {
+		Number      int       `json:"number"`
+		Title       string    `json:"title"`
+		Body        string    `json:"body"`
+		URL         string    `json:"url"`
+		State       string    `json:"state"`
+		IsDraft     bool      `json:"isDraft"`
+		Mergeable   string    `json:"mergeable"`
+		HeadRefName string    `json:"headRefName"`
+		HeadRefOid  string    `json:"headRefOid"`
+		BaseRefName string    `json:"baseRefName"`
+		CreatedAt   time.Time `json:"createdAt"`
+		UpdatedAt   time.Time `json:"updatedAt"`
+		MergedAt    *time.Time `json:"mergedAt"`
+		Labels      []struct {
+			Name string `json:"name"`
+		} `json:"labels"`
+		Assignees []struct {
+			Login string `json:"login"`
+		} `json:"assignees"`
+	}
+
+	if err := json.Unmarshal([]byte(output), &data); err != nil {
+		return nil, fmt.Errorf("parsing PR: %w", err)
+	}
+
+	var mergeable *bool
+	if data.Mergeable != "" {
+		m := data.Mergeable == "MERGEABLE"
+		mergeable = &m
+	}
+
+	labels := make([]string, len(data.Labels))
+	for i, l := range data.Labels {
+		labels[i] = l.Name
+	}
+
+	assignees := make([]string, len(data.Assignees))
+	for i, a := range data.Assignees {
+		assignees[i] = a.Login
+	}
+
+	return &core.PullRequest{
+		Number:    data.Number,
+		Title:     data.Title,
+		Body:      data.Body,
+		State:     strings.ToLower(data.State),
+		Head:      core.PRBranch{Ref: data.HeadRefName, SHA: data.HeadRefOid, Repo: c.Repo()},
+		Base:      core.PRBranch{Ref: data.BaseRefName, Repo: c.Repo()},
+		HTMLURL:   data.URL,
+		Draft:     data.IsDraft,
+		Merged:    data.MergedAt != nil,
+		Mergeable: mergeable,
+		Labels:    labels,
+		Assignees: assignees,
+		CreatedAt: data.CreatedAt,
+		UpdatedAt: data.UpdatedAt,
+		MergedAt:  data.MergedAt,
+	}, nil
+}
+
+// parsePR parses PR JSON output (local type, deprecated).
 func (c *Client) parsePR(output string) (*PullRequest, error) {
 	var data struct {
 		Number      int       `json:"number"`
@@ -202,12 +268,24 @@ func (c *Client) parsePR(output string) (*PullRequest, error) {
 	}, nil
 }
 
-// ListPRs lists open PRs.
-func (c *Client) ListPRs(ctx context.Context, state string) ([]PullRequest, error) {
+// ListPRs lists PRs with options (implements core.GitHubClient).
+func (c *Client) ListPRs(ctx context.Context, opts core.ListPROptions) ([]*core.PullRequest, error) {
 	args := []string{"pr", "list",
 		"--repo", fmt.Sprintf("%s/%s", c.repoOwner, c.repoName),
-		"--state", state,
-		"--json", "number,title,url,state,isDraft,headRefName,baseRefName",
+		"--json", "number,title,body,url,state,isDraft,headRefName,baseRefName,headRefOid,createdAt,updatedAt,mergedAt,labels,assignees",
+	}
+
+	if opts.State != "" {
+		args = append(args, "--state", opts.State)
+	}
+	if opts.Head != "" {
+		args = append(args, "--head", opts.Head)
+	}
+	if opts.Base != "" {
+		args = append(args, "--base", opts.Base)
+	}
+	if opts.Limit > 0 {
+		args = append(args, "--limit", fmt.Sprintf("%d", opts.Limit))
 	}
 
 	output, err := c.run(ctx, args...)
@@ -216,48 +294,82 @@ func (c *Client) ListPRs(ctx context.Context, state string) ([]PullRequest, erro
 	}
 
 	var prs []struct {
-		Number      int    `json:"number"`
-		Title       string `json:"title"`
-		URL         string `json:"url"`
-		State       string `json:"state"`
-		IsDraft     bool   `json:"isDraft"`
-		HeadRefName string `json:"headRefName"`
-		BaseRefName string `json:"baseRefName"`
+		Number      int        `json:"number"`
+		Title       string     `json:"title"`
+		Body        string     `json:"body"`
+		URL         string     `json:"url"`
+		State       string     `json:"state"`
+		IsDraft     bool       `json:"isDraft"`
+		HeadRefName string     `json:"headRefName"`
+		HeadRefOid  string     `json:"headRefOid"`
+		BaseRefName string     `json:"baseRefName"`
+		CreatedAt   time.Time  `json:"createdAt"`
+		UpdatedAt   time.Time  `json:"updatedAt"`
+		MergedAt    *time.Time `json:"mergedAt"`
+		Labels      []struct {
+			Name string `json:"name"`
+		} `json:"labels"`
+		Assignees []struct {
+			Login string `json:"login"`
+		} `json:"assignees"`
 	}
 
 	if err := json.Unmarshal([]byte(output), &prs); err != nil {
 		return nil, err
 	}
 
-	result := make([]PullRequest, len(prs))
+	result := make([]*core.PullRequest, len(prs))
 	for i, pr := range prs {
-		result[i] = PullRequest{
-			Number:  pr.Number,
-			Title:   pr.Title,
-			URL:     pr.URL,
-			State:   pr.State,
-			Draft:   pr.IsDraft,
-			HeadRef: pr.HeadRefName,
-			BaseRef: pr.BaseRefName,
+		labels := make([]string, len(pr.Labels))
+		for j, l := range pr.Labels {
+			labels[j] = l.Name
+		}
+		assignees := make([]string, len(pr.Assignees))
+		for j, a := range pr.Assignees {
+			assignees[j] = a.Login
+		}
+
+		result[i] = &core.PullRequest{
+			Number:    pr.Number,
+			Title:     pr.Title,
+			Body:      pr.Body,
+			State:     strings.ToLower(pr.State),
+			Head:      core.PRBranch{Ref: pr.HeadRefName, SHA: pr.HeadRefOid, Repo: c.Repo()},
+			Base:      core.PRBranch{Ref: pr.BaseRefName, Repo: c.Repo()},
+			HTMLURL:   pr.URL,
+			Draft:     pr.IsDraft,
+			Merged:    pr.MergedAt != nil,
+			Labels:    labels,
+			Assignees: assignees,
+			CreatedAt: pr.CreatedAt,
+			UpdatedAt: pr.UpdatedAt,
+			MergedAt:  pr.MergedAt,
 		}
 	}
 
 	return result, nil
 }
 
-// MergePR merges a pull request.
-func (c *Client) MergePR(ctx context.Context, number int, method string) error {
+// MergePR merges a pull request (implements core.GitHubClient).
+func (c *Client) MergePR(ctx context.Context, number int, opts core.MergePROptions) error {
 	args := []string{"pr", "merge", fmt.Sprintf("%d", number),
 		"--repo", fmt.Sprintf("%s/%s", c.repoOwner, c.repoName),
 	}
 
-	switch method {
+	switch opts.Method {
 	case "squash":
 		args = append(args, "--squash")
 	case "rebase":
 		args = append(args, "--rebase")
 	default:
 		args = append(args, "--merge")
+	}
+
+	if opts.CommitTitle != "" {
+		args = append(args, "--subject", opts.CommitTitle)
+	}
+	if opts.CommitMessage != "" {
+		args = append(args, "--body", opts.CommitMessage)
 	}
 
 	_, err := c.run(ctx, args...)
@@ -336,30 +448,30 @@ func (c *Client) WithTimeout(d time.Duration) *Client {
 	return c
 }
 
-// UpdatePR updates a pull request.
-func (c *Client) UpdatePR(ctx context.Context, number int, opts PRUpdateOptions) error {
+// UpdatePR updates a pull request (implements core.GitHubClient).
+func (c *Client) UpdatePR(ctx context.Context, number int, opts core.UpdatePROptions) error {
 	args := []string{"pr", "edit", fmt.Sprintf("%d", number),
 		"--repo", fmt.Sprintf("%s/%s", c.repoOwner, c.repoName),
 	}
 
-	if opts.Title != "" {
-		args = append(args, "--title", opts.Title)
+	if opts.Title != nil {
+		args = append(args, "--title", *opts.Title)
 	}
-	if opts.Body != "" {
-		args = append(args, "--body", opts.Body)
+	if opts.Body != nil {
+		args = append(args, "--body", *opts.Body)
 	}
-	for _, label := range opts.AddLabels {
+	for _, label := range opts.Labels {
 		args = append(args, "--add-label", label)
 	}
-	for _, label := range opts.RemoveLabels {
-		args = append(args, "--remove-label", label)
+	for _, assignee := range opts.Assignees {
+		args = append(args, "--add-assignee", assignee)
 	}
 
 	_, err := c.run(ctx, args...)
 	return err
 }
 
-// PRUpdateOptions holds options for PR updates.
+// PRUpdateOptions holds options for PR updates (local type, deprecated).
 type PRUpdateOptions struct {
 	Title        string
 	Body         string
@@ -401,4 +513,140 @@ func (c *Client) CreateIssue(ctx context.Context, title, body string, labels []s
 	}
 
 	return 0, nil
+}
+
+// =============================================================================
+// core.GitHubClient interface methods
+// =============================================================================
+
+// GetRepo returns repository information (implements core.GitHubClient).
+func (c *Client) GetRepo(ctx context.Context) (*core.RepoInfo, error) {
+	output, err := c.run(ctx, "repo", "view",
+		fmt.Sprintf("%s/%s", c.repoOwner, c.repoName),
+		"--json", "owner,name,defaultBranchRef,isPrivate,url")
+	if err != nil {
+		return nil, err
+	}
+
+	var data struct {
+		Owner struct {
+			Login string `json:"login"`
+		} `json:"owner"`
+		Name             string `json:"name"`
+		DefaultBranchRef struct {
+			Name string `json:"name"`
+		} `json:"defaultBranchRef"`
+		IsPrivate bool   `json:"isPrivate"`
+		URL       string `json:"url"`
+	}
+
+	if err := json.Unmarshal([]byte(output), &data); err != nil {
+		return nil, fmt.Errorf("parsing repo info: %w", err)
+	}
+
+	return &core.RepoInfo{
+		Owner:         data.Owner.Login,
+		Name:          data.Name,
+		FullName:      fmt.Sprintf("%s/%s", data.Owner.Login, data.Name),
+		DefaultBranch: data.DefaultBranchRef.Name,
+		IsPrivate:     data.IsPrivate,
+		HTMLURL:       data.URL,
+	}, nil
+}
+
+// ValidateToken validates the GitHub token (implements core.GitHubClient).
+func (c *Client) ValidateToken(ctx context.Context) error {
+	return c.verifyAuth()
+}
+
+// GetAuthenticatedUser returns the authenticated user's login (implements core.GitHubClient).
+func (c *Client) GetAuthenticatedUser(ctx context.Context) (string, error) {
+	output, err := c.run(ctx, "api", "user", "--jq", ".login")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(output), nil
+}
+
+// GetCheckStatus returns the status of checks for a ref (implements core.GitHubClient).
+func (c *Client) GetCheckStatus(ctx context.Context, ref string) (*core.CheckStatus, error) {
+	output, err := c.run(ctx, "pr", "checks", ref,
+		"--repo", fmt.Sprintf("%s/%s", c.repoOwner, c.repoName),
+		"--json", "name,status,conclusion,detailsUrl,startedAt,completedAt")
+	if err != nil {
+		return nil, fmt.Errorf("getting checks: %w", err)
+	}
+
+	var rawChecks []struct {
+		Name        string     `json:"name"`
+		Status      string     `json:"status"`
+		Conclusion  string     `json:"conclusion"`
+		DetailsURL  string     `json:"detailsUrl"`
+		StartedAt   *time.Time `json:"startedAt"`
+		CompletedAt *time.Time `json:"completedAt"`
+	}
+
+	if err := json.Unmarshal([]byte(output), &rawChecks); err != nil {
+		return nil, fmt.Errorf("parsing checks: %w", err)
+	}
+
+	status := &core.CheckStatus{
+		State:      "success",
+		TotalCount: len(rawChecks),
+		Checks:     make([]core.Check, 0, len(rawChecks)),
+		UpdatedAt:  time.Now(),
+	}
+
+	for _, rc := range rawChecks {
+		check := core.Check{
+			Name:        rc.Name,
+			Status:      rc.Status,
+			Conclusion:  rc.Conclusion,
+			HTMLURL:     rc.DetailsURL,
+			StartedAt:   rc.StartedAt,
+			CompletedAt: rc.CompletedAt,
+		}
+		status.Checks = append(status.Checks, check)
+
+		if rc.Status != "completed" {
+			status.Pending++
+			status.State = "pending"
+		} else if rc.Conclusion == "success" || rc.Conclusion == "skipped" || rc.Conclusion == "neutral" {
+			status.Passed++
+		} else {
+			status.Failed++
+			status.State = "failure"
+		}
+	}
+
+	return status, nil
+}
+
+// WaitForChecks waits for all checks to complete (implements core.GitHubClient).
+func (c *Client) WaitForChecks(ctx context.Context, ref string, timeout time.Duration) (*core.CheckStatus, error) {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	pollInterval := 30 * time.Second
+
+	for {
+		status, err := c.GetCheckStatus(ctx, ref)
+		if err != nil {
+			return nil, err
+		}
+
+		if !status.IsPending() {
+			return status, nil
+		}
+
+		select {
+		case <-ctx.Done():
+			if ctx.Err() == context.DeadlineExceeded {
+				return nil, core.ErrTimeout(fmt.Sprintf("checks did not complete within %v", timeout))
+			}
+			return nil, ctx.Err()
+		case <-time.After(pollInterval):
+			// Continue polling
+		}
+	}
 }

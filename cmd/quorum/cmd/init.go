@@ -40,10 +40,15 @@ func runInit(_ *cobra.Command, _ []string) error {
 
 	// Create default config
 	defaultConfig := `# Quorum AI Configuration
-version: "1"
+
+# Logging configuration
+log:
+  level: info
+  format: auto
 
 # Agent configuration
 agents:
+  default: claude
   claude:
     enabled: true
     path: "claude"
@@ -55,14 +60,17 @@ agents:
 
 # Workflow settings
 workflow:
-  consensus_threshold: 0.75
   max_retries: 3
   timeout: "30m"
 
-# Output settings
-output:
-  format: "auto"
-  verbose: false
+# Consensus settings
+consensus:
+  threshold: 0.75
+
+# State persistence
+state:
+  path: ".quorum/state/state.json"
+  backup_path: ".quorum/state/state.json.bak"
 `
 
 	if err := os.WriteFile(configPath, []byte(defaultConfig), 0o644); err != nil { //nolint:gosec // Config file needs to be readable

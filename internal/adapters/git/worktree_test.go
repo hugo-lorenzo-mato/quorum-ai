@@ -235,3 +235,97 @@ func TestWorktreeManager_CreateClient(t *testing.T) {
 	testutil.AssertNoError(t, err)
 	testutil.AssertEqual(t, branch, "test-branch")
 }
+
+// =============================================================================
+// TaskWorktreeManager tests (core.WorktreeManager implementation)
+// =============================================================================
+
+func TestTaskWorktreeManager_Create(t *testing.T) {
+	repo := testutil.NewGitRepo(t)
+	repo.WriteFile("README.md", "# Test")
+	repo.Commit("Initial commit")
+
+	client, err := git.NewClient(repo.Path)
+	testutil.AssertNoError(t, err)
+
+	worktreeDir := testutil.TempDir(t)
+	manager := git.NewTaskWorktreeManager(client, worktreeDir)
+
+	// Create worktree using TaskID
+	info, err := manager.Create(context.Background(), "task-123", "feature-branch")
+	testutil.AssertNoError(t, err)
+	testutil.AssertEqual(t, string(info.TaskID), "task-123")
+	testutil.AssertEqual(t, info.Branch, "feature-branch")
+
+	// Verify path exists
+	_, err = os.Stat(info.Path)
+	testutil.AssertNoError(t, err)
+}
+
+func TestTaskWorktreeManager_Get(t *testing.T) {
+	repo := testutil.NewGitRepo(t)
+	repo.WriteFile("README.md", "# Test")
+	repo.Commit("Initial commit")
+
+	client, err := git.NewClient(repo.Path)
+	testutil.AssertNoError(t, err)
+
+	worktreeDir := testutil.TempDir(t)
+	manager := git.NewTaskWorktreeManager(client, worktreeDir)
+
+	// Create worktree
+	_, err = manager.Create(context.Background(), "task-456", "test-branch")
+	testutil.AssertNoError(t, err)
+
+	// Get it back
+	info, err := manager.Get(context.Background(), "task-456")
+	testutil.AssertNoError(t, err)
+	testutil.AssertEqual(t, string(info.TaskID), "task-456")
+	testutil.AssertEqual(t, info.Branch, "test-branch")
+}
+
+func TestTaskWorktreeManager_Remove(t *testing.T) {
+	repo := testutil.NewGitRepo(t)
+	repo.WriteFile("README.md", "# Test")
+	repo.Commit("Initial commit")
+
+	client, err := git.NewClient(repo.Path)
+	testutil.AssertNoError(t, err)
+
+	worktreeDir := testutil.TempDir(t)
+	manager := git.NewTaskWorktreeManager(client, worktreeDir)
+
+	// Create and remove
+	info, err := manager.Create(context.Background(), "task-789", "remove-branch")
+	testutil.AssertNoError(t, err)
+
+	err = manager.Remove(context.Background(), "task-789")
+	testutil.AssertNoError(t, err)
+
+	// Should no longer exist
+	_, err = os.Stat(info.Path)
+	testutil.AssertError(t, err)
+}
+
+func TestTaskWorktreeManager_List(t *testing.T) {
+	repo := testutil.NewGitRepo(t)
+	repo.WriteFile("README.md", "# Test")
+	repo.Commit("Initial commit")
+
+	client, err := git.NewClient(repo.Path)
+	testutil.AssertNoError(t, err)
+
+	worktreeDir := testutil.TempDir(t)
+	manager := git.NewTaskWorktreeManager(client, worktreeDir)
+
+	// Create multiple worktrees
+	_, err = manager.Create(context.Background(), "task-a", "branch-a")
+	testutil.AssertNoError(t, err)
+	_, err = manager.Create(context.Background(), "task-b", "branch-b")
+	testutil.AssertNoError(t, err)
+
+	// List them
+	list, err := manager.List(context.Background())
+	testutil.AssertNoError(t, err)
+	testutil.AssertLen(t, list, 2)
+}

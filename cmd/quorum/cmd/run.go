@@ -6,8 +6,15 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/adapters/cli"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/adapters/state"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/logging"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service"
 )
 
 var runCmd = &cobra.Command{
@@ -38,12 +45,6 @@ func init() {
 }
 
 func runWorkflow(_ *cobra.Command, args []string) error {
-	// Get prompt
-	prompt, err := getPrompt(args, runFile)
-	if err != nil {
-		return err
-	}
-
 	// Setup context with cancellation
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -57,18 +58,140 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 		cancel()
 	}()
 
-	// TODO(future): Integrate with service.WorkflowRunner when ready
-	// This stub simulates the workflow for now
+	// Create logger
+	logger := logging.New(logging.Config{
+		Level:  viper.GetString("log.level"),
+		Format: viper.GetString("log.format"),
+	})
 
-	fmt.Printf("Would run workflow with prompt: %s\n", truncatePrompt(prompt, 50))
-	fmt.Printf("Options: dry-run=%v, yolo=%v, resume=%v, max-retries=%d\n",
-		runDryRun, runYolo, runResume, runMaxRetries)
+	// Create state manager
+	statePath := viper.GetString("state.path")
+	if statePath == "" {
+		statePath = ".quorum/state/state.json"
+	}
+	stateManager := state.NewJSONStateManager(statePath)
 
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	default:
-		return nil
+	// Create agent registry
+	registry := cli.NewRegistry()
+
+	// Configure agents from config
+	configureAgents(registry)
+
+	// Create consensus checker
+	threshold := viper.GetFloat64("consensus.threshold")
+	if threshold == 0 {
+		threshold = 0.75
+	}
+	consensusChecker := service.NewConsensusChecker(threshold, service.DefaultWeights())
+
+	// Create prompt renderer
+	promptRenderer, err := service.NewPromptRenderer()
+	if err != nil {
+		return fmt.Errorf("creating prompt renderer: %w", err)
+	}
+
+	// Create workflow runner config
+	timeout := viper.GetDuration("workflow.timeout")
+	if timeout == 0 {
+		timeout = time.Hour
+	}
+	runnerConfig := &service.WorkflowRunnerConfig{
+		Timeout:      timeout,
+		MaxRetries:   runMaxRetries,
+		DryRun:       runDryRun,
+		Sandbox:      viper.GetBool("workflow.sandbox"),
+		DenyTools:    viper.GetStringSlice("workflow.deny_tools"),
+		DefaultAgent: viper.GetString("agents.default"),
+		V3Agent:      "claude",
+	}
+	if runnerConfig.DefaultAgent == "" {
+		runnerConfig.DefaultAgent = "claude"
+	}
+
+	// Create workflow runner
+	runner := service.NewWorkflowRunner(
+		runnerConfig,
+		stateManager,
+		registry,
+		consensusChecker,
+		promptRenderer,
+		logger,
+	)
+
+	// Resume or run new workflow
+	if runResume {
+		logger.Info("resuming workflow from checkpoint")
+		return runner.Resume(ctx)
+	}
+
+	// Get prompt for new workflow
+	prompt, err := getPrompt(args, runFile)
+	if err != nil {
+		return err
+	}
+
+	logger.Info("starting new workflow", "prompt_length", len(prompt))
+	return runner.Run(ctx, prompt)
+}
+
+func configureAgents(registry *cli.Registry) {
+	// Configure Claude
+	if viper.GetBool("agents.claude.enabled") {
+		registry.Configure("claude", cli.AgentConfig{
+			Name:        "claude",
+			Path:        viper.GetString("agents.claude.path"),
+			Model:       viper.GetString("agents.claude.model"),
+			MaxTokens:   viper.GetInt("agents.claude.max_tokens"),
+			Temperature: viper.GetFloat64("agents.claude.temperature"),
+			Timeout:     5 * time.Minute,
+		})
+	}
+
+	// Configure Gemini
+	if viper.GetBool("agents.gemini.enabled") {
+		registry.Configure("gemini", cli.AgentConfig{
+			Name:        "gemini",
+			Path:        viper.GetString("agents.gemini.path"),
+			Model:       viper.GetString("agents.gemini.model"),
+			MaxTokens:   viper.GetInt("agents.gemini.max_tokens"),
+			Temperature: viper.GetFloat64("agents.gemini.temperature"),
+			Timeout:     5 * time.Minute,
+		})
+	}
+
+	// Configure Codex
+	if viper.GetBool("agents.codex.enabled") {
+		registry.Configure("codex", cli.AgentConfig{
+			Name:        "codex",
+			Path:        viper.GetString("agents.codex.path"),
+			Model:       viper.GetString("agents.codex.model"),
+			MaxTokens:   viper.GetInt("agents.codex.max_tokens"),
+			Temperature: viper.GetFloat64("agents.codex.temperature"),
+			Timeout:     5 * time.Minute,
+		})
+	}
+
+	// Configure Copilot
+	if viper.GetBool("agents.copilot.enabled") {
+		registry.Configure("copilot", cli.AgentConfig{
+			Name:        "copilot",
+			Path:        viper.GetString("agents.copilot.path"),
+			MaxTokens:   viper.GetInt("agents.copilot.max_tokens"),
+			Temperature: viper.GetFloat64("agents.copilot.temperature"),
+			Timeout:     5 * time.Minute,
+		})
+	}
+
+	// Configure Aider
+	if viper.GetBool("agents.aider.enabled") {
+		registry.Configure("aider", cli.AgentConfig{
+			Name:        "aider",
+			Path:        viper.GetString("agents.aider.path"),
+			Model:       viper.GetString("agents.aider.model"),
+			MaxTokens:   viper.GetInt("agents.aider.max_tokens"),
+			Temperature: viper.GetFloat64("agents.aider.temperature"),
+			Timeout:     5 * time.Minute,
+		})
 	}
 }
 
@@ -86,11 +209,4 @@ func getPrompt(args []string, file string) (string, error) {
 	}
 
 	return "", fmt.Errorf("prompt required: provide as argument or use --file")
-}
-
-func truncatePrompt(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
-	}
-	return s[:maxLen] + "..."
 }

@@ -7,6 +7,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/adapters/state"
 )
@@ -28,7 +29,11 @@ func init() {
 }
 
 func runStatus(cmd *cobra.Command, _ []string) error {
-	stateManager := state.NewJSONStateManager(".quorum/state")
+	statePath := viper.GetString("state.path")
+	if statePath == "" {
+		statePath = ".quorum/state/state.json"
+	}
+	stateManager := state.NewJSONStateManager(statePath)
 
 	if !stateManager.Exists() {
 		fmt.Println("No active workflow")

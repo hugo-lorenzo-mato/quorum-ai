@@ -41,16 +41,22 @@ func TestGitClient_Status(t *testing.T) {
 	// Clean status
 	status, err := client.Status(context.Background())
 	testutil.AssertNoError(t, err)
-	testutil.AssertLen(t, status.Modified, 0)
+	testutil.AssertLen(t, status.Unstaged, 0)
 	testutil.AssertLen(t, status.Untracked, 0)
-	testutil.AssertTrue(t, status.IsClean(), "should be clean")
+
+	isClean, err := client.IsClean(context.Background())
+	testutil.AssertNoError(t, err)
+	testutil.AssertTrue(t, isClean, "should be clean")
 
 	// Add untracked file
 	repo.WriteFile("new.txt", "new content")
 	status, err = client.Status(context.Background())
 	testutil.AssertNoError(t, err)
 	testutil.AssertLen(t, status.Untracked, 1)
-	testutil.AssertFalse(t, status.IsClean(), "should not be clean")
+
+	isClean, err = client.IsClean(context.Background())
+	testutil.AssertNoError(t, err)
+	testutil.AssertFalse(t, isClean, "should not be clean")
 }
 
 func TestGitClient_CurrentBranch(t *testing.T) {
@@ -173,14 +179,14 @@ func TestGitClient_Diff(t *testing.T) {
 	testutil.AssertNoError(t, err)
 
 	// No diff initially
-	diff, err := client.Diff(context.Background(), false)
+	diff, err := client.DiffUnstaged(context.Background())
 	testutil.AssertNoError(t, err)
 	testutil.AssertEqual(t, diff, "")
 
 	// Make a change
 	repo.WriteFile("README.md", "# Test\n\nMore content")
 
-	diff, err = client.Diff(context.Background(), false)
+	diff, err = client.DiffUnstaged(context.Background())
 	testutil.AssertNoError(t, err)
 	testutil.AssertContains(t, diff, "More content")
 }
@@ -223,7 +229,7 @@ func TestGitClient_DeleteBranch(t *testing.T) {
 	testutil.AssertNoError(t, err)
 
 	// Delete branch
-	err = client.DeleteBranch(context.Background(), "to-delete", false)
+	err = client.DeleteBranch(context.Background(), "to-delete")
 	testutil.AssertNoError(t, err)
 
 	exists, _ := client.BranchExists(context.Background(), "to-delete")

@@ -1,0 +1,25 @@
+quorum-ai orchestrates multiple AI agents to analyze, plan, and execute
+development tasks. It uses consensus mechanisms to reduce hallucinations
+and improve output quality through V1/V2/V3 validation protocol.
+
+Usage:
+  quorum [command]
+
+Available Commands:
+  completion  Generate the autocompletion script for the specified shell
+  doctor      Check system dependencies
+  help        Help about any command
+  init        Initialize a new quorum project
+  run         Run a complete workflow
+  status      Show workflow status
+  version     Print version information
+
+Flags:
+      --config string       config file (default: .quorum.yaml)
+  -h, --help                help for quorum
+      --log-format string   log format (auto, text, json) (default "auto")
+      --log-level string    log level (debug, info, warn, error) (default "info")
+      --no-color            disable colored output
+  -q, --quiet               suppress non-essential output
+
+Use "quorum [command] --help" for more information about a command.

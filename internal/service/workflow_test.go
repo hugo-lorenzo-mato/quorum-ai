@@ -663,14 +663,14 @@ func TestWorkflowRunner_ParsePlan_InvalidJSON(t *testing.T) {
 
 	output := `not valid json`
 
-	tasks, err := runner.parsePlan(output)
-	if err != nil {
-		t.Fatalf("parsePlan() error = %v", err)
+	_, err := runner.parsePlan(output)
+	if err == nil {
+		t.Fatal("parsePlan() error = nil, want error for invalid JSON")
 	}
 
-	// Should return empty list on parse failure
-	if len(tasks) != 0 {
-		t.Errorf("len(tasks) = %d, want 0", len(tasks))
+	// Should return an error explaining the parse failure
+	if !strings.Contains(err.Error(), "failed to parse plan output") {
+		t.Errorf("error = %v, want error containing 'failed to parse plan output'", err)
 	}
 }
 

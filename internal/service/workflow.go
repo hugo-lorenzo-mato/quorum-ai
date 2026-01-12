@@ -240,17 +240,19 @@ func (w *WorkflowRunner) runAnalyzePhase(ctx context.Context, state *core.Workfl
 		"needs_v3", consensusResult.NeedsV3,
 	)
 
-	// V2: If low consensus, run critique
-	if consensusResult.NeedsV3 {
+	// Track all outputs for consolidation
+	allOutputs := make([]AnalysisOutput, 0, len(v1Outputs)*3)
+	allOutputs = append(allOutputs, v1Outputs...)
+
+	// V2: If low consensus (either needs V3 or needs human review), run critique
+	if consensusResult.NeedsV3 || consensusResult.NeedsHumanReview {
 		v2Outputs, err := w.runV2Critique(ctx, state, v1Outputs)
 		if err != nil {
 			return fmt.Errorf("V2 critique: %w", err)
 		}
+		allOutputs = append(allOutputs, v2Outputs...)
 
 		// Re-evaluate consensus
-		allOutputs := make([]AnalysisOutput, 0, len(v1Outputs)+len(v2Outputs))
-		allOutputs = append(allOutputs, v1Outputs...)
-		allOutputs = append(allOutputs, v2Outputs...)
 		consensusResult = w.consensus.Evaluate(allOutputs)
 		if err := w.checkpoint.ConsensusCheckpoint(ctx, state, consensusResult); err != nil {
 			w.logger.Warn("failed to create V2 consensus checkpoint", "error", err)
@@ -264,8 +266,8 @@ func (w *WorkflowRunner) runAnalyzePhase(ctx context.Context, state *core.Workfl
 		}
 	}
 
-	// Consolidate analysis
-	if err := w.consolidateAnalysis(ctx, state, v1Outputs); err != nil {
+	// Consolidate analysis using all outputs (V1, V2, V3)
+	if err := w.consolidateAnalysis(ctx, state, allOutputs); err != nil {
 		return fmt.Errorf("consolidating analysis: %w", err)
 	}
 
@@ -892,11 +894,15 @@ func (w *WorkflowRunner) parsePlan(output string) ([]*core.Task, error) {
 			Tasks []TaskPlanItem `json:"tasks"`
 		}
 		if err := json.Unmarshal([]byte(output), &wrapper); err != nil {
-			// Return empty plan if parsing fails
-			w.logger.Warn("failed to parse plan, using empty task list", "error", err)
-			return []*core.Task{}, nil
+			// Return error - plan parsing failure should not be silent
+			return nil, fmt.Errorf("failed to parse plan output as JSON: %w", err)
 		}
 		planItems = wrapper.Tasks
+	}
+
+	// Validate we have at least one task
+	if len(planItems) == 0 {
+		return nil, fmt.Errorf("plan produced no tasks")
 	}
 
 	tasks := make([]*core.Task, 0, len(planItems))
