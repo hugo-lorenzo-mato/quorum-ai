@@ -274,6 +274,23 @@ The POC includes controlled experiments:
 
 ---
 
+## Appendix A: Multi-Model Consensus Rationale
+
+This project is motivated by the observation that independently generated
+specifications from multiple models converge on a stable set of architectural
+decisions. The convergence is most apparent on core constraints such as
+hexagonal architecture, JSON state persistence for v1, CLI-first delivery, and
+Jaccard-based consensus scoring. While long-form comparative reports are not
+maintained in this repository, the key takeaway is preserved here: cross-model
+agreement on foundational decisions reduces subjective bias and improves
+confidence in the POC scope.
+
+This appendix is intentionally brief to avoid documentation drift. Detailed
+comparative analyses should remain out of the main repository unless they are
+actively maintained and referenced by the implementation.
+
+---
+
 ## 9. Document History
 
 | Version | Date | Author            | Changes |
