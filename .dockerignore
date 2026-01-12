@@ -1,0 +1,51 @@
+# Git
+.git
+.gitignore
+.github
+
+# Build artifacts
+bin/
+dist/
+*.exe
+*.test
+*.out
+coverage.*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Documentation (not needed in runtime)
+docs/
+*.md
+!README.md
+
+# Development
+.env*
+*.log
+.quorum/
+.worktrees/
+
+# Tests
+*_test.go
+testdata/
+internal/testutil/
+
+# CI/CD
+.goreleaser.yml
+.golangci.yml
+Makefile
+scripts/
+
+# Docker
+Dockerfile*
+docker-compose*
+docker-bake.hcl
+
+# Tasks
+tasks*/
+
+# Go module cache
+.gocache/

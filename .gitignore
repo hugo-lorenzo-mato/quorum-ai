@@ -7,7 +7,6 @@
 *.test
 *.out
 bin/
-dist/
 
 # Coverage
 *.coverprofile
@@ -89,3 +88,6 @@ go.work.sum
 
 # Local binary (root only)
 /quorum
+
+# Initial markdown formated issues
+tasks-v2/*
