@@ -11,6 +11,21 @@ import (
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 )
 
+// resolvePath resolves symlinks and returns an absolute path.
+// This is needed for cross-platform path comparison (e.g., macOS /var -> /private/var).
+func resolvePath(path string) string {
+	resolved, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		// If we can't resolve, return absolute path
+		abs, err := filepath.Abs(path)
+		if err != nil {
+			return path
+		}
+		return abs
+	}
+	return resolved
+}
+
 // WorktreeManager manages git worktrees.
 type WorktreeManager struct {
 	git     *Client
@@ -92,8 +107,9 @@ func (m *WorktreeManager) Create(ctx context.Context, name, branch string) (*Wor
 		return nil, err
 	}
 
+	resolvedPath := resolvePath(worktreePath)
 	for _, wt := range worktrees {
-		if wt.Path == worktreePath {
+		if resolvePath(wt.Path) == resolvedPath {
 			wt.CreatedAt = time.Now()
 			return &wt, nil
 		}
@@ -134,8 +150,10 @@ func (m *WorktreeManager) CreateFromCommit(ctx context.Context, name, commit str
 
 // Remove removes a worktree.
 func (m *WorktreeManager) Remove(ctx context.Context, path string, force bool) error {
-	// Check if path is within our base directory
-	if !strings.HasPrefix(path, m.baseDir) {
+	// Check if path is within our base directory (using resolved paths for cross-platform)
+	resolvedPath := resolvePath(path)
+	resolvedBase := resolvePath(m.baseDir)
+	if !strings.HasPrefix(resolvedPath, resolvedBase) {
 		return core.ErrValidation("INVALID_WORKTREE",
 			"worktree is not managed by this manager")
 	}
@@ -204,9 +222,10 @@ func (m *WorktreeManager) ListManaged(ctx context.Context) ([]Worktree, error) {
 		return nil, err
 	}
 
+	resolvedBase := resolvePath(m.baseDir)
 	managed := make([]Worktree, 0)
 	for _, wt := range all {
-		if strings.HasPrefix(wt.Path, m.baseDir) {
+		if strings.HasPrefix(resolvePath(wt.Path), resolvedBase) {
 			managed = append(managed, wt)
 		}
 	}
@@ -222,8 +241,9 @@ func (m *WorktreeManager) Get(ctx context.Context, name string) (*Worktree, erro
 		return nil, err
 	}
 
+	resolvedPath := resolvePath(path)
 	for _, wt := range worktrees {
-		if wt.Path == path {
+		if resolvePath(wt.Path) == resolvedPath {
 			return &wt, nil
 		}
 	}
