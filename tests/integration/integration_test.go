@@ -58,7 +58,8 @@ func TestIntegration_StateManager(t *testing.T) {
 func TestIntegration_ConfigLoader(t *testing.T) {
 	dir := testutil.TempDir(t)
 
-	configContent := `version: "1"
+	configContent := `log:
+  level: info
 agents:
   claude:
     enabled: true
@@ -66,8 +67,9 @@ agents:
   gemini:
     enabled: true
     model: gemini-pro
+consensus:
+  threshold: 0.75
 workflow:
-  consensus_threshold: 0.75
   max_retries: 3
 `
 
@@ -76,14 +78,14 @@ workflow:
 		t.Fatalf("writing config: %v", err)
 	}
 
-	loader := config.NewLoader(configPath)
+	loader := config.NewLoader().WithConfigFile(configPath)
 	cfg, err := loader.Load()
 	if err != nil {
 		t.Fatalf("loading config: %v", err)
 	}
 
-	if cfg.Workflow.ConsensusThreshold != 0.75 {
-		t.Errorf("threshold mismatch: got %f, want 0.75", cfg.Workflow.ConsensusThreshold)
+	if cfg.Consensus.Threshold != 0.75 {
+		t.Errorf("threshold mismatch: got %f, want 0.75", cfg.Consensus.Threshold)
 	}
 
 	if cfg.Agents.Claude.Model != "claude-3-opus" {
