@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"regexp"
@@ -206,43 +205,6 @@ func (c *CopilotAdapter) isOutputComplete(output string) bool {
 	}
 
 	return false
-}
-
-// readWithTimeout reads from a reader with timeout.
-func (c *CopilotAdapter) readWithTimeout(ctx context.Context, r io.Reader, timeout time.Duration) (string, error) {
-	var output bytes.Buffer
-	done := make(chan error, 1)
-
-	go func() {
-		buf := make([]byte, 4096)
-		for {
-			n, err := r.Read(buf)
-			if err != nil {
-				if err == io.EOF {
-					done <- nil
-					return
-				}
-				done <- err
-				return
-			}
-			output.Write(buf[:n])
-
-			// Check for completion markers
-			if c.isOutputComplete(output.String()) {
-				done <- nil
-				return
-			}
-		}
-	}()
-
-	select {
-	case <-ctx.Done():
-		return output.String(), ctx.Err()
-	case <-time.After(timeout):
-		return output.String(), core.ErrTimeout(fmt.Sprintf("read timed out after %v", timeout))
-	case err := <-done:
-		return output.String(), err
-	}
 }
 
 // Ensure CopilotAdapter implements core.Agent

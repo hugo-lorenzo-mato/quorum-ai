@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"encoding/json"
 	"regexp"
 	"strconv"
 
@@ -179,36 +178,6 @@ func (c *CodexAdapter) estimateCost(tokensIn, tokensOut int) float64 {
 	inputCost := float64(tokensIn) / 1000000 * 2.50
 	outputCost := float64(tokensOut) / 1000000 * 10.00
 	return inputCost + outputCost
-}
-
-// codexJSONResponse represents Codex output structure.
-type codexJSONResponse struct {
-	ID      string `json:"id"`
-	Object  string `json:"object"`
-	Created int64  `json:"created"`
-	Model   string `json:"model"`
-	Choices []struct {
-		Index   int `json:"index"`
-		Message struct {
-			Role    string `json:"role"`
-			Content string `json:"content"`
-		} `json:"message"`
-		FinishReason string `json:"finish_reason"`
-	} `json:"choices"`
-	Usage struct {
-		PromptTokens     int `json:"prompt_tokens"`
-		CompletionTokens int `json:"completion_tokens"`
-		TotalTokens      int `json:"total_tokens"`
-	} `json:"usage"`
-}
-
-// parseStructuredOutput parses Codex's structured JSON response.
-func (c *CodexAdapter) parseStructuredOutput(output string) (*codexJSONResponse, error) {
-	var resp codexJSONResponse
-	if err := json.Unmarshal([]byte(output), &resp); err != nil {
-		return nil, err
-	}
-	return &resp, nil
 }
 
 // Ensure CodexAdapter implements core.Agent

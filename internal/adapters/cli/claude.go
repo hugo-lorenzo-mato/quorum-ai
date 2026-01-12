@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"encoding/json"
 	"regexp"
 	"strconv"
 
@@ -188,27 +187,6 @@ func (c *ClaudeAdapter) estimateCost(tokensIn, tokensOut int) float64 {
 	inputCost := float64(tokensIn) / 1000000 * 3
 	outputCost := float64(tokensOut) / 1000000 * 15
 	return inputCost + outputCost
-}
-
-// claudeJSONResponse represents Claude's JSON output structure.
-type claudeJSONResponse struct {
-	Type    string `json:"type"`
-	Content string `json:"content"`
-	Model   string `json:"model"`
-	Usage   struct {
-		InputTokens  int `json:"input_tokens"`
-		OutputTokens int `json:"output_tokens"`
-	} `json:"usage"`
-	StopReason string `json:"stop_reason"`
-}
-
-// parseStructuredOutput parses Claude's structured JSON response.
-func (c *ClaudeAdapter) parseStructuredOutput(output string) (*claudeJSONResponse, error) {
-	var resp claudeJSONResponse
-	if err := json.Unmarshal([]byte(output), &resp); err != nil {
-		return nil, err
-	}
-	return &resp, nil
 }
 
 // Ensure ClaudeAdapter implements core.Agent

@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"encoding/json"
 	"regexp"
 	"strconv"
 	"strings"
@@ -185,15 +184,6 @@ type geminiJSONResponse struct {
 		CandidatesTokenCount int `json:"candidatesTokenCount"`
 		TotalTokenCount      int `json:"totalTokenCount"`
 	} `json:"usageMetadata"`
-}
-
-// parseStructuredOutput parses Gemini's structured response.
-func (g *GeminiAdapter) parseStructuredOutput(output string) (*geminiJSONResponse, error) {
-	var resp geminiJSONResponse
-	if err := json.Unmarshal([]byte(output), &resp); err != nil {
-		return nil, err
-	}
-	return &resp, nil
 }
 
 // extractContent extracts text content from Gemini response.

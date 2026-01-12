@@ -5,6 +5,7 @@ run:
     - integration
 
 linters:
+  disable-all: true
   enable:
     # Critical bug detection only
     - govet
