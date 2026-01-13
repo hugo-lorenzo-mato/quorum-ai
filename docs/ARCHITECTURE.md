@@ -308,17 +308,18 @@ quorum-ai/
 ├── cmd/quorum/              # Entry point
 │   ├── main.go              # Minimal main
 │   └── cmd/                  # Cobra commands
-│       ├── root.go
-│       ├── run.go
-│       ├── analyze.go
-│       ├── plan.go
-│       ├── execute.go
-│       ├── status.go
-│       └── doctor.go
+│       ├── root.go          # Root command and global flags
+│       ├── run.go           # Main workflow execution
+│       ├── status.go        # Workflow status inspection
+│       ├── doctor.go        # Prerequisites validation
+│       ├── init.go          # Configuration scaffolding
+│       ├── trace.go         # Trace inspection
+│       └── version.go       # Version information
 │
 ├── internal/                 # Private packages
 │   ├── core/                 # Domain layer
 │   ├── service/              # Application layer
+│   │   └── prompts/         # Prompt templates
 │   ├── adapters/             # Infrastructure
 │   │   ├── cli/
 │   │   ├── state/
@@ -331,7 +332,6 @@ quorum-ai/
 │
 ├── pkg/parser/               # Public packages
 │
-├── prompts/                  # Prompt templates
 ├── configs/                  # Config examples
 ├── testdata/                 # Test fixtures
 └── docs/                     # Documentation
