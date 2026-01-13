@@ -1,0 +1,245 @@
+package cmd
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"sync/atomic"
+	"time"
+
+	"github.com/spf13/viper"
+
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/adapters/cli"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/adapters/git"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/adapters/state"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/config"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/logging"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service/workflow"
+)
+
+// cmdIDCounter provides additional uniqueness for workflow IDs generated from cmd.
+var cmdIDCounter uint64
+
+// PhaseRunnerDeps holds all dependencies needed for running workflow phases.
+type PhaseRunnerDeps struct {
+	Config            *config.Config
+	Logger            *logging.Logger
+	StateManager      *state.JSONStateManager
+	StateAdapter      workflow.StateManager
+	Registry          *cli.Registry
+	ConsensusAdapter  *workflow.ConsensusAdapter
+	CheckpointAdapter *workflow.CheckpointAdapter
+	RetryAdapter      *workflow.RetryAdapter
+	RateLimiterAdapt  *workflow.RateLimiterRegistryAdapter
+	PromptAdapter     *workflow.PromptRendererAdapter
+	ResumeAdapter     *workflow.ResumePointAdapter
+	DAGAdapter        *workflow.DAGAdapter
+	WorktreeManager   workflow.WorktreeManager
+	RunnerConfig      *workflow.RunnerConfig
+}
+
+// InitPhaseRunner initializes all dependencies needed for running individual phases.
+// This extracts the common initialization logic from run.go to be reused by
+// analyze, plan, and execute commands.
+func InitPhaseRunner(ctx context.Context, maxRetries int, dryRun bool, sandbox bool) (*PhaseRunnerDeps, error) {
+	// Load unified configuration using global viper (includes flag bindings)
+	loader := config.NewLoaderWithViper(viper.GetViper())
+	if cfgFile != "" {
+		loader.WithConfigFile(cfgFile)
+	}
+	cfg, err := loader.Load()
+	if err != nil {
+		return nil, fmt.Errorf("loading config: %w", err)
+	}
+
+	// Validate configuration
+	if err := config.ValidateConfig(cfg); err != nil {
+		return nil, fmt.Errorf("validating config: %w", err)
+	}
+
+	// Create logger from unified config
+	logger := logging.New(logging.Config{
+		Level:  cfg.Log.Level,
+		Format: cfg.Log.Format,
+	})
+
+	// Create state manager from unified config
+	statePath := cfg.State.Path
+	if statePath == "" {
+		statePath = ".quorum/state/state.json"
+	}
+
+	// Migrate state from legacy paths if needed
+	if migrated, err := state.MigrateState(statePath, logger); err != nil {
+		logger.Warn("state migration failed", "error", err)
+	} else if migrated {
+		logger.Info("migrated state from legacy path to", "path", statePath)
+	}
+
+	stateManager := state.NewJSONStateManager(statePath)
+
+	// Create agent registry and configure from unified config
+	registry := cli.NewRegistry()
+	if err := configureAgentsFromConfig(registry, cfg, loader); err != nil {
+		return nil, fmt.Errorf("configuring agents: %w", err)
+	}
+
+	// Create consensus checker from unified config
+	consensusChecker := service.NewConsensusCheckerWithThresholds(
+		cfg.Consensus.Threshold,
+		cfg.Consensus.V2Threshold,
+		cfg.Consensus.HumanThreshold,
+		service.CategoryWeights{
+			Claims:          cfg.Consensus.Weights.Claims,
+			Risks:           cfg.Consensus.Weights.Risks,
+			Recommendations: cfg.Consensus.Weights.Recommendations,
+		},
+	)
+
+	// Create prompt renderer
+	promptRenderer, err := service.NewPromptRenderer()
+	if err != nil {
+		return nil, fmt.Errorf("creating prompt renderer: %w", err)
+	}
+
+	// Create workflow runner config
+	timeout := time.Hour
+	if cfg.Workflow.Timeout != "" {
+		parsed, parseErr := time.ParseDuration(cfg.Workflow.Timeout)
+		if parseErr != nil {
+			return nil, fmt.Errorf("parsing workflow timeout %q: %w", cfg.Workflow.Timeout, parseErr)
+		}
+		timeout = parsed
+	}
+
+	defaultAgent := cfg.Agents.Default
+	if defaultAgent == "" {
+		defaultAgent = "claude"
+	}
+
+	// Use provided values or fall back to config
+	if maxRetries == 0 {
+		maxRetries = 3
+	}
+
+	runnerConfig := &workflow.RunnerConfig{
+		Timeout:      timeout,
+		MaxRetries:   maxRetries,
+		DryRun:       dryRun,
+		Sandbox:      sandbox || cfg.Workflow.Sandbox,
+		DenyTools:    cfg.Workflow.DenyTools,
+		DefaultAgent: defaultAgent,
+		V3Agent:      "claude",
+		AgentPhaseModels: map[string]map[string]string{
+			"claude":  cfg.Agents.Claude.PhaseModels,
+			"gemini":  cfg.Agents.Gemini.PhaseModels,
+			"codex":   cfg.Agents.Codex.PhaseModels,
+			"copilot": cfg.Agents.Copilot.PhaseModels,
+			"aider":   cfg.Agents.Aider.PhaseModels,
+		},
+		WorktreeAutoClean:  cfg.Git.AutoClean,
+		MaxCostPerWorkflow: cfg.Costs.MaxPerWorkflow,
+		MaxCostPerTask:     cfg.Costs.MaxPerTask,
+	}
+
+	// Create service components
+	checkpointManager := service.NewCheckpointManager(stateManager, logger)
+	retryPolicy := service.NewRetryPolicy(service.WithMaxAttempts(maxRetries))
+	rateLimiterRegistry := service.NewRateLimiterRegistry()
+	dagBuilder := service.NewDAGBuilder()
+
+	// Create worktree manager for task isolation
+	cwd, err := os.Getwd()
+	if err != nil {
+		return nil, fmt.Errorf("getting working directory: %w", err)
+	}
+
+	gitClient, err := git.NewClient(cwd)
+	if err != nil {
+		logger.Warn("failed to create git client, worktree isolation disabled", "error", err)
+	}
+
+	var worktreeManager workflow.WorktreeManager
+	if gitClient != nil {
+		worktreeManager = git.NewTaskWorktreeManager(gitClient, cfg.Git.WorktreeDir)
+	}
+
+	// Create adapters for modular runner interfaces
+	consensusAdapter := workflow.NewConsensusAdapter(consensusChecker)
+	checkpointAdapter := workflow.NewCheckpointAdapter(checkpointManager, ctx)
+	retryAdapter := workflow.NewRetryAdapter(retryPolicy, ctx)
+	rateLimiterAdapter := workflow.NewRateLimiterRegistryAdapter(rateLimiterRegistry, ctx)
+	promptAdapter := workflow.NewPromptRendererAdapter(promptRenderer)
+	resumeAdapter := workflow.NewResumePointAdapter(checkpointManager)
+	dagAdapter := workflow.NewDAGAdapter(dagBuilder)
+
+	// Create state manager adapter
+	stateAdapter := &stateManagerAdapter{sm: stateManager}
+
+	return &PhaseRunnerDeps{
+		Config:            cfg,
+		Logger:            logger,
+		StateManager:      stateManager,
+		StateAdapter:      stateAdapter,
+		Registry:          registry,
+		ConsensusAdapter:  consensusAdapter,
+		CheckpointAdapter: checkpointAdapter,
+		RetryAdapter:      retryAdapter,
+		RateLimiterAdapt:  rateLimiterAdapter,
+		PromptAdapter:     promptAdapter,
+		ResumeAdapter:     resumeAdapter,
+		DAGAdapter:        dagAdapter,
+		WorktreeManager:   worktreeManager,
+		RunnerConfig:      runnerConfig,
+	}, nil
+}
+
+// CreateWorkflowContext creates a workflow context from dependencies and state.
+func CreateWorkflowContext(deps *PhaseRunnerDeps, state *core.WorkflowState) *workflow.Context {
+	return &workflow.Context{
+		State:      state,
+		Agents:     deps.Registry,
+		Prompts:    deps.PromptAdapter,
+		Checkpoint: deps.CheckpointAdapter,
+		Retry:      deps.RetryAdapter,
+		RateLimits: deps.RateLimiterAdapt,
+		Worktrees:  deps.WorktreeManager,
+		Logger:     deps.Logger,
+		Config: &workflow.Config{
+			DryRun:             deps.RunnerConfig.DryRun,
+			Sandbox:            deps.RunnerConfig.Sandbox,
+			DenyTools:          deps.RunnerConfig.DenyTools,
+			DefaultAgent:       deps.RunnerConfig.DefaultAgent,
+			V3Agent:            deps.RunnerConfig.V3Agent,
+			AgentPhaseModels:   deps.RunnerConfig.AgentPhaseModels,
+			WorktreeAutoClean:  deps.RunnerConfig.WorktreeAutoClean,
+			MaxCostPerWorkflow: deps.RunnerConfig.MaxCostPerWorkflow,
+			MaxCostPerTask:     deps.RunnerConfig.MaxCostPerTask,
+		},
+	}
+}
+
+// InitializeWorkflowState creates a new workflow state for a fresh run.
+func InitializeWorkflowState(prompt string) *core.WorkflowState {
+	return &core.WorkflowState{
+		Version:      core.CurrentStateVersion,
+		WorkflowID:   core.WorkflowID(generateCmdWorkflowID()),
+		Status:       core.WorkflowStatusRunning,
+		CurrentPhase: core.PhaseAnalyze,
+		Prompt:       prompt,
+		Tasks:        make(map[core.TaskID]*core.TaskState),
+		TaskOrder:    make([]core.TaskID, 0),
+		Checkpoints:  make([]core.Checkpoint, 0),
+		Metrics:      &core.StateMetrics{},
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
+	}
+}
+
+// generateCmdWorkflowID generates a unique workflow ID.
+func generateCmdWorkflowID() string {
+	counter := atomic.AddUint64(&cmdIDCounter, 1)
+	return fmt.Sprintf("wf-%d-%d", time.Now().UnixNano(), counter)
+}

@@ -138,6 +138,16 @@ Core responsibilities:
 5. Generate report
 ```
 
+**Independent Phase Execution:**
+
+Phases can also run independently via dedicated commands (`quorum analyze`,
+`quorum plan`, `quorum execute`). Each phase validates prerequisites:
+- **analyze**: Creates new workflow state
+- **plan**: Requires completed analysis (consolidated output)
+- **execute**: Requires completed plan (task list in state)
+
+This enables debugging, cost control, and recovery between phases.
+
 ### 3. Adapters (`internal/adapters/`)
 
 Implement ports by wrapping external systems.
@@ -316,6 +326,10 @@ quorum-ai/
 │   └── cmd/                  # Cobra commands
 │       ├── root.go          # Root command and global flags
 │       ├── run.go           # Main workflow execution
+│       ├── analyze.go       # Analysis phase only
+│       ├── plan.go          # Planning phase only
+│       ├── execute.go       # Execution phase only
+│       ├── common.go        # Shared phase utilities
 │       ├── status.go        # Workflow status inspection
 │       ├── doctor.go        # Prerequisites validation
 │       ├── init.go          # Configuration scaffolding
