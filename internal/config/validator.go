@@ -52,6 +52,7 @@ func NewValidator() *Validator {
 // Validate validates the entire configuration.
 func (v *Validator) Validate(cfg *Config) error {
 	v.validateLog(&cfg.Log)
+	v.validateTrace(&cfg.Trace)
 	v.validateWorkflow(&cfg.Workflow)
 	v.validateAgents(&cfg.Agents)
 	v.validateState(&cfg.State)
@@ -96,6 +97,52 @@ func (v *Validator) validateLog(cfg *LogConfig) {
 
 	if cfg.File != "" && !isValidPath(cfg.File) {
 		v.addError("log.file", cfg.File, "invalid file path")
+	}
+}
+
+func (v *Validator) validateTrace(cfg *TraceConfig) {
+	validModes := map[string]bool{
+		"off": true, "summary": true, "full": true,
+	}
+	if !validModes[cfg.Mode] {
+		v.addError("trace.mode", cfg.Mode, "must be one of: off, summary, full")
+	}
+
+	if cfg.Dir == "" {
+		v.addError("trace.dir", cfg.Dir, "directory required")
+	} else if !isValidPath(cfg.Dir) {
+		v.addError("trace.dir", cfg.Dir, "invalid directory path")
+	}
+
+	if cfg.SchemaVersion <= 0 {
+		v.addError("trace.schema_version", cfg.SchemaVersion, "must be positive")
+	}
+
+	if cfg.MaxBytes <= 0 {
+		v.addError("trace.max_bytes", cfg.MaxBytes, "must be positive")
+	}
+
+	if cfg.TotalMaxBytes <= 0 {
+		v.addError("trace.total_max_bytes", cfg.TotalMaxBytes, "must be positive")
+	}
+
+	if cfg.TotalMaxBytes < cfg.MaxBytes {
+		v.addError("trace.total_max_bytes", cfg.TotalMaxBytes, "must be >= trace.max_bytes")
+	}
+
+	if cfg.MaxFiles <= 0 {
+		v.addError("trace.max_files", cfg.MaxFiles, "must be positive")
+	}
+
+	if len(cfg.IncludePhases) > 0 {
+		validPhases := map[string]bool{
+			"analyze": true, "plan": true, "execute": true, "consensus": true,
+		}
+		for _, phase := range cfg.IncludePhases {
+			if !validPhases[phase] {
+				v.addError("trace.include_phases", phase, "unknown phase")
+			}
+		}
 	}
 }
 

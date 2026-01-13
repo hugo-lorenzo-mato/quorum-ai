@@ -10,6 +10,29 @@ log:
   # Optional log file path (empty = stdout only)
   file: ""
 
+# Trace configuration
+trace:
+  # Trace mode: off, summary, full
+  mode: off
+  # Directory for trace artifacts
+  dir: .quorum/traces
+  # Trace schema version
+  schema_version: 1
+  # Redact sensitive values in traces
+  redact: true
+  # Regex patterns to redact (empty uses built-in defaults)
+  redact_patterns: []
+  # Regex allowlist to skip redaction
+  redact_allowlist: []
+  # Max bytes per trace file
+  max_bytes: 262144
+  # Max total bytes per run
+  total_max_bytes: 10485760
+  # Max number of files per run
+  max_files: 500
+  # Phases to include in tracing
+  include_phases: [analyze, consensus, plan, execute]
+
 # Workflow execution settings
 workflow:
   # Maximum workflow execution time

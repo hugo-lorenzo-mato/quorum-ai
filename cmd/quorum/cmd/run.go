@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/adapters/cli"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/adapters/git"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/adapters/state"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/config"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/logging"
@@ -33,6 +34,7 @@ var (
 	runYolo       bool
 	runResume     bool
 	runMaxRetries int
+	runTrace      string
 )
 
 func init() {
@@ -43,6 +45,10 @@ func init() {
 	runCmd.Flags().BoolVar(&runYolo, "yolo", false, "Skip confirmations")
 	runCmd.Flags().BoolVar(&runResume, "resume", false, "Resume from last checkpoint")
 	runCmd.Flags().IntVar(&runMaxRetries, "max-retries", 3, "Maximum retry attempts")
+	runCmd.Flags().StringVar(&runTrace, "trace", "", "Trace mode (off, summary, full)")
+	if flag := runCmd.Flags().Lookup("trace"); flag != nil {
+		flag.NoOptDefVal = "summary"
+	}
 }
 
 func runWorkflow(_ *cobra.Command, args []string) error {
@@ -94,6 +100,13 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 		return fmt.Errorf("creating prompt renderer: %w", err)
 	}
 
+	traceCfg, err := parseTraceConfig(cfg, runTrace)
+	if err != nil {
+		return err
+	}
+
+	gitCommit, gitDirty := loadGitInfo()
+
 	// Create workflow runner config
 	timeout := viper.GetDuration("workflow.timeout")
 	if timeout == 0 {
@@ -107,6 +120,12 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 		DenyTools:    viper.GetStringSlice("workflow.deny_tools"),
 		DefaultAgent: viper.GetString("agents.default"),
 		V3Agent:      "claude",
+		Trace:        traceCfg,
+		AppVersion:   appVersion,
+		AppCommit:    appCommit,
+		AppDate:      appDate,
+		GitCommit:    gitCommit,
+		GitDirty:     gitDirty,
 		AgentPhaseModels: map[string]map[string]string{
 			"claude":  cfg.Agents.Claude.PhaseModels,
 			"gemini":  cfg.Agents.Gemini.PhaseModels,
@@ -143,6 +162,59 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 
 	logger.Info("starting new workflow", "prompt_length", len(prompt))
 	return runner.Run(ctx, prompt)
+}
+
+func loadGitInfo() (string, bool) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", false
+	}
+
+	client, err := git.NewClient(cwd)
+	if err != nil {
+		return "", false
+	}
+
+	commit, err := client.CurrentCommit(context.Background())
+	if err != nil {
+		return "", false
+	}
+
+	status, err := client.StatusLocal(context.Background())
+	if err != nil {
+		return commit, false
+	}
+
+	return commit, !status.IsClean()
+}
+
+func parseTraceConfig(cfg *config.Config, override string) (service.TraceConfig, error) {
+	trace := service.TraceConfig{
+		Mode:            cfg.Trace.Mode,
+		Dir:             cfg.Trace.Dir,
+		SchemaVersion:   cfg.Trace.SchemaVersion,
+		Redact:          cfg.Trace.Redact,
+		RedactPatterns:  cfg.Trace.RedactPatterns,
+		RedactAllowlist: cfg.Trace.RedactAllowlist,
+		MaxBytes:        cfg.Trace.MaxBytes,
+		TotalMaxBytes:   cfg.Trace.TotalMaxBytes,
+		MaxFiles:        cfg.Trace.MaxFiles,
+		IncludePhases:   cfg.Trace.IncludePhases,
+	}
+
+	if override != "" {
+		trace.Mode = override
+	}
+
+	switch trace.Mode {
+	case "", "off", "summary", "full":
+		if trace.Mode == "" {
+			trace.Mode = "off"
+		}
+		return trace, nil
+	default:
+		return service.TraceConfig{}, fmt.Errorf("invalid trace mode: %s", trace.Mode)
+	}
 }
 
 func configureAgents(registry *cli.Registry) (*config.Config, error) {

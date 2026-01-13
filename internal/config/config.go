@@ -3,6 +3,7 @@ package config
 // Config holds all application configuration.
 type Config struct {
 	Log       LogConfig       `mapstructure:"log"`
+	Trace     TraceConfig     `mapstructure:"trace"`
 	Workflow  WorkflowConfig  `mapstructure:"workflow"`
 	Agents    AgentsConfig    `mapstructure:"agents"`
 	State     StateConfig     `mapstructure:"state"`
@@ -17,6 +18,20 @@ type LogConfig struct {
 	Level  string `mapstructure:"level"`
 	Format string `mapstructure:"format"`
 	File   string `mapstructure:"file"`
+}
+
+// TraceConfig configures trace mode output.
+type TraceConfig struct {
+	Mode            string   `mapstructure:"mode"`
+	Dir             string   `mapstructure:"dir"`
+	SchemaVersion   int      `mapstructure:"schema_version"`
+	Redact          bool     `mapstructure:"redact"`
+	RedactPatterns  []string `mapstructure:"redact_patterns"`
+	RedactAllowlist []string `mapstructure:"redact_allowlist"`
+	MaxBytes        int64    `mapstructure:"max_bytes"`
+	TotalMaxBytes   int64    `mapstructure:"total_max_bytes"`
+	MaxFiles        int      `mapstructure:"max_files"`
+	IncludePhases   []string `mapstructure:"include_phases"`
 }
 
 // WorkflowConfig configures workflow execution.

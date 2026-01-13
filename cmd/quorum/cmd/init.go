@@ -46,6 +46,19 @@ log:
   level: info
   format: auto
 
+# Trace configuration
+trace:
+  mode: off
+  dir: .quorum/traces
+  schema_version: 1
+  redact: true
+  redact_patterns: []
+  redact_allowlist: []
+  max_bytes: 262144
+  total_max_bytes: 10485760
+  max_files: 500
+  include_phases: [analyze, consensus, plan, execute]
+
 # Agent configuration
 agents:
   default: claude
