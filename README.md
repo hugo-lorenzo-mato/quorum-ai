@@ -20,6 +20,7 @@ quorum-ai reduces LLM hallucinations and increases output reliability by running
 - **Resume from Checkpoint**: Recover from failures without re-running completed work
 - **Cost Tracking**: Monitor token usage and costs across all agents
 - **Secret Sanitization**: Multi-pattern regex ensures API keys never appear in logs
+- **Trace Mode**: Optional file-based traces for prompts, outputs, and consensus decisions
 
 ---
 
@@ -81,6 +82,14 @@ quorum run "Implement user authentication with JWT tokens"
 
 # Check workflow status
 quorum status
+
+# Enable trace output (summary or full)
+quorum run --trace "Add a CLI flag to validate configs"
+quorum run --trace=full "Refactor the payment processing module"
+
+# Inspect trace runs
+quorum trace --list
+quorum trace --run-id wf-1234-1700000000
 ```
 
 ---
