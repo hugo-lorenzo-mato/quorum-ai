@@ -123,7 +123,9 @@ Example `run.json` (trimmed):
   "git_dirty": false,
   "config": {
     "mode": "summary",
-    "dir": ".quorum/traces"
+    "dir": ".quorum/traces",
+    "schema_version": 1,
+    "redact": true
   },
   "summary": {
     "total_prompts": 6,
