@@ -78,14 +78,18 @@ agents:
       analyze: "gemini-2.5-pro"
       plan: "gemini-2.5-flash"
       execute: "gemini-2.5-flash"
+  # Optional agents (disabled by default)
   codex:
-    enabled: true
+    enabled: false
     path: "codex"
     model: "gpt-5.1-codex"
-    phase_models:
-      analyze: "gpt-5.1-codex"
-      plan: "gpt-5.1-codex"
-      execute: "gpt-5.1-codex-mini"
+  copilot:
+    enabled: false
+    path: "gh copilot"
+  aider:
+    enabled: false
+    path: "aider"
+    model: "gpt-4"
 
 # Workflow settings
 workflow:

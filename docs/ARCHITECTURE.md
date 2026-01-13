@@ -148,8 +148,9 @@ Implement ports by wrapping external systems.
 |---------|----------|-------------|
 | `claude` | `claude` | Full analysis, planning, code generation |
 | `gemini` | `gemini` | Analysis, validation |
-| `codex` | `codex` | Code-focused tasks |
-| `copilot` | `gh copilot` | GitHub-integrated tasks (PTY required) |
+| `codex` | `codex` | Code-focused tasks (optional) |
+| `copilot` | `gh copilot` | GitHub-integrated tasks (optional, PTY required) |
+| `aider` | `aider` | AI pair programming (optional) |
 
 #### State Adapter (`internal/adapters/state/`)
 

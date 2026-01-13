@@ -80,9 +80,9 @@ agents:
     max_tokens: 4096
     temperature: 0.7
 
-  # OpenAI Codex CLI configuration (optional)
+  # OpenAI Codex CLI configuration (optional, disabled by default)
   codex:
-    enabled: true
+    enabled: false
     path: codex
     model: gpt-5.1-codex
     phase_models:

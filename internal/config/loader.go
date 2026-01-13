@@ -133,7 +133,7 @@ func (l *Loader) setDefaults() {
 	l.v.SetDefault("agents.gemini.model", "gemini-2.5-flash")
 	l.v.SetDefault("agents.gemini.max_tokens", 4096)
 	l.v.SetDefault("agents.gemini.temperature", 0.7)
-	l.v.SetDefault("agents.codex.enabled", true)
+	l.v.SetDefault("agents.codex.enabled", false) // Optional: enable explicitly in config
 	l.v.SetDefault("agents.codex.path", "codex")
 	l.v.SetDefault("agents.codex.model", "gpt-5.1-codex")
 	l.v.SetDefault("agents.codex.max_tokens", 4096)
