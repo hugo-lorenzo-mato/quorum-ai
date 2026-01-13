@@ -174,6 +174,7 @@ type TaskState struct {
 	CostUSD      float64    `json:"cost_usd"`
 	Retries      int        `json:"retries"`
 	Error        string     `json:"error,omitempty"`
+	WorktreePath string     `json:"worktree_path,omitempty"`
 	StartedAt    *time.Time `json:"started_at,omitempty"`
 	CompletedAt  *time.Time `json:"completed_at,omitempty"`
 }

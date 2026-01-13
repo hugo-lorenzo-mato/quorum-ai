@@ -133,6 +133,7 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 			"copilot": cfg.Agents.Copilot.PhaseModels,
 			"aider":   cfg.Agents.Aider.PhaseModels,
 		},
+		WorktreeAutoClean: cfg.Git.AutoClean,
 	}
 
 	// Store trace config for potential later use
@@ -145,6 +146,20 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 	retryPolicy := service.NewRetryPolicy(service.WithMaxAttempts(runMaxRetries))
 	rateLimiterRegistry := service.NewRateLimiterRegistry()
 	dagBuilder := service.NewDAGBuilder()
+
+	// Create worktree manager for task isolation
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("getting working directory: %w", err)
+	}
+	gitClient, err := git.NewClient(cwd)
+	if err != nil {
+		logger.Warn("failed to create git client, worktree isolation disabled", "error", err)
+	}
+	var worktreeManager workflow.WorktreeManager
+	if gitClient != nil {
+		worktreeManager = git.NewTaskWorktreeManager(gitClient, cfg.Git.WorktreeDir)
+	}
 
 	// Create adapters for modular runner interfaces
 	consensusAdapter := workflow.NewConsensusAdapter(consensusChecker)
@@ -170,6 +185,7 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 		Prompts:        promptAdapter,
 		Retry:          retryAdapter,
 		RateLimits:     rateLimiterAdapter,
+		Worktrees:      worktreeManager,
 		Logger:         logger,
 	})
 

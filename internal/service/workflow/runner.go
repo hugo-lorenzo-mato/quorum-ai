@@ -48,6 +48,8 @@ type RunnerConfig struct {
 	V3Agent      string
 	// AgentPhaseModels allows per-agent, per-phase model overrides.
 	AgentPhaseModels map[string]map[string]string
+	// WorktreeAutoClean controls automatic worktree cleanup after task execution.
+	WorktreeAutoClean bool
 }
 
 // DefaultRunnerConfig returns default configuration.
@@ -78,6 +80,7 @@ type Runner struct {
 	prompts        PromptRenderer
 	retry          RetryExecutor
 	rateLimits     RateLimiterGetter
+	worktrees      WorktreeManager
 	logger         *logging.Logger
 }
 
@@ -96,6 +99,7 @@ type RunnerDeps struct {
 	Prompts        PromptRenderer
 	Retry          RetryExecutor
 	RateLimits     RateLimiterGetter
+	Worktrees      WorktreeManager
 	Logger         *logging.Logger
 }
 
@@ -120,6 +124,7 @@ func NewRunner(deps RunnerDeps) *Runner {
 		prompts:        deps.Prompts,
 		retry:          deps.Retry,
 		rateLimits:     deps.RateLimits,
+		worktrees:      deps.Worktrees,
 		logger:         deps.Logger,
 	}
 }
@@ -271,14 +276,16 @@ func (r *Runner) createContext(state *core.WorkflowState) *Context {
 		Checkpoint: r.checkpoint,
 		Retry:      r.retry,
 		RateLimits: r.rateLimits,
+		Worktrees:  r.worktrees,
 		Logger:     r.logger,
 		Config: &Config{
-			DryRun:           r.config.DryRun,
-			Sandbox:          r.config.Sandbox,
-			DenyTools:        r.config.DenyTools,
-			DefaultAgent:     r.config.DefaultAgent,
-			V3Agent:          r.config.V3Agent,
-			AgentPhaseModels: r.config.AgentPhaseModels,
+			DryRun:            r.config.DryRun,
+			Sandbox:           r.config.Sandbox,
+			DenyTools:         r.config.DenyTools,
+			DefaultAgent:      r.config.DefaultAgent,
+			V3Agent:           r.config.V3Agent,
+			AgentPhaseModels:  r.config.AgentPhaseModels,
+			WorktreeAutoClean: r.config.WorktreeAutoClean,
 		},
 	}
 }

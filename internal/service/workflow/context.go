@@ -1,6 +1,7 @@
 package workflow
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -18,6 +19,7 @@ type Context struct {
 	Checkpoint CheckpointCreator
 	Retry      RetryExecutor
 	RateLimits RateLimiterGetter
+	Worktrees  WorktreeManager
 	Logger     *logging.Logger
 	Config     *Config
 }
@@ -31,6 +33,8 @@ type Config struct {
 	V3Agent      string
 	// AgentPhaseModels allows per-agent, per-phase model overrides.
 	AgentPhaseModels map[string]map[string]string
+	// WorktreeAutoClean controls automatic worktree cleanup after task execution.
+	WorktreeAutoClean bool
 }
 
 // PromptRenderer renders prompts for different phases.
@@ -107,6 +111,18 @@ type RateLimiterGetter interface {
 // RateLimiter controls request rate.
 type RateLimiter interface {
 	Acquire() error
+}
+
+// WorktreeManager manages git worktrees for task isolation.
+type WorktreeManager interface {
+	// Create creates a new worktree for a task.
+	Create(ctx context.Context, taskID core.TaskID, branch string) (*core.WorktreeInfo, error)
+	// Get retrieves worktree info for a task.
+	Get(ctx context.Context, taskID core.TaskID) (*core.WorktreeInfo, error)
+	// Remove cleans up a task's worktree.
+	Remove(ctx context.Context, taskID core.TaskID) error
+	// CleanupStale removes worktrees for completed/failed tasks.
+	CleanupStale(ctx context.Context) error
 }
 
 // BuildContextString constructs a context string from workflow state.

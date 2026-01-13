@@ -127,6 +127,43 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 		return nil
 	}
 
+	// Create worktree for task isolation
+	var workDir string
+	var worktreeCreated bool
+	if wctx.Worktrees != nil {
+		wtInfo, err := wctx.Worktrees.Create(ctx, task.ID, "")
+		if err != nil {
+			wctx.Logger.Warn("failed to create worktree, executing in main repo",
+				"task_id", task.ID,
+				"error", err,
+			)
+		} else {
+			workDir = wtInfo.Path
+			taskState.WorktreePath = workDir
+			worktreeCreated = true
+			wctx.Logger.Info("created worktree for task",
+				"task_id", task.ID,
+				"worktree_path", workDir,
+			)
+		}
+	}
+
+	// Cleanup worktree when done (if auto_clean is enabled)
+	defer func() {
+		if worktreeCreated && wctx.Config.WorktreeAutoClean && wctx.Worktrees != nil {
+			if rmErr := wctx.Worktrees.Remove(ctx, task.ID); rmErr != nil {
+				wctx.Logger.Warn("failed to cleanup worktree",
+					"task_id", task.ID,
+					"error", rmErr,
+				)
+			} else {
+				wctx.Logger.Info("cleaned up worktree",
+					"task_id", task.ID,
+				)
+			}
+		}
+	}()
+
 	// Get agent
 	agentName := task.CLI
 	if agentName == "" {
@@ -171,6 +208,7 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 			Timeout:     10 * time.Minute,
 			Sandbox:     wctx.Config.Sandbox,
 			DeniedTools: e.denyTools,
+			WorkDir:     workDir, // Execute in worktree if available
 		})
 		return execErr
 	}, func(attempt int, err error) {
