@@ -36,11 +36,54 @@ quorum-ai reduces LLM hallucinations and increases output reliability by running
 
 ### Installation
 
-Download a prebuilt binary from the releases page and place it in your PATH:
+#### From releases (recommended)
 
-- https://github.com/hugo-lorenzo-mato/quorum-ai/releases
+Download a prebuilt binary from [GitHub Releases](https://github.com/hugo-lorenzo-mato/quorum-ai/releases).
 
-Or build from source:
+<details>
+<summary><strong>Linux</strong></summary>
+
+```bash
+# Download (replace VERSION and ARCH as needed)
+VERSION=0.1.0
+ARCH=amd64  # or arm64
+
+curl -LO "https://github.com/hugo-lorenzo-mato/quorum-ai/releases/download/v${VERSION}/quorum-ai_${VERSION}_linux_${ARCH}.tar.gz"
+tar -xzf quorum-ai_${VERSION}_linux_${ARCH}.tar.gz
+sudo mv quorum /usr/local/bin/
+```
+
+</details>
+
+<details>
+<summary><strong>macOS</strong></summary>
+
+```bash
+# Download (replace VERSION and ARCH as needed)
+VERSION=0.1.0
+ARCH=arm64  # or amd64 for Intel Macs
+
+curl -LO "https://github.com/hugo-lorenzo-mato/quorum-ai/releases/download/v${VERSION}/quorum-ai_${VERSION}_darwin_${ARCH}.tar.gz"
+tar -xzf quorum-ai_${VERSION}_darwin_${ARCH}.tar.gz
+sudo mv quorum /usr/local/bin/
+```
+
+</details>
+
+<details>
+<summary><strong>Windows</strong></summary>
+
+1. Download `quorum-ai_VERSION_windows_amd64.zip` from the [releases page](https://github.com/hugo-lorenzo-mato/quorum-ai/releases)
+2. Extract the archive
+3. Move `quorum.exe` to a directory in your PATH, or add its location to PATH:
+   ```powershell
+   # Add to PATH permanently (run as Administrator)
+   [Environment]::SetEnvironmentVariable("Path", $env:Path + ";C:\path\to\quorum", "Machine")
+   ```
+
+</details>
+
+#### From source
 
 ```bash
 # Using go install
@@ -50,7 +93,76 @@ go install github.com/hugo-lorenzo-mato/quorum-ai/cmd/quorum@latest
 git clone https://github.com/hugo-lorenzo-mato/quorum-ai.git
 cd quorum-ai
 make build
+sudo cp bin/quorum /usr/local/bin/  # Linux/macOS
 ```
+
+### Shell Completion
+
+quorum supports autocompletion for Bash, Zsh, Fish, and PowerShell.
+
+<details>
+<summary><strong>Bash</strong></summary>
+
+```bash
+# Linux
+quorum completion bash | sudo tee /etc/bash_completion.d/quorum > /dev/null
+
+# macOS (requires bash-completion)
+brew install bash-completion
+quorum completion bash > $(brew --prefix)/etc/bash_completion.d/quorum
+
+# Reload shell
+source ~/.bashrc
+```
+
+</details>
+
+<details>
+<summary><strong>Zsh</strong></summary>
+
+```bash
+# Create completions directory if needed
+mkdir -p ~/.zsh/completions
+
+# Generate completion script
+quorum completion zsh > ~/.zsh/completions/_quorum
+
+# Add to ~/.zshrc (if not already present)
+echo 'fpath=(~/.zsh/completions $fpath)' >> ~/.zshrc
+echo 'autoload -Uz compinit && compinit' >> ~/.zshrc
+
+# Reload shell
+exec zsh
+```
+
+**Alternative (system-wide on Linux):**
+```bash
+quorum completion zsh | sudo tee /usr/share/zsh/site-functions/_quorum > /dev/null
+```
+
+</details>
+
+<details>
+<summary><strong>Fish</strong></summary>
+
+```bash
+quorum completion fish > ~/.config/fish/completions/quorum.fish
+```
+
+</details>
+
+<details>
+<summary><strong>PowerShell</strong></summary>
+
+```powershell
+# Generate and load completion
+quorum completion powershell | Out-String | Invoke-Expression
+
+# To load on every session, add to your profile:
+quorum completion powershell >> $PROFILE
+```
+
+</details>
 
 ### Configuration
 
