@@ -78,6 +78,11 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 		return fmt.Errorf("loading config: %w", err)
 	}
 
+	// Validate configuration (catches invalid weights, thresholds, etc.)
+	if err := config.ValidateConfig(cfg); err != nil {
+		return fmt.Errorf("validating config: %w", err)
+	}
+
 	// Create logger from unified config
 	logger := logging.New(logging.Config{
 		Level:  cfg.Log.Level,

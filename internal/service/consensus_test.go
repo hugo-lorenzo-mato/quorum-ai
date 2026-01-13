@@ -365,3 +365,58 @@ func TestConsensusChecker_CategoryScores(t *testing.T) {
 		t.Errorf("recommendations score = %v, want ~%v", result.CategoryScores["recommendations"], expectedRecs)
 	}
 }
+
+func TestConsensusChecker_CustomWeights(t *testing.T) {
+	// Test data where claims=1.0, risks=0.0, recommendations=0.333
+	outputs := []AnalysisOutput{
+		{
+			AgentName:       "claude",
+			Claims:          []string{"A", "B"},
+			Risks:           []string{"X"},
+			Recommendations: []string{"1", "2", "3"},
+		},
+		{
+			AgentName:       "gemini",
+			Claims:          []string{"A", "B"}, // Perfect match
+			Risks:           []string{"Y"},      // No match
+			Recommendations: []string{"1"},      // 1/3 match
+		},
+	}
+
+	// With default weights (0.4, 0.3, 0.3):
+	// score = 1.0*0.4 + 0.0*0.3 + 0.333*0.3 = 0.4 + 0 + 0.1 = 0.5
+	defaultChecker := NewConsensusChecker(0.75, DefaultWeights())
+	defaultResult := defaultChecker.Evaluate(outputs)
+	expectedDefault := 0.4 + 0.0 + (1.0/3.0)*0.3 // ~0.5
+	if math.Abs(defaultResult.Score-expectedDefault) > 0.01 {
+		t.Errorf("default weights score = %v, want ~%v", defaultResult.Score, expectedDefault)
+	}
+
+	// With claims-heavy weights (0.8, 0.1, 0.1):
+	// score = 1.0*0.8 + 0.0*0.1 + 0.333*0.1 = 0.8 + 0 + 0.033 = 0.833
+	claimsWeights := CategoryWeights{Claims: 0.8, Risks: 0.1, Recommendations: 0.1}
+	claimsChecker := NewConsensusChecker(0.75, claimsWeights)
+	claimsResult := claimsChecker.Evaluate(outputs)
+	expectedClaims := 0.8 + 0.0 + (1.0/3.0)*0.1 // ~0.833
+	if math.Abs(claimsResult.Score-expectedClaims) > 0.01 {
+		t.Errorf("claims-heavy weights score = %v, want ~%v", claimsResult.Score, expectedClaims)
+	}
+
+	// With risks-heavy weights (0.1, 0.8, 0.1):
+	// score = 1.0*0.1 + 0.0*0.8 + 0.333*0.1 = 0.1 + 0 + 0.033 = 0.133
+	risksWeights := CategoryWeights{Claims: 0.1, Risks: 0.8, Recommendations: 0.1}
+	risksChecker := NewConsensusChecker(0.75, risksWeights)
+	risksResult := risksChecker.Evaluate(outputs)
+	expectedRisks := 0.1 + 0.0 + (1.0/3.0)*0.1 // ~0.133
+	if math.Abs(risksResult.Score-expectedRisks) > 0.01 {
+		t.Errorf("risks-heavy weights score = %v, want ~%v", risksResult.Score, expectedRisks)
+	}
+
+	// Verify that weights actually changed the outcome
+	if claimsResult.Score <= defaultResult.Score {
+		t.Error("claims-heavy weights should produce higher score than default")
+	}
+	if risksResult.Score >= defaultResult.Score {
+		t.Error("risks-heavy weights should produce lower score than default")
+	}
+}
