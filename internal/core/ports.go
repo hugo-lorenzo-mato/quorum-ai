@@ -145,19 +145,20 @@ type StateManager interface {
 
 // WorkflowState represents the persisted state of a workflow.
 type WorkflowState struct {
-	Version      int                   `json:"version"`
-	WorkflowID   WorkflowID            `json:"workflow_id"`
-	Status       WorkflowStatus        `json:"status"`
-	CurrentPhase Phase                 `json:"current_phase"`
-	Prompt       string                `json:"prompt"`
-	Tasks        map[TaskID]*TaskState `json:"tasks"`
-	TaskOrder    []TaskID              `json:"task_order"`
-	Config       *WorkflowConfig       `json:"config"`
-	Metrics      *StateMetrics         `json:"metrics"`
-	Checkpoints  []Checkpoint          `json:"checkpoints"`
-	CreatedAt    time.Time             `json:"created_at"`
-	UpdatedAt    time.Time             `json:"updated_at"`
-	Checksum     string                `json:"checksum,omitempty"`
+	Version         int                   `json:"version"`
+	WorkflowID      WorkflowID            `json:"workflow_id"`
+	Status          WorkflowStatus        `json:"status"`
+	CurrentPhase    Phase                 `json:"current_phase"`
+	Prompt          string                `json:"prompt"`
+	OptimizedPrompt string                `json:"optimized_prompt,omitempty"`
+	Tasks           map[TaskID]*TaskState `json:"tasks"`
+	TaskOrder       []TaskID              `json:"task_order"`
+	Config          *WorkflowConfig       `json:"config"`
+	Metrics         *StateMetrics         `json:"metrics"`
+	Checkpoints     []Checkpoint          `json:"checkpoints"`
+	CreatedAt       time.Time             `json:"created_at"`
+	UpdatedAt       time.Time             `json:"updated_at"`
+	Checksum        string                `json:"checksum,omitempty"`
 }
 
 // TaskState represents persisted task state.

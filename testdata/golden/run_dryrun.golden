@@ -2,8 +2,8 @@
 {"time":"[TIMESTAMP] workflow","workflow_id":"wf-1768217195627953795-1","prompt_length":11}
 {"time":"[TIMESTAMP] analyze phase","workflow_id":"wf-1768217195627953795-1"}
 {"time":"[TIMESTAMP] created","checkpoint_id":"cp-1768217195635518591","type":"phase_start","phase":"analyze"}
-{"time":"[TIMESTAMP] V1 analysis","agents":"aider, claude"}
-{"time":"[TIMESTAMP] analysis failed","agent":"aider","error":"executing command: exec: \"aider\": executable file not found in $PATH"}
+{"time":"[TIMESTAMP] V1 analysis","agents":"claude, gemini"}
 {"time":"[TIMESTAMP] analysis failed","agent":"claude","error":"context canceled"}
-{"time":"[TIMESTAMP] error","workflow_id":"wf-1768217195627953795-1","phase":"analyze","error":"V1 analysis: executing command: exec: \"aider\": executable file not found in $PATH"}
+{"time":"[TIMESTAMP] analysis failed","agent":"gemini","error":"context canceled"}
+{"time":"[TIMESTAMP] error","workflow_id":"wf-1768217195627953795-1","phase":"analyze","error":"V1 analysis: context canceled"}
 {"time":"[TIMESTAMP] created","checkpoint_id":"cp-1768217195706315545","type":"error","phase":"analyze"}

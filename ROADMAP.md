@@ -21,6 +21,7 @@ Committed items for the initial release.
 | Complete | P0 | Committed | Git worktree isolation | [#64](https://github.com/hugo-lorenzo-mato/quorum-ai/issues/64) |
 | In Progress | P0 | Committed | Claude and Gemini adapters | [#57](https://github.com/hugo-lorenzo-mato/quorum-ai/issues/57), [#58](https://github.com/hugo-lorenzo-mato/quorum-ai/issues/58) |
 | Complete | P1 | Committed | Jaccard consensus algorithm | [#49](https://github.com/hugo-lorenzo-mato/quorum-ai/issues/49) |
+| Complete | P1 | Committed | Prompt optimization phase | N/A |
 | In Progress | P1 | Committed | Basic TUI with progress display | [#68](https://github.com/hugo-lorenzo-mato/quorum-ai/issues/68), [#69](https://github.com/hugo-lorenzo-mato/quorum-ai/issues/69) |
 
 ## v2.0 (Future)
@@ -30,7 +31,7 @@ Planned enhancements to improve scalability and extensibility.
 | Status | Priority | Commitment | Item | Issues |
 | --- | --- | --- | --- | --- |
 | Planned | P0 | Committed | SQLite state persistence with migrations | N/A |
-| Planned | P0 | Committed | Additional CLI adapters (Codex, Copilot, Aider) | [#59](https://github.com/hugo-lorenzo-mato/quorum-ai/issues/59), [#60](https://github.com/hugo-lorenzo-mato/quorum-ai/issues/60), [#61](https://github.com/hugo-lorenzo-mato/quorum-ai/issues/61) |
+| Planned | P0 | Committed | Additional CLI adapters (Codex, Copilot) | [#59](https://github.com/hugo-lorenzo-mato/quorum-ai/issues/59), [#60](https://github.com/hugo-lorenzo-mato/quorum-ai/issues/60) |
 | Planned | P1 | Committed | Analytics dashboard | N/A |
 | Planned | P1 | Committed | Plugin architecture foundation | N/A |
 | Planned | P1 | Committed | Performance optimizations | N/A |

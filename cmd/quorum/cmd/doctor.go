@@ -30,7 +30,7 @@ func runDoctor(_ *cobra.Command, _ []string) error {
 		{"claude", "claude", []string{"--version"}, false},
 		{"gemini", "gemini", []string{"--version"}, false},
 		{"codex", "codex", []string{"--version"}, false},
-		{"aider", "aider", []string{"--version"}, false},
+		{"copilot", "copilot", []string{"--version"}, false},
 	}
 
 	fmt.Println("Checking dependencies...")

@@ -3,10 +3,12 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -14,9 +16,9 @@ import (
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/logging"
 )
 
-// CopilotAdapter implements Agent for GitHub Copilot CLI.
-// Note: PTY support requires the creack/pty package, but for simplicity
-// we implement a fallback approach using standard I/O.
+// CopilotAdapter implements Agent for GitHub Copilot CLI (standalone).
+// This adapter uses the new `copilot` CLI (npm install -g @github/copilot)
+// which replaced the deprecated `gh copilot` extension.
 type CopilotAdapter struct {
 	config       AgentConfig
 	logger       *logging.Logger
@@ -26,7 +28,7 @@ type CopilotAdapter struct {
 // NewCopilotAdapter creates a new Copilot adapter.
 func NewCopilotAdapter(cfg AgentConfig) (core.Agent, error) {
 	if cfg.Path == "" {
-		cfg.Path = "gh copilot"
+		cfg.Path = "copilot"
 	}
 
 	logger := logging.NewNop().With("adapter", "copilot")
@@ -35,14 +37,14 @@ func NewCopilotAdapter(cfg AgentConfig) (core.Agent, error) {
 		config: cfg,
 		logger: logger,
 		capabilities: core.Capabilities{
-			SupportsJSON:      false,
+			SupportsJSON:      true,
 			SupportsStreaming: true,
 			SupportsImages:    false,
-			SupportsTools:     false,
-			MaxContextTokens:  8000,
-			MaxOutputTokens:   2048,
-			SupportedModels:   []string{},
-			DefaultModel:      "",
+			SupportsTools:     true,
+			MaxContextTokens:  200000,
+			MaxOutputTokens:   16384,
+			SupportedModels:   []string{"claude-sonnet-4-5", "claude-sonnet-4", "gpt-5"},
+			DefaultModel:      "claude-sonnet-4-5",
 		},
 	}
 
@@ -61,23 +63,29 @@ func (c *CopilotAdapter) Capabilities() core.Capabilities {
 
 // Ping checks if Copilot CLI is available.
 func (c *CopilotAdapter) Ping(ctx context.Context) error {
-	// Check gh is installed
-	_, err := exec.LookPath("gh")
+	// Check copilot is installed
+	path := strings.Fields(c.config.Path)[0]
+	_, err := exec.LookPath(path)
 	if err != nil {
-		return core.ErrNotFound("CLI", "gh")
+		return core.ErrNotFound("CLI", "copilot")
 	}
 
-	// Check copilot extension
-	cmd := exec.CommandContext(ctx, "gh", "copilot", "--help")
+	// Check copilot responds to --version or help
+	// #nosec G204 -- path is from trusted config
+	cmd := exec.CommandContext(ctx, path, "--version")
 	if err := cmd.Run(); err != nil {
-		return core.ErrNotFound("extension", "gh-copilot")
+		// Try help as fallback
+		// #nosec G204 -- path is from trusted config
+		cmd = exec.CommandContext(ctx, path, "help")
+		if err := cmd.Run(); err != nil {
+			return core.ErrNotFound("CLI", "copilot")
+		}
 	}
 
 	return nil
 }
 
 // Execute runs a prompt through Copilot CLI.
-// This uses standard I/O rather than PTY for simplicity.
 func (c *CopilotAdapter) Execute(ctx context.Context, opts core.ExecuteOptions) (*core.ExecuteResult, error) {
 	args := c.buildArgs(opts)
 
@@ -87,13 +95,13 @@ func (c *CopilotAdapter) Execute(ctx context.Context, opts core.ExecuteOptions) 
 	allArgs = append(allArgs, cmdParts[1:]...)
 	allArgs = append(allArgs, args...)
 
+	// Add prompt
+	allArgs = append(allArgs, "-p", opts.Prompt)
+
 	// #nosec G204 -- command path is from trusted config
 	cmd := exec.CommandContext(ctx, cmdParts[0], allArgs...)
 	cmd.Dir = opts.WorkDir
 	cmd.Env = os.Environ()
-
-	// Provide the prompt via stdin
-	cmd.Stdin = strings.NewReader(opts.Prompt + "\n")
 
 	// Capture output
 	var stdout, stderr bytes.Buffer
@@ -119,23 +127,21 @@ func (c *CopilotAdapter) Execute(ctx context.Context, opts core.ExecuteOptions) 
 		return nil, core.ErrTimeout(fmt.Sprintf("copilot timed out after %v", timeout))
 	}
 
-	output := stdout.String()
-
-	// Clean ANSI escape sequences
-	output = c.cleanANSI(output)
-
-	// Extract suggestion
-	suggestion := c.extractSuggestion(output)
-
-	execResult := &core.ExecuteResult{
-		Output:    suggestion,
-		Duration:  duration,
-		TokensIn:  c.estimateTokens(opts.Prompt),
-		TokensOut: c.estimateTokens(suggestion),
-		CostUSD:   0, // Copilot is included in GitHub subscription
+	result := &CommandResult{
+		Stdout:   stdout.String(),
+		Stderr:   stderr.String(),
+		Duration: duration,
 	}
 
-	if err != nil && suggestion == "" {
+	execResult, parseErr := c.parseOutput(result, opts.Format)
+	if parseErr != nil {
+		return nil, parseErr
+	}
+
+	// Extract usage information
+	c.extractUsage(result, execResult)
+
+	if err != nil && execResult.Output == "" {
 		return execResult, fmt.Errorf("copilot execution failed: %w", err)
 	}
 
@@ -143,13 +149,88 @@ func (c *CopilotAdapter) Execute(ctx context.Context, opts core.ExecuteOptions) 
 }
 
 // buildArgs constructs CLI arguments for Copilot.
-func (c *CopilotAdapter) buildArgs(_ core.ExecuteOptions) []string {
-	args := []string{"suggest"}
+func (c *CopilotAdapter) buildArgs(opts core.ExecuteOptions) []string {
+	args := []string{}
 
-	// Specify shell type
-	args = append(args, "-t", "shell")
+	// Model selection - Copilot CLI uses /model slash command or config file
+	// Model passed via opts is stored for tracking but not sent as CLI flag
+	_ = opts.Model // Acknowledge model selection (used for tracking/logging)
+
+	// YOLO mode - auto-approve all tools for non-interactive execution
+	args = append(args, "--allow-all-tools")
+
+	// Allow all paths and URLs for full access
+	args = append(args, "--allow-all-paths")
+	args = append(args, "--allow-all-urls")
+
+	// Output format
+	if opts.Format == core.OutputFormatJSON {
+		args = append(args, "--output-format", "json")
+	}
 
 	return args
+}
+
+// parseOutput parses Copilot CLI output.
+func (c *CopilotAdapter) parseOutput(result *CommandResult, format core.OutputFormat) (*core.ExecuteResult, error) {
+	output := result.Stdout
+
+	// Clean ANSI escape sequences
+	output = c.cleanANSI(output)
+
+	execResult := &core.ExecuteResult{
+		Output:   strings.TrimSpace(output),
+		Duration: result.Duration,
+	}
+
+	// Try to parse JSON if requested
+	if format == core.OutputFormatJSON && output != "" {
+		var parsed map[string]interface{}
+		if err := json.Unmarshal([]byte(output), &parsed); err == nil {
+			execResult.Parsed = parsed
+		}
+	}
+
+	return execResult, nil
+}
+
+// extractUsage extracts token and cost information from output.
+func (c *CopilotAdapter) extractUsage(result *CommandResult, execResult *core.ExecuteResult) {
+	combined := result.Stdout + result.Stderr
+
+	// Look for token patterns
+	tokenPatterns := []struct {
+		pattern string
+		field   *int
+	}{
+		{`input[_\s]?tokens?:?\s*(\d+)`, &execResult.TokensIn},
+		{`output[_\s]?tokens?:?\s*(\d+)`, &execResult.TokensOut},
+		{`prompt[_\s]?tokens?:?\s*(\d+)`, &execResult.TokensIn},
+		{`completion[_\s]?tokens?:?\s*(\d+)`, &execResult.TokensOut},
+	}
+
+	for _, tp := range tokenPatterns {
+		re := regexp.MustCompile(`(?i)` + tp.pattern)
+		if matches := re.FindStringSubmatch(combined); len(matches) > 1 {
+			if val, err := strconv.Atoi(matches[1]); err == nil {
+				*tp.field = val
+			}
+		}
+	}
+
+	// Estimate cost (Copilot is subscription-based, but we estimate for tracking)
+	execResult.CostUSD = c.estimateCost(execResult.TokensIn, execResult.TokensOut)
+}
+
+// estimateCost provides rough cost estimate.
+// Note: Copilot CLI is included in GitHub Copilot subscription, so actual cost is $0
+// but we track usage for comparison purposes using Claude Sonnet pricing as proxy.
+func (c *CopilotAdapter) estimateCost(tokensIn, tokensOut int) float64 {
+	// Using Claude Sonnet 4.5 pricing as baseline since that's the default model
+	// Input: $3/MTok, Output: $15/MTok
+	inputCost := float64(tokensIn) * 3.0 / 1_000_000
+	outputCost := float64(tokensOut) * 15.0 / 1_000_000
+	return inputCost + outputCost
 }
 
 // cleanANSI removes ANSI escape sequences from output.
@@ -158,56 +239,14 @@ func (c *CopilotAdapter) cleanANSI(s string) string {
 	return ansiPattern.ReplaceAllString(s, "")
 }
 
-// extractSuggestion extracts the actual suggestion from Copilot output.
-func (c *CopilotAdapter) extractSuggestion(output string) string {
-	// Look for suggestion markers
-	lines := strings.Split(output, "\n")
-	var suggestion []string
-	capturing := false
-
-	for _, line := range lines {
-		if strings.Contains(line, "Suggestion:") {
-			capturing = true
-			continue
-		}
-		if capturing {
-			// Stop at interactive prompts
-			if strings.HasPrefix(line, "?") || strings.HasPrefix(line, "$") {
-				break
-			}
-			suggestion = append(suggestion, line)
-		}
-	}
-
-	if len(suggestion) > 0 {
-		return strings.TrimSpace(strings.Join(suggestion, "\n"))
-	}
-
-	// If no suggestion markers found, return cleaned output
-	return strings.TrimSpace(output)
-}
-
 // estimateTokens provides rough token estimate.
 func (c *CopilotAdapter) estimateTokens(text string) int {
 	return len(text) / 4
 }
 
-// isOutputComplete checks if Copilot has finished responding.
-func (c *CopilotAdapter) isOutputComplete(output string) bool {
-	// Look for completion markers
-	completionMarkers := []string{
-		"$ ",          // Shell prompt
-		"Suggestion:", // Copilot output marker
-		"? ",          // Interactive prompt
-	}
-
-	for _, marker := range completionMarkers {
-		if strings.HasSuffix(strings.TrimSpace(output), marker) {
-			return true
-		}
-	}
-
-	return false
+// Config returns the adapter configuration.
+func (c *CopilotAdapter) Config() AgentConfig {
+	return c.config
 }
 
 // Ensure CopilotAdapter implements core.Agent

@@ -139,14 +139,15 @@ func (l *Loader) setDefaults() {
 	l.v.SetDefault("agents.codex.max_tokens", 4096)
 	l.v.SetDefault("agents.codex.temperature", 0.7)
 	l.v.SetDefault("agents.copilot.enabled", false)
-	l.v.SetDefault("agents.copilot.path", "gh copilot")
-	l.v.SetDefault("agents.copilot.max_tokens", 4096)
+	l.v.SetDefault("agents.copilot.path", "copilot")
+	l.v.SetDefault("agents.copilot.model", "claude-sonnet-4-5")
+	l.v.SetDefault("agents.copilot.max_tokens", 16384)
 	l.v.SetDefault("agents.copilot.temperature", 0.7)
-	l.v.SetDefault("agents.aider.enabled", false)
-	l.v.SetDefault("agents.aider.path", "aider")
-	l.v.SetDefault("agents.aider.model", "gpt-4")
-	l.v.SetDefault("agents.aider.max_tokens", 4096)
-	l.v.SetDefault("agents.aider.temperature", 0.7)
+
+	// Prompt optimizer defaults
+	l.v.SetDefault("prompt_optimizer.enabled", true)
+	l.v.SetDefault("prompt_optimizer.agent", "claude")
+	l.v.SetDefault("prompt_optimizer.model", "")
 
 	// State defaults (unified under .quorum/)
 	l.v.SetDefault("state.path", ".quorum/state/state.json")

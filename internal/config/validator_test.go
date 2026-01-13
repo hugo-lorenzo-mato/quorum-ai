@@ -48,9 +48,6 @@ func validConfig() *Config {
 			Copilot: AgentConfig{
 				Enabled: false,
 			},
-			Aider: AgentConfig{
-				Enabled: false,
-			},
 		},
 		State: StateConfig{
 			Path:       ".quorum/state/state.json",

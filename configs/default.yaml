@@ -31,7 +31,7 @@ trace:
   # Max number of files per run
   max_files: 500
   # Phases to include in tracing
-  include_phases: [analyze, consensus, plan, execute]
+  include_phases: [optimize, analyze, consensus, plan, execute]
 
 # Workflow execution settings
 workflow:
@@ -56,13 +56,14 @@ agents:
     enabled: true
     # Path to claude CLI executable
     path: claude
-    # Default model
-    model: claude-sonnet-4-20250514
-    # Optional per-phase model overrides (analyze/plan/execute)
+    # Default model (fallback when phase not specified)
+    model: claude-opus-4-5-20251101
+    # Per-phase model overrides (optimize/analyze/plan/execute)
     phase_models:
-      analyze: claude-opus-4-20250514
-      plan: claude-sonnet-4-20250514
-      execute: claude-3-5-haiku-20241022
+      optimize: claude-opus-4-5-20251101
+      analyze: claude-opus-4-5-20251101
+      plan: claude-opus-4-5-20251101
+      execute: claude-opus-4-5-20251101
     # Maximum output tokens
     max_tokens: 4096
     # Temperature (0.0-2.0)
@@ -72,43 +73,60 @@ agents:
   gemini:
     enabled: true
     path: gemini
-    model: gemini-2.5-flash
+    model: gemini-3-flash-preview
+    # Per-phase model overrides (optimize/analyze/plan/execute)
     phase_models:
-      analyze: gemini-2.5-pro
-      plan: gemini-2.5-flash
-      execute: gemini-2.5-flash
+      optimize: gemini-3-pro-preview
+      analyze: gemini-3-pro-preview
+      plan: gemini-3-pro-preview
+      execute: gemini-3-flash-preview
     max_tokens: 4096
     temperature: 0.7
 
   # OpenAI Codex CLI configuration (optional, disabled by default)
+  # Note: reasoning_effort is configured per-phase in the adapter code
+  # optimize/analyze/plan use "xhigh" (extra high), execute uses "high"
   codex:
     enabled: false
     path: codex
-    model: gpt-5.1-codex
+    # Default model (fallback when phase not specified)
+    model: gpt-5.2-codex
+    # Per-phase model overrides (optimize/analyze/plan/execute)
     phase_models:
-      analyze: gpt-5.1-codex
-      plan: gpt-5.1-codex
-      execute: gpt-5.1-codex-mini
+      optimize: gpt-5.2-codex
+      analyze: gpt-5.2-codex
+      plan: gpt-5.2-codex
+      execute: gpt-5.2-codex
     max_tokens: 4096
     temperature: 0.7
 
   # GitHub Copilot CLI configuration (optional)
+  # Uses the standalone `copilot` CLI (npm install -g @github/copilot)
+  # Note: Requires GitHub Copilot Pro/Pro+/Business/Enterprise subscription
   copilot:
     enabled: false
-    path: gh copilot
-    model: ""
-    phase_models: {}
-    max_tokens: 4096
+    path: copilot
+    # Default model (fallback when phase not specified)
+    model: claude-sonnet-4-5
+    # Per-phase model overrides (optimize/analyze/plan/execute)
+    # Available models: claude-sonnet-4-5 (default), claude-sonnet-4, gpt-5
+    phase_models:
+      optimize: claude-sonnet-4-5
+      analyze: claude-sonnet-4-5
+      plan: claude-sonnet-4-5
+      execute: claude-sonnet-4-5
+    max_tokens: 16384
     temperature: 0.7
 
-  # Aider CLI configuration (optional)
-  aider:
-    enabled: false
-    path: aider
-    model: gpt-4
-    phase_models: {}
-    max_tokens: 4096
-    temperature: 0.7
+# Prompt optimizer configuration
+# Optimizes the user prompt before analysis for better LLM effectiveness
+prompt_optimizer:
+  # Enable/disable prompt optimization phase
+  enabled: true
+  # Agent to use for optimization (claude, gemini, codex, copilot)
+  agent: claude
+  # Model override (optional, uses agent's phase_models.optimize or default if empty)
+  model: ""
 
 # State persistence configuration
 state:

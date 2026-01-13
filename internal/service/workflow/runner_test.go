@@ -135,8 +135,8 @@ func TestRunner_initializeState(t *testing.T) {
 	if state.Status != core.WorkflowStatusRunning {
 		t.Errorf("Status = %v, want %v", state.Status, core.WorkflowStatusRunning)
 	}
-	if state.CurrentPhase != core.PhaseAnalyze {
-		t.Errorf("CurrentPhase = %v, want %v", state.CurrentPhase, core.PhaseAnalyze)
+	if state.CurrentPhase != core.PhaseOptimize {
+		t.Errorf("CurrentPhase = %v, want %v", state.CurrentPhase, core.PhaseOptimize)
 	}
 	if state.WorkflowID == "" {
 		t.Error("WorkflowID should not be empty")

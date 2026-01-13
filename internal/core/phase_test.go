@@ -3,14 +3,17 @@ package core
 import "testing"
 
 func TestPhase_Order(t *testing.T) {
-	if PhaseOrder(PhaseAnalyze) != 0 {
-		t.Fatalf("expected analyze order 0")
+	if PhaseOrder(PhaseOptimize) != 0 {
+		t.Fatalf("expected optimize order 0")
 	}
-	if PhaseOrder(PhasePlan) != 1 {
-		t.Fatalf("expected plan order 1")
+	if PhaseOrder(PhaseAnalyze) != 1 {
+		t.Fatalf("expected analyze order 1")
 	}
-	if PhaseOrder(PhaseExecute) != 2 {
-		t.Fatalf("expected execute order 2")
+	if PhaseOrder(PhasePlan) != 2 {
+		t.Fatalf("expected plan order 2")
+	}
+	if PhaseOrder(PhaseExecute) != 3 {
+		t.Fatalf("expected execute order 3")
 	}
 	if PhaseOrder("invalid") != -1 {
 		t.Fatalf("expected invalid phase order -1")
@@ -18,6 +21,9 @@ func TestPhase_Order(t *testing.T) {
 }
 
 func TestPhase_Navigation(t *testing.T) {
+	if NextPhase(PhaseOptimize) != PhaseAnalyze {
+		t.Fatalf("expected next optimize to be analyze")
+	}
 	if NextPhase(PhaseAnalyze) != PhasePlan {
 		t.Fatalf("expected next analyze to be plan")
 	}
@@ -28,14 +34,17 @@ func TestPhase_Navigation(t *testing.T) {
 		t.Fatalf("expected no next phase after execute")
 	}
 
+	if PrevPhase(PhaseAnalyze) != PhaseOptimize {
+		t.Fatalf("expected prev analyze to be optimize")
+	}
 	if PrevPhase(PhasePlan) != PhaseAnalyze {
 		t.Fatalf("expected prev plan to be analyze")
 	}
 	if PrevPhase(PhaseExecute) != PhasePlan {
 		t.Fatalf("expected prev execute to be plan")
 	}
-	if PrevPhase(PhaseAnalyze) != "" {
-		t.Fatalf("expected no prev phase before analyze")
+	if PrevPhase(PhaseOptimize) != "" {
+		t.Fatalf("expected no prev phase before optimize")
 	}
 }
 
@@ -69,6 +78,7 @@ func TestPhase_Description(t *testing.T) {
 		phase Phase
 		want  string
 	}{
+		{PhaseOptimize, "Optimize the user prompt for better LLM understanding"},
 		{PhaseAnalyze, "Analyze the problem with multiple agents"},
 		{PhasePlan, "Generate and consolidate execution plans"},
 		{PhaseExecute, "Execute tasks in isolated environments"},

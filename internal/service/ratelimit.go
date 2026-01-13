@@ -161,10 +161,6 @@ func defaultAdapterConfigs() map[string]RateLimiterConfig {
 			MaxTokens:  5,
 			RefillRate: 0.5,
 		},
-		"aider": {
-			MaxTokens:  5,
-			RefillRate: 0.5,
-		},
 	}
 }
 

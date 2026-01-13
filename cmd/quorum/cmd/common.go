@@ -137,12 +137,18 @@ func InitPhaseRunner(ctx context.Context, maxRetries int, dryRun, sandbox bool) 
 			"gemini":  cfg.Agents.Gemini.PhaseModels,
 			"codex":   cfg.Agents.Codex.PhaseModels,
 			"copilot": cfg.Agents.Copilot.PhaseModels,
-			"aider":   cfg.Agents.Aider.PhaseModels,
 		},
 		WorktreeAutoClean:  cfg.Git.AutoClean,
 		WorktreeMode:       cfg.Git.WorktreeMode,
 		MaxCostPerWorkflow: cfg.Costs.MaxPerWorkflow,
 		MaxCostPerTask:     cfg.Costs.MaxPerTask,
+		// Optimizer disabled by default for independent phase runners
+		// (only enabled when running full workflow via `run` command)
+		Optimizer: workflow.OptimizerConfig{
+			Enabled: false,
+			Agent:   cfg.PromptOptimizer.Agent,
+			Model:   cfg.PromptOptimizer.Model,
+		},
 	}
 
 	// Create service components
@@ -229,7 +235,7 @@ func InitializeWorkflowState(prompt string) *core.WorkflowState {
 		Version:      core.CurrentStateVersion,
 		WorkflowID:   core.WorkflowID(generateCmdWorkflowID()),
 		Status:       core.WorkflowStatusRunning,
-		CurrentPhase: core.PhaseAnalyze,
+		CurrentPhase: core.PhaseOptimize,
 		Prompt:       prompt,
 		Tasks:        make(map[core.TaskID]*core.TaskState),
 		TaskOrder:    make([]core.TaskID, 0),

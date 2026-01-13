@@ -115,7 +115,7 @@ Orchestrates business operations using core entities and ports.
 
 Core responsibilities:
 
-- **Workflow orchestration** across analyze, plan, and execute phases
+- **Workflow orchestration** across optimize, analyze, plan, and execute phases
 - **Dependency management** with DAG construction and ready-task selection
 - **Consensus evaluation** using Jaccard similarity and category weights
 - **Prompt rendering** for phase-specific tasks
@@ -127,13 +127,12 @@ Core responsibilities:
 ```
 1. Load or create workflow state
 2. Acquire process lock
-3. For each phase (Analyze -> Plan -> Execute):
-   a. Build DAG for phase tasks
-   b. Get ready tasks (no pending dependencies)
-   c. Execute tasks in parallel (respecting rate limits)
-   d. Evaluate consensus (if applicable)
-   e. Handle divergences (V2/V3 if needed)
-   f. Save checkpoint
+3. For each phase (Optimize -> Analyze -> Plan -> Execute):
+   a. Optimize: Enhance user prompt for LLM effectiveness
+   b. Analyze: Run V1/V2/V3 consensus protocol
+   c. Plan: Build DAG and task dependencies
+   d. Execute: Run tasks in parallel worktrees
+   e. Save checkpoint after each phase
 4. Release lock
 5. Generate report
 ```
@@ -142,9 +141,13 @@ Core responsibilities:
 
 Phases can also run independently via dedicated commands (`quorum analyze`,
 `quorum plan`, `quorum execute`). Each phase validates prerequisites:
-- **analyze**: Creates new workflow state
+- **analyze**: Creates new workflow state (optimization skipped in standalone mode)
 - **plan**: Requires completed analysis (consolidated output)
 - **execute**: Requires completed plan (task list in state)
+
+Note: The optimize phase runs automatically as part of `quorum run` but is
+skipped when running individual phases via standalone commands. Use the
+`--skip-optimize` flag to disable optimization in the full workflow.
 
 This enables debugging, cost control, and recovery between phases.
 
@@ -160,7 +163,6 @@ Implement ports by wrapping external systems.
 | `gemini` | `gemini` | Analysis, validation |
 | `codex` | `codex` | Code-focused tasks (optional) |
 | `copilot` | `gh copilot` | GitHub-integrated tasks (optional, PTY required) |
-| `aider` | `aider` | AI pair programming (optional) |
 
 #### State Adapter (`internal/adapters/state/`)
 
@@ -246,6 +248,15 @@ User Input (prompt)
        v
 +------+-------+
 | Lock Acquire |  <- Process lock (PID file)
++------+-------+
+       |
+       v
++------+-------+
+| OPTIMIZE     |
+| Phase        |
+|  - Enhance   |  <- Improve prompt clarity
+|  - Preserve  |  <- Keep original intent
+|  - Fallback  |  <- Use original on error
 +------+-------+
        |
        v

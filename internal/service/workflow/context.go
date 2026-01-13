@@ -73,11 +73,17 @@ type Config struct {
 
 // PromptRenderer renders prompts for different phases.
 type PromptRenderer interface {
+	RenderOptimizePrompt(params OptimizePromptParams) (string, error)
 	RenderAnalyzeV1(params AnalyzeV1Params) (string, error)
 	RenderAnalyzeV2(params AnalyzeV2Params) (string, error)
 	RenderAnalyzeV3(params AnalyzeV3Params) (string, error)
 	RenderPlanGenerate(params PlanParams) (string, error)
 	RenderTaskExecute(params TaskExecuteParams) (string, error)
+}
+
+// OptimizePromptParams holds parameters for prompt optimization.
+type OptimizePromptParams struct {
+	OriginalPrompt string
 }
 
 // AnalyzeV1Params holds parameters for V1 analysis prompt.

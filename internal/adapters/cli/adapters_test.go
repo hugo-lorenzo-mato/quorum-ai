@@ -31,23 +31,20 @@ func TestRegistry_NewRegistry(t *testing.T) {
 	if !r.Has("copilot") {
 		t.Error("registry should have copilot factory")
 	}
-	if !r.Has("aider") {
-		t.Error("registry should have aider factory")
-	}
 }
 
 func TestRegistry_List(t *testing.T) {
 	r := NewRegistry()
 	list := r.List()
 
-	if len(list) != 5 {
-		t.Errorf("List() returned %d items, want 5", len(list))
+	if len(list) != 4 {
+		t.Errorf("List() returned %d items, want 4", len(list))
 	}
 
 	// Check all expected adapters are present
 	expected := map[string]bool{
 		"claude": true, "gemini": true, "codex": true,
-		"copilot": true, "aider": true,
+		"copilot": true,
 	}
 
 	for _, name := range list {
@@ -466,31 +463,21 @@ func TestCopilotAdapter_Capabilities(t *testing.T) {
 
 	caps := adapter.Capabilities()
 
-	if caps.SupportsJSON {
-		t.Error("copilot should not support JSON")
+	if !caps.SupportsJSON {
+		t.Error("copilot should support JSON")
 	}
 	if caps.SupportsImages {
 		t.Error("copilot should not support images")
 	}
-	if caps.MaxContextTokens != 8000 {
-		t.Errorf("MaxContextTokens = %d, want 8000", caps.MaxContextTokens)
+	if !caps.SupportsTools {
+		t.Error("copilot should support tools")
+	}
+	if caps.MaxContextTokens != 200000 {
+		t.Errorf("MaxContextTokens = %d, want 200000", caps.MaxContextTokens)
 	}
 }
 
 func TestCopilotAdapter_CleanANSI(t *testing.T) {
-	adapter, _ := NewCopilotAdapter(AgentConfig{})
-	copilot := adapter.(*CopilotAdapter)
-
-	input := "\x1b[32mGreen Text\x1b[0m and \x1b[1;34mBold Blue\x1b[0m"
-	expected := "Green Text and Bold Blue"
-
-	result := copilot.cleanANSI(input)
-	if result != expected {
-		t.Errorf("cleanANSI() = %q, want %q", result, expected)
-	}
-}
-
-func TestCopilotAdapter_ExtractSuggestion(t *testing.T) {
 	adapter, _ := NewCopilotAdapter(AgentConfig{})
 	copilot := adapter.(*CopilotAdapter)
 
@@ -500,192 +487,45 @@ func TestCopilotAdapter_ExtractSuggestion(t *testing.T) {
 		want  string
 	}{
 		{
-			name:  "with suggestion marker",
-			input: "Some intro\nSuggestion:\nls -la\nrm -rf /tmp\n? Continue?",
-			want:  "ls -la\nrm -rf /tmp",
+			name:  "no ansi",
+			input: "plain text",
+			want:  "plain text",
 		},
 		{
-			name:  "no marker",
-			input: "Direct output text",
-			want:  "Direct output text",
+			name:  "with color codes",
+			input: "\x1b[31mred text\x1b[0m",
+			want:  "red text",
 		},
 		{
-			name:  "shell prompt end",
-			input: "Suggestion:\ngit status\n$ ",
-			want:  "git status",
+			name:  "with bold",
+			input: "\x1b[1mbold\x1b[0m normal",
+			want:  "bold normal",
+		},
+		{
+			name:  "mixed colors",
+			input: "\x1b[32mGreen Text\x1b[0m and \x1b[1;34mBold Blue\x1b[0m",
+			want:  "Green Text and Bold Blue",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := copilot.extractSuggestion(tt.input)
+			result := copilot.cleanANSI(tt.input)
 			if result != tt.want {
-				t.Errorf("extractSuggestion() = %q, want %q", result, tt.want)
+				t.Errorf("cleanANSI() = %q, want %q", result, tt.want)
 			}
 		})
 	}
 }
 
-func TestCopilotAdapter_IsOutputComplete(t *testing.T) {
+func TestCopilotAdapter_EstimateTokens(t *testing.T) {
 	adapter, _ := NewCopilotAdapter(AgentConfig{})
 	copilot := adapter.(*CopilotAdapter)
 
-	// Note: The function uses TrimSpace before checking suffixes
-	// So trailing whitespace is removed before the suffix match
-	// "$ " marker won't match because TrimSpace removes the trailing space
-	// Only "Suggestion:" (no trailing space) can match after trimming
-	tests := []struct {
-		input string
-		want  bool
-	}{
-		{"Some text $", false},               // $ without space
-		{"Some text with Suggestion:", true}, // Ends with Suggestion:
-		{"Interactive ?", false},             // ? without space
-		{"Still waiting...", false},          // No markers
-		{"Another Suggestion:", true},        // Ends with Suggestion:
-		{"  Suggestion:  ", true},            // After trim ends with Suggestion:
-	}
-
-	for _, tt := range tests {
-		result := copilot.isOutputComplete(tt.input)
-		if result != tt.want {
-			t.Errorf("isOutputComplete(%q) = %v, want %v", tt.input, result, tt.want)
-		}
-	}
-}
-
-// =============================================================================
-// Aider Adapter Tests
-// =============================================================================
-
-func TestAiderAdapter_Name(t *testing.T) {
-	adapter, err := NewAiderAdapter(AgentConfig{})
-	if err != nil {
-		t.Fatalf("NewAiderAdapter() error = %v", err)
-	}
-
-	if adapter.Name() != "aider" {
-		t.Errorf("Name() = %s, want aider", adapter.Name())
-	}
-}
-
-func TestAiderAdapter_Capabilities(t *testing.T) {
-	adapter, err := NewAiderAdapter(AgentConfig{})
-	if err != nil {
-		t.Fatalf("NewAiderAdapter() error = %v", err)
-	}
-
-	caps := adapter.Capabilities()
-
-	if caps.SupportsJSON {
-		t.Error("aider should not support JSON")
-	}
-	if caps.MaxContextTokens != 128000 {
-		t.Errorf("MaxContextTokens = %d, want 128000", caps.MaxContextTokens)
-	}
-}
-
-func TestAiderAdapter_BuildArgs_Claude(t *testing.T) {
-	cfg := AgentConfig{Model: "claude-3-5-sonnet-20241022"}
-	adapter, _ := NewAiderAdapter(cfg)
-	aider := adapter.(*AiderAdapter)
-
-	opts := core.ExecuteOptions{}
-	args := aider.buildArgs(opts)
-
-	if !containsString(args, "--sonnet") {
-		t.Error("should include --sonnet for Claude Sonnet")
-	}
-	if !containsString(args, "--no-git") {
-		t.Error("should include --no-git")
-	}
-	if !containsString(args, "--no-auto-commits") {
-		t.Error("should include --no-auto-commits")
-	}
-	if !containsString(args, "--yes") {
-		t.Error("should include --yes")
-	}
-	if !containsString(args, "--message") {
-		t.Error("should include --message")
-	}
-}
-
-func TestAiderAdapter_BuildArgs_GPT(t *testing.T) {
-	cfg := AgentConfig{Model: "gpt-5.1-codex"}
-	adapter, _ := NewAiderAdapter(cfg)
-	aider := adapter.(*AiderAdapter)
-
-	opts := core.ExecuteOptions{}
-	args := aider.buildArgs(opts)
-
-	if !containsString(args, "--model") {
-		t.Error("should include --model for GPT models")
-	}
-}
-
-func TestAiderAdapter_BuildArgs_Opus(t *testing.T) {
-	cfg := AgentConfig{Model: "claude-3-opus-20240229"}
-	adapter, _ := NewAiderAdapter(cfg)
-	aider := adapter.(*AiderAdapter)
-
-	opts := core.ExecuteOptions{}
-	args := aider.buildArgs(opts)
-
-	if !containsString(args, "--opus") {
-		t.Error("should include --opus for Claude Opus")
-	}
-}
-
-func TestAiderAdapter_CleanOutput(t *testing.T) {
-	adapter, _ := NewAiderAdapter(AgentConfig{})
-	aider := adapter.(*AiderAdapter)
-
-	input := "⠋ Loading...\x1b[32m[Done]\x1b[0m Result here"
-	result := aider.cleanOutput(input)
-
-	if containsString([]string{result}, "⠋") {
-		t.Error("should remove spinner characters")
-	}
-	if containsString([]string{result}, "\x1b") {
-		t.Error("should remove ANSI codes")
-	}
-}
-
-func TestAiderAdapter_ExtractUsage(t *testing.T) {
-	adapter, _ := NewAiderAdapter(AgentConfig{})
-	aider := adapter.(*AiderAdapter)
-
-	result := &CommandResult{
-		Stdout: "Response text",
-		Stderr: "Tokens: 500 sent, 200 received. Cost: $0.05",
-	}
-	execResult := &core.ExecuteResult{}
-
-	aider.extractUsage(result, execResult)
-
-	if execResult.TokensIn != 500 {
-		t.Errorf("TokensIn = %d, want 500", execResult.TokensIn)
-	}
-	if execResult.TokensOut != 200 {
-		t.Errorf("TokensOut = %d, want 200", execResult.TokensOut)
-	}
-	if execResult.CostUSD != 0.05 {
-		t.Errorf("CostUSD = %v, want 0.05", execResult.CostUSD)
-	}
-}
-
-func TestAiderAdapter_WithEditFormat(t *testing.T) {
-	adapter, _ := NewAiderAdapter(AgentConfig{})
-	aider := adapter.(*AiderAdapter)
-
-	args := aider.WithEditFormat("diff")
-	if len(args) != 2 || args[0] != "--edit-format" || args[1] != "diff" {
-		t.Errorf("WithEditFormat(diff) = %v, want [--edit-format diff]", args)
-	}
-
-	args = aider.WithEditFormat("")
-	if args[1] != "whole" {
-		t.Errorf("WithEditFormat('') should default to 'whole', got %s", args[1])
+	got := copilot.estimateTokens("hello world test")
+	want := 4 // 16 chars / 4
+	if got != want {
+		t.Errorf("estimateTokens() = %d, want %d", got, want)
 	}
 }
 
@@ -796,8 +636,7 @@ func TestDefaultConfig(t *testing.T) {
 		{"claude", "claude"},
 		{"gemini", "gemini"},
 		{"codex", "codex"},
-		{"copilot", "gh copilot"},
-		{"aider", "aider"},
+		{"copilot", "copilot"},
 		{"unknown", ""},
 	}
 

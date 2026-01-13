@@ -143,11 +143,19 @@ func (m *mockRetryExecutor) ExecuteWithNotify(fn func() error, _ func(int, error
 
 // mockPromptRenderer implements PromptRenderer for testing.
 type mockPromptRenderer struct {
-	v1Err   error
-	v2Err   error
-	v3Err   error
-	planErr error
-	taskErr error
+	optimizeErr error
+	v1Err       error
+	v2Err       error
+	v3Err       error
+	planErr     error
+	taskErr     error
+}
+
+func (m *mockPromptRenderer) RenderOptimizePrompt(_ OptimizePromptParams) (string, error) {
+	if m.optimizeErr != nil {
+		return "", m.optimizeErr
+	}
+	return "optimized prompt", nil
 }
 
 func (m *mockPromptRenderer) RenderAnalyzeV1(_ AnalyzeV1Params) (string, error) {

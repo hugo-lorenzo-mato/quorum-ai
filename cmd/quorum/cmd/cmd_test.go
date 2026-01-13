@@ -317,8 +317,8 @@ func TestInitializeWorkflowState(t *testing.T) {
 	if state.Prompt != prompt {
 		t.Errorf("expected prompt '%s', got '%s'", prompt, state.Prompt)
 	}
-	if state.CurrentPhase != core.PhaseAnalyze {
-		t.Errorf("expected phase 'analyze', got '%s'", state.CurrentPhase)
+	if state.CurrentPhase != core.PhaseOptimize {
+		t.Errorf("expected phase 'optimize', got '%s'", state.CurrentPhase)
 	}
 	if state.Status != core.WorkflowStatusRunning {
 		t.Errorf("expected status 'running', got '%s'", state.Status)

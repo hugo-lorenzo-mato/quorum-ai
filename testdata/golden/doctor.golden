@@ -5,6 +5,6 @@ Checking dependencies...
   ✓ claude
   ✓ gemini
   ✓ codex
-  ○ aider (optional)
+  ✓ copilot
 
 All dependencies available

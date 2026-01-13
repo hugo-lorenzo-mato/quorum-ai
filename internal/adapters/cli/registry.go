@@ -40,7 +40,6 @@ func (r *Registry) registerBuiltins() {
 	r.RegisterFactory("gemini", NewGeminiAdapter)
 	r.RegisterFactory("codex", NewCodexAdapter)
 	r.RegisterFactory("copilot", NewCopilotAdapter)
-	r.RegisterFactory("aider", NewAiderAdapter)
 }
 
 // RegisterFactory registers a factory for an agent type.
@@ -227,16 +226,9 @@ func defaultConfig(name string) AgentConfig {
 		},
 		"copilot": {
 			Name:        "copilot",
-			Path:        "gh copilot",
-			MaxTokens:   4096,
-			Temperature: 0.7,
-			Timeout:     5 * time.Minute,
-		},
-		"aider": {
-			Name:        "aider",
-			Path:        "aider",
-			Model:       "gpt-4o",
-			MaxTokens:   4096,
+			Path:        "copilot",
+			Model:       "claude-sonnet-4-5",
+			MaxTokens:   16384,
 			Temperature: 0.7,
 			Timeout:     5 * time.Minute,
 		},

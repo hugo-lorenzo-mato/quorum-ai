@@ -186,9 +186,9 @@ func (a *Analyzer) runAnalysisWithAgent(ctx context.Context, wctx *Context, agen
 		return AnalysisOutput{}, fmt.Errorf("rate limit: %w", err)
 	}
 
-	// Render prompt
+	// Render prompt (use optimized prompt if available)
 	prompt, err := wctx.Prompts.RenderAnalyzeV1(AnalyzeV1Params{
-		Prompt:  wctx.State.Prompt,
+		Prompt:  GetEffectivePrompt(wctx.State),
 		Context: BuildContextString(wctx.State),
 	})
 	if err != nil {
@@ -244,7 +244,7 @@ func (a *Analyzer) runV2Critique(ctx context.Context, wctx *Context, v1Outputs [
 		}
 
 		prompt, err := wctx.Prompts.RenderAnalyzeV2(AnalyzeV2Params{
-			Prompt:     wctx.State.Prompt,
+			Prompt:     GetEffectivePrompt(wctx.State),
 			V1Analysis: v1.RawOutput,
 			AgentName:  v1.AgentName,
 		})
@@ -313,7 +313,7 @@ func (a *Analyzer) runV3Reconciliation(ctx context.Context, wctx *Context, v1, v
 	}
 
 	prompt, err := wctx.Prompts.RenderAnalyzeV3(AnalyzeV3Params{
-		Prompt:      wctx.State.Prompt,
+		Prompt:      GetEffectivePrompt(wctx.State),
 		V1Analysis:  v1Combined.String(),
 		V2Analysis:  v2Combined.String(),
 		Divergences: consensus.Divergences,

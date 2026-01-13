@@ -55,6 +55,7 @@ func (v *Validator) Validate(cfg *Config) error {
 	v.validateTrace(&cfg.Trace)
 	v.validateWorkflow(&cfg.Workflow)
 	v.validateAgents(&cfg.Agents)
+	v.validatePromptOptimizer(&cfg.PromptOptimizer, &cfg.Agents)
 	v.validateState(&cfg.State)
 	v.validateGit(&cfg.Git)
 	v.validateGitHub(&cfg.GitHub)
@@ -136,7 +137,7 @@ func (v *Validator) validateTrace(cfg *TraceConfig) {
 
 	if len(cfg.IncludePhases) > 0 {
 		validPhases := map[string]bool{
-			"analyze": true, "plan": true, "execute": true, "consensus": true,
+			"optimize": true, "analyze": true, "plan": true, "execute": true, "consensus": true,
 		}
 		for _, phase := range cfg.IncludePhases {
 			if !validPhases[phase] {
@@ -158,7 +159,7 @@ func (v *Validator) validateWorkflow(cfg *WorkflowConfig) {
 
 func (v *Validator) validateAgents(cfg *AgentsConfig) {
 	validDefaults := map[string]bool{
-		"claude": true, "gemini": true, "codex": true, "copilot": true, "aider": true,
+		"claude": true, "gemini": true, "codex": true, "copilot": true,
 	}
 	if !validDefaults[cfg.Default] {
 		v.addError("agents.default", cfg.Default, "unknown agent")
@@ -170,7 +171,6 @@ func (v *Validator) validateAgents(cfg *AgentsConfig) {
 		"gemini":  cfg.Gemini.Enabled,
 		"codex":   cfg.Codex.Enabled,
 		"copilot": cfg.Copilot.Enabled,
-		"aider":   cfg.Aider.Enabled,
 	}
 	if !defaultEnabled[cfg.Default] {
 		v.addError("agents.default", cfg.Default, "default agent must be enabled")
@@ -180,7 +180,6 @@ func (v *Validator) validateAgents(cfg *AgentsConfig) {
 	v.validateAgent("agents.gemini", &cfg.Gemini)
 	v.validateAgent("agents.codex", &cfg.Codex)
 	v.validateAgent("agents.copilot", &cfg.Copilot)
-	v.validateAgent("agents.aider", &cfg.Aider)
 }
 
 func (v *Validator) validateAgent(prefix string, cfg *AgentConfig) {
@@ -283,6 +282,31 @@ func (v *Validator) validateCosts(cfg *CostsConfig) {
 
 	if cfg.AlertThreshold < 0 || cfg.AlertThreshold > 1 {
 		v.addError("costs.alert_threshold", cfg.AlertThreshold, "must be between 0 and 1")
+	}
+}
+
+func (v *Validator) validatePromptOptimizer(cfg *PromptOptimizerConfig, agents *AgentsConfig) {
+	if !cfg.Enabled {
+		return
+	}
+
+	validAgents := map[string]bool{
+		"claude": true, "gemini": true, "codex": true, "copilot": true,
+	}
+	if !validAgents[cfg.Agent] {
+		v.addError("prompt_optimizer.agent", cfg.Agent, "unknown agent")
+		return
+	}
+
+	// Validate that the specified agent is enabled
+	agentEnabled := map[string]bool{
+		"claude":  agents.Claude.Enabled,
+		"gemini":  agents.Gemini.Enabled,
+		"codex":   agents.Codex.Enabled,
+		"copilot": agents.Copilot.Enabled,
+	}
+	if !agentEnabled[cfg.Agent] {
+		v.addError("prompt_optimizer.agent", cfg.Agent, "specified agent must be enabled")
 	}
 }
 

@@ -174,6 +174,13 @@ func NewPromptRendererAdapter(renderer *service.PromptRenderer) *PromptRendererA
 	return &PromptRendererAdapter{renderer: renderer}
 }
 
+// RenderOptimizePrompt renders the prompt optimization template.
+func (a *PromptRendererAdapter) RenderOptimizePrompt(params OptimizePromptParams) (string, error) {
+	return a.renderer.RenderOptimizePrompt(service.OptimizePromptParams{
+		OriginalPrompt: params.OriginalPrompt,
+	})
+}
+
 // RenderAnalyzeV1 renders the initial analysis prompt.
 func (a *PromptRendererAdapter) RenderAnalyzeV1(params AnalyzeV1Params) (string, error) {
 	return a.renderer.RenderAnalyzeV1(service.AnalyzeV1Params{

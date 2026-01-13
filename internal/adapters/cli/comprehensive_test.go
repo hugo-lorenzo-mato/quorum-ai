@@ -521,208 +521,6 @@ func TestCodexAdapter_EstimateCostCalc(t *testing.T) {
 	}
 }
 
-// Test AiderAdapter specific functions
-
-func TestAiderAdapter_BuildArgsModels(t *testing.T) {
-	adapter, _ := NewAiderAdapter(AgentConfig{
-		Path:  "aider",
-		Model: "gpt-4o",
-	})
-	aider := adapter.(*AiderAdapter)
-
-	tests := []struct {
-		name    string
-		opts    core.ExecuteOptions
-		wantLen int
-	}{
-		{
-			name: "default with GPT model",
-			opts: core.ExecuteOptions{},
-		},
-		{
-			name: "with Claude Opus",
-			opts: core.ExecuteOptions{Model: "claude-3-opus-20240229"},
-		},
-		{
-			name: "with Claude Sonnet",
-			opts: core.ExecuteOptions{Model: "claude-3-5-sonnet-20241022"},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := aider.buildArgs(tt.opts)
-			// Should contain --no-git, --no-auto-commits, --yes, --message
-			hasNoGit := false
-			hasYes := false
-			hasMessage := false
-			for _, arg := range got {
-				switch arg {
-				case "--no-git":
-					hasNoGit = true
-				case "--yes":
-					hasYes = true
-				case "--message":
-					hasMessage = true
-				}
-			}
-			if !hasNoGit || !hasYes || !hasMessage {
-				t.Errorf("missing required flags: no-git=%v, yes=%v, message=%v", hasNoGit, hasYes, hasMessage)
-			}
-		})
-	}
-}
-
-func TestAiderAdapter_CleanOutputSpinners(t *testing.T) {
-	adapter, _ := NewAiderAdapter(AgentConfig{Path: "aider"})
-	aider := adapter.(*AiderAdapter)
-
-	tests := []struct {
-		name   string
-		input  string
-		expect string
-	}{
-		{
-			name:   "clean output",
-			input:  "clean text",
-			expect: "clean text",
-		},
-		{
-			name:   "with progress indicators",
-			input:  "[loading] some text [done]",
-			expect: "some text",
-		},
-		{
-			name:   "with spinners",
-			input:  "⠋ loading ⠙ done",
-			expect: "loading  done",
-		},
-		{
-			name:   "with ANSI codes",
-			input:  "\x1b[31mred text\x1b[0m",
-			expect: "red text",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := aider.cleanOutput(tt.input)
-			if got != tt.expect {
-				t.Errorf("cleanOutput() = %q, want %q", got, tt.expect)
-			}
-		})
-	}
-}
-
-func TestAiderAdapter_ExtractUsageTokens(t *testing.T) {
-	adapter, _ := NewAiderAdapter(AgentConfig{Path: "aider"})
-	aider := adapter.(*AiderAdapter)
-
-	tests := []struct {
-		name     string
-		stdout   string
-		stderr   string
-		wantIn   int
-		wantOut  int
-		wantCost float64
-	}{
-		{
-			name:    "with token info",
-			stdout:  "Tokens: 100 sent, 50 received",
-			stderr:  "",
-			wantIn:  100,
-			wantOut: 50,
-		},
-		{
-			name:     "with cost info",
-			stdout:   "Cost: $0.05",
-			stderr:   "",
-			wantCost: 0.05,
-		},
-		{
-			name:     "with both",
-			stdout:   "Tokens: 200 sent, 100 received. Cost: $0.10",
-			stderr:   "",
-			wantIn:   200,
-			wantOut:  100,
-			wantCost: 0.10,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := &CommandResult{Stdout: tt.stdout, Stderr: tt.stderr}
-			execResult := &core.ExecuteResult{}
-			aider.extractUsage(result, execResult)
-
-			if tt.wantIn > 0 && execResult.TokensIn != tt.wantIn {
-				t.Errorf("TokensIn = %d, want %d", execResult.TokensIn, tt.wantIn)
-			}
-			if tt.wantOut > 0 && execResult.TokensOut != tt.wantOut {
-				t.Errorf("TokensOut = %d, want %d", execResult.TokensOut, tt.wantOut)
-			}
-			if tt.wantCost > 0 && execResult.CostUSD != tt.wantCost {
-				t.Errorf("CostUSD = %f, want %f", execResult.CostUSD, tt.wantCost)
-			}
-		})
-	}
-}
-
-func TestAiderAdapter_ParseOutputClean(t *testing.T) {
-	adapter, _ := NewAiderAdapter(AgentConfig{Path: "aider"})
-	aider := adapter.(*AiderAdapter)
-
-	result := &CommandResult{
-		Stdout:   "[loading] some output [done]",
-		Duration: time.Second,
-	}
-
-	got, err := aider.parseOutput(result, core.OutputFormatText)
-	if err != nil {
-		t.Fatalf("parseOutput() error = %v", err)
-	}
-	// Should have cleaned the output
-	if got.Output != "some output" {
-		t.Errorf("Output = %q, expected cleaned output", got.Output)
-	}
-}
-
-func TestAiderAdapter_EstimateCost(t *testing.T) {
-	adapter, _ := NewAiderAdapter(AgentConfig{Path: "aider"})
-	aider := adapter.(*AiderAdapter)
-
-	cost := aider.estimateCost(1000000, 1000000)
-	// Input: 1M tokens * $2.50/MTok = $2.50
-	// Output: 1M tokens * $10.00/MTok = $10.00
-	// Total: $12.50
-	if cost < 12.0 || cost > 13.0 {
-		t.Errorf("estimateCost(1M, 1M) = %f, expected ~12.50", cost)
-	}
-}
-
-func TestAiderAdapter_WithEditFormatOptions(t *testing.T) {
-	adapter, _ := NewAiderAdapter(AgentConfig{Path: "aider"})
-	aider := adapter.(*AiderAdapter)
-
-	tests := []struct {
-		format string
-		want   []string
-	}{
-		{"", []string{"--edit-format", "whole"}},
-		{"diff", []string{"--edit-format", "diff"}},
-		{"diff-fenced", []string{"--edit-format", "diff-fenced"}},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.format, func(t *testing.T) {
-			got := aider.WithEditFormat(tt.format)
-			if len(got) != 2 || got[0] != tt.want[0] || got[1] != tt.want[1] {
-				t.Errorf("WithEditFormat(%q) = %v, want %v", tt.format, got, tt.want)
-			}
-		})
-	}
-}
-
 // Test ClaudeAdapter specific functions not covered elsewhere
 
 func TestClaudeAdapter_ExtractUsagePatterns(t *testing.T) {
@@ -855,7 +653,7 @@ func TestClaudeAdapter_EstimateCostCalc(t *testing.T) {
 // Test CopilotAdapter specific functions not covered elsewhere
 
 func TestCopilotAdapter_CleanANSIExtended(t *testing.T) {
-	adapter, _ := NewCopilotAdapter(AgentConfig{Path: "gh copilot"})
+	adapter, _ := NewCopilotAdapter(AgentConfig{Path: "copilot"})
 	copilot := adapter.(*CopilotAdapter)
 
 	tests := []struct {
@@ -890,49 +688,8 @@ func TestCopilotAdapter_CleanANSIExtended(t *testing.T) {
 	}
 }
 
-func TestCopilotAdapter_ExtractSuggestionPatterns(t *testing.T) {
-	adapter, _ := NewCopilotAdapter(AgentConfig{Path: "gh copilot"})
-	copilot := adapter.(*CopilotAdapter)
-
-	tests := []struct {
-		name   string
-		output string
-		want   string
-	}{
-		{
-			name:   "with suggestion marker",
-			output: "Thinking...\nSuggestion:\nls -la\n$ ",
-			want:   "ls -la",
-		},
-		{
-			name:   "multiple lines after suggestion",
-			output: "Suggestion:\nfirst line\nsecond line\n? ",
-			want:   "first line\nsecond line",
-		},
-		{
-			name:   "no suggestion marker",
-			output: "raw command output",
-			want:   "raw command output",
-		},
-		{
-			name:   "empty output",
-			output: "",
-			want:   "",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := copilot.extractSuggestion(tt.output)
-			if got != tt.want {
-				t.Errorf("extractSuggestion() = %q, want %q", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestCopilotAdapter_EstimateTokens(t *testing.T) {
-	adapter, _ := NewCopilotAdapter(AgentConfig{Path: "gh copilot"})
+func TestCopilotAdapter_EstimateTokensShort(t *testing.T) {
+	adapter, _ := NewCopilotAdapter(AgentConfig{Path: "copilot"})
 	copilot := adapter.(*CopilotAdapter)
 
 	got := copilot.estimateTokens("hello world")
@@ -942,45 +699,50 @@ func TestCopilotAdapter_EstimateTokens(t *testing.T) {
 	}
 }
 
-func TestCopilotAdapter_IsOutputCompleteScenarios(t *testing.T) {
-	adapter, _ := NewCopilotAdapter(AgentConfig{Path: "gh copilot"})
+func TestCopilotAdapter_EstimateCost(t *testing.T) {
+	adapter, _ := NewCopilotAdapter(AgentConfig{Path: "copilot"})
 	copilot := adapter.(*CopilotAdapter)
 
-	// Note: isOutputComplete uses TrimSpace before checking HasSuffix
-	// So the marker must be at the end after trimming
-	tests := []struct {
-		output   string
-		complete bool
-	}{
-		{"output ending with Suggestion:", true},
-		{"incomplete output", false},
-		{"", false},
-		{"simple text without markers", false},
-	}
-
-	for _, tt := range tests {
-		got := copilot.isOutputComplete(tt.output)
-		if got != tt.complete {
-			t.Errorf("isOutputComplete(%q) = %v, want %v", tt.output, got, tt.complete)
-		}
+	// Test cost estimation using Claude Sonnet 4.5 pricing as baseline
+	cost := copilot.estimateCost(1000000, 1000000)
+	// Input: 1M tokens * $3/MTok = $3.00
+	// Output: 1M tokens * $15/MTok = $15.00
+	// Total: $18.00
+	if cost < 17.0 || cost > 19.0 {
+		t.Errorf("estimateCost(1M, 1M) = %f, expected ~18.00", cost)
 	}
 }
 
-func TestCopilotAdapter_BuildArgsShell(t *testing.T) {
-	adapter, _ := NewCopilotAdapter(AgentConfig{Path: "gh copilot"})
+func TestCopilotAdapter_BuildArgsYOLO(t *testing.T) {
+	adapter, _ := NewCopilotAdapter(AgentConfig{Path: "copilot"})
 	copilot := adapter.(*CopilotAdapter)
 
 	args := copilot.buildArgs(core.ExecuteOptions{})
-	expected := []string{"suggest", "-t", "shell"}
 
-	if len(args) != len(expected) {
-		t.Errorf("buildArgs() len = %d, want %d", len(args), len(expected))
-		return
-	}
-	for i := range args {
-		if args[i] != expected[i] {
-			t.Errorf("buildArgs()[%d] = %q, want %q", i, args[i], expected[i])
+	// Check YOLO mode flags are present
+	hasAllowAllTools := false
+	hasAllowAllPaths := false
+	hasAllowAllUrls := false
+
+	for _, arg := range args {
+		switch arg {
+		case "--allow-all-tools":
+			hasAllowAllTools = true
+		case "--allow-all-paths":
+			hasAllowAllPaths = true
+		case "--allow-all-urls":
+			hasAllowAllUrls = true
 		}
+	}
+
+	if !hasAllowAllTools {
+		t.Error("expected --allow-all-tools flag in args")
+	}
+	if !hasAllowAllPaths {
+		t.Error("expected --allow-all-paths flag in args")
+	}
+	if !hasAllowAllUrls {
+		t.Error("expected --allow-all-urls flag in args")
 	}
 }
 
@@ -1004,17 +766,12 @@ func TestDefaultConfigAllAdapters(t *testing.T) {
 		},
 		{
 			name:        "copilot",
-			wantPath:    "gh copilot",
+			wantPath:    "copilot",
 			wantTimeout: 5 * time.Minute,
 		},
 		{
 			name:        "codex",
 			wantPath:    "codex",
-			wantTimeout: 5 * time.Minute,
-		},
-		{
-			name:        "aider",
-			wantPath:    "aider",
 			wantTimeout: 5 * time.Minute,
 		},
 		{
@@ -1073,18 +830,14 @@ func TestNewCopilotAdapter_Capabilities(t *testing.T) {
 		t.Errorf("Name() = %q, want %q", adapter.Name(), "copilot")
 	}
 	caps := adapter.Capabilities()
-	if caps.SupportsJSON {
-		t.Error("expected SupportsJSON to be false for copilot")
+	if !caps.SupportsJSON {
+		t.Error("expected SupportsJSON to be true for copilot")
 	}
-}
-
-func TestNewAiderAdapter_Capabilities(t *testing.T) {
-	adapter, err := NewAiderAdapter(AgentConfig{Path: "aider"})
-	if err != nil {
-		t.Fatalf("NewAiderAdapter() error = %v", err)
+	if !caps.SupportsTools {
+		t.Error("expected SupportsTools to be true for copilot")
 	}
-	if adapter.Name() != "aider" {
-		t.Errorf("Name() = %q, want %q", adapter.Name(), "aider")
+	if caps.MaxContextTokens != 200000 {
+		t.Errorf("MaxContextTokens = %d, want 200000", caps.MaxContextTokens)
 	}
 }
 

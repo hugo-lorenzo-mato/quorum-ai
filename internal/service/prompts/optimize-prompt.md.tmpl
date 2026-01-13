@@ -1,0 +1,30 @@
+# Prompt Optimization Request
+
+## Original User Prompt
+{{.OriginalPrompt}}
+
+## Instructions
+Your task is to optimize the above prompt for better clarity and effectiveness when used with AI coding assistants. The optimization should:
+
+1. **Preserve Intent**: Maintain the original meaning and goals exactly
+2. **Add Clarity**: Remove ambiguity, add specificity where helpful
+3. **Structure**: Organize into clear sections if the prompt is complex
+4. **Context**: Ensure sufficient context is provided for the task
+5. **Actionable**: Make the request actionable and measurable
+
+## Constraints
+- Do NOT change the fundamental request or add new requirements
+- Do NOT remove any requirements from the original prompt
+- Keep the optimized prompt concise but complete
+- Preserve the user's preferred language (respond in the same language as the input)
+- If the prompt is already clear and well-structured, minimal changes are acceptable
+
+## Response Format
+Provide your response in the following JSON structure:
+```json
+{
+  "optimized_prompt": "The improved version of the user's prompt",
+  "changes_made": ["List of specific changes made to improve the prompt"],
+  "reasoning": "Brief explanation of why these changes improve the prompt"
+}
+```

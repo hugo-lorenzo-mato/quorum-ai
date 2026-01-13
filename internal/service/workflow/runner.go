@@ -56,6 +56,8 @@ type RunnerConfig struct {
 	MaxCostPerWorkflow float64
 	// MaxCostPerTask is the maximum cost per task in USD (0 = unlimited).
 	MaxCostPerTask float64
+	// Optimizer configures the prompt optimization phase.
+	Optimizer OptimizerConfig
 }
 
 // DefaultRunnerConfig returns default configuration.
@@ -73,12 +75,13 @@ func DefaultRunnerConfig() *RunnerConfig {
 }
 
 // Runner orchestrates the complete workflow execution.
-// It coordinates the analysis, planning, and execution phases
+// It coordinates the optimization, analysis, planning, and execution phases
 // but delegates the actual work to specialized phase runners.
 type Runner struct {
 	config         *RunnerConfig
 	state          StateManager
 	agents         core.AgentRegistry
+	optimizer      *Optimizer
 	analyzer       *Analyzer
 	planner        *Planner
 	executor       *Executor
@@ -128,6 +131,7 @@ func NewRunner(deps RunnerDeps) *Runner {
 		config:         deps.Config,
 		state:          deps.State,
 		agents:         deps.Agents,
+		optimizer:      NewOptimizer(deps.Config.Optimizer),
 		analyzer:       NewAnalyzer(deps.Consensus),
 		planner:        NewPlanner(deps.DAG, deps.State),
 		executor:       NewExecutor(deps.DAG, deps.State, deps.Config.DenyTools),
@@ -176,6 +180,10 @@ func (r *Runner) Run(ctx context.Context, prompt string) error {
 	wctx := r.createContext(workflowState)
 
 	// Run phases
+	if err := r.optimizer.Run(ctx, wctx); err != nil {
+		return r.handleError(ctx, workflowState, err)
+	}
+
 	if err := r.analyzer.Run(ctx, wctx); err != nil {
 		return r.handleError(ctx, workflowState, err)
 	}
@@ -237,6 +245,11 @@ func (r *Runner) Resume(ctx context.Context) error {
 
 	// Resume from appropriate phase
 	switch resumePoint.Phase {
+	case core.PhaseOptimize:
+		if err := r.optimizer.Run(ctx, wctx); err != nil {
+			return r.handleError(ctx, workflowState, err)
+		}
+		fallthrough
 	case core.PhaseAnalyze:
 		if err := r.analyzer.Run(ctx, wctx); err != nil {
 			return r.handleError(ctx, workflowState, err)
@@ -269,7 +282,7 @@ func (r *Runner) initializeState(prompt string) *core.WorkflowState {
 		Version:      core.CurrentStateVersion,
 		WorkflowID:   core.WorkflowID(generateWorkflowID()),
 		Status:       core.WorkflowStatusRunning,
-		CurrentPhase: core.PhaseAnalyze,
+		CurrentPhase: core.PhaseOptimize,
 		Prompt:       prompt,
 		Tasks:        make(map[core.TaskID]*core.TaskState),
 		TaskOrder:    make([]core.TaskID, 0),

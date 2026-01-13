@@ -88,6 +88,16 @@ func indent(spaces int, s string) string {
 	return strings.Join(lines, "\n")
 }
 
+// OptimizePromptParams contains parameters for optimize-prompt template.
+type OptimizePromptParams struct {
+	OriginalPrompt string
+}
+
+// RenderOptimizePrompt renders the prompt optimization template.
+func (r *PromptRenderer) RenderOptimizePrompt(params OptimizePromptParams) (string, error) {
+	return r.render("optimize-prompt", params)
+}
+
 // AnalyzeV1Params contains parameters for analyze-v1 template.
 type AnalyzeV1Params struct {
 	Prompt      string

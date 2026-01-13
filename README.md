@@ -183,14 +183,19 @@ log:
   level: info
 ```
 
+For complete configuration options, see the [Configuration Reference](docs/CONFIGURATION.md).
+
 ### Usage
 
 ```bash
 # Verify prerequisites
 quorum doctor
 
-# Run full workflow (analyze -> plan -> execute)
+# Run full workflow (optimize -> analyze -> plan -> execute)
 quorum run "Implement user authentication with JWT tokens"
+
+# Skip prompt optimization (use original prompt directly)
+quorum run --skip-optimize "Implement user authentication with JWT tokens"
 
 # Check workflow status
 quorum status
@@ -312,7 +317,21 @@ For detailed architecture documentation, see [docs/ARCHITECTURE.md](docs/ARCHITE
 
 ## How It Works
 
-### 1. Analyze Phase
+### 1. Optimize Phase (Optional)
+
+Before analysis, the user's prompt is enhanced for clarity:
+
+```
+User Prompt ---> Optimizer Agent ---> Enhanced Prompt ---> Subsequent Phases
+                       |
+                       +---> Preserves original intent
+                       +---> Adds clarity and structure
+                       +---> Falls back to original on error
+```
+
+Skip with `--skip-optimize` or disable in config.
+
+### 2. Analyze Phase
 
 Multiple agents independently analyze the task:
 
@@ -324,7 +343,7 @@ Gemini Agent ----+                     |
                                        +---> <60%? ---> V3 Synthesis
 ```
 
-### 2. Plan Phase
+### 3. Plan Phase
 
 Consolidated analysis informs plan generation:
 
@@ -332,7 +351,7 @@ Consolidated analysis informs plan generation:
 - Build dependency graph (DAG)
 - Identify parallelizable tasks
 
-### 3. Execute Phase
+### 4. Execute Phase
 
 Tasks run in isolated environments:
 
@@ -347,6 +366,7 @@ Tasks run in isolated environments:
 
 | Document | Description |
 |----------|-------------|
+| [Configuration](docs/CONFIGURATION.md) | Complete configuration reference |
 | [Architecture](docs/ARCHITECTURE.md) | System design and layer responsibilities |
 | [Vision](docs/vision/QUORUM-POC-VISION-v1.md) | POC goals, metrics, and success criteria |
 | [Roadmap](ROADMAP.md) | Planned features for future versions |

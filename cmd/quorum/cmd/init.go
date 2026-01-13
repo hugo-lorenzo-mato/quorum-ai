@@ -85,11 +85,8 @@ agents:
     model: "gpt-5.1-codex"
   copilot:
     enabled: false
-    path: "gh copilot"
-  aider:
-    enabled: false
-    path: "aider"
-    model: "gpt-4"
+    path: "copilot"
+    model: "claude-sonnet-4-5"
 
 # Workflow settings
 workflow:

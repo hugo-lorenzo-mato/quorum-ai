@@ -2,15 +2,16 @@ package config
 
 // Config holds all application configuration.
 type Config struct {
-	Log       LogConfig       `mapstructure:"log"`
-	Trace     TraceConfig     `mapstructure:"trace"`
-	Workflow  WorkflowConfig  `mapstructure:"workflow"`
-	Agents    AgentsConfig    `mapstructure:"agents"`
-	State     StateConfig     `mapstructure:"state"`
-	Git       GitConfig       `mapstructure:"git"`
-	GitHub    GitHubConfig    `mapstructure:"github"`
-	Consensus ConsensusConfig `mapstructure:"consensus"`
-	Costs     CostsConfig     `mapstructure:"costs"`
+	Log             LogConfig             `mapstructure:"log"`
+	Trace           TraceConfig           `mapstructure:"trace"`
+	Workflow        WorkflowConfig        `mapstructure:"workflow"`
+	Agents          AgentsConfig          `mapstructure:"agents"`
+	PromptOptimizer PromptOptimizerConfig `mapstructure:"prompt_optimizer"`
+	State           StateConfig           `mapstructure:"state"`
+	Git             GitConfig             `mapstructure:"git"`
+	GitHub          GitHubConfig          `mapstructure:"github"`
+	Consensus       ConsensusConfig       `mapstructure:"consensus"`
+	Costs           CostsConfig           `mapstructure:"costs"`
 }
 
 // LogConfig configures logging behavior.
@@ -50,7 +51,6 @@ type AgentsConfig struct {
 	Gemini  AgentConfig `mapstructure:"gemini"`
 	Codex   AgentConfig `mapstructure:"codex"`
 	Copilot AgentConfig `mapstructure:"copilot"`
-	Aider   AgentConfig `mapstructure:"aider"`
 }
 
 // AgentConfig configures a single AI agent.
@@ -103,4 +103,14 @@ type CostsConfig struct {
 	MaxPerWorkflow float64 `mapstructure:"max_per_workflow"`
 	MaxPerTask     float64 `mapstructure:"max_per_task"`
 	AlertThreshold float64 `mapstructure:"alert_threshold"`
+}
+
+// PromptOptimizerConfig configures the prompt optimization phase.
+type PromptOptimizerConfig struct {
+	// Enabled enables/disables the prompt optimization phase.
+	Enabled bool `mapstructure:"enabled"`
+	// Agent specifies which agent to use for optimization (claude, gemini, etc.).
+	Agent string `mapstructure:"agent"`
+	// Model specifies the model to use (optional, uses agent's default if empty).
+	Model string `mapstructure:"model"`
 }

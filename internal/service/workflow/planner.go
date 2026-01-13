@@ -67,7 +67,7 @@ func (p *Planner) Run(ctx context.Context, wctx *Context) error {
 	}
 
 	prompt, err := wctx.Prompts.RenderPlanGenerate(PlanParams{
-		Prompt:               wctx.State.Prompt,
+		Prompt:               GetEffectivePrompt(wctx.State),
 		ConsolidatedAnalysis: analysis,
 		MaxTasks:             10,
 	})

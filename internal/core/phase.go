@@ -6,11 +6,15 @@ import "fmt"
 type Phase string
 
 const (
-	// PhaseAnalyze is the first phase where agents analyze the problem.
+	// PhaseOptimize is the first phase where the user prompt is optimized.
+	// An LLM enhances the prompt for clarity and effectiveness.
+	PhaseOptimize Phase = "optimize"
+
+	// PhaseAnalyze is the second phase where agents analyze the problem.
 	// Multiple agents provide independent analyses (V1/V2).
 	PhaseAnalyze Phase = "analyze"
 
-	// PhasePlan is the second phase where agents create execution plans.
+	// PhasePlan is the third phase where agents create execution plans.
 	// Plans are consolidated based on consensus.
 	PhasePlan Phase = "plan"
 
@@ -21,18 +25,20 @@ const (
 
 // AllPhases returns all phases in execution order.
 func AllPhases() []Phase {
-	return []Phase{PhaseAnalyze, PhasePlan, PhaseExecute}
+	return []Phase{PhaseOptimize, PhaseAnalyze, PhasePlan, PhaseExecute}
 }
 
 // PhaseOrder returns the numeric order of a phase (0-indexed).
 func PhaseOrder(p Phase) int {
 	switch p {
-	case PhaseAnalyze:
+	case PhaseOptimize:
 		return 0
-	case PhasePlan:
+	case PhaseAnalyze:
 		return 1
-	case PhaseExecute:
+	case PhasePlan:
 		return 2
+	case PhaseExecute:
+		return 3
 	default:
 		return -1
 	}
@@ -42,6 +48,8 @@ func PhaseOrder(p Phase) int {
 // Returns empty string if current phase is the last.
 func NextPhase(p Phase) Phase {
 	switch p {
+	case PhaseOptimize:
+		return PhaseAnalyze
 	case PhaseAnalyze:
 		return PhasePlan
 	case PhasePlan:
@@ -55,6 +63,8 @@ func NextPhase(p Phase) Phase {
 // Returns empty string if current phase is the first.
 func PrevPhase(p Phase) Phase {
 	switch p {
+	case PhaseAnalyze:
+		return PhaseOptimize
 	case PhasePlan:
 		return PhaseAnalyze
 	case PhaseExecute:
@@ -67,7 +77,7 @@ func PrevPhase(p Phase) Phase {
 // ValidPhase checks if a phase string is valid.
 func ValidPhase(p Phase) bool {
 	switch p {
-	case PhaseAnalyze, PhasePlan, PhaseExecute:
+	case PhaseOptimize, PhaseAnalyze, PhasePlan, PhaseExecute:
 		return true
 	default:
 		return false
@@ -91,6 +101,8 @@ func (p Phase) String() string {
 // Description returns a human-readable description of the phase.
 func (p Phase) Description() string {
 	switch p {
+	case PhaseOptimize:
+		return "Optimize the user prompt for better LLM understanding"
 	case PhaseAnalyze:
 		return "Analyze the problem with multiple agents"
 	case PhasePlan:

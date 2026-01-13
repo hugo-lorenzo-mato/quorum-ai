@@ -34,13 +34,14 @@ The prompt can be provided as an argument or via --file flag.`,
 }
 
 var (
-	runFile       string
-	runDryRun     bool
-	runYolo       bool
-	runResume     bool
-	runMaxRetries int
-	runTrace      string
-	runOutput     string
+	runFile         string
+	runDryRun       bool
+	runYolo         bool
+	runResume       bool
+	runMaxRetries   int
+	runTrace        string
+	runOutput       string
+	runSkipOptimize bool
 )
 
 func init() {
@@ -56,8 +57,10 @@ func init() {
 		flag.NoOptDefVal = "summary"
 	}
 	runCmd.Flags().StringVarP(&runOutput, "output", "o", "", "Output mode (tui, plain, json, quiet)")
+	runCmd.Flags().BoolVar(&runSkipOptimize, "skip-optimize", false, "Skip prompt optimization phase")
 }
 
+//nolint:gocyclo // Complexity is acceptable for CLI orchestration function
 func runWorkflow(_ *cobra.Command, args []string) error {
 	// Setup context with cancellation
 	ctx, cancel := context.WithCancel(context.Background())
@@ -203,6 +206,8 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 	if defaultAgent == "" {
 		defaultAgent = "claude"
 	}
+	// Optimizer config: disabled if --skip-optimize flag is set
+	optimizerEnabled := cfg.PromptOptimizer.Enabled && !runSkipOptimize
 	runnerConfig := &workflow.RunnerConfig{
 		Timeout:      timeout,
 		MaxRetries:   runMaxRetries,
@@ -216,12 +221,16 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 			"gemini":  cfg.Agents.Gemini.PhaseModels,
 			"codex":   cfg.Agents.Codex.PhaseModels,
 			"copilot": cfg.Agents.Copilot.PhaseModels,
-			"aider":   cfg.Agents.Aider.PhaseModels,
 		},
 		WorktreeAutoClean:  cfg.Git.AutoClean,
 		WorktreeMode:       cfg.Git.WorktreeMode,
 		MaxCostPerWorkflow: cfg.Costs.MaxPerWorkflow,
 		MaxCostPerTask:     cfg.Costs.MaxPerTask,
+		Optimizer: workflow.OptimizerConfig{
+			Enabled: optimizerEnabled,
+			Agent:   cfg.PromptOptimizer.Agent,
+			Model:   cfg.PromptOptimizer.Model,
+		},
 	}
 
 	// Store trace config for potential later use
@@ -443,18 +452,6 @@ func configureAgentsFromConfig(registry *cli.Registry, cfg *config.Config, loade
 			Path:        cfg.Agents.Copilot.Path,
 			MaxTokens:   cfg.Agents.Copilot.MaxTokens,
 			Temperature: cfg.Agents.Copilot.Temperature,
-			Timeout:     5 * time.Minute,
-		})
-	}
-
-	// Configure Aider
-	if isEnabled("agents.aider.enabled", "QUORUM_AGENTS_AIDER_ENABLED", cfg.Agents.Aider.Enabled) {
-		registry.Configure("aider", cli.AgentConfig{
-			Name:        "aider",
-			Path:        cfg.Agents.Aider.Path,
-			Model:       cfg.Agents.Aider.Model,
-			MaxTokens:   cfg.Agents.Aider.MaxTokens,
-			Temperature: cfg.Agents.Aider.Temperature,
 			Timeout:     5 * time.Minute,
 		})
 	}
