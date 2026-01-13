@@ -19,6 +19,7 @@ import (
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/logging"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service/workflow"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/tui"
 )
 
 var runCmd = &cobra.Command{
@@ -37,6 +38,7 @@ var (
 	runResume     bool
 	runMaxRetries int
 	runTrace      string
+	runOutput     string
 )
 
 func init() {
@@ -51,6 +53,7 @@ func init() {
 	if flag := runCmd.Flags().Lookup("trace"); flag != nil {
 		flag.NoOptDefVal = "summary"
 	}
+	runCmd.Flags().StringVarP(&runOutput, "output", "o", "", "Output mode (tui, plain, json, quiet)")
 }
 
 func runWorkflow(_ *cobra.Command, args []string) error {
@@ -66,6 +69,40 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 		fmt.Println("\nReceived interrupt, stopping...")
 		cancel()
 	}()
+
+	// Detect output mode
+	detector := tui.NewDetector()
+	if runOutput != "" {
+		detector.ForceMode(tui.ParseOutputMode(runOutput))
+	}
+	outputMode := detector.Detect()
+	useColor := detector.ShouldUseColor()
+
+	// Create output handler based on detected mode
+	// Verbose output is enabled when trace mode is set or log level is debug
+	verboseOutput := runTrace != ""
+	output := tui.NewOutput(outputMode, useColor, verboseOutput)
+	defer func() { _ = output.Close() }()
+
+	// For TUI mode, start the TUI in a goroutine and run workflow in background
+	var tuiOutput *tui.TUIOutput
+	var tuiErrCh chan error
+	if outputMode == tui.ModeTUI {
+		var ok bool
+		tuiOutput, ok = output.(*tui.TUIOutput)
+		if ok {
+			tuiErrCh = make(chan error, 1)
+			go func() {
+				tuiErrCh <- tuiOutput.Start()
+			}()
+			// Give TUI time to initialize
+			defer func() {
+				if tuiOutput != nil {
+					_ = tuiOutput.Close()
+				}
+			}()
+		}
+	}
 
 	// Load unified configuration using global viper (includes flag bindings)
 	// Precedence: flags > env > project config > user config > defaults
@@ -224,7 +261,16 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 	// Resume or run new workflow
 	if runResume {
 		logger.Info("resuming workflow from checkpoint")
-		return runner.Resume(ctx)
+		output.WorkflowStarted("(resuming)")
+		if err := runner.Resume(ctx); err != nil {
+			output.WorkflowFailed(err)
+			return handleTUICompletion(tuiErrCh, err)
+		}
+		// Get state for completion notification
+		if state, err := runner.GetState(ctx); err == nil && state != nil {
+			output.WorkflowCompleted(state)
+		}
+		return handleTUICompletion(tuiErrCh, nil)
 	}
 
 	// Get prompt for new workflow
@@ -234,7 +280,34 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 	}
 
 	logger.Info("starting new workflow", "prompt_length", len(prompt))
-	return runner.Run(ctx, prompt)
+	output.WorkflowStarted(prompt)
+	if err := runner.Run(ctx, prompt); err != nil {
+		output.WorkflowFailed(err)
+		return handleTUICompletion(tuiErrCh, err)
+	}
+
+	// Get state for completion notification
+	if state, err := runner.GetState(ctx); err == nil && state != nil {
+		output.WorkflowCompleted(state)
+	}
+	return handleTUICompletion(tuiErrCh, nil)
+}
+
+// handleTUICompletion waits for TUI to finish if running.
+func handleTUICompletion(tuiErrCh chan error, workflowErr error) error {
+	if tuiErrCh != nil {
+		// Wait a bit for TUI to render final state, then signal quit
+		select {
+		case tuiErr := <-tuiErrCh:
+			// TUI exited first (user pressed q)
+			if tuiErr != nil && workflowErr == nil {
+				return tuiErr
+			}
+		default:
+			// TUI still running, give it time to display final state
+		}
+	}
+	return workflowErr
 }
 
 func loadGitInfo() (string, bool) {
