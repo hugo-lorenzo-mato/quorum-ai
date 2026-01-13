@@ -20,6 +20,7 @@ quorum-ai reduces LLM hallucinations and increases output reliability by running
 - **Resume from Checkpoint**: Recover from failures without re-running completed work
 - **Cost Tracking**: Monitor token usage and costs across all agents
 - **Secret Sanitization**: Multi-pattern regex ensures API keys never appear in logs
+- **Trace Mode**: Optional file-based traces for prompts, outputs, and consensus decisions
 
 ---
 
@@ -81,6 +82,58 @@ quorum run "Implement user authentication with JWT tokens"
 
 # Check workflow status
 quorum status
+
+# Enable trace output (summary or full)
+quorum run --trace "Add a CLI flag to validate configs"
+quorum run --trace=full "Refactor the payment processing module"
+
+# Inspect trace runs
+quorum trace --list
+quorum trace --run-id wf-1234-1700000000
+```
+
+### Trace artifacts
+
+When trace mode is enabled, artifacts are written to `.quorum/traces/<run_id>/`:
+
+- `run.json`: run manifest (config snapshot, git/app metadata, summary).
+- `trace.jsonl`: ordered trace events (phase, model, tokens, hashes).
+- `*.txt` / `*.json`: prompt/response payloads (full mode only).
+
+Trace modes:
+- `summary`: only `run.json` and `trace.jsonl` (no prompt/response files).
+- `full`: includes prompt/response files for each step (subject to size limits).
+
+Example `trace.jsonl` entry:
+```json
+{"seq":1,"ts":"2026-01-13T00:00:00Z","event_type":"prompt","phase":"analyze","step":"v1","agent":"claude","model":"claude-sonnet-4-20250514","tokens_in":120,"tokens_out":0,"cost_usd":0.0023,"hash_raw":"...","hash_stored":"..."}
+```
+
+Example `run.json` (trimmed):
+```json
+{
+  "run_id": "wf-1234-1700000000-1700000000",
+  "workflow_id": "wf-1234-1700000000",
+  "prompt_length": 120,
+  "started_at": "2026-01-13T00:00:00Z",
+  "ended_at": "2026-01-13T00:02:10Z",
+  "app_version": "0.4.0",
+  "app_commit": "abc1234",
+  "git_commit": "def5678",
+  "git_dirty": false,
+  "config": {
+    "mode": "summary",
+    "dir": ".quorum/traces"
+  },
+  "summary": {
+    "total_prompts": 6,
+    "total_tokens_in": 1234,
+    "total_tokens_out": 987,
+    "total_cost_usd": 0.0421,
+    "total_files": 0,
+    "total_bytes": 0
+  }
+}
 ```
 
 ---

@@ -12,6 +12,16 @@ func validConfig() *Config {
 			Level:  "info",
 			Format: "auto",
 		},
+		Trace: TraceConfig{
+			Mode:          "off",
+			Dir:           ".quorum/traces",
+			SchemaVersion: 1,
+			Redact:        true,
+			MaxBytes:      262144,
+			TotalMaxBytes: 10485760,
+			MaxFiles:      500,
+			IncludePhases: []string{"analyze", "consensus", "plan", "execute"},
+		},
 		Workflow: WorkflowConfig{
 			Timeout:    "2h",
 			MaxRetries: 3,

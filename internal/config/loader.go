@@ -94,6 +94,18 @@ func (l *Loader) setDefaults() {
 	l.v.SetDefault("log.level", "info")
 	l.v.SetDefault("log.format", "auto")
 
+	// Trace defaults
+	l.v.SetDefault("trace.mode", "off")
+	l.v.SetDefault("trace.dir", ".quorum/traces")
+	l.v.SetDefault("trace.schema_version", 1)
+	l.v.SetDefault("trace.redact", true)
+	l.v.SetDefault("trace.redact_patterns", []string{})
+	l.v.SetDefault("trace.redact_allowlist", []string{})
+	l.v.SetDefault("trace.max_bytes", 262144)
+	l.v.SetDefault("trace.total_max_bytes", 10485760)
+	l.v.SetDefault("trace.max_files", 500)
+	l.v.SetDefault("trace.include_phases", []string{"analyze", "consensus", "plan", "execute"})
+
 	// Workflow defaults
 	l.v.SetDefault("workflow.timeout", "2h")
 	l.v.SetDefault("workflow.max_retries", 3)

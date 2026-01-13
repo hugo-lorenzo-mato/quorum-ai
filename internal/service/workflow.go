@@ -30,6 +30,8 @@ type WorkflowRunner struct {
 	retry      *RetryPolicy
 	rateLimits *RateLimiterRegistry
 	logger     *logging.Logger
+	trace      TraceWriter
+	traceID    string
 }
 
 // WorkflowRunnerConfig holds workflow runner configuration.
@@ -41,6 +43,12 @@ type WorkflowRunnerConfig struct {
 	DenyTools    []string
 	DefaultAgent string
 	V3Agent      string
+	Trace        TraceConfig
+	AppVersion   string
+	AppCommit    string
+	AppDate      string
+	GitCommit    string
+	GitDirty     bool
 	// AgentPhaseModels allows per-agent, per-phase model overrides.
 	AgentPhaseModels map[string]map[string]string
 }
@@ -54,6 +62,7 @@ func DefaultWorkflowRunnerConfig() *WorkflowRunnerConfig {
 		Sandbox:          true,
 		DefaultAgent:     "claude",
 		V3Agent:          "claude",
+		Trace:            TraceConfig{Mode: "off"},
 		AgentPhaseModels: map[string]map[string]string{},
 	}
 }
@@ -81,6 +90,7 @@ func NewWorkflowRunner(
 		retry:      DefaultRetryPolicy(),
 		rateLimits: NewRateLimiterRegistry(),
 		logger:     logger,
+		trace:      NewTraceWriter(config.Trace, logger),
 	}
 }
 
@@ -121,9 +131,13 @@ func (w *WorkflowRunner) Run(ctx context.Context, prompt string) error {
 		"prompt_length", len(prompt),
 	)
 
+	w.startTrace(ctx, state, prompt)
+
 	// Save initial state
 	if err := w.state.Save(ctx, state); err != nil {
-		return fmt.Errorf("saving initial state: %w", err)
+		err = fmt.Errorf("saving initial state: %w", err)
+		w.endTrace(ctx)
+		return err
 	}
 
 	// Run phases
@@ -148,7 +162,13 @@ func (w *WorkflowRunner) Run(ctx context.Context, prompt string) error {
 		"total_tasks", len(state.Tasks),
 	)
 
-	return w.state.Save(ctx, state)
+	if err := w.state.Save(ctx, state); err != nil {
+		w.endTrace(ctx)
+		return err
+	}
+
+	w.endTrace(ctx)
+	return nil
 }
 
 // Resume continues a workflow from the last checkpoint.
@@ -184,6 +204,8 @@ func (w *WorkflowRunner) Resume(ctx context.Context) error {
 		"from_start", resumePoint.FromStart,
 	)
 
+	w.startTrace(ctx, state, state.Prompt)
+
 	// Rebuild DAG from existing tasks
 	if err := w.rebuildDAG(state); err != nil {
 		return fmt.Errorf("rebuilding DAG: %w", err)
@@ -214,7 +236,13 @@ func (w *WorkflowRunner) Resume(ctx context.Context) error {
 		"workflow_id", state.WorkflowID,
 	)
 
-	return w.state.Save(ctx, state)
+	if err := w.state.Save(ctx, state); err != nil {
+		w.endTrace(ctx)
+		return err
+	}
+
+	w.endTrace(ctx)
+	return nil
 }
 
 // runAnalyzePhase executes the analysis phase with V1/V2/V3 protocol.
@@ -238,11 +266,16 @@ func (w *WorkflowRunner) runAnalyzePhase(ctx context.Context, state *core.Workfl
 		w.logger.Warn("failed to create consensus checkpoint", "error", err)
 	}
 
-	w.logger.Info("V1 consensus evaluated",
+	decision := "skip_v2"
+	if consensusResult.NeedsV3 || consensusResult.NeedsHumanReview {
+		decision = "v2"
+	}
+	w.logger.Info("consensus:v1",
 		"score", consensusResult.Score,
 		"threshold", w.consensus.Threshold,
-		"needs_v3", consensusResult.NeedsV3,
+		"decision", decision,
 	)
+	w.recordConsensus(ctx, "v1", consensusResult)
 
 	// Track all outputs for consolidation
 	allOutputs := make([]AnalysisOutput, 0, len(v1Outputs)*3)
@@ -261,6 +294,17 @@ func (w *WorkflowRunner) runAnalyzePhase(ctx context.Context, state *core.Workfl
 		if err := w.checkpoint.ConsensusCheckpoint(ctx, state, consensusResult); err != nil {
 			w.logger.Warn("failed to create V2 consensus checkpoint", "error", err)
 		}
+
+		decision = "skip_v3"
+		if consensusResult.NeedsV3 || consensusResult.NeedsHumanReview {
+			decision = "v3"
+		}
+		w.logger.Info("consensus:v2",
+			"score", consensusResult.Score,
+			"threshold", w.consensus.Threshold,
+			"decision", decision,
+		)
+		w.recordConsensus(ctx, "v2", consensusResult)
 
 		// V3: If still low, run reconciliation
 		if consensusResult.NeedsV3 || consensusResult.NeedsHumanReview {
@@ -294,7 +338,7 @@ func (w *WorkflowRunner) runV1Analysis(ctx context.Context, state *core.Workflow
 		agentNames = agentNames[:2]
 	}
 
-	w.logger.Info("running V1 analysis",
+	w.logger.Info("analyze:v1 start",
 		"agents", strings.Join(agentNames, ", "),
 	)
 
@@ -324,6 +368,10 @@ func (w *WorkflowRunner) runV1Analysis(ctx context.Context, state *core.Workflow
 		return nil, err
 	}
 
+	w.logger.Info("analyze:v1 done",
+		"agents", strings.Join(agentNames, ", "),
+	)
+
 	return outputs, nil
 }
 
@@ -349,6 +397,20 @@ func (w *WorkflowRunner) runAnalysisWithAgent(ctx context.Context, state *core.W
 		return AnalysisOutput{}, fmt.Errorf("rendering prompt: %w", err)
 	}
 
+	model := w.resolveModel(agentName, core.PhaseAnalyze, "")
+	_ = w.trace.Record(ctx, TraceEvent{
+		Phase:     "analyze",
+		Step:      "v1",
+		EventType: "prompt",
+		Agent:     agentName,
+		Model:     model,
+		FileExt:   "txt",
+		Content:   []byte(prompt),
+		Metadata: map[string]interface{}{
+			"format": "json",
+		},
+	})
+
 	// Execute with retry
 	var result *core.ExecuteResult
 	err = w.retry.Execute(ctx, func(ctx context.Context) error {
@@ -356,7 +418,7 @@ func (w *WorkflowRunner) runAnalysisWithAgent(ctx context.Context, state *core.W
 		result, execErr = agent.Execute(ctx, core.ExecuteOptions{
 			Prompt:  prompt,
 			Format:  core.OutputFormatJSON,
-			Model:   w.resolveModel(agentName, core.PhaseAnalyze, ""),
+			Model:   model,
 			Timeout: 5 * time.Minute,
 			Sandbox: w.config.Sandbox,
 		})
@@ -369,6 +431,29 @@ func (w *WorkflowRunner) runAnalysisWithAgent(ctx context.Context, state *core.W
 
 	// Parse output
 	output := w.parseAnalysisOutput(agentName, result)
+	w.logger.Info("analyze:v1 agent done",
+		"agent", agentName,
+		"model", model,
+	)
+	w.logger.Debug("analyze:v1 agent usage",
+		"agent", agentName,
+		"model", model,
+		"tokens_in", result.TokensIn,
+		"tokens_out", result.TokensOut,
+		"cost_usd", result.CostUSD,
+	)
+	_ = w.trace.Record(ctx, TraceEvent{
+		Phase:     "analyze",
+		Step:      "v1",
+		EventType: "response",
+		Agent:     agentName,
+		Model:     model,
+		FileExt:   "json",
+		Content:   []byte(result.Output),
+		TokensIn:  result.TokensIn,
+		TokensOut: result.TokensOut,
+		CostUSD:   result.CostUSD,
+	})
 	return output, nil
 }
 
@@ -407,13 +492,33 @@ func (w *WorkflowRunner) runV2Critique(ctx context.Context, state *core.Workflow
 			continue
 		}
 
+		model := w.resolveModel(critiqueAgent, core.PhaseAnalyze, "")
+		w.logger.Info("analyze:v2 start",
+			"agent", critiqueAgent,
+			"critiquing", v1.AgentName,
+			"model", model,
+		)
+		_ = w.trace.Record(ctx, TraceEvent{
+			Phase:     "analyze",
+			Step:      "v2",
+			EventType: "prompt",
+			Agent:     critiqueAgent,
+			Model:     model,
+			FileExt:   "txt",
+			Content:   []byte(prompt),
+			Metadata: map[string]interface{}{
+				"critiquing": v1.AgentName,
+				"format":     "json",
+			},
+		})
+
 		var result *core.ExecuteResult
 		err = w.retry.Execute(ctx, func(ctx context.Context) error {
 			var execErr error
 			result, execErr = agent.Execute(ctx, core.ExecuteOptions{
 				Prompt:  prompt,
 				Format:  core.OutputFormatJSON,
-				Model:   w.resolveModel(critiqueAgent, core.PhaseAnalyze, ""),
+				Model:   model,
 				Timeout: 5 * time.Minute,
 				Sandbox: w.config.Sandbox,
 			})
@@ -422,6 +527,32 @@ func (w *WorkflowRunner) runV2Critique(ctx context.Context, state *core.Workflow
 
 		if err == nil {
 			output := w.parseAnalysisOutput(fmt.Sprintf("%s-critique-%d", critiqueAgent, i), result)
+			w.logger.Info("analyze:v2 agent done",
+				"agent", critiqueAgent,
+				"model", model,
+			)
+			w.logger.Debug("analyze:v2 agent usage",
+				"agent", critiqueAgent,
+				"model", model,
+				"tokens_in", result.TokensIn,
+				"tokens_out", result.TokensOut,
+				"cost_usd", result.CostUSD,
+			)
+			_ = w.trace.Record(ctx, TraceEvent{
+				Phase:     "analyze",
+				Step:      "v2",
+				EventType: "response",
+				Agent:     critiqueAgent,
+				Model:     model,
+				FileExt:   "json",
+				Content:   []byte(result.Output),
+				TokensIn:  result.TokensIn,
+				TokensOut: result.TokensOut,
+				CostUSD:   result.CostUSD,
+				Metadata: map[string]interface{}{
+					"critiquing": v1.AgentName,
+				},
+			})
 			outputs = append(outputs, output)
 		} else {
 			w.logger.Warn("V2 critique failed",
@@ -476,13 +607,32 @@ func (w *WorkflowRunner) runV3Reconciliation(ctx context.Context, state *core.Wo
 		return fmt.Errorf("rendering V3 prompt: %w", err)
 	}
 
+	model := w.resolveModel(v3AgentName, core.PhaseAnalyze, "")
+	w.logger.Info("analyze:v3 start",
+		"agent", v3AgentName,
+		"model", model,
+		"divergences", len(consensus.Divergences),
+	)
+	_ = w.trace.Record(ctx, TraceEvent{
+		Phase:     "analyze",
+		Step:      "v3",
+		EventType: "prompt",
+		Agent:     v3AgentName,
+		Model:     model,
+		FileExt:   "txt",
+		Content:   []byte(prompt),
+		Metadata: map[string]interface{}{
+			"format": "json",
+		},
+	})
+
 	var result *core.ExecuteResult
 	err = w.retry.Execute(ctx, func(ctx context.Context) error {
 		var execErr error
 		result, execErr = agent.Execute(ctx, core.ExecuteOptions{
 			Prompt:  prompt,
 			Format:  core.OutputFormatJSON,
-			Model:   w.resolveModel(v3AgentName, core.PhaseAnalyze, ""),
+			Model:   model,
 			Timeout: 10 * time.Minute,
 			Sandbox: w.config.Sandbox,
 		})
@@ -498,6 +648,30 @@ func (w *WorkflowRunner) runV3Reconciliation(ctx context.Context, state *core.Wo
 		state.Metrics = &core.StateMetrics{}
 	}
 
+	w.logger.Info("analyze:v3 done",
+		"agent", v3AgentName,
+		"model", model,
+	)
+	w.logger.Debug("analyze:v3 usage",
+		"agent", v3AgentName,
+		"model", model,
+		"tokens_in", result.TokensIn,
+		"tokens_out", result.TokensOut,
+		"cost_usd", result.CostUSD,
+	)
+	_ = w.trace.Record(ctx, TraceEvent{
+		Phase:     "analyze",
+		Step:      "v3",
+		EventType: "response",
+		Agent:     v3AgentName,
+		Model:     model,
+		FileExt:   "json",
+		Content:   []byte(result.Output),
+		TokensIn:  result.TokensIn,
+		TokensOut: result.TokensOut,
+		CostUSD:   result.CostUSD,
+	})
+
 	// Create a checkpoint with the V3 reconciliation result
 	return w.checkpoint.CreateCheckpoint(ctx, state, CheckpointType("v3_reconciliation"), map[string]interface{}{
 		"output":     result.Output,
@@ -509,7 +683,7 @@ func (w *WorkflowRunner) runV3Reconciliation(ctx context.Context, state *core.Wo
 
 // runPlanPhase generates execution plan from analysis.
 func (w *WorkflowRunner) runPlanPhase(ctx context.Context, state *core.WorkflowState) error {
-	w.logger.Info("starting plan phase", "workflow_id", state.WorkflowID)
+	w.logger.Info("plan start", "workflow_id", state.WorkflowID)
 
 	state.CurrentPhase = core.PhasePlan
 	if err := w.checkpoint.PhaseCheckpoint(ctx, state, core.PhasePlan, false); err != nil {
@@ -551,13 +725,27 @@ func (w *WorkflowRunner) runPlanPhase(ctx context.Context, state *core.WorkflowS
 		return fmt.Errorf("rendering plan prompt: %w", err)
 	}
 
+	model := w.resolveModel(w.config.DefaultAgent, core.PhasePlan, "")
+	_ = w.trace.Record(ctx, TraceEvent{
+		Phase:     "plan",
+		Step:      "generate",
+		EventType: "prompt",
+		Agent:     w.config.DefaultAgent,
+		Model:     model,
+		FileExt:   "txt",
+		Content:   []byte(prompt),
+		Metadata: map[string]interface{}{
+			"format": "json",
+		},
+	})
+
 	var result *core.ExecuteResult
 	err = w.retry.Execute(ctx, func(ctx context.Context) error {
 		var execErr error
 		result, execErr = agent.Execute(ctx, core.ExecuteOptions{
 			Prompt:  prompt,
 			Format:  core.OutputFormatJSON,
-			Model:   w.resolveModel(w.config.DefaultAgent, core.PhasePlan, ""),
+			Model:   model,
 			Timeout: 5 * time.Minute,
 			Sandbox: w.config.Sandbox,
 		})
@@ -567,6 +755,19 @@ func (w *WorkflowRunner) runPlanPhase(ctx context.Context, state *core.WorkflowS
 	if err != nil {
 		return err
 	}
+
+	_ = w.trace.Record(ctx, TraceEvent{
+		Phase:     "plan",
+		Step:      "generate",
+		EventType: "response",
+		Agent:     w.config.DefaultAgent,
+		Model:     model,
+		FileExt:   "json",
+		Content:   []byte(result.Output),
+		TokensIn:  result.TokensIn,
+		TokensOut: result.TokensOut,
+		CostUSD:   result.CostUSD,
+	})
 
 	// Parse plan into tasks
 	tasks, err := w.parsePlan(result.Output)
@@ -601,8 +802,8 @@ func (w *WorkflowRunner) runPlanPhase(ctx context.Context, state *core.WorkflowS
 		return fmt.Errorf("validating task graph: %w", err)
 	}
 
-	w.logger.Info("plan phase completed",
-		"task_count", len(tasks),
+	w.logger.Info("plan done",
+		"tasks", len(tasks),
 	)
 
 	if err := w.checkpoint.PhaseCheckpoint(ctx, state, core.PhasePlan, true); err != nil {
@@ -682,11 +883,6 @@ func (w *WorkflowRunner) runExecutePhase(ctx context.Context, state *core.Workfl
 
 // executeTask executes a single task.
 func (w *WorkflowRunner) executeTask(ctx context.Context, state *core.WorkflowState, task *core.Task) error {
-	w.logger.Info("executing task",
-		"task_id", task.ID,
-		"task_name", task.Name,
-	)
-
 	// Update task state
 	taskState := state.Tasks[task.ID]
 	if taskState == nil {
@@ -716,6 +912,14 @@ func (w *WorkflowRunner) executeTask(ctx context.Context, state *core.WorkflowSt
 		agentName = w.config.DefaultAgent
 	}
 
+	model := w.resolveModel(agentName, core.PhaseExecute, task.Model)
+	w.logger.Info("execute task start",
+		"task_id", task.ID,
+		"task_name", task.Name,
+		"agent", agentName,
+		"model", model,
+	)
+
 	agent, err := w.agents.Get(agentName)
 	if err != nil {
 		taskState.Status = core.TaskStatusFailed
@@ -742,6 +946,18 @@ func (w *WorkflowRunner) executeTask(ctx context.Context, state *core.WorkflowSt
 		return err
 	}
 
+	_ = w.trace.Record(ctx, TraceEvent{
+		Phase:     "execute",
+		Step:      "task",
+		EventType: "prompt",
+		Agent:     agentName,
+		Model:     model,
+		TaskID:    string(task.ID),
+		TaskName:  task.Name,
+		FileExt:   "txt",
+		Content:   []byte(prompt),
+	})
+
 	// Execute with retry
 	var result *core.ExecuteResult
 	err = w.retry.ExecuteWithNotify(ctx, func(ctx context.Context) error {
@@ -749,7 +965,7 @@ func (w *WorkflowRunner) executeTask(ctx context.Context, state *core.WorkflowSt
 		result, execErr = agent.Execute(ctx, core.ExecuteOptions{
 			Prompt:      prompt,
 			Format:      core.OutputFormatText,
-			Model:       w.resolveModel(agentName, core.PhaseExecute, task.Model),
+			Model:       model,
 			Timeout:     10 * time.Minute,
 			Sandbox:     w.config.Sandbox,
 			DeniedTools: w.config.DenyTools,
@@ -785,6 +1001,36 @@ func (w *WorkflowRunner) executeTask(ctx context.Context, state *core.WorkflowSt
 		state.Metrics.TotalTokensOut += result.TokensOut
 		state.Metrics.TotalCostUSD += result.CostUSD
 	}
+
+	w.logger.Info("execute task done",
+		"task_id", task.ID,
+		"task_name", task.Name,
+		"agent", agentName,
+		"model", model,
+	)
+	w.logger.Debug("execute task usage",
+		"task_id", task.ID,
+		"task_name", task.Name,
+		"agent", agentName,
+		"model", model,
+		"tokens_in", result.TokensIn,
+		"tokens_out", result.TokensOut,
+		"cost_usd", result.CostUSD,
+	)
+	_ = w.trace.Record(ctx, TraceEvent{
+		Phase:     "execute",
+		Step:      "task",
+		EventType: "response",
+		Agent:     agentName,
+		Model:     model,
+		TaskID:    string(task.ID),
+		TaskName:  task.Name,
+		FileExt:   "txt",
+		Content:   []byte(result.Output),
+		TokensIn:  result.TokensIn,
+		TokensOut: result.TokensOut,
+		CostUSD:   result.CostUSD,
+	})
 
 	if err := w.checkpoint.TaskCheckpoint(ctx, state, task, true); err != nil {
 		w.logger.Warn("failed to create task complete checkpoint", "error", err)
@@ -822,8 +1068,83 @@ func (w *WorkflowRunner) handleError(ctx context.Context, state *core.WorkflowSt
 		w.logger.Warn("failed to create error checkpoint", "checkpoint_error", err)
 	}
 	_ = w.state.Save(ctx, state) // Best-effort save on error path
+	w.endTrace(ctx)
 
 	return err
+}
+
+func (w *WorkflowRunner) startTrace(ctx context.Context, state *core.WorkflowState, prompt string) {
+	if w.trace == nil || !w.trace.Enabled() {
+		return
+	}
+
+	traceID := fmt.Sprintf("%s-%d", state.WorkflowID, time.Now().Unix())
+	info := TraceRunInfo{
+		RunID:        traceID,
+		WorkflowID:   string(state.WorkflowID),
+		PromptLength: len(prompt),
+		StartedAt:    time.Now().UTC(),
+		AppVersion:   w.config.AppVersion,
+		AppCommit:    w.config.AppCommit,
+		AppDate:      w.config.AppDate,
+		GitCommit:    w.config.GitCommit,
+		GitDirty:     w.config.GitDirty,
+	}
+
+	if err := w.trace.StartRun(ctx, info); err != nil {
+		w.logger.Warn("trace start failed", "error", err)
+		return
+	}
+
+	w.traceID = traceID
+	w.logger = w.logger.With("trace_id", traceID)
+	w.checkpoint = NewCheckpointManager(w.state, w.logger)
+
+	w.logger.Info("trace enabled", "dir", w.trace.Dir())
+}
+
+func (w *WorkflowRunner) endTrace(ctx context.Context) {
+	if w.trace == nil || !w.trace.Enabled() {
+		return
+	}
+
+	summary := w.trace.EndRun(ctx)
+	if summary.RunID == "" {
+		return
+	}
+
+	w.logger.Info("trace summary",
+		"prompts", summary.TotalPrompts,
+		"tokens_in", summary.TotalTokensIn,
+		"tokens_out", summary.TotalTokensOut,
+		"cost_usd", summary.TotalCostUSD,
+		"dir", summary.Dir,
+	)
+}
+
+func (w *WorkflowRunner) recordConsensus(ctx context.Context, step string, result ConsensusResult) {
+	if w.trace == nil || !w.trace.Enabled() {
+		return
+	}
+
+	data, err := json.Marshal(result)
+	if err != nil {
+		return
+	}
+
+	_ = w.trace.Record(ctx, TraceEvent{
+		Phase:     "consensus",
+		Step:      step,
+		EventType: "consensus",
+		FileExt:   "json",
+		Content:   data,
+		Metadata: map[string]interface{}{
+			"score":              result.Score,
+			"threshold":          w.consensus.Threshold,
+			"needs_v3":           result.NeedsV3,
+			"needs_human_review": result.NeedsHumanReview,
+		},
+	})
 }
 
 func (w *WorkflowRunner) buildContext(state *core.WorkflowState) string {
