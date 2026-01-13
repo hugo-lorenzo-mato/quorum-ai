@@ -121,6 +121,11 @@ func (r *ConsensusResult) HasConsensus(threshold float64) bool {
 	return r.Score >= threshold
 }
 
+// GetThreshold returns the consensus threshold value.
+func (c *ConsensusChecker) GetThreshold() float64 {
+	return c.Threshold
+}
+
 // pairwiseJaccard calculates Jaccard similarity for all pairs.
 func (c *ConsensusChecker) pairwiseJaccard(outputs []AnalysisOutput, extract func(AnalysisOutput) []string) []float64 {
 	scores := make([]float64, 0)

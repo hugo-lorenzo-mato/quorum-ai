@@ -15,8 +15,10 @@ import (
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/adapters/git"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/adapters/state"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/config"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/logging"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service/workflow"
 )
 
 var runCmd = &cobra.Command{
@@ -112,20 +114,18 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 	if timeout == 0 {
 		timeout = time.Hour
 	}
-	runnerConfig := &service.WorkflowRunnerConfig{
+	defaultAgent := viper.GetString("agents.default")
+	if defaultAgent == "" {
+		defaultAgent = "claude"
+	}
+	runnerConfig := &workflow.RunnerConfig{
 		Timeout:      timeout,
 		MaxRetries:   runMaxRetries,
 		DryRun:       runDryRun,
 		Sandbox:      viper.GetBool("workflow.sandbox"),
 		DenyTools:    viper.GetStringSlice("workflow.deny_tools"),
-		DefaultAgent: viper.GetString("agents.default"),
+		DefaultAgent: defaultAgent,
 		V3Agent:      "claude",
-		Trace:        traceCfg,
-		AppVersion:   appVersion,
-		AppCommit:    appCommit,
-		AppDate:      appDate,
-		GitCommit:    gitCommit,
-		GitDirty:     gitDirty,
 		AgentPhaseModels: map[string]map[string]string{
 			"claude":  cfg.Agents.Claude.PhaseModels,
 			"gemini":  cfg.Agents.Gemini.PhaseModels,
@@ -134,19 +134,44 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 			"aider":   cfg.Agents.Aider.PhaseModels,
 		},
 	}
-	if runnerConfig.DefaultAgent == "" {
-		runnerConfig.DefaultAgent = "claude"
-	}
 
-	// Create workflow runner
-	runner := service.NewWorkflowRunner(
-		runnerConfig,
-		stateManager,
-		registry,
-		consensusChecker,
-		promptRenderer,
-		logger,
-	)
+	// Store trace config for potential later use
+	_ = traceCfg
+	_ = gitCommit
+	_ = gitDirty
+
+	// Create service components needed by the modular runner
+	checkpointManager := service.NewCheckpointManager(stateManager, logger)
+	retryPolicy := service.NewRetryPolicy(service.WithMaxAttempts(runMaxRetries))
+	rateLimiterRegistry := service.NewRateLimiterRegistry()
+	dagBuilder := service.NewDAGBuilder()
+
+	// Create adapters for modular runner interfaces
+	consensusAdapter := workflow.NewConsensusAdapter(consensusChecker)
+	checkpointAdapter := workflow.NewCheckpointAdapter(checkpointManager, ctx)
+	retryAdapter := workflow.NewRetryAdapter(retryPolicy, ctx)
+	rateLimiterAdapter := workflow.NewRateLimiterRegistryAdapter(rateLimiterRegistry, ctx)
+	promptAdapter := workflow.NewPromptRendererAdapter(promptRenderer)
+	resumeAdapter := workflow.NewResumePointAdapter(checkpointManager)
+	dagAdapter := workflow.NewDAGAdapter(dagBuilder)
+
+	// Create state manager adapter that implements workflow.StateManager
+	stateAdapter := &stateManagerAdapter{sm: stateManager}
+
+	// Create workflow runner using modular architecture (ADR-0005)
+	runner := workflow.NewRunner(workflow.RunnerDeps{
+		Config:         runnerConfig,
+		State:          stateAdapter,
+		Agents:         registry,
+		Consensus:      consensusAdapter,
+		DAG:            dagAdapter,
+		Checkpoint:     checkpointAdapter,
+		ResumeProvider: resumeAdapter,
+		Prompts:        promptAdapter,
+		Retry:          retryAdapter,
+		RateLimits:     rateLimiterAdapter,
+		Logger:         logger,
+	})
 
 	// Resume or run new workflow
 	if runResume {
@@ -313,4 +338,25 @@ func getPrompt(args []string, file string) (string, error) {
 	}
 
 	return "", fmt.Errorf("prompt required: provide as argument or use --file")
+}
+
+// stateManagerAdapter adapts state.JSONStateManager to workflow.StateManager interface.
+type stateManagerAdapter struct {
+	sm *state.JSONStateManager
+}
+
+func (a *stateManagerAdapter) Save(ctx context.Context, st *core.WorkflowState) error {
+	return a.sm.Save(ctx, st)
+}
+
+func (a *stateManagerAdapter) Load(ctx context.Context) (*core.WorkflowState, error) {
+	return a.sm.Load(ctx)
+}
+
+func (a *stateManagerAdapter) AcquireLock(ctx context.Context) error {
+	return a.sm.AcquireLock(ctx)
+}
+
+func (a *stateManagerAdapter) ReleaseLock(ctx context.Context) error {
+	return a.sm.ReleaseLock(ctx)
 }
