@@ -109,6 +109,33 @@ Example `trace.jsonl` entry:
 {"seq":1,"ts":"2026-01-13T00:00:00Z","event_type":"prompt","phase":"analyze","step":"v1","agent":"claude","model":"claude-sonnet-4-20250514","tokens_in":120,"tokens_out":0,"cost_usd":0.0023,"hash_raw":"...","hash_stored":"..."}
 ```
 
+Example `run.json` (trimmed):
+```json
+{
+  "run_id": "wf-1234-1700000000-1700000000",
+  "workflow_id": "wf-1234-1700000000",
+  "prompt_length": 120,
+  "started_at": "2026-01-13T00:00:00Z",
+  "ended_at": "2026-01-13T00:02:10Z",
+  "app_version": "0.4.0",
+  "app_commit": "abc1234",
+  "git_commit": "def5678",
+  "git_dirty": false,
+  "config": {
+    "mode": "summary",
+    "dir": ".quorum/traces"
+  },
+  "summary": {
+    "total_prompts": 6,
+    "total_tokens_in": 1234,
+    "total_tokens_out": 987,
+    "total_cost_usd": 0.0421,
+    "total_files": 0,
+    "total_bytes": 0
+  }
+}
+```
+
 ---
 
 ## Architecture
