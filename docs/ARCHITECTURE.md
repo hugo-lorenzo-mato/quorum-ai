@@ -168,10 +168,15 @@ Responsibilities:
 
 #### GitHub Adapter (`internal/adapters/github/`)
 
+**Status**: Implemented but not yet integrated into workflow runner.
+
 Responsibilities:
 
 - PR creation and issue management via `gh` CLI
 - CI status polling and wait
+
+Note: The adapter is complete and tested but requires manual instantiation.
+Future work may integrate it into the workflow runner for automated PR creation.
 
 ### 4. Configuration (`internal/config/`)
 
