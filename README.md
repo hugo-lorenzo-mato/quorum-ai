@@ -138,6 +138,22 @@ Example `run.json` (trimmed):
 }
 ```
 
+Trace configuration (optional):
+```yaml
+trace:
+  mode: summary        # off | summary | full
+  dir: .quorum/traces
+  redact: true
+  max_bytes: 262144
+  total_max_bytes: 10485760
+  max_files: 500
+```
+
+Notes:
+- `summary` never stores prompt/response payloads on disk.
+- `full` payloads are redacted and truncated based on limits; hashes remain for integrity checks.
+- `quorum trace --json` outputs the raw manifest for automation.
+
 ---
 
 ## Architecture
