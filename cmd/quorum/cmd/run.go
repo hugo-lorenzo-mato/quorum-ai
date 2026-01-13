@@ -89,12 +89,20 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 		return fmt.Errorf("configuring agents: %w", err)
 	}
 
-	// Create consensus checker
+	// Create consensus checker with 80/60/50 escalation thresholds
 	threshold := viper.GetFloat64("consensus.threshold")
 	if threshold == 0 {
-		threshold = 0.75
+		threshold = 0.80
 	}
-	consensusChecker := service.NewConsensusChecker(threshold, service.DefaultWeights())
+	v2Threshold := viper.GetFloat64("consensus.v2_threshold")
+	if v2Threshold == 0 {
+		v2Threshold = 0.60
+	}
+	humanThreshold := viper.GetFloat64("consensus.human_threshold")
+	if humanThreshold == 0 {
+		humanThreshold = 0.50
+	}
+	consensusChecker := service.NewConsensusCheckerWithThresholds(threshold, v2Threshold, humanThreshold, service.DefaultWeights())
 
 	// Create prompt renderer
 	promptRenderer, err := service.NewPromptRenderer()

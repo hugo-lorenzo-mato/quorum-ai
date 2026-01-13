@@ -10,20 +10,38 @@ import (
 
 // mockConsensusEvaluator implements ConsensusEvaluator for testing.
 type mockConsensusEvaluator struct {
-	score     float64
-	needsV3   bool
-	threshold float64
+	score            float64
+	needsV3          bool
+	needsHumanReview bool
+	threshold        float64
+	v2Threshold      float64
+	humanThreshold   float64
 }
 
 func (m *mockConsensusEvaluator) Evaluate(_ []AnalysisOutput) ConsensusResult {
 	return ConsensusResult{
-		Score:   m.score,
-		NeedsV3: m.needsV3,
+		Score:            m.score,
+		NeedsV3:          m.needsV3,
+		NeedsHumanReview: m.needsHumanReview,
 	}
 }
 
 func (m *mockConsensusEvaluator) Threshold() float64 {
 	return m.threshold
+}
+
+func (m *mockConsensusEvaluator) V2Threshold() float64 {
+	if m.v2Threshold == 0 {
+		return 0.60
+	}
+	return m.v2Threshold
+}
+
+func (m *mockConsensusEvaluator) HumanThreshold() float64 {
+	if m.humanThreshold == 0 {
+		return 0.50
+	}
+	return m.humanThreshold
 }
 
 // mockAgentRegistry implements core.AgentRegistry for testing.

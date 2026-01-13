@@ -133,10 +133,14 @@ github:
   # Remote name
   remote: origin
 
-# Consensus configuration
+# Consensus configuration (80/60/50 escalation policy)
 consensus:
   # Minimum consensus score to proceed (0.0-1.0)
-  threshold: 0.75
+  threshold: 0.80
+  # Threshold for V2 critique escalation (score below this triggers V2+V3)
+  v2_threshold: 0.60
+  # Threshold for human review (score below this aborts workflow)
+  human_threshold: 0.50
   # Category weights for Jaccard similarity
   weights:
     # Weight for claims/findings (40%)

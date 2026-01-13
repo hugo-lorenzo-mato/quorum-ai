@@ -38,8 +38,8 @@ func TestLoader_Defaults(t *testing.T) {
 	}
 
 	// Verify consensus defaults
-	if cfg.Consensus.Threshold != 0.75 {
-		t.Errorf("Consensus.Threshold = %f, want %f", cfg.Consensus.Threshold, 0.75)
+	if cfg.Consensus.Threshold != 0.80 {
+		t.Errorf("Consensus.Threshold = %f, want %f", cfg.Consensus.Threshold, 0.80)
 	}
 }
 
@@ -298,8 +298,8 @@ func TestLoader_DefaultConfigFile(t *testing.T) {
 	if cfg.Agents.Default != "claude" {
 		t.Errorf("Agents.Default = %q, want %q", cfg.Agents.Default, "claude")
 	}
-	if cfg.Consensus.Threshold != 0.75 {
-		t.Errorf("Consensus.Threshold = %f, want %f", cfg.Consensus.Threshold, 0.75)
+	if cfg.Consensus.Threshold != 0.80 {
+		t.Errorf("Consensus.Threshold = %f, want %f", cfg.Consensus.Threshold, 0.80)
 	}
 	if cfg.Costs.MaxPerWorkflow != 10.0 {
 		t.Errorf("Costs.MaxPerWorkflow = %f, want %f", cfg.Costs.MaxPerWorkflow, 10.0)

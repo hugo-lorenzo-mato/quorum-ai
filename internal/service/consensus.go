@@ -8,8 +8,10 @@ import (
 
 // ConsensusChecker evaluates agreement between agent outputs.
 type ConsensusChecker struct {
-	Threshold float64
-	Weights   CategoryWeights
+	Threshold      float64
+	V2Threshold    float64
+	HumanThreshold float64
+	Weights        CategoryWeights
 }
 
 // CategoryWeights defines the importance of each category.
@@ -31,8 +33,20 @@ func DefaultWeights() CategoryWeights {
 // NewConsensusChecker creates a new consensus checker.
 func NewConsensusChecker(threshold float64, weights CategoryWeights) *ConsensusChecker {
 	return &ConsensusChecker{
-		Threshold: threshold,
-		Weights:   weights,
+		Threshold:      threshold,
+		V2Threshold:    0.60, // Default V2 escalation threshold
+		HumanThreshold: 0.50, // Default human review threshold
+		Weights:        weights,
+	}
+}
+
+// NewConsensusCheckerWithThresholds creates a consensus checker with explicit escalation thresholds.
+func NewConsensusCheckerWithThresholds(threshold, v2Threshold, humanThreshold float64, weights CategoryWeights) *ConsensusChecker {
+	return &ConsensusChecker{
+		Threshold:      threshold,
+		V2Threshold:    v2Threshold,
+		HumanThreshold: humanThreshold,
+		Weights:        weights,
 	}
 }
 
@@ -109,9 +123,12 @@ func (c *ConsensusChecker) Evaluate(outputs []AnalysisOutput) ConsensusResult {
 		Agreement:   agreement,
 	}
 
-	// Determine escalation
-	result.NeedsV3 = totalScore < c.Threshold && totalScore >= c.Threshold*0.7
-	result.NeedsHumanReview = totalScore < c.Threshold*0.7
+	// Determine escalation using explicit 80/60/50 thresholds:
+	// - score >= threshold (80%): approved, no escalation
+	// - score < threshold but >= human_threshold: needs escalation (V2, possibly V3)
+	// - score < human_threshold (50%): requires human review, abort execution
+	result.NeedsV3 = totalScore < c.Threshold
+	result.NeedsHumanReview = totalScore < c.HumanThreshold
 
 	return result
 }
@@ -124,6 +141,16 @@ func (r *ConsensusResult) HasConsensus(threshold float64) bool {
 // GetThreshold returns the consensus threshold value.
 func (c *ConsensusChecker) GetThreshold() float64 {
 	return c.Threshold
+}
+
+// GetV2Threshold returns the V2 escalation threshold.
+func (c *ConsensusChecker) GetV2Threshold() float64 {
+	return c.V2Threshold
+}
+
+// GetHumanThreshold returns the human review threshold.
+func (c *ConsensusChecker) GetHumanThreshold() float64 {
+	return c.HumanThreshold
 }
 
 // pairwiseJaccard calculates Jaccard similarity for all pairs.

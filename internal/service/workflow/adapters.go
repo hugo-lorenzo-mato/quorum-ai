@@ -55,6 +55,16 @@ func (a *ConsensusAdapter) Threshold() float64 {
 	return a.checker.GetThreshold()
 }
 
+// V2Threshold returns the V2 escalation threshold.
+func (a *ConsensusAdapter) V2Threshold() float64 {
+	return a.checker.GetV2Threshold()
+}
+
+// HumanThreshold returns the human review threshold.
+func (a *ConsensusAdapter) HumanThreshold() float64 {
+	return a.checker.GetHumanThreshold()
+}
+
 // CheckpointAdapter wraps service.CheckpointManager to satisfy CheckpointCreator.
 type CheckpointAdapter struct {
 	manager *service.CheckpointManager

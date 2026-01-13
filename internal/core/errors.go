@@ -129,6 +129,20 @@ func ErrConsensus(message string) *DomainError {
 	}
 }
 
+// ErrHumanReviewRequired creates an error indicating human review is required.
+func ErrHumanReviewRequired(score float64, threshold float64) *DomainError {
+	return &DomainError{
+		Category:  ErrCatConsensus,
+		Code:      CodeHumanReviewRequired,
+		Message:   fmt.Sprintf("consensus score %.2f is below human threshold %.2f, manual review required", score, threshold),
+		Retryable: false,
+		Details: map[string]interface{}{
+			"score":           score,
+			"human_threshold": threshold,
+		},
+	}
+}
+
 // ErrAuth creates an authentication error.
 func ErrAuth(message string) *DomainError {
 	return &DomainError{
@@ -179,9 +193,10 @@ const (
 	CodeInvalidState      = "INVALID_STATE"
 	CodeLockAcquireFailed = "LOCK_ACQUIRE_FAILED"
 	CodeStateCorrupted    = "STATE_CORRUPTED"
-	CodeAgentUnavailable  = "AGENT_UNAVAILABLE"
-	CodeConsensusLow      = "CONSENSUS_BELOW_THRESHOLD"
-	CodeChecksFailed      = "CHECKS_FAILED"
+	CodeAgentUnavailable     = "AGENT_UNAVAILABLE"
+	CodeConsensusLow         = "CONSENSUS_BELOW_THRESHOLD"
+	CodeHumanReviewRequired  = "HUMAN_REVIEW_REQUIRED"
+	CodeChecksFailed         = "CHECKS_FAILED"
 	CodeMergeConflict     = "MERGE_CONFLICT"
 
 	// Validation error codes

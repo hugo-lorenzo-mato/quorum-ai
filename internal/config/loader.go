@@ -151,8 +151,10 @@ func (l *Loader) setDefaults() {
 	// GitHub defaults
 	l.v.SetDefault("github.remote", "origin")
 
-	// Consensus defaults
-	l.v.SetDefault("consensus.threshold", 0.75)
+	// Consensus defaults (80/60/50 escalation policy)
+	l.v.SetDefault("consensus.threshold", 0.80)
+	l.v.SetDefault("consensus.v2_threshold", 0.60)
+	l.v.SetDefault("consensus.human_threshold", 0.50)
 	l.v.SetDefault("consensus.weights.claims", 0.40)
 	l.v.SetDefault("consensus.weights.risks", 0.30)
 	l.v.SetDefault("consensus.weights.recommendations", 0.30)

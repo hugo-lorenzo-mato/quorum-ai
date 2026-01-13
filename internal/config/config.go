@@ -84,8 +84,10 @@ type GitHubConfig struct {
 
 // ConsensusConfig configures consensus calculation.
 type ConsensusConfig struct {
-	Threshold float64         `mapstructure:"threshold"`
-	Weights   ConsensusWeight `mapstructure:"weights"`
+	Threshold      float64         `mapstructure:"threshold"`
+	V2Threshold    float64         `mapstructure:"v2_threshold"`
+	HumanThreshold float64         `mapstructure:"human_threshold"`
+	Weights        ConsensusWeight `mapstructure:"weights"`
 }
 
 // ConsensusWeight configures component weights for consensus.

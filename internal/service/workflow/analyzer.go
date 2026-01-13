@@ -25,6 +25,8 @@ type AnalysisOutput struct {
 type ConsensusEvaluator interface {
 	Evaluate(outputs []AnalysisOutput) ConsensusResult
 	Threshold() float64
+	V2Threshold() float64
+	HumanThreshold() float64
 }
 
 // Analyzer runs the analysis phase with V1/V2/V3 protocol.
@@ -63,17 +65,18 @@ func (a *Analyzer) Run(ctx context.Context, wctx *Context) error {
 	wctx.Logger.Info("V1 consensus evaluated",
 		"score", consensusResult.Score,
 		"threshold", a.consensus.Threshold(),
-		"needs_v3", consensusResult.NeedsV3,
+		"needs_escalation", consensusResult.NeedsV3,
+		"needs_human_review", consensusResult.NeedsHumanReview,
 	)
 
-	// V2: If low consensus, run critique
+	// V2/V3 escalation: If consensus below approval threshold
 	if consensusResult.NeedsV3 {
 		v2Outputs, err := a.runV2Critique(ctx, wctx, v1Outputs)
 		if err != nil {
 			return fmt.Errorf("V2 critique: %w", err)
 		}
 
-		// Re-evaluate consensus
+		// Re-evaluate consensus after V2
 		allOutputs := make([]AnalysisOutput, 0, len(v1Outputs)+len(v2Outputs))
 		allOutputs = append(allOutputs, v1Outputs...)
 		allOutputs = append(allOutputs, v2Outputs...)
@@ -82,12 +85,31 @@ func (a *Analyzer) Run(ctx context.Context, wctx *Context) error {
 			wctx.Logger.Warn("failed to create V2 consensus checkpoint", "error", err)
 		}
 
-		// V3: If still low, run reconciliation
-		if consensusResult.NeedsV3 || consensusResult.NeedsHumanReview {
+		wctx.Logger.Info("V2 consensus evaluated",
+			"score", consensusResult.Score,
+			"needs_v3", consensusResult.Score < a.consensus.V2Threshold(),
+			"needs_human_review", consensusResult.NeedsHumanReview,
+		)
+
+		// V3: If score below V2 threshold, run reconciliation
+		if consensusResult.Score < a.consensus.V2Threshold() {
 			if err := a.runV3Reconciliation(ctx, wctx, v1Outputs, v2Outputs, consensusResult); err != nil {
 				return fmt.Errorf("V3 reconciliation: %w", err)
 			}
+
+			// Final evaluation after V3
+			// Note: V3 doesn't produce new structured outputs, it synthesizes existing ones
+			// The NeedsHumanReview flag from the last evaluation determines if we must abort
 		}
+	}
+
+	// Check if human review is still required after all escalation attempts
+	if consensusResult.NeedsHumanReview {
+		wctx.Logger.Error("consensus score below human threshold, aborting workflow",
+			"score", consensusResult.Score,
+			"human_threshold", a.consensus.HumanThreshold(),
+		)
+		return core.ErrHumanReviewRequired(consensusResult.Score, a.consensus.HumanThreshold())
 	}
 
 	// Consolidate analysis
