@@ -32,7 +32,7 @@ drift.
 ### 5. Constraints
 
 - Local execution only for v1.
-- English prompts and outputs recommended (multi-language supported but untested).
+- Multi-language prompts supported (see ADR-0007).
 - No plugin system, web dashboard, or multi-repo orchestration in v1.
 
 ## References
