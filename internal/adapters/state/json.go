@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/fsutil"
 )
 
 // JSONStateManager implements StateManager with JSON file storage.
@@ -65,7 +66,7 @@ type stateEnvelope struct {
 func (m *JSONStateManager) Save(_ context.Context, state *core.WorkflowState) error {
 	// Ensure directory exists
 	dir := filepath.Dir(m.path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return fmt.Errorf("creating state directory: %w", err)
 	}
 
@@ -107,7 +108,7 @@ func (m *JSONStateManager) Save(_ context.Context, state *core.WorkflowState) er
 	}
 
 	// Atomic write
-	if err := atomicWriteFile(m.path, data, 0o644); err != nil {
+	if err := atomicWriteFile(m.path, data, 0o600); err != nil {
 		return fmt.Errorf("writing state file: %w", err)
 	}
 
@@ -133,7 +134,7 @@ func (m *JSONStateManager) Load(_ context.Context) (*core.WorkflowState, error) 
 }
 
 func (m *JSONStateManager) loadFromPath(path string) (*core.WorkflowState, error) {
-	data, err := os.ReadFile(path)
+	data, err := fsutil.ReadFileScoped(path)
 	if err != nil {
 		return nil, fmt.Errorf("reading file: %w", err)
 	}
@@ -163,11 +164,11 @@ func (m *JSONStateManager) loadFromPath(path string) (*core.WorkflowState, error
 }
 
 func (m *JSONStateManager) createBackup() error {
-	data, err := os.ReadFile(m.path)
+	data, err := fsutil.ReadFileScoped(m.path)
 	if err != nil {
 		return err
 	}
-	return atomicWriteFile(m.backupPath, data, 0o644)
+	return atomicWriteFile(m.backupPath, data, 0o600)
 }
 
 // Exists checks if state file exists.
@@ -200,12 +201,12 @@ type lockInfo struct {
 func (m *JSONStateManager) AcquireLock(_ context.Context) error {
 	// Ensure directory exists
 	dir := filepath.Dir(m.lockPath)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return fmt.Errorf("creating lock directory: %w", err)
 	}
 
 	// Check for existing lock
-	if data, err := os.ReadFile(m.lockPath); err == nil {
+	if data, err := fsutil.ReadFileScoped(m.lockPath); err == nil {
 		var info lockInfo
 		if err := json.Unmarshal(data, &info); err == nil {
 			// Check if lock is stale
@@ -217,8 +218,12 @@ func (m *JSONStateManager) AcquireLock(_ context.Context) error {
 				}
 			}
 			// Stale lock, remove it
-			os.Remove(m.lockPath)
+			if err := os.Remove(m.lockPath); err != nil && !os.IsNotExist(err) {
+				return fmt.Errorf("removing stale lock: %w", err)
+			}
 		}
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("reading lock file: %w", err)
 	}
 
 	// Create lock file
@@ -235,7 +240,7 @@ func (m *JSONStateManager) AcquireLock(_ context.Context) error {
 	}
 
 	// Write lock file exclusively
-	f, err := os.OpenFile(m.lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
+	f, err := os.OpenFile(m.lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
 		if os.IsExist(err) {
 			return core.ErrState("LOCK_ACQUIRE_FAILED", "lock file created by another process")
@@ -245,7 +250,9 @@ func (m *JSONStateManager) AcquireLock(_ context.Context) error {
 	defer f.Close()
 
 	if _, err := f.Write(data); err != nil {
-		os.Remove(m.lockPath)
+		if rmErr := os.Remove(m.lockPath); rmErr != nil && !os.IsNotExist(rmErr) {
+			return fmt.Errorf("writing lock file: %w (cleanup failed: %v)", err, rmErr)
+		}
 		return fmt.Errorf("writing lock file: %w", err)
 	}
 
@@ -255,7 +262,7 @@ func (m *JSONStateManager) AcquireLock(_ context.Context) error {
 // ReleaseLock releases the lock.
 func (m *JSONStateManager) ReleaseLock(_ context.Context) error {
 	// Verify we own the lock
-	data, err := os.ReadFile(m.lockPath)
+	data, err := fsutil.ReadFileScoped(m.lockPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil // Already released
@@ -272,7 +279,10 @@ func (m *JSONStateManager) ReleaseLock(_ context.Context) error {
 		return core.ErrState("LOCK_RELEASE_FAILED", "lock owned by different process")
 	}
 
-	return os.Remove(m.lockPath)
+	if err := os.Remove(m.lockPath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("removing lock file: %w", err)
+	}
+	return nil
 }
 
 // Path returns the state file path.
@@ -346,12 +356,12 @@ func migrateStateFile(src, dst string, logger interface {
 }) error {
 	// Ensure destination directory exists
 	dstDir := filepath.Dir(dst)
-	if err := os.MkdirAll(dstDir, 0o755); err != nil {
+	if err := os.MkdirAll(dstDir, 0o750); err != nil {
 		return fmt.Errorf("creating directory %s: %w", dstDir, err)
 	}
 
 	// Read source file
-	data, err := os.ReadFile(src)
+	data, err := fsutil.ReadFileScoped(src)
 	if err != nil {
 		return fmt.Errorf("reading %s: %w", src, err)
 	}

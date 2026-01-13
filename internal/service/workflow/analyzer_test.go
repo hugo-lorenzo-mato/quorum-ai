@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
@@ -109,17 +110,24 @@ func (m *mockAgent) Execute(_ context.Context, _ core.ExecuteOptions) (*core.Exe
 }
 
 // mockRateLimiterGetter implements RateLimiterGetter for testing.
-type mockRateLimiterGetter struct{}
+type mockRateLimiterGetter struct {
+	limiter RateLimiter
+}
 
 func (m *mockRateLimiterGetter) Get(_ string) RateLimiter {
+	if m.limiter != nil {
+		return m.limiter
+	}
 	return &mockRateLimiter{}
 }
 
 // mockRateLimiter implements RateLimiter for testing.
-type mockRateLimiter struct{}
+type mockRateLimiter struct {
+	acquireErr error
+}
 
 func (m *mockRateLimiter) Acquire() error {
-	return nil
+	return m.acquireErr
 }
 
 // mockRetryExecutor implements RetryExecutor for testing.
@@ -134,54 +142,86 @@ func (m *mockRetryExecutor) ExecuteWithNotify(fn func() error, _ func(int, error
 }
 
 // mockPromptRenderer implements PromptRenderer for testing.
-type mockPromptRenderer struct{}
+type mockPromptRenderer struct {
+	v1Err   error
+	v2Err   error
+	v3Err   error
+	planErr error
+	taskErr error
+}
 
 func (m *mockPromptRenderer) RenderAnalyzeV1(_ AnalyzeV1Params) (string, error) {
+	if m.v1Err != nil {
+		return "", m.v1Err
+	}
 	return "analyze v1 prompt", nil
 }
 
 func (m *mockPromptRenderer) RenderAnalyzeV2(_ AnalyzeV2Params) (string, error) {
+	if m.v2Err != nil {
+		return "", m.v2Err
+	}
 	return "analyze v2 prompt", nil
 }
 
 func (m *mockPromptRenderer) RenderAnalyzeV3(_ AnalyzeV3Params) (string, error) {
+	if m.v3Err != nil {
+		return "", m.v3Err
+	}
 	return "analyze v3 prompt", nil
 }
 
 func (m *mockPromptRenderer) RenderPlanGenerate(_ PlanParams) (string, error) {
+	if m.planErr != nil {
+		return "", m.planErr
+	}
 	return "plan prompt", nil
 }
 
 func (m *mockPromptRenderer) RenderTaskExecute(_ TaskExecuteParams) (string, error) {
+	if m.taskErr != nil {
+		return "", m.taskErr
+	}
 	return "task prompt", nil
 }
 
 // mockCheckpointCreator implements CheckpointCreator for testing.
 type mockCheckpointCreator struct {
+	mu          sync.Mutex
 	checkpoints []string
 }
 
-func (m *mockCheckpointCreator) PhaseCheckpoint(_ *core.WorkflowState, phase core.Phase, completed bool) error {
+func (m *mockCheckpointCreator) PhaseCheckpoint(_ *core.WorkflowState, phase core.Phase, _ bool) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.checkpoints = append(m.checkpoints, string(phase))
 	return nil
 }
 
 func (m *mockCheckpointCreator) TaskCheckpoint(_ *core.WorkflowState, task *core.Task, _ bool) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.checkpoints = append(m.checkpoints, string(task.ID))
 	return nil
 }
 
 func (m *mockCheckpointCreator) ConsensusCheckpoint(_ *core.WorkflowState, _ ConsensusResult) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.checkpoints = append(m.checkpoints, "consensus")
 	return nil
 }
 
 func (m *mockCheckpointCreator) ErrorCheckpoint(_ *core.WorkflowState, _ error) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.checkpoints = append(m.checkpoints, "error")
 	return nil
 }
 
 func (m *mockCheckpointCreator) CreateCheckpoint(_ *core.WorkflowState, checkpointType string, _ map[string]interface{}) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.checkpoints = append(m.checkpoints, checkpointType)
 	return nil
 }

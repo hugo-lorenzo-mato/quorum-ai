@@ -158,7 +158,8 @@ func (p *RetryPolicy) CalculateDelayNoJitter(attempt int) time.Duration {
 func addJitter(delay, factor float64) float64 {
 	jitter := delay * factor
 	// Random value between -jitter and +jitter
-	randomJitter := (rand.Float64()*2 - 1) * jitter //nolint:gosec // Non-security random for jitter
+	// #nosec G404 -- non-crypto jitter
+	randomJitter := (rand.Float64()*2 - 1) * jitter
 	return delay + randomJitter
 }
 

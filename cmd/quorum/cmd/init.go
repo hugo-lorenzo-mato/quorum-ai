@@ -106,7 +106,7 @@ state:
   backup_path: ".quorum/state/state.json.bak"
 `
 
-	if err := os.WriteFile(configPath, []byte(defaultConfig), 0o644); err != nil { //nolint:gosec // Config file needs to be readable
+	if err := os.WriteFile(configPath, []byte(defaultConfig), 0o600); err != nil {
 		return fmt.Errorf("writing config: %w", err)
 	}
 
@@ -118,7 +118,7 @@ state:
 	}
 
 	for _, dir := range dirs {
-		if err := os.MkdirAll(filepath.Join(cwd, dir), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Join(cwd, dir), 0o750); err != nil {
 			return fmt.Errorf("creating directory %s: %w", dir, err)
 		}
 	}

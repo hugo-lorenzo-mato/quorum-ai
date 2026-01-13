@@ -17,6 +17,7 @@ import (
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/adapters/state"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/config"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/fsutil"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/logging"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service/workflow"
@@ -463,7 +464,7 @@ func configureAgentsFromConfig(registry *cli.Registry, cfg *config.Config, loade
 
 func getPrompt(args []string, file string) (string, error) {
 	if file != "" {
-		data, err := os.ReadFile(file)
+		data, err := fsutil.ReadFileScoped(file)
 		if err != nil {
 			return "", fmt.Errorf("reading prompt file: %w", err)
 		}

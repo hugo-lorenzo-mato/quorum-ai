@@ -109,15 +109,18 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 		"task_name", task.Name,
 	)
 
-	// Update task state
+	// Update task state (with lock for concurrent access)
+	wctx.Lock()
 	taskState := wctx.State.Tasks[task.ID]
 	if taskState == nil {
+		wctx.Unlock()
 		return fmt.Errorf("task state not found: %s", task.ID)
 	}
 
 	startTime := time.Now()
 	taskState.Status = core.TaskStatusRunning
 	taskState.StartedAt = &startTime
+	wctx.Unlock()
 
 	// Notify output that task has started
 	if wctx.Output != nil {
@@ -144,9 +147,11 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 
 	// Skip in dry-run mode
 	if wctx.Config.DryRun {
+		wctx.Lock()
 		taskState.Status = core.TaskStatusCompleted
 		completedAt := time.Now()
 		taskState.CompletedAt = &completedAt
+		wctx.Unlock()
 		return nil
 	}
 
@@ -162,7 +167,9 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 			)
 		} else {
 			workDir = wtInfo.Path
+			wctx.Lock()
 			taskState.WorktreePath = workDir
+			wctx.Unlock()
 			worktreeCreated = true
 			wctx.Logger.Info("created worktree for task",
 				"task_id", task.ID,
@@ -195,8 +202,10 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 
 	agent, err := wctx.Agents.Get(agentName)
 	if err != nil {
+		wctx.Lock()
 		taskState.Status = core.TaskStatusFailed
 		taskState.Error = err.Error()
+		wctx.Unlock()
 		taskErr = err
 		return err
 	}
@@ -204,8 +213,10 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 	// Acquire rate limit
 	limiter := wctx.RateLimits.Get(agentName)
 	if err := limiter.Acquire(); err != nil {
+		wctx.Lock()
 		taskState.Status = core.TaskStatusFailed
 		taskState.Error = err.Error()
+		wctx.Unlock()
 		taskErr = err
 		return fmt.Errorf("rate limit: %w", err)
 	}
@@ -213,11 +224,13 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 	// Render task prompt
 	prompt, err := wctx.Prompts.RenderTaskExecute(TaskExecuteParams{
 		Task:    task,
-		Context: BuildContextString(wctx.State),
+		Context: wctx.GetContextString(),
 	})
 	if err != nil {
+		wctx.Lock()
 		taskState.Status = core.TaskStatusFailed
 		taskState.Error = err.Error()
+		wctx.Unlock()
 		taskErr = err
 		return err
 	}
@@ -246,16 +259,21 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 		retryCount = attempt
 	})
 
+	wctx.Lock()
 	taskState.Retries = retryCount
+	wctx.Unlock()
 
 	if err != nil {
+		wctx.Lock()
 		taskState.Status = core.TaskStatusFailed
 		taskState.Error = err.Error()
+		wctx.Unlock()
 		taskErr = err
 		return err
 	}
 
 	// Update task metrics
+	wctx.Lock()
 	taskState.TokensIn = result.TokensIn
 	taskState.TokensOut = result.TokensOut
 	taskState.CostUSD = result.CostUSD
@@ -269,13 +287,16 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 		wctx.State.Metrics.TotalTokensOut += result.TokensOut
 		wctx.State.Metrics.TotalCostUSD += result.CostUSD
 	}
+	wctx.Unlock()
 
 	// Check cost limits
 	if wctx.Config != nil {
 		// Check task cost limit
 		if wctx.Config.MaxCostPerTask > 0 && result.CostUSD > wctx.Config.MaxCostPerTask {
+			wctx.Lock()
 			taskState.Status = core.TaskStatusFailed
 			taskState.Error = "task budget exceeded"
+			wctx.Unlock()
 			taskErr = core.ErrTaskBudgetExceeded(string(task.ID), result.CostUSD, wctx.Config.MaxCostPerTask)
 			wctx.Logger.Error("task budget exceeded",
 				"task_id", task.ID,
@@ -286,14 +307,18 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 		}
 
 		// Check workflow cost limit
-		if wctx.Config.MaxCostPerWorkflow > 0 && wctx.State.Metrics != nil {
-			if wctx.State.Metrics.TotalCostUSD > wctx.Config.MaxCostPerWorkflow {
-				wctx.Logger.Error("workflow budget exceeded",
-					"total_cost", wctx.State.Metrics.TotalCostUSD,
-					"limit", wctx.Config.MaxCostPerWorkflow,
-				)
-				return core.ErrWorkflowBudgetExceeded(wctx.State.Metrics.TotalCostUSD, wctx.Config.MaxCostPerWorkflow)
-			}
+		wctx.RLock()
+		totalCost := float64(0)
+		if wctx.State.Metrics != nil {
+			totalCost = wctx.State.Metrics.TotalCostUSD
+		}
+		wctx.RUnlock()
+		if wctx.Config.MaxCostPerWorkflow > 0 && totalCost > wctx.Config.MaxCostPerWorkflow {
+			wctx.Logger.Error("workflow budget exceeded",
+				"total_cost", totalCost,
+				"limit", wctx.Config.MaxCostPerWorkflow,
+			)
+			return core.ErrWorkflowBudgetExceeded(totalCost, wctx.Config.MaxCostPerWorkflow)
 		}
 	}
 

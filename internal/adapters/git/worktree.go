@@ -189,7 +189,7 @@ func (m *WorktreeManager) Create(ctx context.Context, name, branch string) (*Wor
 	}
 
 	// Ensure base directory exists
-	if err := os.MkdirAll(m.baseDir, 0o755); err != nil {
+	if err := os.MkdirAll(m.baseDir, 0o750); err != nil {
 		return nil, fmt.Errorf("creating worktree directory: %w", err)
 	}
 
@@ -257,7 +257,7 @@ func (m *WorktreeManager) CreateFromCommit(ctx context.Context, name, commit str
 		return nil, err
 	}
 
-	if err := os.MkdirAll(m.baseDir, 0o755); err != nil {
+	if err := os.MkdirAll(m.baseDir, 0o750); err != nil {
 		return nil, fmt.Errorf("creating worktree directory: %w", err)
 	}
 

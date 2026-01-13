@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/fsutil"
 )
 
 // ExperimentConfig defines a validation experiment.
@@ -110,7 +112,7 @@ func (e *ExperimentRunner) SetDryRun(dryRun bool) {
 
 // LoadConfig loads an experiment configuration from file.
 func LoadConfig(path string) (*ExperimentConfig, error) {
-	data, err := os.ReadFile(path)
+	data, err := fsutil.ReadFileScoped(path)
 	if err != nil {
 		return nil, fmt.Errorf("reading config file: %w", err)
 	}
@@ -312,7 +314,7 @@ func (e *ExperimentRunner) calculateSummary(runs []RunResult) Summary {
 // SaveResult saves the experiment result to a file.
 func SaveResult(result *ExperimentResult, path string) error {
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return fmt.Errorf("creating output directory: %w", err)
 	}
 
@@ -321,7 +323,7 @@ func SaveResult(result *ExperimentResult, path string) error {
 		return fmt.Errorf("marshaling result: %w", err)
 	}
 
-	if err := os.WriteFile(path, data, 0o644); err != nil {
+	if err := os.WriteFile(path, data, 0o600); err != nil {
 		return fmt.Errorf("writing result file: %w", err)
 	}
 

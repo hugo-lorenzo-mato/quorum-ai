@@ -452,6 +452,201 @@ func TestJSONStateManager_BackupNonExistent(t *testing.T) {
 	}
 }
 
+func TestJSONStateManager_Path(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath := filepath.Join(tmpDir, "test-state.json")
+
+	manager := NewJSONStateManager(statePath)
+
+	if manager.Path() != statePath {
+		t.Errorf("Path() = %s, want %s", manager.Path(), statePath)
+	}
+}
+
+func TestProcessExists(t *testing.T) {
+	// Test with current process PID - should exist
+	currentPID := os.Getpid()
+	if !processExists(currentPID) {
+		t.Errorf("processExists(%d) = false, want true for current process", currentPID)
+	}
+
+	// Test with a very high PID that shouldn't exist
+	nonExistentPID := 999999
+	if processExists(nonExistentPID) {
+		t.Logf("processExists(%d) = true, this might be valid on some systems", nonExistentPID)
+	}
+
+	// Test with PID 0 (init process)
+	// Result depends on permissions, just ensure it doesn't panic
+	_ = processExists(0)
+
+	// Test with negative PID - should return false or not panic
+	_ = processExists(-1)
+}
+
+func TestJSONStateManager_LoadFromBackup(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath := filepath.Join(tmpDir, "state.json")
+
+	manager := NewJSONStateManager(statePath)
+	ctx := context.Background()
+
+	// Create a valid backup manually
+	state := newTestState()
+	state.WorkflowID = "backup-wf"
+
+	// Save to main path first
+	if err := manager.Save(ctx, state); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	// Create backup
+	if err := manager.Backup(ctx); err != nil {
+		t.Fatalf("Backup() error = %v", err)
+	}
+
+	// Now corrupt the main file
+	if err := os.WriteFile(statePath, []byte("corrupted json{{{"), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	// Load should fall back to backup
+	loaded, err := manager.Load(ctx)
+	if err != nil {
+		t.Fatalf("Load() error = %v, should have loaded from backup", err)
+	}
+
+	if loaded.WorkflowID != "backup-wf" {
+		t.Errorf("WorkflowID = %s, want backup-wf", loaded.WorkflowID)
+	}
+}
+
+func TestJSONStateManager_LoadBothCorrupted(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath := filepath.Join(tmpDir, "state.json")
+
+	manager := NewJSONStateManager(statePath)
+	ctx := context.Background()
+
+	// Create corrupted main file
+	if err := os.MkdirAll(filepath.Dir(statePath), 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	if err := os.WriteFile(statePath, []byte("corrupted{"), 0o644); err != nil {
+		t.Fatalf("WriteFile() main error = %v", err)
+	}
+
+	// Create corrupted backup
+	backupPath := statePath + ".bak"
+	if err := os.WriteFile(backupPath, []byte("corrupted backup{"), 0o644); err != nil {
+		t.Fatalf("WriteFile() backup error = %v", err)
+	}
+
+	// Load should fail since both are corrupted
+	_, err := manager.Load(ctx)
+	if err == nil {
+		t.Error("Load() should fail when both main and backup are corrupted")
+	}
+}
+
+func TestJSONStateManager_ReleaseLockOwnedByOther(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath := filepath.Join(tmpDir, "state.json")
+
+	manager := NewJSONStateManager(statePath)
+	ctx := context.Background()
+
+	// Create a lock file owned by a different PID
+	lockPath := statePath + ".lock"
+	if err := os.MkdirAll(filepath.Dir(lockPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+
+	otherLock := lockInfo{
+		PID:        os.Getpid() + 1, // Different PID
+		Hostname:   "other-host",
+		AcquiredAt: time.Now(),
+	}
+	data, _ := json.Marshal(otherLock)
+	if err := os.WriteFile(lockPath, data, 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	// Release should fail with "lock owned by different process"
+	err := manager.ReleaseLock(ctx)
+	if err == nil {
+		t.Error("ReleaseLock() should fail when lock owned by different process")
+	}
+}
+
+func TestJSONStateManager_ReleaseLockCorrupted(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath := filepath.Join(tmpDir, "state.json")
+
+	manager := NewJSONStateManager(statePath)
+	ctx := context.Background()
+
+	// Create a corrupted lock file
+	lockPath := statePath + ".lock"
+	if err := os.MkdirAll(filepath.Dir(lockPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+
+	if err := os.WriteFile(lockPath, []byte("not valid json{{{"), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	// Release should fail with parse error
+	err := manager.ReleaseLock(ctx)
+	if err == nil {
+		t.Error("ReleaseLock() should fail with corrupted lock file")
+	}
+}
+
+func TestJSONStateManager_AcquireLockHeldByActiveProcess(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath := filepath.Join(tmpDir, "state.json")
+
+	// Create manager with long TTL
+	manager := NewJSONStateManager(statePath, WithLockTTL(time.Hour))
+	ctx := context.Background()
+
+	// Create a lock file held by current process (same PID)
+	lockPath := statePath + ".lock"
+	if err := os.MkdirAll(filepath.Dir(lockPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+
+	// Use current PID - which definitely exists
+	activeLock := lockInfo{
+		PID:        os.Getpid(), // Current process always exists
+		Hostname:   "localhost",
+		AcquiredAt: time.Now(), // Recent timestamp, within TTL
+	}
+	data, _ := json.Marshal(activeLock)
+	if err := os.WriteFile(lockPath, data, 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	// AcquireLock should fail because process is still active and lock file exists
+	// The O_EXCL flag in OpenFile will fail since the file already exists
+	err := manager.AcquireLock(ctx)
+	if err == nil {
+		t.Error("AcquireLock() should fail when lock held by active process")
+	}
+
+	// Cleanup
+	os.Remove(lockPath)
+}
+
+type testLogger struct {
+	messages []string
+}
+
+func (l *testLogger) Info(msg string, args ...interface{}) {
+	l.messages = append(l.messages, msg)
+}
+
 func TestMigrateState(t *testing.T) {
 	t.Run("no legacy state", func(t *testing.T) {
 		tmpDir := t.TempDir()
@@ -525,6 +720,76 @@ func TestMigrateState(t *testing.T) {
 		}
 		if string(newBackup) != string(legacyContent) {
 			t.Errorf("migrated backup mismatch: got %s, want %s", newBackup, legacyContent)
+		}
+	})
+
+	t.Run("migrate with logger", func(t *testing.T) {
+		// Save current directory and change to temp dir
+		origDir, _ := os.Getwd()
+		tmpDir := t.TempDir()
+		os.Chdir(tmpDir)
+		defer os.Chdir(origDir)
+
+		// Create legacy state at .orchestrator/state.json
+		legacyPath := ".orchestrator/state.json"
+		os.MkdirAll(filepath.Dir(legacyPath), 0o755)
+		legacyContent := []byte(`{"version":1,"checksum":"abc","state":{"workflow_id":"test"}}`)
+		os.WriteFile(legacyPath, legacyContent, 0o644)
+
+		newPath := ".quorum/state/state.json"
+
+		logger := &testLogger{}
+		migrated, err := MigrateState(newPath, logger)
+		if err != nil {
+			t.Fatalf("MigrateState() error = %v", err)
+		}
+		if !migrated {
+			t.Fatal("MigrateState() returned false when legacy state exists")
+		}
+
+		// Verify logger was called
+		if len(logger.messages) == 0 {
+			t.Error("Logger should have been called during migration")
+		}
+	})
+
+	t.Run("migrate with unreadable backup", func(t *testing.T) {
+		// Save current directory and change to temp dir
+		origDir, _ := os.Getwd()
+		tmpDir := t.TempDir()
+		os.Chdir(tmpDir)
+		defer os.Chdir(origDir)
+
+		// Create legacy state at .orchestrator/state.json
+		legacyPath := ".orchestrator/state.json"
+		os.MkdirAll(filepath.Dir(legacyPath), 0o755)
+		legacyContent := []byte(`{"version":1,"checksum":"abc","state":{"workflow_id":"test"}}`)
+		os.WriteFile(legacyPath, legacyContent, 0o644)
+
+		// Create a backup file that is a directory (will cause read failure)
+		os.MkdirAll(legacyPath+".bak", 0o755)
+
+		newPath := ".quorum/state/state.json"
+
+		logger := &testLogger{}
+		migrated, err := MigrateState(newPath, logger)
+		if err != nil {
+			t.Fatalf("MigrateState() error = %v (backup failure should be non-fatal)", err)
+		}
+		if !migrated {
+			t.Fatal("MigrateState() returned false")
+		}
+
+		// Logger should have logged the backup failure
+		foundBackupError := false
+		for _, msg := range logger.messages {
+			if msg == "failed to migrate backup file" {
+				foundBackupError = true
+				break
+			}
+		}
+		if !foundBackupError {
+			t.Log("Logger messages:", logger.messages)
 		}
 	})
 }

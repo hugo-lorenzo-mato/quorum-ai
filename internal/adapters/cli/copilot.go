@@ -87,7 +87,8 @@ func (c *CopilotAdapter) Execute(ctx context.Context, opts core.ExecuteOptions) 
 	allArgs = append(allArgs, cmdParts[1:]...)
 	allArgs = append(allArgs, args...)
 
-	cmd := exec.CommandContext(ctx, cmdParts[0], allArgs...) //nolint:gosec // Command path is from trusted config
+	// #nosec G204 -- command path is from trusted config
+	cmd := exec.CommandContext(ctx, cmdParts[0], allArgs...)
 	cmd.Dir = opts.WorkDir
 	cmd.Env = os.Environ()
 

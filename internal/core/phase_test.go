@@ -63,3 +63,29 @@ func TestPhase_Parse(t *testing.T) {
 		t.Fatalf("expected error parsing invalid phase")
 	}
 }
+
+func TestPhase_Description(t *testing.T) {
+	tests := []struct {
+		phase Phase
+		want  string
+	}{
+		{PhaseAnalyze, "Analyze the problem with multiple agents"},
+		{PhasePlan, "Generate and consolidate execution plans"},
+		{PhaseExecute, "Execute tasks in isolated environments"},
+	}
+
+	for _, tt := range tests {
+		t.Run(string(tt.phase), func(t *testing.T) {
+			got := tt.phase.Description()
+			if got != tt.want {
+				t.Errorf("Description() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+
+	// Test unknown phase
+	unknown := Phase("unknown")
+	if unknown.Description() != "Unknown phase" {
+		t.Errorf("Unknown phase description should be 'Unknown phase', got %q", unknown.Description())
+	}
+}

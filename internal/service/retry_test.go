@@ -326,3 +326,23 @@ func TestRetryPolicy_ImmediateContextCancel(t *testing.T) {
 		t.Errorf("Execute() error = %v, want context.Canceled", err)
 	}
 }
+
+func TestNetworkRetryPolicy(t *testing.T) {
+	policy := NetworkRetryPolicy()
+
+	if policy.MaxAttempts != 5 {
+		t.Errorf("MaxAttempts = %d, want 5", policy.MaxAttempts)
+	}
+	if policy.BaseDelay != 2*time.Second {
+		t.Errorf("BaseDelay = %v, want 2s", policy.BaseDelay)
+	}
+	if policy.MaxDelay != time.Minute {
+		t.Errorf("MaxDelay = %v, want 1m", policy.MaxDelay)
+	}
+	if policy.JitterFactor != 0.25 {
+		t.Errorf("JitterFactor = %v, want 0.25", policy.JitterFactor)
+	}
+	if policy.Multiplier != 2.0 {
+		t.Errorf("Multiplier = %v, want 2.0", policy.Multiplier)
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
@@ -38,6 +39,7 @@ func (n NopOutputNotifier) WorkflowStateUpdated(_ *core.WorkflowState)  {}
 // It encapsulates the runtime state and dependencies needed
 // by all phase runners.
 type Context struct {
+	mu         sync.RWMutex // protects State during concurrent access
 	State      *core.WorkflowState
 	Agents     core.AgentRegistry
 	Prompts    PromptRenderer
@@ -158,6 +160,7 @@ type WorktreeManager interface {
 }
 
 // BuildContextString constructs a context string from workflow state.
+// Note: This function is not thread-safe. Use Context.GetContextString() for concurrent access.
 func BuildContextString(state *core.WorkflowState) string {
 	var ctx strings.Builder
 	ctx.WriteString(fmt.Sprintf("Workflow: %s\n", state.WorkflowID))
@@ -171,6 +174,33 @@ func BuildContextString(state *core.WorkflowState) string {
 	}
 
 	return ctx.String()
+}
+
+// GetContextString returns a context string with thread-safe access to state.
+func (c *Context) GetContextString() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return BuildContextString(c.State)
+}
+
+// Lock acquires a write lock on the context state.
+func (c *Context) Lock() {
+	c.mu.Lock()
+}
+
+// Unlock releases the write lock on the context state.
+func (c *Context) Unlock() {
+	c.mu.Unlock()
+}
+
+// RLock acquires a read lock on the context state.
+func (c *Context) RLock() {
+	c.mu.RLock()
+}
+
+// RUnlock releases the read lock on the context state.
+func (c *Context) RUnlock() {
+	c.mu.RUnlock()
 }
 
 // ResolvePhaseModel returns the model override for a given agent/phase.

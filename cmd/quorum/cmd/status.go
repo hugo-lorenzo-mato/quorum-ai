@@ -68,7 +68,9 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n",
 			task.Name, task.Phase, task.Status, duration)
 	}
-	w.Flush()
+	if err := w.Flush(); err != nil {
+		return err
+	}
 
 	return nil
 }

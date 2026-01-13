@@ -261,3 +261,134 @@ func TestIsSafeCommand(t *testing.T) {
 		testutil.AssertEqual(t, result, tt.safe)
 	}
 }
+
+func TestModeEnforcer_TotalCost(t *testing.T) {
+	mode := service.DefaultMode()
+	enforcer := service.NewModeEnforcer(mode)
+
+	// Initially total cost should be 0
+	testutil.AssertEqual(t, enforcer.TotalCost(), 0.0)
+
+	// Record some costs
+	enforcer.RecordCost(0.5)
+	testutil.AssertEqual(t, enforcer.TotalCost(), 0.5)
+
+	enforcer.RecordCost(0.3)
+	testutil.AssertEqual(t, enforcer.TotalCost(), 0.8)
+}
+
+func TestModeEnforcer_Mode(t *testing.T) {
+	mode := service.ExecutionMode{
+		DryRun:  true,
+		Sandbox: false,
+		MaxCost: 5.0,
+	}
+	enforcer := service.NewModeEnforcer(mode)
+
+	result := enforcer.Mode()
+	testutil.AssertTrue(t, result.DryRun, "DryRun should be true")
+	testutil.AssertEqual(t, result.MaxCost, 5.0)
+}
+
+func TestErrDryRunBlocked_Error(t *testing.T) {
+	err := service.ErrDryRunBlocked{Operation: "write-file"}
+	expected := "operation write-file blocked by dry-run mode"
+	testutil.AssertEqual(t, err.Error(), expected)
+}
+
+func TestModeEnforcer_SandboxNetworkRestriction(t *testing.T) {
+	mode := service.ExecutionMode{Sandbox: true}
+	enforcer := service.NewModeEnforcer(mode)
+
+	// Network operation not allowed in sandbox
+	op := service.Operation{
+		Name:             "http-request",
+		Type:             service.OpTypeNetwork,
+		AllowedInSandbox: false,
+	}
+
+	err := enforcer.CanExecute(context.Background(), op)
+	testutil.AssertError(t, err)
+}
+
+func TestModeEnforcer_SandboxGitRestriction(t *testing.T) {
+	mode := service.ExecutionMode{Sandbox: true}
+	enforcer := service.NewModeEnforcer(mode)
+
+	// Destructive git operation not allowed in sandbox
+	op := service.Operation{
+		Name:          "git-force-push",
+		Type:          service.OpTypeGit,
+		IsDestructive: true,
+	}
+
+	err := enforcer.CanExecute(context.Background(), op)
+	testutil.AssertError(t, err)
+}
+
+func TestSandbox_DenyPath(t *testing.T) {
+	sandbox := service.NewSandbox("/workspace")
+	sandbox.AllowPath("/workspace/allowed")
+	sandbox.DenyPath("/workspace/allowed/secret")
+
+	// Parent is allowed
+	testutil.AssertTrue(t, sandbox.IsPathAllowed("/workspace/allowed/file.txt"),
+		"parent path should be allowed")
+
+	// But specifically denied path should not be allowed
+	testutil.AssertFalse(t, sandbox.IsPathAllowed("/workspace/allowed/secret/file.txt"),
+		"denied path should not be allowed")
+}
+
+func TestSandbox_WorkspaceRoot(t *testing.T) {
+	sandbox := service.NewSandbox("/my/workspace")
+	testutil.AssertEqual(t, sandbox.WorkspaceRoot(), "/my/workspace")
+}
+
+func TestSandbox_ValidateOperation(t *testing.T) {
+	sandbox := service.NewSandbox("/workspace")
+
+	// File write outside workspace
+	err := sandbox.ValidateOperation(service.Operation{
+		Type:        service.OpTypeFileWrite,
+		InWorkspace: false,
+	})
+	testutil.AssertError(t, err)
+
+	// File write inside workspace
+	err = sandbox.ValidateOperation(service.Operation{
+		Type:        service.OpTypeFileWrite,
+		InWorkspace: true,
+	})
+	testutil.AssertNoError(t, err)
+
+	// Destructive shell command
+	err = sandbox.ValidateOperation(service.Operation{
+		Type:          service.OpTypeShell,
+		IsDestructive: true,
+	})
+	testutil.AssertError(t, err)
+
+	// Normal shell command
+	err = sandbox.ValidateOperation(service.Operation{
+		Type:          service.OpTypeShell,
+		IsDestructive: false,
+	})
+	testutil.AssertNoError(t, err)
+}
+
+func TestSandbox_ValidatePath(t *testing.T) {
+	sandbox := service.NewSandbox("/workspace")
+
+	// Write to allowed path
+	err := sandbox.ValidatePath("/workspace/file.txt", true)
+	testutil.AssertNoError(t, err)
+
+	// Write to disallowed path
+	err = sandbox.ValidatePath("/etc/passwd", true)
+	testutil.AssertError(t, err)
+
+	// Read from disallowed path
+	err = sandbox.ValidatePath("/etc/passwd", false)
+	testutil.AssertError(t, err)
+}

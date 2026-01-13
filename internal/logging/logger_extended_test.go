@@ -331,3 +331,200 @@ func TestIsTerminal_NonFile(t *testing.T) {
 		t.Error("bytes.Buffer should not be detected as terminal")
 	}
 }
+
+func TestSetRedactedPlaceholder(t *testing.T) {
+	sanitizer := NewSanitizer()
+
+	// Set custom placeholder
+	sanitizer.SetRedactedPlaceholder("[HIDDEN]")
+
+	input := "API key: sk-1234567890abcdefghijklmnop"
+	result := sanitizer.Sanitize(input)
+
+	if !strings.Contains(result, "[HIDDEN]") {
+		t.Errorf("Expected custom placeholder [HIDDEN], got: %s", result)
+	}
+	if strings.Contains(result, "[REDACTED]") {
+		t.Error("Should not contain default [REDACTED] placeholder")
+	}
+}
+
+func TestSanitizingHandler_WithAttrs(t *testing.T) {
+	var buf bytes.Buffer
+	baseHandler := slog.NewJSONHandler(&buf, &slog.HandlerOptions{})
+	sanitizer := NewSanitizer()
+	handler := NewSanitizingHandler(baseHandler, sanitizer)
+
+	// Create attrs with sensitive data
+	attrs := []slog.Attr{
+		slog.String("api_key", "sk-1234567890abcdefghijklmnop"),
+		slog.String("normal", "hello"),
+	}
+
+	newHandler := handler.WithAttrs(attrs)
+	if newHandler == nil {
+		t.Fatal("WithAttrs should not return nil")
+	}
+
+	// The new handler should be a SanitizingHandler
+	_, ok := newHandler.(*SanitizingHandler)
+	if !ok {
+		t.Error("WithAttrs should return a SanitizingHandler")
+	}
+}
+
+func TestSanitizingHandler_WithGroupDirect(t *testing.T) {
+	var buf bytes.Buffer
+	baseHandler := slog.NewJSONHandler(&buf, &slog.HandlerOptions{})
+	sanitizer := NewSanitizer()
+	handler := NewSanitizingHandler(baseHandler, sanitizer)
+
+	newHandler := handler.WithGroup("request")
+	if newHandler == nil {
+		t.Fatal("WithGroup should not return nil")
+	}
+
+	// The new handler should be a SanitizingHandler
+	_, ok := newHandler.(*SanitizingHandler)
+	if !ok {
+		t.Error("WithGroup should return a SanitizingHandler")
+	}
+}
+
+func TestSanitizingHandler_SanitizeAttr_Group(t *testing.T) {
+	var buf bytes.Buffer
+	baseHandler := slog.NewJSONHandler(&buf, &slog.HandlerOptions{})
+	sanitizer := NewSanitizer()
+	handler := NewSanitizingHandler(baseHandler, sanitizer)
+
+	// Log with a group containing sensitive data
+	logger := slog.New(handler)
+	logger.Info("test",
+		slog.Group("credentials",
+			slog.String("api_key", "sk-1234567890abcdefghijklmnop"),
+			slog.String("username", "user"),
+		),
+	)
+
+	output := buf.String()
+	if strings.Contains(output, "sk-1234567890") {
+		t.Errorf("API key in group should be sanitized, got: %s", output)
+	}
+}
+
+func TestSanitizingHandler_SanitizeAttr_NonString(t *testing.T) {
+	var buf bytes.Buffer
+	baseHandler := slog.NewJSONHandler(&buf, &slog.HandlerOptions{})
+	sanitizer := NewSanitizer()
+	handler := NewSanitizingHandler(baseHandler, sanitizer)
+
+	// Log with non-string attrs
+	logger := slog.New(handler)
+	logger.Info("test",
+		slog.Int("count", 42),
+		slog.Bool("active", true),
+		slog.Float64("ratio", 3.14),
+	)
+
+	output := buf.String()
+	if !strings.Contains(output, "42") {
+		t.Error("Int value should be preserved")
+	}
+	if !strings.Contains(output, "true") {
+		t.Error("Bool value should be preserved")
+	}
+}
+
+func TestPrettyHandler_WithAttrs(t *testing.T) {
+	var buf bytes.Buffer
+	handler := NewPrettyHandler(&buf, slog.LevelInfo)
+
+	attrs := []slog.Attr{
+		slog.String("key1", "value1"),
+		slog.Int("key2", 42),
+	}
+
+	newHandler := handler.WithAttrs(attrs)
+	if newHandler == nil {
+		t.Fatal("WithAttrs should not return nil")
+	}
+
+	// The new handler should be a PrettyHandler
+	ph, ok := newHandler.(*PrettyHandler)
+	if !ok {
+		t.Error("WithAttrs should return a PrettyHandler")
+	}
+
+	// Log to verify attrs are used
+	logger := slog.New(ph)
+	logger.Info("test message")
+
+	output := buf.String()
+	if !strings.Contains(output, "key1") {
+		t.Error("Expected key1 in output")
+	}
+}
+
+func TestPrettyHandler_WithGroup(t *testing.T) {
+	var buf bytes.Buffer
+	handler := NewPrettyHandler(&buf, slog.LevelInfo)
+
+	newHandler := handler.WithGroup("mygroup")
+	if newHandler == nil {
+		t.Fatal("WithGroup should not return nil")
+	}
+
+	// The new handler should be a PrettyHandler
+	ph, ok := newHandler.(*PrettyHandler)
+	if !ok {
+		t.Error("WithGroup should return a PrettyHandler")
+	}
+
+	// Log with attrs to verify group prefix is applied
+	grouped := slog.New(ph).With("key", "value")
+	grouped.Info("test")
+
+	output := buf.String()
+	if !strings.Contains(output, "mygroup") {
+		t.Error("Expected group name in output")
+	}
+}
+
+func TestPrettyHandler_FormatAttr_Group(t *testing.T) {
+	var buf bytes.Buffer
+	handler := NewPrettyHandler(&buf, slog.LevelInfo)
+	logger := slog.New(handler)
+
+	// Log with a group
+	logger.Info("test",
+		slog.Group("request",
+			slog.String("method", "GET"),
+			slog.String("path", "/api/v1"),
+		),
+	)
+
+	output := buf.String()
+	if !strings.Contains(output, "method") {
+		t.Error("Expected method in output")
+	}
+	if !strings.Contains(output, "path") {
+		t.Error("Expected path in output")
+	}
+}
+
+func TestPrettyHandler_FormatLevel_Unknown(t *testing.T) {
+	var buf bytes.Buffer
+	handler := NewPrettyHandler(&buf, slog.LevelDebug) // Use debug to enable all levels
+
+	ctx := context.Background()
+
+	// Use a custom level value that's not DEBUG/INFO/WARN/ERROR
+	logger := slog.New(handler)
+	logger.Log(ctx, slog.Level(100), "unknown level message")
+
+	output := buf.String()
+	// The default case returns level.String()[:3]
+	if output == "" {
+		t.Error("Expected some output for unknown level")
+	}
+}

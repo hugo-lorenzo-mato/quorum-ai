@@ -20,7 +20,9 @@ func TempDir(t *testing.T) string {
 		t.Fatalf("creating temp dir: %v", err)
 	}
 	t.Cleanup(func() {
-		os.RemoveAll(dir)
+		if err := os.RemoveAll(dir); err != nil {
+			t.Logf("cleaning temp dir: %v", err)
+		}
 	})
 	return dir
 }
@@ -29,7 +31,7 @@ func TempDir(t *testing.T) string {
 func TempFile(t *testing.T, dir, name, content string) string {
 	t.Helper()
 	path := filepath.Join(dir, name)
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatalf("writing temp file: %v", err)
 	}
 	return path
@@ -157,11 +159,11 @@ func (r *GitRepo) WriteFile(name, content string) {
 
 	// Create directory if needed
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
 		r.t.Fatalf("creating directory: %v", err)
 	}
 
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		r.t.Fatalf("writing file: %v", err)
 	}
 }
@@ -212,6 +214,7 @@ func (r *GitRepo) Clone(t *testing.T) *GitRepo {
 
 	dir := TempDir(t)
 
+	// #nosec G204 -- test helper runs git against a local path
 	cmd := exec.Command("git", "clone", r.Path, dir)
 	if err := cmd.Run(); err != nil {
 		t.Fatalf("cloning repo: %v", err)
@@ -229,6 +232,7 @@ func CreateBareRemote(t *testing.T) string {
 
 	dir := TempDir(t)
 
+	// #nosec G204 -- test helper runs git against a local path
 	cmd := exec.Command("git", "init", "--bare", dir)
 	if err := cmd.Run(); err != nil {
 		t.Fatalf("creating bare repo: %v", err)

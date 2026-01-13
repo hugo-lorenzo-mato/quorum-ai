@@ -13,6 +13,8 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/fsutil"
 )
 
 var traceCmd = &cobra.Command{
@@ -150,7 +152,7 @@ func listTraceEntries(baseDir string) ([]traceEntry, error) {
 }
 
 func readTraceManifest(path string) (*traceManifestView, error) {
-	data, err := os.ReadFile(path)
+	data, err := fsutil.ReadFileScoped(path)
 	if err != nil {
 		return nil, err
 	}

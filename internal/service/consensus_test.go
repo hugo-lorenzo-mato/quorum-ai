@@ -420,3 +420,42 @@ func TestConsensusChecker_CustomWeights(t *testing.T) {
 		t.Error("risks-heavy weights should produce lower score than default")
 	}
 }
+
+func TestNewConsensusCheckerWithThresholds(t *testing.T) {
+	weights := DefaultWeights()
+	checker := NewConsensusCheckerWithThresholds(0.80, 0.60, 0.50, weights)
+
+	if checker.Threshold != 0.80 {
+		t.Errorf("Threshold = %v, want 0.80", checker.Threshold)
+	}
+	if checker.V2Threshold != 0.60 {
+		t.Errorf("V2Threshold = %v, want 0.60", checker.V2Threshold)
+	}
+	if checker.HumanThreshold != 0.50 {
+		t.Errorf("HumanThreshold = %v, want 0.50", checker.HumanThreshold)
+	}
+}
+
+func TestConsensusChecker_GetThreshold(t *testing.T) {
+	checker := NewConsensusCheckerWithThresholds(0.85, 0.65, 0.45, DefaultWeights())
+
+	if checker.GetThreshold() != 0.85 {
+		t.Errorf("GetThreshold() = %v, want 0.85", checker.GetThreshold())
+	}
+}
+
+func TestConsensusChecker_GetV2Threshold(t *testing.T) {
+	checker := NewConsensusCheckerWithThresholds(0.85, 0.65, 0.45, DefaultWeights())
+
+	if checker.GetV2Threshold() != 0.65 {
+		t.Errorf("GetV2Threshold() = %v, want 0.65", checker.GetV2Threshold())
+	}
+}
+
+func TestConsensusChecker_GetHumanThreshold(t *testing.T) {
+	checker := NewConsensusCheckerWithThresholds(0.85, 0.65, 0.45, DefaultWeights())
+
+	if checker.GetHumanThreshold() != 0.45 {
+		t.Errorf("GetHumanThreshold() = %v, want 0.45", checker.GetHumanThreshold())
+	}
+}

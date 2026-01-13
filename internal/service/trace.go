@@ -161,7 +161,7 @@ func (w *fileTraceWriter) StartRun(_ context.Context, info TraceRunInfo) error {
 	info.Config = w.cfg
 	w.runInfo = info
 
-	if err := os.MkdirAll(w.dir, 0o755); err != nil {
+	if err := os.MkdirAll(w.dir, 0o750); err != nil {
 		w.disableWithWarning(fmt.Errorf("creating trace dir: %w", err))
 		return err
 	}
@@ -285,7 +285,7 @@ func (w *fileTraceWriter) appendRecord(record traceRecord) error {
 	}
 	data = append(data, '\n')
 
-	file, err := os.OpenFile(w.jsonlPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	file, err := os.OpenFile(w.jsonlPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
 		return err
 	}

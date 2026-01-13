@@ -74,6 +74,7 @@ func (b *BaseAdapter) ExecuteCommand(ctx context.Context, args []string, stdin, 
 		args = append(cmdParts[1:], args...)
 	}
 
+	// #nosec G204 -- command path and args come from validated config
 	cmd := exec.CommandContext(ctx, cmdPath, args...)
 	if workDir != "" {
 		cmd.Dir = workDir

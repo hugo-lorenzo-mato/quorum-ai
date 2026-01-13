@@ -31,6 +31,9 @@ help: ## Show this help
 .PHONY: all
 all: lint test build ## Run lint, test, and build
 
+.PHONY: check
+check: lint test security analyze ## Run all checks (lint, test, security, analyze)
+
 # Build targets
 .PHONY: build
 build: ## Build for current OS/arch
@@ -106,6 +109,34 @@ security: ## Run security checks
 	govulncheck ./...
 	gosec -quiet ./...
 
+# Analysis targets (complementary to SonarCloud)
+.PHONY: analyze
+analyze: ## Run local analysis (struct alignment, performance hints)
+	@echo "=== Local Analysis (SonarCloud complement) ==="
+	@echo ""
+	@echo "[1/3] Struct alignment..."
+	@if [ -f $(GOBIN)/betteralign ]; then \
+		$(GOBIN)/betteralign ./internal/... 2>&1 | head -20; \
+	else \
+		echo "  Install: make tools"; \
+	fi
+	@echo ""
+	@echo "[2/3] Performance hints (hugeParam, rangeValCopy)..."
+	@if [ -f $(GOBIN)/gocritic ]; then \
+		$(GOBIN)/gocritic check -enableAll ./internal/... 2>&1 | grep -E "hugeParam|rangeValCopy|appendCombine" | head -20; \
+	else \
+		echo "  Install: make tools"; \
+	fi
+	@echo ""
+	@echo "[3/3] Dependency vulnerabilities..."
+	@command -v docker >/dev/null && docker run --rm -v $(PWD):/src aquasec/trivy:latest fs /src --scanners vuln --quiet 2>/dev/null | tail -30 || echo "  Requires docker"
+	@echo ""
+	@echo "Full analysis: https://sonarcloud.io/project/overview?id=hugo-lorenzo-mato_quorum-ai"
+
+.PHONY: sonar-report
+sonar-report: ## Download SonarCloud report locally (requires SONAR_TOKEN)
+	@./scripts/sonar-report.sh
+
 # Release targets
 .PHONY: release-dry
 release-dry: ## Dry-run goreleaser
@@ -125,6 +156,13 @@ clean: ## Clean build artifacts
 deps: ## Download dependencies
 	go mod download
 	go mod verify
+
+.PHONY: tools
+tools: ## Install analysis tools
+	go install github.com/dkorunic/betteralign/cmd/betteralign@latest
+	go install github.com/go-critic/go-critic/cmd/gocritic@latest
+	go install github.com/uudashr/gocognit/cmd/gocognit@latest
+	go install golang.org/x/vuln/cmd/govulncheck@latest
 
 .PHONY: tidy
 tidy: ## Tidy go.mod

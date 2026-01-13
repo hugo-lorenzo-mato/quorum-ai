@@ -1,11 +1,9 @@
 package github
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"os/exec"
 	"strings"
 	"time"
 
@@ -20,14 +18,22 @@ type Client struct {
 	repoOwner string
 	repoName  string
 	timeout   time.Duration
+	runner    CommandRunner
 }
 
 // NewClient creates a new GitHub client.
 func NewClient(owner, repo string) (*Client, error) {
+	return NewClientWithRunner(owner, repo, NewExecRunner())
+}
+
+// NewClientWithRunner creates a new GitHub client with a custom CommandRunner.
+// This is primarily used for testing.
+func NewClientWithRunner(owner, repo string, runner CommandRunner) (*Client, error) {
 	client := &Client{
 		repoOwner: owner,
 		repoName:  repo,
 		timeout:   60 * time.Second,
+		runner:    runner,
 	}
 
 	// Verify gh is installed and authenticated
@@ -38,9 +44,28 @@ func NewClient(owner, repo string) (*Client, error) {
 	return client, nil
 }
 
+// NewClientSkipAuth creates a client without verifying auth.
+// Used for testing when gh CLI is not available.
+func NewClientSkipAuth(owner, repo string, runner CommandRunner) *Client {
+	return &Client{
+		repoOwner: owner,
+		repoName:  repo,
+		timeout:   60 * time.Second,
+		runner:    runner,
+	}
+}
+
 // NewClientFromRepo creates a client detecting repo from git remote.
 func NewClientFromRepo() (*Client, error) {
-	output, err := exec.Command("gh", "repo", "view", "--json", "owner,name").Output()
+	return NewClientFromRepoWithRunner(NewExecRunner())
+}
+
+// NewClientFromRepoWithRunner creates a client detecting repo from git remote with a custom runner.
+func NewClientFromRepoWithRunner(runner CommandRunner) (*Client, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	output, err := runner.Run(ctx, "gh", "repo", "view", "--json", "owner,name")
 	if err != nil {
 		return nil, fmt.Errorf("detecting repo: %w", err)
 	}
@@ -52,17 +77,20 @@ func NewClientFromRepo() (*Client, error) {
 		Name string `json:"name"`
 	}
 
-	if err := json.Unmarshal(output, &repo); err != nil {
+	if err := json.Unmarshal([]byte(output), &repo); err != nil {
 		return nil, fmt.Errorf("parsing repo info: %w", err)
 	}
 
-	return NewClient(repo.Owner.Login, repo.Name)
+	return NewClientWithRunner(repo.Owner.Login, repo.Name, runner)
 }
 
 // verifyAuth checks if gh is authenticated.
 func (c *Client) verifyAuth() error {
-	cmd := exec.Command("gh", "auth", "status")
-	if err := cmd.Run(); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), c.timeout)
+	defer cancel()
+
+	_, err := c.runner.Run(ctx, "gh", "auth", "status")
+	if err != nil {
 		return core.ErrValidation("GH_NOT_AUTHENTICATED",
 			"gh CLI is not authenticated, run 'gh auth login'")
 	}
@@ -74,20 +102,15 @@ func (c *Client) run(ctx context.Context, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "gh", args...)
-
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
+	output, err := c.runner.Run(ctx, "gh", args...)
+	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
 			return "", core.ErrTimeout("gh command timed out")
 		}
-		return "", fmt.Errorf("gh %s: %s: %w", strings.Join(args, " "), stderr.String(), err)
+		return "", fmt.Errorf("gh %s: %w", strings.Join(args, " "), err)
 	}
 
-	return strings.TrimSpace(stdout.String()), nil
+	return output, nil
 }
 
 // PullRequest represents a GitHub PR.

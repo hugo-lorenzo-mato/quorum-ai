@@ -56,10 +56,14 @@ func (r *ReportGenerator) GenerateTextReport(w io.Writer) error {
 	fmt.Fprintln(w, "")
 
 	// Agent breakdown
-	r.writeAgentTable(w)
+	if err := r.writeAgentTable(w); err != nil {
+		return err
+	}
 
 	// Task breakdown
-	r.writeTaskTable(w)
+	if err := r.writeTaskTable(w); err != nil {
+		return err
+	}
 
 	// Consensus summary
 	r.writeConsensusSummary(w)
@@ -70,10 +74,10 @@ func (r *ReportGenerator) GenerateTextReport(w io.Writer) error {
 }
 
 // writeAgentTable writes the agent metrics table.
-func (r *ReportGenerator) writeAgentTable(w io.Writer) {
+func (r *ReportGenerator) writeAgentTable(w io.Writer) error {
 	agents := r.metrics.GetAgentMetrics()
 	if len(agents) == 0 {
-		return
+		return nil
 	}
 
 	fmt.Fprintln(w, "AGENT METRICS")
@@ -92,15 +96,18 @@ func (r *ReportGenerator) writeAgentTable(w io.Writer) {
 			am.AvgDuration.Round(time.Millisecond),
 		)
 	}
-	tw.Flush()
+	if err := tw.Flush(); err != nil {
+		return err
+	}
 	fmt.Fprintln(w, "")
+	return nil
 }
 
 // writeTaskTable writes the task metrics table.
-func (r *ReportGenerator) writeTaskTable(w io.Writer) {
+func (r *ReportGenerator) writeTaskTable(w io.Writer) error {
 	tasks := r.metrics.GetAllTaskMetrics()
 	if len(tasks) == 0 {
-		return
+		return nil
 	}
 
 	fmt.Fprintln(w, "TASK METRICS")
@@ -123,8 +130,11 @@ func (r *ReportGenerator) writeTaskTable(w io.Writer) {
 			tm.CostUSD,
 		)
 	}
-	tw.Flush()
+	if err := tw.Flush(); err != nil {
+		return err
+	}
 	fmt.Fprintln(w, "")
+	return nil
 }
 
 // writeConsensusSummary writes consensus summary.

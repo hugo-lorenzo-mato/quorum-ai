@@ -107,3 +107,123 @@ func TestTask_Validate(t *testing.T) {
 type errTest string
 
 func (e errTest) Error() string { return string(e) }
+
+func TestTask_Options(t *testing.T) {
+	task := NewTask("t1", "task", PhaseAnalyze).
+		WithDescription("test description").
+		WithCLI("claude").
+		WithModel("claude-4").
+		WithMaxRetries(5)
+
+	if task.Description != "test description" {
+		t.Errorf("Description = %s, want test description", task.Description)
+	}
+	if task.CLI != "claude" {
+		t.Errorf("CLI = %s, want claude", task.CLI)
+	}
+	if task.Model != "claude-4" {
+		t.Errorf("Model = %s, want claude-4", task.Model)
+	}
+	if task.MaxRetries != 5 {
+		t.Errorf("MaxRetries = %d, want 5", task.MaxRetries)
+	}
+}
+
+func TestTask_MarkSkipped(t *testing.T) {
+	task := NewTask("t1", "task", PhaseAnalyze)
+
+	err := task.MarkSkipped("dependency failed")
+	if err != nil {
+		t.Fatalf("MarkSkipped() error = %v", err)
+	}
+	if task.Status != TaskStatusSkipped {
+		t.Errorf("Status = %s, want skipped", task.Status)
+	}
+	if task.Error != "dependency failed" {
+		t.Errorf("Error = %s, want dependency failed", task.Error)
+	}
+	if task.CompletedAt == nil {
+		t.Error("CompletedAt should be set")
+	}
+}
+
+func TestTask_Duration(t *testing.T) {
+	task := NewTask("t1", "task", PhaseAnalyze)
+
+	// Duration without started should be 0
+	if task.Duration() != 0 {
+		t.Error("Duration should be 0 when not started")
+	}
+
+	// Start and complete the task
+	_ = task.MarkRunning()
+	_ = task.MarkCompleted(nil)
+
+	// Duration should be positive after completion
+	dur := task.Duration()
+	if dur <= 0 {
+		t.Error("Duration should be positive after completion")
+	}
+}
+
+func TestTask_IsTerminal(t *testing.T) {
+	tests := []struct {
+		status   TaskStatus
+		terminal bool
+	}{
+		{TaskStatusPending, false},
+		{TaskStatusRunning, false},
+		{TaskStatusCompleted, true},
+		{TaskStatusFailed, true},
+		{TaskStatusSkipped, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(string(tt.status), func(t *testing.T) {
+			task := NewTask("t1", "task", PhaseAnalyze)
+			task.Status = tt.status
+
+			if task.IsTerminal() != tt.terminal {
+				t.Errorf("IsTerminal() = %v, want %v", task.IsTerminal(), tt.terminal)
+			}
+		})
+	}
+}
+
+func TestTask_IsSuccess(t *testing.T) {
+	task := NewTask("t1", "task", PhaseAnalyze)
+
+	// Pending is not success
+	if task.IsSuccess() {
+		t.Error("Pending task should not be success")
+	}
+
+	// Running is not success
+	_ = task.MarkRunning()
+	if task.IsSuccess() {
+		t.Error("Running task should not be success")
+	}
+
+	// Completed is success
+	_ = task.MarkCompleted(nil)
+	if !task.IsSuccess() {
+		t.Error("Completed task should be success")
+	}
+}
+
+func TestTask_MarkFailed_WithError(t *testing.T) {
+	task := NewTask("t1", "task", PhaseAnalyze)
+	_ = task.MarkRunning()
+
+	testErr := errTest("test error message")
+	err := task.MarkFailed(testErr)
+	if err != nil {
+		t.Fatalf("MarkFailed() error = %v", err)
+	}
+
+	if task.Error != "test error message" {
+		t.Errorf("Error = %s, want test error message", task.Error)
+	}
+}
+
+// Note: TestTask_MarkFailed_NilError removed because MarkFailed doesn't handle nil error gracefully

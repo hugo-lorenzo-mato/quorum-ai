@@ -495,7 +495,7 @@ func (c *Client) CreateWorktree(ctx context.Context, path, branch string) error 
 	}
 
 	// Ensure parent directory exists
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 		return fmt.Errorf("creating worktree parent directory: %w", err)
 	}
 

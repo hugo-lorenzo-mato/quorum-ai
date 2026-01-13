@@ -247,3 +247,45 @@ func TestOutputNotifierAdapter_NilOutput(t *testing.T) {
 	adapter.TaskFailed(&core.Task{ID: "1"}, nil)
 	adapter.WorkflowStateUpdated(&core.WorkflowState{Tasks: make(map[core.TaskID]*core.TaskState)})
 }
+
+func TestQuietOutput_AllMethods(t *testing.T) {
+	quiet := NewQuietOutput()
+
+	// All methods should not panic and do nothing
+	quiet.WorkflowStarted("test")
+	quiet.PhaseStarted(core.PhaseAnalyze)
+	quiet.PhaseStarted(core.PhasePlan)
+	quiet.PhaseStarted(core.PhaseExecute)
+
+	task := &core.Task{
+		ID:          "task-1",
+		Name:        "Test Task",
+		Description: "Description",
+		TokensIn:    100,
+		TokensOut:   50,
+		CostUSD:     0.01,
+	}
+
+	quiet.TaskStarted(task)
+	quiet.TaskCompleted(task, time.Second)
+	quiet.TaskFailed(task, errors.New("test error"))
+
+	state := &core.WorkflowState{
+		WorkflowID:   "wf-test",
+		CurrentPhase: core.PhaseExecute,
+		Status:       core.WorkflowStatusCompleted,
+		Tasks: map[core.TaskID]*core.TaskState{
+			"task-1": {ID: "task-1", Status: core.TaskStatusCompleted},
+		},
+	}
+	quiet.WorkflowCompleted(state)
+	quiet.WorkflowFailed(errors.New("workflow failed"))
+	quiet.Log("info", "test message")
+	quiet.Log("error", "error message")
+
+	// Close should return nil
+	err := quiet.Close()
+	if err != nil {
+		t.Errorf("QuietOutput.Close() error = %v", err)
+	}
+}
