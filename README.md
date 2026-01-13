@@ -92,6 +92,14 @@ quorum trace --list
 quorum trace --run-id wf-1234-1700000000
 ```
 
+### Trace artifacts
+
+When trace mode is enabled, artifacts are written to `.quorum/traces/<run_id>/`:
+
+- `run.json`: run manifest (config snapshot, git/app metadata, summary).
+- `trace.jsonl`: ordered trace events (phase, model, tokens, hashes).
+- `*.txt` / `*.json`: prompt/response payloads (full mode only).
+
 ---
 
 ## Architecture
