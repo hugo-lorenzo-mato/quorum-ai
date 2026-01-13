@@ -16,7 +16,7 @@ Thank you for your interest in contributing to quorum-ai. This document provides
 
 Before contributing, ensure you have the following installed:
 
-- **Go 1.22 or later** - [Installation guide](https://go.dev/doc/install)
+- **Go 1.24 or later** - [Installation guide](https://go.dev/doc/install)
 - **Git 2.20 or later** - For worktree support
 - **golangci-lint** - [Installation guide](https://golangci-lint.run/usage/install/)
 - **Make** - For running build commands

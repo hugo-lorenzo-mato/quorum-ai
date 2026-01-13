@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/hugo-lorenzo-mato/quorum-ai/actions/workflows/test.yml/badge.svg)](https://github.com/hugo-lorenzo-mato/quorum-ai/actions/workflows/test.yml)
 [![Coverage](https://codecov.io/gh/hugo-lorenzo-mato/quorum-ai/branch/main/graph/badge.svg)](https://codecov.io/gh/hugo-lorenzo-mato/quorum-ai)
-[![Go Version](https://img.shields.io/badge/Go-1.22+-00ADD8?style=flat&logo=go)](https://go.dev/)
+[![Go Version](https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat&logo=go)](https://go.dev/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 **Multi-agent LLM orchestrator with consensus-based validation for reliable software engineering workflows.**
@@ -28,7 +28,7 @@ quorum-ai reduces LLM hallucinations and increases output reliability by running
 
 ### Prerequisites
 
-- Go 1.22 or later
+- Go 1.24 or later
 - Git 2.20 or later
 - At least one LLM CLI installed:
   - [Claude Code](https://github.com/anthropics/claude-code) (recommended)
