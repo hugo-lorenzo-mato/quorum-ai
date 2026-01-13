@@ -67,42 +67,47 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 		cancel()
 	}()
 
-	// Create logger
+	// Load unified configuration using global viper (includes flag bindings)
+	// Precedence: flags > env > project config > user config > defaults
+	loader := config.NewLoaderWithViper(viper.GetViper())
+	if cfgFile != "" {
+		loader.WithConfigFile(cfgFile)
+	}
+	cfg, err := loader.Load()
+	if err != nil {
+		return fmt.Errorf("loading config: %w", err)
+	}
+
+	// Create logger from unified config
 	logger := logging.New(logging.Config{
-		Level:  viper.GetString("log.level"),
-		Format: viper.GetString("log.format"),
+		Level:  cfg.Log.Level,
+		Format: cfg.Log.Format,
 	})
 
-	// Create state manager
-	statePath := viper.GetString("state.path")
+	// Create state manager from unified config
+	statePath := cfg.State.Path
 	if statePath == "" {
 		statePath = ".quorum/state/state.json"
 	}
 	stateManager := state.NewJSONStateManager(statePath)
 
-	// Create agent registry
+	// Create agent registry and configure from unified config
 	registry := cli.NewRegistry()
-
-	// Configure agents from config
-	cfg, err := configureAgents(registry)
-	if err != nil {
+	if err := configureAgentsFromConfig(registry, cfg, loader); err != nil {
 		return fmt.Errorf("configuring agents: %w", err)
 	}
 
-	// Create consensus checker with 80/60/50 escalation thresholds
-	threshold := viper.GetFloat64("consensus.threshold")
-	if threshold == 0 {
-		threshold = 0.80
-	}
-	v2Threshold := viper.GetFloat64("consensus.v2_threshold")
-	if v2Threshold == 0 {
-		v2Threshold = 0.60
-	}
-	humanThreshold := viper.GetFloat64("consensus.human_threshold")
-	if humanThreshold == 0 {
-		humanThreshold = 0.50
-	}
-	consensusChecker := service.NewConsensusCheckerWithThresholds(threshold, v2Threshold, humanThreshold, service.DefaultWeights())
+	// Create consensus checker from unified config (80/60/50 escalation policy)
+	consensusChecker := service.NewConsensusCheckerWithThresholds(
+		cfg.Consensus.Threshold,
+		cfg.Consensus.V2Threshold,
+		cfg.Consensus.HumanThreshold,
+		service.CategoryWeights{
+			Claims:          cfg.Consensus.Weights.Claims,
+			Risks:           cfg.Consensus.Weights.Risks,
+			Recommendations: cfg.Consensus.Weights.Recommendations,
+		},
+	)
 
 	// Create prompt renderer
 	promptRenderer, err := service.NewPromptRenderer()
@@ -117,12 +122,16 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 
 	gitCommit, gitDirty := loadGitInfo()
 
-	// Create workflow runner config
-	timeout := viper.GetDuration("workflow.timeout")
-	if timeout == 0 {
-		timeout = time.Hour
+	// Create workflow runner config from unified config
+	timeout := time.Hour
+	if cfg.Workflow.Timeout != "" {
+		parsed, parseErr := time.ParseDuration(cfg.Workflow.Timeout)
+		if parseErr != nil {
+			return fmt.Errorf("parsing workflow timeout %q: %w", cfg.Workflow.Timeout, parseErr)
+		}
+		timeout = parsed
 	}
-	defaultAgent := viper.GetString("agents.default")
+	defaultAgent := cfg.Agents.Default
 	if defaultAgent == "" {
 		defaultAgent = "claude"
 	}
@@ -130,8 +139,8 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 		Timeout:      timeout,
 		MaxRetries:   runMaxRetries,
 		DryRun:       runDryRun,
-		Sandbox:      viper.GetBool("workflow.sandbox"),
-		DenyTools:    viper.GetStringSlice("workflow.deny_tools"),
+		Sandbox:      cfg.Workflow.Sandbox,
+		DenyTools:    cfg.Workflow.DenyTools,
 		DefaultAgent: defaultAgent,
 		V3Agent:      "claude",
 		AgentPhaseModels: map[string]map[string]string{
@@ -266,15 +275,9 @@ func parseTraceConfig(cfg *config.Config, override string) (service.TraceConfig,
 	}
 }
 
-func configureAgents(registry *cli.Registry) (*config.Config, error) {
-	loader := config.NewLoader()
-	if cfgFile != "" {
-		loader.WithConfigFile(cfgFile)
-	}
-	cfg, err := loader.Load()
-	if err != nil {
-		return nil, err
-	}
+// configureAgentsFromConfig configures agents in the registry using unified config.
+// The loader is used to check if values are explicitly set in config vs defaults.
+func configureAgentsFromConfig(registry *cli.Registry, cfg *config.Config, loader *config.Loader) error {
 	isEnabled := func(key, envKey string, enabled bool) bool {
 		if !enabled {
 			return false
@@ -345,7 +348,7 @@ func configureAgents(registry *cli.Registry) (*config.Config, error) {
 		})
 	}
 
-	return cfg, nil
+	return nil
 }
 
 func getPrompt(args []string, file string) (string, error) {

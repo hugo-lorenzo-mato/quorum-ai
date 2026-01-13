@@ -24,6 +24,15 @@ func NewLoader() *Loader {
 	}
 }
 
+// NewLoaderWithViper creates a loader using an existing viper instance.
+// This allows integration with CLI flag bindings.
+func NewLoaderWithViper(v *viper.Viper) *Loader {
+	return &Loader{
+		v:         v,
+		envPrefix: "QUORUM",
+	}
+}
+
 // WithConfigFile sets an explicit config file path.
 func (l *Loader) WithConfigFile(path string) *Loader {
 	l.configFile = path
@@ -64,12 +73,12 @@ func (l *Loader) Load() (*Config, error) {
 		l.v.SetConfigName(".quorum")
 		l.v.SetConfigType("yaml")
 
-		// Add search paths in reverse precedence order
-		// (last added has highest precedence)
+		// Add search paths in precedence order (first found wins)
+		// Project config takes precedence over user config
+		l.v.AddConfigPath(".")
 		if home, err := os.UserHomeDir(); err == nil {
 			l.v.AddConfigPath(filepath.Join(home, ".config", "quorum"))
 		}
-		l.v.AddConfigPath(".")
 	}
 
 	// Read config file (ignore not found)
