@@ -100,6 +100,15 @@ When trace mode is enabled, artifacts are written to `.quorum/traces/<run_id>/`:
 - `trace.jsonl`: ordered trace events (phase, model, tokens, hashes).
 - `*.txt` / `*.json`: prompt/response payloads (full mode only).
 
+Trace modes:
+- `summary`: only `run.json` and `trace.jsonl` (no prompt/response files).
+- `full`: includes prompt/response files for each step (subject to size limits).
+
+Example `trace.jsonl` entry:
+```json
+{"seq":1,"ts":"2026-01-13T00:00:00Z","event_type":"prompt","phase":"analyze","step":"v1","agent":"claude","model":"claude-sonnet-4-20250514","tokens_in":120,"tokens_out":0,"cost_usd":0.0023,"hash_raw":"...","hash_stored":"..."}
+```
+
 ---
 
 ## Architecture
