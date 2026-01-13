@@ -154,6 +154,11 @@ Notes:
 - `full` payloads are redacted and truncated based on limits; hashes remain for integrity checks.
 - `quorum trace --json` outputs the raw manifest for automation.
 
+Troubleshooting:
+- No traces listed: ensure `trace.mode` is not `off` and the run finished without errors.
+- Missing prompt/response files: you are likely in `summary` mode or size limits dropped content.
+- Unexpected empty output: confirm `trace.dir` points to the correct workspace.
+
 ---
 
 ## Architecture
