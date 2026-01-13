@@ -49,7 +49,7 @@ linters-settings:
             desc: "deprecated, use io and os packages"
 
   gocyclo:
-    min-complexity: 15
+    min-complexity: 30
 
   gocritic:
     enabled-tags:

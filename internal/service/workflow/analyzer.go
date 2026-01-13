@@ -46,6 +46,9 @@ func (a *Analyzer) Run(ctx context.Context, wctx *Context) error {
 	wctx.Logger.Info("starting analyze phase", "workflow_id", wctx.State.WorkflowID)
 
 	wctx.State.CurrentPhase = core.PhaseAnalyze
+	if wctx.Output != nil {
+		wctx.Output.PhaseStarted(core.PhaseAnalyze)
+	}
 	if err := wctx.Checkpoint.PhaseCheckpoint(wctx.State, core.PhaseAnalyze, false); err != nil {
 		wctx.Logger.Warn("failed to create phase checkpoint", "error", err)
 	}

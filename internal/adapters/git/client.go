@@ -75,7 +75,7 @@ func (c *Client) run(ctx context.Context, args ...string) (string, error) {
 }
 
 // RepoRoot returns the repository root path (implements core.GitClient).
-func (c *Client) RepoRoot(ctx context.Context) (string, error) {
+func (c *Client) RepoRoot(_ context.Context) (string, error) {
 	return c.repoPath, nil
 }
 
@@ -490,6 +490,10 @@ func (c *Client) IsClean(ctx context.Context) (bool, error) {
 
 // CreateWorktree creates a new worktree for a branch (implements core.GitClient).
 func (c *Client) CreateWorktree(ctx context.Context, path, branch string) error {
+	if err := validateWorktreeBranch(branch); err != nil {
+		return err
+	}
+
 	// Ensure parent directory exists
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("creating worktree parent directory: %w", err)
@@ -537,7 +541,7 @@ func (c *Client) ListWorktrees(ctx context.Context) ([]core.Worktree, error) {
 }
 
 // parseWorktreesToCore parses git worktree list output to core.Worktree slice.
-func parseWorktreesToCore(output string, mainRepoPath string) []core.Worktree {
+func parseWorktreesToCore(output, mainRepoPath string) []core.Worktree {
 	worktrees := make([]core.Worktree, 0)
 	var current *core.Worktree
 

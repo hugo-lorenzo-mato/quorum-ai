@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/logging"
 )
 
 // Compile-time interface conformance check.
@@ -27,6 +28,124 @@ func resolvePath(path string) string {
 		return abs
 	}
 	return resolved
+}
+
+const (
+	worktreeNameSeparator = "__"
+	worktreeLabelMaxLen   = 48
+)
+
+func validateTaskID(taskID string) error {
+	trimmed := strings.TrimSpace(taskID)
+	if trimmed == "" {
+		return core.ErrValidation("WORKTREE_TASK_ID_REQUIRED", "task id required for worktree")
+	}
+	if strings.Contains(trimmed, worktreeNameSeparator) {
+		return core.ErrValidation("WORKTREE_TASK_ID_INVALID", "task id must not contain '__'")
+	}
+	if strings.Contains(trimmed, "..") || strings.ContainsAny(trimmed, "/\\") {
+		return core.ErrValidation("WORKTREE_TASK_ID_INVALID", "task id contains invalid path characters")
+	}
+	for _, r := range trimmed {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' || r == '.' {
+			continue
+		}
+		return core.ErrValidation("WORKTREE_TASK_ID_INVALID", "task id contains invalid characters")
+	}
+	return nil
+}
+
+func normalizeLabel(input string, maxLen int) string {
+	trimmed := strings.TrimSpace(input)
+	if trimmed == "" {
+		return ""
+	}
+
+	var b strings.Builder
+	b.Grow(len(trimmed))
+	lastDash := false
+	for _, r := range trimmed {
+		if r >= 'A' && r <= 'Z' {
+			r = r - 'A' + 'a'
+		}
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+			lastDash = false
+		} else if !lastDash {
+			b.WriteByte('-')
+			lastDash = true
+		}
+		if maxLen > 0 && b.Len() >= maxLen {
+			break
+		}
+	}
+
+	return strings.Trim(b.String(), "-")
+}
+
+func buildWorktreeName(task *core.Task) (name string, ok bool, err error) {
+	if task == nil {
+		return "", false, core.ErrValidation("WORKTREE_TASK_REQUIRED", "task required to create worktree")
+	}
+	taskID := strings.TrimSpace(string(task.ID))
+	if err := validateTaskID(taskID); err != nil {
+		return "", false, err
+	}
+
+	labelSource := strings.TrimSpace(task.Name)
+	if labelSource == "" {
+		labelSource = strings.TrimSpace(task.Description)
+	}
+	if labelSource == "" {
+		return "", false, core.ErrValidation("WORKTREE_TASK_LABEL_REQUIRED", "task name or description required for worktree naming")
+	}
+
+	label := normalizeLabel(labelSource, worktreeLabelMaxLen)
+	if label == "" {
+		if err := validateWorktreeName(taskID); err != nil {
+			return "", false, err
+		}
+		return taskID, true, nil
+	}
+
+	name = taskID + worktreeNameSeparator + label
+	if err := validateWorktreeName(name); err != nil {
+		return "", false, err
+	}
+	return name, false, nil
+}
+
+func validateWorktreeName(name string) error {
+	trimmed := strings.TrimSpace(name)
+	if trimmed == "" {
+		return core.ErrValidation("WORKTREE_NAME_REQUIRED", "worktree name required")
+	}
+	if strings.Contains(trimmed, "..") || strings.ContainsAny(trimmed, "/\\") {
+		return core.ErrValidation("WORKTREE_NAME_INVALID", "worktree name contains invalid path characters")
+	}
+	return nil
+}
+
+func validateWorktreeBranch(branch string) error {
+	trimmed := strings.TrimSpace(branch)
+	if trimmed == "" {
+		return core.ErrValidation("WORKTREE_BRANCH_REQUIRED", "worktree branch required")
+	}
+	if strings.Contains(trimmed, " ") || strings.Contains(trimmed, "..") {
+		return core.ErrValidation("WORKTREE_BRANCH_INVALID", "worktree branch contains invalid characters")
+	}
+	return nil
+}
+
+func resolveWorktreeBranch(name, branch string) (string, error) {
+	candidate := strings.TrimSpace(branch)
+	if candidate == "" {
+		candidate = "quorum/" + name
+	}
+	if err := validateWorktreeBranch(candidate); err != nil {
+		return "", err
+	}
+	return candidate, nil
 }
 
 // WorktreeManager manages git worktrees.
@@ -62,6 +181,13 @@ type Worktree struct {
 
 // Create creates a new worktree for a branch.
 func (m *WorktreeManager) Create(ctx context.Context, name, branch string) (*Worktree, error) {
+	if err := validateWorktreeName(name); err != nil {
+		return nil, err
+	}
+	if err := validateWorktreeBranch(branch); err != nil {
+		return nil, err
+	}
+
 	// Ensure base directory exists
 	if err := os.MkdirAll(m.baseDir, 0o755); err != nil {
 		return nil, fmt.Errorf("creating worktree directory: %w", err)
@@ -127,6 +253,10 @@ func (m *WorktreeManager) Create(ctx context.Context, name, branch string) (*Wor
 
 // CreateFromCommit creates a detached worktree from a commit.
 func (m *WorktreeManager) CreateFromCommit(ctx context.Context, name, commit string) (*Worktree, error) {
+	if err := validateWorktreeName(name); err != nil {
+		return nil, err
+	}
+
 	if err := os.MkdirAll(m.baseDir, 0o755); err != nil {
 		return nil, fmt.Errorf("creating worktree directory: %w", err)
 	}
@@ -362,25 +492,42 @@ func (m *WorktreeManager) WithPrefix(prefix string) *WorktreeManager {
 // It provides TaskID-based worktree management on top of the low-level WorktreeManager.
 type TaskWorktreeManager struct {
 	manager *WorktreeManager
+	logger  *logging.Logger
 }
 
 // NewTaskWorktreeManager creates a new task-aware worktree manager.
 func NewTaskWorktreeManager(git *Client, baseDir string) *TaskWorktreeManager {
 	return &TaskWorktreeManager{
 		manager: NewWorktreeManager(git, baseDir),
+		logger:  logging.NewNop(),
 	}
 }
 
 // Create creates a new worktree for a task (implements core.WorktreeManager).
-func (m *TaskWorktreeManager) Create(ctx context.Context, taskID core.TaskID, branch string) (*core.WorktreeInfo, error) {
-	name := string(taskID)
-	wt, err := m.manager.Create(ctx, name, branch)
+func (m *TaskWorktreeManager) Create(ctx context.Context, task *core.Task, branch string) (*core.WorktreeInfo, error) {
+	name, usedFallback, err := buildWorktreeName(task)
+	if err != nil {
+		return nil, err
+	}
+	if usedFallback {
+		m.logger.Warn("worktree label normalized empty, using task id only",
+			"task_id", task.ID,
+			"task_name", task.Name,
+			"task_description", task.Description,
+			"worktree_name", name,
+		)
+	}
+	resolvedBranch, err := resolveWorktreeBranch(name, branch)
+	if err != nil {
+		return nil, err
+	}
+	wt, err := m.manager.Create(ctx, name, resolvedBranch)
 	if err != nil {
 		return nil, err
 	}
 
 	return &core.WorktreeInfo{
-		TaskID:    taskID,
+		TaskID:    task.ID,
 		Path:      wt.Path,
 		Branch:    wt.Branch,
 		CreatedAt: wt.CreatedAt,
@@ -389,8 +536,11 @@ func (m *TaskWorktreeManager) Create(ctx context.Context, taskID core.TaskID, br
 }
 
 // Get retrieves worktree info for a task (implements core.WorktreeManager).
-func (m *TaskWorktreeManager) Get(ctx context.Context, taskID core.TaskID) (*core.WorktreeInfo, error) {
-	name := string(taskID)
+func (m *TaskWorktreeManager) Get(ctx context.Context, task *core.Task) (*core.WorktreeInfo, error) {
+	name, _, err := buildWorktreeName(task)
+	if err != nil {
+		return nil, err
+	}
 	wt, err := m.manager.Get(ctx, name)
 	if err != nil {
 		return nil, err
@@ -402,7 +552,7 @@ func (m *TaskWorktreeManager) Get(ctx context.Context, taskID core.TaskID) (*cor
 	}
 
 	return &core.WorktreeInfo{
-		TaskID:    taskID,
+		TaskID:    task.ID,
 		Path:      wt.Path,
 		Branch:    wt.Branch,
 		CreatedAt: wt.CreatedAt,
@@ -411,8 +561,11 @@ func (m *TaskWorktreeManager) Get(ctx context.Context, taskID core.TaskID) (*cor
 }
 
 // Remove cleans up a task's worktree (implements core.WorktreeManager).
-func (m *TaskWorktreeManager) Remove(ctx context.Context, taskID core.TaskID) error {
-	name := string(taskID)
+func (m *TaskWorktreeManager) Remove(ctx context.Context, task *core.Task) error {
+	name, _, err := buildWorktreeName(task)
+	if err != nil {
+		return err
+	}
 	wt, err := m.manager.Get(ctx, name)
 	if err != nil {
 		return err
@@ -441,6 +594,10 @@ func (m *TaskWorktreeManager) List(ctx context.Context) ([]*core.WorktreeInfo, e
 		if strings.HasPrefix(name, m.manager.prefix) {
 			name = strings.TrimPrefix(name, m.manager.prefix)
 		}
+		taskID := name
+		if sepIdx := strings.Index(name, worktreeNameSeparator); sepIdx > -1 {
+			taskID = name[:sepIdx]
+		}
 
 		status := core.WorktreeStatusActive
 		if wt.Prunable {
@@ -448,7 +605,7 @@ func (m *TaskWorktreeManager) List(ctx context.Context) ([]*core.WorktreeInfo, e
 		}
 
 		result = append(result, &core.WorktreeInfo{
-			TaskID:    core.TaskID(name),
+			TaskID:    core.TaskID(taskID),
 			Path:      wt.Path,
 			Branch:    wt.Branch,
 			CreatedAt: wt.CreatedAt,
@@ -462,4 +619,12 @@ func (m *TaskWorktreeManager) List(ctx context.Context) ([]*core.WorktreeInfo, e
 // Manager returns the underlying WorktreeManager for advanced operations.
 func (m *TaskWorktreeManager) Manager() *WorktreeManager {
 	return m.manager
+}
+
+// WithLogger sets the logger for worktree manager warnings.
+func (m *TaskWorktreeManager) WithLogger(logger *logging.Logger) *TaskWorktreeManager {
+	if logger != nil {
+		m.logger = logger
+	}
+	return m
 }

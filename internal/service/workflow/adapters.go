@@ -120,14 +120,14 @@ func NewRetryAdapter(policy *service.RetryPolicy, ctx context.Context) *RetryAda
 
 // Execute runs the function with retry logic.
 func (a *RetryAdapter) Execute(fn func() error) error {
-	return a.policy.Execute(a.ctx, func(ctx context.Context) error {
+	return a.policy.Execute(a.ctx, func(_ context.Context) error {
 		return fn()
 	})
 }
 
 // ExecuteWithNotify runs with retry and notifications.
 func (a *RetryAdapter) ExecuteWithNotify(fn func() error, notify func(attempt int, err error)) error {
-	return a.policy.ExecuteWithNotify(a.ctx, func(ctx context.Context) error {
+	return a.policy.ExecuteWithNotify(a.ctx, func(_ context.Context) error {
 		return fn()
 	}, func(attempt int, err error, _ time.Duration) {
 		notify(attempt, err)

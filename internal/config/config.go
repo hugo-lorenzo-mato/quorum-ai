@@ -72,8 +72,9 @@ type StateConfig struct {
 
 // GitConfig configures git operations.
 type GitConfig struct {
-	WorktreeDir string `mapstructure:"worktree_dir"`
-	AutoClean   bool   `mapstructure:"auto_clean"`
+	WorktreeDir  string `mapstructure:"worktree_dir"`
+	AutoClean    bool   `mapstructure:"auto_clean"`
+	WorktreeMode string `mapstructure:"worktree_mode"`
 }
 
 // GitHubConfig configures GitHub integration.

@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"syscall"
@@ -78,30 +79,13 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 	outputMode := detector.Detect()
 	useColor := detector.ShouldUseColor()
 
-	// Create output handler based on detected mode
-	// Verbose output is enabled when trace mode is set or log level is debug
-	verboseOutput := runTrace != ""
-	output := tui.NewOutput(outputMode, useColor, verboseOutput)
-	defer func() { _ = output.Close() }()
-
-	// For TUI mode, start the TUI in a goroutine and run workflow in background
-	var tuiOutput *tui.TUIOutput
-	var tuiErrCh chan error
+	// Create TUIWriter for log routing when in TUI mode
+	// This must be created before the logger so logs can be routed to the TUI
+	var tuiWriter *tui.TUIWriter
+	var logOutput io.Writer = os.Stdout
 	if outputMode == tui.ModeTUI {
-		var ok bool
-		tuiOutput, ok = output.(*tui.TUIOutput)
-		if ok {
-			tuiErrCh = make(chan error, 1)
-			go func() {
-				tuiErrCh <- tuiOutput.Start()
-			}()
-			// Give TUI time to initialize
-			defer func() {
-				if tuiOutput != nil {
-					_ = tuiOutput.Close()
-				}
-			}()
-		}
+		tuiWriter = tui.NewTUIWriter(os.Stdout)
+		logOutput = tuiWriter
 	}
 
 	// Load unified configuration using global viper (includes flag bindings)
@@ -120,11 +104,44 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 		return fmt.Errorf("validating config: %w", err)
 	}
 
-	// Create logger from unified config
+	// Create logger from unified config with appropriate output
 	logger := logging.New(logging.Config{
 		Level:  cfg.Log.Level,
 		Format: cfg.Log.Format,
+		Output: logOutput,
 	})
+
+	// Create output handler based on detected mode
+	// Verbose output is enabled when trace mode is set or log level is debug
+	verboseOutput := runTrace != ""
+	output := tui.NewOutput(outputMode, useColor, verboseOutput)
+	defer func() { _ = output.Close() }()
+
+	// For TUI mode, start the TUI in a goroutine and run workflow in background
+	var tuiOutput *tui.TUIOutput
+	var tuiErrCh chan error
+	if outputMode == tui.ModeTUI {
+		var ok bool
+		tuiOutput, ok = output.(*tui.TUIOutput)
+		if ok {
+			// Connect TUIWriter to TUIOutput so logs are routed to the TUI
+			if tuiWriter != nil {
+				tuiWriter.Connect(tuiOutput)
+				defer tuiWriter.Disconnect()
+			}
+
+			tuiErrCh = make(chan error, 1)
+			go func() {
+				tuiErrCh <- tuiOutput.Start()
+			}()
+			// Give TUI time to initialize
+			defer func() {
+				if tuiOutput != nil {
+					_ = tuiOutput.Close()
+				}
+			}()
+		}
+	}
 
 	// Create state manager from unified config
 	statePath := cfg.State.Path
@@ -201,6 +218,7 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 			"aider":   cfg.Agents.Aider.PhaseModels,
 		},
 		WorktreeAutoClean:  cfg.Git.AutoClean,
+		WorktreeMode:       cfg.Git.WorktreeMode,
 		MaxCostPerWorkflow: cfg.Costs.MaxPerWorkflow,
 		MaxCostPerTask:     cfg.Costs.MaxPerTask,
 	}
@@ -227,7 +245,7 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 	}
 	var worktreeManager workflow.WorktreeManager
 	if gitClient != nil {
-		worktreeManager = git.NewTaskWorktreeManager(gitClient, cfg.Git.WorktreeDir)
+		worktreeManager = git.NewTaskWorktreeManager(gitClient, cfg.Git.WorktreeDir).WithLogger(logger)
 	}
 
 	// Create adapters for modular runner interfaces
@@ -241,6 +259,9 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 
 	// Create state manager adapter that implements workflow.StateManager
 	stateAdapter := &stateManagerAdapter{sm: stateManager}
+
+	// Create output notifier adapter for real-time TUI updates
+	outputNotifier := tui.NewOutputNotifierAdapter(output)
 
 	// Create workflow runner using modular architecture (ADR-0005)
 	runner := workflow.NewRunner(workflow.RunnerDeps{
@@ -256,6 +277,7 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 		RateLimits:     rateLimiterAdapter,
 		Worktrees:      worktreeManager,
 		Logger:         logger,
+		Output:         outputNotifier,
 	})
 
 	// Resume or run new workflow

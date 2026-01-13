@@ -74,7 +74,7 @@ func (g *GeminiAdapter) Execute(ctx context.Context, opts core.ExecuteOptions) (
 		args = append(args, opts.Prompt)
 	}
 
-	result, err := g.ExecuteCommand(ctx, args, "")
+	result, err := g.ExecuteCommand(ctx, args, "", opts.WorkDir)
 	if err != nil {
 		return nil, err
 	}

@@ -1,11 +1,16 @@
 package git_test
 
 import (
+	"bytes"
 	"context"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/adapters/git"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/logging"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/testutil"
 )
 
@@ -33,6 +38,21 @@ func TestWorktreeManager_Create(t *testing.T) {
 	if wt.Path == repo.Path {
 		t.Fatal("worktree path should be different from main repo")
 	}
+}
+
+func TestWorktreeManager_Create_EmptyBranch(t *testing.T) {
+	repo := testutil.NewGitRepo(t)
+	repo.WriteFile("README.md", "# Test")
+	repo.Commit("Initial commit")
+
+	client, err := git.NewClient(repo.Path)
+	testutil.AssertNoError(t, err)
+
+	worktreeDir := testutil.TempDir(t)
+	manager := git.NewWorktreeManager(client, worktreeDir)
+
+	_, err = manager.Create(context.Background(), "test-task", "")
+	testutil.AssertError(t, err)
 }
 
 func TestWorktreeManager_CreateExisting(t *testing.T) {
@@ -252,7 +272,8 @@ func TestTaskWorktreeManager_Create(t *testing.T) {
 	manager := git.NewTaskWorktreeManager(client, worktreeDir)
 
 	// Create worktree using TaskID
-	info, err := manager.Create(context.Background(), "task-123", "feature-branch")
+	task := &core.Task{ID: "task-123", Name: "Feature setup"}
+	info, err := manager.Create(context.Background(), task, "feature-branch")
 	testutil.AssertNoError(t, err)
 	testutil.AssertEqual(t, string(info.TaskID), "task-123")
 	testutil.AssertEqual(t, info.Branch, "feature-branch")
@@ -260,6 +281,93 @@ func TestTaskWorktreeManager_Create(t *testing.T) {
 	// Verify path exists
 	_, err = os.Stat(info.Path)
 	testutil.AssertNoError(t, err)
+}
+
+func TestTaskWorktreeManager_Create_MissingName(t *testing.T) {
+	repo := testutil.NewGitRepo(t)
+	repo.WriteFile("README.md", "# Test")
+	repo.Commit("Initial commit")
+
+	client, err := git.NewClient(repo.Path)
+	testutil.AssertNoError(t, err)
+
+	worktreeDir := testutil.TempDir(t)
+	manager := git.NewTaskWorktreeManager(client, worktreeDir)
+
+	_, err = manager.Create(context.Background(), &core.Task{ID: "task-321"}, "branch-321")
+	testutil.AssertError(t, err)
+}
+
+func TestTaskWorktreeManager_Create_NonAsciiName(t *testing.T) {
+	repo := testutil.NewGitRepo(t)
+	repo.WriteFile("README.md", "# Test")
+	repo.Commit("Initial commit")
+
+	client, err := git.NewClient(repo.Path)
+	testutil.AssertNoError(t, err)
+
+	worktreeDir := testutil.TempDir(t)
+	var buf bytes.Buffer
+	logger := logging.New(logging.Config{
+		Level:  "warn",
+		Format: "text",
+		Output: &buf,
+	})
+	manager := git.NewTaskWorktreeManager(client, worktreeDir).WithLogger(logger)
+
+	task := &core.Task{ID: "task-901", Name: "日本語のタスク"}
+	info, err := manager.Create(context.Background(), task, "branch-901")
+	testutil.AssertNoError(t, err)
+
+	base := filepath.Base(info.Path)
+	testutil.AssertEqual(t, base, "quorum-task-901")
+
+	output := buf.String()
+	if !strings.Contains(output, "worktree label normalized empty, using task id only") {
+		t.Fatalf("expected fallback log message, got: %s", output)
+	}
+	if !strings.Contains(output, "worktree_name=task-901") {
+		t.Fatalf("expected worktree_name in log, got: %s", output)
+	}
+	if !strings.Contains(output, "task_name=日本語のタスク") {
+		t.Fatalf("expected task_name in log, got: %s", output)
+	}
+}
+
+func TestTaskWorktreeManager_Create_NonAsciiDescription(t *testing.T) {
+	repo := testutil.NewGitRepo(t)
+	repo.WriteFile("README.md", "# Test")
+	repo.Commit("Initial commit")
+
+	client, err := git.NewClient(repo.Path)
+	testutil.AssertNoError(t, err)
+
+	worktreeDir := testutil.TempDir(t)
+	var buf bytes.Buffer
+	logger := logging.New(logging.Config{
+		Level:  "warn",
+		Format: "text",
+		Output: &buf,
+	})
+	manager := git.NewTaskWorktreeManager(client, worktreeDir).WithLogger(logger)
+
+	task := &core.Task{ID: "task-902", Description: "日本語の説明"}
+	info, err := manager.Create(context.Background(), task, "branch-902")
+	testutil.AssertNoError(t, err)
+
+	base := filepath.Base(info.Path)
+	testutil.AssertEqual(t, base, "quorum-task-902")
+
+	output := buf.String()
+	if !strings.Contains(output, "worktree label normalized empty, using task id only") {
+		t.Fatalf("expected fallback log message, got: %s", output)
+	}
+	if !strings.Contains(output, "worktree_name=task-902") {
+		t.Fatalf("expected worktree_name in log, got: %s", output)
+	}
+	if !strings.Contains(output, "task_description=日本語の説明") {
+		t.Fatalf("expected task_description in log, got: %s", output)
+	}
 }
 
 func TestTaskWorktreeManager_Get(t *testing.T) {
@@ -274,11 +382,12 @@ func TestTaskWorktreeManager_Get(t *testing.T) {
 	manager := git.NewTaskWorktreeManager(client, worktreeDir)
 
 	// Create worktree
-	_, err = manager.Create(context.Background(), "task-456", "test-branch")
+	task := &core.Task{ID: "task-456", Name: "Fetch metadata"}
+	_, err = manager.Create(context.Background(), task, "test-branch")
 	testutil.AssertNoError(t, err)
 
 	// Get it back
-	info, err := manager.Get(context.Background(), "task-456")
+	info, err := manager.Get(context.Background(), task)
 	testutil.AssertNoError(t, err)
 	testutil.AssertEqual(t, string(info.TaskID), "task-456")
 	testutil.AssertEqual(t, info.Branch, "test-branch")
@@ -296,10 +405,11 @@ func TestTaskWorktreeManager_Remove(t *testing.T) {
 	manager := git.NewTaskWorktreeManager(client, worktreeDir)
 
 	// Create and remove
-	info, err := manager.Create(context.Background(), "task-789", "remove-branch")
+	task := &core.Task{ID: "task-789", Name: "Cleanup staging"}
+	info, err := manager.Create(context.Background(), task, "remove-branch")
 	testutil.AssertNoError(t, err)
 
-	err = manager.Remove(context.Background(), "task-789")
+	err = manager.Remove(context.Background(), task)
 	testutil.AssertNoError(t, err)
 
 	// Should no longer exist
@@ -319,9 +429,9 @@ func TestTaskWorktreeManager_List(t *testing.T) {
 	manager := git.NewTaskWorktreeManager(client, worktreeDir)
 
 	// Create multiple worktrees
-	_, err = manager.Create(context.Background(), "task-a", "branch-a")
+	_, err = manager.Create(context.Background(), &core.Task{ID: "task-a", Name: "Alpha task"}, "branch-a")
 	testutil.AssertNoError(t, err)
-	_, err = manager.Create(context.Background(), "task-b", "branch-b")
+	_, err = manager.Create(context.Background(), &core.Task{ID: "task-b", Name: "Beta task"}, "branch-b")
 	testutil.AssertNoError(t, err)
 
 	// List them

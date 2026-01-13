@@ -4,10 +4,35 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/logging"
 )
+
+// OutputNotifier provides real-time updates to the UI/output layer.
+// This interface mirrors tui.Output but is defined here to avoid circular imports.
+type OutputNotifier interface {
+	// PhaseStarted is called when a phase begins.
+	PhaseStarted(phase core.Phase)
+	// TaskStarted is called when a task begins.
+	TaskStarted(task *core.Task)
+	// TaskCompleted is called when a task finishes successfully.
+	TaskCompleted(task *core.Task, duration time.Duration)
+	// TaskFailed is called when a task fails.
+	TaskFailed(task *core.Task, err error)
+	// WorkflowStateUpdated is called when the workflow state changes (e.g., tasks created).
+	WorkflowStateUpdated(state *core.WorkflowState)
+}
+
+// NopOutputNotifier is a no-op implementation of OutputNotifier.
+type NopOutputNotifier struct{}
+
+func (n NopOutputNotifier) PhaseStarted(_ core.Phase)                   {}
+func (n NopOutputNotifier) TaskStarted(_ *core.Task)                    {}
+func (n NopOutputNotifier) TaskCompleted(_ *core.Task, _ time.Duration) {}
+func (n NopOutputNotifier) TaskFailed(_ *core.Task, _ error)            {}
+func (n NopOutputNotifier) WorkflowStateUpdated(_ *core.WorkflowState)  {}
 
 // Context provides shared resources for workflow phases.
 // It encapsulates the runtime state and dependencies needed
@@ -22,6 +47,7 @@ type Context struct {
 	Worktrees  WorktreeManager
 	Logger     *logging.Logger
 	Config     *Config
+	Output     OutputNotifier
 }
 
 // Config holds workflow configuration.
@@ -35,6 +61,8 @@ type Config struct {
 	AgentPhaseModels map[string]map[string]string
 	// WorktreeAutoClean controls automatic worktree cleanup after task execution.
 	WorktreeAutoClean bool
+	// WorktreeMode controls when worktrees are created for tasks.
+	WorktreeMode string
 	// MaxCostPerWorkflow is the maximum total cost for the workflow in USD (0 = unlimited).
 	MaxCostPerWorkflow float64
 	// MaxCostPerTask is the maximum cost per task in USD (0 = unlimited).
@@ -120,11 +148,11 @@ type RateLimiter interface {
 // WorktreeManager manages git worktrees for task isolation.
 type WorktreeManager interface {
 	// Create creates a new worktree for a task.
-	Create(ctx context.Context, taskID core.TaskID, branch string) (*core.WorktreeInfo, error)
+	Create(ctx context.Context, task *core.Task, branch string) (*core.WorktreeInfo, error)
 	// Get retrieves worktree info for a task.
-	Get(ctx context.Context, taskID core.TaskID) (*core.WorktreeInfo, error)
+	Get(ctx context.Context, task *core.Task) (*core.WorktreeInfo, error)
 	// Remove cleans up a task's worktree.
-	Remove(ctx context.Context, taskID core.TaskID) error
+	Remove(ctx context.Context, task *core.Task) error
 	// CleanupStale removes worktrees for completed/failed tasks.
 	CleanupStale(ctx context.Context) error
 }

@@ -233,6 +233,15 @@ func (v *Validator) validateGit(cfg *GitConfig) {
 	if cfg.WorktreeDir == "" {
 		v.addError("git.worktree_dir", cfg.WorktreeDir, "worktree directory required")
 	}
+	if strings.TrimSpace(cfg.WorktreeMode) == "" {
+		return
+	}
+	switch strings.ToLower(strings.TrimSpace(cfg.WorktreeMode)) {
+	case "always", "parallel", "disabled":
+		// ok
+	default:
+		v.addError("git.worktree_mode", cfg.WorktreeMode, "must be always, parallel, or disabled")
+	}
 }
 
 func (v *Validator) validateGitHub(cfg *GitHubConfig) {

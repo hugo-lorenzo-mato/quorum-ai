@@ -41,6 +41,9 @@ func (p *Planner) Run(ctx context.Context, wctx *Context) error {
 	wctx.Logger.Info("starting plan phase", "workflow_id", wctx.State.WorkflowID)
 
 	wctx.State.CurrentPhase = core.PhasePlan
+	if wctx.Output != nil {
+		wctx.Output.PhaseStarted(core.PhasePlan)
+	}
 	if err := wctx.Checkpoint.PhaseCheckpoint(wctx.State, core.PhasePlan, false); err != nil {
 		wctx.Logger.Warn("failed to create phase checkpoint", "error", err)
 	}
@@ -108,6 +111,11 @@ func (p *Planner) Run(ctx context.Context, wctx *Context) error {
 		}
 		wctx.State.TaskOrder = append(wctx.State.TaskOrder, task.ID)
 		_ = p.dag.AddTask(task)
+	}
+
+	// Notify output that tasks have been created
+	if wctx.Output != nil {
+		wctx.Output.WorkflowStateUpdated(wctx.State)
 	}
 
 	// Build dependency graph

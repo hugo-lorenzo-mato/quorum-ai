@@ -73,7 +73,7 @@ func (c *ClaudeAdapter) Execute(ctx context.Context, opts core.ExecuteOptions) (
 		args = append(args, opts.Prompt)
 	}
 
-	result, err := c.ExecuteCommand(ctx, args, "")
+	result, err := c.ExecuteCommand(ctx, args, "", opts.WorkDir)
 	if err != nil {
 		return nil, err
 	}
@@ -100,11 +100,6 @@ func (c *ClaudeAdapter) buildArgs(opts core.ExecuteOptions) []string {
 	// Output format
 	if opts.Format == core.OutputFormatJSON {
 		args = append(args, "--output-format", "json")
-	}
-
-	// Working directory
-	if opts.WorkDir != "" {
-		args = append(args, "--cwd", opts.WorkDir)
 	}
 
 	// Auto-accept for non-interactive mode

@@ -50,6 +50,8 @@ type RunnerConfig struct {
 	AgentPhaseModels map[string]map[string]string
 	// WorktreeAutoClean controls automatic worktree cleanup after task execution.
 	WorktreeAutoClean bool
+	// WorktreeMode controls when worktrees are created for tasks.
+	WorktreeMode string
 	// MaxCostPerWorkflow is the maximum total cost for the workflow in USD (0 = unlimited).
 	MaxCostPerWorkflow float64
 	// MaxCostPerTask is the maximum cost per task in USD (0 = unlimited).
@@ -66,6 +68,7 @@ func DefaultRunnerConfig() *RunnerConfig {
 		DefaultAgent:     "claude",
 		V3Agent:          "claude",
 		AgentPhaseModels: map[string]map[string]string{},
+		WorktreeMode:     "always",
 	}
 }
 
@@ -86,6 +89,7 @@ type Runner struct {
 	rateLimits     RateLimiterGetter
 	worktrees      WorktreeManager
 	logger         *logging.Logger
+	output         OutputNotifier
 }
 
 // RunnerDeps holds dependencies for creating a Runner.
@@ -105,6 +109,7 @@ type RunnerDeps struct {
 	RateLimits     RateLimiterGetter
 	Worktrees      WorktreeManager
 	Logger         *logging.Logger
+	Output         OutputNotifier
 }
 
 // NewRunner creates a new workflow runner with all dependencies.
@@ -114,6 +119,9 @@ func NewRunner(deps RunnerDeps) *Runner {
 	}
 	if deps.Logger == nil {
 		deps.Logger = logging.NewNop()
+	}
+	if deps.Output == nil {
+		deps.Output = NopOutputNotifier{}
 	}
 
 	return &Runner{
@@ -130,6 +138,7 @@ func NewRunner(deps RunnerDeps) *Runner {
 		rateLimits:     deps.RateLimits,
 		worktrees:      deps.Worktrees,
 		logger:         deps.Logger,
+		output:         deps.Output,
 	}
 }
 
@@ -282,6 +291,7 @@ func (r *Runner) createContext(state *core.WorkflowState) *Context {
 		RateLimits: r.rateLimits,
 		Worktrees:  r.worktrees,
 		Logger:     r.logger,
+		Output:     r.output,
 		Config: &Config{
 			DryRun:             r.config.DryRun,
 			Sandbox:            r.config.Sandbox,
@@ -290,6 +300,7 @@ func (r *Runner) createContext(state *core.WorkflowState) *Context {
 			V3Agent:            r.config.V3Agent,
 			AgentPhaseModels:   r.config.AgentPhaseModels,
 			WorktreeAutoClean:  r.config.WorktreeAutoClean,
+			WorktreeMode:       r.config.WorktreeMode,
 			MaxCostPerWorkflow: r.config.MaxCostPerWorkflow,
 			MaxCostPerTask:     r.config.MaxCostPerTask,
 		},

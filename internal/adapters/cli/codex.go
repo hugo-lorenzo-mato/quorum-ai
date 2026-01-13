@@ -81,7 +81,7 @@ func (c *CodexAdapter) Execute(ctx context.Context, opts core.ExecuteOptions) (*
 		args = append(args, opts.Prompt)
 	}
 
-	result, err := c.ExecuteCommand(ctx, args, "")
+	result, err := c.ExecuteCommand(ctx, args, "", opts.WorkDir)
 	if err != nil {
 		return nil, err
 	}

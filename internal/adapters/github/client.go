@@ -173,18 +173,18 @@ func (c *Client) getPRByURL(ctx context.Context, url string) (*core.PullRequest,
 // parseCorePR parses PR JSON output to core.PullRequest.
 func (c *Client) parseCorePR(output string) (*core.PullRequest, error) {
 	var data struct {
-		Number      int       `json:"number"`
-		Title       string    `json:"title"`
-		Body        string    `json:"body"`
-		URL         string    `json:"url"`
-		State       string    `json:"state"`
-		IsDraft     bool      `json:"isDraft"`
-		Mergeable   string    `json:"mergeable"`
-		HeadRefName string    `json:"headRefName"`
-		HeadRefOid  string    `json:"headRefOid"`
-		BaseRefName string    `json:"baseRefName"`
-		CreatedAt   time.Time `json:"createdAt"`
-		UpdatedAt   time.Time `json:"updatedAt"`
+		Number      int        `json:"number"`
+		Title       string     `json:"title"`
+		Body        string     `json:"body"`
+		URL         string     `json:"url"`
+		State       string     `json:"state"`
+		IsDraft     bool       `json:"isDraft"`
+		Mergeable   string     `json:"mergeable"`
+		HeadRefName string     `json:"headRefName"`
+		HeadRefOid  string     `json:"headRefOid"`
+		BaseRefName string     `json:"baseRefName"`
+		CreatedAt   time.Time  `json:"createdAt"`
+		UpdatedAt   time.Time  `json:"updatedAt"`
 		MergedAt    *time.Time `json:"mergedAt"`
 		Labels      []struct {
 			Name string `json:"name"`
@@ -230,41 +230,6 @@ func (c *Client) parseCorePR(output string) (*core.PullRequest, error) {
 		CreatedAt: data.CreatedAt,
 		UpdatedAt: data.UpdatedAt,
 		MergedAt:  data.MergedAt,
-	}, nil
-}
-
-// parsePR parses PR JSON output (local type, deprecated).
-func (c *Client) parsePR(output string) (*PullRequest, error) {
-	var data struct {
-		Number      int       `json:"number"`
-		Title       string    `json:"title"`
-		Body        string    `json:"body"`
-		URL         string    `json:"url"`
-		State       string    `json:"state"`
-		IsDraft     bool      `json:"isDraft"`
-		Mergeable   string    `json:"mergeable"`
-		HeadRefName string    `json:"headRefName"`
-		BaseRefName string    `json:"baseRefName"`
-		CreatedAt   time.Time `json:"createdAt"`
-		UpdatedAt   time.Time `json:"updatedAt"`
-	}
-
-	if err := json.Unmarshal([]byte(output), &data); err != nil {
-		return nil, fmt.Errorf("parsing PR: %w", err)
-	}
-
-	return &PullRequest{
-		Number:    data.Number,
-		Title:     data.Title,
-		Body:      data.Body,
-		URL:       data.URL,
-		State:     data.State,
-		Draft:     data.IsDraft,
-		Mergeable: data.Mergeable,
-		HeadRef:   data.HeadRefName,
-		BaseRef:   data.BaseRefName,
-		CreatedAt: data.CreatedAt,
-		UpdatedAt: data.UpdatedAt,
 	}, nil
 }
 
@@ -555,7 +520,7 @@ func (c *Client) GetRepo(ctx context.Context) (*core.RepoInfo, error) {
 }
 
 // ValidateToken validates the GitHub token (implements core.GitHubClient).
-func (c *Client) ValidateToken(ctx context.Context) error {
+func (c *Client) ValidateToken(_ context.Context) error {
 	return c.verifyAuth()
 }
 

@@ -67,7 +67,7 @@ func (t *TUIOutput) Start() error {
 }
 
 // WorkflowStarted implements Output.
-func (t *TUIOutput) WorkflowStarted(prompt string) {
+func (t *TUIOutput) WorkflowStarted(_ string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if t.updateC != nil {
@@ -103,7 +103,7 @@ func (t *TUIOutput) TaskStarted(task *core.Task) {
 }
 
 // TaskCompleted implements Output.
-func (t *TUIOutput) TaskCompleted(task *core.Task, duration time.Duration) {
+func (t *TUIOutput) TaskCompleted(task *core.Task, _ time.Duration) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if t.updateC != nil {
@@ -360,4 +360,42 @@ func NewOutput(mode OutputMode, useColor, verbose bool) Output {
 	default:
 		return NewFallbackOutputAdapter(useColor, verbose)
 	}
+}
+
+// OutputNotifierAdapter adapts an Output to the workflow.OutputNotifier interface.
+// This allows the workflow package to send real-time updates to the TUI.
+type OutputNotifierAdapter struct {
+	output Output
+}
+
+// NewOutputNotifierAdapter creates a new adapter wrapping an Output.
+func NewOutputNotifierAdapter(output Output) *OutputNotifierAdapter {
+	return &OutputNotifierAdapter{output: output}
+}
+
+// PhaseStarted implements workflow.OutputNotifier.
+func (a *OutputNotifierAdapter) PhaseStarted(phase core.Phase) {
+	a.output.PhaseStarted(phase)
+}
+
+// TaskStarted implements workflow.OutputNotifier.
+func (a *OutputNotifierAdapter) TaskStarted(task *core.Task) {
+	a.output.TaskStarted(task)
+}
+
+// TaskCompleted implements workflow.OutputNotifier.
+func (a *OutputNotifierAdapter) TaskCompleted(task *core.Task, duration time.Duration) {
+	a.output.TaskCompleted(task, duration)
+}
+
+// TaskFailed implements workflow.OutputNotifier.
+func (a *OutputNotifierAdapter) TaskFailed(task *core.Task, err error) {
+	a.output.TaskFailed(task, err)
+}
+
+// WorkflowStateUpdated implements workflow.OutputNotifier.
+// It sends the full workflow state to update the TUI task list.
+func (a *OutputNotifierAdapter) WorkflowStateUpdated(state *core.WorkflowState) {
+	// Use WorkflowCompleted to send the full state - it works for intermediate updates too
+	a.output.WorkflowCompleted(state)
 }

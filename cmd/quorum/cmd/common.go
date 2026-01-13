@@ -43,7 +43,7 @@ type PhaseRunnerDeps struct {
 // InitPhaseRunner initializes all dependencies needed for running individual phases.
 // This extracts the common initialization logic from run.go to be reused by
 // analyze, plan, and execute commands.
-func InitPhaseRunner(ctx context.Context, maxRetries int, dryRun bool, sandbox bool) (*PhaseRunnerDeps, error) {
+func InitPhaseRunner(ctx context.Context, maxRetries int, dryRun, sandbox bool) (*PhaseRunnerDeps, error) {
 	// Load unified configuration using global viper (includes flag bindings)
 	loader := config.NewLoaderWithViper(viper.GetViper())
 	if cfgFile != "" {
@@ -140,6 +140,7 @@ func InitPhaseRunner(ctx context.Context, maxRetries int, dryRun bool, sandbox b
 			"aider":   cfg.Agents.Aider.PhaseModels,
 		},
 		WorktreeAutoClean:  cfg.Git.AutoClean,
+		WorktreeMode:       cfg.Git.WorktreeMode,
 		MaxCostPerWorkflow: cfg.Costs.MaxPerWorkflow,
 		MaxCostPerTask:     cfg.Costs.MaxPerTask,
 	}
@@ -163,7 +164,7 @@ func InitPhaseRunner(ctx context.Context, maxRetries int, dryRun bool, sandbox b
 
 	var worktreeManager workflow.WorktreeManager
 	if gitClient != nil {
-		worktreeManager = git.NewTaskWorktreeManager(gitClient, cfg.Git.WorktreeDir)
+		worktreeManager = git.NewTaskWorktreeManager(gitClient, cfg.Git.WorktreeDir).WithLogger(logger)
 	}
 
 	// Create adapters for modular runner interfaces
@@ -215,6 +216,7 @@ func CreateWorkflowContext(deps *PhaseRunnerDeps, state *core.WorkflowState) *wo
 			V3Agent:            deps.RunnerConfig.V3Agent,
 			AgentPhaseModels:   deps.RunnerConfig.AgentPhaseModels,
 			WorktreeAutoClean:  deps.RunnerConfig.WorktreeAutoClean,
+			WorktreeMode:       deps.RunnerConfig.WorktreeMode,
 			MaxCostPerWorkflow: deps.RunnerConfig.MaxCostPerWorkflow,
 			MaxCostPerTask:     deps.RunnerConfig.MaxCostPerTask,
 		},

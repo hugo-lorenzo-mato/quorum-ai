@@ -156,6 +156,7 @@ func (l *Loader) setDefaults() {
 	// Git defaults
 	l.v.SetDefault("git.worktree_dir", ".worktrees")
 	l.v.SetDefault("git.auto_clean", true)
+	l.v.SetDefault("git.worktree_mode", "always")
 
 	// GitHub defaults
 	l.v.SetDefault("github.remote", "origin")

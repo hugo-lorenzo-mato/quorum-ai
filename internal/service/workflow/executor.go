@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
@@ -38,6 +39,9 @@ func (e *Executor) Run(ctx context.Context, wctx *Context) error {
 	)
 
 	wctx.State.CurrentPhase = core.PhaseExecute
+	if wctx.Output != nil {
+		wctx.Output.PhaseStarted(core.PhaseExecute)
+	}
 	if err := wctx.Checkpoint.PhaseCheckpoint(wctx.State, core.PhaseExecute, false); err != nil {
 		wctx.Logger.Warn("failed to create phase checkpoint", "error", err)
 	}
@@ -65,11 +69,12 @@ func (e *Executor) Run(ctx context.Context, wctx *Context) error {
 		)
 
 		// Execute ready tasks in parallel
+		useWorktrees := shouldUseWorktrees(wctx.Config.WorktreeMode, len(ready))
 		g, taskCtx := errgroup.WithContext(ctx)
 		for _, task := range ready {
 			task := task
 			g.Go(func() error {
-				return e.executeTask(taskCtx, wctx, task)
+				return e.executeTask(taskCtx, wctx, task, useWorktrees)
 			})
 		}
 
@@ -98,7 +103,7 @@ func (e *Executor) Run(ctx context.Context, wctx *Context) error {
 }
 
 // executeTask executes a single task.
-func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Task) error {
+func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Task, useWorktrees bool) error {
 	wctx.Logger.Info("executing task",
 		"task_id", task.ID,
 		"task_name", task.Name,
@@ -110,9 +115,27 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 		return fmt.Errorf("task state not found: %s", task.ID)
 	}
 
-	now := time.Now()
+	startTime := time.Now()
 	taskState.Status = core.TaskStatusRunning
-	taskState.StartedAt = &now
+	taskState.StartedAt = &startTime
+
+	// Notify output that task has started
+	if wctx.Output != nil {
+		wctx.Output.TaskStarted(task)
+	}
+
+	// Notify output when task completes (success or failure)
+	var taskErr error
+	defer func() {
+		if wctx.Output != nil {
+			duration := time.Since(startTime)
+			if taskState.Status == core.TaskStatusCompleted {
+				wctx.Output.TaskCompleted(task, duration)
+			} else if taskState.Status == core.TaskStatusFailed {
+				wctx.Output.TaskFailed(task, taskErr)
+			}
+		}
+	}()
 
 	// Create task checkpoint
 	if err := wctx.Checkpoint.TaskCheckpoint(wctx.State, task, false); err != nil {
@@ -130,8 +153,8 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 	// Create worktree for task isolation
 	var workDir string
 	var worktreeCreated bool
-	if wctx.Worktrees != nil {
-		wtInfo, err := wctx.Worktrees.Create(ctx, task.ID, "")
+	if useWorktrees && wctx.Worktrees != nil {
+		wtInfo, err := wctx.Worktrees.Create(ctx, task, "")
 		if err != nil {
 			wctx.Logger.Warn("failed to create worktree, executing in main repo",
 				"task_id", task.ID,
@@ -151,7 +174,7 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 	// Cleanup worktree when done (if auto_clean is enabled)
 	defer func() {
 		if worktreeCreated && wctx.Config.WorktreeAutoClean && wctx.Worktrees != nil {
-			if rmErr := wctx.Worktrees.Remove(ctx, task.ID); rmErr != nil {
+			if rmErr := wctx.Worktrees.Remove(ctx, task); rmErr != nil {
 				wctx.Logger.Warn("failed to cleanup worktree",
 					"task_id", task.ID,
 					"error", rmErr,
@@ -174,6 +197,7 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 	if err != nil {
 		taskState.Status = core.TaskStatusFailed
 		taskState.Error = err.Error()
+		taskErr = err
 		return err
 	}
 
@@ -182,6 +206,7 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 	if err := limiter.Acquire(); err != nil {
 		taskState.Status = core.TaskStatusFailed
 		taskState.Error = err.Error()
+		taskErr = err
 		return fmt.Errorf("rate limit: %w", err)
 	}
 
@@ -193,6 +218,7 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 	if err != nil {
 		taskState.Status = core.TaskStatusFailed
 		taskState.Error = err.Error()
+		taskErr = err
 		return err
 	}
 
@@ -225,6 +251,7 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 	if err != nil {
 		taskState.Status = core.TaskStatusFailed
 		taskState.Error = err.Error()
+		taskErr = err
 		return err
 	}
 
@@ -249,12 +276,13 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 		if wctx.Config.MaxCostPerTask > 0 && result.CostUSD > wctx.Config.MaxCostPerTask {
 			taskState.Status = core.TaskStatusFailed
 			taskState.Error = "task budget exceeded"
+			taskErr = core.ErrTaskBudgetExceeded(string(task.ID), result.CostUSD, wctx.Config.MaxCostPerTask)
 			wctx.Logger.Error("task budget exceeded",
 				"task_id", task.ID,
 				"cost", result.CostUSD,
 				"limit", wctx.Config.MaxCostPerTask,
 			)
-			return core.ErrTaskBudgetExceeded(string(task.ID), result.CostUSD, wctx.Config.MaxCostPerTask)
+			return taskErr
 		}
 
 		// Check workflow cost limit
@@ -274,4 +302,17 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 	}
 
 	return nil
+}
+
+func shouldUseWorktrees(mode string, readyCount int) bool {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "", "always":
+		return true
+	case "parallel":
+		return readyCount > 1
+	case "disabled", "off", "false":
+		return false
+	default:
+		return true
+	}
 }

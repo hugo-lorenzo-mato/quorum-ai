@@ -95,3 +95,6 @@ tasks*/*
 
 # File storing user-specific quorum configuration
 .quorum.yaml
+
+# Files related to Claude Code
+.claude*

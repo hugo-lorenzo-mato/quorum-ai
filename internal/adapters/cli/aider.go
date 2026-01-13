@@ -71,7 +71,7 @@ func (a *AiderAdapter) Ping(ctx context.Context) error {
 func (a *AiderAdapter) Execute(ctx context.Context, opts core.ExecuteOptions) (*core.ExecuteResult, error) {
 	args := a.buildArgs(opts)
 
-	result, err := a.ExecuteCommand(ctx, args, opts.Prompt)
+	result, err := a.ExecuteCommand(ctx, args, opts.Prompt, opts.WorkDir)
 	if err != nil {
 		return nil, err
 	}

@@ -52,7 +52,7 @@ type CommandResult struct {
 }
 
 // ExecuteCommand runs a CLI command with the given options.
-func (b *BaseAdapter) ExecuteCommand(ctx context.Context, args []string, stdin string) (*CommandResult, error) {
+func (b *BaseAdapter) ExecuteCommand(ctx context.Context, args []string, stdin, workDir string) (*CommandResult, error) {
 	// Apply timeout
 	timeout := b.config.Timeout
 	if timeout == 0 {
@@ -75,7 +75,9 @@ func (b *BaseAdapter) ExecuteCommand(ctx context.Context, args []string, stdin s
 	}
 
 	cmd := exec.CommandContext(ctx, cmdPath, args...)
-	if b.config.WorkDir != "" {
+	if workDir != "" {
+		cmd.Dir = workDir
+	} else if b.config.WorkDir != "" {
 		cmd.Dir = b.config.WorkDir
 	}
 
@@ -244,7 +246,7 @@ func (b *BaseAdapter) ExtractByPattern(output, pattern string) ([]string, error)
 
 // GetVersion retrieves the CLI version.
 func (b *BaseAdapter) GetVersion(ctx context.Context, versionArg string) (string, error) {
-	result, err := b.ExecuteCommand(ctx, []string{versionArg}, "")
+	result, err := b.ExecuteCommand(ctx, []string{versionArg}, "", "")
 	if err != nil {
 		return "", err
 	}

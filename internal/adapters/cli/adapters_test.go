@@ -221,9 +221,6 @@ func TestClaudeAdapter_BuildArgs(t *testing.T) {
 	if !containsString(args, "--output-format") {
 		t.Error("should include --output-format for JSON")
 	}
-	if !containsString(args, "--cwd") {
-		t.Error("should include --cwd for work dir")
-	}
 }
 
 func TestClaudeAdapter_EstimateCost(t *testing.T) {

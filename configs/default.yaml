@@ -125,6 +125,8 @@ git:
   worktree_dir: .worktrees
   # Auto-cleanup completed worktrees
   auto_clean: true
+  # When to create worktrees: always, parallel, disabled
+  worktree_mode: parallel
 
 # GitHub integration
 github:

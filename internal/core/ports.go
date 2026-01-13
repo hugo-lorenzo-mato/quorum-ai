@@ -313,13 +313,13 @@ type FileStatus struct {
 // WorktreeManager provides higher-level worktree management.
 type WorktreeManager interface {
 	// Create creates a new worktree for a task.
-	Create(ctx context.Context, taskID TaskID, branch string) (*WorktreeInfo, error)
+	Create(ctx context.Context, task *Task, branch string) (*WorktreeInfo, error)
 
 	// Get retrieves worktree info for a task.
-	Get(ctx context.Context, taskID TaskID) (*WorktreeInfo, error)
+	Get(ctx context.Context, task *Task) (*WorktreeInfo, error)
 
 	// Remove cleans up a task's worktree.
-	Remove(ctx context.Context, taskID TaskID) error
+	Remove(ctx context.Context, task *Task) error
 
 	// CleanupStale removes worktrees for completed/failed tasks.
 	CleanupStale(ctx context.Context) error

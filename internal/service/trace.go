@@ -225,7 +225,7 @@ func (w *fileTraceWriter) Record(_ context.Context, event TraceEvent) error {
 			if filename != "" {
 				filePath := filepath.Join(w.dir, filename)
 				if w.canWriteFile(int64(len(stored))) {
-					if err := os.WriteFile(filePath, stored, 0o644); err != nil {
+					if err := os.WriteFile(filePath, stored, 0o600); err != nil {
 						w.disableWithWarning(fmt.Errorf("writing trace file: %w", err))
 					} else {
 						record.File = filename
@@ -361,8 +361,9 @@ func (w *fileTraceWriter) truncate(content []byte) ([]byte, bool) {
 		return content[:int(w.cfg.MaxBytes)], true
 	}
 
-	truncated := append(content[:int(limit)], marker...)
-	return truncated, true
+	result := content[:int(limit)]
+	result = append(result, marker...)
+	return result, true
 }
 
 func (w *fileTraceWriter) canWriteFile(size int64) bool {
@@ -402,7 +403,7 @@ func (w *fileTraceWriter) writeManifest(info TraceRunInfo, summary TraceRunSumma
 	}
 
 	path := filepath.Join(w.dir, "run.json")
-	return os.WriteFile(path, data, 0o644)
+	return os.WriteFile(path, data, 0o600)
 }
 
 func (w *fileTraceWriter) disableWithWarning(err error) {

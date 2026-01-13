@@ -131,7 +131,7 @@ func ErrConsensus(message string) *DomainError {
 }
 
 // ErrHumanReviewRequired creates an error indicating human review is required.
-func ErrHumanReviewRequired(score float64, threshold float64) *DomainError {
+func ErrHumanReviewRequired(score, threshold float64) *DomainError {
 	return &DomainError{
 		Category:  ErrCatConsensus,
 		Code:      CodeHumanReviewRequired,
@@ -218,16 +218,16 @@ func IsCategory(err error, cat ErrorCategory) bool {
 
 // Predefined error codes
 const (
-	CodeTaskNotFound      = "TASK_NOT_FOUND"
-	CodeWorkflowNotFound  = "WORKFLOW_NOT_FOUND"
-	CodeInvalidState      = "INVALID_STATE"
-	CodeLockAcquireFailed = "LOCK_ACQUIRE_FAILED"
-	CodeStateCorrupted    = "STATE_CORRUPTED"
-	CodeAgentUnavailable     = "AGENT_UNAVAILABLE"
-	CodeConsensusLow         = "CONSENSUS_BELOW_THRESHOLD"
-	CodeHumanReviewRequired  = "HUMAN_REVIEW_REQUIRED"
-	CodeChecksFailed         = "CHECKS_FAILED"
-	CodeMergeConflict     = "MERGE_CONFLICT"
+	CodeTaskNotFound        = "TASK_NOT_FOUND"
+	CodeWorkflowNotFound    = "WORKFLOW_NOT_FOUND"
+	CodeInvalidState        = "INVALID_STATE"
+	CodeLockAcquireFailed   = "LOCK_ACQUIRE_FAILED"
+	CodeStateCorrupted      = "STATE_CORRUPTED"
+	CodeAgentUnavailable    = "AGENT_UNAVAILABLE"
+	CodeConsensusLow        = "CONSENSUS_BELOW_THRESHOLD"
+	CodeHumanReviewRequired = "HUMAN_REVIEW_REQUIRED"
+	CodeChecksFailed        = "CHECKS_FAILED"
+	CodeMergeConflict       = "MERGE_CONFLICT"
 
 	// Validation error codes
 	CodeEmptyPrompt    = "EMPTY_PROMPT"
