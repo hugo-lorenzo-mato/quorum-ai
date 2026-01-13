@@ -35,6 +35,10 @@ type Config struct {
 	AgentPhaseModels map[string]map[string]string
 	// WorktreeAutoClean controls automatic worktree cleanup after task execution.
 	WorktreeAutoClean bool
+	// MaxCostPerWorkflow is the maximum total cost for the workflow in USD (0 = unlimited).
+	MaxCostPerWorkflow float64
+	// MaxCostPerTask is the maximum cost per task in USD (0 = unlimited).
+	MaxCostPerTask float64
 }
 
 // PromptRenderer renders prompts for different phases.

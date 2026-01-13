@@ -50,6 +50,10 @@ type RunnerConfig struct {
 	AgentPhaseModels map[string]map[string]string
 	// WorktreeAutoClean controls automatic worktree cleanup after task execution.
 	WorktreeAutoClean bool
+	// MaxCostPerWorkflow is the maximum total cost for the workflow in USD (0 = unlimited).
+	MaxCostPerWorkflow float64
+	// MaxCostPerTask is the maximum cost per task in USD (0 = unlimited).
+	MaxCostPerTask float64
 }
 
 // DefaultRunnerConfig returns default configuration.
@@ -279,13 +283,15 @@ func (r *Runner) createContext(state *core.WorkflowState) *Context {
 		Worktrees:  r.worktrees,
 		Logger:     r.logger,
 		Config: &Config{
-			DryRun:            r.config.DryRun,
-			Sandbox:           r.config.Sandbox,
-			DenyTools:         r.config.DenyTools,
-			DefaultAgent:      r.config.DefaultAgent,
-			V3Agent:           r.config.V3Agent,
-			AgentPhaseModels:  r.config.AgentPhaseModels,
-			WorktreeAutoClean: r.config.WorktreeAutoClean,
+			DryRun:             r.config.DryRun,
+			Sandbox:            r.config.Sandbox,
+			DenyTools:          r.config.DenyTools,
+			DefaultAgent:       r.config.DefaultAgent,
+			V3Agent:            r.config.V3Agent,
+			AgentPhaseModels:   r.config.AgentPhaseModels,
+			WorktreeAutoClean:  r.config.WorktreeAutoClean,
+			MaxCostPerWorkflow: r.config.MaxCostPerWorkflow,
+			MaxCostPerTask:     r.config.MaxCostPerTask,
 		},
 	}
 }

@@ -243,6 +243,32 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 		wctx.State.Metrics.TotalCostUSD += result.CostUSD
 	}
 
+	// Check cost limits
+	if wctx.Config != nil {
+		// Check task cost limit
+		if wctx.Config.MaxCostPerTask > 0 && result.CostUSD > wctx.Config.MaxCostPerTask {
+			taskState.Status = core.TaskStatusFailed
+			taskState.Error = "task budget exceeded"
+			wctx.Logger.Error("task budget exceeded",
+				"task_id", task.ID,
+				"cost", result.CostUSD,
+				"limit", wctx.Config.MaxCostPerTask,
+			)
+			return core.ErrTaskBudgetExceeded(string(task.ID), result.CostUSD, wctx.Config.MaxCostPerTask)
+		}
+
+		// Check workflow cost limit
+		if wctx.Config.MaxCostPerWorkflow > 0 && wctx.State.Metrics != nil {
+			if wctx.State.Metrics.TotalCostUSD > wctx.Config.MaxCostPerWorkflow {
+				wctx.Logger.Error("workflow budget exceeded",
+					"total_cost", wctx.State.Metrics.TotalCostUSD,
+					"limit", wctx.Config.MaxCostPerWorkflow,
+				)
+				return core.ErrWorkflowBudgetExceeded(wctx.State.Metrics.TotalCostUSD, wctx.Config.MaxCostPerWorkflow)
+			}
+		}
+	}
+
 	if err := wctx.Checkpoint.TaskCheckpoint(wctx.State, task, true); err != nil {
 		wctx.Logger.Warn("failed to create task complete checkpoint", "error", err)
 	}

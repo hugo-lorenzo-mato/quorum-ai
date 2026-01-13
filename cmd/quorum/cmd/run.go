@@ -163,7 +163,9 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 			"copilot": cfg.Agents.Copilot.PhaseModels,
 			"aider":   cfg.Agents.Aider.PhaseModels,
 		},
-		WorktreeAutoClean: cfg.Git.AutoClean,
+		WorktreeAutoClean:  cfg.Git.AutoClean,
+		MaxCostPerWorkflow: cfg.Costs.MaxPerWorkflow,
+		MaxCostPerTask:     cfg.Costs.MaxPerTask,
 	}
 
 	// Store trace config for potential later use

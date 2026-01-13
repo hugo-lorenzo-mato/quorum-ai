@@ -20,6 +20,7 @@ const (
 	ErrCatNotFound   ErrorCategory = "not_found"  // Resource not found
 	ErrCatConflict   ErrorCategory = "conflict"   // Concurrent modification
 	ErrCatInternal   ErrorCategory = "internal"   // Unexpected internal error
+	ErrCatBudget     ErrorCategory = "budget"     // Cost budget exceeded
 )
 
 // DomainError represents a structured error from the domain layer.
@@ -160,6 +161,35 @@ func ErrNotFound(resource, id string) *DomainError {
 		Code:      "NOT_FOUND",
 		Message:   fmt.Sprintf("%s not found: %s", resource, id),
 		Retryable: false,
+	}
+}
+
+// ErrWorkflowBudgetExceeded creates an error when workflow budget is exceeded.
+func ErrWorkflowBudgetExceeded(current, limit float64) *DomainError {
+	return &DomainError{
+		Category:  ErrCatBudget,
+		Code:      "WORKFLOW_BUDGET_EXCEEDED",
+		Message:   fmt.Sprintf("workflow cost $%.4f exceeds limit $%.2f", current, limit),
+		Retryable: false,
+		Details: map[string]interface{}{
+			"current_cost": current,
+			"limit":        limit,
+		},
+	}
+}
+
+// ErrTaskBudgetExceeded creates an error when task budget is exceeded.
+func ErrTaskBudgetExceeded(taskID string, cost, limit float64) *DomainError {
+	return &DomainError{
+		Category:  ErrCatBudget,
+		Code:      "TASK_BUDGET_EXCEEDED",
+		Message:   fmt.Sprintf("task %s cost $%.4f exceeds limit $%.2f", taskID, cost, limit),
+		Retryable: false,
+		Details: map[string]interface{}{
+			"task_id": taskID,
+			"cost":    cost,
+			"limit":   limit,
+		},
 	}
 }
 
