@@ -208,7 +208,7 @@ The POC includes controlled experiments:
 1. **Single User**: No multi-tenancy or concurrent workflows
 2. **Local Execution**: No remote orchestration
 3. **CLI-Based Agents**: No direct API integration (uses existing CLI tools)
-4. **English Only**: Prompts and outputs in English
+4. **English Recommended**: English prompts yield best results; other languages supported but untested
 
 ---
 
