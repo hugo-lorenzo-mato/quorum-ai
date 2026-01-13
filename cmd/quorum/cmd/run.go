@@ -89,6 +89,14 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 	if statePath == "" {
 		statePath = ".quorum/state/state.json"
 	}
+
+	// Migrate state from legacy paths if needed
+	if migrated, err := state.MigrateState(statePath, logger); err != nil {
+		logger.Warn("state migration failed", "error", err)
+	} else if migrated {
+		logger.Info("migrated state from legacy path to", "path", statePath)
+	}
+
 	stateManager := state.NewJSONStateManager(statePath)
 
 	// Create agent registry and configure from unified config

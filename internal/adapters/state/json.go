@@ -296,5 +296,71 @@ func processExists(pid int) bool {
 	return err == nil
 }
 
+// MigrateState migrates state files from legacy paths to the new unified path.
+// It checks if state exists at the old location (.orchestrator/) and migrates
+// to the new location (.quorum/state/) if the new location doesn't exist.
+// Returns true if migration was performed.
+func MigrateState(newPath string, logger interface{ Info(msg string, args ...interface{}) }) (bool, error) {
+	// Legacy paths to check
+	legacyPaths := []string{
+		".orchestrator/state.json",
+	}
+
+	// If new state already exists, no migration needed
+	if _, err := os.Stat(newPath); err == nil {
+		return false, nil
+	}
+
+	for _, legacyPath := range legacyPaths {
+		if _, err := os.Stat(legacyPath); err == nil {
+			// Found legacy state, migrate it
+			if err := migrateStateFile(legacyPath, newPath, logger); err != nil {
+				return false, fmt.Errorf("migrating state from %s: %w", legacyPath, err)
+			}
+
+			// Also migrate backup if it exists
+			legacyBackup := legacyPath + ".bak"
+			newBackup := newPath + ".bak"
+			if _, err := os.Stat(legacyBackup); err == nil {
+				if err := migrateStateFile(legacyBackup, newBackup, logger); err != nil {
+					// Non-fatal, just log
+					if logger != nil {
+						logger.Info("failed to migrate backup file", "error", err)
+					}
+				}
+			}
+
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+func migrateStateFile(src, dst string, logger interface{ Info(msg string, args ...interface{}) }) error {
+	// Ensure destination directory exists
+	dstDir := filepath.Dir(dst)
+	if err := os.MkdirAll(dstDir, 0o755); err != nil {
+		return fmt.Errorf("creating directory %s: %w", dstDir, err)
+	}
+
+	// Read source file
+	data, err := os.ReadFile(src)
+	if err != nil {
+		return fmt.Errorf("reading %s: %w", src, err)
+	}
+
+	// Write to destination
+	if err := os.WriteFile(dst, data, 0o644); err != nil {
+		return fmt.Errorf("writing %s: %w", dst, err)
+	}
+
+	if logger != nil {
+		logger.Info("migrated state file", "from", src, "to", dst)
+	}
+
+	return nil
+}
+
 // Verify that JSONStateManager implements core.StateManager.
 var _ core.StateManager = (*JSONStateManager)(nil)

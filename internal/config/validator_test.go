@@ -53,8 +53,8 @@ func validConfig() *Config {
 			},
 		},
 		State: StateConfig{
-			Path:       ".orchestrator/state.json",
-			BackupPath: ".orchestrator/state.json.bak",
+			Path:       ".quorum/state/state.json",
+			BackupPath: ".quorum/state/state.json.bak",
 			LockTTL:    "1h",
 		},
 		Git: GitConfig{

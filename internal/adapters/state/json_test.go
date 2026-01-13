@@ -451,3 +451,80 @@ func TestJSONStateManager_BackupNonExistent(t *testing.T) {
 		t.Errorf("Backup() with no state error = %v", err)
 	}
 }
+
+func TestMigrateState(t *testing.T) {
+	t.Run("no legacy state", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		newPath := filepath.Join(tmpDir, ".quorum", "state", "state.json")
+
+		migrated, err := MigrateState(newPath, nil)
+		if err != nil {
+			t.Errorf("MigrateState() error = %v", err)
+		}
+		if migrated {
+			t.Error("MigrateState() returned true when no legacy state exists")
+		}
+	})
+
+	t.Run("new state already exists", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		newPath := filepath.Join(tmpDir, "new", "state.json")
+
+		// Create new state
+		os.MkdirAll(filepath.Dir(newPath), 0o755)
+		os.WriteFile(newPath, []byte(`{"test": true}`), 0o644)
+
+		migrated, err := MigrateState(newPath, nil)
+		if err != nil {
+			t.Errorf("MigrateState() error = %v", err)
+		}
+		if migrated {
+			t.Error("MigrateState() returned true when new state already exists")
+		}
+	})
+
+	t.Run("migrate from legacy path", func(t *testing.T) {
+		// Save current directory and change to temp dir
+		origDir, _ := os.Getwd()
+		tmpDir := t.TempDir()
+		os.Chdir(tmpDir)
+		defer os.Chdir(origDir)
+
+		// Create legacy state at .orchestrator/state.json
+		legacyPath := ".orchestrator/state.json"
+		os.MkdirAll(filepath.Dir(legacyPath), 0o755)
+		legacyContent := []byte(`{"version":1,"checksum":"abc","state":{"workflow_id":"test"}}`)
+		os.WriteFile(legacyPath, legacyContent, 0o644)
+
+		// Also create legacy backup
+		os.WriteFile(legacyPath+".bak", legacyContent, 0o644)
+
+		newPath := ".quorum/state/state.json"
+
+		migrated, err := MigrateState(newPath, nil)
+		if err != nil {
+			t.Fatalf("MigrateState() error = %v", err)
+		}
+		if !migrated {
+			t.Fatal("MigrateState() returned false when legacy state exists")
+		}
+
+		// Verify new state exists
+		newContent, err := os.ReadFile(newPath)
+		if err != nil {
+			t.Fatalf("failed to read new state: %v", err)
+		}
+		if string(newContent) != string(legacyContent) {
+			t.Errorf("migrated content mismatch: got %s, want %s", newContent, legacyContent)
+		}
+
+		// Verify backup was also migrated
+		newBackup, err := os.ReadFile(newPath + ".bak")
+		if err != nil {
+			t.Fatalf("failed to read new backup: %v", err)
+		}
+		if string(newBackup) != string(legacyContent) {
+			t.Errorf("migrated backup mismatch: got %s, want %s", newBackup, legacyContent)
+		}
+	})
+}

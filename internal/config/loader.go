@@ -148,9 +148,9 @@ func (l *Loader) setDefaults() {
 	l.v.SetDefault("agents.aider.max_tokens", 4096)
 	l.v.SetDefault("agents.aider.temperature", 0.7)
 
-	// State defaults
-	l.v.SetDefault("state.path", ".orchestrator/state.json")
-	l.v.SetDefault("state.backup_path", ".orchestrator/state.json.bak")
+	// State defaults (unified under .quorum/)
+	l.v.SetDefault("state.path", ".quorum/state/state.json")
+	l.v.SetDefault("state.backup_path", ".quorum/state/state.json.bak")
 	l.v.SetDefault("state.lock_ttl", "1h")
 
 	// Git defaults
