@@ -24,6 +24,15 @@ func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
 
 	// Rename temp file to target (atomic on Windows when same volume)
 	if err := os.Rename(tempFile, path); err != nil {
+		// Windows does not allow renaming over an existing file.
+		if _, statErr := os.Stat(path); statErr == nil {
+			_ = os.Remove(path)
+			if retryErr := os.Rename(tempFile, path); retryErr == nil {
+				return nil
+			} else {
+				err = retryErr
+			}
+		}
 		os.Remove(tempFile) // Clean up on failure
 		return err
 	}
