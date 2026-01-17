@@ -343,8 +343,12 @@ func TestSandbox_DenyPath(t *testing.T) {
 
 func TestSandbox_WorkspaceRoot(t *testing.T) {
 	sandbox := service.NewSandbox("/my/workspace")
-	if filepath.ToSlash(sandbox.WorkspaceRoot()) != "/my/workspace" {
-		t.Errorf("WorkspaceRoot() = %s, want /my/workspace", sandbox.WorkspaceRoot())
+	expected, err := filepath.Abs("/my/workspace")
+	if err != nil {
+		t.Fatalf("Abs() error = %v", err)
+	}
+	if sandbox.WorkspaceRoot() != expected {
+		t.Errorf("WorkspaceRoot() = %s, want %s", sandbox.WorkspaceRoot(), expected)
 	}
 }
 
