@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service"
@@ -342,7 +343,9 @@ func TestSandbox_DenyPath(t *testing.T) {
 
 func TestSandbox_WorkspaceRoot(t *testing.T) {
 	sandbox := service.NewSandbox("/my/workspace")
-	testutil.AssertEqual(t, sandbox.WorkspaceRoot(), "/my/workspace")
+	if filepath.ToSlash(sandbox.WorkspaceRoot()) != "/my/workspace" {
+		t.Errorf("WorkspaceRoot() = %s, want /my/workspace", sandbox.WorkspaceRoot())
+	}
 }
 
 func TestSandbox_ValidateOperation(t *testing.T) {

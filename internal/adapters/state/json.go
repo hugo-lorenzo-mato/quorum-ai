@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"syscall"
 	"time"
 
@@ -297,6 +298,10 @@ func (m *JSONStateManager) BackupPath() string {
 
 // processExists checks if a process is running.
 func processExists(pid int) bool {
+	// Windows reports no access when signaling the current process; treat that as existing.
+	if runtime.GOOS == "windows" && pid == os.Getpid() {
+		return true
+	}
 	process, err := os.FindProcess(pid)
 	if err != nil {
 		return false

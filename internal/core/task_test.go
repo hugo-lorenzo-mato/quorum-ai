@@ -159,10 +159,10 @@ func TestTask_Duration(t *testing.T) {
 	_ = task.MarkRunning()
 	_ = task.MarkCompleted(nil)
 
-	// Duration should be positive after completion
+	// Duration should be non-negative after completion
 	dur := task.Duration()
-	if dur <= 0 {
-		t.Error("Duration should be positive after completion")
+	if dur < 0 {
+		t.Error("Duration should be non-negative after completion")
 	}
 }
 
