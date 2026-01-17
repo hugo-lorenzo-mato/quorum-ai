@@ -135,11 +135,6 @@ func (a *Analyzer) runV1Analysis(ctx context.Context, wctx *Context) ([]Analysis
 		return nil, core.ErrValidation(core.CodeNoAgents, "no agents available")
 	}
 
-	// Limit to 2 agents for V1
-	if len(agentNames) > 2 {
-		agentNames = agentNames[:2]
-	}
-
 	wctx.Logger.Info("running V1 analysis",
 		"agents", strings.Join(agentNames, ", "),
 	)

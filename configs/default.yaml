@@ -83,20 +83,20 @@ agents:
     max_tokens: 4096
     temperature: 0.7
 
-  # OpenAI Codex CLI configuration (optional, disabled by default)
+  # OpenAI Codex CLI configuration
   # Note: reasoning_effort is configured per-phase in the adapter code
   # optimize/analyze/plan use "xhigh" (extra high), execute uses "high"
   codex:
-    enabled: false
+    enabled: true
     path: codex
     # Default model (fallback when phase not specified)
-    model: gpt-5.2-codex
+    model: gpt-5.2-codex-extra-high
     # Per-phase model overrides (optimize/analyze/plan/execute)
     phase_models:
-      optimize: gpt-5.2-codex
-      analyze: gpt-5.2-codex
-      plan: gpt-5.2-codex
-      execute: gpt-5.2-codex
+      optimize: gpt-5.2-codex-extra-high
+      analyze: gpt-5.2-codex-extra-high
+      plan: gpt-5.2-codex-extra-high
+      execute: gpt-5.2-codex-extra-high
     max_tokens: 4096
     temperature: 0.7
 

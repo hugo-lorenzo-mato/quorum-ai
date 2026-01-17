@@ -137,23 +137,40 @@ type optimizationResult struct {
 func parseOptimizationResult(output string) (string, error) {
 	var result optimizationResult
 
-	if err := json.Unmarshal([]byte(output), &result); err != nil {
-		// Try to extract JSON from markdown code blocks
-		extracted := extractJSONFromMarkdown(output)
+	// First, try to parse the output as a direct optimization result
+	if err := json.Unmarshal([]byte(output), &result); err == nil && result.OptimizedPrompt != "" {
+		return result.OptimizedPrompt, nil
+	}
+
+	// Try to extract from CLI JSON wrapper (e.g., Claude CLI --output-format json)
+	// The wrapper has format: {"type":"result","result":"...content...","session_id":"..."}
+	var cliWrapper struct {
+		Result string `json:"result"`
+	}
+	if err := json.Unmarshal([]byte(output), &cliWrapper); err == nil && cliWrapper.Result != "" {
+		// The result field contains the model's response, which may contain our JSON
+		// Try to parse it directly
+		if err := json.Unmarshal([]byte(cliWrapper.Result), &result); err == nil && result.OptimizedPrompt != "" {
+			return result.OptimizedPrompt, nil
+		}
+		// Try to extract JSON from markdown code blocks within the result
+		extracted := extractJSONFromMarkdown(cliWrapper.Result)
 		if extracted != "" {
-			if err := json.Unmarshal([]byte(extracted), &result); err != nil {
-				return "", fmt.Errorf("parsing optimization output: %w", err)
+			if err := json.Unmarshal([]byte(extracted), &result); err == nil && result.OptimizedPrompt != "" {
+				return result.OptimizedPrompt, nil
 			}
-		} else {
-			return "", fmt.Errorf("parsing optimization output: %w", err)
 		}
 	}
 
-	if result.OptimizedPrompt == "" {
-		return "", fmt.Errorf("optimization result missing optimized_prompt field")
+	// Try to extract JSON from markdown code blocks in original output
+	extracted := extractJSONFromMarkdown(output)
+	if extracted != "" {
+		if err := json.Unmarshal([]byte(extracted), &result); err == nil && result.OptimizedPrompt != "" {
+			return result.OptimizedPrompt, nil
+		}
 	}
 
-	return result.OptimizedPrompt, nil
+	return "", fmt.Errorf("optimization result missing optimized_prompt field")
 }
 
 // extractJSONFromMarkdown extracts JSON from markdown code blocks.
