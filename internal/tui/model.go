@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/events"
 )
 
 // Model is the main TUI model.
@@ -21,7 +22,8 @@ type Model struct {
 	logs          []LogEntry
 	showLogs      bool
 	err           error
-	droppedEvents int64 // track dropped events
+	droppedEvents int64            // track dropped events
+	eventAdapter  *EventBusAdapter // EventBus adapter for real-time events
 }
 
 // TaskView represents a task in the TUI.
@@ -52,13 +54,29 @@ func New() Model {
 	}
 }
 
+// NewWithEventBus creates a Model connected to an EventBus.
+func NewWithEventBus(bus *events.EventBus) Model {
+	m := New()
+	if bus != nil {
+		m.eventAdapter = NewEventBusAdapter(bus)
+	}
+	return m
+}
+
 // Init initializes the model.
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(
+	cmds := []tea.Cmd{
 		m.spinner.Tick(),
-		waitForWorkflowUpdate(),
 		durationTick(),
-	)
+	}
+
+	if m.eventAdapter != nil {
+		cmds = append(cmds, waitForEventBusUpdate(m.eventAdapter))
+	} else {
+		cmds = append(cmds, waitForWorkflowUpdate())
+	}
+
+	return tea.Batch(cmds...)
 }
 
 // Update handles messages.
@@ -76,14 +94,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case WorkflowUpdateMsg:
 		m.workflow = msg.State
 		m.tasks = m.buildTaskViews(msg.State)
+		if m.eventAdapter != nil {
+			return m, waitForEventBusUpdate(m.eventAdapter)
+		}
 		return m, waitForWorkflowUpdate()
 
 	case PhaseUpdateMsg:
 		m.currentPhase = msg.Phase
+		if m.eventAdapter != nil {
+			return m, waitForEventBusUpdate(m.eventAdapter)
+		}
 		return m, nil
 
 	case TaskUpdateMsg:
 		m.updateTask(msg)
+		if m.eventAdapter != nil {
+			return m, waitForEventBusUpdate(m.eventAdapter)
+		}
 		return m, nil
 
 	case LogMsg:
@@ -95,6 +122,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Keep last 100 logs
 		if len(m.logs) > 100 {
 			m.logs = m.logs[1:]
+		}
+		if m.eventAdapter != nil {
+			return m, waitForEventBusUpdate(m.eventAdapter)
+		}
+		return m, nil
+
+	case MetricsUpdateMsg:
+		// Update metrics display (future implementation)
+		// For now, just re-subscribe for next event
+		if m.eventAdapter != nil {
+			return m, waitForEventBusUpdate(m.eventAdapter)
 		}
 		return m, nil
 

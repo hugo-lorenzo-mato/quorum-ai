@@ -1,0 +1,177 @@
+package tui
+
+import (
+	"sync"
+
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/events"
+)
+
+// EventBusAdapter bridges EventBus events to Bubbletea messages.
+type EventBusAdapter struct {
+	bus        *events.EventBus
+	eventCh    <-chan events.Event
+	priorityCh <-chan events.Event
+	msgCh      chan tea.Msg
+	closeCh    chan struct{}
+	mu         sync.Mutex
+	closed     bool
+}
+
+// NewEventBusAdapter creates a new adapter.
+func NewEventBusAdapter(bus *events.EventBus) *EventBusAdapter {
+	adapter := &EventBusAdapter{
+		bus:        bus,
+		eventCh:    bus.Subscribe(), // Subscribe to all events
+		priorityCh: bus.SubscribePriority(),
+		msgCh:      make(chan tea.Msg, 100),
+		closeCh:    make(chan struct{}),
+	}
+
+	go adapter.run()
+	return adapter
+}
+
+// MsgChannel returns the channel for Bubbletea to read from.
+func (a *EventBusAdapter) MsgChannel() <-chan tea.Msg {
+	return a.msgCh
+}
+
+// Close shuts down the adapter.
+func (a *EventBusAdapter) Close() {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	if a.closed {
+		return
+	}
+	a.closed = true
+	close(a.closeCh)
+}
+
+// run processes events and converts them to tea.Msg.
+func (a *EventBusAdapter) run() {
+	for {
+		select {
+		case <-a.closeCh:
+			close(a.msgCh)
+			return
+
+		case event, ok := <-a.priorityCh:
+			if !ok {
+				return
+			}
+			a.handleEvent(event)
+
+		case event, ok := <-a.eventCh:
+			if !ok {
+				return
+			}
+			a.handleEvent(event)
+		}
+	}
+}
+
+// handleEvent converts an event to tea.Msg and sends it.
+func (a *EventBusAdapter) handleEvent(event events.Event) {
+	msg := a.eventToMsg(event)
+	if msg == nil {
+		return
+	}
+
+	select {
+	case a.msgCh <- msg:
+	default:
+		// Drop if channel full (shouldn't happen often)
+	}
+}
+
+// eventToMsg converts an events.Event to a tea.Msg.
+func (a *EventBusAdapter) eventToMsg(event events.Event) tea.Msg {
+	switch e := event.(type) {
+	case events.WorkflowStartedEvent:
+		return LogMsg{
+			Level:   "info",
+			Message: "Workflow started",
+		}
+
+	case events.WorkflowStateUpdatedEvent:
+		// Create a minimal WorkflowState for UI
+		return WorkflowUpdateMsg{
+			State: &core.WorkflowState{
+				CurrentPhase: core.Phase(e.Phase),
+				Status:       core.WorkflowStatusRunning,
+			},
+		}
+
+	case events.WorkflowCompletedEvent:
+		return WorkflowUpdateMsg{
+			State: &core.WorkflowState{
+				Status: core.WorkflowStatusCompleted,
+			},
+		}
+
+	case events.WorkflowFailedEvent:
+		return ErrorMsg{
+			Error: &eventError{message: e.Error},
+		}
+
+	case events.PhaseStartedEvent:
+		return PhaseUpdateMsg{
+			Phase: core.Phase(e.Phase),
+		}
+
+	case events.TaskStartedEvent:
+		return TaskUpdateMsg{
+			TaskID: core.TaskID(e.TaskID),
+			Status: core.TaskStatusRunning,
+		}
+
+	case events.TaskCompletedEvent:
+		return TaskUpdateMsg{
+			TaskID: core.TaskID(e.TaskID),
+			Status: core.TaskStatusCompleted,
+		}
+
+	case events.TaskFailedEvent:
+		return TaskUpdateMsg{
+			TaskID: core.TaskID(e.TaskID),
+			Status: core.TaskStatusFailed,
+			Error:  e.Error,
+		}
+
+	case events.TaskSkippedEvent:
+		return TaskUpdateMsg{
+			TaskID: core.TaskID(e.TaskID),
+			Status: core.TaskStatusSkipped,
+			Error:  e.Reason,
+		}
+
+	case events.LogEvent:
+		return LogMsg{
+			Level:   e.Level,
+			Message: e.Message,
+		}
+
+	case events.MetricsUpdateEvent:
+		return MetricsUpdateMsg{
+			TotalCostUSD:   e.TotalCostUSD,
+			TotalTokensIn:  e.TotalTokensIn,
+			TotalTokensOut: e.TotalTokensOut,
+			Duration:       e.Duration,
+		}
+
+	default:
+		return nil
+	}
+}
+
+// eventError wraps an error string.
+type eventError struct {
+	message string
+}
+
+func (e *eventError) Error() string {
+	return e.message
+}
