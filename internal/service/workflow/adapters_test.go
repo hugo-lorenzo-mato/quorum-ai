@@ -78,6 +78,65 @@ func TestConsensusAdapter_Evaluate(t *testing.T) {
 	}
 }
 
+func TestConsensusAdapter_PreservesFullStructure(t *testing.T) {
+	checker := service.NewConsensusChecker(0.8, service.DefaultWeights())
+	adapter := NewConsensusAdapter(checker)
+
+	outputs := []AnalysisOutput{
+		{
+			AgentName: "claude",
+			Claims:    []string{"claim1", "claim2"},
+			Risks:     []string{"risk1"},
+		},
+		{
+			AgentName: "gemini",
+			Claims:    []string{"claim1", "claim3"},
+			Risks:     []string{"risk2"},
+		},
+	}
+
+	result := adapter.Evaluate(outputs)
+
+	// Check CategoryScores are preserved
+	if result.CategoryScores == nil {
+		t.Error("CategoryScores should not be nil")
+	}
+	if _, ok := result.CategoryScores["claims"]; !ok {
+		t.Error("CategoryScores should include 'claims'")
+	}
+
+	// Check Divergences have full detail
+	for _, d := range result.Divergences {
+		if d.Agent1Items == nil && d.Agent2Items == nil {
+			t.Error("Divergence should have agent items")
+		}
+		if d.JaccardScore < 0 || d.JaccardScore > 1 {
+			t.Errorf("JaccardScore should be 0-1, got %f", d.JaccardScore)
+		}
+	}
+}
+
+func TestConsensusResult_DivergenceStrings(t *testing.T) {
+	result := ConsensusResult{
+		Divergences: []Divergence{
+			{
+				Category: "claims",
+				Agent1:   "claude",
+				Agent2:   "gemini",
+			},
+		},
+	}
+
+	strings := result.DivergenceStrings()
+
+	if len(strings) != 1 {
+		t.Errorf("Expected 1 string, got %d", len(strings))
+	}
+	if strings[0] != "claims: claude vs gemini" {
+		t.Errorf("Unexpected string: %s", strings[0])
+	}
+}
+
 func TestConsensusAdapter_Evaluate_EmptyOutputs(t *testing.T) {
 	checker := service.NewConsensusChecker(0.7, service.CategoryWeights{})
 	adapter := NewConsensusAdapter(checker)

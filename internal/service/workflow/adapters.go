@@ -36,17 +36,26 @@ func (a *ConsensusAdapter) Evaluate(outputs []AnalysisOutput) ConsensusResult {
 
 	result := a.checker.Evaluate(serviceOutputs)
 
-	// Convert divergences to strings
-	divergenceStrings := make([]string, len(result.Divergences))
+	// Convert divergences preserving full structure
+	divergences := make([]Divergence, len(result.Divergences))
 	for i, d := range result.Divergences {
-		divergenceStrings[i] = d.Category + ": " + d.Agent1 + " vs " + d.Agent2
+		divergences[i] = Divergence{
+			Category:     d.Category,
+			Agent1:       d.Agent1,
+			Agent1Items:  d.Agent1Items,
+			Agent2:       d.Agent2,
+			Agent2Items:  d.Agent2Items,
+			JaccardScore: d.JaccardScore,
+		}
 	}
 
 	return ConsensusResult{
 		Score:            result.Score,
 		NeedsV3:          result.NeedsV3,
 		NeedsHumanReview: result.NeedsHumanReview,
-		Divergences:      divergenceStrings,
+		CategoryScores:   result.CategoryScores,
+		Divergences:      divergences,
+		Agreement:        result.Agreement,
 	}
 }
 
@@ -88,11 +97,27 @@ func (a *CheckpointAdapter) TaskCheckpoint(state *core.WorkflowState, task *core
 
 // ConsensusCheckpoint creates a checkpoint after consensus evaluation.
 func (a *CheckpointAdapter) ConsensusCheckpoint(state *core.WorkflowState, result ConsensusResult) error {
+	// Convert workflow.Divergence to service.Divergence
+	serviceDivergences := make([]service.Divergence, len(result.Divergences))
+	for i, d := range result.Divergences {
+		serviceDivergences[i] = service.Divergence{
+			Category:     d.Category,
+			Agent1:       d.Agent1,
+			Agent1Items:  d.Agent1Items,
+			Agent2:       d.Agent2,
+			Agent2Items:  d.Agent2Items,
+			JaccardScore: d.JaccardScore,
+		}
+	}
+
 	// Convert workflow.ConsensusResult to service.ConsensusResult
 	serviceResult := service.ConsensusResult{
 		Score:            result.Score,
 		NeedsV3:          result.NeedsV3,
 		NeedsHumanReview: result.NeedsHumanReview,
+		CategoryScores:   result.CategoryScores,
+		Divergences:      serviceDivergences,
+		Agreement:        result.Agreement,
 	}
 	return a.manager.ConsensusCheckpoint(a.ctx, state, serviceResult)
 }
