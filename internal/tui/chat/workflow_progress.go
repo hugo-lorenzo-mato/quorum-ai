@@ -95,7 +95,7 @@ func (p *WorkflowProgress) CompletePhase(phaseName string) {
 }
 
 // FailPhase marks a phase as failed
-func (p *WorkflowProgress) FailPhase(phaseName string, err string) {
+func (p *WorkflowProgress) FailPhase(phaseName, err string) {
 	for i := range p.phases {
 		if strings.EqualFold(p.phases[i].Name, phaseName) {
 			p.phases[i].Status = PhaseError

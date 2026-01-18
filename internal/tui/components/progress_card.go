@@ -9,11 +9,11 @@ import (
 
 // ProgressCardConfig holds progress card configuration.
 type ProgressCardConfig struct {
-	Width       int
-	Title       string
-	Percentage  float64
+	Width        int
+	Title        string
+	Percentage   float64
 	ShowPipeline bool
-	Agents      []*Agent
+	Agents       []*Agent
 }
 
 var (

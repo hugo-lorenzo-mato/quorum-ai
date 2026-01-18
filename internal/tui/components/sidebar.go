@@ -10,11 +10,11 @@ import (
 
 // SidebarConfig holds sidebar configuration.
 type SidebarConfig struct {
-	Width      int
-	Height     int
-	ShowStats  bool
-	TotalCost  float64
-	TotalReqs  int
+	Width     int
+	Height    int
+	ShowStats bool
+	TotalCost float64
+	TotalReqs int
 }
 
 // DefaultSidebarConfig returns default sidebar configuration.

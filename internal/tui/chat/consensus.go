@@ -9,10 +9,10 @@ import (
 
 // ConsensusPanel displays the consensus level between agents
 type ConsensusPanel struct {
-	score        float64                   // Overall consensus score (0-100)
-	threshold    float64                   // Configured threshold (e.g., 80)
-	pairScores   map[string]float64        // Scores between agent pairs
-	agentOutputs map[string]string         // Raw outputs for diff
+	score        float64            // Overall consensus score (0-100)
+	threshold    float64            // Configured threshold (e.g., 80)
+	pairScores   map[string]float64 // Scores between agent pairs
+	agentOutputs map[string]string  // Raw outputs for diff
 	width        int
 	height       int
 	visible      bool
@@ -39,7 +39,7 @@ func (p *ConsensusPanel) SetScore(score float64) {
 }
 
 // SetPairScore sets the consensus between two agents
-func (p *ConsensusPanel) SetPairScore(agent1, agent2, score string, val float64) {
+func (p *ConsensusPanel) SetPairScore(agent1, agent2, _ string, val float64) {
 	key := fmt.Sprintf("%s ↔ %s", agent1, agent2)
 	p.pairScores[key] = val
 }

@@ -206,7 +206,7 @@ func (p *LogsPanel) ScrollUp() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.ready {
-		p.viewport.LineUp(1)
+		p.viewport.ScrollUp(1)
 	}
 }
 
@@ -215,7 +215,7 @@ func (p *LogsPanel) ScrollDown() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.ready {
-		p.viewport.LineDown(1)
+		p.viewport.ScrollDown(1)
 	}
 }
 
@@ -224,7 +224,7 @@ func (p *LogsPanel) PageUp() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.ready {
-		p.viewport.ViewUp()
+		p.viewport.PageUp()
 	}
 }
 
@@ -233,7 +233,7 @@ func (p *LogsPanel) PageDown() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.ready {
-		p.viewport.ViewDown()
+		p.viewport.PageDown()
 	}
 }
 
@@ -340,7 +340,7 @@ func (p *LogsPanel) formatEntry(entry LogEntry) string {
 		var lines []string
 		indent := strings.Repeat(" ", prefixWidth)
 
-		for len(message) > 0 {
+		for message != "" {
 			if len(message) <= msgWidth {
 				lines = append(lines, message)
 				break

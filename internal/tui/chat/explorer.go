@@ -165,23 +165,6 @@ func (p *ExplorerPanel) addWatch(path string) {
 	}
 }
 
-// removeWatch removes a directory from the watcher
-func (p *ExplorerPanel) removeWatch(path string) {
-	if p.watcher == nil {
-		return
-	}
-
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	if !p.watchedDirs[path] {
-		return
-	}
-
-	p.watcher.Remove(path)
-	delete(p.watchedDirs, path)
-}
-
 // OnChange returns the channel that signals file system changes
 func (p *ExplorerPanel) OnChange() <-chan struct{} {
 	return p.onChange
@@ -423,7 +406,7 @@ func (p *ExplorerPanel) ToggleHidden() {
 	defer p.mu.Unlock()
 
 	p.showHidden = !p.showHidden
-	p.refresh()
+	_ = p.refresh()
 }
 
 // GoUp navigates to parent directory (but not above initialRoot)
@@ -445,7 +428,7 @@ func (p *ExplorerPanel) GoUp() {
 	if parent != p.root {
 		p.root = parent
 		p.cursor = 0
-		p.refresh()
+		_ = p.refresh()
 	}
 }
 
@@ -462,7 +445,7 @@ func (p *ExplorerPanel) Enter() string {
 	if entry.Type == FileTypeDir {
 		p.root = entry.Path
 		p.cursor = 0
-		p.refresh()
+		_ = p.refresh()
 		return ""
 	}
 	return entry.Path
@@ -479,7 +462,7 @@ func (p *ExplorerPanel) SetSize(width, height int) {
 	if !p.ready {
 		p.viewport = viewport.New(width-4, height-4)
 		p.ready = true
-		p.refresh()
+		_ = p.refresh()
 	} else {
 		p.viewport.Width = width - 4
 		p.viewport.Height = height - 4
@@ -598,20 +581,20 @@ func (p *ExplorerPanel) formatEntry(entry *FileEntry, selected bool) string {
 
 // Nerd Font icons for explorer
 const (
-	explorerIconFolder     = ""  // nf-fa-folder
-	explorerIconFolderOpen = ""  // nf-fa-folder_open
-	explorerIconFile       = ""  // nf-fa-file
-	explorerIconGo         = ""  // nf-seti-go
-	explorerIconJs         = ""  // nf-seti-javascript
-	explorerIconTs         = ""  // nf-seti-typescript
-	explorerIconPy         = ""  // nf-seti-python
-	explorerIconRust       = ""  // nf-dev-rust
-	explorerIconJson       = ""  // nf-seti-json
-	explorerIconYaml       = ""  // nf-seti-yml
-	explorerIconMd         = ""  // nf-seti-markdown
-	explorerIconGit        = ""  // nf-dev-git
-	explorerIconDocker     = ""  // nf-linux-docker
-	explorerIconTree       = ""  // nf-fa-sitemap
+	explorerIconFolder     = "" // nf-fa-folder
+	explorerIconFolderOpen = "" // nf-fa-folder_open
+	explorerIconFile       = "" // nf-fa-file
+	explorerIconGo         = "" // nf-seti-go
+	explorerIconJs         = "" // nf-seti-javascript
+	explorerIconTs         = "" // nf-seti-typescript
+	explorerIconPy         = "" // nf-seti-python
+	explorerIconRust       = "" // nf-dev-rust
+	explorerIconJson       = "" // nf-seti-json
+	explorerIconYaml       = "" // nf-seti-yml
+	explorerIconMd         = "" // nf-seti-markdown
+	explorerIconGit        = "" // nf-dev-git
+	explorerIconDocker     = "" // nf-linux-docker
+	explorerIconTree       = "" // nf-fa-sitemap
 )
 
 // Render renders the explorer panel

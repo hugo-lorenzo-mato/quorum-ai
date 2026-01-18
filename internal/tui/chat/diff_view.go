@@ -27,8 +27,8 @@ type AgentDiffView struct {
 	visible      bool
 	ready        bool
 	// Navigation between agent pairs
-	agentPairs    [][2]string // Available pairs to compare
-	currentPair   int
+	agentPairs  [][2]string // Available pairs to compare
+	currentPair int
 }
 
 // NewAgentDiffView creates a new diff view
@@ -86,7 +86,7 @@ func (d *AgentDiffView) PrevPair() bool {
 }
 
 // GetCurrentPair returns the current agent pair
-func (d *AgentDiffView) GetCurrentPair() (string, string) {
+func (d *AgentDiffView) GetCurrentPair() (left, right string) {
 	if len(d.agentPairs) == 0 {
 		return d.leftAgent, d.rightAgent
 	}
@@ -130,12 +130,12 @@ func (d *AgentDiffView) SetSize(width, height int) {
 
 // ScrollUp scrolls the viewport up
 func (d *AgentDiffView) ScrollUp() {
-	d.viewport.LineUp(1)
+	d.viewport.ScrollUp(1)
 }
 
 // ScrollDown scrolls the viewport down
 func (d *AgentDiffView) ScrollDown() {
-	d.viewport.LineDown(1)
+	d.viewport.ScrollDown(1)
 }
 
 // computeDiff computes the diff between left and right content

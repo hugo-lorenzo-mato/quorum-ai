@@ -89,8 +89,8 @@ func (w *StatsWidget) calculateCPUPercent() float64 {
 	}
 
 	var utime, stime uint64
-	fmt.Sscanf(fields[13], "%d", &utime)
-	fmt.Sscanf(fields[14], "%d", &stime)
+	_, _ = fmt.Sscanf(fields[13], "%d", &utime)
+	_, _ = fmt.Sscanf(fields[14], "%d", &stime)
 
 	currentCPUTime := utime + stime
 	currentWallTime := time.Now()

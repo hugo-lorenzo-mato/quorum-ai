@@ -17,14 +17,14 @@ type AgentCost struct {
 
 // CostPanel displays real-time cost tracking
 type CostPanel struct {
-	agents       map[string]*AgentCost
-	agentOrder   []string // To maintain consistent ordering
-	budget       float64
-	alertAt80    bool // Whether we've shown 80% alert
-	alertAt95    bool // Whether we've shown 95% alert
-	width        int
-	height       int
-	visible      bool
+	agents     map[string]*AgentCost
+	agentOrder []string // To maintain consistent ordering
+	budget     float64
+	alertAt80  bool // Whether we've shown 80% alert
+	alertAt95  bool // Whether we've shown 95% alert
+	width      int
+	height     int
+	visible    bool
 }
 
 // NewCostPanel creates a new cost tracking panel

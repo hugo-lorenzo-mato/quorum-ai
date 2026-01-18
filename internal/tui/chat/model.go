@@ -39,27 +39,27 @@ var (
 
 // Nerd Font icons (fallback to Unicode if not available)
 const (
-	iconFolder       = ""  // nf-fa-folder
-	iconFolderOpen   = ""  // nf-fa-folder_open
-	iconFile         = ""  // nf-fa-file
-	iconLogs         = ""  // nf-fa-list_alt
-	iconExplorer     = ""  // nf-fa-sitemap
-	iconDot          = "●"
-	iconDotHollow    = "○"
-	iconDotHalf      = "◐"
-	iconCheck        = "✓"
-	iconCross        = "✗"
-	iconChevronRight = "›"
-	iconChevronLeft  = "‹"
-	iconTriangleDown = "▼"
-	iconTriangleRight= "▶"
-	iconSpinner      = "◐"
+	iconFolder        = "" // nf-fa-folder
+	iconFolderOpen    = "" // nf-fa-folder_open
+	iconFile          = "" // nf-fa-file
+	iconLogs          = "" // nf-fa-list_alt
+	iconExplorer      = "" // nf-fa-sitemap
+	iconDot           = "●"
+	iconDotHollow     = "○"
+	iconDotHalf       = "◐"
+	iconCheck         = "✓"
+	iconCross         = "✗"
+	iconChevronRight  = "›"
+	iconChevronLeft   = "‹"
+	iconTriangleDown  = "▼"
+	iconTriangleRight = "▶"
+	iconSpinner       = "◐"
 )
 
 // Input area constants
 const (
-	minInputLines = 1  // Minimum lines for input
-	maxInputLines = 8  // Maximum lines for input before scrolling
+	minInputLines = 1 // Minimum lines for input
+	maxInputLines = 8 // Maximum lines for input before scrolling
 )
 
 // Styles for the modern chat UI
@@ -77,8 +77,8 @@ var (
 			Bold(true)
 
 	tabInactiveStyle = lipgloss.NewStyle().
-			Foreground(dimColor).
-			Padding(0, 1)
+				Foreground(dimColor).
+				Padding(0, 1)
 
 	tabRunningStyle = lipgloss.NewStyle().
 			Foreground(warningColor).
@@ -92,18 +92,7 @@ var (
 			Padding(0, 1)
 
 	tabSeparatorStyle = lipgloss.NewStyle().
-			Foreground(borderColor)
-
-	agentBadgeStyle = lipgloss.NewStyle().
-			Foreground(textColor).
-			Background(primaryColor).
-			Padding(0, 1).
-			Bold(true)
-
-	modelBadgeStyle = lipgloss.NewStyle().
-			Foreground(textColor).
-			Background(secondaryColor).
-			Padding(0, 1)
+				Foreground(borderColor)
 
 	// Message styles
 	userLabelStyle = lipgloss.NewStyle().
@@ -144,23 +133,9 @@ var (
 			BorderForeground(lipgloss.Color("#f97316")). // Orange
 			Padding(0, 1)
 
-	// Footer styles
-	footerStyle = lipgloss.NewStyle().
-			Foreground(mutedColor).
-			Padding(0, 1)
-
-	keyStyle = lipgloss.NewStyle().
-			Foreground(dimColor).
-			Background(lipgloss.Color("#374151")).
-			Padding(0, 1)
-
 	// Spinner style
 	spinnerStyle = lipgloss.NewStyle().
 			Foreground(primaryColor)
-
-	// Divider
-	dividerStyle = lipgloss.NewStyle().
-			Foreground(borderColor)
 )
 
 // quorumSystemPrompt contains accurate documentation about Quorum AI.
@@ -281,18 +256,18 @@ type Model struct {
 	explorerFocus bool // true when explorer has focus for navigation
 
 	// NEW: Enhanced UI panels
-	consensusPanel  *ConsensusPanel
-	contextPanel    *ContextPreviewPanel
-	diffView        *AgentDiffView
-	historySearch   *HistorySearch
+	consensusPanel   *ConsensusPanel
+	contextPanel     *ContextPreviewPanel
+	diffView         *AgentDiffView
+	historySearch    *HistorySearch
 	workflowProgress *WorkflowProgress
-	costPanel       *CostPanel
+	costPanel        *CostPanel
 	shortcutsOverlay *ShortcutsOverlay
-	statsWidget     *StatsWidget
+	statsWidget      *StatsWidget
 
 	// NEW: Focus/Zen mode
-	focusMode       bool
-	preFocusState   struct {
+	focusMode     bool
+	preFocusState struct {
 		showLogs     bool
 		showExplorer bool
 	}
@@ -342,7 +317,7 @@ func NewModel(cp *control.ControlPlane, agents core.AgentRegistry, defaultAgent,
 				status = AgentStatusIdle
 			}
 			agentInfos = append(agentInfos, &AgentInfo{
-				Name:   strings.Title(name),
+				Name:   strings.ToUpper(name[:1]) + name[1:],
 				Color:  GetAgentColor(name),
 				Status: status,
 			})
@@ -402,7 +377,7 @@ func (m Model) Init() tea.Cmd {
 		m.spinner.Tick,
 		m.listenForInputRequests(),
 		m.listenForExplorerChanges(),
-		statsTickCmd(), // Start stats updates
+		statsTickCmd(),            // Start stats updates
 		tea.EnableMouseCellMotion, // Enable mouse support for click-to-focus
 	)
 }
@@ -422,13 +397,13 @@ type (
 	WorkflowUpdateMsg struct {
 		State *core.WorkflowState
 	}
-	QuitMsg               struct{}
-	WorkflowStartedMsg    struct{ Prompt string }
-	WorkflowCompletedMsg  struct{ State *core.WorkflowState }
-	WorkflowErrorMsg      struct{ Error error }
-	TickMsg               struct{ Time time.Time }
-	ExplorerRefreshMsg    struct{} // File system change detected
-	StatsTickMsg          struct{} // Periodic stats update
+	QuitMsg              struct{}
+	WorkflowStartedMsg   struct{ Prompt string }
+	WorkflowCompletedMsg struct{ State *core.WorkflowState }
+	WorkflowErrorMsg     struct{ Error error }
+	TickMsg              struct{ Time time.Time }
+	ExplorerRefreshMsg   struct{} // File system change detected
+	StatsTickMsg         struct{} // Periodic stats update
 )
 
 func (m Model) listenForInputRequests() tea.Cmd {
@@ -451,7 +426,7 @@ func (m Model) listenForExplorerChanges() tea.Cmd {
 
 // statsTickCmd returns a command that sends StatsTickMsg every 2 seconds
 func statsTickCmd() tea.Cmd {
-	return tea.Tick(2*time.Second, func(t time.Time) tea.Msg {
+	return tea.Tick(2*time.Second, func(_ time.Time) tea.Msg {
 		return StatsTickMsg{}
 	})
 }
@@ -878,7 +853,7 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 }
 
 // handleMouseClick handles mouse clicks to switch panel focus.
-func (m Model) handleMouseClick(x, y int) (tea.Model, tea.Cmd, bool) {
+func (m Model) handleMouseClick(x, _ int) (tea.Model, tea.Cmd, bool) {
 	// Calculate panel boundaries based on current layout
 	explorerWidth := 0
 	logsWidth := 0
@@ -951,7 +926,7 @@ func (m Model) handleMouseClick(x, y int) (tea.Model, tea.Cmd, bool) {
 	}
 
 	// Check if click is in Logs panel
-	if m.showLogs && x >= mainEnd+1 {
+	if m.showLogs && x > mainEnd {
 		if !m.logsFocus {
 			m.logsFocus = true
 			m.explorerFocus = false
@@ -994,11 +969,6 @@ func (m Model) copyLastResponse() (tea.Model, tea.Cmd, bool) {
 			} else {
 				// Show brief confirmation
 				agent := msgs[i].Agent
-				preview := msgs[i].Content
-				if len(preview) > 40 {
-					preview = preview[:40] + "..."
-				}
-				preview = strings.ReplaceAll(preview, "\n", " ")
 				m.logsPanel.AddSuccess("system", fmt.Sprintf("Copied %s response to clipboard (%d chars)", agent, len(msgs[i].Content)))
 			}
 			return m, nil, true
@@ -1106,7 +1076,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case ExplorerRefreshMsg:
 		// File system change detected - refresh explorer
-		m.explorerPanel.Refresh()
+		_ = m.explorerPanel.Refresh()
 		// Continue listening for more changes
 		cmds = append(cmds, m.listenForExplorerChanges())
 
@@ -1144,12 +1114,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					break
 				}
 			}
-			// Truncate for log
-			preview := msg.Content
-			if len(preview) > 80 {
-				preview = preview[:80] + "..."
-			}
-			preview = strings.ReplaceAll(preview, "\n", " ")
 			tokenInfo := ""
 			if msg.TokensIn > 0 || msg.TokensOut > 0 {
 				tokenInfo = fmt.Sprintf(" [%d→%d tok]", msg.TokensIn, msg.TokensOut)
@@ -1179,7 +1143,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// Refresh explorer to show any new files created by shell command
 		if m.explorerPanel != nil {
-			m.explorerPanel.Refresh()
+			_ = m.explorerPanel.Refresh()
 		}
 		m.updateViewport()
 
@@ -1438,7 +1402,7 @@ func (m Model) buildConversationMessages() []core.Message {
 				Role:    "assistant",
 				Content: content,
 			})
-		// Skip system messages in context
+			// Skip system messages in context
 		}
 	}
 
@@ -2212,48 +2176,6 @@ func (m Model) renderFullScreenModal(content string, width, height int) string {
 	return strings.Join(result, "\n")
 }
 
-// overlayDropdown renders a dropdown overlay using negative margin trick
-// The dropdown appears to "float" above the input by using negative top margin
-func (m Model) overlayDropdown(base, overlay string, x, y, width, height int) string {
-	// For dropdowns, we use a simpler approach:
-	// The base is returned as-is, and the dropdown is rendered
-	// with negative margin in renderMainContent
-	// This function is kept for compatibility but just returns base
-	// The actual dropdown rendering happens inline
-	return base
-}
-
-// overlayAtPosition renders an overlay at a specific position on dimmed background
-func (m Model) overlayAtPosition(base, overlay string, x, y, width, height int) string {
-	baseLines := strings.Split(base, "\n")
-	overlayLines := strings.Split(overlay, "\n")
-
-	// Ensure base has enough lines
-	for len(baseLines) < height {
-		baseLines = append(baseLines, strings.Repeat(" ", width))
-	}
-
-	// Build result with dimmed base and overlay on top
-	var result []string
-	for i := 0; i < len(baseLines); i++ {
-		if i >= y && i < y+len(overlayLines) {
-			// This line has overlay content
-			overlayIdx := i - y
-			if overlayIdx < len(overlayLines) {
-				leftPad := strings.Repeat(" ", x)
-				result = append(result, leftPad+overlayLines[overlayIdx])
-			} else {
-				result = append(result, dimLine(baseLines[i]))
-			}
-		} else {
-			// No overlay on this line - just dim it
-			result = append(result, dimLine(baseLines[i]))
-		}
-	}
-
-	return strings.Join(result, "\n")
-}
-
 // renderMainContent renders the main chat area
 func (m Model) renderMainContent(w int) string {
 	var sb strings.Builder
@@ -2386,7 +2308,7 @@ func (m Model) renderHeader(width int) string {
 		tokensIn += a.TokensIn
 		tokensOut += a.TokensOut
 	}
-	tokensIn += m.totalTokens / 2  // Distribute workflow tokens
+	tokensIn += m.totalTokens / 2 // Distribute workflow tokens
 	tokensOut += m.totalTokens / 2
 	if tokensIn > 0 || tokensOut > 0 {
 		stats = append(stats, statsStyle.Render("tok:")+valueStyle.Render(fmt.Sprintf("%d→%d", tokensIn, tokensOut)))

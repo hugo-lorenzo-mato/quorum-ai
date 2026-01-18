@@ -16,15 +16,15 @@ type ContextFile struct {
 
 // ContextPreviewPanel shows the active context for the current agent
 type ContextPreviewPanel struct {
-	files         []ContextFile
-	directories   []string
-	messageCount  int
-	tokensUsed    int
-	tokensMax     int
-	currentAgent  string
-	width         int
-	height        int
-	visible       bool
+	files        []ContextFile
+	directories  []string
+	messageCount int
+	tokensUsed   int
+	tokensMax    int
+	currentAgent string
+	width        int
+	height       int
+	visible      bool
 }
 
 // NewContextPreviewPanel creates a new context preview panel
@@ -58,9 +58,9 @@ func (p *ContextPreviewPanel) SetMessageCount(count int) {
 }
 
 // SetTokens sets the token usage
-func (p *ContextPreviewPanel) SetTokens(used, max int) {
+func (p *ContextPreviewPanel) SetTokens(used, maxTokens int) {
 	p.tokensUsed = used
-	p.tokensMax = max
+	p.tokensMax = maxTokens
 }
 
 // SetCurrentAgent sets the current agent name

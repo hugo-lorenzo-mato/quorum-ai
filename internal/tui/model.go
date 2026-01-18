@@ -35,14 +35,14 @@ type Model struct {
 	isPaused      bool
 
 	// Enhanced UI components
-	progressBar    progress.Model
-	agents         []*components.Agent
-	agentMap       map[string]*components.Agent
-	workflowPct    float64
-	workflowTitle  string
-	showSidebar    bool
-	totalCost      float64
-	totalRequests  int
+	progressBar   progress.Model
+	agents        []*components.Agent
+	agentMap      map[string]*components.Agent
+	workflowPct   float64
+	workflowTitle string
+	showSidebar   bool
+	totalCost     float64
+	totalRequests int
 }
 
 // TaskView represents a task in the TUI.

@@ -55,7 +55,7 @@ func NewHistorySearch() *HistorySearch {
 	}
 
 	// Load existing history
-	hs.Load()
+	_ = hs.Load()
 
 	return hs
 }
@@ -63,11 +63,11 @@ func NewHistorySearch() *HistorySearch {
 // SetHistoryFile sets the path to the history file
 func (h *HistorySearch) SetHistoryFile(path string) {
 	h.historyFile = path
-	h.Load()
+	_ = h.Load()
 }
 
 // Add adds a command to history
-func (h *HistorySearch) Add(command string, agent string) {
+func (h *HistorySearch) Add(command, agent string) {
 	// Don't add empty or duplicate consecutive commands
 	command = strings.TrimSpace(command)
 	if command == "" {
@@ -91,7 +91,7 @@ func (h *HistorySearch) Add(command string, agent string) {
 	}
 
 	// Persist
-	h.Save()
+	_ = h.Save()
 }
 
 // Load loads history from file
@@ -111,7 +111,7 @@ func (h *HistorySearch) Load() error {
 func (h *HistorySearch) Save() error {
 	// Ensure directory exists
 	dir := filepath.Dir(h.historyFile)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
 
@@ -120,7 +120,7 @@ func (h *HistorySearch) Save() error {
 		return err
 	}
 
-	return os.WriteFile(h.historyFile, data, 0644)
+	return os.WriteFile(h.historyFile, data, 0o600)
 }
 
 // Show shows the history search
@@ -268,15 +268,7 @@ func (h *HistorySearch) Render() string {
 
 	// Header with count
 	header := headerStyle.Render(" History")
-	countStr := dimStyle.Render(" (" + string('0'+rune(len(h.filtered)%10)) + "/" +
-		string('0'+rune(len(h.entries)%10)) + ")")
-	if len(h.filtered) >= 10 || len(h.entries) >= 10 {
-		countStr = dimStyle.Render(" (" +
-			strings.TrimLeft(strings.Replace(string(rune('0'+len(h.filtered)/10))+string(rune('0'+len(h.filtered)%10)), "\x00", "", -1), "0") + "/" +
-			strings.TrimLeft(strings.Replace(string(rune('0'+len(h.entries)/10))+string(rune('0'+len(h.entries)%10)), "\x00", "", -1), "0") + ")")
-	}
-	// Simple count display
-	countStr = dimStyle.Render(" (" + itoa(len(h.filtered)) + "/" + itoa(len(h.entries)) + ")")
+	countStr := dimStyle.Render(" (" + itoa(len(h.filtered)) + "/" + itoa(len(h.entries)) + ")")
 	sb.WriteString(header + countStr)
 	sb.WriteString("\n")
 

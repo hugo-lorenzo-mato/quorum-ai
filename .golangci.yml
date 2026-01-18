@@ -92,6 +92,11 @@ issues:
         - gocritic
         - gocyclo
 
+    # TUI code - event handlers are inherently complex
+    - path: internal/tui/
+      linters:
+        - gocyclo
+
     # Generated files
     - path: ".*_gen\\.go"
       linters:

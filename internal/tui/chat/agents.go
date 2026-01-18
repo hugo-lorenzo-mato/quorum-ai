@@ -188,38 +188,39 @@ func RenderAgentResults(agents []*AgentInfo, width int) string {
 
 	hasResults := false
 	for _, agent := range agents {
-		if agent.Status == AgentStatusDone && agent.Output != "" {
-			hasResults = true
-			// Header: ● Claude 1.2s (847 tok)
-			header := lipgloss.NewStyle().
-				Foreground(agent.Color).
-				Bold(true).
-				Render("● " + agent.Name)
-
-			if agent.Time != "" {
-				header += " " + agentDimStyle.Render(agent.Time)
-			}
-			totalTokens := agent.TokensIn + agent.TokensOut
-			if totalTokens > 0 {
-				header += " " + agentDimStyle.Render(fmt.Sprintf("(%d tok)", totalTokens))
-			}
-			s.WriteString(header + "\n")
-
-			// Output with colored left border
-			outputWidth := width - 12
-			if outputWidth < 40 {
-				outputWidth = 40
-			}
-			output := lipgloss.NewStyle().
-				BorderLeft(true).
-				BorderStyle(lipgloss.ThickBorder()).
-				BorderForeground(agent.Color).
-				PaddingLeft(1).
-				MarginLeft(2).
-				Width(outputWidth).
-				Render(agent.Output)
-			s.WriteString(output + "\n\n")
+		if agent.Status != AgentStatusDone || agent.Output == "" {
+			continue
 		}
+		hasResults = true
+		// Header: ● Claude 1.2s (847 tok)
+		header := lipgloss.NewStyle().
+			Foreground(agent.Color).
+			Bold(true).
+			Render("● " + agent.Name)
+
+		if agent.Time != "" {
+			header += " " + agentDimStyle.Render(agent.Time)
+		}
+		totalTokens := agent.TokensIn + agent.TokensOut
+		if totalTokens > 0 {
+			header += " " + agentDimStyle.Render(fmt.Sprintf("(%d tok)", totalTokens))
+		}
+		s.WriteString(header + "\n")
+
+		// Output with colored left border
+		outputWidth := width - 12
+		if outputWidth < 40 {
+			outputWidth = 40
+		}
+		output := lipgloss.NewStyle().
+			BorderLeft(true).
+			BorderStyle(lipgloss.ThickBorder()).
+			BorderForeground(agent.Color).
+			PaddingLeft(1).
+			MarginLeft(2).
+			Width(outputWidth).
+			Render(agent.Output)
+		s.WriteString(output + "\n\n")
 	}
 
 	if !hasResults {

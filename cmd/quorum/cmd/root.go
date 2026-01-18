@@ -35,11 +35,7 @@ Running 'quorum' without arguments starts interactive chat mode.`,
 		return initConfig()
 	},
 	// Default to chat mode when no subcommand is provided
-	RunE: func(cmd *cobra.Command, args []string) error {
-		// If a subcommand was specified, this won't be called
-		// So this only runs for bare "quorum" invocation
-		return runChat(cmd, args)
-	},
+	RunE: runChat,
 }
 
 func Execute() error {
