@@ -115,8 +115,8 @@ func (a *Analyzer) Run(ctx context.Context, wctx *Context) error {
 		return core.ErrHumanReviewRequired(consensusResult.Score, a.consensus.HumanThreshold())
 	}
 
-	// Consolidate analysis
-	if err := a.consolidateAnalysis(wctx, v1Outputs); err != nil {
+	// Consolidate analysis using LLM
+	if err := a.consolidateAnalysis(ctx, wctx, v1Outputs); err != nil {
 		return fmt.Errorf("consolidating analysis: %w", err)
 	}
 
@@ -200,6 +200,7 @@ func (a *Analyzer) runAnalysisWithAgent(ctx context.Context, wctx *Context, agen
 			Model:   ResolvePhaseModel(wctx.Config, agentName, core.PhaseAnalyze, ""),
 			Timeout: 5 * time.Minute,
 			Sandbox: wctx.Config.Sandbox,
+			Phase:   core.PhaseAnalyze,
 		})
 		return execErr
 	})
@@ -257,6 +258,7 @@ func (a *Analyzer) runV2Critique(ctx context.Context, wctx *Context, v1Outputs [
 				Model:   ResolvePhaseModel(wctx.Config, critiqueAgent, core.PhaseAnalyze, ""),
 				Timeout: 5 * time.Minute,
 				Sandbox: wctx.Config.Sandbox,
+				Phase:   core.PhaseAnalyze,
 			})
 			return execErr
 		})
@@ -326,6 +328,7 @@ func (a *Analyzer) runV3Reconciliation(ctx context.Context, wctx *Context, v1, v
 			Model:   ResolvePhaseModel(wctx.Config, v3AgentName, core.PhaseAnalyze, ""),
 			Timeout: 10 * time.Minute,
 			Sandbox: wctx.Config.Sandbox,
+			Phase:   core.PhaseAnalyze,
 		})
 		return execErr
 	})
@@ -348,8 +351,98 @@ func (a *Analyzer) runV3Reconciliation(ctx context.Context, wctx *Context, v1, v
 	})
 }
 
-// consolidateAnalysis combines all analysis outputs.
-func (a *Analyzer) consolidateAnalysis(wctx *Context, outputs []AnalysisOutput) error {
+// consolidateAnalysis uses an LLM to synthesize all analysis outputs into a unified report.
+func (a *Analyzer) consolidateAnalysis(ctx context.Context, wctx *Context, outputs []AnalysisOutput) error {
+	// Get consolidator agent
+	consolidatorAgent := wctx.Config.ConsolidatorAgent
+	if consolidatorAgent == "" {
+		consolidatorAgent = wctx.Config.DefaultAgent
+	}
+
+	agent, err := wctx.Agents.Get(consolidatorAgent)
+	if err != nil {
+		wctx.Logger.Warn("consolidator agent not available, using concatenation fallback",
+			"agent", consolidatorAgent,
+			"error", err,
+		)
+		return a.consolidateAnalysisFallback(wctx, outputs)
+	}
+
+	// Acquire rate limit
+	limiter := wctx.RateLimits.Get(consolidatorAgent)
+	if err := limiter.Acquire(); err != nil {
+		wctx.Logger.Warn("rate limit exceeded for consolidator, using fallback",
+			"agent", consolidatorAgent,
+		)
+		return a.consolidateAnalysisFallback(wctx, outputs)
+	}
+
+	// Render consolidation prompt
+	prompt, err := wctx.Prompts.RenderConsolidateAnalysis(ConsolidateAnalysisParams{
+		Prompt:   GetEffectivePrompt(wctx.State),
+		Analyses: outputs,
+	})
+	if err != nil {
+		wctx.Logger.Warn("failed to render consolidation prompt, using fallback",
+			"error", err,
+		)
+		return a.consolidateAnalysisFallback(wctx, outputs)
+	}
+
+	// Resolve model
+	model := wctx.Config.ConsolidatorModel
+	if model == "" {
+		model = ResolvePhaseModel(wctx.Config, consolidatorAgent, core.PhaseAnalyze, "")
+	}
+
+	wctx.Logger.Info("consolidate start",
+		"agent", consolidatorAgent,
+		"model", model,
+		"analyses_count", len(outputs),
+	)
+
+	// Execute with retry
+	var result *core.ExecuteResult
+	err = wctx.Retry.Execute(func() error {
+		var execErr error
+		result, execErr = agent.Execute(ctx, core.ExecuteOptions{
+			Prompt:  prompt,
+			Format:  core.OutputFormatJSON,
+			Model:   model,
+			Timeout: 5 * time.Minute,
+			Sandbox: wctx.Config.Sandbox,
+			Phase:   core.PhaseAnalyze,
+		})
+		return execErr
+	})
+
+	if err != nil {
+		wctx.Logger.Warn("consolidation LLM call failed, using fallback",
+			"error", err,
+		)
+		return a.consolidateAnalysisFallback(wctx, outputs)
+	}
+
+	wctx.Logger.Info("consolidate done",
+		"agent", consolidatorAgent,
+		"model", model,
+	)
+
+	// Store the LLM-synthesized consolidation as checkpoint
+	return wctx.Checkpoint.CreateCheckpoint(wctx.State, "consolidated_analysis", map[string]interface{}{
+		"content":     result.Output,
+		"agent_count": len(outputs),
+		"synthesized": true,
+		"agent":       consolidatorAgent,
+		"model":       model,
+		"tokens_in":   result.TokensIn,
+		"tokens_out":  result.TokensOut,
+		"cost_usd":    result.CostUSD,
+	})
+}
+
+// consolidateAnalysisFallback concatenates analyses when LLM consolidation fails.
+func (a *Analyzer) consolidateAnalysisFallback(wctx *Context, outputs []AnalysisOutput) error {
 	var consolidated strings.Builder
 
 	for _, output := range outputs {
@@ -361,6 +454,7 @@ func (a *Analyzer) consolidateAnalysis(wctx *Context, outputs []AnalysisOutput) 
 	return wctx.Checkpoint.CreateCheckpoint(wctx.State, "consolidated_analysis", map[string]interface{}{
 		"content":     consolidated.String(),
 		"agent_count": len(outputs),
+		"synthesized": false,
 	})
 }
 

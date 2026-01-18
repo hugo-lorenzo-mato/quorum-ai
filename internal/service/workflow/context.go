@@ -69,6 +69,10 @@ type Config struct {
 	MaxCostPerWorkflow float64
 	// MaxCostPerTask is the maximum cost per task in USD (0 = unlimited).
 	MaxCostPerTask float64
+	// ConsolidatorAgent specifies which agent to use for analysis consolidation.
+	ConsolidatorAgent string
+	// ConsolidatorModel specifies the model to use for consolidation (optional).
+	ConsolidatorModel string
 }
 
 // PromptRenderer renders prompts for different phases.
@@ -77,8 +81,15 @@ type PromptRenderer interface {
 	RenderAnalyzeV1(params AnalyzeV1Params) (string, error)
 	RenderAnalyzeV2(params AnalyzeV2Params) (string, error)
 	RenderAnalyzeV3(params AnalyzeV3Params) (string, error)
+	RenderConsolidateAnalysis(params ConsolidateAnalysisParams) (string, error)
 	RenderPlanGenerate(params PlanParams) (string, error)
 	RenderTaskExecute(params TaskExecuteParams) (string, error)
+}
+
+// ConsolidateAnalysisParams holds parameters for analysis consolidation prompt.
+type ConsolidateAnalysisParams struct {
+	Prompt   string
+	Analyses []AnalysisOutput
 }
 
 // OptimizePromptParams holds parameters for prompt optimization.

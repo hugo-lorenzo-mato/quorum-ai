@@ -248,6 +248,7 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 			Sandbox:     wctx.Config.Sandbox,
 			DeniedTools: e.denyTools,
 			WorkDir:     workDir, // Execute in worktree if available
+			Phase:       core.PhaseExecute,
 		})
 		return execErr
 	}, func(attempt int, err error) {

@@ -90,13 +90,13 @@ agents:
     enabled: true
     path: codex
     # Default model (fallback when phase not specified)
-    model: gpt-5.2-codex-extra-high
+    model: gpt-5.2-codex
     # Per-phase model overrides (optimize/analyze/plan/execute)
     phase_models:
-      optimize: gpt-5.2-codex-extra-high
-      analyze: gpt-5.2-codex-extra-high
-      plan: gpt-5.2-codex-extra-high
-      execute: gpt-5.2-codex-extra-high
+      optimize: gpt-5.2-codex
+      analyze: gpt-5.2-codex
+      plan: gpt-5.2-codex
+      execute: gpt-5.2-codex
     max_tokens: 4096
     temperature: 0.7
 
@@ -127,6 +127,14 @@ prompt_optimizer:
   agent: claude
   # Model override (optional, uses agent's phase_models.optimize or default if empty)
   model: ""
+
+# Analysis consolidator configuration
+# Synthesizes multiple agent analyses into a single coherent report
+analysis_consolidator:
+  # Agent to use for consolidation (claude, gemini, codex, copilot)
+  agent: claude
+  # Model override (optional, uses agent's phase_models.analyze or default if empty)
+  model: claude-opus-4-5-20251101
 
 # State persistence configuration
 state:

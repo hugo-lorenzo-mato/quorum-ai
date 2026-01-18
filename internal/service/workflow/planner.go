@@ -84,6 +84,7 @@ func (p *Planner) Run(ctx context.Context, wctx *Context) error {
 			Model:   ResolvePhaseModel(wctx.Config, wctx.Config.DefaultAgent, core.PhasePlan, ""),
 			Timeout: 5 * time.Minute,
 			Sandbox: wctx.Config.Sandbox,
+			Phase:   core.PhasePlan,
 		})
 		return execErr
 	})

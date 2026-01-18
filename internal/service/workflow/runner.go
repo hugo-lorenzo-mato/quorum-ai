@@ -58,6 +58,16 @@ type RunnerConfig struct {
 	MaxCostPerTask float64
 	// Optimizer configures the prompt optimization phase.
 	Optimizer OptimizerConfig
+	// Consolidator configures the analysis consolidation phase.
+	Consolidator ConsolidatorConfig
+}
+
+// ConsolidatorConfig configures the analysis consolidation phase.
+type ConsolidatorConfig struct {
+	// Agent specifies which agent to use for consolidation (e.g., "claude", "gemini").
+	Agent string
+	// Model specifies the model to use (optional, uses agent's phase_models.analyze if empty).
+	Model string
 }
 
 // DefaultRunnerConfig returns default configuration.
@@ -71,6 +81,10 @@ func DefaultRunnerConfig() *RunnerConfig {
 		V3Agent:          "claude",
 		AgentPhaseModels: map[string]map[string]string{},
 		WorktreeMode:     "always",
+		Consolidator: ConsolidatorConfig{
+			Agent: "claude",
+			Model: "",
+		},
 	}
 }
 
@@ -316,6 +330,8 @@ func (r *Runner) createContext(state *core.WorkflowState) *Context {
 			WorktreeMode:       r.config.WorktreeMode,
 			MaxCostPerWorkflow: r.config.MaxCostPerWorkflow,
 			MaxCostPerTask:     r.config.MaxCostPerTask,
+			ConsolidatorAgent:  r.config.Consolidator.Agent,
+			ConsolidatorModel:  r.config.Consolidator.Model,
 		},
 	}
 }

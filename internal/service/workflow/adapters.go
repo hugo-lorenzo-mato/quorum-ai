@@ -213,6 +213,25 @@ func (a *PromptRendererAdapter) RenderAnalyzeV3(params AnalyzeV3Params) (string,
 	})
 }
 
+// RenderConsolidateAnalysis renders the analysis consolidation prompt.
+func (a *PromptRendererAdapter) RenderConsolidateAnalysis(params ConsolidateAnalysisParams) (string, error) {
+	// Convert workflow.AnalysisOutput to service.AnalysisOutput
+	serviceAnalyses := make([]service.AnalysisOutput, len(params.Analyses))
+	for i, ao := range params.Analyses {
+		serviceAnalyses[i] = service.AnalysisOutput{
+			AgentName:       ao.AgentName,
+			RawOutput:       ao.RawOutput,
+			Claims:          ao.Claims,
+			Risks:           ao.Risks,
+			Recommendations: ao.Recommendations,
+		}
+	}
+	return a.renderer.RenderConsolidateAnalysis(service.ConsolidateAnalysisParams{
+		Prompt:   params.Prompt,
+		Analyses: serviceAnalyses,
+	})
+}
+
 // RenderPlanGenerate renders the plan generation prompt.
 func (a *PromptRendererAdapter) RenderPlanGenerate(params PlanParams) (string, error) {
 	return a.renderer.RenderPlanGenerate(service.PlanParams{

@@ -51,19 +51,25 @@ type WorkflowRunnerConfig struct {
 	GitDirty     bool
 	// AgentPhaseModels allows per-agent, per-phase model overrides.
 	AgentPhaseModels map[string]map[string]string
+	// ConsolidatorAgent specifies which agent to use for analysis consolidation.
+	ConsolidatorAgent string
+	// ConsolidatorModel specifies the model to use for consolidation (optional).
+	ConsolidatorModel string
 }
 
 // DefaultWorkflowRunnerConfig returns default configuration.
 func DefaultWorkflowRunnerConfig() *WorkflowRunnerConfig {
 	return &WorkflowRunnerConfig{
-		Timeout:          time.Hour,
-		MaxRetries:       3,
-		DryRun:           false,
-		Sandbox:          true,
-		DefaultAgent:     "claude",
-		V3Agent:          "claude",
-		Trace:            TraceConfig{Mode: "off"},
-		AgentPhaseModels: map[string]map[string]string{},
+		Timeout:           time.Hour,
+		MaxRetries:        3,
+		DryRun:            false,
+		Sandbox:           true,
+		DefaultAgent:      "claude",
+		V3Agent:           "claude",
+		Trace:             TraceConfig{Mode: "off"},
+		AgentPhaseModels:  map[string]map[string]string{},
+		ConsolidatorAgent: "claude",
+		ConsolidatorModel: "",
 	}
 }
 
@@ -1197,6 +1203,129 @@ func (w *WorkflowRunner) parseAnalysisOutput(agentName string, result *core.Exec
 }
 
 func (w *WorkflowRunner) consolidateAnalysis(ctx context.Context, state *core.WorkflowState, outputs []AnalysisOutput) error {
+	// Get consolidator agent
+	consolidatorAgent := w.config.ConsolidatorAgent
+	if consolidatorAgent == "" {
+		consolidatorAgent = w.config.DefaultAgent
+	}
+
+	agent, err := w.agents.Get(consolidatorAgent)
+	if err != nil {
+		w.logger.Warn("consolidator agent not available, using concatenation fallback",
+			"agent", consolidatorAgent,
+			"error", err,
+		)
+		return w.consolidateAnalysisFallback(ctx, state, outputs)
+	}
+
+	// Acquire rate limit
+	limiter := w.rateLimits.Get(consolidatorAgent)
+	if err := limiter.Acquire(ctx); err != nil {
+		w.logger.Warn("rate limit exceeded for consolidator, using fallback",
+			"agent", consolidatorAgent,
+		)
+		return w.consolidateAnalysisFallback(ctx, state, outputs)
+	}
+
+	// Render consolidation prompt
+	prompt, err := w.prompts.RenderConsolidateAnalysis(ConsolidateAnalysisParams{
+		Prompt:   state.Prompt,
+		Analyses: outputs,
+	})
+	if err != nil {
+		w.logger.Warn("failed to render consolidation prompt, using fallback",
+			"error", err,
+		)
+		return w.consolidateAnalysisFallback(ctx, state, outputs)
+	}
+
+	// Resolve model
+	model := w.config.ConsolidatorModel
+	if model == "" {
+		model = w.resolveModel(consolidatorAgent, core.PhaseAnalyze, "")
+	}
+
+	w.logger.Info("consolidate start",
+		"agent", consolidatorAgent,
+		"model", model,
+		"analyses_count", len(outputs),
+	)
+
+	_ = w.trace.Record(ctx, TraceEvent{
+		Phase:     "analyze",
+		Step:      "consolidate",
+		EventType: "prompt",
+		Agent:     consolidatorAgent,
+		Model:     model,
+		FileExt:   "txt",
+		Content:   []byte(prompt),
+		Metadata: map[string]interface{}{
+			"format":         "json",
+			"analyses_count": len(outputs),
+		},
+	})
+
+	// Execute with retry
+	var result *core.ExecuteResult
+	err = w.retry.Execute(ctx, func(ctx context.Context) error {
+		var execErr error
+		result, execErr = agent.Execute(ctx, core.ExecuteOptions{
+			Prompt:  prompt,
+			Format:  core.OutputFormatJSON,
+			Model:   model,
+			Timeout: 5 * time.Minute,
+			Sandbox: w.config.Sandbox,
+		})
+		return execErr
+	})
+
+	if err != nil {
+		w.logger.Warn("consolidation LLM call failed, using fallback",
+			"error", err,
+		)
+		return w.consolidateAnalysisFallback(ctx, state, outputs)
+	}
+
+	w.logger.Info("consolidate done",
+		"agent", consolidatorAgent,
+		"model", model,
+	)
+	w.logger.Debug("consolidate usage",
+		"agent", consolidatorAgent,
+		"model", model,
+		"tokens_in", result.TokensIn,
+		"tokens_out", result.TokensOut,
+		"cost_usd", result.CostUSD,
+	)
+
+	_ = w.trace.Record(ctx, TraceEvent{
+		Phase:     "analyze",
+		Step:      "consolidate",
+		EventType: "response",
+		Agent:     consolidatorAgent,
+		Model:     model,
+		FileExt:   "json",
+		Content:   []byte(result.Output),
+		TokensIn:  result.TokensIn,
+		TokensOut: result.TokensOut,
+		CostUSD:   result.CostUSD,
+	})
+
+	// Store the LLM-synthesized consolidation as checkpoint
+	return w.checkpoint.CreateCheckpoint(ctx, state, CheckpointType("consolidated_analysis"), map[string]interface{}{
+		"content":     result.Output,
+		"agent_count": len(outputs),
+		"synthesized": true,
+		"agent":       consolidatorAgent,
+		"model":       model,
+		"tokens_in":   result.TokensIn,
+		"tokens_out":  result.TokensOut,
+		"cost_usd":    result.CostUSD,
+	})
+}
+
+// consolidateAnalysisFallback concatenates analyses when LLM consolidation fails.
+func (w *WorkflowRunner) consolidateAnalysisFallback(ctx context.Context, state *core.WorkflowState, outputs []AnalysisOutput) error {
 	var consolidated strings.Builder
 
 	for _, output := range outputs {
@@ -1205,10 +1334,10 @@ func (w *WorkflowRunner) consolidateAnalysis(ctx context.Context, state *core.Wo
 		consolidated.WriteString("\n\n")
 	}
 
-	// Store as checkpoint metadata
 	return w.checkpoint.CreateCheckpoint(ctx, state, CheckpointType("consolidated_analysis"), map[string]interface{}{
 		"content":     consolidated.String(),
 		"agent_count": len(outputs),
+		"synthesized": false,
 	})
 }
 

@@ -137,6 +137,17 @@ func (r *PromptRenderer) RenderAnalyzeV3(params AnalyzeV3Params) (string, error)
 	return r.render("analyze-v3-reconcile", params)
 }
 
+// ConsolidateAnalysisParams contains parameters for consolidate-analysis template.
+type ConsolidateAnalysisParams struct {
+	Prompt   string
+	Analyses []AnalysisOutput
+}
+
+// RenderConsolidateAnalysis renders the analysis consolidation prompt.
+func (r *PromptRenderer) RenderConsolidateAnalysis(params ConsolidateAnalysisParams) (string, error) {
+	return r.render("consolidate-analysis", params)
+}
+
 // ConsensusParams contains parameters for consensus check template.
 type ConsensusParams struct {
 	Analyses []AnalysisOutput

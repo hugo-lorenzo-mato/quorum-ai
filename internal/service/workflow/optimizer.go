@@ -91,6 +91,7 @@ func (o *Optimizer) Run(ctx context.Context, wctx *Context) error {
 			Model:   model,
 			Timeout: 3 * time.Minute,
 			Sandbox: wctx.Config.Sandbox,
+			Phase:   core.PhaseOptimize,
 		})
 		return execErr
 	})

@@ -231,6 +231,10 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 			Agent:   cfg.PromptOptimizer.Agent,
 			Model:   cfg.PromptOptimizer.Model,
 		},
+		Consolidator: workflow.ConsolidatorConfig{
+			Agent: cfg.AnalysisConsolidator.Agent,
+			Model: cfg.AnalysisConsolidator.Model,
+		},
 	}
 
 	// Store trace config for potential later use

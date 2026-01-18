@@ -60,6 +60,7 @@ type ExecuteOptions struct {
 	AllowedTools []string
 	DeniedTools  []string
 	Sandbox      bool
+	Phase        Phase // Current workflow phase (for phase-specific behavior)
 }
 
 // DefaultExecuteOptions returns sensible defaults.

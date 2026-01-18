@@ -5,12 +5,22 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 )
+
+// agentUsage holds aggregated metrics per agent.
+type agentUsage struct {
+	Name      string
+	Model     string
+	TokensIn  int
+	TokensOut int
+	Tasks     int
+}
 
 // FallbackOutput provides plain text output for non-interactive mode.
 type FallbackOutput struct {
@@ -127,9 +137,87 @@ func (f *FallbackOutput) WorkflowCompleted(state *core.WorkflowState) {
 	f.printf("  Duration: %s\n", duration.Round(time.Second))
 	f.printf("  Tasks: %d completed\n", f.countCompleted(state))
 
-	if state.Metrics != nil && state.Metrics.TotalCostUSD > 0 {
-		f.printf("  Total Cost: $%.4f\n", state.Metrics.TotalCostUSD)
+	// Show detailed agent usage breakdown
+	agentBreakdown := f.aggregateAgentUsage(state)
+	if len(agentBreakdown) > 0 {
+		f.printf("\n  Agent Usage:\n")
+		f.printf("  %-12s %-30s %12s %12s\n", "Agent", "Model", "Tokens In", "Tokens Out")
+		f.printf("  %s %s %s %s\n",
+			strings.Repeat("-", 12),
+			strings.Repeat("-", 30),
+			strings.Repeat("-", 12),
+			strings.Repeat("-", 12))
+
+		var totalTokensIn, totalTokensOut int
+		for _, au := range agentBreakdown {
+			model := au.Model
+			if len(model) > 28 {
+				model = model[:25] + "..."
+			}
+			f.printf("  %-12s %-30s %12d %12d\n",
+				au.Name, model, au.TokensIn, au.TokensOut)
+			totalTokensIn += au.TokensIn
+			totalTokensOut += au.TokensOut
+		}
+
+		f.printf("  %s %s %s %s\n",
+			strings.Repeat("-", 12),
+			strings.Repeat("-", 30),
+			strings.Repeat("-", 12),
+			strings.Repeat("-", 12))
+		f.printf("  %-12s %-30s %12d %12d\n",
+			"TOTAL", "", totalTokensIn, totalTokensOut)
 	}
+}
+
+// aggregateAgentUsage groups task metrics by agent/CLI.
+func (f *FallbackOutput) aggregateAgentUsage(state *core.WorkflowState) []agentUsage {
+	if len(state.Tasks) == 0 {
+		return nil
+	}
+
+	// Aggregate by agent+model combination
+	usageMap := make(map[string]*agentUsage)
+	for _, task := range state.Tasks {
+		if task.Status != core.TaskStatusCompleted {
+			continue
+		}
+		agent := task.CLI
+		if agent == "" {
+			agent = "default"
+		}
+		model := task.Model
+		if model == "" {
+			model = "(default)"
+		}
+
+		key := agent + "|" + model
+		au, ok := usageMap[key]
+		if !ok {
+			au = &agentUsage{
+				Name:  agent,
+				Model: model,
+			}
+			usageMap[key] = au
+		}
+		au.TokensIn += task.TokensIn
+		au.TokensOut += task.TokensOut
+		au.Tasks++
+	}
+
+	// Convert to sorted slice
+	result := make([]agentUsage, 0, len(usageMap))
+	for _, au := range usageMap {
+		result = append(result, *au)
+	}
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].Name != result[j].Name {
+			return result[i].Name < result[j].Name
+		}
+		return result[i].Model < result[j].Model
+	})
+
+	return result
 }
 
 // WorkflowFailed logs workflow failure.
@@ -363,14 +451,77 @@ func (j *JSONOutput) TaskFailed(task *core.Task, err error) {
 
 // WorkflowCompleted emits a workflow completed event.
 func (j *JSONOutput) WorkflowCompleted(state *core.WorkflowState) {
-	totalCost := 0.0
+	totalTokensIn := 0
+	totalTokensOut := 0
 	if state.Metrics != nil {
-		totalCost = state.Metrics.TotalCostUSD
+		totalTokensIn = state.Metrics.TotalTokensIn
+		totalTokensOut = state.Metrics.TotalTokensOut
 	}
+
+	// Aggregate agent usage
+	agentUsage := j.aggregateAgentUsage(state)
+
 	j.emit("workflow_completed", map[string]interface{}{
-		"total_cost":      totalCost,
-		"completed_tasks": len(state.Tasks),
+		"total_tokens_in":  totalTokensIn,
+		"total_tokens_out": totalTokensOut,
+		"completed_tasks":  len(state.Tasks),
+		"agent_usage":      agentUsage,
 	})
+}
+
+// aggregateAgentUsage groups task metrics by agent/CLI for JSON output.
+func (j *JSONOutput) aggregateAgentUsage(state *core.WorkflowState) []map[string]interface{} {
+	if len(state.Tasks) == 0 {
+		return nil
+	}
+
+	// Aggregate by agent+model combination
+	type usage struct {
+		Agent     string
+		Model     string
+		TokensIn  int
+		TokensOut int
+		Tasks     int
+	}
+	usageMap := make(map[string]*usage)
+
+	for _, task := range state.Tasks {
+		if task.Status != core.TaskStatusCompleted {
+			continue
+		}
+		agent := task.CLI
+		if agent == "" {
+			agent = "default"
+		}
+		model := task.Model
+		if model == "" {
+			model = "(default)"
+		}
+
+		key := agent + "|" + model
+		u, ok := usageMap[key]
+		if !ok {
+			u = &usage{Agent: agent, Model: model}
+			usageMap[key] = u
+		}
+		u.TokensIn += task.TokensIn
+		u.TokensOut += task.TokensOut
+		u.Tasks++
+	}
+
+	// Convert to slice of maps for JSON
+	result := make([]map[string]interface{}, 0, len(usageMap))
+	for _, u := range usageMap {
+		result = append(result, map[string]interface{}{
+			"agent":      u.Agent,
+			"model":      u.Model,
+			"tokens_in":  u.TokensIn,
+			"tokens_out": u.TokensOut,
+			"tasks":      u.Tasks,
+		})
+	}
+
+	return result
 }
 
 // WorkflowFailed emits a workflow failed event.

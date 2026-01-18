@@ -2,16 +2,17 @@ package config
 
 // Config holds all application configuration.
 type Config struct {
-	Log             LogConfig             `mapstructure:"log"`
-	Trace           TraceConfig           `mapstructure:"trace"`
-	Workflow        WorkflowConfig        `mapstructure:"workflow"`
-	Agents          AgentsConfig          `mapstructure:"agents"`
-	PromptOptimizer PromptOptimizerConfig `mapstructure:"prompt_optimizer"`
-	State           StateConfig           `mapstructure:"state"`
-	Git             GitConfig             `mapstructure:"git"`
-	GitHub          GitHubConfig          `mapstructure:"github"`
-	Consensus       ConsensusConfig       `mapstructure:"consensus"`
-	Costs           CostsConfig           `mapstructure:"costs"`
+	Log                  LogConfig                  `mapstructure:"log"`
+	Trace                TraceConfig                `mapstructure:"trace"`
+	Workflow             WorkflowConfig             `mapstructure:"workflow"`
+	Agents               AgentsConfig               `mapstructure:"agents"`
+	PromptOptimizer      PromptOptimizerConfig      `mapstructure:"prompt_optimizer"`
+	AnalysisConsolidator AnalysisConsolidatorConfig `mapstructure:"analysis_consolidator"`
+	State                StateConfig                `mapstructure:"state"`
+	Git                  GitConfig                  `mapstructure:"git"`
+	GitHub               GitHubConfig               `mapstructure:"github"`
+	Consensus            ConsensusConfig            `mapstructure:"consensus"`
+	Costs                CostsConfig                `mapstructure:"costs"`
 }
 
 // LogConfig configures logging behavior.
@@ -112,5 +113,13 @@ type PromptOptimizerConfig struct {
 	// Agent specifies which agent to use for optimization (claude, gemini, etc.).
 	Agent string `mapstructure:"agent"`
 	// Model specifies the model to use (optional, uses agent's default if empty).
+	Model string `mapstructure:"model"`
+}
+
+// AnalysisConsolidatorConfig configures the analysis consolidation phase.
+type AnalysisConsolidatorConfig struct {
+	// Agent specifies which agent to use for consolidation (claude, gemini, etc.).
+	Agent string `mapstructure:"agent"`
+	// Model specifies the model to use (optional, uses agent's phase_models.analyze if empty).
 	Model string `mapstructure:"model"`
 }

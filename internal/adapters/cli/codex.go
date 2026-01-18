@@ -93,11 +93,21 @@ func (c *CodexAdapter) Execute(ctx context.Context, opts core.ExecuteOptions) (*
 func (c *CodexAdapter) buildArgs(opts core.ExecuteOptions) []string {
 	args := []string{"exec"}
 
+	// Determine reasoning effort based on phase
+	// Use "xhigh" (extra high) for analyze/optimize/plan, "high" for execute
+	reasoningEffort := "high"
+	switch opts.Phase {
+	case core.PhaseOptimize, core.PhaseAnalyze, core.PhasePlan:
+		reasoningEffort = "xhigh"
+	case core.PhaseExecute:
+		reasoningEffort = "high"
+	}
+
 	// Headless approvals/sandbox via config overrides
 	args = append(args,
 		"-c", `approval_policy="never"`,
 		"-c", `sandbox_mode="workspace-write"`,
-		"-c", `model_reasoning_effort="high"`,
+		"-c", `model_reasoning_effort="`+reasoningEffort+`"`,
 	)
 
 	// Model selection

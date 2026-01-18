@@ -179,6 +179,10 @@ func (m *mockPromptRenderer) RenderAnalyzeV3(_ AnalyzeV3Params) (string, error) 
 	return "analyze v3 prompt", nil
 }
 
+func (m *mockPromptRenderer) RenderConsolidateAnalysis(_ ConsolidateAnalysisParams) (string, error) {
+	return "consolidate analysis prompt", nil
+}
+
 func (m *mockPromptRenderer) RenderPlanGenerate(_ PlanParams) (string, error) {
 	if m.planErr != nil {
 		return "", m.planErr
