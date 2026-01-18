@@ -154,12 +154,16 @@ func (g *GeminiAdapter) extractUsage(result *CommandResult, execResult *core.Exe
 		}
 	}
 
-	// Estimate if not found
-	if execResult.TokensIn == 0 {
-		execResult.TokensIn = g.TokenEstimate(result.Stdout)
-	}
+	// Estimate tokens if not found
+	// Note: TokensIn should be based on INPUT (prompt), TokensOut on OUTPUT (response)
+	// Since we only have the output here, we estimate TokensOut from it
+	// and use a heuristic for TokensIn (typically prompts are shorter than responses)
 	if execResult.TokensOut == 0 {
 		execResult.TokensOut = g.TokenEstimate(result.Stdout)
+	}
+	if execResult.TokensIn == 0 && execResult.TokensOut > 0 {
+		// Heuristic: input is typically 20-50% of output for conversational prompts
+		execResult.TokensIn = execResult.TokensOut / 3
 	}
 
 	// Estimate cost

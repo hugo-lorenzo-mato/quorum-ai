@@ -1795,6 +1795,38 @@ func (m *Model) recalculateLayout() {
 		mainWidth = 40
 	}
 
+	// === FINAL OVERFLOW CHECK ===
+	// After applying minimums, recalculate total and force-reduce sidebars if needed
+	finalTotal := mainWidth
+	if m.showExplorer {
+		finalTotal += explorerWidth + 1
+	}
+	if m.showLogs {
+		finalTotal += logsWidth + 1
+	}
+
+	// If still overflowing, aggressively reduce sidebar widths
+	for finalTotal > m.width && (explorerWidth > 20 || logsWidth > 20) {
+		if m.showLogs && logsWidth > 20 {
+			logsWidth--
+			finalTotal--
+		}
+		if finalTotal > m.width && m.showExplorer && explorerWidth > 20 {
+			explorerWidth--
+			finalTotal--
+		}
+	}
+
+	// If still overflowing, reduce main width below minimum as last resort
+	if finalTotal > m.width {
+		excess := finalTotal - m.width
+		mainWidth -= excess
+		if mainWidth < 30 {
+			mainWidth = 30
+		}
+	}
+	// === END FINAL OVERFLOW CHECK ===
+
 	// === SIDEBAR HEIGHT: FULL HEIGHT MINUS OUTER BORDER ===
 	// Sidebars should extend from top to bottom of usable area
 	// Account for box border (2 lines: top + bottom)
