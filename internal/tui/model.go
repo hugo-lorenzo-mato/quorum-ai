@@ -2,12 +2,17 @@ package tui
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/progress"
+	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/control"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/events"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/tui/components"
 )
 
 // Model is the main TUI model.
@@ -28,6 +33,16 @@ type Model struct {
 	stateManager  *UIStateManager
 	controlPlane  *control.ControlPlane
 	isPaused      bool
+
+	// Enhanced UI components
+	progressBar    progress.Model
+	agents         []*components.Agent
+	agentMap       map[string]*components.Agent
+	workflowPct    float64
+	workflowTitle  string
+	showSidebar    bool
+	totalCost      float64
+	totalRequests  int
 }
 
 // TaskView represents a task in the TUI.
@@ -51,10 +66,32 @@ type LogEntry struct {
 
 // New creates a new TUI model.
 func New() Model {
+	// Initialize progress bar with gradient
+	pb := progress.New(
+		progress.WithScaledGradient("#7c3aed", "#3b82f6"),
+		progress.WithoutPercentage(),
+	)
+
+	// Initialize default agents
+	defaultAgents := []*components.Agent{
+		{ID: "claude", Name: "Claude", Status: components.StatusIdle, Color: components.GetAgentColor("claude")},
+		{ID: "gemini", Name: "Gemini", Status: components.StatusIdle, Color: components.GetAgentColor("gemini")},
+		{ID: "codex", Name: "Codex", Status: components.StatusIdle, Color: components.GetAgentColor("codex")},
+	}
+
+	agentMap := make(map[string]*components.Agent)
+	for _, agent := range defaultAgents {
+		agentMap[agent.ID] = agent
+	}
+
 	return Model{
-		tasks:   make([]*TaskView, 0),
-		logs:    make([]LogEntry, 0),
-		spinner: NewSpinner(),
+		tasks:       make([]*TaskView, 0),
+		logs:        make([]LogEntry, 0),
+		spinner:     NewSpinner(),
+		progressBar: pb,
+		agents:      defaultAgents,
+		agentMap:    agentMap,
+		showSidebar: true,
 	}
 }
 
@@ -62,9 +99,7 @@ func New() Model {
 func NewWithStateManager(baseDir string) Model {
 	m := New()
 	m.stateManager = NewUIStateManager(baseDir)
-	if err := m.stateManager.Load(); err != nil {
-		// Log but continue with defaults
-	}
+	_ = m.stateManager.Load() // Ignore error, continue with defaults
 
 	// Restore state
 	state := m.stateManager.Get()
@@ -99,6 +134,7 @@ func (m *Model) SetControlPlane(cp *control.ControlPlane) {
 func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{
 		m.spinner.Tick(),
+		m.spinner.bubblesSpinner.Tick, // Initialize bubbles spinner
 		durationTick(),
 	}
 
@@ -179,6 +215,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
 		return m, cmd
+
+	case spinner.TickMsg:
+		// Update bubbles spinner for components
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
+		return m, cmd
+
 	case DurationTickMsg:
 		return m, durationTick()
 
@@ -203,6 +246,29 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if task.ID == msg.TaskID {
 				m.tasks[i].Status = core.TaskStatusPending
 			}
+		}
+		return m, nil
+
+	case AgentStatusUpdateMsg:
+		// Update agent status in the UI
+		if agent, ok := m.agentMap[msg.AgentID]; ok {
+			agent.Status = components.AgentStatus(msg.Status)
+			agent.Duration = msg.Duration
+			agent.Output = msg.Output
+			agent.Error = msg.Error
+		}
+		if m.eventAdapter != nil {
+			return m, waitForEventBusUpdate(m.eventAdapter)
+		}
+		return m, nil
+
+	case WorkflowProgressMsg:
+		m.workflowTitle = msg.Title
+		m.workflowPct = msg.Percentage
+		m.totalCost = msg.Cost
+		m.totalRequests = msg.Requests
+		if m.eventAdapter != nil {
+			return m, waitForEventBusUpdate(m.eventAdapter)
 		}
 		return m, nil
 	}
@@ -290,41 +356,141 @@ func (m Model) View() string {
 	return m.renderMain()
 }
 
-// renderMain renders the main view.
+// renderMain renders the main view with horizontal layout.
 func (m Model) renderMain() string {
-	s := m.renderHeader()
-	s += "\n\n"
-	s += m.renderProgress()
-	s += "\n\n"
-	s += m.renderTasks()
-	s += "\n\n"
-	s += m.renderFooter()
+	var sb strings.Builder
 
-	return s
+	// Header
+	sb.WriteString(m.renderHeader())
+	sb.WriteString("\n")
+
+	// Divider
+	divider := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#374151")).
+		Render(strings.Repeat("─", m.width-2))
+	sb.WriteString(divider)
+	sb.WriteString("\n")
+
+	// Body: Sidebar + Main Content (horizontal layout)
+	if m.showSidebar && m.width >= 80 {
+		sidebar := m.renderSidebar()
+		mainContent := m.renderMainContent()
+		body := lipgloss.JoinHorizontal(lipgloss.Top, sidebar, mainContent)
+		sb.WriteString(body)
+	} else {
+		// Fallback to vertical layout for narrow terminals
+		sb.WriteString(m.renderMainContent())
+	}
+
+	sb.WriteString("\n")
+	sb.WriteString(m.renderFooter())
+
+	return sb.String()
 }
 
-// renderHeader renders the header section.
+// renderSidebar renders the agent sidebar panel.
+func (m Model) renderSidebar() string {
+	cfg := components.SidebarConfig{
+		Width:     24,
+		Height:    m.height - 8,
+		ShowStats: true,
+		TotalCost: m.totalCost,
+		TotalReqs: m.totalRequests,
+	}
+	return components.RenderSidebar(m.agents, m.spinner.bubblesSpinner, cfg)
+}
+
+// renderMainContent renders the main content area (right of sidebar).
+func (m Model) renderMainContent() string {
+	var sb strings.Builder
+	contentWidth := m.width - 28
+	if !m.showSidebar || m.width < 80 {
+		contentWidth = m.width - 4
+	}
+
+	// Progress card if workflow is active
+	if m.workflow != nil && m.workflowPct > 0 {
+		sb.WriteString(m.renderProgressCard(contentWidth))
+		sb.WriteString("\n")
+	}
+
+	// Tasks list
+	sb.WriteString(m.renderTasks())
+
+	// Agent outputs
+	for _, agent := range m.agents {
+		if agent.Status == components.StatusDone && agent.Output != "" {
+			sb.WriteString(components.RenderAgentOutput(agent, contentWidth))
+		}
+	}
+
+	style := MainContentStyle.
+		Width(contentWidth).
+		Height(m.height - 8)
+
+	return style.Render(sb.String())
+}
+
+// renderProgressCard renders the workflow progress card.
+func (m Model) renderProgressCard(width int) string {
+	cfg := components.ProgressCardConfig{
+		Width:        width,
+		Title:        m.workflowTitle,
+		Percentage:   m.workflowPct,
+		ShowPipeline: true,
+		Agents:       m.agents,
+	}
+	return components.RenderProgressCard(cfg, m.progressBar)
+}
+
+// renderHeader renders the header section with stats.
 func (m Model) renderHeader() string {
+	// Left side: logo and version
+	titleStyle := lipgloss.NewStyle().Foreground(ColorPrimary).Bold(true)
+	dimStyle := lipgloss.NewStyle().Foreground(ColorTextMuted)
+
+	left := titleStyle.Render("◆ Quorum AI") + dimStyle.Render(" v0.2.0")
+
+	// Right side: stats
 	phase := string(m.currentPhase)
 	if phase == "" {
-		phase = "initializing"
+		phase = "init"
 	}
 
 	status := "running"
 	if m.workflow != nil {
 		status = string(m.workflow.Status)
 	}
-
 	if m.err != nil {
 		status = "error"
 	}
-
 	if m.isPaused {
 		status = "PAUSED"
 	}
 
-	return HeaderStyle.Render(
-		fmt.Sprintf("Quorum AI - Phase: %s - Status: %s", phase, status))
+	phaseIcon := lipgloss.NewStyle().Foreground(ColorPrimary).Render("⬡ ")
+	costIcon := lipgloss.NewStyle().Foreground(ColorWarning).Render("$ ")
+	reqIcon := lipgloss.NewStyle().Foreground(ColorSuccess).Render("↑ ")
+
+	right := dimStyle.Render(
+		phaseIcon + phase + "  │  " +
+			reqIcon + fmt.Sprintf("%d req", m.totalRequests) + "  │  " +
+			costIcon + fmt.Sprintf("%.3f", m.totalCost) + "  │  " +
+			status)
+
+	// Calculate gap for alignment
+	gap := m.width - lipgloss.Width(left) - lipgloss.Width(right) - 4
+	if gap < 0 {
+		gap = 0
+	}
+
+	header := lipgloss.NewStyle().
+		Background(lipgloss.Color("#1e1b2e")).
+		Width(m.width).
+		Padding(0, 1).
+		Render(left + strings.Repeat(" ", gap) + right)
+
+	return header
 }
 
 // progressStats calculates task completion statistics.

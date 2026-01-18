@@ -95,8 +95,14 @@ func (c *CopilotAdapter) Execute(ctx context.Context, opts core.ExecuteOptions) 
 	allArgs = append(allArgs, cmdParts[1:]...)
 	allArgs = append(allArgs, args...)
 
+	// Copilot CLI doesn't have --system-prompt, so prepend to user prompt
+	prompt := opts.Prompt
+	if opts.SystemPrompt != "" && prompt != "" {
+		prompt = "[System Instructions]\n" + opts.SystemPrompt + "\n\n[User Message]\n" + prompt
+	}
+
 	// Add prompt
-	allArgs = append(allArgs, "-p", opts.Prompt)
+	allArgs = append(allArgs, "-p", prompt)
 
 	// #nosec G204 -- command path is from trusted config
 	cmd := exec.CommandContext(ctx, cmdParts[0], allArgs...)

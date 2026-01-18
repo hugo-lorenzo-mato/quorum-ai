@@ -77,8 +77,13 @@ func (c *CodexAdapter) Ping(ctx context.Context) error {
 func (c *CodexAdapter) Execute(ctx context.Context, opts core.ExecuteOptions) (*core.ExecuteResult, error) {
 	args := c.buildArgs(opts)
 
-	if opts.Prompt != "" {
-		args = append(args, opts.Prompt)
+	// Codex CLI doesn't have --system-prompt, so prepend to user prompt
+	prompt := opts.Prompt
+	if opts.SystemPrompt != "" && prompt != "" {
+		prompt = "[System Instructions]\n" + opts.SystemPrompt + "\n\n[User Message]\n" + prompt
+	}
+	if prompt != "" {
+		args = append(args, prompt)
 	}
 
 	result, err := c.ExecuteCommand(ctx, args, "", opts.WorkDir)
@@ -91,7 +96,7 @@ func (c *CodexAdapter) Execute(ctx context.Context, opts core.ExecuteOptions) (*
 
 // buildArgs constructs CLI arguments for Codex.
 func (c *CodexAdapter) buildArgs(opts core.ExecuteOptions) []string {
-	args := []string{"exec"}
+	args := []string{"exec", "--skip-git-repo-check"}
 
 	// Determine reasoning effort based on phase
 	// Use "xhigh" (extra high) for analyze/optimize/plan, "high" for execute
@@ -108,6 +113,7 @@ func (c *CodexAdapter) buildArgs(opts core.ExecuteOptions) []string {
 		"-c", `approval_policy="never"`,
 		"-c", `sandbox_mode="workspace-write"`,
 		"-c", `model_reasoning_effort="`+reasoningEffort+`"`,
+		"-c", `skip_git_repo_check=true`,
 	)
 
 	// Model selection

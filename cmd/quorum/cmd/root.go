@@ -26,11 +26,19 @@ var rootCmd = &cobra.Command{
 	Short: "Multi-agent AI orchestrator with consensus-based validation",
 	Long: `quorum-ai orchestrates multiple AI agents to analyze, plan, and execute
 development tasks. It uses consensus mechanisms to reduce hallucinations
-and improve output quality through V1/V2/V3 validation protocol.`,
+and improve output quality through V1/V2/V3 validation protocol.
+
+Running 'quorum' without arguments starts interactive chat mode.`,
 	SilenceUsage:  true,
 	SilenceErrors: true,
 	PersistentPreRunE: func(_ *cobra.Command, _ []string) error {
 		return initConfig()
+	},
+	// Default to chat mode when no subcommand is provided
+	RunE: func(cmd *cobra.Command, args []string) error {
+		// If a subcommand was specified, this won't be called
+		// So this only runs for bare "quorum" invocation
+		return runChat(cmd, args)
 	},
 }
 
@@ -42,6 +50,11 @@ func SetVersion(version, commit, date string) {
 	appVersion = version
 	appCommit = commit
 	appDate = date
+}
+
+// GetVersion returns the application version string.
+func GetVersion() string {
+	return appVersion
 }
 
 func init() {

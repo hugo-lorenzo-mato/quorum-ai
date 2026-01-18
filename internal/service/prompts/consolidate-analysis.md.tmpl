@@ -1,0 +1,36 @@
+# Analysis Consolidation Request
+
+## User Prompt
+{{.Prompt}}
+
+## Agent Analyses
+The following analyses were produced by different AI agents for the same request:
+
+{{range .Analyses}}
+### Analysis from {{.AgentName}}
+{{.RawOutput}}
+
+{{end}}
+
+## Instructions
+Synthesize the above analyses into a single, coherent consolidated report. Your task is to:
+
+1. **Merge Claims**: Combine factual findings from all agents, removing duplicates and resolving contradictions
+2. **Aggregate Risks**: Collect all identified risks, prioritizing those mentioned by multiple agents
+3. **Reconcile Recommendations**: Synthesize recommendations, choosing the best approach when agents disagree
+
+When agents disagree:
+- Prefer the most specific and actionable recommendation
+- If approaches are mutually exclusive, choose based on simplicity and best practices
+- Note significant trade-offs in your reasoning
+
+## Response Format
+Provide the consolidated analysis in the following JSON structure:
+```json
+{
+  "claims": ["Consolidated factual findings..."],
+  "risks": ["Aggregated risks with priority..."],
+  "recommendations": ["Reconciled actionable recommendations..."],
+  "reasoning": "Brief explanation of how conflicts were resolved"
+}
+```

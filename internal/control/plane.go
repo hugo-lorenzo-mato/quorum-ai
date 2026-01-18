@@ -2,11 +2,30 @@ package control
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 )
+
+// InputRequest represents a request for user input.
+type InputRequest struct {
+	ID      string        `json:"id"`
+	Prompt  string        `json:"prompt"`
+	Context string        `json:"context,omitempty"`
+	Options []string      `json:"options,omitempty"`
+	Timeout time.Duration `json:"timeout,omitempty"`
+}
+
+// InputResponse represents the user's response to an input request.
+type InputResponse struct {
+	RequestID string `json:"request_id"`
+	Input     string `json:"input"`
+	Cancelled bool   `json:"cancelled"`
+	Error     error  `json:"-"`
+}
 
 // ControlPlane provides workflow control capabilities.
 type ControlPlane struct {
@@ -16,14 +35,21 @@ type ControlPlane struct {
 	retryQueue chan core.TaskID
 	pauseCh    chan struct{}
 	resumeCh   chan struct{}
+
+	// Human-in-the-loop support
+	inputMu        sync.RWMutex
+	inputRequestCh chan InputRequest
+	pendingInputs  map[string]chan InputResponse
 }
 
 // New creates a new ControlPlane.
 func New() *ControlPlane {
 	return &ControlPlane{
-		retryQueue: make(chan core.TaskID, 100),
-		pauseCh:    make(chan struct{}),
-		resumeCh:   make(chan struct{}),
+		retryQueue:     make(chan core.TaskID, 100),
+		pauseCh:        make(chan struct{}),
+		resumeCh:       make(chan struct{}),
+		inputRequestCh: make(chan InputRequest, 10),
+		pendingInputs:  make(map[string]chan InputResponse),
 	}
 }
 
@@ -134,4 +160,96 @@ func (cp *ControlPlane) Status() Status {
 		Cancelled: cp.cancelled.Load(),
 		Retries:   len(cp.retryQueue),
 	}
+}
+
+// RequestUserInput blocks until the user provides input.
+// This follows the same pattern as WaitIfPaused - blocking until signal.
+func (cp *ControlPlane) RequestUserInput(ctx context.Context, req InputRequest) (InputResponse, error) {
+	// Create response channel for this request
+	responseCh := make(chan InputResponse, 1)
+
+	cp.inputMu.Lock()
+	cp.pendingInputs[req.ID] = responseCh
+	cp.inputMu.Unlock()
+
+	// Cleanup on exit
+	defer func() {
+		cp.inputMu.Lock()
+		delete(cp.pendingInputs, req.ID)
+		cp.inputMu.Unlock()
+	}()
+
+	// Send request to TUI (non-blocking with timeout)
+	select {
+	case cp.inputRequestCh <- req:
+	case <-ctx.Done():
+		return InputResponse{}, ctx.Err()
+	case <-time.After(5 * time.Second):
+		return InputResponse{}, fmt.Errorf("timeout sending input request")
+	}
+
+	// Wait for response
+	var timeoutCh <-chan time.Time
+	if req.Timeout > 0 {
+		timeoutCh = time.After(req.Timeout)
+	}
+
+	select {
+	case <-ctx.Done():
+		return InputResponse{RequestID: req.ID, Cancelled: true}, ctx.Err()
+	case <-timeoutCh:
+		return InputResponse{RequestID: req.ID, Cancelled: true}, fmt.Errorf("user input timeout")
+	case resp := <-responseCh:
+		return resp, resp.Error
+	}
+}
+
+// ProvideUserInput delivers the user's response to a pending input request.
+// Called by the TUI when the user submits input.
+func (cp *ControlPlane) ProvideUserInput(requestID, input string) error {
+	cp.inputMu.RLock()
+	responseCh, ok := cp.pendingInputs[requestID]
+	cp.inputMu.RUnlock()
+
+	if !ok {
+		return fmt.Errorf("no pending input request with ID: %s", requestID)
+	}
+
+	select {
+	case responseCh <- InputResponse{RequestID: requestID, Input: input}:
+		return nil
+	default:
+		return fmt.Errorf("response channel full or closed")
+	}
+}
+
+// CancelUserInput cancels a pending input request.
+func (cp *ControlPlane) CancelUserInput(requestID string) error {
+	cp.inputMu.RLock()
+	responseCh, ok := cp.pendingInputs[requestID]
+	cp.inputMu.RUnlock()
+
+	if !ok {
+		return fmt.Errorf("no pending input request with ID: %s", requestID)
+	}
+
+	select {
+	case responseCh <- InputResponse{RequestID: requestID, Cancelled: true}:
+		return nil
+	default:
+		return fmt.Errorf("response channel full or closed")
+	}
+}
+
+// InputRequestCh returns the channel for receiving input requests.
+// The TUI should listen on this channel and display prompts to the user.
+func (cp *ControlPlane) InputRequestCh() <-chan InputRequest {
+	return cp.inputRequestCh
+}
+
+// HasPendingInput returns true if there are pending input requests.
+func (cp *ControlPlane) HasPendingInput() bool {
+	cp.inputMu.RLock()
+	defer cp.inputMu.RUnlock()
+	return len(cp.pendingInputs) > 0
 }

@@ -17,9 +17,9 @@ type Event interface {
 
 // BaseEvent provides common fields for all events.
 type BaseEvent struct {
-	Type       string    `json:"type"`
-	Time       time.Time `json:"timestamp"`
-	Workflow   string    `json:"workflow_id"`
+	Type     string    `json:"type"`
+	Time     time.Time `json:"timestamp"`
+	Workflow string    `json:"workflow_id"`
 }
 
 func (e BaseEvent) EventType() string    { return e.Type }

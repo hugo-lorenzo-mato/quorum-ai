@@ -47,10 +47,17 @@ const (
 	OutputFormatMarkdown OutputFormat = "markdown"
 )
 
+// Message represents a single message in a conversation.
+type Message struct {
+	Role    string // "user", "assistant", "system"
+	Content string
+}
+
 // ExecuteOptions configures an agent execution.
 type ExecuteOptions struct {
 	Prompt       string
 	SystemPrompt string
+	Messages     []Message // Conversation history (for API-based adapters)
 	Model        string
 	MaxTokens    int
 	Temperature  float64

@@ -70,8 +70,14 @@ func (g *GeminiAdapter) Ping(ctx context.Context) error {
 // Execute runs a prompt through Gemini CLI.
 func (g *GeminiAdapter) Execute(ctx context.Context, opts core.ExecuteOptions) (*core.ExecuteResult, error) {
 	args := g.buildArgs(opts)
-	if opts.Prompt != "" {
-		args = append(args, opts.Prompt)
+
+	// Gemini CLI doesn't have --system-prompt, so prepend to user prompt
+	prompt := opts.Prompt
+	if opts.SystemPrompt != "" && prompt != "" {
+		prompt = "[System Instructions]\n" + opts.SystemPrompt + "\n\n[User Message]\n" + prompt
+	}
+	if prompt != "" {
+		args = append(args, prompt)
 	}
 
 	result, err := g.ExecuteCommand(ctx, args, "", opts.WorkDir)

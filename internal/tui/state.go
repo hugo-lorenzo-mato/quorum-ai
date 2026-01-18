@@ -103,7 +103,7 @@ func (m *UIStateManager) Save() error {
 
 	// Ensure directory exists
 	dir := filepath.Dir(m.path)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
 
@@ -114,7 +114,7 @@ func (m *UIStateManager) Save() error {
 
 	// Write atomically
 	tmpPath := m.path + ".tmp"
-	if err := os.WriteFile(tmpPath, data, 0644); err != nil {
+	if err := os.WriteFile(tmpPath, data, 0o600); err != nil {
 		return err
 	}
 
@@ -206,7 +206,7 @@ func (m *UIStateManager) backgroundSaver() {
 // migrateState migrates old state versions.
 func (m *UIStateManager) migrateState(old UIState) UIState {
 	// Add migration logic as versions evolve
-	new := old
-	new.Version = CurrentUIStateVersion
-	return new
+	migrated := old
+	migrated.Version = CurrentUIStateVersion
+	return migrated
 }

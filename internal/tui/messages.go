@@ -113,6 +113,23 @@ type TaskRetryQueuedMsg struct {
 	TaskID core.TaskID
 }
 
+// AgentStatusUpdateMsg signals an agent status change.
+type AgentStatusUpdateMsg struct {
+	AgentID  string
+	Status   int // 0=Idle, 1=Working, 2=Done, 3=Error
+	Duration time.Duration
+	Output   string
+	Error    string
+}
+
+// WorkflowProgressMsg signals workflow progress update.
+type WorkflowProgressMsg struct {
+	Title      string
+	Percentage float64
+	Cost       float64
+	Requests   int
+}
+
 // PauseCmd creates a command to pause the workflow.
 func PauseCmd(cp *control.ControlPlane) tea.Cmd {
 	return func() tea.Msg {
@@ -151,11 +168,6 @@ func CancelCmd(cp *control.ControlPlane) tea.Cmd {
 		}
 		return CancelledMsg{}
 	}
-}
-
-// retryTask creates a command to retry a task (legacy stub for backwards compatibility).
-func retryTask(taskID core.TaskID) tea.Cmd {
-	return RetryTaskCmd(nil, taskID)
 }
 
 // SendWorkflowUpdate creates a workflow update message.

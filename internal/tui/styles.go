@@ -118,7 +118,49 @@ var (
 	// SubtleStyle is for subtle text.
 	SubtleStyle = lipgloss.NewStyle().
 			Foreground(ColorTextMuted)
+
+	// SidebarStyle for the agent sidebar panel.
+	SidebarStyle = lipgloss.NewStyle().
+			Background(lipgloss.Color("#13101c")).
+			BorderRight(true).
+			BorderStyle(lipgloss.NormalBorder()).
+			BorderForeground(lipgloss.Color("#3b0764")).
+			Padding(1)
+
+	// MainContentStyle for the main content area.
+	MainContentStyle = lipgloss.NewStyle().
+				Padding(1, 2)
+
+	// ProgressCardStyle for workflow progress display.
+	ProgressCardStyle = lipgloss.NewStyle().
+				Background(lipgloss.Color("#1a1528")).
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(lipgloss.Color("#3b0764")).
+				Padding(1).
+				MarginTop(1)
+
+	// InputBoxStyle for the input area.
+	InputBoxStyle = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(ColorPrimary).
+			Padding(0, 1)
+
+	// PromptStyle for user prompts.
+	PromptStyle = lipgloss.NewStyle().
+			Foreground(ColorWarning).
+			Bold(true)
 )
+
+// AgentOutputStyle returns style for agent output with colored left border.
+func AgentOutputStyle(color lipgloss.Color) lipgloss.Style {
+	return lipgloss.NewStyle().
+		BorderLeft(true).
+		BorderStyle(lipgloss.ThickBorder()).
+		BorderForeground(color).
+		Padding(0, 1).
+		MarginTop(1).
+		MarginBottom(1)
+}
 
 // StatusStyle returns style for a task status.
 func StatusStyle(status string) lipgloss.Style {

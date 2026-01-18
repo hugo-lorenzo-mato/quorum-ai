@@ -4,6 +4,7 @@ import (
 	"context"
 	"regexp"
 	"strconv"
+	"strings"
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/logging"
@@ -69,8 +70,11 @@ func (c *ClaudeAdapter) Ping(ctx context.Context) error {
 // Execute runs a prompt through Claude CLI.
 func (c *ClaudeAdapter) Execute(ctx context.Context, opts core.ExecuteOptions) (*core.ExecuteResult, error) {
 	args := c.buildArgs(opts)
-	if opts.Prompt != "" {
-		args = append(args, opts.Prompt)
+
+	// Build the full prompt, including conversation history if provided
+	fullPrompt := c.buildPromptWithHistory(opts)
+	if fullPrompt != "" {
+		args = append(args, fullPrompt)
 	}
 
 	result, err := c.ExecuteCommand(ctx, args, "", opts.WorkDir)
@@ -79,6 +83,40 @@ func (c *ClaudeAdapter) Execute(ctx context.Context, opts core.ExecuteOptions) (
 	}
 
 	return c.parseOutput(result, opts.Format)
+}
+
+// buildPromptWithHistory constructs a prompt including conversation history.
+// For CLI adapters, this converts the Messages array to a text format.
+// API-based adapters should use Messages directly instead.
+func (c *ClaudeAdapter) buildPromptWithHistory(opts core.ExecuteOptions) string {
+	// If no messages, just return the prompt
+	if len(opts.Messages) == 0 {
+		return opts.Prompt
+	}
+
+	// Build conversation context from Messages
+	var sb strings.Builder
+	sb.WriteString("<conversation_history>\n")
+
+	for _, msg := range opts.Messages {
+		switch msg.Role {
+		case "user":
+			sb.WriteString("<user>\n")
+			sb.WriteString(msg.Content)
+			sb.WriteString("\n</user>\n")
+		case "assistant":
+			sb.WriteString("<assistant>\n")
+			sb.WriteString(msg.Content)
+			sb.WriteString("\n</assistant>\n")
+		}
+	}
+
+	sb.WriteString("</conversation_history>\n\n")
+	sb.WriteString("<current_message>\n")
+	sb.WriteString(opts.Prompt)
+	sb.WriteString("\n</current_message>")
+
+	return sb.String()
 }
 
 // buildArgs constructs CLI arguments.
@@ -95,6 +133,11 @@ func (c *ClaudeAdapter) buildArgs(opts core.ExecuteOptions) []string {
 	}
 	if model != "" {
 		args = append(args, "--model", model)
+	}
+
+	// System prompt (for customizing assistant behavior)
+	if opts.SystemPrompt != "" {
+		args = append(args, "--system-prompt", opts.SystemPrompt)
 	}
 
 	// Output format

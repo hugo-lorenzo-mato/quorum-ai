@@ -200,43 +200,10 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 	}
 
 	// Create worktree for task isolation
-	var workDir string
-	var worktreeCreated bool
-	if useWorktrees && wctx.Worktrees != nil {
-		wtInfo, err := wctx.Worktrees.Create(ctx, task, "")
-		if err != nil {
-			wctx.Logger.Warn("failed to create worktree, executing in main repo",
-				"task_id", task.ID,
-				"error", err,
-			)
-		} else {
-			workDir = wtInfo.Path
-			wctx.Lock()
-			taskState.WorktreePath = workDir
-			wctx.Unlock()
-			worktreeCreated = true
-			wctx.Logger.Info("created worktree for task",
-				"task_id", task.ID,
-				"worktree_path", workDir,
-			)
-		}
-	}
+	workDir, worktreeCreated := e.setupWorktree(ctx, wctx, task, taskState, useWorktrees)
 
 	// Cleanup worktree when done (if auto_clean is enabled)
-	defer func() {
-		if worktreeCreated && wctx.Config.WorktreeAutoClean && wctx.Worktrees != nil {
-			if rmErr := wctx.Worktrees.Remove(ctx, task); rmErr != nil {
-				wctx.Logger.Warn("failed to cleanup worktree",
-					"task_id", task.ID,
-					"error", rmErr,
-				)
-			} else {
-				wctx.Logger.Info("cleaned up worktree",
-					"task_id", task.ID,
-				)
-			}
-		}
-	}()
+	defer e.cleanupWorktree(ctx, wctx, task, worktreeCreated)
 
 	// Get agent
 	agentName := task.CLI
@@ -246,10 +213,7 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 
 	agent, err := wctx.Agents.Get(agentName)
 	if err != nil {
-		wctx.Lock()
-		taskState.Status = core.TaskStatusFailed
-		taskState.Error = err.Error()
-		wctx.Unlock()
+		e.setTaskFailed(wctx, taskState, err)
 		taskErr = err
 		return err
 	}
@@ -257,10 +221,7 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 	// Acquire rate limit
 	limiter := wctx.RateLimits.Get(agentName)
 	if err := limiter.Acquire(); err != nil {
-		wctx.Lock()
-		taskState.Status = core.TaskStatusFailed
-		taskState.Error = err.Error()
-		wctx.Unlock()
+		e.setTaskFailed(wctx, taskState, err)
 		taskErr = err
 		return fmt.Errorf("rate limit: %w", err)
 	}
@@ -271,10 +232,7 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 		Context: wctx.GetContextString(),
 	})
 	if err != nil {
-		wctx.Lock()
-		taskState.Status = core.TaskStatusFailed
-		taskState.Error = err.Error()
-		wctx.Unlock()
+		e.setTaskFailed(wctx, taskState, err)
 		taskErr = err
 		return err
 	}
@@ -309,10 +267,7 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 	wctx.Unlock()
 
 	if err != nil {
-		wctx.Lock()
-		taskState.Status = core.TaskStatusFailed
-		taskState.Error = err.Error()
-		wctx.Unlock()
+		e.setTaskFailed(wctx, taskState, err)
 		taskErr = err
 		return err
 	}
@@ -356,36 +311,9 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 	}
 
 	// Check cost limits
-	if wctx.Config != nil {
-		// Check task cost limit
-		if wctx.Config.MaxCostPerTask > 0 && result.CostUSD > wctx.Config.MaxCostPerTask {
-			wctx.Lock()
-			taskState.Status = core.TaskStatusFailed
-			taskState.Error = "task budget exceeded"
-			wctx.Unlock()
-			taskErr = core.ErrTaskBudgetExceeded(string(task.ID), result.CostUSD, wctx.Config.MaxCostPerTask)
-			wctx.Logger.Error("task budget exceeded",
-				"task_id", task.ID,
-				"cost", result.CostUSD,
-				"limit", wctx.Config.MaxCostPerTask,
-			)
-			return taskErr
-		}
-
-		// Check workflow cost limit
-		wctx.RLock()
-		totalCost := float64(0)
-		if wctx.State.Metrics != nil {
-			totalCost = wctx.State.Metrics.TotalCostUSD
-		}
-		wctx.RUnlock()
-		if wctx.Config.MaxCostPerWorkflow > 0 && totalCost > wctx.Config.MaxCostPerWorkflow {
-			wctx.Logger.Error("workflow budget exceeded",
-				"total_cost", totalCost,
-				"limit", wctx.Config.MaxCostPerWorkflow,
-			)
-			return core.ErrWorkflowBudgetExceeded(totalCost, wctx.Config.MaxCostPerWorkflow)
-		}
+	if costErr := e.checkCostLimits(wctx, task, taskState, result.CostUSD); costErr != nil {
+		taskErr = costErr
+		return costErr
 	}
 
 	if err := wctx.Checkpoint.TaskCheckpoint(wctx.State, task, true); err != nil {
@@ -393,6 +321,93 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 	}
 
 	return nil
+}
+
+// setTaskFailed marks a task as failed with the given error.
+func (e *Executor) setTaskFailed(wctx *Context, taskState *core.TaskState, err error) {
+	wctx.Lock()
+	taskState.Status = core.TaskStatusFailed
+	taskState.Error = err.Error()
+	wctx.Unlock()
+}
+
+// checkCostLimits verifies task and workflow cost limits.
+func (e *Executor) checkCostLimits(wctx *Context, task *core.Task, taskState *core.TaskState, cost float64) error {
+	if wctx.Config == nil {
+		return nil
+	}
+
+	// Check task cost limit
+	if wctx.Config.MaxCostPerTask > 0 && cost > wctx.Config.MaxCostPerTask {
+		e.setTaskFailed(wctx, taskState, fmt.Errorf("task budget exceeded"))
+		wctx.Logger.Error("task budget exceeded",
+			"task_id", task.ID,
+			"cost", cost,
+			"limit", wctx.Config.MaxCostPerTask,
+		)
+		return core.ErrTaskBudgetExceeded(string(task.ID), cost, wctx.Config.MaxCostPerTask)
+	}
+
+	// Check workflow cost limit
+	wctx.RLock()
+	totalCost := float64(0)
+	if wctx.State.Metrics != nil {
+		totalCost = wctx.State.Metrics.TotalCostUSD
+	}
+	wctx.RUnlock()
+
+	if wctx.Config.MaxCostPerWorkflow > 0 && totalCost > wctx.Config.MaxCostPerWorkflow {
+		wctx.Logger.Error("workflow budget exceeded",
+			"total_cost", totalCost,
+			"limit", wctx.Config.MaxCostPerWorkflow,
+		)
+		return core.ErrWorkflowBudgetExceeded(totalCost, wctx.Config.MaxCostPerWorkflow)
+	}
+
+	return nil
+}
+
+// setupWorktree creates a worktree for task isolation if enabled.
+func (e *Executor) setupWorktree(ctx context.Context, wctx *Context, task *core.Task, taskState *core.TaskState, useWorktrees bool) (workDir string, created bool) {
+	if !useWorktrees || wctx.Worktrees == nil {
+		return "", false
+	}
+
+	wtInfo, err := wctx.Worktrees.Create(ctx, task, "")
+	if err != nil {
+		wctx.Logger.Warn("failed to create worktree, executing in main repo",
+			"task_id", task.ID,
+			"error", err,
+		)
+		return "", false
+	}
+
+	wctx.Lock()
+	taskState.WorktreePath = wtInfo.Path
+	wctx.Unlock()
+
+	wctx.Logger.Info("created worktree for task",
+		"task_id", task.ID,
+		"worktree_path", wtInfo.Path,
+	)
+
+	return wtInfo.Path, true
+}
+
+// cleanupWorktree removes the worktree if auto_clean is enabled.
+func (e *Executor) cleanupWorktree(ctx context.Context, wctx *Context, task *core.Task, created bool) {
+	if !created || !wctx.Config.WorktreeAutoClean || wctx.Worktrees == nil {
+		return
+	}
+
+	if rmErr := wctx.Worktrees.Remove(ctx, task); rmErr != nil {
+		wctx.Logger.Warn("failed to cleanup worktree",
+			"task_id", task.ID,
+			"error", rmErr,
+		)
+	} else {
+		wctx.Logger.Info("cleaned up worktree", "task_id", task.ID)
+	}
 }
 
 func shouldUseWorktrees(mode string, readyCount int) bool {
@@ -412,13 +427,13 @@ func shouldUseWorktrees(mode string, readyCount int) bool {
 func (e *Executor) saveTaskOutput(taskID core.TaskID, output string) string {
 	// Create outputs directory
 	outputDir := ".quorum/outputs"
-	if err := os.MkdirAll(outputDir, 0755); err != nil {
+	if err := os.MkdirAll(outputDir, 0o755); err != nil {
 		return ""
 	}
 
 	// Write output file
 	outputPath := filepath.Join(outputDir, string(taskID)+".txt")
-	if err := os.WriteFile(outputPath, []byte(output), 0644); err != nil {
+	if err := os.WriteFile(outputPath, []byte(output), 0o600); err != nil {
 		return ""
 	}
 
