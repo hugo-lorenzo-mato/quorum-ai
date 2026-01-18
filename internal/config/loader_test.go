@@ -305,3 +305,15 @@ func TestLoader_DefaultConfigFile(t *testing.T) {
 		t.Errorf("Costs.MaxPerWorkflow = %f, want %f", cfg.Costs.MaxPerWorkflow, 10.0)
 	}
 }
+
+func TestDefaultConfig_SandboxEnabled(t *testing.T) {
+	loader := NewLoader()
+	cfg, err := loader.Load()
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+
+	if !cfg.Workflow.Sandbox {
+		t.Error("Expected workflow.sandbox to default to true")
+	}
+}

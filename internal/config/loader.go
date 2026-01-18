@@ -119,7 +119,7 @@ func (l *Loader) setDefaults() {
 	l.v.SetDefault("workflow.timeout", "2h")
 	l.v.SetDefault("workflow.max_retries", 3)
 	l.v.SetDefault("workflow.dry_run", false)
-	l.v.SetDefault("workflow.sandbox", false)
+	l.v.SetDefault("workflow.sandbox", true) // Security: sandbox enabled by default
 
 	// Agent defaults
 	l.v.SetDefault("agents.default", "claude")

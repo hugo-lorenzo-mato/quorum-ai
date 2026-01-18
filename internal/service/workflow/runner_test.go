@@ -25,6 +25,13 @@ func TestDefaultRunnerConfig(t *testing.T) {
 	}
 }
 
+func TestDefaultRunnerConfig_SandboxEnabled(t *testing.T) {
+	config := DefaultRunnerConfig()
+	if !config.Sandbox {
+		t.Error("Expected DefaultRunnerConfig().Sandbox to be true")
+	}
+}
+
 func TestRunner_validateRunInput(t *testing.T) {
 	tests := []struct {
 		name    string

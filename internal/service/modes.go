@@ -23,7 +23,7 @@ func DefaultMode() ExecutionMode {
 	return ExecutionMode{
 		DryRun:      false,
 		Yolo:        false,
-		Sandbox:     false,
+		Sandbox:     true, // Security: sandbox enabled by default
 		DeniedTools: nil,
 		MaxCost:     0, // No limit
 		Interactive: true,

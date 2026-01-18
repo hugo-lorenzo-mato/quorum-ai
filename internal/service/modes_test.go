@@ -399,3 +399,10 @@ func TestSandbox_ValidatePath(t *testing.T) {
 	err = sandbox.ValidatePath("/etc/passwd", false)
 	testutil.AssertError(t, err)
 }
+
+func TestDefaultMode_SandboxEnabled(t *testing.T) {
+	mode := service.DefaultMode()
+	if !mode.Sandbox {
+		t.Error("Expected DefaultMode().Sandbox to be true")
+	}
+}
