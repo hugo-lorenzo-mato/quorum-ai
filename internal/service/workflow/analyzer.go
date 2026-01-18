@@ -61,6 +61,12 @@ func (a *Analyzer) Run(ctx context.Context, wctx *Context) error {
 
 	// Check consensus
 	consensusResult := a.consensus.Evaluate(v1Outputs)
+
+	// Save consensus score to metrics
+	wctx.UpdateMetrics(func(m *core.StateMetrics) {
+		m.ConsensusScore = consensusResult.Score
+	})
+
 	if err := wctx.Checkpoint.ConsensusCheckpoint(wctx.State, consensusResult); err != nil {
 		wctx.Logger.Warn("failed to create consensus checkpoint", "error", err)
 	}
@@ -84,6 +90,12 @@ func (a *Analyzer) Run(ctx context.Context, wctx *Context) error {
 		allOutputs = append(allOutputs, v1Outputs...)
 		allOutputs = append(allOutputs, v2Outputs...)
 		consensusResult = a.consensus.Evaluate(allOutputs)
+
+		// Update consensus score to metrics
+		wctx.UpdateMetrics(func(m *core.StateMetrics) {
+			m.ConsensusScore = consensusResult.Score
+		})
+
 		if err := wctx.Checkpoint.ConsensusCheckpoint(wctx.State, consensusResult); err != nil {
 			wctx.Logger.Warn("failed to create V2 consensus checkpoint", "error", err)
 		}
@@ -309,11 +321,12 @@ func (a *Analyzer) runV3Reconciliation(ctx context.Context, wctx *Context, v1, v
 		v2Combined.WriteString(fmt.Sprintf("### %s\n%s\n\n", o.AgentName, o.RawOutput))
 	}
 
+	divergenceStrings := consensus.DivergenceStrings()
 	prompt, err := wctx.Prompts.RenderAnalyzeV3(AnalyzeV3Params{
 		Prompt:      GetEffectivePrompt(wctx.State),
 		V1Analysis:  v1Combined.String(),
 		V2Analysis:  v2Combined.String(),
-		Divergences: consensus.Divergences,
+		Divergences: divergenceStrings,
 	})
 	if err != nil {
 		return fmt.Errorf("rendering V3 prompt: %w", err)

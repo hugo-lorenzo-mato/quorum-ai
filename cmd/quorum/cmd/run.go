@@ -142,6 +142,9 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 		var ok bool
 		tuiOutput, ok = output.(*tui.TUIOutput)
 		if ok {
+			baseDir := ".quorum"
+			tuiOutput.SetModel(tui.NewWithStateManager(baseDir))
+
 			// Connect TUILogHandler to TUIOutput so logs are routed directly
 			if tuiLogHandler != nil {
 				tuiLogHandler.SetOutput(tuiOutput)

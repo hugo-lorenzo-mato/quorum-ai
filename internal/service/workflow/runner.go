@@ -213,6 +213,9 @@ func (r *Runner) Run(ctx context.Context, prompt string) error {
 		return r.handleError(ctx, workflowState, err)
 	}
 
+	// Finalize metrics
+	r.finalizeMetrics(workflowState)
+
 	// Mark completed
 	workflowState.Status = core.WorkflowStatusCompleted
 	workflowState.UpdatedAt = time.Now()
@@ -220,6 +223,8 @@ func (r *Runner) Run(ctx context.Context, prompt string) error {
 	r.logger.Info("workflow completed",
 		"workflow_id", workflowState.WorkflowID,
 		"total_tasks", len(workflowState.Tasks),
+		"duration", workflowState.Metrics.Duration,
+		"total_cost", workflowState.Metrics.TotalCostUSD,
 	)
 
 	return r.state.Save(ctx, workflowState)
@@ -283,11 +288,16 @@ func (r *Runner) Resume(ctx context.Context) error {
 		}
 	}
 
+	// Finalize metrics
+	r.finalizeMetrics(workflowState)
+
 	workflowState.Status = core.WorkflowStatusCompleted
 	workflowState.UpdatedAt = time.Now()
 
 	r.logger.Info("workflow resumed and completed",
 		"workflow_id", workflowState.WorkflowID,
+		"duration", workflowState.Metrics.Duration,
+		"total_cost", workflowState.Metrics.TotalCostUSD,
 	)
 
 	return r.state.Save(ctx, workflowState)
@@ -390,4 +400,17 @@ func (r *Runner) SetDryRun(enabled bool) {
 func generateWorkflowID() string {
 	counter := atomic.AddUint64(&idCounter, 1)
 	return fmt.Sprintf("wf-%d-%d", time.Now().UnixNano(), counter)
+}
+
+// finalizeMetrics calculates final aggregate metrics.
+func (r *Runner) finalizeMetrics(state *core.WorkflowState) {
+	if state.Metrics == nil {
+		state.Metrics = &core.StateMetrics{}
+	}
+
+	// Calculate workflow duration
+	state.Metrics.Duration = time.Since(state.CreatedAt)
+
+	// Note: ConsensusScore is set by analyzer during analyze phase
+	// See analyzer.go for where this is updated
 }

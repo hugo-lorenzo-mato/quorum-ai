@@ -58,6 +58,13 @@ func NewTUIOutput() *TUIOutput {
 	return t
 }
 
+// SetModel updates the TUI model before program start.
+func (t *TUIOutput) SetModel(model Model) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.model = model
+}
+
 // DroppedEvents returns the count of dropped events.
 func (t *TUIOutput) DroppedEvents() int64 {
 	return atomic.LoadInt64(&t.dropCount)

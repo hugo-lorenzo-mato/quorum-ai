@@ -179,7 +179,28 @@ type ConsensusResult struct {
 	Score            float64
 	NeedsV3          bool
 	NeedsHumanReview bool
-	Divergences      []string
+	CategoryScores   map[string]float64
+	Divergences      []Divergence
+	Agreement        map[string][]string
+}
+
+// Divergence represents a disagreement between agents.
+type Divergence struct {
+	Category     string
+	Agent1       string
+	Agent1Items  []string
+	Agent2       string
+	Agent2Items  []string
+	JaccardScore float64
+}
+
+// DivergenceStrings returns a simplified string representation for logging.
+func (r ConsensusResult) DivergenceStrings() []string {
+	result := make([]string, len(r.Divergences))
+	for i, d := range r.Divergences {
+		result[i] = d.Category + ": " + d.Agent1 + " vs " + d.Agent2
+	}
+	return result
 }
 
 // RetryExecutor provides retry capabilities.
@@ -252,6 +273,17 @@ func (c *Context) RLock() {
 // RUnlock releases the read lock on the context state.
 func (c *Context) RUnlock() {
 	c.mu.RUnlock()
+}
+
+// UpdateMetrics safely updates workflow metrics.
+func (c *Context) UpdateMetrics(fn func(m *core.StateMetrics)) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.State.Metrics == nil {
+		c.State.Metrics = &core.StateMetrics{}
+	}
+	fn(c.State.Metrics)
 }
 
 // ResolvePhaseModel returns the model override for a given agent/phase.

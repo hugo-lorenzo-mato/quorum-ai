@@ -39,11 +39,12 @@ type MetricsUpdateEvent struct {
 	TotalCostUSD   float64       `json:"total_cost_usd"`
 	CostLimit      float64       `json:"cost_limit"`
 	UsagePercent   float64       `json:"usage_percent"`
+	ConsensusScore float64       `json:"consensus_score"`
 	Duration       time.Duration `json:"duration"`
 }
 
 // NewMetricsUpdateEvent creates a new metrics update event.
-func NewMetricsUpdateEvent(workflowID string, tokensIn, tokensOut int, cost, limit float64, duration time.Duration) MetricsUpdateEvent {
+func NewMetricsUpdateEvent(workflowID string, tokensIn, tokensOut int, cost, limit, consensusScore float64, duration time.Duration) MetricsUpdateEvent {
 	usagePercent := 0.0
 	if limit > 0 {
 		usagePercent = (cost / limit) * 100
@@ -55,6 +56,7 @@ func NewMetricsUpdateEvent(workflowID string, tokensIn, tokensOut int, cost, lim
 		TotalCostUSD:   cost,
 		CostLimit:      limit,
 		UsagePercent:   usagePercent,
+		ConsensusScore: consensusScore,
 		Duration:       duration,
 	}
 }

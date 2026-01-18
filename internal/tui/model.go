@@ -24,6 +24,7 @@ type Model struct {
 	err           error
 	droppedEvents int64            // track dropped events
 	eventAdapter  *EventBusAdapter // EventBus adapter for real-time events
+	stateManager  *UIStateManager
 }
 
 // TaskView represents a task in the TUI.
@@ -52,6 +53,22 @@ func New() Model {
 		logs:    make([]LogEntry, 0),
 		spinner: NewSpinner(),
 	}
+}
+
+// NewWithStateManager creates a Model with UI state persistence.
+func NewWithStateManager(baseDir string) Model {
+	m := New()
+	m.stateManager = NewUIStateManager(baseDir)
+	if err := m.stateManager.Load(); err != nil {
+		// Log but continue with defaults
+	}
+
+	// Restore state
+	state := m.stateManager.Get()
+	m.selectedIdx = state.SelectedTask
+	m.showLogs = state.ShowLogs
+
+	return m
 }
 
 // NewWithEventBus creates a Model connected to an EventBus.
@@ -94,6 +111,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case WorkflowUpdateMsg:
 		m.workflow = msg.State
 		m.tasks = m.buildTaskViews(msg.State)
+		if msg.State != nil && m.stateManager != nil {
+			m.stateManager.SetLastWorkflow(msg.State.WorkflowID)
+		}
 		if m.eventAdapter != nil {
 			return m, waitForEventBusUpdate(m.eventAdapter)
 		}
@@ -162,22 +182,34 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "q", "ctrl+c":
+		if m.stateManager != nil {
+			_ = m.stateManager.Close()
+		}
 		return m, tea.Quit
 
 	case "up", "k":
 		if m.selectedIdx > 0 {
 			m.selectedIdx--
+			if m.stateManager != nil {
+				m.stateManager.SetSelectedTask(m.selectedIdx)
+			}
 		}
 		return m, nil
 
 	case "down", "j":
 		if m.selectedIdx < len(m.tasks)-1 {
 			m.selectedIdx++
+			if m.stateManager != nil {
+				m.stateManager.SetSelectedTask(m.selectedIdx)
+			}
 		}
 		return m, nil
 
 	case "l":
 		m.showLogs = !m.showLogs
+		if m.stateManager != nil {
+			m.stateManager.SetShowLogs(m.showLogs)
+		}
 		return m, nil
 
 	case "enter":

@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 )
@@ -285,5 +286,34 @@ func TestRunner_GetState(t *testing.T) {
 	}
 	if state != expectedState {
 		t.Error("GetState() did not return expected state")
+	}
+}
+
+func TestFinalizeMetrics_CalculatesDuration(t *testing.T) {
+	state := &core.WorkflowState{
+		Metrics:   &core.StateMetrics{},
+		CreatedAt: time.Now().Add(-5 * time.Minute),
+	}
+
+	runner := &Runner{}
+	runner.finalizeMetrics(state)
+
+	// Duration should be approximately 5 minutes
+	if state.Metrics.Duration < 4*time.Minute || state.Metrics.Duration > 6*time.Minute {
+		t.Errorf("Expected ~5m duration, got %v", state.Metrics.Duration)
+	}
+}
+
+func TestFinalizeMetrics_InitializesNilMetrics(t *testing.T) {
+	state := &core.WorkflowState{
+		Metrics:   nil,
+		CreatedAt: time.Now(),
+	}
+
+	runner := &Runner{}
+	runner.finalizeMetrics(state)
+
+	if state.Metrics == nil {
+		t.Error("Expected Metrics to be initialized")
 	}
 }

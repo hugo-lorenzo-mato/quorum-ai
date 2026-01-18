@@ -150,7 +150,10 @@ func TestConsensusResult_Fields(t *testing.T) {
 		Score:            0.85,
 		NeedsV3:          true,
 		NeedsHumanReview: false,
-		Divergences:      []string{"risk assessment differs", "priority differs"},
+		Divergences: []Divergence{
+			{Category: "risk", Agent1: "claude", Agent2: "gemini"},
+			{Category: "priority", Agent1: "claude", Agent2: "gemini"},
+		},
 	}
 
 	if result.Score != 0.85 {
