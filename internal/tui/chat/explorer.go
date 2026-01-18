@@ -470,6 +470,13 @@ func (p *ExplorerPanel) SetSize(width, height int) {
 	p.updateContent()
 }
 
+// Width returns the current width of the panel
+func (p *ExplorerPanel) Width() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.width
+}
+
 // updateContent refreshes the viewport content (must be called with lock held)
 func (p *ExplorerPanel) updateContent() {
 	if !p.ready {

@@ -162,6 +162,13 @@ func (p *LogsPanel) SetSize(width, height int) {
 }
 
 // SetTokenStats updates token statistics
+// Width returns the current width of the panel
+func (p *LogsPanel) Width() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.width
+}
+
 func (p *LogsPanel) SetTokenStats(stats []TokenStats) {
 	p.mu.Lock()
 	defer p.mu.Unlock()

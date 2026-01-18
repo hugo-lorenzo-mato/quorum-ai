@@ -1936,60 +1936,24 @@ func (m Model) View() string {
 	}
 
 	// === CALCULATE PANEL WIDTHS ===
+	// Use actual panel widths (set by recalculateLayout) to ensure consistency
 	explorerWidth := 0
 	logsWidth := 0
-	mainWidth := w - 2 // Match recalculateLayout (line 1721: availableWidth := m.width - 2)
-
-	// Determine how many sidebars are open for dynamic sizing
-	bothSidebarsOpen := m.showExplorer && m.showLogs
-	oneSidebarOpen := (m.showExplorer || m.showLogs) && !bothSidebarsOpen
 
 	if m.showExplorer {
-		if oneSidebarOpen {
-			// More space when only one sidebar is open (2/5 of width)
-			explorerWidth = w * 2 / 5
-			if explorerWidth < 35 {
-				explorerWidth = 35
-			}
-			if explorerWidth > 70 {
-				explorerWidth = 70
-			}
-		} else {
-			// Less space when both sidebars are open (1/4 of width)
-			explorerWidth = w / 4
-			if explorerWidth < 30 {
-				explorerWidth = 30
-			}
-			if explorerWidth > 50 {
-				explorerWidth = 50
-			}
-		}
-		// Account for separator
-		mainWidth -= explorerWidth + 1
+		explorerWidth = m.explorerPanel.Width()
+	}
+	if m.showLogs {
+		logsWidth = m.logsPanel.Width()
 	}
 
+	// Calculate mainWidth based on remaining space after sidebars
+	mainWidth := w - 2 // Start with available width (minus outer margins)
+	if m.showExplorer {
+		mainWidth -= explorerWidth + 1 // Subtract explorer + separator
+	}
 	if m.showLogs {
-		if oneSidebarOpen {
-			// More space when only one sidebar is open (2/5 of width)
-			logsWidth = w * 2 / 5
-			if logsWidth < 40 {
-				logsWidth = 40
-			}
-			if logsWidth > 80 {
-				logsWidth = 80
-			}
-		} else {
-			// Less space when both sidebars are open (1/4 of width)
-			logsWidth = w / 4
-			if logsWidth < 35 {
-				logsWidth = 35
-			}
-			if logsWidth > 60 {
-				logsWidth = 60
-			}
-		}
-		// Account for separator
-		mainWidth -= logsWidth + 1
+		mainWidth -= logsWidth + 1 // Subtract logs + separator
 	}
 
 	// Ensure minimum main width
