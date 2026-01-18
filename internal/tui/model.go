@@ -10,17 +10,18 @@ import (
 
 // Model is the main TUI model.
 type Model struct {
-	workflow     *core.WorkflowState
-	currentPhase core.Phase // Track current phase separately.
-	tasks        []*TaskView
-	selectedIdx  int
-	width        int
-	height       int
-	ready        bool
-	spinner      SpinnerModel
-	logs         []LogEntry
-	showLogs     bool
-	err          error
+	workflow      *core.WorkflowState
+	currentPhase  core.Phase // Track current phase separately.
+	tasks         []*TaskView
+	selectedIdx   int
+	width         int
+	height        int
+	ready         bool
+	spinner       SpinnerModel
+	logs          []LogEntry
+	showLogs      bool
+	err           error
+	droppedEvents int64 // track dropped events
 }
 
 // TaskView represents a task in the TUI.
@@ -93,6 +94,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if len(m.logs) > 100 {
 			m.logs = m.logs[1:]
 		}
+		return m, nil
+
+	case DroppedEventsMsg:
+		m.droppedEvents = msg.Count
 		return m, nil
 
 	case SpinnerTickMsg:
@@ -257,8 +262,11 @@ func (m Model) renderTasks() string {
 
 // renderFooter renders the footer with keybindings.
 func (m Model) renderFooter() string {
-	return FooterStyle.Render(
-		"q: quit | j/k: navigate | l: logs | r: retry | enter: details")
+	footer := "q: quit | j/k: navigate | l: logs | r: retry | enter: details"
+	if m.droppedEvents > 0 {
+		footer += fmt.Sprintf(" | ⚠ %d dropped", m.droppedEvents)
+	}
+	return FooterStyle.Render(footer)
 }
 
 // renderError renders error view.

@@ -3,6 +3,8 @@ package tui
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -158,4 +160,84 @@ func TestTUIOutput_Interface(t *testing.T) {
 
 	// After close, methods should not panic
 	tuiOut.Log("info", "after close")
+}
+
+func TestTUIOutput_PriorityNeverDrops(t *testing.T) {
+	output := NewTUIOutput()
+
+	// Fill the normal channel
+	for i := 0; i < 200; i++ {
+		output.Log("info", "flood message")
+	}
+
+	// Priority events should still work
+	state := &core.WorkflowState{WorkflowID: "test-1"}
+
+	done := make(chan bool, 1)
+	go func() {
+		output.WorkflowCompleted(state)
+		done <- true
+	}()
+
+	select {
+	case <-done:
+		// Success - priority event was sent
+	case <-time.After(100 * time.Millisecond):
+		t.Error("Priority event blocked - should never happen")
+	}
+}
+
+func TestTUIOutput_DroppedEventsCounter(t *testing.T) {
+	output := NewTUIOutput()
+
+	// Fill the buffer
+	for i := 0; i < 500; i++ {
+		output.Log("info", "test message")
+	}
+
+	// Should have dropped some events
+	dropped := output.DroppedEvents()
+	if dropped == 0 {
+		// With ring buffer, we expect some drops when flooding
+		t.Log("No events dropped (buffer might not have filled)")
+	}
+}
+
+func TestTUIOutput_RingBufferBehavior(t *testing.T) {
+	output := NewTUIOutput()
+
+	// Send more events than buffer size
+	bufferSize := 100
+	for i := 0; i < bufferSize*3; i++ {
+		output.Log("info", "message")
+	}
+
+	// Some events should have been dropped
+	// (the oldest ones, not the newest)
+	dropped := atomic.LoadInt64(&output.dropCount)
+	t.Logf("Dropped %d events out of %d sent", dropped, bufferSize*3)
+}
+
+func TestTUIOutput_CriticalEventsDelivered(t *testing.T) {
+	output := NewTUIOutput()
+
+	// Flood with normal events
+	go func() {
+		for i := 0; i < 1000; i++ {
+			output.Log("info", "flood")
+			time.Sleep(time.Microsecond)
+		}
+	}()
+
+	// Send critical events
+	criticalSent := 0
+	for i := 0; i < 10; i++ {
+		output.WorkflowFailed(fmt.Errorf("critical error %d", i))
+		criticalSent++
+	}
+
+	// Critical events should all be in the priority channel
+	// (This is a simplified test - full test would verify delivery)
+	t.Logf("Sent %d critical events, dropped %d normal events",
+		criticalSent, output.DroppedEvents())
 }

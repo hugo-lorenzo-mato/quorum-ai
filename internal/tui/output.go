@@ -68,9 +68,18 @@ func (t *TUIOutput) Start() error {
 	// Create program with the update channel
 	t.program = tea.NewProgram(t.model, tea.WithAltScreen())
 
-	// Start a goroutine to send updates to the program
+	// Start goroutine for normal updates
 	go func() {
 		for msg := range t.updateC {
+			if t.program != nil {
+				t.program.Send(msg)
+			}
+		}
+	}()
+
+	// Start goroutine for priority updates (separate to avoid blocking)
+	go func() {
+		for msg := range t.priorityC {
 			if t.program != nil {
 				t.program.Send(msg)
 			}
@@ -81,132 +90,136 @@ func (t *TUIOutput) Start() error {
 	return err
 }
 
+// sendNormal sends a message with ring buffer behavior (drops oldest if full).
+func (t *TUIOutput) sendNormal(msg tea.Msg) {
+	if t.updateC == nil {
+		return
+	}
+
+	dropped := false
+	droppedCount := int64(0)
+	select {
+	case t.updateC <- msg:
+		// Sent successfully
+	default:
+		// Buffer full - implement ring buffer by dropping oldest
+		select {
+		case <-t.updateC:
+			// Dropped oldest
+			dropped = true
+			droppedCount = atomic.AddInt64(&t.dropCount, 1)
+		default:
+			// Channel empty (shouldn't happen, but handle gracefully)
+		}
+		// Try again
+		select {
+		case t.updateC <- msg:
+		default:
+			// Still can't send, drop current
+			dropped = true
+			droppedCount = atomic.AddInt64(&t.dropCount, 1)
+		}
+	}
+
+	if dropped {
+		t.sendDropped(droppedCount)
+	}
+}
+
+func (t *TUIOutput) sendDropped(count int64) {
+	if t.updateC == nil {
+		return
+	}
+	select {
+	case t.updateC <- DroppedEventsMsg{Count: count}:
+	default:
+	}
+}
+
+// sendPriority sends a message with blocking behavior (never drops).
+func (t *TUIOutput) sendPriority(msg tea.Msg) {
+	if t.priorityC == nil {
+		return
+	}
+	// Blocking send - will wait until there's room
+	t.priorityC <- msg
+}
+
 // WorkflowStarted implements Output.
 func (t *TUIOutput) WorkflowStarted(_ string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if t.updateC != nil {
-		select {
-		case t.updateC <- LogMsg{Time: time.Now(), Level: "info", Message: "Workflow started"}:
-		default:
-		}
-	}
+	t.sendNormal(LogMsg{Time: time.Now(), Level: "info", Message: "Workflow started"})
 }
 
 // PhaseStarted implements Output.
 func (t *TUIOutput) PhaseStarted(phase core.Phase) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if t.updateC != nil {
-		select {
-		case t.updateC <- PhaseUpdateMsg{Phase: phase}:
-		default:
-		}
-		select {
-		case t.updateC <- LogMsg{Time: time.Now(), Level: "info", Message: "Phase: " + string(phase)}:
-		default:
-		}
-	}
+	t.sendNormal(PhaseUpdateMsg{Phase: phase})
+	t.sendNormal(LogMsg{Time: time.Now(), Level: "info", Message: "Phase: " + string(phase)})
 }
 
 // TaskStarted implements Output.
 func (t *TUIOutput) TaskStarted(task *core.Task) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if t.updateC != nil {
-		select {
-		case t.updateC <- TaskUpdateMsg{TaskID: task.ID, Status: core.TaskStatusRunning}:
-		default:
-		}
-	}
+	t.sendNormal(TaskUpdateMsg{TaskID: task.ID, Status: core.TaskStatusRunning})
 }
 
 // TaskCompleted implements Output.
 func (t *TUIOutput) TaskCompleted(task *core.Task, _ time.Duration) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if t.updateC != nil {
-		select {
-		case t.updateC <- TaskUpdateMsg{TaskID: task.ID, Status: core.TaskStatusCompleted}:
-		default:
-		}
-	}
+	t.sendNormal(TaskUpdateMsg{TaskID: task.ID, Status: core.TaskStatusCompleted})
 }
 
 // TaskFailed implements Output.
 func (t *TUIOutput) TaskFailed(task *core.Task, err error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if t.updateC != nil {
-		errStr := ""
-		if err != nil {
-			errStr = err.Error()
-		}
-		select {
-		case t.updateC <- TaskUpdateMsg{TaskID: task.ID, Status: core.TaskStatusFailed, Error: errStr}:
-		default:
-		}
+	errStr := ""
+	if err != nil {
+		errStr = err.Error()
 	}
+	t.sendNormal(TaskUpdateMsg{TaskID: task.ID, Status: core.TaskStatusFailed, Error: errStr})
 }
 
 // WorkflowStateUpdated implements Output.
 func (t *TUIOutput) WorkflowStateUpdated(state *core.WorkflowState) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if t.updateC != nil {
-		select {
-		case t.updateC <- WorkflowUpdateMsg{State: state}:
-		default:
-		}
-	}
+	t.sendNormal(WorkflowUpdateMsg{State: state})
 }
 
 // TaskSkipped implements Output.
 func (t *TUIOutput) TaskSkipped(task *core.Task, reason string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if t.updateC != nil {
-		select {
-		case t.updateC <- TaskUpdateMsg{TaskID: task.ID, Status: core.TaskStatusSkipped, Error: reason}:
-		default:
-		}
-	}
+	t.sendNormal(TaskUpdateMsg{TaskID: task.ID, Status: core.TaskStatusSkipped, Error: reason})
 }
 
 // WorkflowCompleted implements Output.
 func (t *TUIOutput) WorkflowCompleted(state *core.WorkflowState) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if t.updateC != nil {
-		select {
-		case t.updateC <- WorkflowUpdateMsg{State: state}:
-		default:
-		}
-	}
+	// PRIORITY: This event should never be dropped
+	t.sendPriority(WorkflowUpdateMsg{State: state})
 }
 
 // WorkflowFailed implements Output.
 func (t *TUIOutput) WorkflowFailed(err error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if t.updateC != nil {
-		select {
-		case t.updateC <- ErrorMsg{Error: err}:
-		default:
-		}
-	}
+	// PRIORITY: This event should never be dropped
+	t.sendPriority(ErrorMsg{Error: err})
 }
 
 // Log implements Output.
 func (t *TUIOutput) Log(level, message string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if t.updateC != nil {
-		select {
-		case t.updateC <- LogMsg{Time: time.Now(), Level: level, Message: message}:
-		default:
-		}
-	}
+	t.sendNormal(LogMsg{Time: time.Now(), Level: level, Message: message})
 }
 
 // Close implements Output.
@@ -216,6 +229,10 @@ func (t *TUIOutput) Close() error {
 	if t.updateC != nil {
 		close(t.updateC)
 		t.updateC = nil
+	}
+	if t.priorityC != nil {
+		close(t.priorityC)
+		t.priorityC = nil
 	}
 	if t.program != nil {
 		t.program.Quit()
@@ -227,12 +244,7 @@ func (t *TUIOutput) Close() error {
 func (t *TUIOutput) SendWorkflowState(state *core.WorkflowState) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if t.updateC != nil {
-		select {
-		case t.updateC <- WorkflowUpdateMsg{State: state}:
-		default:
-		}
-	}
+	t.sendNormal(WorkflowUpdateMsg{State: state})
 }
 
 // FallbackOutputAdapter adapts FallbackOutput to the Output interface.

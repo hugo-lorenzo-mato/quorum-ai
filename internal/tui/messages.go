@@ -37,6 +37,11 @@ type ErrorMsg struct {
 	Error error
 }
 
+// DroppedEventsMsg notifies the UI of dropped events.
+type DroppedEventsMsg struct {
+	Count int64
+}
+
 // SpinnerTickMsg updates spinner animation.
 type SpinnerTickMsg time.Time
 
