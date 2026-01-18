@@ -3,6 +3,7 @@ package tui
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 )
@@ -219,5 +220,56 @@ func TestBuildTaskViews_HandlesMissingTask(t *testing.T) {
 	}
 	if views[0].ID != "task-1" {
 		t.Errorf("Expected task-1, got %s", views[0].ID)
+	}
+}
+
+func TestGetTaskDuration_LiveForRunning(t *testing.T) {
+	started := time.Now().Add(-5 * time.Second)
+	task := &TaskView{
+		ID:        "task-1",
+		Status:    core.TaskStatusRunning,
+		StartedAt: &started,
+	}
+
+	model := Model{}
+	duration := model.getTaskDuration(task)
+
+	if duration < 4*time.Second || duration > 6*time.Second {
+		t.Errorf("Expected ~5s, got %v", duration)
+	}
+}
+
+func TestGetTaskDuration_StaticForCompleted(t *testing.T) {
+	task := &TaskView{
+		ID:       "task-1",
+		Status:   core.TaskStatusCompleted,
+		Duration: 30 * time.Second,
+	}
+
+	model := Model{}
+	duration := model.getTaskDuration(task)
+
+	if duration != 30*time.Second {
+		t.Errorf("Expected 30s for completed task, got %v", duration)
+	}
+}
+
+func TestFormatDuration(t *testing.T) {
+	tests := []struct {
+		input    time.Duration
+		expected string
+	}{
+		{5 * time.Second, "5s"},
+		{45 * time.Second, "45s"},
+		{90 * time.Second, "1m30s"},
+		{5*time.Minute + 30*time.Second, "5m30s"},
+		{1*time.Hour + 15*time.Minute, "1h15m"},
+	}
+
+	for _, tc := range tests {
+		result := formatDuration(tc.input)
+		if result != tc.expected {
+			t.Errorf("formatDuration(%v) = %s, want %s", tc.input, result, tc.expected)
+		}
 	}
 }
