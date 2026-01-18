@@ -1682,23 +1682,11 @@ func (m *Model) recalculateLayout() {
 		statusHeight = 1
 	}
 
-	// Dropdown suggestions when visible
-	// Height: 1 (header) + min(6, len(suggestions)) (items) + 2 (borders) + 2 (scroll indicators max)
-	suggestionsHeight := 0
-	if m.showSuggestions && len(m.suggestions) > 0 {
-		visibleItems := len(m.suggestions)
-		if visibleItems > 6 {
-			visibleItems = 6
-		}
-		// header line + items + border top/bottom + possible scroll indicators
-		suggestionsHeight = 1 + visibleItems + 2
-		if len(m.suggestions) > 6 {
-			suggestionsHeight += 2 // scroll up/down indicators
-		}
-	}
+	// NOTE: Dropdown suggestions are now rendered as an overlay in View(), not inline
+	// This prevents the layout from shifting when the dropdown appears
 
 	// Total fixed height (everything except viewport)
-	fixedHeight := headerHeight + footerHeight + inputHeight + statusHeight + suggestionsHeight
+	fixedHeight := headerHeight + footerHeight + inputHeight + statusHeight
 
 	// Viewport gets remaining height
 	viewportHeight := m.height - fixedHeight
@@ -1933,7 +1921,6 @@ func (m Model) View() string {
 			lipgloss.Left,
 			lipgloss.Top,
 			content,
-			lipgloss.WithWhitespaceBackground(lipgloss.Color("#1f1f23")),
 		)
 	}
 
@@ -2029,11 +2016,10 @@ func (m Model) View() string {
 
 	// Main content (center) - wrapped with explicit width to fill space
 	mainContent := m.renderMainContent(mainWidth)
-	// Ensure main content fills full width with background
+	// Ensure main content fills full width
 	mainContentStyle := lipgloss.NewStyle().
 		Width(mainWidth).
-		Height(h).
-		Background(lipgloss.Color("#1f1f23"))
+		Height(h)
 	panels = append(panels, mainContentStyle.Render(mainContent))
 
 	// Logs panel (right)
@@ -2079,7 +2065,14 @@ func (m Model) View() string {
 		// This is rendered inline, not as overlay - handled in renderMainContent
 	}
 
-	// NOTE: Autocomplete suggestions are now rendered inline in renderMainContent, not as overlay
+	// Command suggestions dropdown overlay (positioned above input/footer)
+	if m.showSuggestions && len(m.suggestions) > 0 {
+		suggestionsOverlay := m.renderInlineSuggestions(mainWidth)
+		// Calculate position: above the footer area
+		// Footer is 1 line, input is ~3 lines
+		footerOffset := 4
+		baseView = m.overlayAtBottom(baseView, suggestionsOverlay, w, h, explorerWidth, footerOffset)
+	}
 
 	return ensureFullScreen(baseView)
 }
@@ -2146,6 +2139,76 @@ func (m Model) overlayOnBase(base, overlay string, width, height int) string {
 	return strings.Join(result, "\n")
 }
 
+// overlayAtBottom renders an overlay positioned at the bottom of the screen,
+// above a specified offset (for footer/input area). Does NOT dim the base.
+func (m Model) overlayAtBottom(base, overlay string, width, height, leftOffset, bottomOffset int) string {
+	baseLines := strings.Split(base, "\n")
+	overlayLines := strings.Split(overlay, "\n")
+
+	// Ensure base has enough lines
+	for len(baseLines) < height {
+		baseLines = append(baseLines, strings.Repeat(" ", width))
+	}
+
+	// Calculate overlay dimensions
+	overlayHeight := len(overlayLines)
+	overlayWidth := 0
+	for _, line := range overlayLines {
+		if w := lipgloss.Width(line); w > overlayWidth {
+			overlayWidth = w
+		}
+	}
+
+	// Position at bottom, above the footer offset
+	startY := height - overlayHeight - bottomOffset
+	startX := leftOffset + 2 // Account for separator and some padding
+	if startY < 0 {
+		startY = 0
+	}
+	if startX < 0 {
+		startX = 0
+	}
+
+	// Build result with overlay on top (no dimming for dropdown)
+	var result []string
+	for i := 0; i < len(baseLines); i++ {
+		if i >= startY && i < startY+overlayHeight {
+			// This line has overlay content
+			overlayIdx := i - startY
+			if overlayIdx < len(overlayLines) {
+				overlayLine := overlayLines[overlayIdx]
+				baseLine := baseLines[i]
+				// Get the part of base line before the overlay
+				baseWidth := lipgloss.Width(baseLine)
+				overlayLineWidth := lipgloss.Width(overlayLine)
+
+				// Build composite line
+				if startX > 0 && baseWidth >= startX {
+					// Keep left part of base, then overlay
+					// We need to carefully construct this to not break ANSI codes
+					leftPart := strings.Repeat(" ", startX) // Simple padding
+					rightStart := startX + overlayLineWidth
+					rightPart := ""
+					if baseWidth > rightStart {
+						// There's content after the overlay - pad to fill
+						rightPart = strings.Repeat(" ", baseWidth-rightStart)
+					}
+					result = append(result, leftPart+overlayLine+rightPart)
+				} else {
+					result = append(result, overlayLine)
+				}
+			} else {
+				result = append(result, baseLines[i])
+			}
+		} else {
+			// No overlay on this line
+			result = append(result, baseLines[i])
+		}
+	}
+
+	return strings.Join(result, "\n")
+}
+
 // renderFullScreenModal renders a modal that covers the entire viewport
 // with a solid background, centering the content box
 func (m Model) renderFullScreenModal(content string, width, height int) string {
@@ -2170,10 +2233,8 @@ func (m Model) renderFullScreenModal(content string, width, height int) string {
 		startX = 0
 	}
 
-	// Background style - solid dark background
-	bgStyle := lipgloss.NewStyle().
-		Background(lipgloss.Color("#1f1f23")).
-		Foreground(lipgloss.Color("#1f1f23"))
+	// Background style - use plain spaces for padding
+	bgStyle := lipgloss.NewStyle()
 
 	// Build full-screen result
 	var result []string
@@ -2275,11 +2336,8 @@ func (m Model) renderMainContent(w int) string {
 	sb.WriteString(m.renderInput(w))
 	sb.WriteString("\n")
 
-	// === INLINE COMMAND SUGGESTIONS ===
-	if suggestions := m.renderInlineSuggestions(w); suggestions != "" {
-		sb.WriteString(suggestions)
-		sb.WriteString("\n")
-	}
+	// NOTE: Command suggestions are now rendered as an overlay in View()
+	// to prevent layout shifts when the dropdown appears
 
 	// === FOOTER ===
 	sb.WriteString(m.renderFooter(w))
@@ -2332,7 +2390,7 @@ func (m Model) renderHeader(width int) string {
 
 	var stats []string
 
-	// Tokens (in→out)
+	// Tokens (↑in ↓out)
 	var tokensIn, tokensOut int
 	for _, a := range m.agentInfos {
 		tokensIn += a.TokensIn
@@ -2341,7 +2399,7 @@ func (m Model) renderHeader(width int) string {
 	tokensIn += m.totalTokensIn
 	tokensOut += m.totalTokensOut
 	if tokensIn > 0 || tokensOut > 0 {
-		stats = append(stats, statsStyle.Render("tok:")+valueStyle.Render(fmt.Sprintf("%d→%d", tokensIn, tokensOut)))
+		stats = append(stats, statsStyle.Render("tok:")+valueStyle.Render(fmt.Sprintf("↑%d ↓%d", tokensIn, tokensOut)))
 	}
 
 	// Status badge
@@ -2507,9 +2565,9 @@ func (m Model) renderInlineSuggestions(width int) string {
 
 		var line string
 		if i == m.suggestionIndex {
-			// Selected item with full row highlight
+			// Selected item with visual highlight (bold + reverse video)
 			fullLine := fmt.Sprintf(" ▸ %-*s %s", maxCmdWidth, cmdName, desc)
-			rowStyle := selectedStyle.Background(lipgloss.Color("#374151"))
+			rowStyle := selectedStyle.Reverse(true)
 			line = rowStyle.Render(fullLine)
 		} else {
 			fullLine := fmt.Sprintf("   %-*s %s", maxCmdWidth, cmdName, desc)
@@ -2529,7 +2587,6 @@ func (m Model) renderInlineSuggestions(width int) string {
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(primaryColor).
-		Background(lipgloss.Color("#1f1f23")).
 		Padding(0, 1).
 		Width(dropdownWidth)
 

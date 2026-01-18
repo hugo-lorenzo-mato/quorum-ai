@@ -115,9 +115,8 @@ func (s *ShortcutsOverlay) Render() string {
 		Bold(true)
 
 	keyStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#F9FAFB")).
-		Background(lipgloss.Color("#374151")).
-		Padding(0, 1)
+		Foreground(lipgloss.Color("#22d3ee")). // Cyan color for keys
+		Bold(true)
 
 	descStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#9CA3AF"))
@@ -235,8 +234,6 @@ func (s *ShortcutsOverlay) Render() string {
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.DoubleBorder()).
 		BorderForeground(lipgloss.Color("#7C3AED")).
-		BorderBackground(lipgloss.Color("#1f1f23")).
-		Background(lipgloss.Color("#1f1f23")).
 		Padding(1, 2).
 		Width(s.width - 4).
 		Align(lipgloss.Left)
