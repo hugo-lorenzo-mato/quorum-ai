@@ -59,6 +59,16 @@ func (e *Executor) Run(ctx context.Context, wctx *Context) error {
 
 	// Execute remaining tasks
 	for len(completed) < len(wctx.State.Tasks) {
+		// Check for cancellation/pause before each batch
+		if wctx.Control != nil {
+			if err := wctx.Control.CheckCancelled(); err != nil {
+				return err
+			}
+			if err := wctx.Control.WaitIfPaused(ctx); err != nil {
+				return err
+			}
+		}
+
 		ready := e.dag.GetReadyTasks(completed)
 		if len(ready) == 0 {
 			return core.ErrState(core.CodeExecutionStuck, "no ready tasks but not all completed")
@@ -106,6 +116,17 @@ func (e *Executor) Run(ctx context.Context, wctx *Context) error {
 
 // executeTask executes a single task.
 func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Task, useWorktrees bool) error {
+	// Check for cancellation
+	if wctx.Control != nil {
+		if err := wctx.Control.CheckCancelled(); err != nil {
+			return err
+		}
+		// Wait if paused
+		if err := wctx.Control.WaitIfPaused(ctx); err != nil {
+			return err
+		}
+	}
+
 	wctx.Logger.Info("executing task",
 		"task_id", task.ID,
 		"task_name", task.Name,

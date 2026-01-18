@@ -4,6 +4,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/control"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 )
 
@@ -93,12 +94,68 @@ func durationTick() tea.Cmd {
 	})
 }
 
-// retryTask creates a command to retry a task.
-func retryTask(_ core.TaskID) tea.Cmd {
+// ControlPlaneMsg wraps control plane operations.
+type ControlPlaneMsg struct {
+	Control *control.ControlPlane
+}
+
+// PausedMsg signals that the workflow has been paused.
+type PausedMsg struct{}
+
+// ResumedMsg signals that the workflow has been resumed.
+type ResumedMsg struct{}
+
+// CancelledMsg signals that the workflow has been cancelled.
+type CancelledMsg struct{}
+
+// TaskRetryQueuedMsg signals that a task has been queued for retry.
+type TaskRetryQueuedMsg struct {
+	TaskID core.TaskID
+}
+
+// PauseCmd creates a command to pause the workflow.
+func PauseCmd(cp *control.ControlPlane) tea.Cmd {
 	return func() tea.Msg {
-		// Signal retry to workflow runner (would use channel in real impl)
-		return nil
+		if cp != nil {
+			cp.Pause()
+		}
+		return PausedMsg{}
 	}
+}
+
+// ResumeCmd creates a command to resume the workflow.
+func ResumeCmd(cp *control.ControlPlane) tea.Cmd {
+	return func() tea.Msg {
+		if cp != nil {
+			cp.Resume()
+		}
+		return ResumedMsg{}
+	}
+}
+
+// RetryTaskCmd creates a command to retry a task.
+func RetryTaskCmd(cp *control.ControlPlane, taskID core.TaskID) tea.Cmd {
+	return func() tea.Msg {
+		if cp != nil {
+			cp.RetryTask(taskID)
+		}
+		return TaskRetryQueuedMsg{TaskID: taskID}
+	}
+}
+
+// CancelCmd creates a command to cancel the workflow.
+func CancelCmd(cp *control.ControlPlane) tea.Cmd {
+	return func() tea.Msg {
+		if cp != nil {
+			cp.Cancel()
+		}
+		return CancelledMsg{}
+	}
+}
+
+// retryTask creates a command to retry a task (legacy stub for backwards compatibility).
+func retryTask(taskID core.TaskID) tea.Cmd {
+	return RetryTaskCmd(nil, taskID)
 }
 
 // SendWorkflowUpdate creates a workflow update message.

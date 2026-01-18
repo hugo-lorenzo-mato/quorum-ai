@@ -5,6 +5,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/control"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/events"
 )
@@ -25,6 +26,8 @@ type Model struct {
 	droppedEvents int64            // track dropped events
 	eventAdapter  *EventBusAdapter // EventBus adapter for real-time events
 	stateManager  *UIStateManager
+	controlPlane  *control.ControlPlane
+	isPaused      bool
 }
 
 // TaskView represents a task in the TUI.
@@ -78,6 +81,18 @@ func NewWithEventBus(bus *events.EventBus) Model {
 		m.eventAdapter = NewEventBusAdapter(bus)
 	}
 	return m
+}
+
+// NewWithControlPlane creates a Model with ControlPlane support.
+func NewWithControlPlane(cp *control.ControlPlane) Model {
+	m := New()
+	m.controlPlane = cp
+	return m
+}
+
+// SetControlPlane sets the control plane for the model.
+func (m *Model) SetControlPlane(cp *control.ControlPlane) {
+	m.controlPlane = cp
 }
 
 // Init initializes the model.
@@ -173,6 +188,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case QuitMsg:
 		return m, tea.Quit
+
+	case PausedMsg:
+		m.isPaused = true
+		return m, nil
+
+	case ResumedMsg:
+		m.isPaused = false
+		return m, nil
+
+	case TaskRetryQueuedMsg:
+		// Update task status to show retry queued
+		for i, task := range m.tasks {
+			if task.ID == msg.TaskID {
+				m.tasks[i].Status = core.TaskStatusPending
+			}
+		}
+		return m, nil
 	}
 
 	return m, nil
@@ -221,10 +253,21 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.selectedIdx < len(m.tasks) {
 			task := m.tasks[m.selectedIdx]
 			if task.Status == core.TaskStatusFailed {
-				return m, retryTask(task.ID)
+				return m, RetryTaskCmd(m.controlPlane, task.ID)
 			}
 		}
 		return m, nil
+
+	case "p":
+		// Toggle pause/resume
+		if !m.isPaused {
+			return m, PauseCmd(m.controlPlane)
+		}
+		return m, ResumeCmd(m.controlPlane)
+
+	case "c":
+		// Cancel workflow
+		return m, CancelCmd(m.controlPlane)
 	}
 
 	return m, nil
@@ -274,6 +317,10 @@ func (m Model) renderHeader() string {
 
 	if m.err != nil {
 		status = "error"
+	}
+
+	if m.isPaused {
+		status = "PAUSED"
 	}
 
 	return HeaderStyle.Render(
@@ -403,7 +450,11 @@ func formatDuration(d time.Duration) string {
 
 // renderFooter renders the footer with keybindings.
 func (m Model) renderFooter() string {
-	footer := "q: quit | j/k: navigate | l: logs | r: retry | enter: details"
+	pauseKey := "p: pause"
+	if m.isPaused {
+		pauseKey = "p: resume"
+	}
+	footer := fmt.Sprintf("q: quit | j/k: navigate | l: logs | r: retry | %s | c: cancel", pauseKey)
 	if m.droppedEvents > 0 {
 		footer += fmt.Sprintf(" | ⚠ %d dropped", m.droppedEvents)
 	}

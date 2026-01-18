@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/control"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/logging"
 )
@@ -108,6 +109,7 @@ type Runner struct {
 	logger         *logging.Logger
 	output         OutputNotifier
 	modeEnforcer   ModeEnforcerInterface
+	control        *control.ControlPlane
 }
 
 // RunnerDeps holds dependencies for creating a Runner.
@@ -129,6 +131,7 @@ type RunnerDeps struct {
 	Logger         *logging.Logger
 	Output         OutputNotifier
 	ModeEnforcer   ModeEnforcerInterface
+	Control        *control.ControlPlane
 }
 
 // NewRunner creates a new workflow runner with all dependencies.
@@ -160,6 +163,7 @@ func NewRunner(deps RunnerDeps) *Runner {
 		logger:         deps.Logger,
 		output:         deps.Output,
 		modeEnforcer:   deps.ModeEnforcer,
+		control:        deps.Control,
 	}
 }
 
@@ -333,6 +337,7 @@ func (r *Runner) createContext(state *core.WorkflowState) *Context {
 		Logger:       r.logger,
 		Output:       r.output,
 		ModeEnforcer: r.modeEnforcer,
+		Control:      r.control,
 		Config: &Config{
 			DryRun:             r.config.DryRun,
 			Sandbox:            r.config.Sandbox,

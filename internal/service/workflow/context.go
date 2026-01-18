@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/control"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/logging"
 )
@@ -58,6 +59,7 @@ type Context struct {
 	Config       *Config
 	Output       OutputNotifier
 	ModeEnforcer ModeEnforcerInterface
+	Control      *control.ControlPlane
 }
 
 // ModeEnforcerInterface provides mode enforcement capabilities.
