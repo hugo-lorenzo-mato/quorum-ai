@@ -3,6 +3,8 @@ package workflow
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -302,6 +304,22 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 	taskState.Status = core.TaskStatusCompleted
 	completedAt := time.Now()
 	taskState.CompletedAt = &completedAt
+	taskState.ModelUsed = result.Model
+	taskState.FinishReason = result.FinishReason
+	taskState.ToolCalls = result.ToolCalls
+
+	// Save output (truncate if too large)
+	if len(result.Output) <= core.MaxInlineOutputSize {
+		taskState.Output = result.Output
+	} else {
+		// Store truncated version inline
+		taskState.Output = result.Output[:core.MaxInlineOutputSize] + "\n... [truncated, see output_file]"
+		// Save full output to file
+		outputPath := e.saveTaskOutput(task.ID, result.Output)
+		if outputPath != "" {
+			taskState.OutputFile = outputPath
+		}
+	}
 
 	// Update aggregate metrics
 	if wctx.State.Metrics != nil {
@@ -367,4 +385,36 @@ func shouldUseWorktrees(mode string, readyCount int) bool {
 	default:
 		return true
 	}
+}
+
+// saveTaskOutput saves large task output to a file.
+func (e *Executor) saveTaskOutput(taskID core.TaskID, output string) string {
+	// Create outputs directory
+	outputDir := ".quorum/outputs"
+	if err := os.MkdirAll(outputDir, 0755); err != nil {
+		return ""
+	}
+
+	// Write output file
+	outputPath := filepath.Join(outputDir, string(taskID)+".txt")
+	if err := os.WriteFile(outputPath, []byte(output), 0644); err != nil {
+		return ""
+	}
+
+	return outputPath
+}
+
+// GetFullOutput retrieves the full output for a task.
+// If output was truncated, reads from the output file.
+func GetFullOutput(state *core.TaskState) (string, error) {
+	if state.OutputFile == "" {
+		return state.Output, nil
+	}
+
+	data, err := os.ReadFile(state.OutputFile)
+	if err != nil {
+		return state.Output, fmt.Errorf("reading output file: %w", err)
+	}
+
+	return string(data), nil
 }

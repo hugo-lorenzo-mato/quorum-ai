@@ -156,10 +156,29 @@ type WorkflowState struct {
 	TaskOrder       []TaskID              `json:"task_order"`
 	Config          *WorkflowConfig       `json:"config"`
 	Metrics         *StateMetrics         `json:"metrics"`
+	ConsensusResult *ConsensusResultState `json:"consensus_result,omitempty"`
 	Checkpoints     []Checkpoint          `json:"checkpoints"`
 	CreatedAt       time.Time             `json:"created_at"`
 	UpdatedAt       time.Time             `json:"updated_at"`
 	Checksum        string                `json:"checksum,omitempty"`
+}
+
+// ConsensusResultState represents persisted consensus result.
+type ConsensusResultState struct {
+	Score          float64             `json:"score"`
+	CategoryScores map[string]float64  `json:"category_scores"`
+	Divergences    []DivergenceState   `json:"divergences"`
+	Agreement      map[string][]string `json:"agreement"`
+}
+
+// DivergenceState represents a persisted divergence detail.
+type DivergenceState struct {
+	Category     string   `json:"category"`
+	Agent1       string   `json:"agent1"`
+	Agent1Items  []string `json:"agent1_items"`
+	Agent2       string   `json:"agent2"`
+	Agent2Items  []string `json:"agent2_items"`
+	JaccardScore float64  `json:"jaccard_score"`
 }
 
 // TaskState represents persisted task state.
@@ -179,7 +198,16 @@ type TaskState struct {
 	WorktreePath string     `json:"worktree_path,omitempty"`
 	StartedAt    *time.Time `json:"started_at,omitempty"`
 	CompletedAt  *time.Time `json:"completed_at,omitempty"`
+	// Task execution artifacts
+	Output       string     `json:"output,omitempty"`        // Agent output (truncated if large)
+	OutputFile   string     `json:"output_file,omitempty"`   // Path to full output if truncated
+	ModelUsed    string     `json:"model_used,omitempty"`    // Actual model used
+	FinishReason string     `json:"finish_reason,omitempty"` // Why agent stopped
+	ToolCalls    []ToolCall `json:"tool_calls,omitempty"`    // Tools invoked
 }
+
+// MaxInlineOutputSize is the maximum size of output to store inline.
+const MaxInlineOutputSize = 10000 // 10KB
 
 // StateMetrics holds aggregated workflow metrics.
 type StateMetrics struct {

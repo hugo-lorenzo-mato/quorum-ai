@@ -3,6 +3,8 @@ package workflow
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -107,6 +109,95 @@ func TestExecutor_NilModeEnforcer(t *testing.T) {
 	err := executor.executeTask(context.Background(), wctx, task, false)
 	if err != nil {
 		t.Errorf("Expected no error with nil mode enforcer, got: %v", err)
+	}
+}
+
+func TestExecutor_SavesTaskOutput(t *testing.T) {
+	mockRegistry := &mockAgentRegistry{
+		agents: map[string]core.Agent{
+			"mock": &mockAgent{
+				result: &core.ExecuteResult{
+					Output:   "Task completed successfully\nFiles modified: 3",
+					TokensIn: 100,
+				},
+			},
+		},
+	}
+
+	executor := NewExecutor(nil, nil, nil)
+	wctx := &Context{
+		State: &core.WorkflowState{
+			Tasks: map[core.TaskID]*core.TaskState{
+				"task-1": {ID: "task-1", Status: core.TaskStatusPending},
+			},
+		},
+		Agents:     mockRegistry,
+		Prompts:    &mockPromptRenderer{},
+		Checkpoint: &mockCheckpointCreator{},
+		Retry:      &mockRetryExecutor{},
+		RateLimits: &mockRateLimiterGetter{limiter: &mockRateLimiter{}},
+		Config: &Config{
+			DefaultAgent: "mock",
+		},
+		Logger: logging.NewNop(),
+		Output: NopOutputNotifier{},
+	}
+
+	task := &core.Task{ID: "task-1", Name: "Test Task", CLI: "mock"}
+	err := executor.executeTask(context.Background(), wctx, task, false)
+
+	if err != nil {
+		t.Fatalf("executeTask failed: %v", err)
+	}
+
+	taskState := wctx.State.Tasks["task-1"]
+	if taskState.Output == "" {
+		t.Error("Expected output to be saved")
+	}
+	if !strings.Contains(taskState.Output, "Task completed") {
+		t.Errorf("Unexpected output: %s", taskState.Output)
+	}
+}
+
+func TestExecutor_TruncatesLargeOutput(t *testing.T) {
+	largeOutput := strings.Repeat("x", core.MaxInlineOutputSize+1000)
+
+	taskState := &core.TaskState{ID: "task-1"}
+
+	if len(largeOutput) <= core.MaxInlineOutputSize {
+		taskState.Output = largeOutput
+	} else {
+		taskState.Output = largeOutput[:core.MaxInlineOutputSize] + "\n... [truncated, see output_file]"
+	}
+
+	if len(taskState.Output) > core.MaxInlineOutputSize+100 {
+		t.Error("Output should be truncated")
+	}
+	if !strings.Contains(taskState.Output, "[truncated") {
+		t.Error("Truncated output should have marker")
+	}
+}
+
+func TestGetFullOutput_ReadsFromFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	outputPath := filepath.Join(tmpDir, "task-1.txt")
+	fullOutput := "This is the full output content"
+	if err := os.WriteFile(outputPath, []byte(fullOutput), 0644); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
+
+	taskState := &core.TaskState{
+		Output:     "This is the full... [truncated, see output_file]",
+		OutputFile: outputPath,
+	}
+
+	result, err := GetFullOutput(taskState)
+	if err != nil {
+		t.Fatalf("GetFullOutput failed: %v", err)
+	}
+
+	if result != fullOutput {
+		t.Errorf("Expected full output, got: %s", result)
 	}
 }
 

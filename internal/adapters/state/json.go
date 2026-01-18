@@ -161,6 +161,16 @@ func (m *JSONStateManager) loadFromPath(path string) (*core.WorkflowState, error
 		return nil, core.ErrState("STATE_CORRUPTED", "checksum mismatch")
 	}
 
+	// Ensure defaults for legacy task states without output fields.
+	for _, task := range envelope.State.Tasks {
+		if task == nil {
+			continue
+		}
+		if task.Output == "" && task.Status == core.TaskStatusCompleted {
+			task.Output = "[output not captured - legacy state]"
+		}
+	}
+
 	return envelope.State, nil
 }
 
