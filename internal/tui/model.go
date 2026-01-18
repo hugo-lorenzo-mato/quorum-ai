@@ -10,16 +10,17 @@ import (
 
 // Model is the main TUI model.
 type Model struct {
-	workflow    *core.WorkflowState
-	tasks       []*TaskView
-	selectedIdx int
-	width       int
-	height      int
-	ready       bool
-	spinner     SpinnerModel
-	logs        []LogEntry
-	showLogs    bool
-	err         error
+	workflow     *core.WorkflowState
+	currentPhase core.Phase // Track current phase separately.
+	tasks        []*TaskView
+	selectedIdx  int
+	width        int
+	height       int
+	ready        bool
+	spinner      SpinnerModel
+	logs         []LogEntry
+	showLogs     bool
+	err          error
 }
 
 // TaskView represents a task in the TUI.
@@ -73,6 +74,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.workflow = msg.State
 		m.tasks = m.buildTaskViews(msg.State)
 		return m, waitForWorkflowUpdate()
+
+	case PhaseUpdateMsg:
+		m.currentPhase = msg.Phase
+		return m, nil
 
 	case TaskUpdateMsg:
 		m.updateTask(msg)
@@ -178,12 +183,19 @@ func (m Model) renderMain() string {
 
 // renderHeader renders the header section.
 func (m Model) renderHeader() string {
-	if m.workflow == nil {
-		return HeaderStyle.Render("Quorum AI - No workflow")
+	phase := string(m.currentPhase)
+	if phase == "" {
+		phase = "initializing"
 	}
 
-	phase := string(m.workflow.CurrentPhase)
-	status := string(m.workflow.Status)
+	status := "running"
+	if m.workflow != nil {
+		status = string(m.workflow.Status)
+	}
+
+	if m.err != nil {
+		status = "error"
+	}
 
 	return HeaderStyle.Render(
 		fmt.Sprintf("Quorum AI - Phase: %s - Status: %s", phase, status))

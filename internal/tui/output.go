@@ -2,6 +2,7 @@ package tui
 
 import (
 	"sync"
+	"sync/atomic"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -39,19 +40,27 @@ type Output interface {
 
 // TUIOutput wraps the bubbletea Model for the Output interface.
 type TUIOutput struct {
-	model   Model
-	program *tea.Program
-	updateC chan tea.Msg
-	mu      sync.Mutex
+	model     Model
+	program   *tea.Program
+	updateC   chan tea.Msg // Normal updates (ring buffer behavior)
+	priorityC chan tea.Msg // Critical updates (blocking, never drop)
+	dropCount int64        // Counter for dropped events
+	mu        sync.Mutex
 }
 
 // NewTUIOutput creates a new TUI output handler.
 func NewTUIOutput() *TUIOutput {
 	t := &TUIOutput{
-		model:   New(),
-		updateC: make(chan tea.Msg, 100),
+		model:     New(),
+		updateC:   make(chan tea.Msg, 100),
+		priorityC: make(chan tea.Msg, 20),
 	}
 	return t
+}
+
+// DroppedEvents returns the count of dropped events.
+func (t *TUIOutput) DroppedEvents() int64 {
+	return atomic.LoadInt64(&t.dropCount)
 }
 
 // Start starts the TUI program (should be called in a goroutine).
@@ -89,6 +98,10 @@ func (t *TUIOutput) PhaseStarted(phase core.Phase) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if t.updateC != nil {
+		select {
+		case t.updateC <- PhaseUpdateMsg{Phase: phase}:
+		default:
+		}
 		select {
 		case t.updateC <- LogMsg{Time: time.Now(), Level: "info", Message: "Phase: " + string(phase)}:
 		default:

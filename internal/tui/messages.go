@@ -12,6 +12,11 @@ type WorkflowUpdateMsg struct {
 	State *core.WorkflowState
 }
 
+// PhaseUpdateMsg signals a phase change.
+type PhaseUpdateMsg struct {
+	Phase core.Phase
+}
+
 // TaskUpdateMsg signals task status change.
 type TaskUpdateMsg struct {
 	TaskID   core.TaskID
