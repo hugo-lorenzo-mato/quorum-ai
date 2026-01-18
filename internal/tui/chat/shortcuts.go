@@ -46,7 +46,6 @@ func NewShortcutsOverlay() *ShortcutsOverlay {
 					{Key: "Ctrl+E", Description: "Toggle explorer"},
 					{Key: "Ctrl+L", Description: "Toggle logs"},
 					{Key: "Ctrl+K", Description: "Toggle consensus"},
-					{Key: "F11", Description: "Focus/Zen mode"},
 				},
 			},
 			{
@@ -136,11 +135,21 @@ func (s *ShortcutsOverlay) Render() string {
 		colWidth = 30
 	}
 
+	// The box has Width(s.width-4) and Padding(1,2), so inner width is s.width-4-4 = s.width-8
+	innerWidth := s.width - 8
+	if innerWidth < 0 {
+		innerWidth = 0
+	}
+
 	var sb strings.Builder
 
 	// Title
 	title := titleStyle.Render(" Shortcuts")
-	sb.WriteString(strings.Repeat(" ", (s.width-lipgloss.Width(title))/2-2))
+	titlePadding := (innerWidth - lipgloss.Width(title)) / 2
+	if titlePadding < 0 {
+		titlePadding = 0
+	}
+	sb.WriteString(strings.Repeat(" ", titlePadding))
 	sb.WriteString(title)
 	sb.WriteString("\n\n")
 
@@ -215,7 +224,11 @@ func (s *ShortcutsOverlay) Render() string {
 	// Footer
 	footer := footerStyle.Render("Press any key to close")
 	sb.WriteString("\n")
-	sb.WriteString(strings.Repeat(" ", (s.width-lipgloss.Width(footer))/2-2))
+	footerPadding := (innerWidth - lipgloss.Width(footer)) / 2
+	if footerPadding < 0 {
+		footerPadding = 0
+	}
+	sb.WriteString(strings.Repeat(" ", footerPadding))
 	sb.WriteString(footer)
 
 	// Box style with double border for overlay feel

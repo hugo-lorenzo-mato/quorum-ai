@@ -566,14 +566,22 @@ func (p *ExplorerPanel) formatEntry(entry *FileEntry, selected bool) string {
 		nameStyle = nameStyle.Reverse(true)
 	}
 
-	// Truncate name if too long
+	// Truncate name if too long (use lipgloss.Width for Unicode safety)
 	maxNameLen := p.width - entry.Level*2 - 6
 	if maxNameLen < 10 {
 		maxNameLen = 10
 	}
 	name := entry.Name
-	if len(name) > maxNameLen {
-		name = name[:maxNameLen-3] + "..."
+	if lipgloss.Width(name) > maxNameLen {
+		// Safe truncation for Unicode characters
+		truncated := ""
+		for _, r := range name {
+			if lipgloss.Width(truncated+string(r)+"...") > maxNameLen {
+				break
+			}
+			truncated += string(r)
+		}
+		name = truncated + "..."
 	}
 
 	return fmt.Sprintf("%s%s%s %s", cursor, indent, icon, nameStyle.Render(name))
