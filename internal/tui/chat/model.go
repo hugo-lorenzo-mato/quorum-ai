@@ -15,6 +15,8 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/glamour"
+	"github.com/charmbracelet/glamour/ansi"
+	"github.com/charmbracelet/glamour/styles"
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/control"
@@ -224,10 +226,11 @@ type Model struct {
 	workflowState *core.WorkflowState
 
 	// Agent display state (for compact bar and pipeline)
-	agentInfos    []*AgentInfo
-	workflowPhase string // "idle", "running", "done"
-	totalTokens   int
-	totalCost     float64
+	agentInfos     []*AgentInfo
+	workflowPhase  string // "idle", "running", "done"
+	totalTokensIn  int
+	totalTokensOut int
+	totalCost      float64
 
 	// Workflow runner for /plan and /run commands
 	runner   WorkflowRunner
@@ -265,13 +268,6 @@ type Model struct {
 	shortcutsOverlay *ShortcutsOverlay
 	statsWidget      *StatsWidget
 
-	// NEW: Focus/Zen mode
-	focusMode     bool
-	preFocusState struct {
-		showLogs     bool
-		showExplorer bool
-	}
-
 	// Cancellation for interrupts
 	cancelFunc context.CancelFunc
 
@@ -301,9 +297,18 @@ func NewModel(cp *control.ControlPlane, agents core.AgentRegistry, defaultAgent,
 	sp.Spinner = spinner.Dot
 	sp.Style = spinnerStyle
 
-	// Create markdown renderer with dark theme
+	// Create markdown renderer with custom style to fix inline code rendering
+	customStyle := styles.DraculaStyleConfig
+	customStyle.Code = ansi.StyleBlock{
+		StylePrimitive: ansi.StylePrimitive{
+			Color:           stringPtr("229"), // Light yellow
+			BackgroundColor: stringPtr(""),    // No background
+			Prefix:          "",               // No prefix
+			Suffix:          "",               // No suffix
+		},
+	}
 	renderer, _ := glamour.NewTermRenderer(
-		glamour.WithAutoStyle(),
+		glamour.WithStyles(customStyle),
 		glamour.WithWordWrap(80),
 	)
 
@@ -352,7 +357,6 @@ func NewModel(cp *control.ControlPlane, agents core.AgentRegistry, defaultAgent,
 		costPanel:        NewCostPanel(1.0), // $1 default budget
 		shortcutsOverlay: NewShortcutsOverlay(),
 		statsWidget:      NewStatsWidget(),
-		focusMode:        false,
 	}
 }
 
@@ -658,31 +662,6 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		} else {
 			m.inputFocused = true
 			m.textarea.Focus()
-		}
-		return m, nil, true
-
-	case tea.KeyF11:
-		// Toggle focus/zen mode
-		m.focusMode = !m.focusMode
-		if m.focusMode {
-			// Save current state and hide sidebars
-			m.preFocusState.showLogs = m.showLogs
-			m.preFocusState.showExplorer = m.showExplorer
-			m.showLogs = false
-			m.showExplorer = false
-			m.explorerFocus = false
-			m.logsFocus = false
-			m.inputFocused = true
-			m.textarea.Focus()
-			m.logsPanel.AddInfo("system", "Focus mode enabled (F11 to exit)")
-		} else {
-			// Restore previous state
-			m.showLogs = m.preFocusState.showLogs
-			m.showExplorer = m.preFocusState.showExplorer
-			m.logsPanel.AddInfo("system", "Focus mode disabled")
-		}
-		if m.width > 0 && m.height > 0 {
-			m.recalculateLayout()
 		}
 		return m, nil, true
 	}
@@ -1184,8 +1163,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Update costs from state
 		if msg.State != nil && msg.State.Metrics != nil {
 			m.totalCost = msg.State.Metrics.TotalCostUSD
-			m.totalTokens = msg.State.Metrics.TotalTokensIn + msg.State.Metrics.TotalTokensOut
-			m.logsPanel.AddInfo("workflow", fmt.Sprintf("Total cost: $%.4f, tokens: %d", m.totalCost, m.totalTokens))
+			m.totalTokensIn = msg.State.Metrics.TotalTokensIn
+			m.totalTokensOut = msg.State.Metrics.TotalTokensOut
+			m.logsPanel.AddInfo("workflow", fmt.Sprintf("Total cost: $%.4f, tokens: %d→%d", m.totalCost, m.totalTokensIn, m.totalTokensOut))
 		}
 		m.logsPanel.AddSuccess("workflow", "Workflow completed successfully")
 		m.history.Add(NewSystemMessage("Workflow completed successfully!"))
@@ -1631,6 +1611,15 @@ func (m *Model) updateLogsPanelTokenStats() {
 		}
 	}
 
+	// Include workflow tokens to match header display
+	if m.totalTokensIn > 0 || m.totalTokensOut > 0 {
+		tokenStats = append(tokenStats, TokenStats{
+			Model:     "workflow",
+			TokensIn:  m.totalTokensIn,
+			TokensOut: m.totalTokensOut,
+		})
+	}
+
 	m.logsPanel.SetTokenStats(tokenStats)
 }
 
@@ -1647,9 +1636,10 @@ func (m *Model) calculateInputLines() int {
 	// Also consider line wrapping based on textarea width
 	if m.textarea.Width() > 0 {
 		for _, line := range strings.Split(content, "\n") {
-			// Each line might wrap if longer than width
-			if len(line) > m.textarea.Width() {
-				extraLines := len(line) / m.textarea.Width()
+			// Each line might wrap if longer than width (use lipgloss.Width for Unicode)
+			lineWidth := lipgloss.Width(line)
+			if lineWidth > m.textarea.Width() {
+				extraLines := lineWidth / m.textarea.Width()
 				lines += extraLines
 			}
 		}
@@ -1777,6 +1767,41 @@ func (m *Model) recalculateLayout() {
 		mainWidth -= logsWidth + 1
 	}
 
+	// === NORMALIZATION OF WIDTHS TO PREVENT OVERFLOW ===
+	totalUsed := mainWidth
+	if m.showExplorer {
+		totalUsed += explorerWidth + 1 // +1 separator
+	}
+	if m.showLogs {
+		totalUsed += logsWidth + 1 // +1 separator
+	}
+	totalUsed += 2 // outer margins
+
+	if totalUsed > m.width {
+		excess := totalUsed - m.width
+
+		// Strategy: reduce mainWidth first (has more margin)
+		if mainWidth-excess >= 40 {
+			mainWidth -= excess
+		} else {
+			// If not enough, reduce sidebars proportionally
+			reduction := excess / 2
+			if m.showExplorer && explorerWidth-reduction >= 25 {
+				explorerWidth -= reduction
+				excess -= reduction
+			}
+			if m.showLogs && logsWidth-reduction >= 30 {
+				logsWidth -= reduction
+				excess -= reduction
+			}
+			// Any remaining excess goes to mainWidth
+			if excess > 0 && mainWidth-excess >= 40 {
+				mainWidth -= excess
+			}
+		}
+	}
+	// === END NORMALIZATION ===
+
 	// Ensure minimum main width
 	if mainWidth < 40 {
 		mainWidth = 40
@@ -1816,6 +1841,11 @@ func (m *Model) recalculateLayout() {
 	}
 	m.textarea.SetWidth(inputWidth)
 	m.textarea.SetHeight(inputLines) // Dynamic height based on content
+
+	// === UPDATE MARKDOWN RENDERER WIDTH ===
+	// Update word wrap to match content viewport width
+	contentWidth := mainWidth - 4 // Subtract padding
+	m.updateMarkdownRenderer(contentWidth)
 }
 
 func (m Model) runWorkflow(prompt string) tea.Cmd {
@@ -1921,7 +1951,7 @@ func (m Model) View() string {
 	// === CALCULATE PANEL WIDTHS ===
 	explorerWidth := 0
 	logsWidth := 0
-	mainWidth := w
+	mainWidth := w - 2 // Match recalculateLayout (line 1721: availableWidth := m.width - 2)
 
 	// Determine how many sidebars are open for dynamic sizing
 	bothSidebarsOpen := m.showExplorer && m.showLogs
@@ -2308,8 +2338,8 @@ func (m Model) renderHeader(width int) string {
 		tokensIn += a.TokensIn
 		tokensOut += a.TokensOut
 	}
-	tokensIn += m.totalTokens / 2 // Distribute workflow tokens
-	tokensOut += m.totalTokens / 2
+	tokensIn += m.totalTokensIn
+	tokensOut += m.totalTokensOut
 	if tokensIn > 0 || tokensOut > 0 {
 		stats = append(stats, statsStyle.Render("tok:")+valueStyle.Render(fmt.Sprintf("%d→%d", tokensIn, tokensOut)))
 	}
@@ -2432,6 +2462,15 @@ func (m Model) renderInlineSuggestions(width int) string {
 	// Build dropdown content
 	var lines []string
 
+	// Calculate dropdownWidth FIRST (before using it for maxDescWidth)
+	dropdownWidth := width - 6
+	if dropdownWidth < 40 {
+		dropdownWidth = 40
+	}
+	if dropdownWidth > 70 {
+		dropdownWidth = 70
+	}
+
 	// Scroll up indicator
 	if start > 0 {
 		lines = append(lines, scrollStyle.Render(fmt.Sprintf("  ↑ %d more commands above", start)))
@@ -2440,10 +2479,16 @@ func (m Model) renderInlineSuggestions(width int) string {
 	// Calculate max command width for alignment
 	maxCmdWidth := 12
 	for i := start; i < end; i++ {
-		cmdLen := len(m.suggestions[i]) + 1
+		cmdLen := lipgloss.Width(m.suggestions[i]) + 1
 		if cmdLen > maxCmdWidth {
 			maxCmdWidth = cmdLen
 		}
+	}
+
+	// Calculate maxDescWidth using dropdownWidth (not width)
+	maxDescWidth := dropdownWidth - maxCmdWidth - 12
+	if maxDescWidth < 10 {
+		maxDescWidth = 10
 	}
 
 	// Command items
@@ -2455,21 +2500,20 @@ func (m Model) renderInlineSuggestions(width int) string {
 			desc = cmd.Description
 		}
 
-		// Format command name with padding
-		paddedCmd := fmt.Sprintf("%-*s", maxCmdWidth+1, cmdName)
-
 		// Truncate description if needed
-		maxDescWidth := width - maxCmdWidth - 12
 		if maxDescWidth > 0 && len(desc) > maxDescWidth {
 			desc = desc[:maxDescWidth-3] + "..."
 		}
 
 		var line string
 		if i == m.suggestionIndex {
-			// Selected item with arrow indicator
-			line = selectedStyle.Render(" ▸ "+paddedCmd) + " " + descStyle.Render(desc)
+			// Selected item with full row highlight
+			fullLine := fmt.Sprintf(" ▸ %-*s %s", maxCmdWidth, cmdName, desc)
+			rowStyle := selectedStyle.Background(lipgloss.Color("#374151"))
+			line = rowStyle.Render(fullLine)
 		} else {
-			line = normalStyle.Render("   "+paddedCmd) + " " + descStyle.Render(desc)
+			fullLine := fmt.Sprintf("   %-*s %s", maxCmdWidth, cmdName, desc)
+			line = normalStyle.Render(fullLine)
 		}
 		lines = append(lines, line)
 	}
@@ -2481,15 +2525,7 @@ func (m Model) renderInlineSuggestions(width int) string {
 
 	content := strings.Join(lines, "\n")
 
-	// Box style
-	dropdownWidth := width - 6
-	if dropdownWidth < 40 {
-		dropdownWidth = 40
-	}
-	if dropdownWidth > 70 {
-		dropdownWidth = 70
-	}
-
+	// Box style (dropdownWidth already calculated above)
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(primaryColor).
@@ -2516,14 +2552,6 @@ func (m Model) renderFooter(width int) string {
 
 	separatorStyle := lipgloss.NewStyle().
 		Foreground(borderColor)
-
-	focusIndicator := ""
-	if m.focusMode {
-		focusIndicator = lipgloss.NewStyle().
-			Foreground(primaryColor).
-			Bold(true).
-			Render("[F] ")
-	}
 
 	var keys []string
 
@@ -2572,8 +2600,6 @@ func (m Model) renderFooter(width int) string {
 		keys = []string{
 			keyHintStyle.Render("↵") + labelStyle.Render(" send"),
 			keyHintStyle.Render("^R") + labelStyle.Render(" hist"),
-			keyHintStyle.Render("^5") + labelStyle.Render(" stats"),
-			keyHintStyle.Render("F11") + labelStyle.Render(" focus"),
 			keyHintStyle.Render("?") + labelStyle.Render(" help"),
 		}
 	}
@@ -2583,12 +2609,12 @@ func (m Model) renderFooter(width int) string {
 	content := strings.Join(keys, separator)
 
 	// Pad to width for consistent look
-	padding := width - lipgloss.Width(content) - lipgloss.Width(focusIndicator) - 2
+	padding := width - lipgloss.Width(content) - 2
 	if padding < 0 {
 		padding = 0
 	}
 
-	return " " + focusIndicator + content + strings.Repeat(" ", padding)
+	return " " + content + strings.Repeat(" ", padding)
 }
 
 func formatWorkflowStatus(state *core.WorkflowState) string {
@@ -2616,4 +2642,37 @@ func formatWorkflowStatus(state *core.WorkflowState) string {
 	}
 
 	return sb.String()
+}
+
+// updateMarkdownRenderer updates the markdown renderer with a new word wrap width
+func (m *Model) updateMarkdownRenderer(width int) {
+	if width < 40 {
+		width = 40
+	}
+	if width > 120 {
+		width = 120 // Maximum reasonable for readability
+	}
+
+	customStyle := styles.DraculaStyleConfig
+	customStyle.Code = ansi.StyleBlock{
+		StylePrimitive: ansi.StylePrimitive{
+			Color:           stringPtr("229"), // Light yellow
+			BackgroundColor: stringPtr(""),    // No background
+			Prefix:          "",               // No prefix
+			Suffix:          "",               // No suffix
+		},
+	}
+
+	renderer, err := glamour.NewTermRenderer(
+		glamour.WithStyles(customStyle),
+		glamour.WithWordWrap(width),
+	)
+	if err == nil {
+		m.mdRenderer = renderer
+	}
+}
+
+// stringPtr returns a pointer to a string (helper for glamour style config)
+func stringPtr(s string) *string {
+	return &s
 }
