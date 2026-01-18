@@ -74,6 +74,17 @@ func New(cfg Config) *Logger {
 	}
 }
 
+// NewWithHandler creates a logger with a custom handler.
+// This is useful for TUI mode where we want to route logs directly to the UI.
+func NewWithHandler(handler slog.Handler) *Logger {
+	sanitizer := NewSanitizer()
+	wrappedHandler := NewSanitizingHandler(handler, sanitizer)
+	return &Logger{
+		Logger:    slog.New(wrappedHandler),
+		sanitizer: sanitizer,
+	}
+}
+
 // NewNop creates a no-op logger for testing.
 func NewNop() *Logger {
 	return &Logger{

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
 	"strings"
 	"sync"
@@ -100,8 +101,8 @@ func (w *TUIWriter) processLine(line []byte) {
 }
 
 // parseLogLine extracts the level and message from a log line.
-// It handles the PrettyHandler format: "15:04:05 INF message key=value"
-// Returns normalized level (info, warn, error, debug) and the message.
+// It handles both PrettyHandler format ("15:04:05 INF message key=value")
+// and JSON format ({"level":"info","msg":"message",...}).
 func parseLogLine(line string) (level, message string) {
 	// Skip empty lines
 	line = strings.TrimSpace(line)
@@ -109,34 +110,51 @@ func parseLogLine(line string) (level, message string) {
 		return "info", ""
 	}
 
-	// PrettyHandler format: "15:04:05 INF message key=value"
-	// Try to find the level marker after the timestamp
+	// Try JSON format first
+	if strings.HasPrefix(line, "{") {
+		var jsonLog struct {
+			Level   string `json:"level"`
+			Msg     string `json:"msg"`
+			Message string `json:"message"`
+		}
+		if err := json.Unmarshal([]byte(line), &jsonLog); err == nil {
+			level = normalizeLevel(jsonLog.Level)
+			message = jsonLog.Msg
+			if message == "" {
+				message = jsonLog.Message
+			}
+			return level, message
+		}
+	}
+
+	// Fall back to PrettyHandler format: "15:04:05 INF message key=value"
 	parts := strings.SplitN(line, " ", 3)
 	if len(parts) < 2 {
 		return "info", line
 	}
 
-	// Check if second part is a level indicator
 	levelStr := strings.ToUpper(parts[1])
-
-	// Extract message (third part if exists, empty otherwise)
 	msg := ""
 	if len(parts) > 2 {
 		msg = parts[2]
 	}
 
-	switch levelStr {
+	return normalizeLevel(levelStr), msg
+}
+
+// normalizeLevel converts various level representations to standard format.
+func normalizeLevel(level string) string {
+	switch strings.ToUpper(strings.TrimSpace(level)) {
 	case "INF", "INFO":
-		return "info", msg
+		return "info"
 	case "WRN", "WARN", "WARNING":
-		return "warn", msg
+		return "warn"
 	case "ERR", "ERROR":
-		return "error", msg
+		return "error"
 	case "DBG", "DEBUG":
-		return "debug", msg
+		return "debug"
 	default:
-		// Not a recognized format, return the whole line as message
-		return "info", line
+		return "info"
 	}
 }
 

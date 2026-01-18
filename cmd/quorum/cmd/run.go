@@ -3,7 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"io"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -60,6 +60,19 @@ func init() {
 	runCmd.Flags().BoolVar(&runSkipOptimize, "skip-optimize", false, "Skip prompt optimization phase")
 }
 
+func parseLogLevel(level string) slog.Level {
+	switch level {
+	case "debug":
+		return slog.LevelDebug
+	case "warn":
+		return slog.LevelWarn
+	case "error":
+		return slog.LevelError
+	default:
+		return slog.LevelInfo
+	}
+}
+
 //nolint:gocyclo // Complexity is acceptable for CLI orchestration function
 func runWorkflow(_ *cobra.Command, args []string) error {
 	// Setup context with cancellation
@@ -83,15 +96,6 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 	outputMode := detector.Detect()
 	useColor := detector.ShouldUseColor()
 
-	// Create TUIWriter for log routing when in TUI mode
-	// This must be created before the logger so logs can be routed to the TUI
-	var tuiWriter *tui.TUIWriter
-	var logOutput io.Writer = os.Stdout
-	if outputMode == tui.ModeTUI {
-		tuiWriter = tui.NewTUIWriter(os.Stdout)
-		logOutput = tuiWriter
-	}
-
 	// Load unified configuration using global viper (includes flag bindings)
 	// Precedence: flags > env > project config > user config > defaults
 	loader := config.NewLoaderWithViper(viper.GetViper())
@@ -108,12 +112,22 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 		return fmt.Errorf("validating config: %w", err)
 	}
 
-	// Create logger from unified config with appropriate output
-	logger := logging.New(logging.Config{
-		Level:  cfg.Log.Level,
-		Format: cfg.Log.Format,
-		Output: logOutput,
-	})
+	// Create logger - for TUI mode we'll set up a custom handler later
+	var logger *logging.Logger
+	var tuiLogHandler *tui.TUILogHandler
+
+	if outputMode == tui.ModeTUI {
+		// Create a placeholder handler - we'll connect it to TUIOutput later
+		tuiLogHandler = tui.NewTUILogHandler(nil, parseLogLevel(cfg.Log.Level))
+		logger = logging.NewWithHandler(tuiLogHandler)
+	} else {
+		// Normal logging for non-TUI modes
+		logger = logging.New(logging.Config{
+			Level:  cfg.Log.Level,
+			Format: cfg.Log.Format,
+			Output: os.Stdout,
+		})
+	}
 
 	// Create output handler based on detected mode
 	// Verbose output is enabled when trace mode is set or log level is debug
@@ -128,10 +142,9 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 		var ok bool
 		tuiOutput, ok = output.(*tui.TUIOutput)
 		if ok {
-			// Connect TUIWriter to TUIOutput so logs are routed to the TUI
-			if tuiWriter != nil {
-				tuiWriter.Connect(tuiOutput)
-				defer tuiWriter.Disconnect()
+			// Connect TUILogHandler to TUIOutput so logs are routed directly
+			if tuiLogHandler != nil {
+				tuiLogHandler.SetOutput(tuiOutput)
 			}
 
 			tuiErrCh = make(chan error, 1)
@@ -237,10 +250,32 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 		},
 	}
 
-	// Store trace config for potential later use
-	_ = traceCfg
-	_ = gitCommit
-	_ = gitDirty
+	// Create trace writer if tracing is enabled
+	traceWriter := service.NewTraceWriter(traceCfg, logger)
+	if traceWriter.Enabled() {
+		// Generate workflow ID early for trace directory
+		traceRunID := fmt.Sprintf("run-%d", time.Now().UnixNano())
+		if err := traceWriter.StartRun(ctx, service.TraceRunInfo{
+			RunID:      traceRunID,
+			WorkflowID: traceRunID,
+			StartedAt:  time.Now(),
+			GitCommit:  gitCommit,
+			GitDirty:   gitDirty,
+		}); err != nil {
+			logger.Warn("failed to start trace run", "error", err)
+		} else {
+			logger.Info("trace enabled", "mode", traceCfg.Mode, "dir", traceWriter.Dir())
+			defer func() {
+				summary := traceWriter.EndRun(ctx)
+				if summary.TotalEvents > 0 {
+					logger.Info("trace completed",
+						"events", summary.TotalEvents,
+						"dir", summary.Dir,
+					)
+				}
+			}()
+		}
+	}
 
 	// Create service components needed by the modular runner
 	checkpointManager := service.NewCheckpointManager(stateManager, logger)
@@ -275,7 +310,16 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 	stateAdapter := &stateManagerAdapter{sm: stateManager}
 
 	// Create output notifier adapter for real-time TUI updates
-	outputNotifier := tui.NewOutputNotifierAdapter(output)
+	baseNotifier := tui.NewOutputNotifierAdapter(output)
+
+	// Wrap with trace notifier if tracing is enabled
+	var outputNotifier workflow.OutputNotifier
+	if traceWriter.Enabled() {
+		traceNotifier := service.NewTraceOutputNotifier(traceWriter)
+		outputNotifier = tui.NewTracingOutputNotifierAdapter(baseNotifier, traceNotifier)
+	} else {
+		outputNotifier = baseNotifier
+	}
 
 	// Create workflow runner using modular architecture (ADR-0005)
 	runner := workflow.NewRunner(workflow.RunnerDeps{
