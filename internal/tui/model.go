@@ -26,13 +26,14 @@ type Model struct {
 
 // TaskView represents a task in the TUI.
 type TaskView struct {
-	ID       core.TaskID
-	Name     string
-	Phase    core.Phase
-	Status   core.TaskStatus
-	Progress float64
-	Duration time.Duration
-	Error    string
+	ID        core.TaskID
+	Name      string
+	Phase     core.Phase
+	Status    core.TaskStatus
+	Progress  float64
+	Duration  time.Duration
+	StartedAt *time.Time
+	Error     string
 }
 
 // LogEntry represents a log line.
@@ -56,6 +57,7 @@ func (m Model) Init() tea.Cmd {
 	return tea.Batch(
 		m.spinner.Tick(),
 		waitForWorkflowUpdate(),
+		durationTick(),
 	)
 }
 
@@ -104,6 +106,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
 		return m, cmd
+	case DurationTickMsg:
+		return m, durationTick()
 
 	case ErrorMsg:
 		m.err = msg.Error
@@ -206,27 +210,70 @@ func (m Model) renderHeader() string {
 		fmt.Sprintf("Quorum AI - Phase: %s - Status: %s", phase, status))
 }
 
+// progressStats calculates task completion statistics.
+type progressStats struct {
+	total     int
+	completed int
+	failed    int
+	skipped   int
+	running   int
+	pending   int
+}
+
+func (m Model) getProgressStats() progressStats {
+	stats := progressStats{
+		total: len(m.tasks),
+	}
+
+	for _, t := range m.tasks {
+		switch t.Status {
+		case core.TaskStatusPending:
+			stats.pending++
+		case core.TaskStatusRunning:
+			stats.running++
+		case core.TaskStatusCompleted:
+			stats.completed++
+		case core.TaskStatusFailed:
+			stats.failed++
+		case core.TaskStatusSkipped:
+			stats.skipped++
+		}
+	}
+
+	return stats
+}
+
+// finished returns the count of terminal-state tasks.
+func (s progressStats) finished() int {
+	return s.completed + s.failed + s.skipped
+}
+
+// percentage returns the completion percentage.
+func (s progressStats) percentage() float64 {
+	if s.total == 0 {
+		return 0
+	}
+	return float64(s.finished()) / float64(s.total) * 100
+}
+
 // renderProgress renders the overall progress bar.
+// Progress is calculated as (completed + failed + skipped) / total.
 func (m Model) renderProgress() string {
 	if m.workflow == nil {
 		return ""
 	}
 
-	completed := 0
-	total := len(m.tasks)
-	for _, t := range m.tasks {
-		if t.Status == core.TaskStatusCompleted {
-			completed++
-		}
+	stats := m.getProgressStats()
+	percentage := stats.percentage()
+	bar := renderProgressBar(percentage, m.width-30)
+
+	// Show breakdown if there are failures or skips
+	if stats.failed > 0 || stats.skipped > 0 {
+		return fmt.Sprintf("Progress: %s %.1f%% (%d/%d done, %d failed, %d skipped)",
+			bar, percentage, stats.completed, stats.total, stats.failed, stats.skipped)
 	}
 
-	percentage := 0.0
-	if total > 0 {
-		percentage = float64(completed) / float64(total) * 100
-	}
-
-	bar := renderProgressBar(percentage, m.width-20)
-	return fmt.Sprintf("Progress: %s %.1f%%", bar, percentage)
+	return fmt.Sprintf("Progress: %s %.1f%% (%d/%d)", bar, percentage, stats.completed, stats.total)
 }
 
 // renderTasks renders the task list.
@@ -250,14 +297,38 @@ func (m Model) renderTasks() string {
 			line += " " + m.spinner.View()
 		}
 
-		if task.Duration > 0 {
-			line += fmt.Sprintf(" [%s]", task.Duration.Round(time.Second))
+		duration := m.getTaskDuration(task)
+		if duration > 0 {
+			line += fmt.Sprintf(" [%s]", formatDuration(duration))
 		}
 
 		s += style.Render(line) + "\n"
 	}
 
 	return s
+}
+
+// getTaskDuration returns the task duration, calculating live for running tasks.
+func (m Model) getTaskDuration(task *TaskView) time.Duration {
+	if task.Status == core.TaskStatusRunning && task.StartedAt != nil {
+		return time.Since(*task.StartedAt)
+	}
+	return task.Duration
+}
+
+// formatDuration formats a duration for display.
+func formatDuration(d time.Duration) string {
+	if d < time.Minute {
+		return fmt.Sprintf("%.0fs", d.Seconds())
+	}
+	if d < time.Hour {
+		mins := int(d.Minutes())
+		secs := int(d.Seconds()) % 60
+		return fmt.Sprintf("%dm%02ds", mins, secs)
+	}
+	hours := int(d.Hours())
+	mins := int(d.Minutes()) % 60
+	return fmt.Sprintf("%dh%02dm", hours, mins)
 }
 
 // renderFooter renders the footer with keybindings.
@@ -318,14 +389,21 @@ func (m Model) statusIcon(status core.TaskStatus) string {
 	}
 }
 
-// buildTaskViews converts workflow tasks to views.
+// buildTaskViews converts workflow tasks to views using TaskOrder for stable ordering.
 func (m Model) buildTaskViews(state *core.WorkflowState) []*TaskView {
 	if state == nil {
 		return nil
 	}
 
-	views := make([]*TaskView, 0, len(state.Tasks))
-	for _, task := range state.Tasks {
+	// Use TaskOrder for deterministic ordering
+	views := make([]*TaskView, 0, len(state.TaskOrder))
+	for _, taskID := range state.TaskOrder {
+		task, exists := state.Tasks[taskID]
+		if !exists {
+			// Task in order but not in map - skip (shouldn't happen, but be safe)
+			continue
+		}
+
 		var duration time.Duration
 		if task.StartedAt != nil {
 			if task.CompletedAt != nil {
@@ -336,13 +414,39 @@ func (m Model) buildTaskViews(state *core.WorkflowState) []*TaskView {
 		}
 
 		views = append(views, &TaskView{
-			ID:       task.ID,
-			Name:     task.Name,
-			Phase:    task.Phase,
-			Status:   task.Status,
-			Duration: duration,
-			Error:    task.Error,
+			ID:        task.ID,
+			Name:      task.Name,
+			Phase:     task.Phase,
+			Status:    task.Status,
+			Duration:  duration,
+			StartedAt: task.StartedAt,
+			Error:     task.Error,
 		})
+	}
+
+	// If TaskOrder is empty but Tasks has items, fall back to map iteration
+	// (for backwards compatibility with old state files)
+	if len(views) == 0 && len(state.Tasks) > 0 {
+		for _, task := range state.Tasks {
+			var duration time.Duration
+			if task.StartedAt != nil {
+				if task.CompletedAt != nil {
+					duration = task.CompletedAt.Sub(*task.StartedAt)
+				} else {
+					duration = time.Since(*task.StartedAt)
+				}
+			}
+
+			views = append(views, &TaskView{
+				ID:        task.ID,
+				Name:      task.Name,
+				Phase:     task.Phase,
+				Status:    task.Status,
+				Duration:  duration,
+				StartedAt: task.StartedAt,
+				Error:     task.Error,
+			})
+		}
 	}
 
 	return views

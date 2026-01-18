@@ -42,19 +42,55 @@ type DroppedEventsMsg struct {
 	Count int64
 }
 
+// MetricsUpdateMsg provides real-time metrics updates.
+type MetricsUpdateMsg struct {
+	TotalCostUSD   float64
+	TotalTokensIn  int
+	TotalTokensOut int
+	Duration       time.Duration
+}
+
 // SpinnerTickMsg updates spinner animation.
 type SpinnerTickMsg time.Time
+
+// DurationTickMsg triggers duration refresh for running tasks.
+type DurationTickMsg struct{}
 
 // QuitMsg signals that the TUI should quit.
 type QuitMsg struct{}
 
-// waitForWorkflowUpdate creates a command to wait for updates.
+// waitForEventBusUpdate creates a command that waits for events from EventBus.
+// This replaces the old polling stub with real event subscription.
+func waitForEventBusUpdate(adapter *EventBusAdapter) tea.Cmd {
+	return func() tea.Msg {
+		if adapter == nil {
+			// Fallback for when adapter not available
+			time.Sleep(100 * time.Millisecond)
+			return nil
+		}
+
+		msg, ok := <-adapter.MsgChannel()
+		if !ok {
+			return QuitMsg{}
+		}
+		return msg
+	}
+}
+
+// waitForWorkflowUpdate is the legacy stub - kept for compatibility.
+// Use waitForEventBusUpdate when EventBus is available.
 func waitForWorkflowUpdate() tea.Cmd {
 	return func() tea.Msg {
-		// This would be connected to actual workflow updates via channel
 		time.Sleep(100 * time.Millisecond)
 		return nil
 	}
+}
+
+// durationTick creates a command that triggers duration updates.
+func durationTick() tea.Cmd {
+	return tea.Tick(time.Second, func(_ time.Time) tea.Msg {
+		return DurationTickMsg{}
+	})
 }
 
 // retryTask creates a command to retry a task.
