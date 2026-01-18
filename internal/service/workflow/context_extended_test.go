@@ -279,6 +279,8 @@ func TestNopOutputNotifier_AllMethods(t *testing.T) {
 	notifier.TaskCompleted(nil, 0)
 	notifier.TaskFailed(task, nil)
 	notifier.TaskFailed(nil, nil)
+	notifier.TaskSkipped(task, "skip")
+	notifier.TaskSkipped(nil, "")
 	notifier.WorkflowStateUpdated(state)
 	notifier.WorkflowStateUpdated(nil)
 

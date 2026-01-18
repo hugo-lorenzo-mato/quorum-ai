@@ -12,7 +12,10 @@ import (
 )
 
 // OutputNotifier provides real-time updates to the UI/output layer.
-// This interface mirrors tui.Output but is defined here to avoid circular imports.
+// This interface is a subset of tui.Output, defined here to avoid circular imports.
+// NOTE: This intentionally has fewer methods than tui.Output.
+// Missing methods (WorkflowStarted, WorkflowCompleted, WorkflowFailed, Log) are
+// handled directly by the CLI layer, not by the workflow runner.
 type OutputNotifier interface {
 	// PhaseStarted is called when a phase begins.
 	PhaseStarted(phase core.Phase)
@@ -22,7 +25,10 @@ type OutputNotifier interface {
 	TaskCompleted(task *core.Task, duration time.Duration)
 	// TaskFailed is called when a task fails.
 	TaskFailed(task *core.Task, err error)
+	// TaskSkipped is called when a task is skipped.
+	TaskSkipped(task *core.Task, reason string)
 	// WorkflowStateUpdated is called when the workflow state changes (e.g., tasks created).
+	// NOTE: This is semantically different from WorkflowCompleted.
 	WorkflowStateUpdated(state *core.WorkflowState)
 }
 
@@ -33,6 +39,7 @@ func (n NopOutputNotifier) PhaseStarted(_ core.Phase)                   {}
 func (n NopOutputNotifier) TaskStarted(_ *core.Task)                    {}
 func (n NopOutputNotifier) TaskCompleted(_ *core.Task, _ time.Duration) {}
 func (n NopOutputNotifier) TaskFailed(_ *core.Task, _ error)            {}
+func (n NopOutputNotifier) TaskSkipped(_ *core.Task, _ string)          {}
 func (n NopOutputNotifier) WorkflowStateUpdated(_ *core.WorkflowState)  {}
 
 // Context provides shared resources for workflow phases.

@@ -75,6 +75,7 @@ func TestOutputNotifierAdapter(t *testing.T) {
 	adapter.TaskStarted(task)
 	adapter.TaskCompleted(task, time.Second)
 	adapter.TaskFailed(task, errors.New("test"))
+	adapter.TaskSkipped(task, "skipped")
 	adapter.WorkflowStateUpdated(&core.WorkflowState{
 		Tasks: make(map[core.TaskID]*core.TaskState),
 	})
@@ -94,6 +95,7 @@ func TestOutputNotifierAdapter_WithFallback(t *testing.T) {
 	adapter.TaskStarted(task)
 	adapter.TaskCompleted(task, 500*time.Millisecond)
 	adapter.TaskFailed(task, core.ErrValidation("TEST", "test"))
+	adapter.TaskSkipped(task, "skipped")
 	adapter.WorkflowStateUpdated(&core.WorkflowState{
 		WorkflowID: "wf-test",
 		Tasks:      make(map[core.TaskID]*core.TaskState),
@@ -121,6 +123,7 @@ func TestJSONOutputAdapter_AllMethods(t *testing.T) {
 	adapter.TaskStarted(task)
 	adapter.TaskCompleted(task, 2*time.Second)
 	adapter.TaskFailed(task, errors.New("test error"))
+	adapter.TaskSkipped(task, "skipped")
 
 	state := &core.WorkflowState{
 		WorkflowID:   "wf-test",
@@ -134,6 +137,7 @@ func TestJSONOutputAdapter_AllMethods(t *testing.T) {
 			},
 		},
 	}
+	adapter.WorkflowStateUpdated(state)
 	adapter.WorkflowCompleted(state)
 	adapter.WorkflowFailed(errors.New("workflow failed"))
 
@@ -167,6 +171,7 @@ func TestFallbackOutputAdapter_AllMethods(t *testing.T) {
 	adapter.TaskStarted(task)
 	adapter.TaskCompleted(task, 3*time.Second)
 	adapter.TaskFailed(task, errors.New("task failed"))
+	adapter.TaskSkipped(task, "skipped")
 
 	state := &core.WorkflowState{
 		WorkflowID:   "wf-test",
@@ -177,6 +182,7 @@ func TestFallbackOutputAdapter_AllMethods(t *testing.T) {
 			"task-2": {ID: "task-2", Status: core.TaskStatusFailed},
 		},
 	}
+	adapter.WorkflowStateUpdated(state)
 	adapter.WorkflowCompleted(state)
 	adapter.WorkflowFailed(errors.New("workflow failed"))
 
@@ -211,6 +217,8 @@ func TestTUIOutput_AfterClose(t *testing.T) {
 	tuiOut.TaskStarted(&core.Task{ID: "task-1"})
 	tuiOut.TaskCompleted(&core.Task{ID: "task-1"}, time.Second)
 	tuiOut.TaskFailed(&core.Task{ID: "task-1"}, nil)
+	tuiOut.TaskSkipped(&core.Task{ID: "task-1"}, "skipped")
+	tuiOut.WorkflowStateUpdated(&core.WorkflowState{Tasks: make(map[core.TaskID]*core.TaskState)})
 	tuiOut.WorkflowCompleted(&core.WorkflowState{Tasks: make(map[core.TaskID]*core.TaskState)})
 	tuiOut.WorkflowFailed(nil)
 	tuiOut.Log("info", "test")
@@ -245,6 +253,7 @@ func TestOutputNotifierAdapter_NilOutput(t *testing.T) {
 	adapter.TaskStarted(&core.Task{ID: "1"})
 	adapter.TaskCompleted(&core.Task{ID: "1"}, time.Millisecond)
 	adapter.TaskFailed(&core.Task{ID: "1"}, nil)
+	adapter.TaskSkipped(&core.Task{ID: "1"}, "skipped")
 	adapter.WorkflowStateUpdated(&core.WorkflowState{Tasks: make(map[core.TaskID]*core.TaskState)})
 }
 
@@ -269,6 +278,7 @@ func TestQuietOutput_AllMethods(t *testing.T) {
 	quiet.TaskStarted(task)
 	quiet.TaskCompleted(task, time.Second)
 	quiet.TaskFailed(task, errors.New("test error"))
+	quiet.TaskSkipped(task, "skipped")
 
 	state := &core.WorkflowState{
 		WorkflowID:   "wf-test",
@@ -278,6 +288,7 @@ func TestQuietOutput_AllMethods(t *testing.T) {
 			"task-1": {ID: "task-1", Status: core.TaskStatusCompleted},
 		},
 	}
+	quiet.WorkflowStateUpdated(state)
 	quiet.WorkflowCompleted(state)
 	quiet.WorkflowFailed(errors.New("workflow failed"))
 	quiet.Log("info", "test message")

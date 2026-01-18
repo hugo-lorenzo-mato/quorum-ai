@@ -42,6 +42,7 @@ type mockOutputNotifier struct {
 	taskStarted   []*core.Task
 	taskCompleted []*core.Task
 	taskFailed    []*core.Task
+	taskSkipped   []*core.Task
 	stateUpdated  int
 }
 
@@ -59,6 +60,10 @@ func (m *mockOutputNotifier) TaskCompleted(task *core.Task, _ time.Duration) {
 
 func (m *mockOutputNotifier) TaskFailed(task *core.Task, _ error) {
 	m.taskFailed = append(m.taskFailed, task)
+}
+
+func (m *mockOutputNotifier) TaskSkipped(task *core.Task, _ string) {
+	m.taskSkipped = append(m.taskSkipped, task)
 }
 
 func (m *mockOutputNotifier) WorkflowStateUpdated(_ *core.WorkflowState) {

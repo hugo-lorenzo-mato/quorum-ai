@@ -49,6 +49,10 @@ func TestFallbackOutputAdapter_Interface(t *testing.T) {
 	adapter.TaskStarted(task)
 	adapter.TaskCompleted(task, 100*time.Millisecond)
 	adapter.TaskFailed(task, nil)
+	adapter.TaskSkipped(task, "skipped")
+	adapter.WorkflowStateUpdated(&core.WorkflowState{
+		Tasks: make(map[core.TaskID]*core.TaskState),
+	})
 	adapter.WorkflowCompleted(&core.WorkflowState{
 		Tasks: make(map[core.TaskID]*core.TaskState),
 	})
@@ -80,6 +84,10 @@ func TestJSONOutputAdapter_Interface(t *testing.T) {
 	adapter.TaskStarted(task)
 	adapter.TaskCompleted(task, 100*time.Millisecond)
 	adapter.TaskFailed(task, testErr)
+	adapter.TaskSkipped(task, "skipped")
+	adapter.WorkflowStateUpdated(&core.WorkflowState{
+		Tasks: make(map[core.TaskID]*core.TaskState),
+	})
 	adapter.WorkflowCompleted(&core.WorkflowState{
 		Tasks: make(map[core.TaskID]*core.TaskState),
 	})
@@ -110,6 +118,8 @@ func TestQuietOutput_Interface(t *testing.T) {
 	quiet.TaskStarted(task)
 	quiet.TaskCompleted(task, 100*time.Millisecond)
 	quiet.TaskFailed(task, nil)
+	quiet.TaskSkipped(task, "skipped")
+	quiet.WorkflowStateUpdated(&core.WorkflowState{})
 	quiet.WorkflowCompleted(&core.WorkflowState{})
 	quiet.WorkflowFailed(nil)
 	quiet.Log("info", "test message")
@@ -133,6 +143,10 @@ func TestTUIOutput_Interface(t *testing.T) {
 	tuiOut.TaskStarted(task)
 	tuiOut.TaskCompleted(task, 100*time.Millisecond)
 	tuiOut.TaskFailed(task, nil)
+	tuiOut.TaskSkipped(task, "skipped")
+	tuiOut.WorkflowStateUpdated(&core.WorkflowState{
+		Tasks: make(map[core.TaskID]*core.TaskState),
+	})
 	tuiOut.WorkflowCompleted(&core.WorkflowState{
 		Tasks: make(map[core.TaskID]*core.TaskState),
 	})

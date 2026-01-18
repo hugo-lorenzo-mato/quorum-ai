@@ -469,5 +469,6 @@ func TestNopOutputNotifier(t *testing.T) {
 	notifier.TaskStarted(&core.Task{})
 	notifier.TaskCompleted(&core.Task{}, time.Second)
 	notifier.TaskFailed(&core.Task{}, errors.New("test"))
+	notifier.TaskSkipped(&core.Task{}, "skip")
 	notifier.WorkflowStateUpdated(&core.WorkflowState{})
 }

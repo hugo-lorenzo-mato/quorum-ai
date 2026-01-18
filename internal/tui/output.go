@@ -21,7 +21,13 @@ type Output interface {
 	TaskCompleted(task *core.Task, duration time.Duration)
 	// TaskFailed is called when a task fails.
 	TaskFailed(task *core.Task, err error)
+	// TaskSkipped is called when a task is skipped.
+	TaskSkipped(task *core.Task, reason string)
+	// WorkflowStateUpdated is called when workflow state changes (e.g., tasks created).
+	// This is semantically different from WorkflowCompleted.
+	WorkflowStateUpdated(state *core.WorkflowState)
 	// WorkflowCompleted is called when the workflow finishes successfully.
+	// This should only be called ONCE at the end of the workflow.
 	WorkflowCompleted(state *core.WorkflowState)
 	// WorkflowFailed is called when the workflow fails.
 	WorkflowFailed(err error)
@@ -130,6 +136,30 @@ func (t *TUIOutput) TaskFailed(task *core.Task, err error) {
 	}
 }
 
+// WorkflowStateUpdated implements Output.
+func (t *TUIOutput) WorkflowStateUpdated(state *core.WorkflowState) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.updateC != nil {
+		select {
+		case t.updateC <- WorkflowUpdateMsg{State: state}:
+		default:
+		}
+	}
+}
+
+// TaskSkipped implements Output.
+func (t *TUIOutput) TaskSkipped(task *core.Task, reason string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.updateC != nil {
+		select {
+		case t.updateC <- TaskUpdateMsg{TaskID: task.ID, Status: core.TaskStatusSkipped, Error: reason}:
+		default:
+		}
+	}
+}
+
 // WorkflowCompleted implements Output.
 func (t *TUIOutput) WorkflowCompleted(state *core.WorkflowState) {
 	t.mu.Lock()
@@ -229,6 +259,29 @@ func (f *FallbackOutputAdapter) TaskFailed(task *core.Task, err error) {
 	f.fallback.TaskFailed(task, err)
 }
 
+// WorkflowStateUpdated implements Output.
+func (f *FallbackOutputAdapter) WorkflowStateUpdated(state *core.WorkflowState) {
+	// For fallback, state updates are logged as progress
+	if f.fallback != nil {
+		completed := 0
+		total := len(state.Tasks)
+		for _, t := range state.Tasks {
+			if t.Status == core.TaskStatusCompleted {
+				completed++
+			}
+		}
+		// Only show progress if there are tasks to track
+		if total > 0 {
+			f.fallback.Progress(completed, total, string(state.CurrentPhase))
+		}
+	}
+}
+
+// TaskSkipped implements Output.
+func (f *FallbackOutputAdapter) TaskSkipped(task *core.Task, reason string) {
+	f.fallback.TaskSkipped(task, reason)
+}
+
 // WorkflowCompleted implements Output.
 func (f *FallbackOutputAdapter) WorkflowCompleted(state *core.WorkflowState) {
 	f.fallback.WorkflowCompleted(state)
@@ -289,6 +342,24 @@ func (j *JSONOutputAdapter) TaskFailed(task *core.Task, err error) {
 	j.json.TaskFailed(task, err)
 }
 
+// WorkflowStateUpdated implements Output.
+func (j *JSONOutputAdapter) WorkflowStateUpdated(state *core.WorkflowState) {
+	j.json.emit("workflow_state_updated", map[string]interface{}{
+		"phase":         string(state.CurrentPhase),
+		"total_tasks":   len(state.Tasks),
+		"current_phase": string(state.CurrentPhase),
+	})
+}
+
+// TaskSkipped implements Output.
+func (j *JSONOutputAdapter) TaskSkipped(task *core.Task, reason string) {
+	j.json.emit("task_skipped", map[string]interface{}{
+		"task_id": task.ID,
+		"name":    task.Name,
+		"reason":  reason,
+	})
+}
+
 // WorkflowCompleted implements Output.
 func (j *JSONOutputAdapter) WorkflowCompleted(state *core.WorkflowState) {
 	j.json.WorkflowCompleted(state)
@@ -331,6 +402,12 @@ func (q *QuietOutput) TaskCompleted(_ *core.Task, _ time.Duration) {}
 
 // TaskFailed implements Output.
 func (q *QuietOutput) TaskFailed(_ *core.Task, _ error) {}
+
+// WorkflowStateUpdated implements Output.
+func (q *QuietOutput) WorkflowStateUpdated(_ *core.WorkflowState) {}
+
+// TaskSkipped implements Output.
+func (q *QuietOutput) TaskSkipped(_ *core.Task, _ string) {}
 
 // WorkflowCompleted implements Output.
 func (q *QuietOutput) WorkflowCompleted(_ *core.WorkflowState) {}
@@ -395,7 +472,104 @@ func (a *OutputNotifierAdapter) TaskFailed(task *core.Task, err error) {
 
 // WorkflowStateUpdated implements workflow.OutputNotifier.
 // It sends the full workflow state to update the TUI task list.
+// NOTE: This is semantically different from WorkflowCompleted.
 func (a *OutputNotifierAdapter) WorkflowStateUpdated(state *core.WorkflowState) {
-	// Use WorkflowCompleted to send the full state - it works for intermediate updates too
-	a.output.WorkflowCompleted(state)
+	a.output.WorkflowStateUpdated(state)
+}
+
+// TaskSkipped implements workflow.OutputNotifier.
+func (a *OutputNotifierAdapter) TaskSkipped(task *core.Task, reason string) {
+	a.output.TaskSkipped(task, reason)
+}
+
+// TraceNotifier is an interface for trace event recording.
+// This matches service.TraceOutputNotifier but is defined here to avoid circular imports.
+type TraceNotifier interface {
+	PhaseStarted(phase string)
+	TaskStarted(taskID, taskName, cli string)
+	TaskCompleted(taskID, taskName string, duration time.Duration, tokensIn, tokensOut int, costUSD float64)
+	TaskFailed(taskID, taskName string, err error)
+	WorkflowStateUpdated(status string, totalTasks int)
+	Close() error
+}
+
+// TracingOutputNotifierAdapter wraps an OutputNotifierAdapter and adds trace event recording.
+// It implements workflow.OutputNotifier and delegates to both the base notifier and the trace notifier.
+type TracingOutputNotifierAdapter struct {
+	base   *OutputNotifierAdapter
+	tracer TraceNotifier
+}
+
+// NewTracingOutputNotifierAdapter creates a new tracing output notifier adapter.
+func NewTracingOutputNotifierAdapter(base *OutputNotifierAdapter, tracer TraceNotifier) *TracingOutputNotifierAdapter {
+	return &TracingOutputNotifierAdapter{
+		base:   base,
+		tracer: tracer,
+	}
+}
+
+// PhaseStarted implements workflow.OutputNotifier.
+func (t *TracingOutputNotifierAdapter) PhaseStarted(phase core.Phase) {
+	if t.tracer != nil {
+		t.tracer.PhaseStarted(string(phase))
+	}
+	if t.base != nil {
+		t.base.PhaseStarted(phase)
+	}
+}
+
+// TaskStarted implements workflow.OutputNotifier.
+func (t *TracingOutputNotifierAdapter) TaskStarted(task *core.Task) {
+	if t.tracer != nil {
+		t.tracer.TaskStarted(string(task.ID), task.Name, task.CLI)
+	}
+	if t.base != nil {
+		t.base.TaskStarted(task)
+	}
+}
+
+// TaskCompleted implements workflow.OutputNotifier.
+func (t *TracingOutputNotifierAdapter) TaskCompleted(task *core.Task, duration time.Duration) {
+	if t.tracer != nil {
+		t.tracer.TaskCompleted(string(task.ID), task.Name, duration, task.TokensIn, task.TokensOut, task.CostUSD)
+	}
+	if t.base != nil {
+		t.base.TaskCompleted(task, duration)
+	}
+}
+
+// TaskFailed implements workflow.OutputNotifier.
+func (t *TracingOutputNotifierAdapter) TaskFailed(task *core.Task, err error) {
+	if t.tracer != nil {
+		t.tracer.TaskFailed(string(task.ID), task.Name, err)
+	}
+	if t.base != nil {
+		t.base.TaskFailed(task, err)
+	}
+}
+
+// WorkflowStateUpdated implements workflow.OutputNotifier.
+func (t *TracingOutputNotifierAdapter) WorkflowStateUpdated(state *core.WorkflowState) {
+	if t.tracer != nil {
+		t.tracer.WorkflowStateUpdated(string(state.Status), len(state.Tasks))
+	}
+	if t.base != nil {
+		t.base.WorkflowStateUpdated(state)
+	}
+}
+
+// TaskSkipped implements workflow.OutputNotifier.
+func (t *TracingOutputNotifierAdapter) TaskSkipped(task *core.Task, reason string) {
+	// Trace writer doesn't have a TaskSkipped method, so we just delegate to base
+	if t.base != nil {
+		t.base.TaskSkipped(task, reason)
+	}
+}
+
+// Close closes the trace notifier.
+func (t *TracingOutputNotifierAdapter) Close() error {
+	if t.tracer != nil {
+		return t.tracer.Close()
+	}
+	return nil
 }

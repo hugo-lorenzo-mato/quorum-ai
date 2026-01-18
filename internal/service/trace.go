@@ -564,3 +564,121 @@ type traceManifest struct {
 	Config        TraceConfig     `json:"config"`
 	Summary       TraceRunSummary `json:"summary,omitempty"`
 }
+
+// TraceOutputNotifierDelegate defines the delegate interface for output notifications.
+// This matches workflow.OutputNotifier but is defined here to avoid circular imports.
+type TraceOutputNotifierDelegate interface {
+	PhaseStarted(phase string)
+	TaskStarted(taskID, taskName, cli string)
+	TaskCompleted(taskID, taskName string, duration time.Duration, tokensIn, tokensOut int, costUSD float64)
+	TaskFailed(taskID, taskName string, err error)
+	WorkflowStateUpdated(status string, totalTasks int)
+}
+
+// TraceOutputNotifier wraps a TraceWriter to emit trace events for workflow notifications.
+// It can be composed with the existing OutputNotifier to add tracing without modifying
+// the existing notification flow.
+type TraceOutputNotifier struct {
+	writer TraceWriter
+	ctx    context.Context
+}
+
+// NewTraceOutputNotifier creates a new trace output notifier.
+func NewTraceOutputNotifier(writer TraceWriter) *TraceOutputNotifier {
+	return &TraceOutputNotifier{
+		writer: writer,
+		ctx:    context.Background(),
+	}
+}
+
+// PhaseStarted records a phase started event.
+func (t *TraceOutputNotifier) PhaseStarted(phase string) {
+	if t.writer == nil || !t.writer.Enabled() {
+		return
+	}
+	_ = t.writer.Record(t.ctx, TraceEvent{
+		Phase:     phase,
+		EventType: "phase_started",
+	})
+}
+
+// TaskStarted records a task started event.
+func (t *TraceOutputNotifier) TaskStarted(taskID, taskName, cli string) {
+	if t.writer == nil || !t.writer.Enabled() {
+		return
+	}
+	_ = t.writer.Record(t.ctx, TraceEvent{
+		Phase:     "",
+		EventType: "task_started",
+		TaskID:    taskID,
+		TaskName:  taskName,
+		Agent:     cli,
+		Metadata: map[string]interface{}{
+			"task_id":   taskID,
+			"task_name": taskName,
+			"cli":       cli,
+		},
+	})
+}
+
+// TaskCompleted records a task completed event.
+func (t *TraceOutputNotifier) TaskCompleted(taskID, taskName string, duration time.Duration, tokensIn, tokensOut int, costUSD float64) {
+	if t.writer == nil || !t.writer.Enabled() {
+		return
+	}
+	_ = t.writer.Record(t.ctx, TraceEvent{
+		Phase:     "",
+		EventType: "task_completed",
+		TaskID:    taskID,
+		TaskName:  taskName,
+		TokensIn:  tokensIn,
+		TokensOut: tokensOut,
+		CostUSD:   costUSD,
+		Metadata: map[string]interface{}{
+			"duration": duration.String(),
+		},
+	})
+}
+
+// TaskFailed records a task failed event.
+func (t *TraceOutputNotifier) TaskFailed(taskID, taskName string, err error) {
+	if t.writer == nil || !t.writer.Enabled() {
+		return
+	}
+	errStr := ""
+	if err != nil {
+		errStr = err.Error()
+	}
+	_ = t.writer.Record(t.ctx, TraceEvent{
+		Phase:     "",
+		EventType: "task_failed",
+		TaskID:    taskID,
+		TaskName:  taskName,
+		Metadata: map[string]interface{}{
+			"error": errStr,
+		},
+	})
+}
+
+// WorkflowStateUpdated records a workflow state updated event.
+func (t *TraceOutputNotifier) WorkflowStateUpdated(status string, totalTasks int) {
+	if t.writer == nil || !t.writer.Enabled() {
+		return
+	}
+	_ = t.writer.Record(t.ctx, TraceEvent{
+		Phase:     "",
+		EventType: "workflow_state_updated",
+		Metadata: map[string]interface{}{
+			"status":      status,
+			"total_tasks": totalTasks,
+		},
+	})
+}
+
+// Close closes the underlying trace writer.
+func (t *TraceOutputNotifier) Close() error {
+	if t.writer != nil && t.writer.Enabled() {
+		t.writer.EndRun(t.ctx)
+	}
+	return nil
+}
