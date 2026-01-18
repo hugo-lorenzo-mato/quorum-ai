@@ -301,3 +301,60 @@ func (a *DAGAdapter) Build() (interface{}, error) {
 func (a *DAGAdapter) GetReadyTasks(completed map[core.TaskID]bool) []*core.Task {
 	return a.dag.GetReadyTasks(completed)
 }
+
+// ModeEnforcerAdapter wraps service.ModeEnforcer to satisfy ModeEnforcerInterface.
+type ModeEnforcerAdapter struct {
+	enforcer *service.ModeEnforcer
+}
+
+// NewModeEnforcerAdapter creates a new mode enforcer adapter.
+func NewModeEnforcerAdapter(enforcer *service.ModeEnforcer) *ModeEnforcerAdapter {
+	if enforcer == nil {
+		return nil
+	}
+	return &ModeEnforcerAdapter{enforcer: enforcer}
+}
+
+// CanExecute implements ModeEnforcerInterface.
+func (a *ModeEnforcerAdapter) CanExecute(ctx context.Context, op ModeOperation) error {
+	if a.enforcer == nil {
+		return nil
+	}
+
+	serviceOp := service.Operation{
+		Name:                 op.Name,
+		Type:                 service.OperationType(op.Type),
+		Tool:                 op.Tool,
+		HasSideEffects:       op.HasSideEffects,
+		RequiresConfirmation: op.RequiresConfirmation,
+		EstimatedCost:        op.EstimatedCost,
+		InWorkspace:          op.InWorkspace,
+		AllowedInSandbox:     op.AllowedInSandbox,
+		IsDestructive:        op.IsDestructive,
+	}
+
+	return a.enforcer.CanExecute(ctx, serviceOp)
+}
+
+// RecordCost implements ModeEnforcerInterface.
+func (a *ModeEnforcerAdapter) RecordCost(cost float64) {
+	if a.enforcer != nil {
+		a.enforcer.RecordCost(cost)
+	}
+}
+
+// IsSandboxed implements ModeEnforcerInterface.
+func (a *ModeEnforcerAdapter) IsSandboxed() bool {
+	if a.enforcer == nil {
+		return false
+	}
+	return a.enforcer.Mode().Sandbox
+}
+
+// IsDryRun implements ModeEnforcerInterface.
+func (a *ModeEnforcerAdapter) IsDryRun() bool {
+	if a.enforcer == nil {
+		return false
+	}
+	return a.enforcer.Mode().DryRun
+}

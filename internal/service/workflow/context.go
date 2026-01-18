@@ -46,17 +46,44 @@ func (n NopOutputNotifier) WorkflowStateUpdated(_ *core.WorkflowState)  {}
 // It encapsulates the runtime state and dependencies needed
 // by all phase runners.
 type Context struct {
-	mu         sync.RWMutex // protects State during concurrent access
-	State      *core.WorkflowState
-	Agents     core.AgentRegistry
-	Prompts    PromptRenderer
-	Checkpoint CheckpointCreator
-	Retry      RetryExecutor
-	RateLimits RateLimiterGetter
-	Worktrees  WorktreeManager
-	Logger     *logging.Logger
-	Config     *Config
-	Output     OutputNotifier
+	mu           sync.RWMutex // protects State during concurrent access
+	State        *core.WorkflowState
+	Agents       core.AgentRegistry
+	Prompts      PromptRenderer
+	Checkpoint   CheckpointCreator
+	Retry        RetryExecutor
+	RateLimits   RateLimiterGetter
+	Worktrees    WorktreeManager
+	Logger       *logging.Logger
+	Config       *Config
+	Output       OutputNotifier
+	ModeEnforcer ModeEnforcerInterface
+}
+
+// ModeEnforcerInterface provides mode enforcement capabilities.
+// This interface wraps service.ModeEnforcer to avoid circular imports.
+type ModeEnforcerInterface interface {
+	// CanExecute checks if an operation can be executed.
+	CanExecute(ctx context.Context, op ModeOperation) error
+	// RecordCost records cost for an operation.
+	RecordCost(cost float64)
+	// IsSandboxed returns whether sandbox mode is enabled.
+	IsSandboxed() bool
+	// IsDryRun returns whether dry-run mode is enabled.
+	IsDryRun() bool
+}
+
+// ModeOperation represents an operation to validate.
+type ModeOperation struct {
+	Name                 string
+	Type                 string // llm, file_read, file_write, git, network, shell
+	Tool                 string
+	HasSideEffects       bool
+	RequiresConfirmation bool
+	EstimatedCost        float64
+	InWorkspace          bool
+	AllowedInSandbox     bool
+	IsDestructive        bool
 }
 
 // Config holds workflow configuration.

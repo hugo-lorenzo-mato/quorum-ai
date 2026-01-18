@@ -107,6 +107,7 @@ type Runner struct {
 	worktrees      WorktreeManager
 	logger         *logging.Logger
 	output         OutputNotifier
+	modeEnforcer   ModeEnforcerInterface
 }
 
 // RunnerDeps holds dependencies for creating a Runner.
@@ -127,6 +128,7 @@ type RunnerDeps struct {
 	Worktrees      WorktreeManager
 	Logger         *logging.Logger
 	Output         OutputNotifier
+	ModeEnforcer   ModeEnforcerInterface
 }
 
 // NewRunner creates a new workflow runner with all dependencies.
@@ -157,6 +159,7 @@ func NewRunner(deps RunnerDeps) *Runner {
 		worktrees:      deps.Worktrees,
 		logger:         deps.Logger,
 		output:         deps.Output,
+		modeEnforcer:   deps.ModeEnforcer,
 	}
 }
 
@@ -310,15 +313,16 @@ func (r *Runner) initializeState(prompt string) *core.WorkflowState {
 // createContext creates a workflow context for phase runners.
 func (r *Runner) createContext(state *core.WorkflowState) *Context {
 	return &Context{
-		State:      state,
-		Agents:     r.agents,
-		Prompts:    r.prompts,
-		Checkpoint: r.checkpoint,
-		Retry:      r.retry,
-		RateLimits: r.rateLimits,
-		Worktrees:  r.worktrees,
-		Logger:     r.logger,
-		Output:     r.output,
+		State:        state,
+		Agents:       r.agents,
+		Prompts:      r.prompts,
+		Checkpoint:   r.checkpoint,
+		Retry:        r.retry,
+		RateLimits:   r.rateLimits,
+		Worktrees:    r.worktrees,
+		Logger:       r.logger,
+		Output:       r.output,
+		ModeEnforcer: r.modeEnforcer,
 		Config: &Config{
 			DryRun:             r.config.DryRun,
 			Sandbox:            r.config.Sandbox,

@@ -1,11 +1,114 @@
 package workflow
 
 import (
+	"context"
+	"errors"
+	"strings"
 	"testing"
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/logging"
 )
+
+// mockModeEnforcer implements ModeEnforcerInterface for testing.
+type mockModeEnforcer struct {
+	sandboxed bool
+	dryRun    bool
+	blocked   bool
+}
+
+func (m *mockModeEnforcer) CanExecute(_ context.Context, _ ModeOperation) error {
+	if m.blocked {
+		return errors.New("blocked by mode enforcer")
+	}
+	return nil
+}
+
+func (m *mockModeEnforcer) RecordCost(_ float64) {}
+
+func (m *mockModeEnforcer) IsSandboxed() bool { return m.sandboxed }
+func (m *mockModeEnforcer) IsDryRun() bool    { return m.dryRun }
+
+func TestExecutor_ModeEnforcerBlocks(t *testing.T) {
+	// Create context with blocking mode enforcer
+	wctx := &Context{
+		State: &core.WorkflowState{
+			Tasks: map[core.TaskID]*core.TaskState{
+				"task-1": {ID: "task-1", Status: core.TaskStatusPending},
+			},
+		},
+		ModeEnforcer: &mockModeEnforcer{blocked: true},
+		Config:       &Config{},
+		Logger:       logging.NewNop(),
+	}
+
+	executor := &Executor{}
+	task := &core.Task{ID: "task-1", Name: "Test Task"}
+
+	err := executor.executeTask(context.Background(), wctx, task, false)
+	if err == nil {
+		t.Error("Expected error from mode enforcer, got nil")
+	}
+	if !strings.Contains(err.Error(), "mode enforcer blocked") {
+		t.Errorf("Expected mode enforcer error, got: %v", err)
+	}
+}
+
+func TestExecutor_ModeEnforcerAllows(t *testing.T) {
+	// Create context with permissive mode enforcer
+	wctx := &Context{
+		State: &core.WorkflowState{
+			Tasks: map[core.TaskID]*core.TaskState{
+				"task-1": {ID: "task-1", Status: core.TaskStatusPending},
+			},
+		},
+		ModeEnforcer: &mockModeEnforcer{blocked: false},
+		Config:       &Config{DryRun: true}, // Dry run to avoid actual execution
+		Logger:       logging.NewNop(),
+		Checkpoint:   &mockCheckpointCreator{},
+		Output:       NopOutputNotifier{},
+	}
+
+	executor := &Executor{}
+	task := &core.Task{ID: "task-1", Name: "Test Task"}
+
+	// In dry-run mode, executeTask should complete without error
+	// (it just marks the task as completed without actual execution)
+	err := executor.executeTask(context.Background(), wctx, task, false)
+	if err != nil {
+		t.Errorf("Expected no error from permissive mode enforcer, got: %v", err)
+	}
+
+	// Verify task was marked completed
+	if wctx.State.Tasks["task-1"].Status != core.TaskStatusCompleted {
+		t.Errorf("Expected task status to be completed, got: %v", wctx.State.Tasks["task-1"].Status)
+	}
+}
+
+func TestExecutor_NilModeEnforcer(t *testing.T) {
+	// Create context without mode enforcer (nil)
+	wctx := &Context{
+		State: &core.WorkflowState{
+			Tasks: map[core.TaskID]*core.TaskState{
+				"task-1": {ID: "task-1", Status: core.TaskStatusPending},
+			},
+		},
+		ModeEnforcer: nil, // No mode enforcer
+		Config:       &Config{DryRun: true},
+		Logger:       logging.NewNop(),
+		Checkpoint:   &mockCheckpointCreator{},
+		Output:       NopOutputNotifier{},
+	}
+
+	executor := &Executor{}
+	task := &core.Task{ID: "task-1", Name: "Test Task"}
+
+	// Should work without mode enforcer
+	err := executor.executeTask(context.Background(), wctx, task, false)
+	if err != nil {
+		t.Errorf("Expected no error with nil mode enforcer, got: %v", err)
+	}
+}
 
 func TestCostLimitEnforcement(t *testing.T) {
 	t.Run("task exceeds cost limit", func(t *testing.T) {

@@ -321,6 +321,15 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 		outputNotifier = baseNotifier
 	}
 
+	// Create mode enforcer from config
+	modeEnforcer := service.NewModeEnforcer(service.ExecutionMode{
+		DryRun:      runnerConfig.DryRun,
+		Sandbox:     runnerConfig.Sandbox,
+		DeniedTools: runnerConfig.DenyTools,
+		MaxCost:     runnerConfig.MaxCostPerWorkflow,
+	})
+	modeEnforcerAdapter := workflow.NewModeEnforcerAdapter(modeEnforcer)
+
 	// Create workflow runner using modular architecture (ADR-0005)
 	runner := workflow.NewRunner(workflow.RunnerDeps{
 		Config:         runnerConfig,
@@ -336,6 +345,7 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 		Worktrees:      worktreeManager,
 		Logger:         logger,
 		Output:         outputNotifier,
+		ModeEnforcer:   modeEnforcerAdapter,
 	})
 
 	// Resume or run new workflow

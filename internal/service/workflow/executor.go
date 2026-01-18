@@ -109,6 +109,27 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 		"task_name", task.Name,
 	)
 
+	// Enforce mode restrictions before execution
+	if wctx.ModeEnforcer != nil {
+		op := ModeOperation{
+			Name:           task.Name,
+			Type:           "llm",
+			Tool:           task.CLI,
+			HasSideEffects: !wctx.Config.DryRun,
+			InWorkspace:    true,
+			// In sandbox mode, LLM operations are allowed but shell commands aren't
+			AllowedInSandbox: true,
+		}
+
+		if err := wctx.ModeEnforcer.CanExecute(ctx, op); err != nil {
+			wctx.Logger.Warn("task blocked by mode enforcer",
+				"task_id", task.ID,
+				"error", err,
+			)
+			return fmt.Errorf("mode enforcer blocked task: %w", err)
+		}
+	}
+
 	// Update task state (with lock for concurrent access)
 	wctx.Lock()
 	taskState := wctx.State.Tasks[task.ID]
@@ -289,6 +310,11 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 		wctx.State.Metrics.TotalCostUSD += result.CostUSD
 	}
 	wctx.Unlock()
+
+	// Record cost with ModeEnforcer
+	if wctx.ModeEnforcer != nil {
+		wctx.ModeEnforcer.RecordCost(result.CostUSD)
+	}
 
 	// Check cost limits
 	if wctx.Config != nil {
