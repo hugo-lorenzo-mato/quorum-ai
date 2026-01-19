@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/events"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/logging"
 	"golang.org/x/sync/errgroup"
 )
@@ -20,18 +21,26 @@ var idCounter uint64
 
 // WorkflowRunner orchestrates the complete workflow execution.
 type WorkflowRunner struct {
-	config     *WorkflowRunnerConfig
-	state      core.StateManager
-	agents     core.AgentRegistry
-	dag        *DAGBuilder
-	consensus  *ConsensusChecker
-	prompts    *PromptRenderer
-	checkpoint *CheckpointManager
-	retry      *RetryPolicy
-	rateLimits *RateLimiterRegistry
-	logger     *logging.Logger
-	trace      TraceWriter
-	traceID    string
+	config       *WorkflowRunnerConfig
+	state        core.StateManager
+	agents       core.AgentRegistry
+	dag          *DAGBuilder
+	consensus    *ConsensusChecker
+	prompts      *PromptRenderer
+	checkpoint   *CheckpointManager
+	retry        *RetryPolicy
+	rateLimits   *RateLimiterRegistry
+	logger       *logging.Logger
+	trace        TraceWriter
+	traceID      string
+	eventBus     EventPublisher
+	workflowIDMu sync.RWMutex
+	currentWfID  string
+}
+
+// EventPublisher interface for publishing events (subset of EventBus).
+type EventPublisher interface {
+	Publish(event interface{ EventType() string })
 }
 
 // WorkflowRunnerConfig holds workflow runner configuration.
@@ -118,9 +127,10 @@ func (w *WorkflowRunner) Run(ctx context.Context, prompt string) error {
 	defer func() { _ = w.state.ReleaseLock(ctx) }()
 
 	// Initialize state
+	wfID := generateWorkflowID()
 	state := &core.WorkflowState{
 		Version:      core.CurrentStateVersion,
-		WorkflowID:   core.WorkflowID(generateWorkflowID()),
+		WorkflowID:   core.WorkflowID(wfID),
 		Status:       core.WorkflowStatusRunning,
 		CurrentPhase: core.PhaseAnalyze,
 		Prompt:       prompt,
@@ -131,6 +141,11 @@ func (w *WorkflowRunner) Run(ctx context.Context, prompt string) error {
 		CreatedAt:    time.Now(),
 		UpdatedAt:    time.Now(),
 	}
+
+	// Store workflow ID for event publishing
+	w.workflowIDMu.Lock()
+	w.currentWfID = wfID
+	w.workflowIDMu.Unlock()
 
 	w.logger.Info("starting workflow",
 		"workflow_id", state.WorkflowID,
@@ -388,6 +403,9 @@ func (w *WorkflowRunner) runAnalysisWithAgent(ctx context.Context, state *core.W
 		return AnalysisOutput{}, fmt.Errorf("getting agent %s: %w", agentName, err)
 	}
 
+	// Set up event handler for streaming
+	w.setupAgentEventHandler(agent, agentName)
+
 	// Acquire rate limit
 	limiter := w.rateLimits.Get(agentName)
 	if err := limiter.Acquire(ctx); err != nil {
@@ -480,6 +498,9 @@ func (w *WorkflowRunner) runV2Critique(ctx context.Context, state *core.Workflow
 			)
 			continue
 		}
+
+		// Set up event handler for streaming
+		w.setupAgentEventHandler(agent, critiqueAgent)
 
 		// Acquire rate limit
 		limiter := w.rateLimits.Get(critiqueAgent)
@@ -587,6 +608,9 @@ func (w *WorkflowRunner) runV3Reconciliation(ctx context.Context, state *core.Wo
 	if err != nil {
 		return fmt.Errorf("getting V3 agent: %w", err)
 	}
+
+	// Set up event handler for streaming
+	w.setupAgentEventHandler(agent, v3AgentName)
 
 	// Acquire rate limit
 	limiter := w.rateLimits.Get(v3AgentName)
@@ -707,6 +731,9 @@ func (w *WorkflowRunner) runPlanPhase(ctx context.Context, state *core.WorkflowS
 	if err != nil {
 		return fmt.Errorf("getting plan agent: %w", err)
 	}
+
+	// Set up event handler for streaming
+	w.setupAgentEventHandler(agent, w.config.DefaultAgent)
 
 	// Acquire rate limit
 	limiter := w.rateLimits.Get(w.config.DefaultAgent)
@@ -932,6 +959,9 @@ func (w *WorkflowRunner) executeTask(ctx context.Context, state *core.WorkflowSt
 		taskState.Error = err.Error()
 		return err
 	}
+
+	// Set up event handler for streaming
+	w.setupAgentEventHandler(agent, agentName)
 
 	// Acquire rate limit
 	limiter := w.rateLimits.Get(agentName)
@@ -1217,6 +1247,9 @@ func (w *WorkflowRunner) consolidateAnalysis(ctx context.Context, state *core.Wo
 		)
 		return w.consolidateAnalysisFallback(ctx, state, outputs)
 	}
+
+	// Set up event handler for streaming
+	w.setupAgentEventHandler(agent, consolidatorAgent)
 
 	// Acquire rate limit
 	limiter := w.rateLimits.Get(consolidatorAgent)
@@ -1639,6 +1672,62 @@ func (w *WorkflowRunner) GetState(ctx context.Context) (*core.WorkflowState, err
 // SetDryRun enables or disables dry-run mode.
 func (w *WorkflowRunner) SetDryRun(enabled bool) {
 	w.config.DryRun = enabled
+}
+
+// SetEventBus sets the event bus for publishing agent streaming events.
+func (w *WorkflowRunner) SetEventBus(bus EventPublisher) {
+	w.eventBus = bus
+}
+
+// setupAgentEventHandler sets up streaming event handler for an agent.
+func (w *WorkflowRunner) setupAgentEventHandler(agent core.Agent, agentName string) {
+	if w.eventBus == nil {
+		return
+	}
+
+	// Check if agent supports streaming
+	streamable, ok := agent.(core.StreamingCapable)
+	if !ok {
+		return
+	}
+
+	// Create event handler that publishes to the event bus
+	handler := func(event core.AgentEvent) {
+		w.workflowIDMu.RLock()
+		wfID := w.currentWfID
+		w.workflowIDMu.RUnlock()
+
+		// Convert core.AgentEvent to events.AgentStreamEvent
+		streamEvent := w.convertAgentEvent(wfID, event)
+		w.eventBus.Publish(streamEvent)
+	}
+
+	streamable.SetEventHandler(handler)
+}
+
+// convertAgentEvent converts a core.AgentEvent to events.AgentStreamEvent.
+func (w *WorkflowRunner) convertAgentEvent(workflowID string, event core.AgentEvent) events.AgentStreamEvent {
+	var kind events.AgentEventType
+	switch event.Type {
+	case core.AgentEventStarted:
+		kind = events.AgentStarted
+	case core.AgentEventToolUse:
+		kind = events.AgentToolUse
+	case core.AgentEventThinking:
+		kind = events.AgentThinking
+	case core.AgentEventChunk:
+		kind = events.AgentChunk
+	case core.AgentEventProgress:
+		kind = events.AgentProgress
+	case core.AgentEventCompleted:
+		kind = events.AgentCompleted
+	case core.AgentEventError:
+		kind = events.AgentError
+	default:
+		kind = events.AgentProgress
+	}
+
+	return events.NewAgentStreamEvent(workflowID, kind, event.Agent, event.Message).WithData(event.Data)
 }
 
 // Validation methods

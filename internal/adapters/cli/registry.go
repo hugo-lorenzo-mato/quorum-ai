@@ -248,3 +248,33 @@ func defaultConfig(name string) AgentConfig {
 
 // Ensure Registry implements core.AgentRegistry
 var _ core.AgentRegistry = (*Registry)(nil)
+
+// LogCallbackSetter is implemented by agents that support real-time log streaming.
+type LogCallbackSetter interface {
+	SetLogCallback(cb LogCallback)
+}
+
+// SetLogCallback sets a log callback on all agents that support it.
+// The callback receives stderr lines in real-time during execution.
+func (r *Registry) SetLogCallback(cb LogCallback) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	for _, agent := range r.agents {
+		if setter, ok := agent.(LogCallbackSetter); ok {
+			setter.SetLogCallback(cb)
+		}
+	}
+}
+
+// SetLogCallbackForAgent sets a log callback on a specific agent.
+func (r *Registry) SetLogCallbackForAgent(name string, cb LogCallback) error {
+	agent, err := r.Get(name)
+	if err != nil {
+		return err
+	}
+	if setter, ok := agent.(LogCallbackSetter); ok {
+		setter.SetLogCallback(cb)
+	}
+	return nil
+}
