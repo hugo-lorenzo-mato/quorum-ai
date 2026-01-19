@@ -368,6 +368,7 @@ Tasks run in isolated environments:
 |----------|-------------|
 | [Configuration](docs/CONFIGURATION.md) | Complete configuration reference |
 | [Architecture](docs/ARCHITECTURE.md) | System design and layer responsibilities |
+| [Workflow Reports](docs/WORKFLOW_REPORTS.md) | Markdown report generation and analysis methodology |
 | [Vision](docs/vision/QUORUM-POC-VISION-v1.md) | POC goals, metrics, and success criteria |
 | [Roadmap](ROADMAP.md) | Planned features for future versions |
 | [Changelog](CHANGELOG.md) | Version history and changes |

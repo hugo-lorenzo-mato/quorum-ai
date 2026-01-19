@@ -13,6 +13,7 @@ import (
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/control"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/logging"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service/report"
 )
 
 // idCounter provides additional uniqueness for workflow IDs.
@@ -61,6 +62,8 @@ type RunnerConfig struct {
 	Optimizer OptimizerConfig
 	// Consolidator configures the analysis consolidation phase.
 	Consolidator ConsolidatorConfig
+	// Report configures the markdown report output.
+	Report report.Config
 }
 
 // ConsolidatorConfig configures the analysis consolidation phase.
@@ -86,6 +89,7 @@ func DefaultRunnerConfig() *RunnerConfig {
 			Agent: "claude",
 			Model: "",
 		},
+		Report: report.DefaultConfig(),
 	}
 }
 
@@ -191,6 +195,9 @@ func (r *Runner) Run(ctx context.Context, prompt string) error {
 		"workflow_id", workflowState.WorkflowID,
 		"prompt_length", len(prompt),
 	)
+	if r.output != nil {
+		r.output.Log("info", "workflow", fmt.Sprintf("Workflow started: %s", workflowState.WorkflowID))
+	}
 
 	// Save initial state
 	if err := r.state.Save(ctx, workflowState); err != nil {
@@ -230,6 +237,12 @@ func (r *Runner) Run(ctx context.Context, prompt string) error {
 		"duration", workflowState.Metrics.Duration,
 		"total_cost", workflowState.Metrics.TotalCostUSD,
 	)
+	if r.output != nil {
+		r.output.Log("success", "workflow", fmt.Sprintf("Workflow completed: %d tasks, $%.4f, %s",
+			len(workflowState.Tasks),
+			workflowState.Metrics.TotalCostUSD,
+			workflowState.Metrics.Duration.Round(time.Second)))
+	}
 
 	return r.state.Save(ctx, workflowState)
 }
@@ -266,6 +279,9 @@ func (r *Runner) Resume(ctx context.Context) error {
 		"task_id", resumePoint.TaskID,
 		"from_start", resumePoint.FromStart,
 	)
+	if r.output != nil {
+		r.output.Log("info", "workflow", fmt.Sprintf("Resuming workflow from %s phase", resumePoint.Phase))
+	}
 
 	wctx := r.createContext(workflowState)
 
@@ -303,6 +319,11 @@ func (r *Runner) Resume(ctx context.Context) error {
 		"duration", workflowState.Metrics.Duration,
 		"total_cost", workflowState.Metrics.TotalCostUSD,
 	)
+	if r.output != nil {
+		r.output.Log("success", "workflow", fmt.Sprintf("Resumed workflow completed: %d tasks, $%.4f",
+			len(workflowState.Tasks),
+			workflowState.Metrics.TotalCostUSD))
+	}
 
 	return r.state.Save(ctx, workflowState)
 }
@@ -326,6 +347,9 @@ func (r *Runner) initializeState(prompt string) *core.WorkflowState {
 
 // createContext creates a workflow context for phase runners.
 func (r *Runner) createContext(state *core.WorkflowState) *Context {
+	// Create report writer for this workflow execution
+	reportWriter := report.NewWorkflowReportWriter(r.config.Report, string(state.WorkflowID))
+
 	return &Context{
 		State:        state,
 		Agents:       r.agents,
@@ -338,6 +362,7 @@ func (r *Runner) createContext(state *core.WorkflowState) *Context {
 		Output:       r.output,
 		ModeEnforcer: r.modeEnforcer,
 		Control:      r.control,
+		Report:       reportWriter,
 		Config: &Config{
 			DryRun:             r.config.DryRun,
 			Sandbox:            r.config.Sandbox,
@@ -362,6 +387,9 @@ func (r *Runner) handleError(ctx context.Context, state *core.WorkflowState, err
 		"phase", state.CurrentPhase,
 		"error", err,
 	)
+	if r.output != nil {
+		r.output.Log("error", "workflow", fmt.Sprintf("Workflow failed in %s: %s", state.CurrentPhase, err.Error()))
+	}
 
 	state.Status = core.WorkflowStatusFailed
 	state.UpdatedAt = time.Now()
@@ -389,6 +417,76 @@ func (r *Runner) validateRunInput(prompt string) error {
 		return core.ErrValidation(core.CodeNoAgents, "no agents configured")
 	}
 	return nil
+}
+
+// Analyze executes only the analyze phase (with optional optimization).
+// This is useful when you want to get multi-agent analysis without planning or execution.
+func (r *Runner) Analyze(ctx context.Context, prompt string) error {
+	// Validate input
+	if err := r.validateRunInput(prompt); err != nil {
+		return err
+	}
+
+	// Apply timeout
+	ctx, cancel := context.WithTimeout(ctx, r.config.Timeout)
+	defer cancel()
+
+	// Acquire lock
+	if err := r.state.AcquireLock(ctx); err != nil {
+		return fmt.Errorf("acquiring lock: %w", err)
+	}
+	defer func() { _ = r.state.ReleaseLock(ctx) }()
+
+	// Initialize state
+	workflowState := r.initializeState(prompt)
+
+	r.logger.Info("starting analyze-only workflow",
+		"workflow_id", workflowState.WorkflowID,
+		"prompt_length", len(prompt),
+	)
+	if r.output != nil {
+		r.output.Log("info", "workflow", fmt.Sprintf("Analyze-only workflow started: %s", workflowState.WorkflowID))
+	}
+
+	// Save initial state
+	if err := r.state.Save(ctx, workflowState); err != nil {
+		return fmt.Errorf("saving initial state: %w", err)
+	}
+
+	// Create workflow context for phase runners
+	wctx := r.createContext(workflowState)
+
+	// Run optimization phase (if enabled)
+	if err := r.optimizer.Run(ctx, wctx); err != nil {
+		return r.handleError(ctx, workflowState, err)
+	}
+
+	// Run analyze phase
+	if err := r.analyzer.Run(ctx, wctx); err != nil {
+		return r.handleError(ctx, workflowState, err)
+	}
+
+	// Finalize metrics
+	r.finalizeMetrics(workflowState)
+
+	// Mark as completed (analyze phase done, ready for plan)
+	workflowState.Status = core.WorkflowStatusCompleted
+	workflowState.CurrentPhase = core.PhasePlan // Ready for next phase
+	workflowState.UpdatedAt = time.Now()
+
+	r.logger.Info("analyze phase completed",
+		"workflow_id", workflowState.WorkflowID,
+		"duration", workflowState.Metrics.Duration,
+		"total_cost", workflowState.Metrics.TotalCostUSD,
+		"consensus_score", workflowState.Metrics.ConsensusScore,
+	)
+	if r.output != nil {
+		r.output.Log("success", "workflow", fmt.Sprintf("Analysis completed: consensus %.1f%%, $%.4f",
+			workflowState.Metrics.ConsensusScore*100,
+			workflowState.Metrics.TotalCostUSD))
+	}
+
+	return r.state.Save(ctx, workflowState)
 }
 
 // GetState returns the current workflow state.

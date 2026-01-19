@@ -10,12 +10,13 @@ import (
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/control"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/logging"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service/report"
 )
 
 // OutputNotifier provides real-time updates to the UI/output layer.
 // This interface is a subset of tui.Output, defined here to avoid circular imports.
 // NOTE: This intentionally has fewer methods than tui.Output.
-// Missing methods (WorkflowStarted, WorkflowCompleted, WorkflowFailed, Log) are
+// Missing methods (WorkflowStarted, WorkflowCompleted, WorkflowFailed) are
 // handled directly by the CLI layer, not by the workflow runner.
 type OutputNotifier interface {
 	// PhaseStarted is called when a phase begins.
@@ -31,6 +32,10 @@ type OutputNotifier interface {
 	// WorkflowStateUpdated is called when the workflow state changes (e.g., tasks created).
 	// NOTE: This is semantically different from WorkflowCompleted.
 	WorkflowStateUpdated(state *core.WorkflowState)
+	// Log sends a log message to the UI.
+	// level can be "info", "warn", "error", "success", "debug".
+	// source identifies the origin (e.g., "workflow", "optimizer", "analyzer", "executor").
+	Log(level, source, message string)
 }
 
 // NopOutputNotifier is a no-op implementation of OutputNotifier.
@@ -42,6 +47,7 @@ func (n NopOutputNotifier) TaskCompleted(_ *core.Task, _ time.Duration) {}
 func (n NopOutputNotifier) TaskFailed(_ *core.Task, _ error)            {}
 func (n NopOutputNotifier) TaskSkipped(_ *core.Task, _ string)          {}
 func (n NopOutputNotifier) WorkflowStateUpdated(_ *core.WorkflowState)  {}
+func (n NopOutputNotifier) Log(_, _, _ string)                          {}
 
 // Context provides shared resources for workflow phases.
 // It encapsulates the runtime state and dependencies needed
@@ -60,6 +66,7 @@ type Context struct {
 	Output       OutputNotifier
 	ModeEnforcer ModeEnforcerInterface
 	Control      *control.ControlPlane
+	Report       *report.WorkflowReportWriter // Writes analysis/plan/execute reports to markdown
 }
 
 // ModeEnforcerInterface provides mode enforcement capabilities.

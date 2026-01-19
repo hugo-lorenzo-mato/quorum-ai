@@ -43,6 +43,7 @@ func (e *Executor) Run(ctx context.Context, wctx *Context) error {
 	wctx.State.CurrentPhase = core.PhaseExecute
 	if wctx.Output != nil {
 		wctx.Output.PhaseStarted(core.PhaseExecute)
+		wctx.Output.Log("info", "executor", fmt.Sprintf("Starting execution phase with %d tasks", len(wctx.State.Tasks)))
 	}
 	if err := wctx.Checkpoint.PhaseCheckpoint(wctx.State, core.PhaseExecute, false); err != nil {
 		wctx.Logger.Warn("failed to create phase checkpoint", "error", err)
@@ -79,6 +80,9 @@ func (e *Executor) Run(ctx context.Context, wctx *Context) error {
 			"completed_count", len(completed),
 			"total_count", len(wctx.State.Tasks),
 		)
+		if wctx.Output != nil {
+			wctx.Output.Log("info", "executor", fmt.Sprintf("Executing batch: %d ready, %d/%d completed", len(ready), len(completed), len(wctx.State.Tasks)))
+		}
 
 		// Execute ready tasks in parallel
 		useWorktrees := shouldUseWorktrees(wctx.Config.WorktreeMode, len(ready))
@@ -111,6 +115,10 @@ func (e *Executor) Run(ctx context.Context, wctx *Context) error {
 		wctx.Logger.Warn("failed to create phase complete checkpoint", "error", err)
 	}
 
+	if wctx.Output != nil {
+		wctx.Output.Log("success", "executor", fmt.Sprintf("Execution phase completed: %d tasks", len(wctx.State.Tasks)))
+	}
+
 	return nil
 }
 
@@ -131,6 +139,9 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 		"task_id", task.ID,
 		"task_name", task.Name,
 	)
+	if wctx.Output != nil {
+		wctx.Output.Log("info", "executor", fmt.Sprintf("Task started: %s", task.Name))
+	}
 
 	// Enforce mode restrictions before execution
 	if wctx.ModeEnforcer != nil {
@@ -320,6 +331,10 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 		wctx.Logger.Warn("failed to create task complete checkpoint", "error", err)
 	}
 
+	if wctx.Output != nil {
+		wctx.Output.Log("success", "executor", fmt.Sprintf("Task completed: %s ($%.4f)", task.Name, result.CostUSD))
+	}
+
 	return nil
 }
 
@@ -329,6 +344,9 @@ func (e *Executor) setTaskFailed(wctx *Context, taskState *core.TaskState, err e
 	taskState.Status = core.TaskStatusFailed
 	taskState.Error = err.Error()
 	wctx.Unlock()
+	if wctx.Output != nil {
+		wctx.Output.Log("error", "executor", fmt.Sprintf("Task failed: %s", err.Error()))
+	}
 }
 
 // checkCostLimits verifies task and workflow cost limits.

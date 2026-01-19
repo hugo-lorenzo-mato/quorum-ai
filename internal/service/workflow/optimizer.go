@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service/report"
 )
 
 // OptimizerConfig configures the optimizer phase.
@@ -29,9 +30,19 @@ func NewOptimizer(config OptimizerConfig) *Optimizer {
 
 // Run executes the optimize phase.
 func (o *Optimizer) Run(ctx context.Context, wctx *Context) error {
+	// Write original prompt report (always, even if optimization is disabled)
+	if wctx.Report != nil {
+		if reportErr := wctx.Report.WriteOriginalPrompt(wctx.State.Prompt); reportErr != nil {
+			wctx.Logger.Warn("failed to write original prompt report", "error", reportErr)
+		}
+	}
+
 	// Skip if optimization is disabled
 	if !o.config.Enabled {
 		wctx.Logger.Info("prompt optimization disabled, skipping phase")
+		if wctx.Output != nil {
+			wctx.Output.Log("info", "optimizer", "Optimization disabled, skipping phase")
+		}
 		return nil
 	}
 
@@ -40,6 +51,7 @@ func (o *Optimizer) Run(ctx context.Context, wctx *Context) error {
 	wctx.State.CurrentPhase = core.PhaseOptimize
 	if wctx.Output != nil {
 		wctx.Output.PhaseStarted(core.PhaseOptimize)
+		wctx.Output.Log("info", "optimizer", "Starting prompt optimization phase")
 	}
 	if err := wctx.Checkpoint.PhaseCheckpoint(wctx.State, core.PhaseOptimize, false); err != nil {
 		wctx.Logger.Warn("failed to create phase checkpoint", "error", err)
@@ -48,6 +60,9 @@ func (o *Optimizer) Run(ctx context.Context, wctx *Context) error {
 	// Skip actual optimization in dry-run mode
 	if wctx.Config.DryRun {
 		wctx.Logger.Info("dry-run mode: skipping actual optimization")
+		if wctx.Output != nil {
+			wctx.Output.Log("info", "optimizer", "Dry-run mode: using original prompt")
+		}
 		wctx.State.OptimizedPrompt = wctx.State.Prompt // Use original as-is
 		return wctx.Checkpoint.PhaseCheckpoint(wctx.State, core.PhaseOptimize, true)
 	}
@@ -77,14 +92,23 @@ func (o *Optimizer) Run(ctx context.Context, wctx *Context) error {
 		return fmt.Errorf("rendering optimize prompt: %w", err)
 	}
 
+	// Resolve model
+	model := o.config.Model
+	if model == "" {
+		model = ResolvePhaseModel(wctx.Config, agentName, core.PhaseOptimize, "")
+	}
+
+	if wctx.Output != nil {
+		wctx.Output.Log("info", "optimizer", fmt.Sprintf("Optimizing prompt with %s", agentName))
+	}
+
+	// Track start time
+	startTime := time.Now()
+
 	// Execute optimization
 	var result *core.ExecuteResult
 	err = wctx.Retry.Execute(func() error {
 		var execErr error
-		model := o.config.Model
-		if model == "" {
-			model = ResolvePhaseModel(wctx.Config, agentName, core.PhaseOptimize, "")
-		}
 		result, execErr = agent.Execute(ctx, core.ExecuteOptions{
 			Prompt:  prompt,
 			Format:  core.OutputFormatJSON,
@@ -96,15 +120,23 @@ func (o *Optimizer) Run(ctx context.Context, wctx *Context) error {
 		return execErr
 	})
 
+	durationMS := time.Since(startTime).Milliseconds()
+
 	if err != nil {
 		// On error, fall back to original prompt
 		wctx.Logger.Warn("prompt optimization failed, using original", "error", err)
+		if wctx.Output != nil {
+			wctx.Output.Log("warn", "optimizer", "Optimization failed, using original prompt")
+		}
 		wctx.State.OptimizedPrompt = wctx.State.Prompt
 	} else {
 		// Parse the optimized prompt
 		optimized, parseErr := parseOptimizationResult(result.Output)
 		if parseErr != nil {
 			wctx.Logger.Warn("failed to parse optimization result, using original", "error", parseErr)
+			if wctx.Output != nil {
+				wctx.Output.Log("warn", "optimizer", "Failed to parse result, using original prompt")
+			}
 			wctx.State.OptimizedPrompt = wctx.State.Prompt
 		} else {
 			wctx.State.OptimizedPrompt = optimized
@@ -112,6 +144,35 @@ func (o *Optimizer) Run(ctx context.Context, wctx *Context) error {
 				"original_length", len(wctx.State.Prompt),
 				"optimized_length", len(optimized),
 			)
+			if wctx.Output != nil {
+				wctx.Output.Log("success", "optimizer", fmt.Sprintf("Prompt optimized: %d → %d chars", len(wctx.State.Prompt), len(optimized)))
+			}
+
+			// Write optimized prompt report
+			if wctx.Report != nil {
+				originalLen := len(wctx.State.Prompt)
+				optimizedLen := len(optimized)
+				var improvementRatio float64
+				if originalLen > 0 {
+					improvementRatio = float64(originalLen-optimizedLen) / float64(originalLen)
+				}
+				if reportErr := wctx.Report.WriteOptimizedPrompt(
+					wctx.State.Prompt,
+					optimized,
+					report.PromptMetrics{
+						OriginalCharCount:  originalLen,
+						OptimizedCharCount: optimizedLen,
+						ImprovementRatio:   improvementRatio,
+						TokensUsed:         result.TokensIn + result.TokensOut,
+						CostUSD:            result.CostUSD,
+						DurationMS:         durationMS,
+						OptimizerAgent:     agentName,
+						OptimizerModel:     model,
+					},
+				); reportErr != nil {
+					wctx.Logger.Warn("failed to write optimized prompt report", "error", reportErr)
+				}
+			}
 		}
 	}
 

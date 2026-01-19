@@ -43,6 +43,7 @@ func (p *Planner) Run(ctx context.Context, wctx *Context) error {
 	wctx.State.CurrentPhase = core.PhasePlan
 	if wctx.Output != nil {
 		wctx.Output.PhaseStarted(core.PhasePlan)
+		wctx.Output.Log("info", "planner", "Starting task planning phase")
 	}
 	if err := wctx.Checkpoint.PhaseCheckpoint(wctx.State, core.PhasePlan, false); err != nil {
 		wctx.Logger.Warn("failed to create phase checkpoint", "error", err)
@@ -93,9 +94,16 @@ func (p *Planner) Run(ctx context.Context, wctx *Context) error {
 		return err
 	}
 
+	if wctx.Output != nil {
+		wctx.Output.Log("info", "planner", fmt.Sprintf("Generating execution plan with %s", wctx.Config.DefaultAgent))
+	}
+
 	// Parse plan into tasks
 	tasks, err := p.parsePlan(wctx, result.Output)
 	if err != nil {
+		if wctx.Output != nil {
+			wctx.Output.Log("error", "planner", fmt.Sprintf("Failed to parse plan: %s", err.Error()))
+		}
 		return fmt.Errorf("parsing plan: %w", err)
 	}
 
@@ -134,6 +142,9 @@ func (p *Planner) Run(ctx context.Context, wctx *Context) error {
 	wctx.Logger.Info("plan phase completed",
 		"task_count", len(tasks),
 	)
+	if wctx.Output != nil {
+		wctx.Output.Log("success", "planner", fmt.Sprintf("Planning completed: %d tasks created", len(tasks)))
+	}
 
 	if err := wctx.Checkpoint.PhaseCheckpoint(wctx.State, core.PhasePlan, true); err != nil {
 		wctx.Logger.Warn("failed to create phase complete checkpoint", "error", err)

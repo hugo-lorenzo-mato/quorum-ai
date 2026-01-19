@@ -9,16 +9,22 @@ import (
 	"time"
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service/report"
 	"golang.org/x/sync/errgroup"
 )
 
 // AnalysisOutput represents output from an analysis agent.
 type AnalysisOutput struct {
 	AgentName       string
+	Model           string
 	RawOutput       string
 	Claims          []string
 	Risks           []string
 	Recommendations []string
+	TokensIn        int
+	TokensOut       int
+	CostUSD         float64
+	DurationMS      int64
 }
 
 // ConsensusEvaluator evaluates consensus between analysis outputs.
@@ -48,6 +54,7 @@ func (a *Analyzer) Run(ctx context.Context, wctx *Context) error {
 	wctx.State.CurrentPhase = core.PhaseAnalyze
 	if wctx.Output != nil {
 		wctx.Output.PhaseStarted(core.PhaseAnalyze)
+		wctx.Output.Log("info", "analyzer", "Starting multi-agent analysis phase")
 	}
 	if err := wctx.Checkpoint.PhaseCheckpoint(wctx.State, core.PhaseAnalyze, false); err != nil {
 		wctx.Logger.Warn("failed to create phase checkpoint", "error", err)
@@ -77,9 +84,28 @@ func (a *Analyzer) Run(ctx context.Context, wctx *Context) error {
 		"needs_escalation", consensusResult.NeedsV3,
 		"needs_human_review", consensusResult.NeedsHumanReview,
 	)
+	if wctx.Output != nil {
+		statusIcon := "✓"
+		level := "success"
+		if consensusResult.NeedsV3 {
+			statusIcon = "⚠"
+			level = "warn"
+		}
+		wctx.Output.Log(level, "analyzer", fmt.Sprintf("%s V1 Consensus: %.1f%% (threshold: %.1f%%)", statusIcon, consensusResult.Score*100, a.consensus.Threshold()*100))
+	}
+
+	// Write V1 consensus report
+	if wctx.Report != nil {
+		if reportErr := wctx.Report.WriteConsensusReport(a.buildConsensusData(consensusResult, v1Outputs), "v1"); reportErr != nil {
+			wctx.Logger.Warn("failed to write V1 consensus report", "error", reportErr)
+		}
+	}
 
 	// V2/V3 escalation: If consensus below approval threshold
 	if consensusResult.NeedsV3 {
+		if wctx.Output != nil {
+			wctx.Output.Log("info", "analyzer", "Consensus below threshold, escalating to V2 critique")
+		}
 		v2Outputs, err := a.runV2Critique(ctx, wctx, v1Outputs)
 		if err != nil {
 			return fmt.Errorf("V2 critique: %w", err)
@@ -105,9 +131,22 @@ func (a *Analyzer) Run(ctx context.Context, wctx *Context) error {
 			"needs_v3", consensusResult.Score < a.consensus.V2Threshold(),
 			"needs_human_review", consensusResult.NeedsHumanReview,
 		)
+		if wctx.Output != nil {
+			wctx.Output.Log("info", "analyzer", fmt.Sprintf("V2 Consensus: %.1f%% (V2 threshold: %.1f%%)", consensusResult.Score*100, a.consensus.V2Threshold()*100))
+		}
+
+		// Write V2 consensus report
+		if wctx.Report != nil {
+			if reportErr := wctx.Report.WriteConsensusReport(a.buildConsensusData(consensusResult, allOutputs), "v2"); reportErr != nil {
+				wctx.Logger.Warn("failed to write V2 consensus report", "error", reportErr)
+			}
+		}
 
 		// V3: If score below V2 threshold, run reconciliation
 		if consensusResult.Score < a.consensus.V2Threshold() {
+			if wctx.Output != nil {
+				wctx.Output.Log("info", "analyzer", "Score still below threshold, escalating to V3 reconciliation")
+			}
 			if err := a.runV3Reconciliation(ctx, wctx, v1Outputs, v2Outputs, consensusResult); err != nil {
 				return fmt.Errorf("V3 reconciliation: %w", err)
 			}
@@ -124,12 +163,21 @@ func (a *Analyzer) Run(ctx context.Context, wctx *Context) error {
 			"score", consensusResult.Score,
 			"human_threshold", a.consensus.HumanThreshold(),
 		)
+		if wctx.Output != nil {
+			wctx.Output.Log("error", "analyzer", fmt.Sprintf("Human review required: consensus %.1f%% below threshold %.1f%%", consensusResult.Score*100, a.consensus.HumanThreshold()*100))
+		}
 		return core.ErrHumanReviewRequired(consensusResult.Score, a.consensus.HumanThreshold())
 	}
 
 	// Consolidate analysis using LLM
+	if wctx.Output != nil {
+		wctx.Output.Log("info", "analyzer", "Consolidating analysis results")
+	}
 	if err := a.consolidateAnalysis(ctx, wctx, v1Outputs); err != nil {
 		return fmt.Errorf("consolidating analysis: %w", err)
+	}
+	if wctx.Output != nil {
+		wctx.Output.Log("success", "analyzer", "Analysis phase completed successfully")
 	}
 
 	if err := wctx.Checkpoint.PhaseCheckpoint(wctx.State, core.PhaseAnalyze, true); err != nil {
@@ -150,6 +198,9 @@ func (a *Analyzer) runV1Analysis(ctx context.Context, wctx *Context) ([]Analysis
 	wctx.Logger.Info("running V1 analysis",
 		"agents", strings.Join(agentNames, ", "),
 	)
+	if wctx.Output != nil {
+		wctx.Output.Log("info", "analyzer", fmt.Sprintf("V1 Analysis: querying %d agents (%s)", len(agentNames), strings.Join(agentNames, ", ")))
+	}
 
 	var mu sync.Mutex
 	outputs := make([]AnalysisOutput, 0, len(agentNames))
@@ -202,6 +253,12 @@ func (a *Analyzer) runAnalysisWithAgent(ctx context.Context, wctx *Context, agen
 		return AnalysisOutput{}, fmt.Errorf("rendering prompt: %w", err)
 	}
 
+	// Resolve model
+	model := ResolvePhaseModel(wctx.Config, agentName, core.PhaseAnalyze, "")
+
+	// Track start time
+	startTime := time.Now()
+
 	// Execute with retry
 	var result *core.ExecuteResult
 	err = wctx.Retry.Execute(func() error {
@@ -209,7 +266,7 @@ func (a *Analyzer) runAnalysisWithAgent(ctx context.Context, wctx *Context, agen
 		result, execErr = agent.Execute(ctx, core.ExecuteOptions{
 			Prompt:  prompt,
 			Format:  core.OutputFormatJSON,
-			Model:   ResolvePhaseModel(wctx.Config, agentName, core.PhaseAnalyze, ""),
+			Model:   model,
 			Timeout: 5 * time.Minute,
 			Sandbox: wctx.Config.Sandbox,
 			Phase:   core.PhaseAnalyze,
@@ -221,14 +278,39 @@ func (a *Analyzer) runAnalysisWithAgent(ctx context.Context, wctx *Context, agen
 		return AnalysisOutput{}, err
 	}
 
-	// Parse output
-	output := parseAnalysisOutput(agentName, result)
+	// Calculate duration
+	durationMS := time.Since(startTime).Milliseconds()
+
+	// Parse output with metrics
+	output := parseAnalysisOutputWithMetrics(agentName, model, result, durationMS)
+
+	// Write V1 analysis report
+	if wctx.Report != nil {
+		if reportErr := wctx.Report.WriteV1Analysis(report.AnalysisData{
+			AgentName:       agentName,
+			Model:           model,
+			RawOutput:       result.Output,
+			Claims:          output.Claims,
+			Risks:           output.Risks,
+			Recommendations: output.Recommendations,
+			TokensIn:        result.TokensIn,
+			TokensOut:       result.TokensOut,
+			CostUSD:         result.CostUSD,
+			DurationMS:      durationMS,
+		}); reportErr != nil {
+			wctx.Logger.Warn("failed to write V1 analysis report", "agent", agentName, "error", reportErr)
+		}
+	}
+
 	return output, nil
 }
 
 // runV2Critique runs critical review of V1 outputs.
 func (a *Analyzer) runV2Critique(ctx context.Context, wctx *Context, v1Outputs []AnalysisOutput) ([]AnalysisOutput, error) {
 	wctx.Logger.Info("starting V2 critique phase")
+	if wctx.Output != nil {
+		wctx.Output.Log("info", "analyzer", "V2 Critique: cross-reviewing agent outputs")
+	}
 
 	outputs := make([]AnalysisOutput, 0)
 
@@ -261,13 +343,17 @@ func (a *Analyzer) runV2Critique(ctx context.Context, wctx *Context, v1Outputs [
 			continue
 		}
 
+		// Resolve model and track time
+		model := ResolvePhaseModel(wctx.Config, critiqueAgent, core.PhaseAnalyze, "")
+		startTime := time.Now()
+
 		var result *core.ExecuteResult
 		err = wctx.Retry.Execute(func() error {
 			var execErr error
 			result, execErr = agent.Execute(ctx, core.ExecuteOptions{
 				Prompt:  prompt,
 				Format:  core.OutputFormatJSON,
-				Model:   ResolvePhaseModel(wctx.Config, critiqueAgent, core.PhaseAnalyze, ""),
+				Model:   model,
 				Timeout: 5 * time.Minute,
 				Sandbox: wctx.Config.Sandbox,
 				Phase:   core.PhaseAnalyze,
@@ -276,8 +362,34 @@ func (a *Analyzer) runV2Critique(ctx context.Context, wctx *Context, v1Outputs [
 		})
 
 		if err == nil {
-			output := parseAnalysisOutput(fmt.Sprintf("%s-critique-%d", critiqueAgent, i), result)
+			durationMS := time.Since(startTime).Milliseconds()
+			outputName := fmt.Sprintf("%s-critique-%d", critiqueAgent, i)
+			output := parseAnalysisOutputWithMetrics(outputName, model, result, durationMS)
 			outputs = append(outputs, output)
+
+			// Write V2 critique report
+			if wctx.Report != nil {
+				critiqueData := report.CritiqueData{
+					CriticAgent:   critiqueAgent,
+					CriticModel:   model,
+					TargetAgent:   v1.AgentName,
+					RawOutput:     result.Output,
+					TokensIn:      result.TokensIn,
+					TokensOut:     result.TokensOut,
+					CostUSD:       result.CostUSD,
+					DurationMS:    durationMS,
+				}
+				// Parse critique-specific fields from JSON
+				a.parseCritiqueFields(result.Output, &critiqueData)
+
+				if reportErr := wctx.Report.WriteV2Critique(critiqueData); reportErr != nil {
+					wctx.Logger.Warn("failed to write V2 critique report",
+						"critic", critiqueAgent,
+						"target", v1.AgentName,
+						"error", reportErr,
+					)
+				}
+			}
 		} else {
 			wctx.Logger.Warn("V2 critique failed",
 				"agent", critiqueAgent,
@@ -294,6 +406,9 @@ func (a *Analyzer) runV3Reconciliation(ctx context.Context, wctx *Context, v1, v
 	wctx.Logger.Info("starting V3 reconciliation phase",
 		"divergences", len(consensus.Divergences),
 	)
+	if wctx.Output != nil {
+		wctx.Output.Log("info", "analyzer", fmt.Sprintf("V3 Reconciliation: resolving %d divergences", len(consensus.Divergences)))
+	}
 
 	// Use V3 agent (typically Claude)
 	v3AgentName := wctx.Config.V3Agent
@@ -332,13 +447,17 @@ func (a *Analyzer) runV3Reconciliation(ctx context.Context, wctx *Context, v1, v
 		return fmt.Errorf("rendering V3 prompt: %w", err)
 	}
 
+	// Resolve model and track time
+	model := ResolvePhaseModel(wctx.Config, v3AgentName, core.PhaseAnalyze, "")
+	startTime := time.Now()
+
 	var result *core.ExecuteResult
 	err = wctx.Retry.Execute(func() error {
 		var execErr error
 		result, execErr = agent.Execute(ctx, core.ExecuteOptions{
 			Prompt:  prompt,
 			Format:  core.OutputFormatJSON,
-			Model:   ResolvePhaseModel(wctx.Config, v3AgentName, core.PhaseAnalyze, ""),
+			Model:   model,
 			Timeout: 10 * time.Minute,
 			Sandbox: wctx.Config.Sandbox,
 			Phase:   core.PhaseAnalyze,
@@ -348,6 +467,23 @@ func (a *Analyzer) runV3Reconciliation(ctx context.Context, wctx *Context, v1, v
 
 	if err != nil {
 		return err
+	}
+
+	durationMS := time.Since(startTime).Milliseconds()
+
+	// Write V3 reconciliation report
+	if wctx.Report != nil {
+		if reportErr := wctx.Report.WriteV3Reconciliation(report.ReconciliationData{
+			Agent:      v3AgentName,
+			Model:      model,
+			RawOutput:  result.Output,
+			TokensIn:   result.TokensIn,
+			TokensOut:  result.TokensOut,
+			CostUSD:    result.CostUSD,
+			DurationMS: durationMS,
+		}); reportErr != nil {
+			wctx.Logger.Warn("failed to write V3 reconciliation report", "error", reportErr)
+		}
 	}
 
 	// Store V3 result in state metadata
@@ -414,6 +550,9 @@ func (a *Analyzer) consolidateAnalysis(ctx context.Context, wctx *Context, outpu
 		"analyses_count", len(outputs),
 	)
 
+	// Track start time
+	startTime := time.Now()
+
 	// Execute with retry
 	var result *core.ExecuteResult
 	err = wctx.Retry.Execute(func() error {
@@ -436,10 +575,33 @@ func (a *Analyzer) consolidateAnalysis(ctx context.Context, wctx *Context, outpu
 		return a.consolidateAnalysisFallback(wctx, outputs)
 	}
 
+	durationMS := time.Since(startTime).Milliseconds()
+
 	wctx.Logger.Info("consolidate done",
 		"agent", consolidatorAgent,
 		"model", model,
 	)
+
+	// Calculate totals from all outputs
+	totalTokensIn, totalTokensOut, totalCost := a.calculateOutputTotals(outputs)
+
+	// Write consolidated analysis report
+	if wctx.Report != nil {
+		if reportErr := wctx.Report.WriteConsolidatedAnalysis(report.ConsolidationData{
+			Agent:           consolidatorAgent,
+			Model:           model,
+			Content:         result.Output,
+			AnalysesCount:   len(outputs),
+			Synthesized:     true,
+			ConsensusScore:  wctx.State.Metrics.ConsensusScore,
+			TotalTokensIn:   totalTokensIn + result.TokensIn,
+			TotalTokensOut:  totalTokensOut + result.TokensOut,
+			TotalCostUSD:    totalCost + result.CostUSD,
+			TotalDurationMS: durationMS,
+		}); reportErr != nil {
+			wctx.Logger.Warn("failed to write consolidated analysis report", "error", reportErr)
+		}
+	}
 
 	// Store the LLM-synthesized consolidation as checkpoint
 	return wctx.Checkpoint.CreateCheckpoint(wctx.State, "consolidated_analysis", map[string]interface{}{
@@ -464,8 +626,35 @@ func (a *Analyzer) consolidateAnalysisFallback(wctx *Context, outputs []Analysis
 		consolidated.WriteString("\n\n")
 	}
 
+	content := consolidated.String()
+
+	// Calculate totals from all outputs
+	totalTokensIn, totalTokensOut, totalCost := a.calculateOutputTotals(outputs)
+
+	// Write consolidated analysis report (fallback mode)
+	if wctx.Report != nil {
+		var consensusScore float64
+		if wctx.State.Metrics != nil {
+			consensusScore = wctx.State.Metrics.ConsensusScore
+		}
+		if reportErr := wctx.Report.WriteConsolidatedAnalysis(report.ConsolidationData{
+			Agent:           "fallback",
+			Model:           "",
+			Content:         content,
+			AnalysesCount:   len(outputs),
+			Synthesized:     false,
+			ConsensusScore:  consensusScore,
+			TotalTokensIn:   totalTokensIn,
+			TotalTokensOut:  totalTokensOut,
+			TotalCostUSD:    totalCost,
+			TotalDurationMS: 0,
+		}); reportErr != nil {
+			wctx.Logger.Warn("failed to write consolidated analysis report (fallback)", "error", reportErr)
+		}
+	}
+
 	return wctx.Checkpoint.CreateCheckpoint(wctx.State, "consolidated_analysis", map[string]interface{}{
-		"content":     consolidated.String(),
+		"content":     content,
 		"agent_count": len(outputs),
 		"synthesized": false,
 	})
@@ -482,11 +671,70 @@ func (a *Analyzer) selectCritiqueAgent(ctx context.Context, wctx *Context, origi
 	return original
 }
 
-// parseAnalysisOutput parses agent output into AnalysisOutput.
+// buildConsensusData converts ConsensusResult to report.ConsensusData.
+func (a *Analyzer) buildConsensusData(cr ConsensusResult, outputs []AnalysisOutput) report.ConsensusData {
+	divergences := make([]report.DivergenceData, len(cr.Divergences))
+	for i, d := range cr.Divergences {
+		divergences[i] = report.DivergenceData{
+			Type:        d.Category,
+			Agent1:      d.Agent1,
+			Agent2:      d.Agent2,
+			Description: fmt.Sprintf("Jaccard score: %.2f", d.JaccardScore),
+		}
+	}
+
+	return report.ConsensusData{
+		Score:            cr.Score,
+		Threshold:        a.consensus.Threshold(),
+		NeedsEscalation:  cr.NeedsV3,
+		NeedsHumanReview: cr.NeedsHumanReview,
+		AgentsCount:      len(outputs),
+		ClaimsScore:      cr.CategoryScores["claims"],
+		RisksScore:       cr.CategoryScores["risks"],
+		RecommendationsScore: cr.CategoryScores["recommendations"],
+		Divergences:      divergences,
+	}
+}
+
+// parseCritiqueFields parses critique-specific fields from JSON output.
+func (a *Analyzer) parseCritiqueFields(output string, data *report.CritiqueData) {
+	var parsed struct {
+		Agreements      []string `json:"agreements"`
+		Disagreements   []string `json:"disagreements"`
+		AdditionalRisks []string `json:"additional_risks"`
+	}
+	if err := json.Unmarshal([]byte(output), &parsed); err == nil {
+		data.Agreements = parsed.Agreements
+		data.Disagreements = parsed.Disagreements
+		data.AdditionalRisks = parsed.AdditionalRisks
+	}
+}
+
+// calculateOutputTotals sums up tokens and cost from all analysis outputs.
+func (a *Analyzer) calculateOutputTotals(outputs []AnalysisOutput) (tokensIn, tokensOut int, costUSD float64) {
+	for _, o := range outputs {
+		tokensIn += o.TokensIn
+		tokensOut += o.TokensOut
+		costUSD += o.CostUSD
+	}
+	return
+}
+
+// parseAnalysisOutput parses agent output into AnalysisOutput (legacy, no metrics).
 func parseAnalysisOutput(agentName string, result *core.ExecuteResult) AnalysisOutput {
+	return parseAnalysisOutputWithMetrics(agentName, "", result, 0)
+}
+
+// parseAnalysisOutputWithMetrics parses agent output into AnalysisOutput with full metrics.
+func parseAnalysisOutputWithMetrics(agentName, model string, result *core.ExecuteResult, durationMS int64) AnalysisOutput {
 	output := AnalysisOutput{
-		AgentName: agentName,
-		RawOutput: result.Output,
+		AgentName:  agentName,
+		Model:      model,
+		RawOutput:  result.Output,
+		TokensIn:   result.TokensIn,
+		TokensOut:  result.TokensOut,
+		CostUSD:    result.CostUSD,
+		DurationMS: durationMS,
 	}
 
 	var parsed struct {
