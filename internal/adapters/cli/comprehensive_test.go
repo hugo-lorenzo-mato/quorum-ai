@@ -830,8 +830,8 @@ func TestNewCopilotAdapter_Capabilities(t *testing.T) {
 		t.Errorf("Name() = %q, want %q", adapter.Name(), "copilot")
 	}
 	caps := adapter.Capabilities()
-	if !caps.SupportsJSON {
-		t.Error("expected SupportsJSON to be true for copilot")
+	if caps.SupportsJSON {
+		t.Error("expected SupportsJSON to be false for copilot")
 	}
 	if !caps.SupportsTools {
 		t.Error("expected SupportsTools to be true for copilot")

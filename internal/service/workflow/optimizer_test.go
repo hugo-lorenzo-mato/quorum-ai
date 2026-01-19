@@ -127,3 +127,108 @@ func TestExtractJSONFromMarkdown(t *testing.T) {
 		})
 	}
 }
+
+func TestExtractOptimizedPromptFromMarkdown(t *testing.T) {
+	tests := []struct {
+		name string
+		text string
+		want string
+	}{
+		{
+			name: "standard markdown section",
+			text: `## Optimized Prompt
+Create a file named hello.txt with the content "Hello World"
+
+## Changes Made
+- Clarified the request`,
+			want: `Create a file named hello.txt with the content "Hello World"`,
+		},
+		{
+			name: "with h3 header",
+			text: `### Optimized Prompt
+Do the thing
+
+### Changes Made
+- Did stuff`,
+			want: "Do the thing",
+		},
+		{
+			name: "multiline prompt",
+			text: `## Optimized Prompt
+First line of prompt.
+Second line of prompt.
+Third line of prompt.
+
+## Changes Made
+- Change 1`,
+			want: `First line of prompt.
+Second line of prompt.
+Third line of prompt.`,
+		},
+		{
+			name: "no optimized prompt section",
+			text: `## Some Other Section
+Content here`,
+			want: "",
+		},
+		{
+			name: "case insensitive",
+			text: `## OPTIMIZED PROMPT
+The prompt content
+
+## Changes`,
+			want: "The prompt content",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := extractOptimizedPromptFromMarkdown(tt.text)
+			if got != tt.want {
+				t.Errorf("extractOptimizedPromptFromMarkdown() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseOptimizationResult_Markdown(t *testing.T) {
+	tests := []struct {
+		name    string
+		output  string
+		want    string
+		wantErr bool
+	}{
+		{
+			name: "markdown format",
+			output: `## Optimized Prompt
+Create a hello.txt file containing 'Hello World'
+
+## Changes Made
+- Translated to English
+
+## Reasoning
+English is clearer`,
+			want:    "Create a hello.txt file containing 'Hello World'",
+			wantErr: false,
+		},
+		{
+			name: "json takes precedence over markdown",
+			output: `{"optimized_prompt": "JSON prompt", "changes_made": [], "reasoning": "test"}`,
+			want:    "JSON prompt",
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := parseOptimizationResult(tt.output)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("parseOptimizationResult() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if got != tt.want {
+				t.Errorf("parseOptimizationResult() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

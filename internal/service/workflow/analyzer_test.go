@@ -378,6 +378,100 @@ func TestParseAnalysisOutput(t *testing.T) {
 	}
 }
 
+func TestParseAnalysisOutput_Markdown(t *testing.T) {
+	tests := []struct {
+		name       string
+		output     string
+		wantClaims int
+		wantRisks  int
+		wantRecs   int
+	}{
+		{
+			name: "standard markdown sections",
+			output: `## Claims
+- The codebase uses Go modules
+- Tests are present
+
+## Risks
+- No documentation
+- Missing error handling
+
+## Recommendations
+- Add documentation
+- Improve error handling
+- Add more tests`,
+			wantClaims: 2,
+			wantRisks:  2,
+			wantRecs:   3,
+		},
+		{
+			name: "mixed header levels",
+			output: `### Claims
+- Claim one
+- Claim two
+
+### Risks
+- Risk one
+
+### Recommendations
+- Rec one`,
+			wantClaims: 2,
+			wantRisks:  1,
+			wantRecs:   1,
+		},
+		{
+			name: "numbered lists",
+			output: `## Claims
+1. First claim
+2. Second claim
+
+## Risks
+1) Risk one
+
+## Recommendations
+1. Recommendation one`,
+			wantClaims: 2,
+			wantRisks:  1,
+			wantRecs:   1,
+		},
+		{
+			name: "with extra text between sections",
+			output: `Here is my analysis:
+
+## Claims
+- The code is well structured
+
+Some additional thoughts about claims.
+
+## Risks
+- Performance could be improved
+
+## Recommendations
+- Consider caching`,
+			wantClaims: 1,
+			wantRisks:  1,
+			wantRecs:   1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := &core.ExecuteResult{Output: tt.output}
+			output := parseAnalysisOutput("test-agent", result)
+
+			if len(output.Claims) != tt.wantClaims {
+				t.Errorf("len(Claims) = %d, want %d. Claims: %v", len(output.Claims), tt.wantClaims, output.Claims)
+			}
+			if len(output.Risks) != tt.wantRisks {
+				t.Errorf("len(Risks) = %d, want %d. Risks: %v", len(output.Risks), tt.wantRisks, output.Risks)
+			}
+			if len(output.Recommendations) != tt.wantRecs {
+				t.Errorf("len(Recommendations) = %d, want %d. Recs: %v", len(output.Recommendations), tt.wantRecs, output.Recommendations)
+			}
+		})
+	}
+}
+
 func TestGetConsolidatedAnalysis(t *testing.T) {
 	tests := []struct {
 		name        string

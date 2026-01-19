@@ -463,8 +463,8 @@ func TestCopilotAdapter_Capabilities(t *testing.T) {
 
 	caps := adapter.Capabilities()
 
-	if !caps.SupportsJSON {
-		t.Error("copilot should support JSON")
+	if caps.SupportsJSON {
+		t.Error("copilot should not support JSON (CLI limitation)")
 	}
 	if caps.SupportsImages {
 		t.Error("copilot should not support images")
