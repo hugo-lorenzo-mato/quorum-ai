@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -259,13 +260,21 @@ func (a *Analyzer) runAnalysisWithAgent(ctx context.Context, wctx *Context, agen
 	// Track start time
 	startTime := time.Now()
 
+	// Emit started event
+	if wctx.Output != nil {
+		wctx.Output.AgentEvent("started", agentName, "Running V1 analysis", map[string]interface{}{
+			"phase": "analyze_v1",
+			"model": model,
+		})
+	}
+
 	// Execute with retry
 	var result *core.ExecuteResult
 	err = wctx.Retry.Execute(func() error {
 		var execErr error
 		result, execErr = agent.Execute(ctx, core.ExecuteOptions{
 			Prompt:  prompt,
-			Format:  core.OutputFormatJSON,
+			Format:  core.OutputFormatText,
 			Model:   model,
 			Timeout: 5 * time.Minute,
 			Sandbox: wctx.Config.Sandbox,
@@ -275,7 +284,27 @@ func (a *Analyzer) runAnalysisWithAgent(ctx context.Context, wctx *Context, agen
 	})
 
 	if err != nil {
+		if wctx.Output != nil {
+			wctx.Output.AgentEvent("error", agentName, err.Error(), map[string]interface{}{
+				"phase":       "analyze_v1",
+				"model":       model,
+				"duration_ms": time.Since(startTime).Milliseconds(),
+				"error_type":  fmt.Sprintf("%T", err),
+			})
+		}
 		return AnalysisOutput{}, err
+	}
+
+	// Emit completed event
+	if wctx.Output != nil {
+		wctx.Output.AgentEvent("completed", agentName, "V1 analysis completed", map[string]interface{}{
+			"phase":       "analyze_v1",
+			"model":       result.Model,
+			"tokens_in":   result.TokensIn,
+			"tokens_out":  result.TokensOut,
+			"cost_usd":    result.CostUSD,
+			"duration_ms": time.Since(startTime).Milliseconds(),
+		})
 	}
 
 	// Calculate duration
@@ -347,12 +376,21 @@ func (a *Analyzer) runV2Critique(ctx context.Context, wctx *Context, v1Outputs [
 		model := ResolvePhaseModel(wctx.Config, critiqueAgent, core.PhaseAnalyze, "")
 		startTime := time.Now()
 
+		// Emit started event
+		if wctx.Output != nil {
+			wctx.Output.AgentEvent("started", critiqueAgent, fmt.Sprintf("Running V2 critique of %s", v1.AgentName), map[string]interface{}{
+				"phase":        "analyze_v2",
+				"target_agent": v1.AgentName,
+				"model":        model,
+			})
+		}
+
 		var result *core.ExecuteResult
 		err = wctx.Retry.Execute(func() error {
 			var execErr error
 			result, execErr = agent.Execute(ctx, core.ExecuteOptions{
 				Prompt:  prompt,
-				Format:  core.OutputFormatJSON,
+				Format:  core.OutputFormatText,
 				Model:   model,
 				Timeout: 5 * time.Minute,
 				Sandbox: wctx.Config.Sandbox,
@@ -361,7 +399,30 @@ func (a *Analyzer) runV2Critique(ctx context.Context, wctx *Context, v1Outputs [
 			return execErr
 		})
 
+		if err != nil {
+			if wctx.Output != nil {
+				wctx.Output.AgentEvent("error", critiqueAgent, err.Error(), map[string]interface{}{
+					"phase":        "analyze_v2",
+					"target_agent": v1.AgentName,
+					"model":        model,
+					"duration_ms":  time.Since(startTime).Milliseconds(),
+					"error_type":   fmt.Sprintf("%T", err),
+				})
+			}
+		}
+
 		if err == nil {
+			if wctx.Output != nil {
+				wctx.Output.AgentEvent("completed", critiqueAgent, fmt.Sprintf("V2 critique of %s completed", v1.AgentName), map[string]interface{}{
+					"phase":        "analyze_v2",
+					"target_agent": v1.AgentName,
+					"model":        result.Model,
+					"tokens_in":    result.TokensIn,
+					"tokens_out":   result.TokensOut,
+					"cost_usd":     result.CostUSD,
+					"duration_ms":  time.Since(startTime).Milliseconds(),
+				})
+			}
 			durationMS := time.Since(startTime).Milliseconds()
 			outputName := fmt.Sprintf("%s-critique-%d", critiqueAgent, i)
 			output := parseAnalysisOutputWithMetrics(outputName, model, result, durationMS)
@@ -451,12 +512,21 @@ func (a *Analyzer) runV3Reconciliation(ctx context.Context, wctx *Context, v1, v
 	model := ResolvePhaseModel(wctx.Config, v3AgentName, core.PhaseAnalyze, "")
 	startTime := time.Now()
 
+	// Emit started event
+	if wctx.Output != nil {
+		wctx.Output.AgentEvent("started", v3AgentName, "Running V3 reconciliation", map[string]interface{}{
+			"phase":            "analyze_v3",
+			"model":            model,
+			"divergence_count": len(divergenceStrings),
+		})
+	}
+
 	var result *core.ExecuteResult
 	err = wctx.Retry.Execute(func() error {
 		var execErr error
 		result, execErr = agent.Execute(ctx, core.ExecuteOptions{
 			Prompt:  prompt,
-			Format:  core.OutputFormatJSON,
+			Format:  core.OutputFormatText,
 			Model:   model,
 			Timeout: 10 * time.Minute,
 			Sandbox: wctx.Config.Sandbox,
@@ -466,7 +536,27 @@ func (a *Analyzer) runV3Reconciliation(ctx context.Context, wctx *Context, v1, v
 	})
 
 	if err != nil {
+		if wctx.Output != nil {
+			wctx.Output.AgentEvent("error", v3AgentName, err.Error(), map[string]interface{}{
+				"phase":       "analyze_v3",
+				"model":       model,
+				"duration_ms": time.Since(startTime).Milliseconds(),
+				"error_type":  fmt.Sprintf("%T", err),
+			})
+		}
 		return err
+	}
+
+	// Emit completed event
+	if wctx.Output != nil {
+		wctx.Output.AgentEvent("completed", v3AgentName, "V3 reconciliation completed", map[string]interface{}{
+			"phase":       "analyze_v3",
+			"model":       result.Model,
+			"tokens_in":   result.TokensIn,
+			"tokens_out":  result.TokensOut,
+			"cost_usd":    result.CostUSD,
+			"duration_ms": time.Since(startTime).Milliseconds(),
+		})
 	}
 
 	durationMS := time.Since(startTime).Milliseconds()
@@ -553,13 +643,22 @@ func (a *Analyzer) consolidateAnalysis(ctx context.Context, wctx *Context, outpu
 	// Track start time
 	startTime := time.Now()
 
+	// Emit started event
+	if wctx.Output != nil {
+		wctx.Output.AgentEvent("started", consolidatorAgent, "Consolidating analyses", map[string]interface{}{
+			"phase":          "consolidate",
+			"model":          model,
+			"analyses_count": len(outputs),
+		})
+	}
+
 	// Execute with retry
 	var result *core.ExecuteResult
 	err = wctx.Retry.Execute(func() error {
 		var execErr error
 		result, execErr = agent.Execute(ctx, core.ExecuteOptions{
 			Prompt:  prompt,
-			Format:  core.OutputFormatJSON,
+			Format:  core.OutputFormatText,
 			Model:   model,
 			Timeout: 5 * time.Minute,
 			Sandbox: wctx.Config.Sandbox,
@@ -569,6 +668,16 @@ func (a *Analyzer) consolidateAnalysis(ctx context.Context, wctx *Context, outpu
 	})
 
 	if err != nil {
+		if wctx.Output != nil {
+			wctx.Output.AgentEvent("error", consolidatorAgent, err.Error(), map[string]interface{}{
+				"phase":          "consolidate",
+				"model":          model,
+				"analyses_count": len(outputs),
+				"duration_ms":    time.Since(startTime).Milliseconds(),
+				"error_type":     fmt.Sprintf("%T", err),
+				"fallback":       true,
+			})
+		}
 		wctx.Logger.Warn("consolidation LLM call failed, using fallback",
 			"error", err,
 		)
@@ -576,6 +685,19 @@ func (a *Analyzer) consolidateAnalysis(ctx context.Context, wctx *Context, outpu
 	}
 
 	durationMS := time.Since(startTime).Milliseconds()
+
+	// Emit completed event
+	if wctx.Output != nil {
+		wctx.Output.AgentEvent("completed", consolidatorAgent, "Consolidation completed", map[string]interface{}{
+			"phase":          "consolidate",
+			"model":          result.Model,
+			"analyses_count": len(outputs),
+			"tokens_in":      result.TokensIn,
+			"tokens_out":     result.TokensOut,
+			"cost_usd":       result.CostUSD,
+			"duration_ms":    durationMS,
+		})
+	}
 
 	wctx.Logger.Info("consolidate done",
 		"agent", consolidatorAgent,
@@ -726,6 +848,7 @@ func parseAnalysisOutput(agentName string, result *core.ExecuteResult) AnalysisO
 }
 
 // parseAnalysisOutputWithMetrics parses agent output into AnalysisOutput with full metrics.
+// Supports both JSON and Markdown formats for flexibility across different CLI agents.
 func parseAnalysisOutputWithMetrics(agentName, model string, result *core.ExecuteResult, durationMS int64) AnalysisOutput {
 	output := AnalysisOutput{
 		AgentName:  agentName,
@@ -737,6 +860,7 @@ func parseAnalysisOutputWithMetrics(agentName, model string, result *core.Execut
 		DurationMS: durationMS,
 	}
 
+	// Try JSON first (for backwards compatibility)
 	var parsed struct {
 		Claims          []string `json:"claims"`
 		Risks           []string `json:"risks"`
@@ -747,9 +871,59 @@ func parseAnalysisOutputWithMetrics(agentName, model string, result *core.Execut
 		output.Claims = parsed.Claims
 		output.Risks = parsed.Risks
 		output.Recommendations = parsed.Recommendations
+		return output
 	}
 
+	// Fall back to Markdown extraction
+	output.Claims = extractMarkdownSection(result.Output, "claims")
+	output.Risks = extractMarkdownSection(result.Output, "risks")
+	output.Recommendations = extractMarkdownSection(result.Output, "recommendations")
+
 	return output
+}
+
+// extractMarkdownSection extracts bullet points from a Markdown section.
+// Looks for sections like "## Claims", "### Claims", "**Claims**", or "Claims:" followed by bullet points.
+func extractMarkdownSection(text, sectionName string) []string {
+	// Pattern to find section header (case-insensitive)
+	// Matches: ## Claims, ### Claims, **Claims**, Claims:
+	headerPattern := regexp.MustCompile(`(?im)^(?:#{1,4}\s*` + sectionName + `|[\*_]{2}` + sectionName + `[\*_]{2}|` + sectionName + `\s*:)\s*$`)
+
+	loc := headerPattern.FindStringIndex(text)
+	if loc == nil {
+		return nil
+	}
+
+	// Get text after the header
+	afterHeader := text[loc[1]:]
+
+	// Find the next section header to limit our search
+	nextSectionPattern := regexp.MustCompile(`(?m)^(?:#{1,4}\s|\*\*[A-Z])`)
+	nextLoc := nextSectionPattern.FindStringIndex(afterHeader)
+
+	sectionText := afterHeader
+	if nextLoc != nil {
+		sectionText = afterHeader[:nextLoc[0]]
+	}
+
+	// Extract bullet points (-, *, or numbered lists)
+	bulletPattern := regexp.MustCompile(`(?m)^[\s]*[-*•]\s*(.+)$|^[\s]*\d+[.)]\s*(.+)$`)
+	matches := bulletPattern.FindAllStringSubmatch(sectionText, -1)
+
+	var items []string
+	for _, match := range matches {
+		// match[1] is for - or * bullets, match[2] is for numbered lists
+		item := match[1]
+		if item == "" {
+			item = match[2]
+		}
+		item = strings.TrimSpace(item)
+		if item != "" {
+			items = append(items, item)
+		}
+	}
+
+	return items
 }
 
 // GetConsolidatedAnalysis retrieves the consolidated analysis from state.

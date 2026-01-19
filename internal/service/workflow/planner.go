@@ -76,13 +76,25 @@ func (p *Planner) Run(ctx context.Context, wctx *Context) error {
 		return fmt.Errorf("rendering plan prompt: %w", err)
 	}
 
+	// Emit started event
+	agentName := wctx.Config.DefaultAgent
+	model := ResolvePhaseModel(wctx.Config, agentName, core.PhasePlan, "")
+	startTime := time.Now()
+
+	if wctx.Output != nil {
+		wctx.Output.AgentEvent("started", agentName, "Generating execution plan", map[string]interface{}{
+			"phase": "plan",
+			"model": model,
+		})
+	}
+
 	var result *core.ExecuteResult
 	err = wctx.Retry.Execute(func() error {
 		var execErr error
 		result, execErr = agent.Execute(ctx, core.ExecuteOptions{
 			Prompt:  prompt,
-			Format:  core.OutputFormatJSON,
-			Model:   ResolvePhaseModel(wctx.Config, wctx.Config.DefaultAgent, core.PhasePlan, ""),
+			Format:  core.OutputFormatText,
+			Model:   model,
 			Timeout: 5 * time.Minute,
 			Sandbox: wctx.Config.Sandbox,
 			Phase:   core.PhasePlan,
@@ -90,12 +102,34 @@ func (p *Planner) Run(ctx context.Context, wctx *Context) error {
 		return execErr
 	})
 
+	durationMS := time.Since(startTime).Milliseconds()
+
 	if err != nil {
+		if wctx.Output != nil {
+			wctx.Output.AgentEvent("error", agentName, err.Error(), map[string]interface{}{
+				"phase":       "plan",
+				"model":       model,
+				"duration_ms": durationMS,
+				"error_type":  fmt.Sprintf("%T", err),
+			})
+		}
 		return err
 	}
 
+	// Emit completed event
 	if wctx.Output != nil {
-		wctx.Output.Log("info", "planner", fmt.Sprintf("Generating execution plan with %s", wctx.Config.DefaultAgent))
+		wctx.Output.AgentEvent("completed", agentName, "Plan generated", map[string]interface{}{
+			"phase":       "plan",
+			"model":       result.Model,
+			"tokens_in":   result.TokensIn,
+			"tokens_out":  result.TokensOut,
+			"cost_usd":    result.CostUSD,
+			"duration_ms": durationMS,
+		})
+	}
+
+	if wctx.Output != nil {
+		wctx.Output.Log("info", "planner", fmt.Sprintf("Generating execution plan with %s", agentName))
 	}
 
 	// Parse plan into tasks

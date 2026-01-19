@@ -57,6 +57,16 @@ func (g *GeminiAdapter) Capabilities() core.Capabilities {
 	return g.capabilities
 }
 
+// SetLogCallback sets a callback for real-time stderr streaming.
+func (g *GeminiAdapter) SetLogCallback(cb LogCallback) {
+	g.BaseAdapter.SetLogCallback(cb)
+}
+
+// SetEventHandler sets the handler for streaming events.
+func (g *GeminiAdapter) SetEventHandler(handler core.AgentEventHandler) {
+	g.BaseAdapter.SetEventHandler(handler)
+}
+
 // Ping checks if Gemini CLI is available.
 func (g *GeminiAdapter) Ping(ctx context.Context) error {
 	if err := g.CheckAvailability(ctx); err != nil {
@@ -80,7 +90,14 @@ func (g *GeminiAdapter) Execute(ctx context.Context, opts core.ExecuteOptions) (
 		args = append(args, prompt)
 	}
 
-	result, err := g.ExecuteCommand(ctx, args, "", opts.WorkDir)
+	// Use streaming execution if event handler is configured
+	var result *CommandResult
+	var err error
+	if g.eventHandler != nil {
+		result, err = g.ExecuteWithStreaming(ctx, "gemini", args, "", opts.WorkDir)
+	} else {
+		result, err = g.ExecuteCommand(ctx, args, "", opts.WorkDir)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -208,5 +225,6 @@ func (g *GeminiAdapter) extractContent(resp *geminiJSONResponse) string {
 	return strings.Join(parts, "\n")
 }
 
-// Ensure GeminiAdapter implements core.Agent
+// Ensure GeminiAdapter implements core.Agent and core.StreamingCapable
 var _ core.Agent = (*GeminiAdapter)(nil)
+var _ core.StreamingCapable = (*GeminiAdapter)(nil)

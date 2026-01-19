@@ -23,6 +23,8 @@ type CopilotAdapter struct {
 	config       AgentConfig
 	logger       *logging.Logger
 	capabilities core.Capabilities
+	eventHandler core.AgentEventHandler
+	aggregator   *EventAggregator
 }
 
 // NewCopilotAdapter creates a new Copilot adapter.
@@ -37,7 +39,7 @@ func NewCopilotAdapter(cfg AgentConfig) (core.Agent, error) {
 		config: cfg,
 		logger: logger,
 		capabilities: core.Capabilities{
-			SupportsJSON:      true,
+			SupportsJSON:      false, // Copilot CLI does not support --output-format json
 			SupportsStreaming: true,
 			SupportsImages:    false,
 			SupportsTools:     true,
@@ -76,6 +78,25 @@ func (c *CopilotAdapter) Capabilities() core.Capabilities {
 	return c.capabilities
 }
 
+// SetEventHandler sets the handler for streaming events.
+func (c *CopilotAdapter) SetEventHandler(handler core.AgentEventHandler) {
+	c.eventHandler = handler
+	if handler != nil && c.aggregator == nil {
+		c.aggregator = NewEventAggregator()
+	}
+}
+
+// emitEvent sends an event to the handler if one is configured.
+func (c *CopilotAdapter) emitEvent(event core.AgentEvent) {
+	if c.eventHandler == nil {
+		return
+	}
+	if c.aggregator != nil && !c.aggregator.ShouldEmit(event) {
+		return
+	}
+	c.eventHandler(event)
+}
+
 // Ping checks if Copilot CLI is available.
 func (c *CopilotAdapter) Ping(ctx context.Context) error {
 	// Check copilot is installed
@@ -102,6 +123,9 @@ func (c *CopilotAdapter) Ping(ctx context.Context) error {
 
 // Execute runs a prompt through Copilot CLI.
 func (c *CopilotAdapter) Execute(ctx context.Context, opts core.ExecuteOptions) (*core.ExecuteResult, error) {
+	// Emit started event
+	c.emitEvent(core.NewAgentEvent(core.AgentEventStarted, "copilot", "Starting execution"))
+
 	args := c.buildArgs(opts)
 
 	// Create command
@@ -140,11 +164,15 @@ func (c *CopilotAdapter) Execute(ctx context.Context, opts core.ExecuteOptions) 
 
 	startTime := time.Now()
 
+	// Emit progress event
+	c.emitEvent(core.NewAgentEvent(core.AgentEventProgress, "copilot", "Processing request..."))
+
 	// Run command
 	err := cmd.Run()
 	duration := time.Since(startTime)
 
 	if ctx.Err() == context.DeadlineExceeded {
+		c.emitEvent(core.NewAgentEvent(core.AgentEventError, "copilot", "Execution timed out"))
 		return nil, core.ErrTimeout(fmt.Sprintf("copilot timed out after %v", timeout))
 	}
 
@@ -156,6 +184,7 @@ func (c *CopilotAdapter) Execute(ctx context.Context, opts core.ExecuteOptions) 
 
 	execResult, parseErr := c.parseOutput(result, opts.Format)
 	if parseErr != nil {
+		c.emitEvent(core.NewAgentEvent(core.AgentEventError, "copilot", "Failed to parse output"))
 		return nil, parseErr
 	}
 
@@ -163,8 +192,20 @@ func (c *CopilotAdapter) Execute(ctx context.Context, opts core.ExecuteOptions) 
 	c.extractUsage(result, execResult)
 
 	if err != nil && execResult.Output == "" {
-		return execResult, fmt.Errorf("copilot execution failed: %w", err)
+		errMsg := fmt.Sprintf("copilot execution failed: %v", err)
+		if result.Stderr != "" {
+			errMsg = fmt.Sprintf("%s\nstderr: %s", errMsg, strings.TrimSpace(result.Stderr))
+		}
+		c.emitEvent(core.NewAgentEvent(core.AgentEventError, "copilot", "Execution failed"))
+		return execResult, fmt.Errorf("%s", errMsg)
 	}
+
+	// Emit completed event
+	c.emitEvent(core.NewAgentEvent(core.AgentEventCompleted, "copilot", "Execution completed").WithData(map[string]any{
+		"duration_ms": duration.Milliseconds(),
+		"tokens_in":   execResult.TokensIn,
+		"tokens_out":  execResult.TokensOut,
+	}))
 
 	return execResult, nil
 }
@@ -184,10 +225,13 @@ func (c *CopilotAdapter) buildArgs(opts core.ExecuteOptions) []string {
 	args = append(args, "--allow-all-paths")
 	args = append(args, "--allow-all-urls")
 
-	// Output format
-	if opts.Format == core.OutputFormatJSON {
-		args = append(args, "--output-format", "json")
-	}
+	// Silent mode for cleaner output (only agent response, no stats)
+	args = append(args, "--silent")
+
+	// Note: Copilot CLI does not support --output-format json.
+	// JSON output format requested via opts.Format is acknowledged but not applied.
+	// The output will be plain text and parsed as-is.
+	_ = opts.Format
 
 	return args
 }
@@ -284,5 +328,6 @@ func (c *CopilotAdapter) Config() AgentConfig {
 	return c.config
 }
 
-// Ensure CopilotAdapter implements core.Agent
+// Ensure CopilotAdapter implements core.Agent and core.StreamingCapable
 var _ core.Agent = (*CopilotAdapter)(nil)
+var _ core.StreamingCapable = (*CopilotAdapter)(nil)

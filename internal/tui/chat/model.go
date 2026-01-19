@@ -194,7 +194,7 @@ Quorum AI orchestrates multiple AI agents (Claude, Gemini, etc.) to work in para
 - -o, --output     Output mode (tui, plain, json, quiet)
 
 ## Configuration:
-Quorum uses .quorum.yaml for configuration including agents, consensus threshold, timeouts, and tracing options.
+Quorum uses .quorum/config.yaml for configuration including agents, consensus threshold, timeouts, and tracing options.
 
 IMPORTANT: Do NOT invent commands or features not listed above. If unsure, say you don't know.
 `
@@ -244,12 +244,13 @@ type Model struct {
 	pendingInputRequest *control.InputRequest
 
 	// Display state
-	width, height   int
-	ready           bool
-	streaming       bool
-	quitting        bool
-	workflowRunning bool
-	inputFocused    bool
+	width, height     int
+	ready             bool
+	streaming         bool
+	quitting          bool
+	workflowRunning   bool
+	workflowStartedAt time.Time // When the current workflow started
+	inputFocused      bool
 
 	// Logs panel
 	logsPanel *LogsPanel
@@ -383,9 +384,10 @@ func (m Model) WithWorkflowRunner(runner WorkflowRunner, eventBus *events.EventB
 	m.runner = runner
 	m.eventBus = eventBus
 	m.logger = logger
-	// Subscribe to log events from the workflow
+	// Subscribe to log events and agent events from the workflow
 	if eventBus != nil {
-		m.logEventsCh = eventBus.Subscribe(events.TypeLog)
+		// Subscribe to all event types - we'll filter in the handler
+		m.logEventsCh = eventBus.Subscribe()
 	}
 	return m
 }
@@ -419,15 +421,27 @@ func (m Model) listenForLogEvents() tea.Cmd {
 		if !ok {
 			return nil
 		}
-		logEvent, ok := event.(events.LogEvent)
-		if !ok {
-			return nil
+
+		// Handle log events
+		if logEvent, ok := event.(events.LogEvent); ok {
+			return WorkflowLogMsg{
+				Level:   logEvent.Level,
+				Source:  "workflow",
+				Message: logEvent.Message,
+			}
 		}
-		return WorkflowLogMsg{
-			Level:   logEvent.Level,
-			Source:  "workflow", // Default source
-			Message: logEvent.Message,
+
+		// Handle agent stream events
+		if agentEvent, ok := event.(events.AgentStreamEvent); ok {
+			return AgentStreamMsg{
+				Kind:    string(agentEvent.EventKind),
+				Agent:   agentEvent.Agent,
+				Message: agentEvent.Message,
+				Data:    agentEvent.Data,
+			}
 		}
+
+		return nil
 	}
 }
 
@@ -450,10 +464,16 @@ type (
 	WorkflowStartedMsg   struct{ Prompt string }
 	WorkflowCompletedMsg struct{ State *core.WorkflowState }
 	WorkflowErrorMsg     struct{ Error error }
-	WorkflowLogMsg       struct {
+	WorkflowLogMsg struct {
 		Level   string
 		Source  string
 		Message string
+	}
+	AgentStreamMsg struct {
+		Kind    string // started, tool_use, thinking, chunk, progress, completed, error
+		Agent   string
+		Message string
+		Data    map[string]any
 	}
 	TickMsg            struct{ Time time.Time }
 	ExplorerRefreshMsg struct{} // File system change detected
@@ -606,6 +626,10 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		}
 
 	case tea.KeyTab:
+		// Skip general Tab handling when explorer has focus (handled in explorer section)
+		if m.explorerFocus {
+			break
+		}
 		if m.showSuggestions && len(m.suggestions) > 0 {
 			// Complete with selected suggestion
 			m.textarea.SetValue("/" + m.suggestions[m.suggestionIndex] + " ")
@@ -963,7 +987,19 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 			}
 			return m, nil, true
 		case tea.KeyTab:
-			// Switch focus back to input
+			// Insert selected path into chat with @ prefix and switch focus
+			relPath := m.explorerPanel.GetSelectedRelativePath()
+			if relPath != "" {
+				// Insert path reference with @ prefix into textarea
+				currentValue := m.textarea.Value()
+				pathRef := "@" + relPath
+				if currentValue != "" && !strings.HasSuffix(currentValue, " ") && !strings.HasSuffix(currentValue, "\n") {
+					pathRef = " " + pathRef
+				}
+				m.textarea.SetValue(currentValue + pathRef)
+				// Move cursor to end
+				m.textarea.CursorEnd()
+			}
 			m.explorerFocus = false
 			m.inputFocused = true
 			m.textarea.Focus()
@@ -1324,6 +1360,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case WorkflowStartedMsg:
 		m.workflowRunning = true
+		m.workflowStartedAt = time.Now()
 		m.workflowPhase = "running"
 		// Set first active agent as running
 		var firstAgent string
@@ -1343,6 +1380,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, m.spinner.Tick)
 
 	case WorkflowCompletedMsg:
+		elapsed := time.Since(m.workflowStartedAt)
 		m.workflowRunning = false
 		m.workflowPhase = "done"
 		m.workflowState = msg.State
@@ -1360,14 +1398,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.totalTokensOut = msg.State.Metrics.TotalTokensOut
 			m.logsPanel.AddInfo("workflow", fmt.Sprintf("Total cost: $%.4f, tokens: ↑%d ↓%d", m.totalCost, m.totalTokensIn, m.totalTokensOut))
 		}
-		m.logsPanel.AddSuccess("workflow", "Workflow completed successfully")
-		m.history.Add(NewSystemMessage("Workflow completed successfully!"))
+		m.logsPanel.AddSuccess("workflow", fmt.Sprintf("Workflow completed in %s", formatDuration(elapsed)))
+		m.history.Add(NewSystemMessage(fmt.Sprintf("Workflow completed in %s", formatDuration(elapsed))))
 		if msg.State != nil {
 			m.history.Add(NewSystemMessage(formatWorkflowStatus(msg.State)))
 		}
 		m.updateViewport()
 
 	case WorkflowErrorMsg:
+		elapsed := time.Since(m.workflowStartedAt)
 		m.workflowRunning = false
 		m.workflowPhase = "idle"
 		// Mark running agent as error
@@ -1379,8 +1418,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				break
 			}
 		}
-		m.logsPanel.AddError("workflow", "Workflow failed: "+msg.Error.Error())
-		m.history.Add(NewSystemMessage(fmt.Sprintf("Workflow failed: %v", msg.Error)))
+		m.logsPanel.AddError("workflow", fmt.Sprintf("Workflow failed after %s: %s", formatDuration(elapsed), msg.Error.Error()))
+		m.history.Add(NewSystemMessage(fmt.Sprintf("Workflow failed after %s: %v", formatDuration(elapsed), msg.Error)))
 		m.updateViewport()
 
 	case WorkflowLogMsg:
@@ -1398,6 +1437,127 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.logsPanel.AddInfo(msg.Source, msg.Message)
 		}
 		// Continue listening for more log events
+		cmds = append(cmds, m.listenForLogEvents())
+
+	case AgentStreamMsg:
+		// Handle real-time agent streaming events
+		source := msg.Agent
+		if source == "" {
+			source = "agent"
+		}
+
+		switch msg.Kind {
+		case "started":
+			details := msg.Message
+			if model, ok := msg.Data["model"].(string); ok && model != "" {
+				details += fmt.Sprintf(" [%s]", model)
+			}
+			if phase, ok := msg.Data["phase"].(string); ok {
+				details = fmt.Sprintf("[%s] %s", phase, details)
+			}
+			m.logsPanel.AddInfo(source, "▶ "+details)
+
+		case "tool_use":
+			m.logsPanel.AddInfo(source, "🔧 Tool: "+msg.Message)
+
+		case "thinking":
+			m.logsPanel.AddDebug(source, "💭 Thinking...")
+
+		case "chunk":
+			// Skip chunk events for now to avoid log spam
+
+		case "progress":
+			details := msg.Message
+			if attempt, ok := msg.Data["attempt"].(int); ok {
+				if errMsg, ok := msg.Data["error"].(string); ok {
+					details = fmt.Sprintf("Retry #%d: %s", attempt, errMsg)
+				}
+			}
+			m.logsPanel.AddWarn(source, "⟳ "+details)
+
+		case "completed":
+			details := msg.Message
+			var stats []string
+
+			// Add model info
+			if model, ok := msg.Data["model"].(string); ok && model != "" {
+				stats = append(stats, model)
+			}
+
+			// Add token info
+			if tokensIn, ok := msg.Data["tokens_in"].(int); ok {
+				if tokensOut, ok := msg.Data["tokens_out"].(int); ok {
+					stats = append(stats, fmt.Sprintf("%d→%d tok", tokensIn, tokensOut))
+				}
+			}
+
+			// Add cost info
+			if cost, ok := msg.Data["cost_usd"].(float64); ok && cost > 0 {
+				stats = append(stats, fmt.Sprintf("$%.4f", cost))
+			}
+
+			// Add duration info
+			if durationMS, ok := msg.Data["duration_ms"].(int64); ok {
+				if durationMS >= 1000 {
+					stats = append(stats, fmt.Sprintf("%.1fs", float64(durationMS)/1000))
+				} else {
+					stats = append(stats, fmt.Sprintf("%dms", durationMS))
+				}
+			}
+
+			// Add tool calls info
+			if toolCalls, ok := msg.Data["tool_calls"].(int); ok && toolCalls > 0 {
+				stats = append(stats, fmt.Sprintf("%d tools", toolCalls))
+			}
+
+			if len(stats) > 0 {
+				details += " [" + strings.Join(stats, " | ") + "]"
+			}
+			m.logsPanel.AddSuccess(source, "✓ "+details)
+
+		case "error":
+			details := msg.Message
+			var errorInfo []string
+
+			// Add error type
+			if errType, ok := msg.Data["error_type"].(string); ok && errType != "" {
+				errorInfo = append(errorInfo, errType)
+			}
+
+			// Add model info
+			if model, ok := msg.Data["model"].(string); ok && model != "" {
+				errorInfo = append(errorInfo, model)
+			}
+
+			// Add phase info
+			if phase, ok := msg.Data["phase"].(string); ok {
+				errorInfo = append(errorInfo, phase)
+			}
+
+			// Add duration info
+			if durationMS, ok := msg.Data["duration_ms"].(int64); ok {
+				errorInfo = append(errorInfo, fmt.Sprintf("%dms", durationMS))
+			}
+
+			// Add retry info
+			if retries, ok := msg.Data["retries"].(int); ok && retries > 0 {
+				errorInfo = append(errorInfo, fmt.Sprintf("%d retries", retries))
+			}
+
+			// Add fallback indicator
+			if fallback, ok := msg.Data["fallback"].(bool); ok && fallback {
+				errorInfo = append(errorInfo, "using fallback")
+			}
+
+			if len(errorInfo) > 0 {
+				details += " [" + strings.Join(errorInfo, " | ") + "]"
+			}
+			m.logsPanel.AddError(source, "✗ "+details)
+
+		default:
+			m.logsPanel.AddDebug(source, msg.Message)
+		}
+		// Continue listening for more events
 		cmds = append(cmds, m.listenForLogEvents())
 
 	case QuitMsg:
@@ -1493,7 +1653,7 @@ func (m Model) handleSubmit() (tea.Model, tea.Cmd) {
 	return m, func() tea.Msg {
 		return AgentResponseMsg{
 			Agent:   "Quorum",
-			Content: "No agents configured. Add agent credentials to your .quorum.yaml file.\n\nUse `/help` to see available commands.",
+			Content: "No agents configured. Add agent credentials to your .quorum/config.yaml file.\n\nUse `/help` to see available commands.",
 		}
 	}
 }
@@ -2691,10 +2851,11 @@ func (m Model) renderMainContent(w int) string {
 
 	// === STATUS LINE (when streaming/running) ===
 	if m.workflowRunning {
+		elapsed := time.Since(m.workflowStartedAt)
 		statusLine := lipgloss.NewStyle().
 			Foreground(primaryColor).
 			Bold(true).
-			Render(m.spinner.View() + " Processing workflow...")
+			Render(fmt.Sprintf("%s Processing workflow... %s", m.spinner.View(), formatDuration(elapsed)))
 		sb.WriteString("  " + statusLine + "\n")
 	} else if m.streaming {
 		statusLine := lipgloss.NewStyle().

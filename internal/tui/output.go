@@ -521,6 +521,29 @@ func (a *OutputNotifierAdapter) Log(level, source, message string) {
 	a.output.Log(level, fullMessage)
 }
 
+// AgentEvent implements workflow.OutputNotifier.
+// For the run command, we log agent events as regular log messages.
+func (a *OutputNotifierAdapter) AgentEvent(kind, agent, message string, _ map[string]interface{}) {
+	// Format agent events as log messages for the run command output
+	prefix := "[" + agent + "]"
+	switch kind {
+	case "started":
+		a.output.Log("info", prefix+" Started: "+message)
+	case "tool_use":
+		a.output.Log("info", prefix+" Tool: "+message)
+	case "thinking":
+		// Don't spam the log with thinking events
+	case "chunk":
+		// Don't log chunks - too noisy
+	case "progress":
+		a.output.Log("info", prefix+" "+message)
+	case "completed":
+		a.output.Log("success", prefix+" Completed")
+	case "error":
+		a.output.Log("error", prefix+" Error: "+message)
+	}
+}
+
 // TraceNotifier is an interface for trace event recording.
 // This matches service.TraceOutputNotifier but is defined here to avoid circular imports.
 type TraceNotifier interface {
@@ -610,6 +633,14 @@ func (t *TracingOutputNotifierAdapter) Log(level, source, message string) {
 	// Trace writer doesn't have a Log method, so we just delegate to base
 	if t.base != nil {
 		t.base.Log(level, source, message)
+	}
+}
+
+// AgentEvent implements workflow.OutputNotifier.
+func (t *TracingOutputNotifierAdapter) AgentEvent(kind, agent, message string, data map[string]interface{}) {
+	// Delegate to base for display
+	if t.base != nil {
+		t.base.AgentEvent(kind, agent, message, data)
 	}
 }
 

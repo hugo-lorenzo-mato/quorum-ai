@@ -42,7 +42,7 @@ for workflow control:
   /help            Show all commands
 
 The workflow phases use the configured agents and consensus mechanism
-from your .quorum.yaml configuration.
+from your .quorum/config.yaml configuration.
 
 Example:
   quorum chat
@@ -304,5 +304,11 @@ func (n *chatOutputNotifier) Log(level, source, message string) {
 	if n.eventBus != nil {
 		fullMessage := "[" + source + "] " + message
 		n.eventBus.Publish(events.NewLogEvent("", level, fullMessage, nil))
+	}
+}
+
+func (n *chatOutputNotifier) AgentEvent(kind, agent, message string, data map[string]interface{}) {
+	if n.eventBus != nil {
+		n.eventBus.Publish(events.NewAgentStreamEvent("", events.AgentEventType(kind), agent, message).WithData(data))
 	}
 }

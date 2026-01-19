@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
@@ -105,13 +106,22 @@ func (o *Optimizer) Run(ctx context.Context, wctx *Context) error {
 	// Track start time
 	startTime := time.Now()
 
+	// Emit started event
+	if wctx.Output != nil {
+		wctx.Output.AgentEvent("started", agentName, "Optimizing prompt", map[string]interface{}{
+			"phase":         "optimize",
+			"model":         model,
+			"prompt_length": len(wctx.State.Prompt),
+		})
+	}
+
 	// Execute optimization
 	var result *core.ExecuteResult
 	err = wctx.Retry.Execute(func() error {
 		var execErr error
 		result, execErr = agent.Execute(ctx, core.ExecuteOptions{
 			Prompt:  prompt,
-			Format:  core.OutputFormatJSON,
+			Format:  core.OutputFormatText,
 			Model:   model,
 			Timeout: 3 * time.Minute,
 			Sandbox: wctx.Config.Sandbox,
@@ -124,12 +134,34 @@ func (o *Optimizer) Run(ctx context.Context, wctx *Context) error {
 
 	if err != nil {
 		// On error, fall back to original prompt
+		if wctx.Output != nil {
+			wctx.Output.AgentEvent("error", agentName, err.Error(), map[string]interface{}{
+				"phase":       "optimize",
+				"model":       model,
+				"duration_ms": durationMS,
+				"error_type":  fmt.Sprintf("%T", err),
+				"fallback":    true,
+			})
+		}
 		wctx.Logger.Warn("prompt optimization failed, using original", "error", err)
 		if wctx.Output != nil {
 			wctx.Output.Log("warn", "optimizer", "Optimization failed, using original prompt")
 		}
 		wctx.State.OptimizedPrompt = wctx.State.Prompt
 	} else {
+		// Emit completed event
+		if wctx.Output != nil {
+			wctx.Output.AgentEvent("completed", agentName, "Prompt optimization completed", map[string]interface{}{
+				"phase":            "optimize",
+				"model":            result.Model,
+				"tokens_in":        result.TokensIn,
+				"tokens_out":       result.TokensOut,
+				"cost_usd":         result.CostUSD,
+				"duration_ms":      durationMS,
+				"original_length":  len(wctx.State.Prompt),
+				"optimized_length": len(result.Output),
+			})
+		}
 		// Parse the optimized prompt
 		optimized, parseErr := parseOptimizationResult(result.Output)
 		if parseErr != nil {
@@ -196,10 +228,11 @@ type optimizationResult struct {
 }
 
 // parseOptimizationResult extracts the optimized prompt from agent output.
+// Supports both JSON and Markdown formats.
 func parseOptimizationResult(output string) (string, error) {
 	var result optimizationResult
 
-	// First, try to parse the output as a direct optimization result
+	// First, try to parse the output as a direct optimization result (JSON)
 	if err := json.Unmarshal([]byte(output), &result); err == nil && result.OptimizedPrompt != "" {
 		return result.OptimizedPrompt, nil
 	}
@@ -222,6 +255,10 @@ func parseOptimizationResult(output string) (string, error) {
 				return result.OptimizedPrompt, nil
 			}
 		}
+		// Try Markdown extraction from wrapper result
+		if prompt := extractOptimizedPromptFromMarkdown(cliWrapper.Result); prompt != "" {
+			return prompt, nil
+		}
 	}
 
 	// Try to extract JSON from markdown code blocks in original output
@@ -232,7 +269,45 @@ func parseOptimizationResult(output string) (string, error) {
 		}
 	}
 
-	return "", fmt.Errorf("optimization result missing optimized_prompt field")
+	// Try Markdown extraction as final fallback
+	if prompt := extractOptimizedPromptFromMarkdown(output); prompt != "" {
+		return prompt, nil
+	}
+
+	return "", fmt.Errorf("could not extract optimized prompt from response")
+}
+
+// extractOptimizedPromptFromMarkdown extracts the optimized prompt from a Markdown section.
+// Looks for "## Optimized Prompt" section and extracts the content until the next section.
+func extractOptimizedPromptFromMarkdown(text string) string {
+	// Pattern to find "## Optimized Prompt" header (case-insensitive)
+	headerPattern := regexp.MustCompile(`(?im)^#{1,3}\s*optimized\s*prompt\s*$`)
+
+	loc := headerPattern.FindStringIndex(text)
+	if loc == nil {
+		return ""
+	}
+
+	// Get text after the header
+	afterHeader := text[loc[1]:]
+
+	// Find the next section header to limit our search
+	nextSectionPattern := regexp.MustCompile(`(?m)^#{1,3}\s+[A-Z]`)
+	nextLoc := nextSectionPattern.FindStringIndex(afterHeader)
+
+	sectionText := afterHeader
+	if nextLoc != nil {
+		sectionText = afterHeader[:nextLoc[0]]
+	}
+
+	// Clean up the extracted text
+	prompt := strings.TrimSpace(sectionText)
+
+	// Remove any leading/trailing markdown artifacts
+	prompt = strings.TrimPrefix(prompt, "\n")
+	prompt = strings.TrimSuffix(prompt, "\n")
+
+	return prompt
 }
 
 // extractJSONFromMarkdown extracts JSON from markdown code blocks.

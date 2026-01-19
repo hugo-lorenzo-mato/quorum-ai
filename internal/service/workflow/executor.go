@@ -251,12 +251,26 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 	// Execute with retry
 	var result *core.ExecuteResult
 	var retryCount int
+	model := ResolvePhaseModel(wctx.Config, agentName, core.PhaseExecute, task.Model)
+	execStartTime := time.Now()
+
+	// Emit agent started event
+	if wctx.Output != nil {
+		wctx.Output.AgentEvent("started", agentName, "Executing task: "+task.Name, map[string]interface{}{
+			"task_id":   string(task.ID),
+			"task_name": task.Name,
+			"phase":     "execute",
+			"model":     model,
+			"workdir":   workDir,
+		})
+	}
+
 	err = wctx.Retry.ExecuteWithNotify(func() error {
 		var execErr error
 		result, execErr = agent.Execute(ctx, core.ExecuteOptions{
 			Prompt:      prompt,
 			Format:      core.OutputFormatText,
-			Model:       ResolvePhaseModel(wctx.Config, agentName, core.PhaseExecute, task.Model),
+			Model:       model,
 			Timeout:     10 * time.Minute,
 			Sandbox:     wctx.Config.Sandbox,
 			DeniedTools: e.denyTools,
@@ -264,23 +278,58 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 			Phase:       core.PhaseExecute,
 		})
 		return execErr
-	}, func(attempt int, err error) {
+	}, func(attempt int, retryErr error) {
 		wctx.Logger.Warn("task retry",
 			"task_id", task.ID,
 			"attempt", attempt,
-			"error", err,
+			"error", retryErr,
 		)
+		if wctx.Output != nil {
+			wctx.Output.AgentEvent("progress", agentName, fmt.Sprintf("Retry attempt %d: %s", attempt, retryErr.Error()), map[string]interface{}{
+				"task_id":     string(task.ID),
+				"attempt":     attempt,
+				"error":       retryErr.Error(),
+				"duration_ms": time.Since(execStartTime).Milliseconds(),
+			})
+		}
 		retryCount = attempt
 	})
+
+	durationMS := time.Since(execStartTime).Milliseconds()
 
 	wctx.Lock()
 	taskState.Retries = retryCount
 	wctx.Unlock()
 
 	if err != nil {
+		if wctx.Output != nil {
+			wctx.Output.AgentEvent("error", agentName, err.Error(), map[string]interface{}{
+				"task_id":     string(task.ID),
+				"task_name":   task.Name,
+				"model":       model,
+				"retries":     retryCount,
+				"duration_ms": durationMS,
+				"error_type":  fmt.Sprintf("%T", err),
+			})
+		}
 		e.setTaskFailed(wctx, taskState, err)
 		taskErr = err
 		return err
+	}
+
+	// Emit completed event
+	if wctx.Output != nil {
+		wctx.Output.AgentEvent("completed", agentName, task.Name, map[string]interface{}{
+			"task_id":       string(task.ID),
+			"task_name":     task.Name,
+			"model":         result.Model,
+			"tokens_in":     result.TokensIn,
+			"tokens_out":    result.TokensOut,
+			"cost_usd":      result.CostUSD,
+			"duration_ms":   durationMS,
+			"tool_calls":    len(result.ToolCalls),
+			"finish_reason": result.FinishReason,
+		})
 	}
 
 	// Update task metrics

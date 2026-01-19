@@ -36,6 +36,9 @@ type OutputNotifier interface {
 	// level can be "info", "warn", "error", "success", "debug".
 	// source identifies the origin (e.g., "workflow", "optimizer", "analyzer", "executor").
 	Log(level, source, message string)
+	// AgentEvent is called when an agent emits a streaming event.
+	// kind can be "started", "tool_use", "thinking", "chunk", "progress", "completed", "error".
+	AgentEvent(kind, agent, message string, data map[string]interface{})
 }
 
 // NopOutputNotifier is a no-op implementation of OutputNotifier.
@@ -46,8 +49,9 @@ func (n NopOutputNotifier) TaskStarted(_ *core.Task)                    {}
 func (n NopOutputNotifier) TaskCompleted(_ *core.Task, _ time.Duration) {}
 func (n NopOutputNotifier) TaskFailed(_ *core.Task, _ error)            {}
 func (n NopOutputNotifier) TaskSkipped(_ *core.Task, _ string)          {}
-func (n NopOutputNotifier) WorkflowStateUpdated(_ *core.WorkflowState)  {}
-func (n NopOutputNotifier) Log(_, _, _ string)                          {}
+func (n NopOutputNotifier) WorkflowStateUpdated(_ *core.WorkflowState)       {}
+func (n NopOutputNotifier) Log(_, _, _ string)                               {}
+func (n NopOutputNotifier) AgentEvent(_, _, _ string, _ map[string]interface{}) {}
 
 // Context provides shared resources for workflow phases.
 // It encapsulates the runtime state and dependencies needed

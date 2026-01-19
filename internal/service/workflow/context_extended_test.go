@@ -283,6 +283,10 @@ func TestNopOutputNotifier_AllMethods(t *testing.T) {
 	notifier.TaskSkipped(nil, "")
 	notifier.WorkflowStateUpdated(state)
 	notifier.WorkflowStateUpdated(nil)
+	notifier.Log("info", "source", "message")
+	notifier.Log("error", "", "")
+	notifier.AgentEvent("started", "claude", "message", nil)
+	notifier.AgentEvent("tool_use", "gemini", "Using tool", map[string]interface{}{"tool": "test"})
 
 	// Test passes if no panic occurred
 }

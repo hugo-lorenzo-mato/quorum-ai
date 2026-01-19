@@ -70,6 +70,10 @@ func (m *mockOutputNotifier) WorkflowStateUpdated(_ *core.WorkflowState) {
 	m.stateUpdated++
 }
 
+func (m *mockOutputNotifier) Log(_, _, _ string) {}
+
+func (m *mockOutputNotifier) AgentEvent(_, _, _ string, _ map[string]interface{}) {}
+
 func TestExecutor_Run_AllTasksCompleted(t *testing.T) {
 	dag := &mockDAGBuilder{}
 	saver := &mockStateSaver{}

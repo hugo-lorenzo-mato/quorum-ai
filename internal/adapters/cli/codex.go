@@ -63,6 +63,11 @@ func (c *CodexAdapter) Capabilities() core.Capabilities {
 	return c.capabilities
 }
 
+// SetEventHandler sets the handler for streaming events.
+func (c *CodexAdapter) SetEventHandler(handler core.AgentEventHandler) {
+	c.BaseAdapter.SetEventHandler(handler)
+}
+
 // Ping checks if Codex CLI is available.
 func (c *CodexAdapter) Ping(ctx context.Context) error {
 	if err := c.CheckAvailability(ctx); err != nil {
@@ -86,7 +91,14 @@ func (c *CodexAdapter) Execute(ctx context.Context, opts core.ExecuteOptions) (*
 		args = append(args, prompt)
 	}
 
-	result, err := c.ExecuteCommand(ctx, args, "", opts.WorkDir)
+	// Use streaming execution if event handler is configured
+	var result *CommandResult
+	var err error
+	if c.eventHandler != nil {
+		result, err = c.ExecuteWithStreaming(ctx, "codex", args, "", opts.WorkDir)
+	} else {
+		result, err = c.ExecuteCommand(ctx, args, "", opts.WorkDir)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -200,5 +212,6 @@ func (c *CodexAdapter) estimateCost(tokensIn, tokensOut int) float64 {
 	return inputCost + outputCost
 }
 
-// Ensure CodexAdapter implements core.Agent
+// Ensure CodexAdapter implements core.Agent and core.StreamingCapable
 var _ core.Agent = (*CodexAdapter)(nil)
+var _ core.StreamingCapable = (*CodexAdapter)(nil)

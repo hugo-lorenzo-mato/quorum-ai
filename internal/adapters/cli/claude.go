@@ -57,6 +57,16 @@ func (c *ClaudeAdapter) Capabilities() core.Capabilities {
 	return c.capabilities
 }
 
+// SetLogCallback sets a callback for real-time stderr streaming.
+func (c *ClaudeAdapter) SetLogCallback(cb LogCallback) {
+	c.BaseAdapter.SetLogCallback(cb)
+}
+
+// SetEventHandler sets the handler for streaming events.
+func (c *ClaudeAdapter) SetEventHandler(handler core.AgentEventHandler) {
+	c.BaseAdapter.SetEventHandler(handler)
+}
+
 // Ping checks if Claude CLI is available.
 func (c *ClaudeAdapter) Ping(ctx context.Context) error {
 	if err := c.CheckAvailability(ctx); err != nil {
@@ -77,7 +87,14 @@ func (c *ClaudeAdapter) Execute(ctx context.Context, opts core.ExecuteOptions) (
 		args = append(args, fullPrompt)
 	}
 
-	result, err := c.ExecuteCommand(ctx, args, "", opts.WorkDir)
+	// Use streaming execution if event handler is configured
+	var result *CommandResult
+	var err error
+	if c.eventHandler != nil {
+		result, err = c.ExecuteWithStreaming(ctx, "claude", args, "", opts.WorkDir)
+	} else {
+		result, err = c.ExecuteCommand(ctx, args, "", opts.WorkDir)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -225,5 +242,6 @@ func (c *ClaudeAdapter) estimateCost(tokensIn, tokensOut int) float64 {
 	return inputCost + outputCost
 }
 
-// Ensure ClaudeAdapter implements core.Agent
+// Ensure ClaudeAdapter implements core.Agent and core.StreamingCapable
 var _ core.Agent = (*ClaudeAdapter)(nil)
+var _ core.StreamingCapable = (*ClaudeAdapter)(nil)
