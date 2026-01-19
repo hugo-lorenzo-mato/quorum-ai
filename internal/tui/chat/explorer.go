@@ -389,6 +389,23 @@ func (p *ExplorerPanel) GetSelectedPath() string {
 	return p.flatList[p.cursor].Path
 }
 
+// GetSelectedRelativePath returns the selected path relative to the project root
+func (p *ExplorerPanel) GetSelectedRelativePath() string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if p.cursor < 0 || p.cursor >= len(p.flatList) {
+		return ""
+	}
+
+	absPath := p.flatList[p.cursor].Path
+	relPath, err := filepath.Rel(p.initialRoot, absPath)
+	if err != nil {
+		return absPath
+	}
+	return relPath
+}
+
 // GetSelectedEntry returns the currently selected entry
 func (p *ExplorerPanel) GetSelectedEntry() *FileEntry {
 	p.mu.Lock()

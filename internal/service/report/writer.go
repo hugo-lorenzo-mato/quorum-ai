@@ -10,7 +10,7 @@ import (
 
 // Config configures the report writer
 type Config struct {
-	BaseDir    string // default: ".quorum-output"
+	BaseDir    string // default: ".quorum/output"
 	UseUTC     bool   // default: true
 	IncludeRaw bool   // include raw JSON output in reports
 	Enabled    bool   // whether to write reports
@@ -19,7 +19,7 @@ type Config struct {
 // DefaultConfig returns sensible defaults
 func DefaultConfig() Config {
 	return Config{
-		BaseDir:    ".quorum-output",
+		BaseDir:    ".quorum/output",
 		UseUTC:     true,
 		IncludeRaw: true,
 		Enabled:    true,
