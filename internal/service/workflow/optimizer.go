@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"regexp"
 	"strings"
 	"time"
 
@@ -165,9 +164,19 @@ func (o *Optimizer) Run(ctx context.Context, wctx *Context) error {
 		// Parse the optimized prompt
 		optimized, parseErr := parseOptimizationResult(result.Output)
 		if parseErr != nil {
-			wctx.Logger.Warn("failed to parse optimization result, using original", "error", parseErr)
+			wctx.Logger.Warn("failed to parse optimization result, using original",
+				"error", parseErr,
+				"output_length", len(result.Output),
+				"output_preview", truncateForLog(result.Output, 1000),
+			)
 			if wctx.Output != nil {
-				wctx.Output.Log("warn", "optimizer", "Failed to parse result, using original prompt")
+				wctx.Output.Log("warn", "optimizer", fmt.Sprintf("Parse failed: %s", parseErr.Error()))
+				// Show first 500 chars to help diagnose format issues
+				preview := result.Output
+				if len(preview) > 500 {
+					preview = preview[:500] + "..."
+				}
+				wctx.Output.Log("debug", "optimizer", fmt.Sprintf("Output preview: %s", preview))
 			}
 			wctx.State.OptimizedPrompt = wctx.State.Prompt
 		} else {
@@ -177,7 +186,7 @@ func (o *Optimizer) Run(ctx context.Context, wctx *Context) error {
 				"optimized_length", len(optimized),
 			)
 			if wctx.Output != nil {
-				wctx.Output.Log("success", "optimizer", fmt.Sprintf("Prompt optimized: %d → %d chars", len(wctx.State.Prompt), len(optimized)))
+				wctx.Output.Log("success", "optimizer", fmt.Sprintf("Prompt enhanced: %d → %d chars", len(wctx.State.Prompt), len(optimized)))
 			}
 
 			// Write optimized prompt report
@@ -220,105 +229,29 @@ func (o *Optimizer) Run(ctx context.Context, wctx *Context) error {
 	return wctx.Checkpoint.PhaseCheckpoint(wctx.State, core.PhaseOptimize, true)
 }
 
-// optimizationResult represents the expected JSON response from the optimizer.
-type optimizationResult struct {
-	OptimizedPrompt string   `json:"optimized_prompt"`
-	ChangesMade     []string `json:"changes_made"`
-	Reasoning       string   `json:"reasoning"`
-}
-
 // parseOptimizationResult extracts the optimized prompt from agent output.
-// Supports both JSON and Markdown formats.
+// The agent should return just the enhanced prompt directly (no structure needed).
 func parseOptimizationResult(output string) (string, error) {
-	var result optimizationResult
-
-	// First, try to parse the output as a direct optimization result (JSON)
-	if err := json.Unmarshal([]byte(output), &result); err == nil && result.OptimizedPrompt != "" {
-		return result.OptimizedPrompt, nil
-	}
-
-	// Try to extract from CLI JSON wrapper (e.g., Claude CLI --output-format json)
+	// Try to extract from CLI JSON wrapper first (e.g., Claude CLI --output-format json)
 	// The wrapper has format: {"type":"result","result":"...content...","session_id":"..."}
 	var cliWrapper struct {
+		Type   string `json:"type"`
 		Result string `json:"result"`
 	}
-	if err := json.Unmarshal([]byte(output), &cliWrapper); err == nil && cliWrapper.Result != "" {
-		// The result field contains the model's response, which may contain our JSON
-		// Try to parse it directly
-		if err := json.Unmarshal([]byte(cliWrapper.Result), &result); err == nil && result.OptimizedPrompt != "" {
-			return result.OptimizedPrompt, nil
-		}
-		// Try to extract JSON from markdown code blocks within the result
-		extracted := extractJSONFromMarkdown(cliWrapper.Result)
-		if extracted != "" {
-			if err := json.Unmarshal([]byte(extracted), &result); err == nil && result.OptimizedPrompt != "" {
-				return result.OptimizedPrompt, nil
-			}
-		}
-		// Try Markdown extraction from wrapper result
-		if prompt := extractOptimizedPromptFromMarkdown(cliWrapper.Result); prompt != "" {
-			return prompt, nil
-		}
+	if err := json.Unmarshal([]byte(output), &cliWrapper); err == nil && cliWrapper.Type == "result" {
+		// This is a CLI wrapper - use the result field (may be empty)
+		output = cliWrapper.Result
 	}
 
-	// Try to extract JSON from markdown code blocks in original output
-	extracted := extractJSONFromMarkdown(output)
-	if extracted != "" {
-		if err := json.Unmarshal([]byte(extracted), &result); err == nil && result.OptimizedPrompt != "" {
-			return result.OptimizedPrompt, nil
-		}
+	// Clean up the output
+	prompt := strings.TrimSpace(output)
+
+	// If empty or too short, fail
+	if len(prompt) < 10 {
+		return "", fmt.Errorf("output too short (%d chars)", len(prompt))
 	}
 
-	// Try Markdown extraction as final fallback
-	if prompt := extractOptimizedPromptFromMarkdown(output); prompt != "" {
-		return prompt, nil
-	}
-
-	return "", fmt.Errorf("could not extract optimized prompt from response")
-}
-
-// extractOptimizedPromptFromMarkdown extracts the optimized prompt from a Markdown section.
-// Looks for "## Optimized Prompt" section and extracts the content until the next section.
-func extractOptimizedPromptFromMarkdown(text string) string {
-	// Pattern to find "## Optimized Prompt" header (case-insensitive)
-	headerPattern := regexp.MustCompile(`(?im)^#{1,3}\s*optimized\s*prompt\s*$`)
-
-	loc := headerPattern.FindStringIndex(text)
-	if loc == nil {
-		return ""
-	}
-
-	// Get text after the header
-	afterHeader := text[loc[1]:]
-
-	// Find the next section header to limit our search
-	nextSectionPattern := regexp.MustCompile(`(?m)^#{1,3}\s+[A-Z]`)
-	nextLoc := nextSectionPattern.FindStringIndex(afterHeader)
-
-	sectionText := afterHeader
-	if nextLoc != nil {
-		sectionText = afterHeader[:nextLoc[0]]
-	}
-
-	// Clean up the extracted text
-	prompt := strings.TrimSpace(sectionText)
-
-	// Remove any leading/trailing markdown artifacts
-	prompt = strings.TrimPrefix(prompt, "\n")
-	prompt = strings.TrimSuffix(prompt, "\n")
-
-	return prompt
-}
-
-// extractJSONFromMarkdown extracts JSON from markdown code blocks.
-func extractJSONFromMarkdown(text string) string {
-	// Match ```json ... ``` or ``` ... ```
-	re := regexp.MustCompile("(?s)```(?:json)?\\s*\\n?(\\{.*?\\})\\s*\\n?```")
-	matches := re.FindStringSubmatch(text)
-	if len(matches) >= 2 {
-		return matches[1]
-	}
-	return ""
+	return prompt, nil
 }
 
 // GetEffectivePrompt returns the optimized prompt if available, otherwise the original.
@@ -327,4 +260,12 @@ func GetEffectivePrompt(state *core.WorkflowState) string {
 		return state.OptimizedPrompt
 	}
 	return state.Prompt
+}
+
+// truncateForLog truncates a string to maxLen characters for logging purposes.
+func truncateForLog(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
 }

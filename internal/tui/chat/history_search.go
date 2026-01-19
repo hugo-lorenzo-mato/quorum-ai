@@ -260,9 +260,8 @@ func (h *HistorySearch) Render() string {
 		Bold(true)
 
 	keyStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#9CA3AF")).
-		Background(lipgloss.Color("#1F2937")).
-		Padding(0, 1)
+		Foreground(lipgloss.Color("#22d3ee")).
+		Bold(true)
 
 	var sb strings.Builder
 
@@ -356,12 +355,10 @@ func (h *HistorySearch) Render() string {
 		"  " + keyStyle.Render("Esc") + dimStyle.Render(" close")
 	sb.WriteString(footer)
 
-	// Box style
+	// Box style - no fixed background to work with any terminal color
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color("#7C3AED")).
-		BorderBackground(lipgloss.Color("#1f1f23")).
-		Background(lipgloss.Color("#1f1f23")).
 		Padding(0, 1).
 		Width(h.width - 2)
 

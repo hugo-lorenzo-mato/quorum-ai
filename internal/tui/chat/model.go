@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -60,8 +61,8 @@ const (
 
 // Input area constants
 const (
-	minInputLines = 1 // Minimum lines for input
-	maxInputLines = 8 // Maximum lines for input before scrolling
+	minInputLines = 1  // Minimum lines for input
+	maxInputLines = 12 // Maximum lines for input before scrolling
 )
 
 // Styles for the modern chat UI
@@ -219,6 +220,9 @@ type Model struct {
 	suggestions     []string
 	showSuggestions bool
 	suggestionIndex int
+	suggestionType  string            // "command", "agent", "model"
+	availableAgents []string          // List of enabled agent names
+	agentModels     map[string][]string // Models available per agent
 
 	// Workflow integration
 	controlPlane  *control.ControlPlane
@@ -243,6 +247,9 @@ type Model struct {
 	// Input request handling
 	pendingInputRequest *control.InputRequest
 
+	// Configuration
+	editorCmd string // Editor command for file editing (from config)
+
 	// Display state
 	width, height     int
 	ready             bool
@@ -250,6 +257,8 @@ type Model struct {
 	quitting          bool
 	workflowRunning   bool
 	workflowStartedAt time.Time // When the current workflow started
+	chatStartedAt     time.Time // When the current chat message was sent
+	chatAgent         string    // Agent handling current chat message
 	inputFocused      bool
 
 	// Logs panel
@@ -275,7 +284,6 @@ type Model struct {
 	contextPanel     *ContextPreviewPanel
 	diffView         *AgentDiffView
 	historySearch    *HistorySearch
-	workflowProgress *WorkflowProgress
 	costPanel        *CostPanel
 	shortcutsOverlay *ShortcutsOverlay
 	fileViewer       *FileViewer
@@ -290,6 +298,10 @@ type Model struct {
 
 	// Version info
 	version string
+
+	// Chat configuration
+	chatTimeout          time.Duration
+	chatProgressInterval time.Duration
 }
 
 // NewModel creates a new chat model.
@@ -370,7 +382,6 @@ func NewModel(cp *control.ControlPlane, agents core.AgentRegistry, defaultAgent,
 		contextPanel:     NewContextPreviewPanel(),
 		diffView:         NewAgentDiffView(),
 		historySearch:    NewHistorySearch(),
-		workflowProgress: NewWorkflowProgress(),
 		costPanel:        NewCostPanel(1.0), // $1 default budget
 		shortcutsOverlay: NewShortcutsOverlay(),
 		fileViewer:       NewFileViewer(),
@@ -398,6 +409,34 @@ func (m Model) WithVersion(version string) Model {
 	return m
 }
 
+// WithChatConfig sets the chat configuration (timeout, progress interval).
+func (m Model) WithChatConfig(timeout, progressInterval time.Duration) Model {
+	if timeout > 0 {
+		m.chatTimeout = timeout
+	} else {
+		m.chatTimeout = 3 * time.Minute // Default 3 min
+	}
+	if progressInterval > 0 {
+		m.chatProgressInterval = progressInterval
+	} else {
+		m.chatProgressInterval = 15 * time.Second // Default 15s
+	}
+	return m
+}
+
+// WithAgentModels sets the available agents and their models for suggestions.
+func (m Model) WithAgentModels(agents []string, agentModels map[string][]string) Model {
+	m.availableAgents = agents
+	m.agentModels = agentModels
+	return m
+}
+
+// WithEditor sets the editor command for file editing
+func (m Model) WithEditor(editor string) Model {
+	m.editorCmd = editor
+	return m
+}
+
 // Init initializes the model.
 func (m Model) Init() tea.Cmd {
 	return tea.Batch(
@@ -417,31 +456,34 @@ func (m Model) listenForLogEvents() tea.Cmd {
 		return nil
 	}
 	return func() tea.Msg {
-		event, ok := <-m.logEventsCh
-		if !ok {
-			return nil
-		}
-
-		// Handle log events
-		if logEvent, ok := event.(events.LogEvent); ok {
-			return WorkflowLogMsg{
-				Level:   logEvent.Level,
-				Source:  "workflow",
-				Message: logEvent.Message,
+		for {
+			event, ok := <-m.logEventsCh
+			if !ok {
+				return nil // Channel closed
 			}
-		}
 
-		// Handle agent stream events
-		if agentEvent, ok := event.(events.AgentStreamEvent); ok {
-			return AgentStreamMsg{
-				Kind:    string(agentEvent.EventKind),
-				Agent:   agentEvent.Agent,
-				Message: agentEvent.Message,
-				Data:    agentEvent.Data,
+			// Handle log events
+			if logEvent, ok := event.(events.LogEvent); ok {
+				return WorkflowLogMsg{
+					Level:   logEvent.Level,
+					Source:  "workflow",
+					Message: logEvent.Message,
+				}
 			}
-		}
 
-		return nil
+			// Handle agent stream events
+			if agentEvent, ok := event.(events.AgentStreamEvent); ok {
+				return AgentStreamMsg{
+					Kind:    string(agentEvent.EventKind),
+					Agent:   agentEvent.Agent,
+					Message: agentEvent.Message,
+					Data:    agentEvent.Data,
+				}
+			}
+
+			// Unknown event type - continue listening instead of returning nil
+			// This prevents the listener from stopping on unknown events
+		}
 	}
 }
 
@@ -478,7 +520,21 @@ type (
 	TickMsg            struct{ Time time.Time }
 	ExplorerRefreshMsg struct{} // File system change detected
 	StatsTickMsg       struct{} // Periodic stats update
+	ChatProgressTickMsg struct {
+		Elapsed time.Duration
+	}
 )
+
+// chatProgressTick returns a command that sends periodic progress updates during chat execution.
+func (m Model) chatProgressTick() tea.Cmd {
+	interval := m.chatProgressInterval
+	if interval == 0 {
+		interval = 15 * time.Second
+	}
+	return tea.Tick(interval, func(t time.Time) tea.Msg {
+		return ChatProgressTickMsg{Elapsed: time.Since(m.chatStartedAt)}
+	})
+}
 
 func (m Model) listenForInputRequests() tea.Cmd {
 	if m.controlPlane == nil {
@@ -598,26 +654,51 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		return m, tea.Quit, true
 
 	case tea.KeyEnter:
-		// If dropdown is visible, check if command requires arguments
+		// If dropdown is visible, handle based on suggestion type
 		if m.showSuggestions && len(m.suggestions) > 0 {
-			selectedCmdName := m.suggestions[m.suggestionIndex]
-			selectedCmd := m.commands.Get(selectedCmdName)
+			selected := m.suggestions[m.suggestionIndex]
 
-			// If command requires arguments, autocomplete like Tab (let user add args)
-			if selectedCmd != nil && selectedCmd.RequiresArg() {
-				m.textarea.SetValue("/" + selectedCmdName + " ")
-				m.textarea.CursorEnd()
+			switch m.suggestionType {
+			case "agent":
+				// Complete and execute /agent command
+				m.textarea.SetValue("/agent " + selected)
 				m.showSuggestions = false
 				m.suggestionIndex = 0
-				return m, nil, true
-			}
+				m.suggestionType = ""
+				model, teaCmd := m.handleSubmit()
+				return model, teaCmd, true
 
-			// Command doesn't require args - execute immediately
-			m.textarea.SetValue("/" + selectedCmdName)
-			m.showSuggestions = false
-			m.suggestionIndex = 0
-			model, teaCmd := m.handleSubmit()
-			return model, teaCmd, true
+			case "model":
+				// Complete and execute /model command
+				m.textarea.SetValue("/model " + selected)
+				m.showSuggestions = false
+				m.suggestionIndex = 0
+				m.suggestionType = ""
+				model, teaCmd := m.handleSubmit()
+				return model, teaCmd, true
+
+			default:
+				// Command suggestion
+				selectedCmd := m.commands.Get(selected)
+
+				// If command requires arguments, autocomplete like Tab (let user add args)
+				if selectedCmd != nil && selectedCmd.RequiresArg() {
+					m.textarea.SetValue("/" + selected + " ")
+					m.textarea.CursorEnd()
+					m.showSuggestions = false
+					m.suggestionIndex = 0
+					m.suggestionType = ""
+					return m, nil, true
+				}
+
+				// Command doesn't require args - execute immediately
+				m.textarea.SetValue("/" + selected)
+				m.showSuggestions = false
+				m.suggestionIndex = 0
+				m.suggestionType = ""
+				model, teaCmd := m.handleSubmit()
+				return model, teaCmd, true
+			}
 		}
 		// Otherwise, normal submit
 		if m.textarea.Value() != "" {
@@ -631,16 +712,25 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 			break
 		}
 		if m.showSuggestions && len(m.suggestions) > 0 {
-			// Complete with selected suggestion
-			m.textarea.SetValue("/" + m.suggestions[m.suggestionIndex] + " ")
+			// Complete with selected suggestion based on type
+			switch m.suggestionType {
+			case "agent":
+				m.textarea.SetValue("/agent " + m.suggestions[m.suggestionIndex])
+			case "model":
+				m.textarea.SetValue("/model " + m.suggestions[m.suggestionIndex])
+			default:
+				m.textarea.SetValue("/" + m.suggestions[m.suggestionIndex] + " ")
+			}
 			m.textarea.CursorEnd()
 			m.showSuggestions = false
 			m.suggestionIndex = 0
+			m.suggestionType = ""
 			return m, nil, true
 		} else if (m.textarea.Value() == "" || m.textarea.Value() == "/") && !m.streaming && !m.workflowRunning {
 			// Show all commands on Tab with empty or just "/" (not during streaming)
 			m.textarea.SetValue("/")
 			m.suggestions = m.commands.Suggest("/")
+			m.suggestionType = "command"
 			m.showSuggestions = len(m.suggestions) > 0
 			m.suggestionIndex = 0
 			return m, nil, true
@@ -676,6 +766,12 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		} else if m.logsFocus && m.showLogs {
 			// Return focus from logs to input
 			m.logsFocus = false
+			m.inputFocused = true
+			m.textarea.Focus()
+			return m, nil, true
+		} else if m.statsFocus && m.showStats {
+			// Return focus from stats to input
+			m.statsFocus = false
 			m.inputFocused = true
 			m.textarea.Focus()
 			return m, nil, true
@@ -716,6 +812,13 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 			m.pendingInputRequest = nil
 			m.history.Add(NewSystemMessage("Input cancelled"))
 			m.updateViewport()
+			return m, nil, true
+		} else if m.inputFocused && m.textarea.Value() != "" {
+			// Clear input text with Escape when nothing else is active
+			m.textarea.Reset()
+			m.showSuggestions = false
+			m.recalculateLayout() // Recalculate since input height changed
+			return m, nil, true
 		}
 
 	case tea.KeyCtrlAt: // Ctrl+Space sends NUL (Ctrl+@) in most terminals
@@ -747,7 +850,7 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 			m.explorerFocus = false
 			m.inputFocused = false
 			m.textarea.Blur()
-			m.logsPanel.AddInfo("system", "Logs panel opened (↑↓ to scroll, Esc to return)")
+			m.logsPanel.AddInfo("system", "Logs panel opened (↑↓ scroll, c=copy, Esc=return)")
 		} else {
 			m.logsFocus = false
 			m.inputFocused = true
@@ -864,10 +967,7 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 			m.diffView.Hide()
 			return m, nil, true
 		}
-		if m.fileViewer.IsVisible() {
-			m.fileViewer.Hide()
-			return m, nil, true
-		}
+		// Note: fileViewer uses 'q' to close, not Escape
 	}
 
 	// Handle file viewer navigation when visible
@@ -879,6 +979,12 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		case tea.KeyDown:
 			m.fileViewer.ScrollDown()
 			return m, nil, true
+		case tea.KeyLeft:
+			m.fileViewer.ScrollLeft()
+			return m, nil, true
+		case tea.KeyRight:
+			m.fileViewer.ScrollRight()
+			return m, nil, true
 		case tea.KeyPgUp:
 			m.fileViewer.PageUp()
 			return m, nil, true
@@ -887,6 +993,42 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 			return m, nil, true
 		}
 		switch msg.String() {
+		case "q":
+			m.fileViewer.Hide()
+			return m, nil, true
+		case "e":
+			// Open file in editor (config > $EDITOR > $VISUAL > vi)
+			filePath := m.fileViewer.GetFilePath()
+			if filePath != "" {
+				editor := m.editorCmd
+				if editor == "" {
+					editor = os.Getenv("EDITOR")
+				}
+				if editor == "" {
+					editor = os.Getenv("VISUAL")
+				}
+				if editor == "" {
+					editor = "vi" // fallback
+				}
+				m.fileViewer.Hide()
+				cmd := exec.Command(editor, filePath)
+				return m, tea.ExecProcess(cmd, func(err error) tea.Msg {
+					return editorFinishedMsg{filePath: filePath, err: err}
+				}), true
+			}
+			return m, nil, true
+		case "h":
+			m.fileViewer.ScrollLeft()
+			return m, nil, true
+		case "l":
+			m.fileViewer.ScrollRight()
+			return m, nil, true
+		case "0":
+			m.fileViewer.ScrollHome()
+			return m, nil, true
+		case "$":
+			m.fileViewer.ScrollEnd()
+			return m, nil, true
 		case "g":
 			m.fileViewer.ScrollTop()
 			return m, nil, true
@@ -1035,6 +1177,11 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 			m.inputFocused = true
 			m.textarea.Focus()
 			return m, nil, true
+		case tea.KeyRunes:
+			// 'c' or 'y' to copy logs when logs panel is focused
+			if len(msg.Runes) == 1 && (msg.Runes[0] == 'c' || msg.Runes[0] == 'y') {
+				return m.copyLogsToClipboard()
+			}
 		}
 	}
 
@@ -1207,6 +1354,23 @@ func (m Model) copyConversation() (tea.Model, tea.Cmd, bool) {
 	return m, nil, true
 }
 
+// copyLogsToClipboard copies all logs to clipboard as plain text.
+func (m Model) copyLogsToClipboard() (tea.Model, tea.Cmd, bool) {
+	logsText := m.logsPanel.GetPlainText()
+	if logsText == "" {
+		m.logsPanel.AddWarn("system", "No logs to copy")
+		return m, nil, true
+	}
+
+	err := clipboard.WriteAll(logsText)
+	if err != nil {
+		m.logsPanel.AddError("system", "Failed to copy logs: "+err.Error())
+	} else {
+		m.logsPanel.AddSuccess("system", fmt.Sprintf("Copied %d logs to clipboard", m.logsPanel.Count()))
+	}
+	return m, nil, true
+}
+
 // updateSuggestions refreshes the autocomplete suggestions.
 func (m *Model) updateSuggestions() {
 	// Don't show suggestions while streaming or during workflow
@@ -1216,17 +1380,134 @@ func (m *Model) updateSuggestions() {
 	}
 
 	val := m.textarea.Value()
-	if strings.HasPrefix(val, "/") && !strings.Contains(val, " ") {
-		newSuggestions := m.commands.Suggest(val)
-		if len(newSuggestions) != len(m.suggestions) {
+	valLower := strings.ToLower(val)
+
+	// Check for /agent with space - show agent suggestions
+	if strings.HasPrefix(valLower, "/agent ") || strings.HasPrefix(valLower, "/a ") {
+		partial := strings.TrimSpace(val[strings.Index(val, " ")+1:])
+		newSuggestions := m.suggestAgents(partial)
+		if len(newSuggestions) != len(m.suggestions) || m.suggestionType != "agent" {
 			m.suggestionIndex = 0
 		}
 		m.suggestions = newSuggestions
+		m.suggestionType = "agent"
 		m.showSuggestions = len(m.suggestions) > 0
-	} else {
-		m.showSuggestions = false
-		m.suggestionIndex = 0
+		return
 	}
+
+	// Check for /model with space - show model suggestions
+	if strings.HasPrefix(valLower, "/model ") || strings.HasPrefix(valLower, "/m ") {
+		partial := strings.TrimSpace(val[strings.Index(val, " ")+1:])
+		newSuggestions := m.suggestModels(partial)
+		if len(newSuggestions) != len(m.suggestions) || m.suggestionType != "model" {
+			m.suggestionIndex = 0
+		}
+		m.suggestions = newSuggestions
+		m.suggestionType = "model"
+		m.showSuggestions = len(m.suggestions) > 0
+		return
+	}
+
+	// Regular command suggestions (no space yet)
+	if strings.HasPrefix(val, "/") && !strings.Contains(val, " ") {
+		newSuggestions := m.commands.Suggest(val)
+		if len(newSuggestions) != len(m.suggestions) || m.suggestionType != "command" {
+			m.suggestionIndex = 0
+		}
+		m.suggestions = newSuggestions
+		m.suggestionType = "command"
+		m.showSuggestions = len(m.suggestions) > 0
+		return
+	}
+
+	m.showSuggestions = false
+	m.suggestionIndex = 0
+	m.suggestionType = ""
+}
+
+// suggestAgents returns agent suggestions filtered by partial input.
+func (m *Model) suggestAgents(partial string) []string {
+	if len(m.availableAgents) == 0 {
+		// Fallback to default agents
+		return []string{"claude", "gemini", "codex", "copilot"}
+	}
+
+	if partial == "" {
+		return m.availableAgents
+	}
+
+	partialLower := strings.ToLower(partial)
+	var matches []string
+	for _, agent := range m.availableAgents {
+		if strings.Contains(strings.ToLower(agent), partialLower) {
+			matches = append(matches, agent)
+		}
+	}
+	return matches
+}
+
+// suggestModels returns model suggestions for the current agent, filtered by partial input.
+func (m *Model) suggestModels(partial string) []string {
+	agent := m.currentAgent
+	if agent == "" {
+		agent = "claude"
+	}
+
+	var models []string
+	if m.agentModels != nil {
+		models = m.agentModels[agent]
+	}
+
+	// Fallback to default models if none configured
+	if len(models) == 0 {
+		switch agent {
+		case "claude":
+			models = []string{
+				"claude-opus-4-5-20251101",
+				"claude-sonnet-4-20250514",
+				"claude-sonnet-4-5-20251101",
+				"claude-haiku-4-5-20251101",
+			}
+		case "gemini":
+			models = []string{
+				"gemini-2.5-pro",
+				"gemini-2.5-flash",
+				"gemini-3-pro-preview",
+				"gemini-3-flash-preview",
+			}
+		case "codex":
+			models = []string{
+				"gpt-5.1",
+				"gpt-5.1-codex",
+				"gpt-5.2",
+				"gpt-5.2-codex",
+				"o3",
+				"o3-mini",
+			}
+		case "copilot":
+			models = []string{
+				"claude-sonnet-4-5",
+				"claude-haiku-4-5",
+				"gpt-4o",
+				"o3-mini",
+			}
+		default:
+			models = []string{m.currentModel}
+		}
+	}
+
+	if partial == "" {
+		return models
+	}
+
+	partialLower := strings.ToLower(partial)
+	var matches []string
+	for _, model := range models {
+		if strings.Contains(strings.ToLower(model), partialLower) {
+			matches = append(matches, model)
+		}
+	}
+	return matches
 }
 
 // Update handles messages.
@@ -1274,6 +1555,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Continue listening for more changes
 		cmds = append(cmds, m.listenForExplorerChanges())
 
+	case ChatProgressTickMsg:
+		// Only emit progress log if still streaming
+		if m.streaming {
+			elapsed := time.Since(m.chatStartedAt)
+			agent := m.chatAgent
+			if agent == "" {
+				agent = "agent"
+			}
+			m.logsPanel.AddInfo(strings.ToLower(agent), fmt.Sprintf("⏳ Waiting for response... (%s)", formatDuration(elapsed)))
+			// Continue ticking while streaming
+			cmds = append(cmds, m.chatProgressTick())
+		}
+
 	case StatsTickMsg:
 		// Update process statistics
 		m.statsWidget.Update()
@@ -1308,10 +1602,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, statsTickCmd())
 
 	case AgentResponseMsg:
+		elapsed := time.Since(m.chatStartedAt)
 		m.streaming = false
+		agentLower := strings.ToLower(msg.Agent)
 		if msg.Error != nil {
-			m.history.Add(NewSystemMessage("Error: " + msg.Error.Error()))
-			m.logsPanel.AddError(strings.ToLower(msg.Agent), "Error: "+msg.Error.Error())
+			errMsg := msg.Error.Error()
+			// Check for timeout errors
+			if strings.Contains(errMsg, "context deadline exceeded") || strings.Contains(errMsg, "timed out") {
+				m.history.Add(NewSystemMessage(fmt.Sprintf("⏱ Request timed out after %s", formatDuration(elapsed))))
+				m.logsPanel.AddError(agentLower, fmt.Sprintf("⏱ Timeout after %s - consider using a faster model", formatDuration(elapsed)))
+			} else {
+				m.history.Add(NewSystemMessage("Error: " + errMsg))
+				m.logsPanel.AddError(agentLower, fmt.Sprintf("✗ Error after %s: %s", formatDuration(elapsed), errMsg))
+			}
 		} else {
 			m.history.Add(NewAgentMessage(msg.Agent, msg.Content))
 			// Update token counts for the agent
@@ -1322,11 +1625,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					break
 				}
 			}
-			tokenInfo := ""
+			// Build detailed completion log
+			stats := []string{fmt.Sprintf("%d chars", len(msg.Content))}
 			if msg.TokensIn > 0 || msg.TokensOut > 0 {
-				tokenInfo = fmt.Sprintf(" [↑%d ↓%d tok]", msg.TokensIn, msg.TokensOut)
+				stats = append(stats, fmt.Sprintf("↑%d ↓%d tok", msg.TokensIn, msg.TokensOut))
 			}
-			m.logsPanel.AddSuccess(strings.ToLower(msg.Agent), fmt.Sprintf("Response received (%d chars)%s", len(msg.Content), tokenInfo))
+			stats = append(stats, formatDuration(elapsed))
+			m.logsPanel.AddSuccess(agentLower, fmt.Sprintf("✓ Response [%s]", strings.Join(stats, " | ")))
 		}
 		m.updateViewport()
 		m.updateLogsPanelTokenStats()
@@ -1355,6 +1660,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.updateViewport()
 
+	case editorFinishedMsg:
+		// Handle editor close - refresh explorer and log result
+		if msg.err != nil {
+			m.logsPanel.AddError("editor", fmt.Sprintf("Editor error: %v", msg.err))
+		} else {
+			m.logsPanel.AddSuccess("editor", fmt.Sprintf("Edited: %s", filepath.Base(msg.filePath)))
+		}
+		// Refresh explorer to show any changes
+		if m.explorerPanel != nil {
+			_ = m.explorerPanel.Refresh()
+		}
+
 	case WorkflowUpdateMsg:
 		m.workflowState = msg.State
 
@@ -1362,19 +1679,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.workflowRunning = true
 		m.workflowStartedAt = time.Now()
 		m.workflowPhase = "running"
-		// Set first active agent as running
-		var firstAgent string
+		// Reset all agents to idle - actual agent events will set them to running
 		for _, a := range m.agentInfos {
-			if a.Status == AgentStatusIdle {
-				a.Status = AgentStatusRunning
-				firstAgent = a.Name
-				break
+			if a.Status != AgentStatusDisabled {
+				a.Status = AgentStatusIdle
 			}
 		}
 		m.history.Add(NewSystemMessage("Starting workflow..."))
 		m.logsPanel.AddInfo("workflow", "Workflow started: "+msg.Prompt)
-		if firstAgent != "" {
-			m.logsPanel.AddInfo(strings.ToLower(firstAgent), "Agent started processing")
+		// Auto-show logs panel when workflow starts so user can see progress
+		if !m.showLogs {
+			m.showLogs = true
+			m.logsPanel.AddInfo("system", "Logs panel opened - press Ctrl+L to toggle")
+			// Recalculate layout with logs panel visible
+			if m.width > 0 && m.height > 0 {
+				m.recalculateLayout()
+			}
 		}
 		m.updateViewport()
 		cmds = append(cmds, m.spinner.Tick)
@@ -1456,6 +1776,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				details = fmt.Sprintf("[%s] %s", phase, details)
 			}
 			m.logsPanel.AddInfo(source, "▶ "+details)
+			// Show CLI command for debugging
+			if cmd, ok := msg.Data["command"].(string); ok && cmd != "" {
+				m.logsPanel.AddDebug(source, "$ "+cmd)
+			}
+			// Update agent status to running
+			for _, a := range m.agentInfos {
+				if strings.EqualFold(a.Name, msg.Agent) {
+					a.Status = AgentStatusRunning
+					break
+				}
+			}
 
 		case "tool_use":
 			m.logsPanel.AddInfo(source, "🔧 Tool: "+msg.Message)
@@ -1487,7 +1818,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Add token info
 			if tokensIn, ok := msg.Data["tokens_in"].(int); ok {
 				if tokensOut, ok := msg.Data["tokens_out"].(int); ok {
-					stats = append(stats, fmt.Sprintf("%d→%d tok", tokensIn, tokensOut))
+					stats = append(stats, fmt.Sprintf("↑%d ↓%d tok", tokensIn, tokensOut))
 				}
 			}
 
@@ -1514,6 +1845,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				details += " [" + strings.Join(stats, " | ") + "]"
 			}
 			m.logsPanel.AddSuccess(source, "✓ "+details)
+			// Update agent status to done
+			for _, a := range m.agentInfos {
+				if strings.EqualFold(a.Name, msg.Agent) {
+					a.Status = AgentStatusDone
+					break
+				}
+			}
 
 		case "error":
 			details := msg.Message
@@ -1553,6 +1891,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				details += " [" + strings.Join(errorInfo, " | ") + "]"
 			}
 			m.logsPanel.AddError(source, "✗ "+details)
+			// Update agent status to error
+			for _, a := range m.agentInfos {
+				if strings.EqualFold(a.Name, msg.Agent) {
+					a.Status = AgentStatusError
+					break
+				}
+			}
 
 		default:
 			m.logsPanel.AddDebug(source, msg.Message)
@@ -1635,18 +1980,34 @@ func (m Model) handleSubmit() (tea.Model, tea.Cmd) {
 			agent = "claude"
 		}
 		m.streaming = true
-		// Create cancellable context
-		ctx, cancel := context.WithCancel(context.Background())
+		m.chatStartedAt = time.Now()
+		m.chatAgent = agent
+
+		// Determine timeout (use configured value or default to 3 min)
+		timeout := m.chatTimeout
+		if timeout == 0 {
+			timeout = 3 * time.Minute
+		}
+
+		// Create cancellable context with timeout
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		m.cancelFunc = cancel
 
-		// Log with context info
+		// Log with detailed context info
 		historyCount := len(m.history.All())
-		if historyCount > 1 {
-			m.logsPanel.AddInfo(strings.ToLower(agent), fmt.Sprintf("Sending prompt (%d chars) with %d messages of context", len(input), historyCount-1))
-		} else {
-			m.logsPanel.AddInfo(strings.ToLower(agent), fmt.Sprintf("Sending prompt (%d chars)", len(input)))
+		model := m.currentModel
+		if model == "" {
+			model = "default"
 		}
-		return m, tea.Batch(m.spinner.Tick, m.sendToAgentWithCtx(ctx, input, agent))
+		logMsg := fmt.Sprintf("▶ %s [%s] (%d chars", agent, model, len(input))
+		if historyCount > 1 {
+			logMsg += fmt.Sprintf(", %d ctx msgs", historyCount-1)
+		}
+		logMsg += fmt.Sprintf(", timeout: %s)", formatDuration(timeout))
+		m.logsPanel.AddInfo(strings.ToLower(agent), logMsg)
+
+		// Start periodic progress tick
+		return m, tea.Batch(m.spinner.Tick, m.sendToAgentWithCtx(ctx, input, agent), m.chatProgressTick())
 	}
 
 	// No agents configured
@@ -1664,6 +2025,12 @@ type ShellOutputMsg struct {
 	Output   string
 	Error    string
 	ExitCode int
+}
+
+// editorFinishedMsg is sent when the external editor closes
+type editorFinishedMsg struct {
+	filePath string
+	err      error
 }
 
 // executeShellCommand runs a shell command and returns the output
@@ -1957,6 +2324,12 @@ func (m Model) handleCommand(cmd *Command, args []string) (tea.Model, tea.Cmd) {
 		m.history.Add(NewSystemMessage("Logs cleared"))
 		m.updateViewport()
 
+	case "copylogs":
+		// Copy logs to clipboard
+		newModel, _, _ := m.copyLogsToClipboard()
+		m = newModel.(Model)
+		m.updateViewport()
+
 	case "explorer":
 		// Toggle explorer panel
 		m.showExplorer = !m.showExplorer
@@ -2050,17 +2423,24 @@ func (m *Model) calculateInputLines() int {
 	}
 
 	// Count actual newlines in content
-	lines := strings.Count(content, "\n") + 1
+	lines := 0
 
-	// Also consider line wrapping based on textarea width
-	if m.textarea.Width() > 0 {
-		for _, line := range strings.Split(content, "\n") {
-			// Each line might wrap if longer than width (use lipgloss.Width for Unicode)
-			lineWidth := lipgloss.Width(line)
-			if lineWidth > m.textarea.Width() {
-				extraLines := lineWidth / m.textarea.Width()
-				lines += extraLines
-			}
+	// Calculate wrapped lines for each line segment
+	textareaWidth := m.textarea.Width()
+	if textareaWidth <= 0 {
+		textareaWidth = 80 // Fallback
+	}
+
+	for _, line := range strings.Split(content, "\n") {
+		lineWidth := lipgloss.Width(line)
+		if lineWidth == 0 {
+			// Empty line still takes 1 line
+			lines++
+		} else {
+			// Calculate how many visual lines this content line needs
+			// Formula: ceil(lineWidth / textareaWidth) = (lineWidth + textareaWidth - 1) / textareaWidth
+			wrappedLines := (lineWidth + textareaWidth - 1) / textareaWidth
+			lines += wrappedLines
 		}
 	}
 
@@ -2078,43 +2458,7 @@ func (m *Model) calculateInputLines() int {
 // recalculateLayout recalculates viewport and logs panel sizes
 // This ensures exact calculations by accounting for all borders, padding, and dynamic elements
 func (m *Model) recalculateLayout() {
-	// === EXACT HEIGHT CALCULATIONS ===
-	// Header: logo line (1) + agents bar (1) + divider (1) = 3
-	headerHeight := 3
-
-	// Pipeline takes 2 lines when visible
-	if m.workflowRunning || m.workflowPhase == "done" {
-		headerHeight += 2
-	}
-
-	// Footer: keybindings line (1) + padding (1) = 2
-	footerHeight := 2
-
-	// Calculate dynamic input height based on content
-	inputLines := m.calculateInputLines()
-	// Input area: border top (1) + content lines + border bottom (1) + margin (1) = inputLines + 3
-	inputHeight := inputLines + 3
-
-	// Status line when streaming/running = 1
-	statusHeight := 0
-	if m.streaming || m.workflowRunning {
-		statusHeight = 1
-	}
-
-	// NOTE: Dropdown suggestions are now rendered as an overlay in View(), not inline
-	// This prevents the layout from shifting when the dropdown appears
-
-	// Total fixed height (everything except viewport)
-	fixedHeight := headerHeight + footerHeight + inputHeight + statusHeight
-
-	// Viewport gets remaining height
-	// Subtract 2 for the main content box borders
-	viewportHeight := m.height - fixedHeight - 2
-	if viewportHeight < 3 {
-		viewportHeight = 3
-	}
-
-	// === EXACT WIDTH CALCULATIONS ===
+	// === EXACT WIDTH CALCULATIONS (must come first for textarea width) ===
 	// No outer margins - panels fill the entire width when joined with JoinHorizontal
 	explorerWidth := 0
 	rightSidebarWidth := 0 // Shared by stats and logs panels
@@ -2171,6 +2515,55 @@ func (m *Model) recalculateLayout() {
 			}
 		}
 		mainWidth -= rightSidebarWidth
+	}
+
+	// === SET TEXTAREA WIDTH FIRST (needed for accurate line calculation) ===
+	// The textarea width must match the available content area in renderInput:
+	// - renderMainContent receives mainWidth - 2 (for main panel borders)
+	// - renderInput uses style.Width(width - 4) for content area = mainWidth - 6
+	// - Prefix can be up to 3 chars (spinner + space)
+	// - So textarea width = mainWidth - 6 - 3 = mainWidth - 9
+	// Using mainWidth - 8 to be slightly generous while avoiding overflow
+	inputWidth := mainWidth - 8
+	if inputWidth < 20 {
+		inputWidth = 20
+	}
+	m.textarea.SetWidth(inputWidth)
+
+	// === EXACT HEIGHT CALCULATIONS ===
+	// Header: logo line (1) + agents bar (1) + divider (1) = 3
+	headerHeight := 3
+
+	// Pipeline takes 2 lines when visible
+	if m.workflowRunning || m.workflowPhase == "done" {
+		headerHeight += 2
+	}
+
+	// Footer: keybindings line (1) + padding (1) = 2
+	footerHeight := 2
+
+	// Calculate dynamic input height based on content (uses textarea width set above)
+	inputLines := m.calculateInputLines()
+	// Input area: border top (1) + content lines + border bottom (1) + margin (1) = inputLines + 3
+	inputHeight := inputLines + 3
+
+	// Status line when streaming/running = 1
+	statusHeight := 0
+	if m.streaming || m.workflowRunning {
+		statusHeight = 1
+	}
+
+	// NOTE: Dropdown suggestions are now rendered as an overlay in View(), not inline
+	// This prevents the layout from shifting when the dropdown appears
+
+	// Total fixed height (everything except viewport)
+	fixedHeight := headerHeight + footerHeight + inputHeight + statusHeight
+
+	// Viewport gets remaining height
+	// Subtract 2 for the main content box borders
+	viewportHeight := m.height - fixedHeight - 2
+	if viewportHeight < 3 {
+		viewportHeight = 3
 	}
 
 	// === NORMALIZATION OF WIDTHS TO PREVENT OVERFLOW ===
@@ -2281,14 +2674,10 @@ func (m *Model) recalculateLayout() {
 		m.viewport.Height = viewportHeight
 	}
 
-	// === TEXTAREA SIZE ===
-	// Account for input container padding (2) and border (2)
-	inputWidth := mainWidth - 4
-	if inputWidth < 20 {
-		inputWidth = 20
-	}
-	m.textarea.SetWidth(inputWidth)
-	m.textarea.SetHeight(inputLines) // Dynamic height based on content
+	// === TEXTAREA HEIGHT ===
+	// Width was set earlier in this function for accurate line calculation
+	// Now set the height based on the calculated inputLines
+	m.textarea.SetHeight(inputLines)
 
 	// === UPDATE MARKDOWN RENDERER WIDTH ===
 	// Update word wrap to match content viewport width
@@ -2352,11 +2741,19 @@ func (m Model) renderHistory() string {
 		return sb.String()
 	}
 
+	// Calculate wrap width for user messages (viewport width - padding)
+	wrapWidth := m.viewport.Width - 4
+	if wrapWidth < 20 {
+		wrapWidth = 80
+	}
+
 	for _, msg := range msgs {
 		switch msg.Role {
 		case RoleUser:
 			sb.WriteString(userLabelStyle.Render("You") + "\n")
-			sb.WriteString(userMsgStyle.Render(msg.Content))
+			// Wrap user message to fit viewport width
+			wrappedContent := wrapText(msg.Content, wrapWidth)
+			sb.WriteString(userMsgStyle.Render(wrappedContent))
 			sb.WriteString("\n\n")
 
 		case RoleAgent:
@@ -2714,6 +3111,69 @@ func truncateWithAnsi(s string, maxWidth int) string {
 	return result.String()
 }
 
+// wrapText wraps text to fit within maxWidth, breaking on word boundaries
+func wrapText(text string, maxWidth int) string {
+	if maxWidth <= 0 {
+		maxWidth = 80
+	}
+
+	var result strings.Builder
+	lines := strings.Split(text, "\n")
+
+	for i, line := range lines {
+		if i > 0 {
+			result.WriteString("\n")
+		}
+
+		// If line fits, add it directly
+		if lipgloss.Width(line) <= maxWidth {
+			result.WriteString(line)
+			continue
+		}
+
+		// Wrap long lines
+		words := strings.Fields(line)
+		currentLine := ""
+		for _, word := range words {
+			testLine := currentLine
+			if testLine != "" {
+				testLine += " "
+			}
+			testLine += word
+
+			if lipgloss.Width(testLine) <= maxWidth {
+				currentLine = testLine
+			} else {
+				// Write current line and start new one
+				if currentLine != "" {
+					result.WriteString(currentLine)
+					result.WriteString("\n")
+				}
+				// Handle very long words that exceed maxWidth
+				if lipgloss.Width(word) > maxWidth {
+					// Break the word
+					for _, r := range word {
+						if lipgloss.Width(currentLine+string(r)) > maxWidth {
+							result.WriteString(currentLine)
+							result.WriteString("\n")
+							currentLine = string(r)
+						} else {
+							currentLine += string(r)
+						}
+					}
+				} else {
+					currentLine = word
+				}
+			}
+		}
+		if currentLine != "" {
+			result.WriteString(currentLine)
+		}
+	}
+
+	return result.String()
+}
+
 // skipCharsWithAnsi skips the first skipWidth visible characters and returns the rest
 func skipCharsWithAnsi(s string, skipWidth int) string {
 	if skipWidth <= 0 {
@@ -2830,20 +3290,9 @@ func (m Model) renderMainContent(w int) string {
 	sb.WriteString(divider)
 	sb.WriteString("\n")
 
-	// === WORKFLOW PROGRESS BAR (when workflow is active) ===
-	if m.workflowProgress.IsActive() || m.workflowRunning || m.workflowPhase == "done" {
-		m.workflowProgress.SetWidth(w - 4)
-		sb.WriteString(m.workflowProgress.Render())
-		sb.WriteString("\n")
-	}
-
+	// NOTE: Workflow progress bar removed - redundant with agent bar indicators
 	// NOTE: Consensus panel is now rendered as overlay in View()
-
-	// === PIPELINE VISUALIZATION (when workflow is running or done) ===
-	if m.workflowRunning || m.workflowPhase == "done" {
-		sb.WriteString(RenderPipeline(m.agentInfos))
-		sb.WriteString("\n")
-	}
+	// NOTE: Pipeline visualization removed - redundant with agent bar
 
 	// === CHAT VIEWPORT ===
 	sb.WriteString(m.viewport.View())
@@ -2858,10 +3307,15 @@ func (m Model) renderMainContent(w int) string {
 			Render(fmt.Sprintf("%s Processing workflow... %s", m.spinner.View(), formatDuration(elapsed)))
 		sb.WriteString("  " + statusLine + "\n")
 	} else if m.streaming {
+		elapsed := time.Since(m.chatStartedAt)
+		agent := m.chatAgent
+		if agent == "" {
+			agent = "agent"
+		}
 		statusLine := lipgloss.NewStyle().
 			Foreground(secondaryColor).
 			Bold(true).
-			Render(m.spinner.View() + " Thinking...")
+			Render(fmt.Sprintf("%s %s thinking... %s", m.spinner.View(), agent, formatDuration(elapsed)))
 		sb.WriteString("  " + statusLine + "\n")
 	}
 
@@ -2923,7 +3377,7 @@ func (m Model) renderHeader(width int) string {
 
 	var stats []string
 
-	// Tokens (↑in ↓out)
+	// Tokens (↑out to LLM, ↓in from LLM)
 	var tokensIn, tokensOut int
 	for _, a := range m.agentInfos {
 		tokensIn += a.TokensIn
@@ -2953,12 +3407,17 @@ func (m Model) renderHeader(width int) string {
 			Bold(true).
 			Render(iconCheck + " done")
 	} else if m.streaming {
+		elapsed := time.Since(m.chatStartedAt)
+		agent := m.chatAgent
+		if agent == "" {
+			agent = "thinking"
+		}
 		badge = lipgloss.NewStyle().
 			Background(secondaryColor).
 			Foreground(lipgloss.Color("#000")).
 			Padding(0, 1).
 			Bold(true).
-			Render(iconSpinner + " thinking")
+			Render(fmt.Sprintf("%s %s %s", iconSpinner, agent, formatDuration(elapsed)))
 	}
 
 	// === COMPOSE HEADER LINE ===
@@ -3004,6 +3463,11 @@ func (m Model) renderInput(width int) string {
 	}
 
 	input := prefix + m.textarea.View()
+
+	// style.Width sets CONTENT width (inside border+padding)
+	// width is mainWidth - 2 (from renderMainContent)
+	// Container needs: border(2) + padding(2) = 4 chars overhead
+	// So content width = width - 4 for the total container to fit
 	return style.Width(width - 4).Render(input)
 }
 
@@ -3062,33 +3526,67 @@ func (m Model) renderInlineSuggestions(width int) string {
 		dropdownWidth = 70
 	}
 
-	// Scroll up indicator
-	if start > 0 {
-		lines = append(lines, scrollStyle.Render(fmt.Sprintf("  ↑ %d more commands above", start)))
+	// Determine header and item type label based on suggestion type
+	headerText := "Commands"
+	itemType := "commands"
+	showDescription := true
+
+	switch m.suggestionType {
+	case "agent":
+		headerText = "Agents"
+		itemType = "agents"
+		showDescription = false
+	case "model":
+		headerText = fmt.Sprintf("Models for %s", m.currentAgent)
+		if m.currentAgent == "" {
+			headerText = "Models for claude"
+		}
+		itemType = "models"
+		showDescription = false
 	}
 
-	// Calculate max command width for alignment
-	maxCmdWidth := 12
+	// Scroll up indicator
+	if start > 0 {
+		lines = append(lines, scrollStyle.Render(fmt.Sprintf("  ↑ %d more %s above", start, itemType)))
+	}
+
+	// Calculate max item width for alignment
+	maxItemWidth := 12
 	for i := start; i < end; i++ {
-		cmdLen := lipgloss.Width(m.suggestions[i]) + 1
-		if cmdLen > maxCmdWidth {
-			maxCmdWidth = cmdLen
+		itemLen := lipgloss.Width(m.suggestions[i]) + 1
+		if itemLen > maxItemWidth {
+			maxItemWidth = itemLen
 		}
 	}
 
 	// Calculate maxDescWidth using dropdownWidth (not width)
-	maxDescWidth := dropdownWidth - maxCmdWidth - 12
+	maxDescWidth := dropdownWidth - maxItemWidth - 12
 	if maxDescWidth < 10 {
 		maxDescWidth = 10
 	}
 
-	// Command items
+	// Suggestion items
 	for i := start; i < end; i++ {
-		cmd := m.commands.Get(m.suggestions[i])
-		cmdName := "/" + m.suggestions[i]
+		itemName := m.suggestions[i]
 		desc := ""
-		if cmd != nil {
-			desc = cmd.Description
+
+		// For commands, show description; for agents/models, show status info
+		if showDescription {
+			cmd := m.commands.Get(itemName)
+			itemName = "/" + itemName
+			if cmd != nil {
+				desc = cmd.Description
+			}
+		} else if m.suggestionType == "agent" {
+			// Mark current agent
+			if strings.EqualFold(itemName, m.currentAgent) {
+				desc = "(current)"
+			}
+		} else if m.suggestionType == "model" {
+			// Mark current model
+			if strings.EqualFold(itemName, m.currentModel) {
+				desc = "(current)"
+			}
 		}
 
 		// Truncate description if needed
@@ -3099,11 +3597,11 @@ func (m Model) renderInlineSuggestions(width int) string {
 		var line string
 		if i == m.suggestionIndex {
 			// Selected item with visual highlight (bold + reverse video)
-			fullLine := fmt.Sprintf(" ▸ %-*s %s", maxCmdWidth, cmdName, desc)
+			fullLine := fmt.Sprintf(" ▸ %-*s %s", maxItemWidth, itemName, desc)
 			rowStyle := selectedStyle.Reverse(true)
 			line = rowStyle.Render(fullLine)
 		} else {
-			fullLine := fmt.Sprintf("   %-*s %s", maxCmdWidth, cmdName, desc)
+			fullLine := fmt.Sprintf("   %-*s %s", maxItemWidth, itemName, desc)
 			line = normalStyle.Render(fullLine)
 		}
 		lines = append(lines, line)
@@ -3111,7 +3609,7 @@ func (m Model) renderInlineSuggestions(width int) string {
 
 	// Scroll down indicator
 	if end < total {
-		lines = append(lines, scrollStyle.Render(fmt.Sprintf("  ↓ %d more commands below", total-end)))
+		lines = append(lines, scrollStyle.Render(fmt.Sprintf("  ↓ %d more %s below", total-end, itemType)))
 	}
 
 	content := strings.Join(lines, "\n")
@@ -3124,7 +3622,7 @@ func (m Model) renderInlineSuggestions(width int) string {
 		Width(dropdownWidth)
 
 	// Header
-	header := headerStyle.Render("Commands")
+	header := headerStyle.Render(headerText)
 	headerLine := " " + header + " " + descStyle.Render(fmt.Sprintf("(%d/%d)", m.suggestionIndex+1, total))
 
 	return headerLine + "\n" + boxStyle.Render(content)

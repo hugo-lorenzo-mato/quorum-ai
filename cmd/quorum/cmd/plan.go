@@ -71,10 +71,14 @@ func runPlan(_ *cobra.Command, _ []string) error {
 	defer func() { _ = output.Close() }()
 
 	// Initialize phase runner dependencies
-	deps, err := InitPhaseRunner(ctx, planMaxRetries, planDryRun, false)
+	deps, err := InitPhaseRunner(ctx, core.PhasePlan, planMaxRetries, planDryRun, false)
 	if err != nil {
 		return err
 	}
+
+	phaseCtx, phaseCancel := context.WithTimeout(ctx, deps.PhaseTimeout)
+	defer phaseCancel()
+	ctx = phaseCtx
 
 	// Acquire lock
 	if err := deps.StateAdapter.AcquireLock(ctx); err != nil {

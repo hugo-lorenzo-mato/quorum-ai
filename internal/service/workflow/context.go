@@ -120,6 +120,15 @@ type Config struct {
 	ConsolidatorAgent string
 	// ConsolidatorModel specifies the model to use for consolidation (optional).
 	ConsolidatorModel string
+	// PhaseTimeouts holds per-phase timeout durations.
+	PhaseTimeouts PhaseTimeouts
+}
+
+// PhaseTimeouts holds timeout durations for each workflow phase.
+type PhaseTimeouts struct {
+	Analyze time.Duration
+	Plan    time.Duration
+	Execute time.Duration
 }
 
 // PromptRenderer renders prompts for different phases.

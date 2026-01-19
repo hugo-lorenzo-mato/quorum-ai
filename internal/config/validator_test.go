@@ -22,25 +22,21 @@ func validConfig() *Config {
 			MaxFiles:      500,
 			IncludePhases: []string{"analyze", "consensus", "plan", "execute"},
 		},
-		Workflow: WorkflowConfig{
-			Timeout:    "2h",
+	Workflow: WorkflowConfig{
+		Timeout:    "12h",
 			MaxRetries: 3,
 		},
 		Agents: AgentsConfig{
 			Default: "claude",
 			Claude: AgentConfig{
-				Enabled:     true,
+				Enabled:     true, // Default agent must be enabled for valid config
 				Path:        "claude",
 				Model:       "claude-sonnet-4-20250514",
 				MaxTokens:   4096,
 				Temperature: 0.7,
 			},
 			Gemini: AgentConfig{
-				Enabled:     true,
-				Path:        "gemini",
-				Model:       "gemini-2.5-flash",
-				MaxTokens:   4096,
-				Temperature: 0.7,
+				Enabled: false,
 			},
 			Codex: AgentConfig{
 				Enabled: false,

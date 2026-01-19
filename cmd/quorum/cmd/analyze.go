@@ -81,10 +81,14 @@ func runAnalyze(_ *cobra.Command, args []string) error {
 	}
 
 	// Initialize phase runner dependencies
-	deps, err := InitPhaseRunner(ctx, analyzeMaxRetries, analyzeDryRun, false)
+	deps, err := InitPhaseRunner(ctx, core.PhaseAnalyze, analyzeMaxRetries, analyzeDryRun, false)
 	if err != nil {
 		return err
 	}
+
+	phaseCtx, phaseCancel := context.WithTimeout(ctx, deps.PhaseTimeout)
+	defer phaseCancel()
+	ctx = phaseCtx
 
 	deps.Logger.Info("starting analyze phase", "prompt_length", len(prompt))
 

@@ -83,21 +83,19 @@ func (c *CodexAdapter) Execute(ctx context.Context, opts core.ExecuteOptions) (*
 	args := c.buildArgs(opts)
 
 	// Codex CLI doesn't have --system-prompt, so prepend to user prompt
+	// Pass via stdin for robustness with long prompts and special characters
 	prompt := opts.Prompt
 	if opts.SystemPrompt != "" && prompt != "" {
 		prompt = "[System Instructions]\n" + opts.SystemPrompt + "\n\n[User Message]\n" + prompt
-	}
-	if prompt != "" {
-		args = append(args, prompt)
 	}
 
 	// Use streaming execution if event handler is configured
 	var result *CommandResult
 	var err error
 	if c.eventHandler != nil {
-		result, err = c.ExecuteWithStreaming(ctx, "codex", args, "", opts.WorkDir)
+		result, err = c.ExecuteWithStreaming(ctx, "codex", args, prompt, opts.WorkDir)
 	} else {
-		result, err = c.ExecuteCommand(ctx, args, "", opts.WorkDir)
+		result, err = c.ExecuteCommand(ctx, args, prompt, opts.WorkDir)
 	}
 	if err != nil {
 		return nil, err

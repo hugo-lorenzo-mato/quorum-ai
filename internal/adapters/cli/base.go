@@ -228,8 +228,19 @@ func (b *BaseAdapter) ExecuteWithStreaming(ctx context.Context, adapterName stri
 		return b.ExecuteCommand(ctx, args, stdin, workDir)
 	}
 
-	// Emit started event
-	b.emitEvent(core.NewAgentEvent(core.AgentEventStarted, adapterName, "Starting execution"))
+	// Build command string for logging (before streaming args are added)
+	cmdPath := b.config.Path
+	cmdParts := strings.Fields(cmdPath)
+	var fullCmd string
+	if len(cmdParts) > 1 {
+		fullCmd = cmdParts[0] + " " + strings.Join(append(cmdParts[1:], args...), " ")
+	} else {
+		fullCmd = cmdPath + " " + strings.Join(args, " ")
+	}
+
+	// Emit started event with command info
+	b.emitEvent(core.NewAgentEvent(core.AgentEventStarted, adapterName, "Starting execution").
+		WithData(map[string]any{"command": fullCmd}))
 
 	switch streamCfg.Method {
 	case StreamMethodJSONStdout:

@@ -1,33 +1,30 @@
-# Prompt Optimization Request
+# Prompt Enhancement Request
 
 ## Original User Prompt
 {{.OriginalPrompt}}
 
 ## Instructions
-Your task is to optimize the above prompt for better clarity and effectiveness when used with AI coding assistants. The optimization should:
+Your task is to ENHANCE and IMPROVE the above prompt to maximize the quality of results when used with AI coding assistants for codebase analysis. The enhancement should:
 
-1. **Preserve Intent**: Maintain the original meaning and goals exactly
-2. **Add Clarity**: Remove ambiguity, add specificity where helpful
-3. **Structure**: Organize into clear sections if the prompt is complex
-4. **Context**: Ensure sufficient context is provided for the task
-5. **Actionable**: Make the request actionable and measurable
+1. **Expand Context**: Add relevant technical context that would help understand the task better
+2. **Clarify Scope**: Define clear boundaries - what should be included/excluded from analysis
+3. **Add Specificity**: Include specific technical aspects to consider (architecture, patterns, security, performance, etc.)
+4. **Structure for Analysis**: Organize the request into clear sections suitable for multi-agent analysis
+5. **Define Success Criteria**: Add measurable outcomes or deliverables expected
+6. **Technical Depth**: Add technical considerations the user might not have explicitly mentioned but are relevant
 
-## Constraints
-- Do NOT change the fundamental request or add new requirements
-- Do NOT remove any requirements from the original prompt
-- Keep the optimized prompt concise but complete
+## Enhancement Goals
+- **DO** expand the prompt with helpful context and specifications
+- **DO** add technical considerations relevant to the task
+- **DO** structure complex requests into clear, analyzable components
+- **DO** suggest areas of analysis that would be valuable
+- **DO NOT** remove any requirements from the original prompt
+- **DO NOT** change the fundamental request or user's intent
+- **DO NOT** prioritize brevity over completeness
 - Preserve the user's preferred language (respond in the same language as the input)
-- If the prompt is already clear and well-structured, minimal changes are acceptable
 
-## Response Format
-Provide your response using the following Markdown structure:
-
-## Optimized Prompt
-[Write the complete optimized prompt here, preserving the user's language]
-
-## Changes Made
-- Change 1
-- Change 2
-
-## Reasoning
-Brief explanation of why these changes improve the prompt.
+## CRITICAL: Response Format
+Respond with ONLY the enhanced prompt. Do NOT include any headers, explanations, or meta-commentary.
+Do NOT write "## Optimized Prompt" or any section headers.
+Do NOT explain what changes you made.
+Just output the improved prompt directly, nothing else.

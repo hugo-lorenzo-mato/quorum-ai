@@ -36,7 +36,12 @@ trace:
 # Workflow execution settings
 workflow:
   # Maximum workflow execution time
-  timeout: 2h
+  timeout: 12h
+  # Maximum duration per standalone phase command
+  phase_timeouts:
+    analyze: 2h
+    plan: 2h
+    execute: 2h
   # Maximum retry attempts per task
   max_retries: 3
   # Dry-run mode (simulate without executing)

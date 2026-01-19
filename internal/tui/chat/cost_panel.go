@@ -253,12 +253,10 @@ func (p *CostPanel) Render() string {
 		sb.WriteString(warnStyle.Render("⚠ 80% of budget used"))
 	}
 
-	// Box style
+	// Box style - no fixed background to work with any terminal color
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color("#10b981")). // Green border
-		BorderBackground(lipgloss.Color("#1f1f23")).
-		Background(lipgloss.Color("#1f1f23")).
 		Padding(0, 1).
 		Width(p.width - 2)
 

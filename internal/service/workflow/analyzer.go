@@ -11,7 +11,6 @@ import (
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service/report"
-	"golang.org/x/sync/errgroup"
 )
 
 // AnalysisOutput represents output from an analysis agent.
@@ -189,6 +188,7 @@ func (a *Analyzer) Run(ctx context.Context, wctx *Context) error {
 }
 
 // runV1Analysis runs initial analysis with multiple agents in parallel.
+// It tolerates partial failures - continues as long as at least 2 agents succeed.
 func (a *Analyzer) runV1Analysis(ctx context.Context, wctx *Context) ([]AnalysisOutput, error) {
 	// Use Available to get only agents that are actually reachable (pass Ping)
 	agentNames := wctx.Agents.Available(ctx)
@@ -203,30 +203,67 @@ func (a *Analyzer) runV1Analysis(ctx context.Context, wctx *Context) ([]Analysis
 		wctx.Output.Log("info", "analyzer", fmt.Sprintf("V1 Analysis: querying %d agents (%s)", len(agentNames), strings.Join(agentNames, ", ")))
 	}
 
+	// Use sync.WaitGroup instead of errgroup to avoid cancelling all goroutines on first error
+	var wg sync.WaitGroup
 	var mu sync.Mutex
 	outputs := make([]AnalysisOutput, 0, len(agentNames))
+	errors := make(map[string]error)
 
-	g, gctx := errgroup.WithContext(ctx)
 	for _, name := range agentNames {
 		name := name // capture
-		g.Go(func() error {
-			output, err := a.runAnalysisWithAgent(gctx, wctx, name)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			output, err := a.runAnalysisWithAgent(ctx, wctx, name)
+			mu.Lock()
+			defer mu.Unlock()
 			if err != nil {
 				wctx.Logger.Error("agent analysis failed",
 					"agent", name,
 					"error", err,
 				)
-				return err
+				errors[name] = err
+			} else {
+				outputs = append(outputs, output)
 			}
-			mu.Lock()
-			outputs = append(outputs, output)
-			mu.Unlock()
-			return nil
-		})
+		}()
 	}
 
-	if err := g.Wait(); err != nil {
-		return nil, err
+	wg.Wait()
+
+	// Log summary
+	wctx.Logger.Info("V1 analysis complete",
+		"succeeded", len(outputs),
+		"failed", len(errors),
+		"total", len(agentNames),
+	)
+
+	// Need at least 2 successful outputs for consensus
+	minRequired := 2
+	if len(agentNames) < 2 {
+		minRequired = 1
+	}
+
+	if len(outputs) < minRequired {
+		// Collect error messages
+		var errMsgs []string
+		for agent, err := range errors {
+			errMsgs = append(errMsgs, fmt.Sprintf("%s: %v", agent, err))
+		}
+		return nil, fmt.Errorf("insufficient agents succeeded (%d/%d required): %s",
+			len(outputs), minRequired, strings.Join(errMsgs, "; "))
+	}
+
+	// Log which agents failed but we're continuing
+	if len(errors) > 0 {
+		var failedAgents []string
+		for agent := range errors {
+			failedAgents = append(failedAgents, agent)
+		}
+		if wctx.Output != nil {
+			wctx.Output.Log("warn", "analyzer", fmt.Sprintf("Continuing with %d/%d agents (failed: %s)",
+				len(outputs), len(agentNames), strings.Join(failedAgents, ", ")))
+		}
 	}
 
 	return outputs, nil
@@ -276,7 +313,7 @@ func (a *Analyzer) runAnalysisWithAgent(ctx context.Context, wctx *Context, agen
 			Prompt:  prompt,
 			Format:  core.OutputFormatText,
 			Model:   model,
-			Timeout: 5 * time.Minute,
+			Timeout: wctx.Config.PhaseTimeouts.Analyze,
 			Sandbox: wctx.Config.Sandbox,
 			Phase:   core.PhaseAnalyze,
 		})
@@ -392,7 +429,7 @@ func (a *Analyzer) runV2Critique(ctx context.Context, wctx *Context, v1Outputs [
 				Prompt:  prompt,
 				Format:  core.OutputFormatText,
 				Model:   model,
-				Timeout: 5 * time.Minute,
+				Timeout: wctx.Config.PhaseTimeouts.Analyze,
 				Sandbox: wctx.Config.Sandbox,
 				Phase:   core.PhaseAnalyze,
 			})
@@ -528,7 +565,7 @@ func (a *Analyzer) runV3Reconciliation(ctx context.Context, wctx *Context, v1, v
 			Prompt:  prompt,
 			Format:  core.OutputFormatText,
 			Model:   model,
-			Timeout: 10 * time.Minute,
+			Timeout: wctx.Config.PhaseTimeouts.Analyze,
 			Sandbox: wctx.Config.Sandbox,
 			Phase:   core.PhaseAnalyze,
 		})
@@ -660,7 +697,7 @@ func (a *Analyzer) consolidateAnalysis(ctx context.Context, wctx *Context, outpu
 			Prompt:  prompt,
 			Format:  core.OutputFormatText,
 			Model:   model,
-			Timeout: 5 * time.Minute,
+			Timeout: wctx.Config.PhaseTimeouts.Analyze,
 			Sandbox: wctx.Config.Sandbox,
 			Phase:   core.PhaseAnalyze,
 		})

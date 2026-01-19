@@ -64,6 +64,8 @@ type RunnerConfig struct {
 	Consolidator ConsolidatorConfig
 	// Report configures the markdown report output.
 	Report report.Config
+	// PhaseTimeouts holds per-phase timeout durations.
+	PhaseTimeouts PhaseTimeouts
 }
 
 // ConsolidatorConfig configures the analysis consolidation phase.
@@ -90,6 +92,11 @@ func DefaultRunnerConfig() *RunnerConfig {
 			Model: "",
 		},
 		Report: report.DefaultConfig(),
+		PhaseTimeouts: PhaseTimeouts{
+			Analyze: 2 * time.Hour,
+			Plan:    2 * time.Hour,
+			Execute: 2 * time.Hour,
+		},
 	}
 }
 
@@ -376,6 +383,7 @@ func (r *Runner) createContext(state *core.WorkflowState) *Context {
 			MaxCostPerTask:     r.config.MaxCostPerTask,
 			ConsolidatorAgent:  r.config.Consolidator.Agent,
 			ConsolidatorModel:  r.config.Consolidator.Model,
+			PhaseTimeouts:      r.config.PhaseTimeouts,
 		},
 	}
 }

@@ -82,18 +82,16 @@ func (c *ClaudeAdapter) Execute(ctx context.Context, opts core.ExecuteOptions) (
 	args := c.buildArgs(opts)
 
 	// Build the full prompt, including conversation history if provided
+	// Pass via stdin for robustness with long prompts and special characters
 	fullPrompt := c.buildPromptWithHistory(opts)
-	if fullPrompt != "" {
-		args = append(args, fullPrompt)
-	}
 
 	// Use streaming execution if event handler is configured
 	var result *CommandResult
 	var err error
 	if c.eventHandler != nil {
-		result, err = c.ExecuteWithStreaming(ctx, "claude", args, "", opts.WorkDir)
+		result, err = c.ExecuteWithStreaming(ctx, "claude", args, fullPrompt, opts.WorkDir)
 	} else {
-		result, err = c.ExecuteCommand(ctx, args, "", opts.WorkDir)
+		result, err = c.ExecuteCommand(ctx, args, fullPrompt, opts.WorkDir)
 	}
 	if err != nil {
 		return nil, err

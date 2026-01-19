@@ -22,8 +22,17 @@ func TestLoader_Defaults(t *testing.T) {
 	}
 
 	// Verify workflow defaults
-	if cfg.Workflow.Timeout != "2h" {
-		t.Errorf("Workflow.Timeout = %q, want %q", cfg.Workflow.Timeout, "2h")
+	if cfg.Workflow.Timeout != "12h" {
+		t.Errorf("Workflow.Timeout = %q, want %q", cfg.Workflow.Timeout, "12h")
+	}
+	if cfg.Workflow.PhaseTimeouts.Analyze != "2h" {
+		t.Errorf("Workflow.PhaseTimeouts.Analyze = %q, want %q", cfg.Workflow.PhaseTimeouts.Analyze, "2h")
+	}
+	if cfg.Workflow.PhaseTimeouts.Plan != "2h" {
+		t.Errorf("Workflow.PhaseTimeouts.Plan = %q, want %q", cfg.Workflow.PhaseTimeouts.Plan, "2h")
+	}
+	if cfg.Workflow.PhaseTimeouts.Execute != "2h" {
+		t.Errorf("Workflow.PhaseTimeouts.Execute = %q, want %q", cfg.Workflow.PhaseTimeouts.Execute, "2h")
 	}
 	if cfg.Workflow.MaxRetries != 3 {
 		t.Errorf("Workflow.MaxRetries = %d, want %d", cfg.Workflow.MaxRetries, 3)
@@ -33,8 +42,9 @@ func TestLoader_Defaults(t *testing.T) {
 	if cfg.Agents.Default != "claude" {
 		t.Errorf("Agents.Default = %q, want %q", cfg.Agents.Default, "claude")
 	}
-	if !cfg.Agents.Claude.Enabled {
-		t.Error("Agents.Claude.Enabled = false, want true")
+	// All agents disabled by default - config file must explicitly enable them
+	if cfg.Agents.Claude.Enabled {
+		t.Error("Agents.Claude.Enabled = true, want false (default)")
 	}
 
 	// Verify consensus defaults

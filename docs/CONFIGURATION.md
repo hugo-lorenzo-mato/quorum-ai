@@ -114,7 +114,11 @@ Controls workflow execution behavior.
 
 ```yaml
 workflow:
-  timeout: 2h
+  timeout: 12h
+  phase_timeouts:
+    analyze: 2h
+    plan: 2h
+    execute: 2h
   max_retries: 3
   dry_run: false
   sandbox: false
@@ -123,7 +127,8 @@ workflow:
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `timeout` | duration | `2h` | Maximum workflow execution time |
+| `timeout` | duration | `12h` | Maximum workflow execution time |
+| `phase_timeouts` | map | `analyze: 2h`, `plan: 2h`, `execute: 2h` | Maximum duration for `quorum analyze`, `quorum plan`, and `quorum execute` |
 | `max_retries` | int | `3` | Maximum retry attempts per failed task |
 | `dry_run` | bool | `false` | Simulate execution without running agents |
 | `sandbox` | bool | `false` | Restrict dangerous operations |

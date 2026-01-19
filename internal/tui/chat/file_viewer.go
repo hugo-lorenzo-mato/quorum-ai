@@ -18,20 +18,22 @@ const (
 
 // FileViewer displays file contents in an overlay
 type FileViewer struct {
-	filePath string
-	fileName string
-	content  string
-	lines    []string
+	filePath  string
+	fileName  string
+	content   string
+	lines     []string
 	lineCount int
-	fileSize int64
-	isBinary bool
-	error    string
+	fileSize  int64
+	isBinary  bool
+	error     string
 
-	viewport viewport.Model
-	width    int
-	height   int
-	visible  bool
-	ready    bool
+	viewport       viewport.Model
+	width          int
+	height         int
+	visible        bool
+	ready          bool
+	horizontalOffset int // horizontal scroll offset
+	maxLineWidth   int   // max width of any line (for scroll limits)
 }
 
 // NewFileViewer creates a new file viewer
@@ -49,6 +51,8 @@ func (f *FileViewer) SetFile(path string) error {
 	f.isBinary = false
 	f.content = ""
 	f.lines = nil
+	f.horizontalOffset = 0
+	f.maxLineWidth = 0
 
 	// Check file info
 	info, err := os.Stat(path)
@@ -120,6 +124,11 @@ func (f *FileViewer) IsVisible() bool {
 	return f.visible
 }
 
+// GetFilePath returns the current file path
+func (f *FileViewer) GetFilePath() string {
+	return f.filePath
+}
+
 // SetSize sets the viewer dimensions
 func (f *FileViewer) SetSize(width, height int) {
 	f.width = width
@@ -176,6 +185,45 @@ func (f *FileViewer) ScrollBottom() {
 	f.viewport.GotoBottom()
 }
 
+// ScrollLeft scrolls left horizontally
+func (f *FileViewer) ScrollLeft() {
+	if f.horizontalOffset > 0 {
+		f.horizontalOffset -= 4
+		if f.horizontalOffset < 0 {
+			f.horizontalOffset = 0
+		}
+		f.updateViewport()
+	}
+}
+
+// ScrollRight scrolls right horizontally
+func (f *FileViewer) ScrollRight() {
+	// Calculate max scroll based on content width vs viewport width
+	maxScroll := f.maxLineWidth - (f.viewport.Width - 10) // Leave some margin
+	if maxScroll < 0 {
+		maxScroll = 0
+	}
+	if f.horizontalOffset < maxScroll {
+		f.horizontalOffset += 4
+		f.updateViewport()
+	}
+}
+
+// ScrollHome goes to beginning of line (horizontal)
+func (f *FileViewer) ScrollHome() {
+	f.horizontalOffset = 0
+	f.updateViewport()
+}
+
+// ScrollEnd goes to end of longest line (horizontal)
+func (f *FileViewer) ScrollEnd() {
+	maxScroll := f.maxLineWidth - (f.viewport.Width - 10)
+	if maxScroll > 0 {
+		f.horizontalOffset = maxScroll
+		f.updateViewport()
+	}
+}
+
 // updateViewport updates the viewport content
 func (f *FileViewer) updateViewport() {
 	if !f.ready || len(f.lines) == 0 {
@@ -193,17 +241,29 @@ func (f *FileViewer) updateViewport() {
 	lineNumStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6B7280"))
 	codeStyle := lipgloss.NewStyle().Foreground(syntaxColor)
 
+	// Calculate display width for content (after line number)
+	displayWidth := f.viewport.Width - lineNumWidth - 4
+	if displayWidth < 10 {
+		displayWidth = 10
+	}
+
+	// Track max line width for horizontal scroll limits
+	f.maxLineWidth = 0
+
 	for i, line := range f.lines {
+		// Replace tabs with spaces for consistent width calculation
+		expandedLine := strings.ReplaceAll(line, "\t", "    ")
+		lineWidth := lipgloss.Width(expandedLine)
+		if lineWidth > f.maxLineWidth {
+			f.maxLineWidth = lineWidth
+		}
+
 		lineNum := fmt.Sprintf("%*d", lineNumWidth, i+1)
 		sb.WriteString(lineNumStyle.Render(lineNum))
 		sb.WriteString(" │ ")
 
-		// Truncate long lines
-		maxLineWidth := f.viewport.Width - lineNumWidth - 4
-		if maxLineWidth < 10 {
-			maxLineWidth = 10
-		}
-		displayLine := truncateLine(line, maxLineWidth)
+		// Apply horizontal offset and get visible portion
+		displayLine := getVisiblePortion(expandedLine, f.horizontalOffset, displayWidth)
 		sb.WriteString(codeStyle.Render(displayLine))
 
 		if i < len(f.lines)-1 {
@@ -212,6 +272,69 @@ func (f *FileViewer) updateViewport() {
 	}
 
 	f.viewport.SetContent(sb.String())
+}
+
+// getVisiblePortion extracts the visible portion of a line based on horizontal offset
+func getVisiblePortion(line string, offset, width int) string {
+	if offset == 0 && lipgloss.Width(line) <= width {
+		return line
+	}
+
+	// Convert to runes for proper Unicode handling
+	runes := []rune(line)
+
+	// Skip characters until we reach the offset
+	currentWidth := 0
+	startIdx := 0
+	for i, r := range runes {
+		if currentWidth >= offset {
+			startIdx = i
+			break
+		}
+		currentWidth += runeWidth(r)
+		startIdx = i + 1
+	}
+
+	// If offset is beyond line length, return empty
+	if startIdx >= len(runes) {
+		return ""
+	}
+
+	// Build visible portion up to width
+	var result strings.Builder
+	visibleWidth := 0
+	for i := startIdx; i < len(runes); i++ {
+		r := runes[i]
+		rw := runeWidth(r)
+		if visibleWidth+rw > width {
+			break
+		}
+		result.WriteRune(r)
+		visibleWidth += rw
+	}
+
+	// Add scroll indicator if there's more content
+	visibleStr := result.String()
+	if offset > 0 {
+		// Show left indicator
+		visibleStr = "◀" + visibleStr[min(1, len(visibleStr)):]
+	}
+	if startIdx+len([]rune(visibleStr)) < len(runes) {
+		// Show right indicator
+		if len(visibleStr) > 0 {
+			visibleRunes := []rune(visibleStr)
+			visibleStr = string(visibleRunes[:len(visibleRunes)-1]) + "▶"
+		}
+	}
+
+	return visibleStr
+}
+
+// runeWidth returns the display width of a rune
+func runeWidth(r rune) int {
+	// Simple approximation - most characters are width 1
+	// Wide characters (CJK, emoji) would need proper handling
+	return 1
 }
 
 // Render renders the file viewer
@@ -281,7 +404,7 @@ func (f *FileViewer) Render() string {
 	// Footer with scroll info and help
 	scrollPercent := f.viewport.ScrollPercent() * 100
 	scrollInfo := dimStyle.Render(fmt.Sprintf("%.0f%%", scrollPercent))
-	helpText := dimStyle.Render("↑↓ scroll • PgUp/PgDn • g/G top/bottom • Esc close")
+	helpText := dimStyle.Render("↑↓←→ scroll • g/G top/bottom • 0/$ start/end • e edit • q close")
 
 	// Calculate gap
 	footerWidth := f.width - 6

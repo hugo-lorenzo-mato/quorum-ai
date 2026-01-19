@@ -271,7 +271,7 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 			Prompt:      prompt,
 			Format:      core.OutputFormatText,
 			Model:       model,
-			Timeout:     10 * time.Minute,
+			Timeout:     wctx.Config.PhaseTimeouts.Execute,
 			Sandbox:     wctx.Config.Sandbox,
 			DeniedTools: e.denyTools,
 			WorkDir:     workDir, // Execute in worktree if available

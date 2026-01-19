@@ -175,6 +175,13 @@ func NewCommandRegistry() *CommandRegistry {
 	})
 
 	r.Register(&Command{
+		Name:        "copylogs",
+		Aliases:     []string{"cpl"},
+		Description: "Copy all logs to clipboard",
+		Usage:       "/copylogs",
+	})
+
+	r.Register(&Command{
 		Name:        "explorer",
 		Aliases:     []string{"e", "files", "tree"},
 		Description: "Toggle file explorer (or Ctrl+E)",

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -22,6 +23,11 @@ import (
 // cmdIDCounter provides additional uniqueness for workflow IDs generated from cmd.
 var cmdIDCounter uint64
 
+const (
+	defaultWorkflowTimeout = 12 * time.Hour
+	defaultPhaseTimeout    = 2 * time.Hour
+)
+
 // PhaseRunnerDeps holds all dependencies needed for running workflow phases.
 type PhaseRunnerDeps struct {
 	Config            *config.Config
@@ -38,12 +44,13 @@ type PhaseRunnerDeps struct {
 	DAGAdapter        *workflow.DAGAdapter
 	WorktreeManager   workflow.WorktreeManager
 	RunnerConfig      *workflow.RunnerConfig
+	PhaseTimeout      time.Duration
 }
 
 // InitPhaseRunner initializes all dependencies needed for running individual phases.
 // This extracts the common initialization logic from run.go to be reused by
 // analyze, plan, and execute commands.
-func InitPhaseRunner(ctx context.Context, maxRetries int, dryRun, sandbox bool) (*PhaseRunnerDeps, error) {
+func InitPhaseRunner(ctx context.Context, phase core.Phase, maxRetries int, dryRun, sandbox bool) (*PhaseRunnerDeps, error) {
 	// Load unified configuration using global viper (includes flag bindings)
 	loader := config.NewLoaderWithViper(viper.GetViper())
 	if cfgFile != "" {
@@ -104,14 +111,30 @@ func InitPhaseRunner(ctx context.Context, maxRetries int, dryRun, sandbox bool) 
 		return nil, fmt.Errorf("creating prompt renderer: %w", err)
 	}
 
-	// Create workflow runner config
-	timeout := time.Hour
-	if cfg.Workflow.Timeout != "" {
-		parsed, parseErr := time.ParseDuration(cfg.Workflow.Timeout)
-		if parseErr != nil {
-			return nil, fmt.Errorf("parsing workflow timeout %q: %w", cfg.Workflow.Timeout, parseErr)
-		}
-		timeout = parsed
+	// Determine workflow timeout
+	timeout, err := parseDurationDefault(cfg.Workflow.Timeout, defaultWorkflowTimeout)
+	if err != nil {
+		return nil, fmt.Errorf("parsing workflow timeout %q: %w", cfg.Workflow.Timeout, err)
+	}
+
+	phaseTimeoutStr := phaseTimeoutValue(cfg.Workflow.PhaseTimeouts, phase)
+	phaseTimeout, err := parseDurationDefault(phaseTimeoutStr, defaultPhaseTimeout)
+	if err != nil {
+		return nil, fmt.Errorf("parsing %s phase timeout %q: %w", strings.ToLower(string(phase)), phaseTimeoutStr, err)
+	}
+
+	// Parse all phase timeouts for passing to workflow runner
+	analyzeTimeout, err := parseDurationDefault(cfg.Workflow.PhaseTimeouts.Analyze, defaultPhaseTimeout)
+	if err != nil {
+		return nil, fmt.Errorf("parsing analyze phase timeout %q: %w", cfg.Workflow.PhaseTimeouts.Analyze, err)
+	}
+	planTimeout, err := parseDurationDefault(cfg.Workflow.PhaseTimeouts.Plan, defaultPhaseTimeout)
+	if err != nil {
+		return nil, fmt.Errorf("parsing plan phase timeout %q: %w", cfg.Workflow.PhaseTimeouts.Plan, err)
+	}
+	executeTimeout, err := parseDurationDefault(cfg.Workflow.PhaseTimeouts.Execute, defaultPhaseTimeout)
+	if err != nil {
+		return nil, fmt.Errorf("parsing execute phase timeout %q: %w", cfg.Workflow.PhaseTimeouts.Execute, err)
 	}
 
 	defaultAgent := cfg.Agents.Default
@@ -148,6 +171,11 @@ func InitPhaseRunner(ctx context.Context, maxRetries int, dryRun, sandbox bool) 
 			Enabled: false,
 			Agent:   cfg.PromptOptimizer.Agent,
 			Model:   cfg.PromptOptimizer.Model,
+		},
+		PhaseTimeouts: workflow.PhaseTimeouts{
+			Analyze: analyzeTimeout,
+			Plan:    planTimeout,
+			Execute: executeTimeout,
 		},
 	}
 
@@ -200,6 +228,7 @@ func InitPhaseRunner(ctx context.Context, maxRetries int, dryRun, sandbox bool) 
 		DAGAdapter:        dagAdapter,
 		WorktreeManager:   worktreeManager,
 		RunnerConfig:      runnerConfig,
+		PhaseTimeout:      phaseTimeout,
 	}, nil
 }
 
@@ -225,6 +254,7 @@ func CreateWorkflowContext(deps *PhaseRunnerDeps, state *core.WorkflowState) *wo
 			WorktreeMode:       deps.RunnerConfig.WorktreeMode,
 			MaxCostPerWorkflow: deps.RunnerConfig.MaxCostPerWorkflow,
 			MaxCostPerTask:     deps.RunnerConfig.MaxCostPerTask,
+			PhaseTimeouts:      deps.RunnerConfig.PhaseTimeouts,
 		},
 	}
 }
@@ -250,4 +280,29 @@ func InitializeWorkflowState(prompt string) *core.WorkflowState {
 func generateCmdWorkflowID() string {
 	counter := atomic.AddUint64(&cmdIDCounter, 1)
 	return fmt.Sprintf("wf-%d-%d", time.Now().UnixNano(), counter)
+}
+
+func parseDurationDefault(value string, fallback time.Duration) (time.Duration, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return fallback, nil
+	}
+	d, err := time.ParseDuration(value)
+	if err != nil {
+		return 0, err
+	}
+	return d, nil
+}
+
+func phaseTimeoutValue(cfg config.PhaseTimeoutConfig, phase core.Phase) string {
+	switch phase {
+	case core.PhaseAnalyze:
+		return cfg.Analyze
+	case core.PhasePlan:
+		return cfg.Plan
+	case core.PhaseExecute:
+		return cfg.Execute
+	default:
+		return ""
+	}
 }

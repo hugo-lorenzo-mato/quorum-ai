@@ -148,8 +148,25 @@ func (v *Validator) validateTrace(cfg *TraceConfig) {
 }
 
 func (v *Validator) validateWorkflow(cfg *WorkflowConfig) {
+	if cfg.Timeout == "" {
+		cfg.Timeout = "12h"
+	}
 	if _, err := time.ParseDuration(cfg.Timeout); err != nil {
 		v.addError("workflow.timeout", cfg.Timeout, "invalid duration format")
+	}
+
+	phaseTimeouts := map[string]string{
+		"workflow.phase_timeouts.analyze": cfg.PhaseTimeouts.Analyze,
+		"workflow.phase_timeouts.plan":    cfg.PhaseTimeouts.Plan,
+		"workflow.phase_timeouts.execute": cfg.PhaseTimeouts.Execute,
+	}
+	for field, value := range phaseTimeouts {
+		if strings.TrimSpace(value) == "" {
+			continue
+		}
+		if _, err := time.ParseDuration(value); err != nil {
+			v.addError(field, value, "invalid duration format")
+		}
 	}
 
 	if cfg.MaxRetries < 0 || cfg.MaxRetries > 10 {

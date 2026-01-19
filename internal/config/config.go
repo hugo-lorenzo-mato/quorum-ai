@@ -13,6 +13,15 @@ type Config struct {
 	GitHub               GitHubConfig               `mapstructure:"github"`
 	Consensus            ConsensusConfig            `mapstructure:"consensus"`
 	Costs                CostsConfig                `mapstructure:"costs"`
+	Chat                 ChatConfig                 `mapstructure:"chat"`
+	Report               ReportConfig               `mapstructure:"report"`
+}
+
+// ChatConfig configures chat behavior in the TUI.
+type ChatConfig struct {
+	Timeout          string `mapstructure:"timeout"`           // Timeout for chat messages (e.g., "3m", "5m")
+	ProgressInterval string `mapstructure:"progress_interval"` // Interval for progress logs (e.g., "15s")
+	Editor           string `mapstructure:"editor"`            // Editor for file editing (e.g., "code", "nvim", "vim")
 }
 
 // LogConfig configures logging behavior.
@@ -38,11 +47,19 @@ type TraceConfig struct {
 
 // WorkflowConfig configures workflow execution.
 type WorkflowConfig struct {
-	Timeout    string   `mapstructure:"timeout"`
-	MaxRetries int      `mapstructure:"max_retries"`
-	DryRun     bool     `mapstructure:"dry_run"`
-	Sandbox    bool     `mapstructure:"sandbox"`
-	DenyTools  []string `mapstructure:"deny_tools"`
+	Timeout       string             `mapstructure:"timeout"`
+	PhaseTimeouts PhaseTimeoutConfig `mapstructure:"phase_timeouts"`
+	MaxRetries    int                `mapstructure:"max_retries"`
+	DryRun        bool               `mapstructure:"dry_run"`
+	Sandbox       bool               `mapstructure:"sandbox"`
+	DenyTools     []string           `mapstructure:"deny_tools"`
+}
+
+// PhaseTimeoutConfig controls per-phase CLI execution limits.
+type PhaseTimeoutConfig struct {
+	Analyze string `mapstructure:"analyze"`
+	Plan    string `mapstructure:"plan"`
+	Execute string `mapstructure:"execute"`
 }
 
 // AgentsConfig configures available AI agents.
@@ -122,4 +139,16 @@ type AnalysisConsolidatorConfig struct {
 	Agent string `mapstructure:"agent"`
 	// Model specifies the model to use (optional, uses agent's phase_models.analyze if empty).
 	Model string `mapstructure:"model"`
+}
+
+// ReportConfig configures markdown report generation.
+type ReportConfig struct {
+	// Enabled enables/disables report generation (default: true).
+	Enabled bool `mapstructure:"enabled"`
+	// BaseDir specifies the output directory (default: ".quorum/output").
+	BaseDir string `mapstructure:"base_dir"`
+	// UseUTC uses UTC timestamps for report directories (default: true).
+	UseUTC bool `mapstructure:"use_utc"`
+	// IncludeRaw includes raw JSON output in reports (default: true).
+	IncludeRaw bool `mapstructure:"include_raw"`
 }

@@ -82,7 +82,7 @@ report:
   include_raw: true
 
 # Prompt optimizer configuration
-optimizer:
+prompt_optimizer:
   enabled: true
   agent: claude
   model: "claude-opus-4-5-20251101"
@@ -98,6 +98,7 @@ agents:
     enabled: true
     path: "claude"
     model: "claude-opus-4-5-20251101"
+    max_tokens: 32000
     phase_models:
       analyze: "claude-opus-4-5-20251101"
       plan: "claude-opus-4-5-20251101"
@@ -109,6 +110,7 @@ agents:
     enabled: true
     path: "gemini"
     model: "gemini-3-pro-preview"
+    max_tokens: 65536
     phase_models:
       analyze: "gemini-3-pro-preview"
       plan: "gemini-3-pro-preview"
@@ -122,6 +124,7 @@ agents:
     enabled: true
     path: "codex"
     model: "gpt-5.2"
+    max_tokens: 32000
     phase_models:
       analyze: "gpt-5.2"
       plan: "gpt-5.2-codex"
@@ -134,6 +137,7 @@ agents:
     enabled: true
     path: "copilot"
     model: "claude-sonnet-4.5"
+    max_tokens: 32000
     phase_models:
       analyze: "claude-sonnet-4.5"
       plan: "claude-sonnet-4.5"
@@ -142,14 +146,19 @@ agents:
 # Workflow settings
 workflow:
   max_retries: 3
-  timeout: "30m"
+  timeout: "4h"
+  # Per-phase timeouts (each phase can run up to this duration)
+  phase_timeouts:
+    analyze: "2h"
+    plan: "2h"
+    execute: "2h"
 
 # Consensus settings
 consensus:
   threshold: 0.75
 
 # Consolidator settings (for analysis synthesis)
-consolidator:
+analysis_consolidator:
   agent: claude
   model: "claude-opus-4-5-20251101"
 

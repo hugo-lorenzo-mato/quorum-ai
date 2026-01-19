@@ -210,13 +210,9 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 	gitCommit, gitDirty := loadGitInfo()
 
 	// Create workflow runner config from unified config
-	timeout := time.Hour
-	if cfg.Workflow.Timeout != "" {
-		parsed, parseErr := time.ParseDuration(cfg.Workflow.Timeout)
-		if parseErr != nil {
-			return fmt.Errorf("parsing workflow timeout %q: %w", cfg.Workflow.Timeout, parseErr)
-		}
-		timeout = parsed
+	timeout, err := parseDurationDefault(cfg.Workflow.Timeout, defaultWorkflowTimeout)
+	if err != nil {
+		return fmt.Errorf("parsing workflow timeout %q: %w", cfg.Workflow.Timeout, err)
 	}
 	defaultAgent := cfg.Agents.Default
 	if defaultAgent == "" {
@@ -457,21 +453,10 @@ func parseTraceConfig(cfg *config.Config, override string) (service.TraceConfig,
 }
 
 // configureAgentsFromConfig configures agents in the registry using unified config.
-// The loader is used to check if values are explicitly set in config vs defaults.
-func configureAgentsFromConfig(registry *cli.Registry, cfg *config.Config, loader *config.Loader) error {
-	isEnabled := func(key, envKey string, enabled bool) bool {
-		if !enabled {
-			return false
-		}
-		if loader.Viper().InConfig(key) {
-			return true
-		}
-		_, ok := os.LookupEnv(envKey)
-		return ok
-	}
-
+// Agents are configured if their enabled flag is true in the config.
+func configureAgentsFromConfig(registry *cli.Registry, cfg *config.Config, _ *config.Loader) error {
 	// Configure Claude
-	if isEnabled("agents.claude.enabled", "QUORUM_AGENTS_CLAUDE_ENABLED", cfg.Agents.Claude.Enabled) {
+	if cfg.Agents.Claude.Enabled {
 		registry.Configure("claude", cli.AgentConfig{
 			Name:        "claude",
 			Path:        cfg.Agents.Claude.Path,
@@ -483,7 +468,7 @@ func configureAgentsFromConfig(registry *cli.Registry, cfg *config.Config, loade
 	}
 
 	// Configure Gemini
-	if isEnabled("agents.gemini.enabled", "QUORUM_AGENTS_GEMINI_ENABLED", cfg.Agents.Gemini.Enabled) {
+	if cfg.Agents.Gemini.Enabled {
 		registry.Configure("gemini", cli.AgentConfig{
 			Name:        "gemini",
 			Path:        cfg.Agents.Gemini.Path,
@@ -495,7 +480,7 @@ func configureAgentsFromConfig(registry *cli.Registry, cfg *config.Config, loade
 	}
 
 	// Configure Codex
-	if isEnabled("agents.codex.enabled", "QUORUM_AGENTS_CODEX_ENABLED", cfg.Agents.Codex.Enabled) {
+	if cfg.Agents.Codex.Enabled {
 		registry.Configure("codex", cli.AgentConfig{
 			Name:        "codex",
 			Path:        cfg.Agents.Codex.Path,
@@ -507,7 +492,7 @@ func configureAgentsFromConfig(registry *cli.Registry, cfg *config.Config, loade
 	}
 
 	// Configure Copilot
-	if isEnabled("agents.copilot.enabled", "QUORUM_AGENTS_COPILOT_ENABLED", cfg.Agents.Copilot.Enabled) {
+	if cfg.Agents.Copilot.Enabled {
 		registry.Configure("copilot", cli.AgentConfig{
 			Name:        "copilot",
 			Path:        cfg.Agents.Copilot.Path,

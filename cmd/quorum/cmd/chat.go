@@ -21,6 +21,7 @@ import (
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/events"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/logging"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service/report"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service/workflow"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/tui/chat"
 )
@@ -124,9 +125,59 @@ func runChat(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("creating workflow runner: %w", err)
 	}
 
-	// Create chat model with workflow runner and version
+	// Parse chat configuration
+	chatTimeout, _ := time.ParseDuration(cfg.Chat.Timeout)
+	chatProgressInterval, _ := time.ParseDuration(cfg.Chat.ProgressInterval)
+
+	// Build list of available agents and their models
+	availableAgents := []string{}
+	agentModels := make(map[string][]string)
+
+	if cfg.Agents.Claude.Enabled {
+		availableAgents = append(availableAgents, "claude")
+		agentModels["claude"] = []string{
+			"claude-opus-4-5-20251101",
+			"claude-sonnet-4-20250514",
+			"claude-sonnet-4-5-20251101",
+			"claude-haiku-4-5-20251101",
+		}
+	}
+	if cfg.Agents.Gemini.Enabled {
+		availableAgents = append(availableAgents, "gemini")
+		agentModels["gemini"] = []string{
+			"gemini-2.5-pro",
+			"gemini-2.5-flash",
+			"gemini-3-pro-preview",
+			"gemini-3-flash-preview",
+		}
+	}
+	if cfg.Agents.Codex.Enabled {
+		availableAgents = append(availableAgents, "codex")
+		agentModels["codex"] = []string{
+			"gpt-5.1",
+			"gpt-5.1-codex",
+			"gpt-5.2",
+			"gpt-5.2-codex",
+			"o3",
+			"o3-mini",
+		}
+	}
+	if cfg.Agents.Copilot.Enabled {
+		availableAgents = append(availableAgents, "copilot")
+		agentModels["copilot"] = []string{
+			"claude-sonnet-4-5",
+			"claude-haiku-4-5",
+			"gpt-4o",
+			"o3-mini",
+		}
+	}
+
+	// Create chat model with workflow runner, config, and version
 	model := chat.NewModel(controlPlane, registry, defaultAgent, defaultModel)
 	model = model.WithWorkflowRunner(runner, eventBus, logger)
+	model = model.WithChatConfig(chatTimeout, chatProgressInterval)
+	model = model.WithAgentModels(availableAgents, agentModels)
+	model = model.WithEditor(cfg.Chat.Editor)
 	model = model.WithVersion(GetVersion())
 
 	// Run the TUI
@@ -181,13 +232,9 @@ func createWorkflowRunner(
 	}
 
 	// Create runner config
-	timeout := time.Hour
-	if cfg.Workflow.Timeout != "" {
-		parsed, parseErr := time.ParseDuration(cfg.Workflow.Timeout)
-		if parseErr != nil {
-			return nil, fmt.Errorf("parsing workflow timeout: %w", parseErr)
-		}
-		timeout = parsed
+	timeout, err := parseDurationDefault(cfg.Workflow.Timeout, defaultWorkflowTimeout)
+	if err != nil {
+		return nil, fmt.Errorf("parsing workflow timeout %q: %w", cfg.Workflow.Timeout, err)
 	}
 
 	defaultAgent := cfg.Agents.Default
@@ -221,6 +268,12 @@ func createWorkflowRunner(
 		Consolidator: workflow.ConsolidatorConfig{
 			Agent: cfg.AnalysisConsolidator.Agent,
 			Model: cfg.AnalysisConsolidator.Model,
+		},
+		Report: report.Config{
+			Enabled:    cfg.Report.Enabled,
+			BaseDir:    cfg.Report.BaseDir,
+			UseUTC:     cfg.Report.UseUTC,
+			IncludeRaw: cfg.Report.IncludeRaw,
 		},
 	}
 

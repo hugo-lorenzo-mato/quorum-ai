@@ -124,24 +124,27 @@ func (l *Loader) setDefaults() {
 	l.v.SetDefault("trace.include_phases", []string{"analyze", "consensus", "plan", "execute"})
 
 	// Workflow defaults
-	l.v.SetDefault("workflow.timeout", "2h")
+	l.v.SetDefault("workflow.timeout", "12h")
+	l.v.SetDefault("workflow.phase_timeouts.analyze", "2h")
+	l.v.SetDefault("workflow.phase_timeouts.plan", "2h")
+	l.v.SetDefault("workflow.phase_timeouts.execute", "2h")
 	l.v.SetDefault("workflow.max_retries", 3)
 	l.v.SetDefault("workflow.dry_run", false)
 	l.v.SetDefault("workflow.sandbox", true) // Security: sandbox enabled by default
 
 	// Agent defaults
 	l.v.SetDefault("agents.default", "claude")
-	l.v.SetDefault("agents.claude.enabled", true)
+	l.v.SetDefault("agents.claude.enabled", false)
 	l.v.SetDefault("agents.claude.path", "claude")
 	l.v.SetDefault("agents.claude.model", "claude-sonnet-4-20250514")
 	l.v.SetDefault("agents.claude.max_tokens", 4096)
 	l.v.SetDefault("agents.claude.temperature", 0.7)
-	l.v.SetDefault("agents.gemini.enabled", true)
+	l.v.SetDefault("agents.gemini.enabled", false)
 	l.v.SetDefault("agents.gemini.path", "gemini")
 	l.v.SetDefault("agents.gemini.model", "gemini-2.5-flash")
 	l.v.SetDefault("agents.gemini.max_tokens", 4096)
 	l.v.SetDefault("agents.gemini.temperature", 0.7)
-	l.v.SetDefault("agents.codex.enabled", false) // Optional: enable explicitly in config
+	l.v.SetDefault("agents.codex.enabled", false)
 	l.v.SetDefault("agents.codex.path", "codex")
 	l.v.SetDefault("agents.codex.model", "gpt-5.1-codex")
 	l.v.SetDefault("agents.codex.max_tokens", 4096)
@@ -182,6 +185,17 @@ func (l *Loader) setDefaults() {
 	l.v.SetDefault("costs.max_per_workflow", 10.0)
 	l.v.SetDefault("costs.max_per_task", 2.0)
 	l.v.SetDefault("costs.alert_threshold", 0.80)
+
+	// Chat defaults (TUI interactive chat)
+	l.v.SetDefault("chat.timeout", "3m")
+	l.v.SetDefault("chat.progress_interval", "15s")
+	l.v.SetDefault("chat.editor", "vim")
+
+	// Report defaults (markdown report generation)
+	l.v.SetDefault("report.enabled", true)
+	l.v.SetDefault("report.base_dir", ".quorum/output")
+	l.v.SetDefault("report.use_utc", true)
+	l.v.SetDefault("report.include_raw", true)
 }
 
 // ConfigFile returns the config file path if one was used.

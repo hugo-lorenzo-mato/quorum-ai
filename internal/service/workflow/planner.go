@@ -95,7 +95,7 @@ func (p *Planner) Run(ctx context.Context, wctx *Context) error {
 			Prompt:  prompt,
 			Format:  core.OutputFormatText,
 			Model:   model,
-			Timeout: 5 * time.Minute,
+			Timeout: wctx.Config.PhaseTimeouts.Plan,
 			Sandbox: wctx.Config.Sandbox,
 			Phase:   core.PhasePlan,
 		})

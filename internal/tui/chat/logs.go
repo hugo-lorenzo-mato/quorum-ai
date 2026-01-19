@@ -510,6 +510,43 @@ func (p *LogsPanel) Count() int {
 	return len(p.entries)
 }
 
+// GetPlainText returns all logs as plain text (without colors) for clipboard copy
+func (p *LogsPanel) GetPlainText() string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	var sb strings.Builder
+	for _, entry := range p.entries {
+		// Format: "HH:MM:SS [LEVEL] SOURCE: message"
+		timeStr := entry.Time.Format("15:04:05")
+		level := p.levelString(entry.Level)
+		source := entry.Source
+		if source == "" {
+			source = "sys"
+		}
+		sb.WriteString(fmt.Sprintf("%s [%s] %s: %s\n", timeStr, level, source, entry.Message))
+	}
+	return sb.String()
+}
+
+// levelString returns a plain text level string
+func (p *LogsPanel) levelString(level LogLevel) string {
+	switch level {
+	case LogLevelDebug:
+		return "DEBUG"
+	case LogLevelInfo:
+		return "INFO"
+	case LogLevelWarn:
+		return "WARN"
+	case LogLevelError:
+		return "ERROR"
+	case LogLevelSuccess:
+		return "SUCCESS"
+	default:
+		return "INFO"
+	}
+}
+
 // renderFooter renders the stats footer (must be called with lock held)
 func (p *LogsPanel) renderFooter() string {
 	// Styles
@@ -550,7 +587,7 @@ func (p *LogsPanel) renderFooter() string {
 	var lines []string
 
 	// === SECTION 1: Tokens (fixed height: header + 3 models max + total = 5 lines) ===
-	tokensHeader := headerStyle.Render("Tokens") + " " + dimStyle.Render("(↑↓)")
+	tokensHeader := headerStyle.Render("Tokens") + " " + dimStyle.Render("(↑out ↓in)")
 
 	// Calculate totals and prepare visible token lines
 	totalIn := 0

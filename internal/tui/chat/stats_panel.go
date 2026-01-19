@@ -168,7 +168,7 @@ func (p *StatsPanel) renderContent() string {
 	var sb strings.Builder
 
 	// === SECTION 1: Tokens ===
-	sb.WriteString(sectionStyle.Render(tokenIcon+" Tokens") + " " + dimStyle.Render("(↑in ↓out)"))
+	sb.WriteString(sectionStyle.Render(tokenIcon+" Tokens") + " " + dimStyle.Render("(↑out ↓in)"))
 	sb.WriteString("\n")
 
 	// Calculate totals
