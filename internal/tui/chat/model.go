@@ -164,17 +164,18 @@ Quorum AI orchestrates multiple AI agents (Claude, Gemini, etc.) to work in para
 - quorum trace            - Show trace summaries
 
 ## Chat Mode Commands (inside quorum chat):
-- /plan <prompt>  - Generate a plan
-- /run <prompt>   - Run complete workflow
-- /status         - Show workflow status
-- /cancel         - Cancel current workflow
-- /model <name>   - Set current model
-- /agent <name>   - Set current agent
-- /copy           - Copy last response to clipboard
-- /copyall        - Copy entire conversation
-- /clear          - Clear conversation
-- /help           - Show help
-- /quit           - Exit chat
+- /analyze <prompt> - Run multi-agent analysis (V1/V2/V3)
+- /plan <prompt>    - Generate a plan from analysis
+- /run <prompt>     - Run complete workflow
+- /status           - Show workflow status
+- /cancel           - Cancel current workflow
+- /model <name>     - Set current model
+- /agent <name>     - Set current agent
+- /copy             - Copy last response to clipboard
+- /copyall          - Copy entire conversation
+- /clear            - Clear conversation
+- /help             - Show help
+- /quit             - Exit chat
 
 ## Key Features:
 - Multi-Agent Execution: Claude, Gemini, and other agents in parallel
@@ -201,6 +202,7 @@ IMPORTANT: Do NOT invent commands or features not listed above. If unsure, say y
 // WorkflowRunner interface for running workflows.
 type WorkflowRunner interface {
 	Run(ctx context.Context, prompt string) error
+	Analyze(ctx context.Context, prompt string) error
 	GetState(ctx context.Context) (*core.WorkflowState, error)
 }
 
@@ -233,9 +235,10 @@ type Model struct {
 	totalCost      float64
 
 	// Workflow runner for /plan and /run commands
-	runner   WorkflowRunner
-	eventBus *events.EventBus
-	logger   *logging.Logger
+	runner      WorkflowRunner
+	eventBus    *events.EventBus
+	logEventsCh <-chan events.Event // Channel for receiving log events
+	logger      *logging.Logger
 
 	// Input request handling
 	pendingInputRequest *control.InputRequest
@@ -253,10 +256,18 @@ type Model struct {
 	showLogs  bool
 	logsFocus bool // true when logs panel has focus for scrolling
 
+	// Stats panel (token usage and system metrics)
+	statsPanel *StatsPanel
+	showStats  bool
+	statsFocus bool // true when stats panel has focus for scrolling
+
 	// Explorer panel
 	explorerPanel *ExplorerPanel
 	showExplorer  bool
 	explorerFocus bool // true when explorer has focus for navigation
+
+	// Panel navigation mode (tmux-style with Ctrl+b prefix)
+	panelNavMode bool // true when waiting for arrow key to switch panels
 
 	// NEW: Enhanced UI panels
 	consensusPanel   *ConsensusPanel
@@ -266,7 +277,9 @@ type Model struct {
 	workflowProgress *WorkflowProgress
 	costPanel        *CostPanel
 	shortcutsOverlay *ShortcutsOverlay
+	fileViewer       *FileViewer
 	statsWidget      *StatsWidget
+	machineCollector *MachineStatsCollector
 
 	// Cancellation for interrupts
 	cancelFunc context.CancelFunc
@@ -345,6 +358,9 @@ func NewModel(cp *control.ControlPlane, agents core.AgentRegistry, defaultAgent,
 		logsPanel:     NewLogsPanel(500),
 		showLogs:      true, // Open by default
 		logsFocus:     false,
+		statsPanel:    NewStatsPanel(),
+		showStats:     true, // Open by default
+		statsFocus:    false,
 		explorerPanel: NewExplorerPanel(),
 		showExplorer:  true, // Open by default
 		explorerFocus: false,
@@ -356,7 +372,9 @@ func NewModel(cp *control.ControlPlane, agents core.AgentRegistry, defaultAgent,
 		workflowProgress: NewWorkflowProgress(),
 		costPanel:        NewCostPanel(1.0), // $1 default budget
 		shortcutsOverlay: NewShortcutsOverlay(),
+		fileViewer:       NewFileViewer(),
 		statsWidget:      NewStatsWidget(),
+		machineCollector: NewMachineStatsCollector(),
 	}
 }
 
@@ -365,6 +383,10 @@ func (m Model) WithWorkflowRunner(runner WorkflowRunner, eventBus *events.EventB
 	m.runner = runner
 	m.eventBus = eventBus
 	m.logger = logger
+	// Subscribe to log events from the workflow
+	if eventBus != nil {
+		m.logEventsCh = eventBus.Subscribe(events.TypeLog)
+	}
 	return m
 }
 
@@ -381,9 +403,32 @@ func (m Model) Init() tea.Cmd {
 		m.spinner.Tick,
 		m.listenForInputRequests(),
 		m.listenForExplorerChanges(),
+		m.listenForLogEvents(),
 		statsTickCmd(),            // Start stats updates
 		tea.EnableMouseCellMotion, // Enable mouse support for click-to-focus
 	)
+}
+
+// listenForLogEvents creates a command that listens for log events from the workflow.
+func (m Model) listenForLogEvents() tea.Cmd {
+	if m.logEventsCh == nil {
+		return nil
+	}
+	return func() tea.Msg {
+		event, ok := <-m.logEventsCh
+		if !ok {
+			return nil
+		}
+		logEvent, ok := event.(events.LogEvent)
+		if !ok {
+			return nil
+		}
+		return WorkflowLogMsg{
+			Level:   logEvent.Level,
+			Source:  "workflow", // Default source
+			Message: logEvent.Message,
+		}
+	}
 }
 
 // Message types
@@ -405,9 +450,14 @@ type (
 	WorkflowStartedMsg   struct{ Prompt string }
 	WorkflowCompletedMsg struct{ State *core.WorkflowState }
 	WorkflowErrorMsg     struct{ Error error }
-	TickMsg              struct{ Time time.Time }
-	ExplorerRefreshMsg   struct{} // File system change detected
-	StatsTickMsg         struct{} // Periodic stats update
+	WorkflowLogMsg       struct {
+		Level   string
+		Source  string
+		Message string
+	}
+	TickMsg            struct{ Time time.Time }
+	ExplorerRefreshMsg struct{} // File system change detected
+	StatsTickMsg       struct{} // Periodic stats update
 )
 
 func (m Model) listenForInputRequests() tea.Cmd {
@@ -428,9 +478,9 @@ func (m Model) listenForExplorerChanges() tea.Cmd {
 	}
 }
 
-// statsTickCmd returns a command that sends StatsTickMsg every 2 seconds
+// statsTickCmd returns a command that sends StatsTickMsg every second
 func statsTickCmd() tea.Cmd {
-	return tea.Tick(2*time.Second, func(_ time.Time) tea.Msg {
+	return tea.Tick(time.Second, func(_ time.Time) tea.Msg {
 		return StatsTickMsg{}
 	})
 }
@@ -445,6 +495,79 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		if m.textarea.Value() == "/" {
 			m.textarea.Reset()
 		}
+		return m, nil, true
+	}
+
+	// Panel navigation mode (tmux-style: Ctrl+b then arrow keys)
+	if m.panelNavMode {
+		switch msg.Type {
+		case tea.KeyEsc:
+			// Cancel panel nav mode
+			m.panelNavMode = false
+			return m, nil, true
+		case tea.KeyLeft:
+			// Focus explorer (left panel)
+			m.panelNavMode = false
+			if m.showExplorer {
+				m.explorerFocus = true
+				m.logsFocus = false
+				m.statsFocus = false
+				m.inputFocused = false
+				m.textarea.Blur()
+				m.explorerPanel.SetFocused(true)
+				m.logsPanel.AddInfo("system", "Explorer focused (Esc to return)")
+			}
+			return m, nil, true
+		case tea.KeyRight:
+			// Focus right sidebar (stats or logs)
+			m.panelNavMode = false
+			if m.showStats {
+				m.statsFocus = true
+				m.logsFocus = false
+				m.explorerFocus = false
+				m.inputFocused = false
+				m.textarea.Blur()
+				m.explorerPanel.SetFocused(false)
+				m.logsPanel.AddInfo("system", "Stats focused (↑↓ scroll, Esc to return)")
+			} else if m.showLogs {
+				m.logsFocus = true
+				m.statsFocus = false
+				m.explorerFocus = false
+				m.inputFocused = false
+				m.textarea.Blur()
+				m.explorerPanel.SetFocused(false)
+				m.logsPanel.AddInfo("system", "Logs focused (↑↓ scroll, Esc to return)")
+			}
+			return m, nil, true
+		case tea.KeyUp, tea.KeyDown:
+			// Switch between stats and logs in right sidebar
+			m.panelNavMode = false
+			if m.showStats && m.showLogs {
+				if m.statsFocus || msg.Type == tea.KeyUp {
+					m.logsFocus = true
+					m.statsFocus = false
+					m.logsPanel.AddInfo("system", "Logs focused (↑↓ scroll, Esc to return)")
+				} else {
+					m.statsFocus = true
+					m.logsFocus = false
+					m.logsPanel.AddInfo("system", "Stats focused (↑↓ scroll, Esc to return)")
+				}
+				m.explorerFocus = false
+				m.inputFocused = false
+				m.textarea.Blur()
+				m.explorerPanel.SetFocused(false)
+			}
+			return m, nil, true
+		default:
+			// Any other key cancels panel nav mode
+			m.panelNavMode = false
+		}
+	}
+
+	// Ctrl+b enters panel navigation mode (tmux-style)
+	if msg.Type == tea.KeyCtrlB {
+		m.panelNavMode = true
+		m.logsPanel.AddInfo("system", "Panel nav: ←→ switch panels, ↑↓ logs/stats, Esc cancel")
 		return m, nil, true
 	}
 
@@ -633,6 +756,27 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		}
 		return m, nil, true
 
+	case tea.KeyCtrlS:
+		// Toggle stats panel
+		m.showStats = !m.showStats
+		if m.showStats {
+			m.statsFocus = true
+			m.logsFocus = false
+			m.explorerFocus = false
+			m.inputFocused = false
+			m.textarea.Blur()
+			m.logsPanel.AddInfo("system", "Stats panel opened (^S to close)")
+		} else {
+			m.statsFocus = false
+			m.inputFocused = true
+			m.textarea.Focus()
+		}
+		// Recalculate layout
+		if m.width > 0 && m.height > 0 {
+			m.recalculateLayout()
+		}
+		return m, nil, true
+
 	case tea.KeyCtrlK:
 		// Toggle consensus panel
 		m.consensusPanel.Toggle()
@@ -696,6 +840,38 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 			m.diffView.Hide()
 			return m, nil, true
 		}
+		if m.fileViewer.IsVisible() {
+			m.fileViewer.Hide()
+			return m, nil, true
+		}
+	}
+
+	// Handle file viewer navigation when visible
+	if m.fileViewer.IsVisible() {
+		switch msg.Type {
+		case tea.KeyUp:
+			m.fileViewer.ScrollUp()
+			return m, nil, true
+		case tea.KeyDown:
+			m.fileViewer.ScrollDown()
+			return m, nil, true
+		case tea.KeyPgUp:
+			m.fileViewer.PageUp()
+			return m, nil, true
+		case tea.KeyPgDown:
+			m.fileViewer.PageDown()
+			return m, nil, true
+		}
+		switch msg.String() {
+		case "g":
+			m.fileViewer.ScrollTop()
+			return m, nil, true
+		case "G":
+			m.fileViewer.ScrollBottom()
+			return m, nil, true
+		}
+		// Block other keys when file viewer is open
+		return m, nil, true
 	}
 
 	// Handle history search navigation when visible
@@ -774,13 +950,16 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 			}
 			return m, nil, true
 		case tea.KeyEnter:
-			// Enter directory or insert file path
+			// Enter directory or open file viewer
 			path := m.explorerPanel.Enter()
 			if path != "" {
-				// File selected - insert path into textarea
-				m.textarea.SetValue(m.textarea.Value() + path + " ")
-				m.textarea.CursorEnd()
-				m.logsPanel.AddInfo("explorer", "Selected: "+filepath.Base(path))
+				// File selected - open in file viewer
+				if err := m.fileViewer.SetFile(path); err != nil {
+					m.logsPanel.AddError("explorer", "Cannot open: "+err.Error())
+				} else {
+					m.fileViewer.Show()
+					m.logsPanel.AddInfo("explorer", "Viewing: "+filepath.Base(path))
+				}
 			}
 			return m, nil, true
 		case tea.KeyTab:
@@ -1063,17 +1242,31 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Update process statistics
 		m.statsWidget.Update()
 
-		// Pass resource stats to LogsPanel footer
+		// Get resource stats
 		stats := m.statsWidget.GetStats()
-		m.logsPanel.SetResourceStats(ResourceStats{
+		resourceStats := ResourceStats{
 			MemoryMB:   stats.MemoryMB,
 			CPUPercent: stats.CPUPercent,
 			Uptime:     stats.Uptime,
 			Goroutines: stats.Goroutines,
-		})
+		}
 
-		// Pass token stats from agentInfos to LogsPanel
+		// Pass to LogsPanel footer
+		m.logsPanel.SetResourceStats(resourceStats)
+
+		// Pass to StatsPanel
+		m.statsPanel.SetResourceStats(resourceStats)
+
+		// Collect and pass machine stats
+		if m.machineCollector != nil {
+			machineStats := m.machineCollector.Collect()
+			m.logsPanel.SetMachineStats(machineStats)
+			m.statsPanel.SetMachineStats(machineStats)
+		}
+
+		// Pass token stats from agentInfos
 		m.updateLogsPanelTokenStats()
+		m.updateStatsPanelTokenStats()
 
 		// Continue ticking
 		cmds = append(cmds, statsTickCmd())
@@ -1095,7 +1288,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			tokenInfo := ""
 			if msg.TokensIn > 0 || msg.TokensOut > 0 {
-				tokenInfo = fmt.Sprintf(" [%d→%d tok]", msg.TokensIn, msg.TokensOut)
+				tokenInfo = fmt.Sprintf(" [↑%d ↓%d tok]", msg.TokensIn, msg.TokensOut)
 			}
 			m.logsPanel.AddSuccess(strings.ToLower(msg.Agent), fmt.Sprintf("Response received (%d chars)%s", len(msg.Content), tokenInfo))
 		}
@@ -1165,7 +1358,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.totalCost = msg.State.Metrics.TotalCostUSD
 			m.totalTokensIn = msg.State.Metrics.TotalTokensIn
 			m.totalTokensOut = msg.State.Metrics.TotalTokensOut
-			m.logsPanel.AddInfo("workflow", fmt.Sprintf("Total cost: $%.4f, tokens: %d→%d", m.totalCost, m.totalTokensIn, m.totalTokensOut))
+			m.logsPanel.AddInfo("workflow", fmt.Sprintf("Total cost: $%.4f, tokens: ↑%d ↓%d", m.totalCost, m.totalTokensIn, m.totalTokensOut))
 		}
 		m.logsPanel.AddSuccess("workflow", "Workflow completed successfully")
 		m.history.Add(NewSystemMessage("Workflow completed successfully!"))
@@ -1189,6 +1382,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.logsPanel.AddError("workflow", "Workflow failed: "+msg.Error.Error())
 		m.history.Add(NewSystemMessage(fmt.Sprintf("Workflow failed: %v", msg.Error)))
 		m.updateViewport()
+
+	case WorkflowLogMsg:
+		// Handle workflow log messages from the runner
+		switch msg.Level {
+		case "success":
+			m.logsPanel.AddSuccess(msg.Source, msg.Message)
+		case "error":
+			m.logsPanel.AddError(msg.Source, msg.Message)
+		case "warn":
+			m.logsPanel.AddWarn(msg.Source, msg.Message)
+		case "debug":
+			m.logsPanel.AddDebug(msg.Source, msg.Message)
+		default:
+			m.logsPanel.AddInfo(msg.Source, msg.Message)
+		}
+		// Continue listening for more log events
+		cmds = append(cmds, m.listenForLogEvents())
 
 	case QuitMsg:
 		m.quitting = true
@@ -1494,6 +1704,28 @@ func (m Model) handleCommand(cmd *Command, args []string) (tea.Model, tea.Cmd) {
 		}
 		m.updateViewport()
 
+	case "analyze":
+		if m.runner == nil {
+			m.history.Add(NewSystemMessage("Workflow runner not configured"))
+			m.updateViewport()
+			return m, nil
+		}
+		if m.workflowRunning {
+			m.history.Add(NewSystemMessage("Workflow already running. Use /cancel first."))
+			m.updateViewport()
+			return m, nil
+		}
+		if len(args) == 0 {
+			m.history.Add(NewSystemMessage("Usage: /analyze <prompt>"))
+			m.updateViewport()
+			return m, nil
+		}
+
+		prompt := strings.Join(args, " ")
+		m.history.Add(NewUserMessage(fmt.Sprintf("/analyze %s", prompt)))
+		m.updateViewport()
+		return m, m.runAnalyze(prompt)
+
 	case "plan", "run":
 		if m.runner == nil {
 			m.history.Add(NewSystemMessage("Workflow runner not configured"))
@@ -1623,6 +1855,33 @@ func (m *Model) updateLogsPanelTokenStats() {
 	m.logsPanel.SetTokenStats(tokenStats)
 }
 
+// updateStatsPanelTokenStats updates the stats panel with current token stats
+func (m *Model) updateStatsPanelTokenStats() {
+	var tokenStats []TokenStats
+
+	// Collect from agentInfos
+	for _, agent := range m.agentInfos {
+		if agent.TokensIn > 0 || agent.TokensOut > 0 {
+			tokenStats = append(tokenStats, TokenStats{
+				Model:     agent.Name,
+				TokensIn:  agent.TokensIn,
+				TokensOut: agent.TokensOut,
+			})
+		}
+	}
+
+	// Include workflow tokens
+	if m.totalTokensIn > 0 || m.totalTokensOut > 0 {
+		tokenStats = append(tokenStats, TokenStats{
+			Model:     "workflow",
+			TokensIn:  m.totalTokensIn,
+			TokensOut: m.totalTokensOut,
+		})
+	}
+
+	m.statsPanel.SetTokenStats(tokenStats)
+}
+
 // calculateInputLines calculates how many lines the input textarea needs
 func (m *Model) calculateInputLines() int {
 	content := m.textarea.Value()
@@ -1689,21 +1948,22 @@ func (m *Model) recalculateLayout() {
 	fixedHeight := headerHeight + footerHeight + inputHeight + statusHeight
 
 	// Viewport gets remaining height
-	viewportHeight := m.height - fixedHeight
+	// Subtract 2 for the main content box borders
+	viewportHeight := m.height - fixedHeight - 2
 	if viewportHeight < 3 {
 		viewportHeight = 3
 	}
 
 	// === EXACT WIDTH CALCULATIONS ===
-	// Account for outer margins (1 on each side)
-	availableWidth := m.width - 2
+	// No outer margins - panels fill the entire width when joined with JoinHorizontal
 	explorerWidth := 0
-	logsWidth := 0
-	mainWidth := availableWidth
+	rightSidebarWidth := 0 // Shared by stats and logs panels
+	mainWidth := m.width
 
 	// Determine how many sidebars are open for dynamic sizing
-	bothSidebarsOpen := m.showExplorer && m.showLogs
-	oneSidebarOpen := (m.showExplorer || m.showLogs) && !bothSidebarsOpen
+	showRightSidebar := m.showStats || m.showLogs
+	bothSidebarsOpen := m.showExplorer && showRightSidebar
+	oneSidebarOpen := (m.showExplorer || showRightSidebar) && !bothSidebarsOpen
 
 	// Explorer panel (left sidebar)
 	if m.showExplorer {
@@ -1726,44 +1986,42 @@ func (m *Model) recalculateLayout() {
 				explorerWidth = 50
 			}
 		}
-		// Account for separator between panels
-		mainWidth -= explorerWidth + 1
+		mainWidth -= explorerWidth
 	}
 
-	// Logs panel (right sidebar)
-	if m.showLogs {
+	// Right sidebar (contains stats and/or logs)
+	if showRightSidebar {
 		if oneSidebarOpen {
 			// More space when only one sidebar is open (2/5 of width)
-			logsWidth = m.width * 2 / 5
-			if logsWidth < 40 {
-				logsWidth = 40
+			rightSidebarWidth = m.width * 2 / 5
+			if rightSidebarWidth < 40 {
+				rightSidebarWidth = 40
 			}
-			if logsWidth > 80 {
-				logsWidth = 80
+			if rightSidebarWidth > 80 {
+				rightSidebarWidth = 80
 			}
 		} else {
 			// Less space when both sidebars are open (1/4 of width)
-			logsWidth = m.width / 4
-			if logsWidth < 35 {
-				logsWidth = 35
+			rightSidebarWidth = m.width / 4
+			if rightSidebarWidth < 35 {
+				rightSidebarWidth = 35
 			}
-			if logsWidth > 60 {
-				logsWidth = 60
+			if rightSidebarWidth > 60 {
+				rightSidebarWidth = 60
 			}
 		}
-		// Account for separator between panels
-		mainWidth -= logsWidth + 1
+		mainWidth -= rightSidebarWidth
 	}
 
 	// === NORMALIZATION OF WIDTHS TO PREVENT OVERFLOW ===
+	// Total must equal m.width exactly (no outer margins)
 	totalUsed := mainWidth
 	if m.showExplorer {
-		totalUsed += explorerWidth + 1 // +1 separator
+		totalUsed += explorerWidth
 	}
-	if m.showLogs {
-		totalUsed += logsWidth + 1 // +1 separator
+	if showRightSidebar {
+		totalUsed += rightSidebarWidth
 	}
-	totalUsed += 2 // outer margins
 
 	if totalUsed > m.width {
 		excess := totalUsed - m.width
@@ -1778,8 +2036,8 @@ func (m *Model) recalculateLayout() {
 				explorerWidth -= reduction
 				excess -= reduction
 			}
-			if m.showLogs && logsWidth-reduction >= 30 {
-				logsWidth -= reduction
+			if showRightSidebar && rightSidebarWidth-reduction >= 30 {
+				rightSidebarWidth -= reduction
 				excess -= reduction
 			}
 			// Any remaining excess goes to mainWidth
@@ -1799,16 +2057,16 @@ func (m *Model) recalculateLayout() {
 	// After applying minimums, recalculate total and force-reduce sidebars if needed
 	finalTotal := mainWidth
 	if m.showExplorer {
-		finalTotal += explorerWidth + 1
+		finalTotal += explorerWidth
 	}
-	if m.showLogs {
-		finalTotal += logsWidth + 1
+	if showRightSidebar {
+		finalTotal += rightSidebarWidth
 	}
 
 	// If still overflowing, aggressively reduce sidebar widths
-	for finalTotal > m.width && (explorerWidth > 20 || logsWidth > 20) {
-		if m.showLogs && logsWidth > 20 {
-			logsWidth--
+	for finalTotal > m.width && (explorerWidth > 20 || rightSidebarWidth > 20) {
+		if showRightSidebar && rightSidebarWidth > 20 {
+			rightSidebarWidth--
 			finalTotal--
 		}
 		if finalTotal > m.width && m.showExplorer && explorerWidth > 20 {
@@ -1827,10 +2085,10 @@ func (m *Model) recalculateLayout() {
 	}
 	// === END FINAL OVERFLOW CHECK ===
 
-	// === SIDEBAR HEIGHT: FULL HEIGHT MINUS OUTER BORDER ===
-	// Sidebars should extend from top to bottom of usable area
-	// Account for box border (2 lines: top + bottom)
-	sidebarHeight := m.height - 2
+	// === SIDEBAR HEIGHT ===
+	// All panels should have the same total rendered height = m.height
+	// Each panel's Render() uses Height(p.height - 2) + borders = p.height
+	sidebarHeight := m.height
 	if sidebarHeight < 10 {
 		sidebarHeight = 10
 	}
@@ -1839,8 +2097,18 @@ func (m *Model) recalculateLayout() {
 	if m.showExplorer {
 		m.explorerPanel.SetSize(explorerWidth, sidebarHeight)
 	}
-	if m.showLogs {
-		m.logsPanel.SetSize(logsWidth, sidebarHeight)
+
+	// Stats and Logs share the right sidebar space
+	// When both visible, split height (logs on top, stats on bottom)
+	if m.showStats && m.showLogs {
+		logsHeight := sidebarHeight / 2
+		statsHeight := sidebarHeight - logsHeight
+		m.logsPanel.SetSize(rightSidebarWidth, logsHeight)
+		m.statsPanel.SetSize(rightSidebarWidth, statsHeight)
+	} else if m.showStats {
+		m.statsPanel.SetSize(rightSidebarWidth, sidebarHeight)
+	} else if m.showLogs {
+		m.logsPanel.SetSize(rightSidebarWidth, sidebarHeight)
 	}
 
 	// === VIEWPORT SETUP ===
@@ -1875,6 +2143,22 @@ func (m Model) runWorkflow(prompt string) tea.Cmd {
 		func() tea.Msg {
 			ctx := context.Background()
 			err := runner.Run(ctx, prompt)
+			if err != nil {
+				return WorkflowErrorMsg{Error: err}
+			}
+			state, _ := runner.GetState(ctx)
+			return WorkflowCompletedMsg{State: state}
+		},
+	)
+}
+
+func (m Model) runAnalyze(prompt string) tea.Cmd {
+	runner := m.runner
+	return tea.Batch(
+		func() tea.Msg { return WorkflowStartedMsg{Prompt: prompt} },
+		func() tea.Msg {
+			ctx := context.Background()
+			err := runner.Analyze(ctx, prompt)
 			if err != nil {
 				return WorkflowErrorMsg{Error: err}
 			}
@@ -1970,22 +2254,28 @@ func (m Model) View() string {
 	// === CALCULATE PANEL WIDTHS ===
 	// Use actual panel widths (set by recalculateLayout) to ensure consistency
 	explorerWidth := 0
-	logsWidth := 0
+	rightSidebarWidth := 0 // Shared by stats and logs panels
 
 	if m.showExplorer {
 		explorerWidth = m.explorerPanel.Width()
 	}
-	if m.showLogs {
-		logsWidth = m.logsPanel.Width()
+
+	// Right sidebar width comes from whichever panel is visible (they share the same width)
+	showRightSidebar := m.showStats || m.showLogs
+	if m.showStats {
+		rightSidebarWidth = m.statsPanel.Width()
+	} else if m.showLogs {
+		rightSidebarWidth = m.logsPanel.Width()
 	}
 
 	// Calculate mainWidth based on remaining space after sidebars
-	mainWidth := w - 2 // Start with available width (minus outer margins)
+	// No outer margins - panels fill entire width when joined with JoinHorizontal
+	mainWidth := w
 	if m.showExplorer {
-		mainWidth -= explorerWidth + 1 // Subtract explorer + separator
+		mainWidth -= explorerWidth
 	}
-	if m.showLogs {
-		mainWidth -= logsWidth + 1 // Subtract logs + separator
+	if showRightSidebar {
+		mainWidth -= rightSidebarWidth
 	}
 
 	// Ensure minimum main width
@@ -1996,35 +2286,40 @@ func (m Model) View() string {
 	// === RENDER PANELS ===
 	var panels []string
 
-	// Vertical separator style
-	separatorStyle := lipgloss.NewStyle().
-		Foreground(borderColor).
-		Height(h)
-
 	// Explorer panel (left)
 	if m.showExplorer {
-		explorerPanel := m.explorerPanel.Render()
-		panels = append(panels, explorerPanel)
-		// Add subtle vertical separator
-		separator := separatorStyle.Render(strings.Repeat("│\n", h-1) + "│")
-		panels = append(panels, separator)
+		panels = append(panels, m.explorerPanel.Render())
 	}
 
-	// Main content (center) - wrapped with explicit width to fill space
-	mainContent := m.renderMainContent(mainWidth)
-	// Ensure main content fills full width
+	// Main content (center) - wrapped with border like sidebars
+	mainContent := m.renderMainContent(mainWidth - 2) // Content width = total - borders
+	// Box style with rounded borders to match sidebars
+	// lipgloss Width/Height set CONTENT size, borders are added OUTSIDE.
+	// Formula: Width(X-2) + borders(2) = total X
+	// DO NOT use MaxWidth/MaxHeight - they truncate AFTER borders, cutting them off.
 	mainContentStyle := lipgloss.NewStyle().
-		Width(mainWidth).
-		Height(h)
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(borderColor).
+		Width(mainWidth - 2).
+		Height(h - 2)
 	panels = append(panels, mainContentStyle.Render(mainContent))
 
-	// Logs panel (right)
-	if m.showLogs {
-		// Add subtle vertical separator
-		separator := separatorStyle.Render(strings.Repeat("│\n", h-1) + "│")
-		panels = append(panels, separator)
-		logsPanel := m.logsPanel.RenderWithFocus(m.logsFocus)
-		panels = append(panels, logsPanel)
+	// Right sidebar (stats and/or logs)
+	if showRightSidebar {
+
+		// Render right sidebar content
+		var rightSidebarContent string
+		if m.showStats && m.showLogs {
+			// Stack logs on top, stats on bottom
+			logsPanel := m.logsPanel.RenderWithFocus(m.logsFocus)
+			statsPanel := m.statsPanel.RenderWithFocus(m.statsFocus)
+			rightSidebarContent = lipgloss.JoinVertical(lipgloss.Left, logsPanel, statsPanel)
+		} else if m.showStats {
+			rightSidebarContent = m.statsPanel.RenderWithFocus(m.statsFocus)
+		} else {
+			rightSidebarContent = m.logsPanel.RenderWithFocus(m.logsFocus)
+		}
+		panels = append(panels, rightSidebarContent)
 	}
 
 	baseView := lipgloss.JoinHorizontal(lipgloss.Top, panels...)
@@ -2055,18 +2350,26 @@ func (m Model) View() string {
 
 	// NOTE: Cost panel and Stats widget overlays removed - now integrated into LogsPanel footer
 
-	// Consensus panel (inline below header)
-	if m.consensusPanel.IsVisible() && m.consensusPanel.HasData() {
-		m.consensusPanel.SetSize(mainWidth-4, 5)
-		// This is rendered inline, not as overlay - handled in renderMainContent
+	// Consensus panel overlay
+	if m.consensusPanel.IsVisible() {
+		m.consensusPanel.SetSize(w-30, h-12)
+		overlay := m.consensusPanel.Render()
+		return ensureFullScreen(m.overlayOnBase(baseView, overlay, w, h))
+	}
+
+	// File viewer overlay
+	if m.fileViewer.IsVisible() {
+		m.fileViewer.SetSize(w-16, h-8)
+		overlay := m.fileViewer.Render()
+		return ensureFullScreen(m.overlayOnBase(baseView, overlay, w, h))
 	}
 
 	// Command suggestions dropdown overlay (positioned above input/footer)
 	if m.showSuggestions && len(m.suggestions) > 0 {
 		suggestionsOverlay := m.renderInlineSuggestions(mainWidth)
 		// Calculate position: above the footer area
-		// Footer is 1 line, input is ~3 lines
-		footerOffset := 4
+		// Footer is 1 line, input is ~3 lines, plus extra margin
+		footerOffset := 6
 		baseView = m.overlayAtBottom(baseView, suggestionsOverlay, w, h, explorerWidth, footerOffset)
 	}
 
@@ -2137,6 +2440,7 @@ func (m Model) overlayOnBase(base, overlay string, width, height int) string {
 
 // overlayAtBottom renders an overlay positioned at the bottom of the screen,
 // above a specified offset (for footer/input area). Does NOT dim the base.
+// IMPORTANT: This preserves sidebar content by only replacing the main content area.
 func (m Model) overlayAtBottom(base, overlay string, width, height, leftOffset, bottomOffset int) string {
 	baseLines := strings.Split(base, "\n")
 	overlayLines := strings.Split(overlay, "\n")
@@ -2166,6 +2470,7 @@ func (m Model) overlayAtBottom(base, overlay string, width, height, leftOffset, 
 	}
 
 	// Build result with overlay on top (no dimming for dropdown)
+	// IMPORTANT: Preserve sidebar content by extracting visible characters
 	var result []string
 	for i := 0; i < len(baseLines); i++ {
 		if i >= startY && i < startY+overlayHeight {
@@ -2174,25 +2479,28 @@ func (m Model) overlayAtBottom(base, overlay string, width, height, leftOffset, 
 			if overlayIdx < len(overlayLines) {
 				overlayLine := overlayLines[overlayIdx]
 				baseLine := baseLines[i]
-				// Get the part of base line before the overlay
 				baseWidth := lipgloss.Width(baseLine)
 				overlayLineWidth := lipgloss.Width(overlayLine)
 
-				// Build composite line
-				if startX > 0 && baseWidth >= startX {
-					// Keep left part of base, then overlay
-					// We need to carefully construct this to not break ANSI codes
-					leftPart := strings.Repeat(" ", startX) // Simple padding
-					rightStart := startX + overlayLineWidth
-					rightPart := ""
-					if baseWidth > rightStart {
-						// There's content after the overlay - pad to fill
-						rightPart = strings.Repeat(" ", baseWidth-rightStart)
-					}
-					result = append(result, leftPart+overlayLine+rightPart)
-				} else {
-					result = append(result, overlayLine)
+				// Extract left sidebar content (preserve ANSI codes)
+				leftPart := truncateWithAnsi(baseLine, startX)
+
+				// Calculate right sidebar start position
+				rightStart := startX + overlayLineWidth
+
+				// Extract right sidebar content
+				rightPart := ""
+				if baseWidth > rightStart {
+					rightPart = skipCharsWithAnsi(baseLine, rightStart)
 				}
+
+				// Pad overlay to ensure alignment
+				paddedOverlay := overlayLine
+				if lipgloss.Width(paddedOverlay) < overlayLineWidth {
+					paddedOverlay += strings.Repeat(" ", overlayLineWidth-lipgloss.Width(paddedOverlay))
+				}
+
+				result = append(result, leftPart+paddedOverlay+rightPart)
 			} else {
 				result = append(result, baseLines[i])
 			}
@@ -2203,6 +2511,90 @@ func (m Model) overlayAtBottom(base, overlay string, width, height, leftOffset, 
 	}
 
 	return strings.Join(result, "\n")
+}
+
+// truncateWithAnsi truncates a string to maxWidth visible characters, preserving ANSI codes
+func truncateWithAnsi(s string, maxWidth int) string {
+	if maxWidth <= 0 {
+		return ""
+	}
+
+	var result strings.Builder
+	visibleWidth := 0
+	inEscape := false
+
+	for _, r := range s {
+		if r == '\x1b' {
+			inEscape = true
+			result.WriteRune(r)
+			continue
+		}
+		if inEscape {
+			result.WriteRune(r)
+			if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') {
+				inEscape = false
+			}
+			continue
+		}
+
+		charWidth := lipgloss.Width(string(r))
+		if visibleWidth+charWidth > maxWidth {
+			break
+		}
+		result.WriteRune(r)
+		visibleWidth += charWidth
+	}
+
+	// Pad to exact width if needed
+	for visibleWidth < maxWidth {
+		result.WriteRune(' ')
+		visibleWidth++
+	}
+
+	return result.String()
+}
+
+// skipCharsWithAnsi skips the first skipWidth visible characters and returns the rest
+func skipCharsWithAnsi(s string, skipWidth int) string {
+	if skipWidth <= 0 {
+		return s
+	}
+
+	var result strings.Builder
+	visibleWidth := 0
+	inEscape := false
+	skipping := true
+
+	for _, r := range s {
+		if r == '\x1b' {
+			inEscape = true
+			if !skipping {
+				result.WriteRune(r)
+			}
+			continue
+		}
+		if inEscape {
+			if !skipping {
+				result.WriteRune(r)
+			}
+			if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') {
+				inEscape = false
+			}
+			continue
+		}
+
+		charWidth := lipgloss.Width(string(r))
+		if skipping {
+			visibleWidth += charWidth
+			if visibleWidth >= skipWidth {
+				skipping = false
+			}
+		} else {
+			result.WriteRune(r)
+		}
+	}
+
+	return result.String()
 }
 
 // renderFullScreenModal renders a modal that covers the entire viewport
@@ -2285,23 +2677,7 @@ func (m Model) renderMainContent(w int) string {
 		sb.WriteString("\n")
 	}
 
-	// === CONSENSUS PANEL (when visible) ===
-	if m.consensusPanel.IsVisible() {
-		m.consensusPanel.SetSize(w-4, 5)
-		if m.consensusPanel.HasData() {
-			sb.WriteString(m.consensusPanel.Render())
-		} else {
-			// Show empty state
-			emptyStyle := lipgloss.NewStyle().
-				Foreground(dimColor).
-				Border(lipgloss.RoundedBorder()).
-				BorderForeground(borderColor).
-				Padding(0, 1).
-				Width(w - 6)
-			sb.WriteString(emptyStyle.Render("Consensus panel - No data yet. Run a workflow to see consensus results."))
-		}
-		sb.WriteString("\n")
-	}
+	// NOTE: Consensus panel is now rendered as overlay in View()
 
 	// === PIPELINE VISUALIZATION (when workflow is running or done) ===
 	if m.workflowRunning || m.workflowPhase == "done" {
@@ -2608,7 +2984,19 @@ func (m Model) renderFooter(width int) string {
 
 	var keys []string
 
-	if m.showSuggestions {
+	if m.panelNavMode {
+		// Panel navigation mode indicator (tmux-style)
+		navModeStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#fbbf24")). // Amber/yellow
+			Bold(true)
+		keys = []string{
+			navModeStyle.Render("⎘ PANEL NAV"),
+			keyHintStyle.Render("←") + labelStyle.Render(" explorer"),
+			keyHintStyle.Render("→") + labelStyle.Render(" sidebar"),
+			keyHintStyle.Render("↑↓") + labelStyle.Render(" logs/stats"),
+			keyHintStyle.Render("Esc") + labelStyle.Render(" cancel"),
+		}
+	} else if m.showSuggestions {
 		keys = []string{
 			keyHintStyle.Render("↑↓") + labelStyle.Render(" nav"),
 			keyHintStyle.Render("Tab") + labelStyle.Render(" complete"),

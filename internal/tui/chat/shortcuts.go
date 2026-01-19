@@ -45,6 +45,7 @@ func NewShortcutsOverlay() *ShortcutsOverlay {
 				Shortcuts: []Shortcut{
 					{Key: "Ctrl+E", Description: "Toggle explorer"},
 					{Key: "Ctrl+L", Description: "Toggle logs"},
+					{Key: "Ctrl+S", Description: "Toggle stats"},
 					{Key: "Ctrl+K", Description: "Toggle consensus"},
 				},
 			},

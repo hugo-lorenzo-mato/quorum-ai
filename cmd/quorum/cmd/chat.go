@@ -300,3 +300,9 @@ func (n *chatOutputNotifier) TaskCompleted(_ *core.Task, _ time.Duration) {}
 func (n *chatOutputNotifier) TaskFailed(_ *core.Task, _ error)            {}
 func (n *chatOutputNotifier) TaskSkipped(_ *core.Task, _ string)          {}
 func (n *chatOutputNotifier) WorkflowStateUpdated(_ *core.WorkflowState)  {}
+func (n *chatOutputNotifier) Log(level, source, message string) {
+	if n.eventBus != nil {
+		fullMessage := "[" + source + "] " + message
+		n.eventBus.Publish(events.NewLogEvent("", level, fullMessage, nil))
+	}
+}

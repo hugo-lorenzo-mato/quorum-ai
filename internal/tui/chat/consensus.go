@@ -79,7 +79,7 @@ func (p *ConsensusPanel) HasData() bool {
 
 // Render renders the consensus panel
 func (p *ConsensusPanel) Render() string {
-	if !p.visible || !p.HasData() {
+	if !p.visible {
 		return ""
 	}
 
@@ -90,6 +90,23 @@ func (p *ConsensusPanel) Render() string {
 
 	dimStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#6B7280"))
+
+	// Box style
+	boxStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("#374151")).
+		Padding(1, 2).
+		Width(p.width - 2)
+
+	// If no data, show empty state
+	if !p.HasData() {
+		emptyContent := headerStyle.Render("◆ Consensus") + "\n\n" +
+			dimStyle.Render("No consensus data yet.\n\n") +
+			dimStyle.Render("Run /analyze or /run to see consensus results\n") +
+			dimStyle.Render("between multiple agents.") + "\n\n" +
+			dimStyle.Render("Press Ctrl+K or Esc to close")
+		return boxStyle.Render(emptyContent)
+	}
 
 	// Determine bar color based on score
 	var barColor lipgloss.Color
@@ -109,12 +126,11 @@ func (p *ConsensusPanel) Render() string {
 	var sb strings.Builder
 
 	// Header
-	header := headerStyle.Render(" Consensus")
-	sb.WriteString(header)
-	sb.WriteString("\n")
+	sb.WriteString(headerStyle.Render("◆ Consensus"))
+	sb.WriteString("\n\n")
 
 	// Progress bar
-	barWidth := p.width - 25
+	barWidth := p.width - 30
 	if barWidth < 10 {
 		barWidth = 10
 	}
@@ -132,11 +148,12 @@ func (p *ConsensusPanel) Render() string {
 	sb.WriteString(bar)
 	sb.WriteString(barStyle.Render(scoreStr))
 	sb.WriteString(thresholdStr)
-	sb.WriteString("\n")
+	sb.WriteString("\n\n")
 
 	// Pair scores (if expanded and available)
 	if p.expanded && len(p.pairScores) > 0 {
-		var pairs []string
+		sb.WriteString(dimStyle.Render("Agent pairs:"))
+		sb.WriteString("\n")
 		for pair, score := range p.pairScores {
 			var pairColor lipgloss.Color
 			switch {
@@ -148,19 +165,12 @@ func (p *ConsensusPanel) Render() string {
 				pairColor = lipgloss.Color("#ef4444")
 			}
 			pairStyle := lipgloss.NewStyle().Foreground(pairColor)
-			pairs = append(pairs, fmt.Sprintf("%s: %s", pair, pairStyle.Render(fmt.Sprintf("%.0f%%", score))))
+			sb.WriteString(fmt.Sprintf("  %s: %s\n", pair, pairStyle.Render(fmt.Sprintf("%.0f%%", score))))
 		}
-
-		pairsLine := dimStyle.Render(strings.Join(pairs, "  "))
-		sb.WriteString(pairsLine)
 	}
 
-	// Box style
-	boxStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#374151")).
-		Padding(0, 1).
-		Width(p.width - 2)
+	sb.WriteString("\n")
+	sb.WriteString(dimStyle.Render("Press Ctrl+K or Esc to close"))
 
 	return boxStyle.Render(sb.String())
 }

@@ -66,7 +66,7 @@ func NewExplorerPanel() *ExplorerPanel {
 		initialRoot: cwd, // Store the initial root - this is the boundary
 		entries:     make([]*FileEntry, 0),
 		flatList:    make([]*FileEntry, 0),
-		showHidden:  false,
+		showHidden:  true, // Show hidden files by default
 		watchedDirs: make(map[string]bool),
 		onChange:    make(chan struct{}, 1), // Buffered to avoid blocking
 		stopWatcher: make(chan struct{}),
@@ -459,13 +459,22 @@ func (p *ExplorerPanel) SetSize(width, height int) {
 	p.width = width
 	p.height = height
 
+	// Viewport height calculation:
+	// Box content height = height - 2 (borders add 2 outside)
+	// Fixed content inside box: header(1) + path(1) + separator(1) + footer(1) = 4 lines
+	// Viewport = (height - 2) - 4 = height - 6
+	viewportHeight := height - 6
+	if viewportHeight < 3 {
+		viewportHeight = 3
+	}
+
 	if !p.ready {
-		p.viewport = viewport.New(width-4, height-4)
+		p.viewport = viewport.New(width-4, viewportHeight)
 		p.ready = true
 		_ = p.refresh()
 	} else {
 		p.viewport.Width = width - 4
-		p.viewport.Height = height - 4
+		p.viewport.Height = viewportHeight
 	}
 	p.updateContent()
 }
@@ -652,19 +661,11 @@ func (p *ExplorerPanel) Render() string {
 		Italic(true)
 	help := helpStyle.Render("^E")
 
-	// Path line with subtle styling - show root indicator
+	// Path line with subtle styling
 	pathStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#9ca3af")).
 		Italic(true)
-
-	// Add root indicator if at project root
-	pathPrefix := ""
-	if p.root == p.initialRoot {
-		pathPrefix = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#22c55e")).
-			Render("◆ ") // Green diamond at root
-	}
-	pathLine := pathPrefix + pathStyle.Render(displayPath)
+	pathLine := pathStyle.Render(displayPath)
 
 	// Header line
 	headerWidth := p.width - 4
@@ -699,11 +700,14 @@ func (p *ExplorerPanel) Render() string {
 		borderColor = lipgloss.Color("#7C3AED") // Purple when focused
 	}
 
+	// lipgloss Width/Height set CONTENT size, borders are added OUTSIDE.
+	// Formula: Width(X-2) + borders(2) = total X
+	// DO NOT use MaxWidth/MaxHeight - they truncate AFTER borders, cutting them off.
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(borderColor).
-		Width(p.width).
-		Height(p.height)
+		Width(p.width - 2).
+		Height(p.height - 2)
 
 	return boxStyle.Render(sb.String())
 }

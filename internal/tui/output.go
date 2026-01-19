@@ -514,6 +514,13 @@ func (a *OutputNotifierAdapter) TaskSkipped(task *core.Task, reason string) {
 	a.output.TaskSkipped(task, reason)
 }
 
+// Log implements workflow.OutputNotifier.
+func (a *OutputNotifierAdapter) Log(level, source, message string) {
+	// Prepend source to message for display
+	fullMessage := "[" + source + "] " + message
+	a.output.Log(level, fullMessage)
+}
+
 // TraceNotifier is an interface for trace event recording.
 // This matches service.TraceOutputNotifier but is defined here to avoid circular imports.
 type TraceNotifier interface {
@@ -595,6 +602,14 @@ func (t *TracingOutputNotifierAdapter) TaskSkipped(task *core.Task, reason strin
 	// Trace writer doesn't have a TaskSkipped method, so we just delegate to base
 	if t.base != nil {
 		t.base.TaskSkipped(task, reason)
+	}
+}
+
+// Log implements workflow.OutputNotifier.
+func (t *TracingOutputNotifierAdapter) Log(level, source, message string) {
+	// Trace writer doesn't have a Log method, so we just delegate to base
+	if t.base != nil {
+		t.base.Log(level, source, message)
 	}
 }
 

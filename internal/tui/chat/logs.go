@@ -44,6 +44,20 @@ type ResourceStats struct {
 	Goroutines int
 }
 
+// MachineStats holds machine-wide resource usage
+type MachineStats struct {
+	MemTotalMB  float64
+	MemUsedMB   float64
+	MemPercent  float64
+	CPUPercent  float64
+	DiskTotalGB float64
+	DiskUsedGB  float64
+	DiskPercent float64
+	LoadAvg1    float64
+	LoadAvg5    float64
+	LoadAvg15   float64
+}
+
 // LogsPanel manages the logs display
 type LogsPanel struct {
 	mu       sync.Mutex
@@ -57,6 +71,7 @@ type LogsPanel struct {
 	// Footer stats
 	tokenStats    []TokenStats
 	resourceStats ResourceStats
+	machineStats  MachineStats
 	showFooter    bool
 	footerHeight  int // Fixed height for footer section
 }
@@ -70,8 +85,8 @@ func NewLogsPanel(maxLines int) *LogsPanel {
 		entries:      make([]LogEntry, 0, maxLines),
 		maxLines:     maxLines,
 		tokenStats:   make([]TokenStats, 0),
-		showFooter:   true,
-		footerHeight: 6, // Fixed height for stats footer
+		showFooter:   false, // Footer disabled - stats now in StatsPanel (^T)
+		footerHeight: 0,
 	}
 }
 
@@ -180,6 +195,13 @@ func (p *LogsPanel) SetResourceStats(stats ResourceStats) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.resourceStats = stats
+}
+
+// SetMachineStats updates machine-wide statistics
+func (p *LogsPanel) SetMachineStats(stats MachineStats) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.machineStats = stats
 }
 
 // ToggleFooter toggles footer visibility
@@ -469,11 +491,14 @@ func (p *LogsPanel) RenderWithFocus(focused bool) string {
 		borderColor = lipgloss.Color("#a855f7") // Purple when focused
 	}
 
+	// lipgloss Width/Height set CONTENT size, borders are added OUTSIDE.
+	// Formula: Width(X-2) + borders(2) = total X
+	// DO NOT use MaxWidth/MaxHeight - they truncate AFTER borders, cutting them off.
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(borderColor).
-		Width(p.width).
-		Height(p.height)
+		Width(p.width - 2).
+		Height(p.height - 2)
 
 	return boxStyle.Render(sb.String())
 }
@@ -511,6 +536,11 @@ func (p *LogsPanel) renderFooter() string {
 	resourceStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#38bdf8")) // Sky blue
 
+	machineStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#f97316")) // Orange for machine
+
+	sepStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#374151"))
+
 	// Calculate column widths
 	colWidth := (p.width - 6) / 2
 	if colWidth < 15 {
@@ -519,87 +549,151 @@ func (p *LogsPanel) renderFooter() string {
 
 	var lines []string
 
-	// === LEFT COLUMN: Tokens ===
-	// === RIGHT COLUMN: Resources ===
+	// === SECTION 1: Tokens (fixed height: header + 3 models max + total = 5 lines) ===
+	tokensHeader := headerStyle.Render("Tokens") + " " + dimStyle.Render("(↑↓)")
 
-	// Line 1: Headers
-	leftHeader := headerStyle.Render("Tokens") + " " + dimStyle.Render("(in→out)")
-	rightHeader := resourceStyle.Render("Resources")
-	line1 := p.formatTwoColumns(leftHeader, rightHeader, colWidth)
-	lines = append(lines, line1)
-
-	// Line 2-4: Token stats per model (left) and resources (right)
+	// Calculate totals and prepare visible token lines
 	totalIn := 0
 	totalOut := 0
-
-	// Prepare token lines
-	var tokenLines []string
 	for _, ts := range p.tokenStats {
 		totalIn += ts.TokensIn
 		totalOut += ts.TokensOut
-		tokenStr := fmt.Sprintf("%s %s→%s",
-			labelStyle.Render(fmt.Sprintf("%-8s", ts.Model)),
+	}
+
+	// Show header with count if more than 3 models
+	if len(p.tokenStats) > 3 {
+		tokensHeader += " " + dimStyle.Render(fmt.Sprintf("[%d]", len(p.tokenStats)))
+	}
+	lines = append(lines, tokensHeader)
+
+	// Show up to 3 models (most tokens first)
+	visibleModels := p.tokenStats
+	if len(visibleModels) > 3 {
+		// Sort by total tokens descending and take top 3
+		visibleModels = p.getTopModels(3)
+	}
+
+	for _, ts := range visibleModels {
+		tokenStr := fmt.Sprintf("  %s ↑%s ↓%s",
+			labelStyle.Render(fmt.Sprintf("%-8s", truncateModel(ts.Model, 8))),
 			inStyle.Render(formatTokenCount(ts.TokensIn)),
 			outStyle.Render(formatTokenCount(ts.TokensOut)),
 		)
-		tokenLines = append(tokenLines, tokenStr)
+		lines = append(lines, tokenStr)
 	}
 
-	// Prepare resource lines
-	var resourceLines []string
-
-	// RAM
-	ramLine := fmt.Sprintf("%s %s",
-		labelStyle.Render("RAM:"),
-		valueStyle.Render(fmt.Sprintf("%.1f MB", p.resourceStats.MemoryMB)),
-	)
-	resourceLines = append(resourceLines, ramLine)
-
-	// CPU
-	cpuLine := fmt.Sprintf("%s %s",
-		labelStyle.Render("CPU:"),
-		valueStyle.Render(fmt.Sprintf("%.1f%%", p.resourceStats.CPUPercent)),
-	)
-	resourceLines = append(resourceLines, cpuLine)
-
-	// Uptime
-	uptimeLine := fmt.Sprintf("%s %s",
-		labelStyle.Render("Up:"),
-		dimStyle.Render(formatDuration(p.resourceStats.Uptime)),
-	)
-	resourceLines = append(resourceLines, uptimeLine)
-
-	// Combine token and resource lines
-	maxLines := len(tokenLines)
-	if len(resourceLines) > maxLines {
-		maxLines = len(resourceLines)
-	}
-
-	for i := 0; i < maxLines; i++ {
-		left := ""
-		right := ""
-		if i < len(tokenLines) {
-			left = tokenLines[i]
-		}
-		if i < len(resourceLines) {
-			right = resourceLines[i]
-		}
-		lines = append(lines, p.formatTwoColumns(left, right, colWidth))
-	}
-
-	// Total line
-	totalLine := fmt.Sprintf("%s %s→%s",
-		labelStyle.Render("Total:"),
+	// Always show total
+	totalLine := fmt.Sprintf("  %s ↑%s ↓%s",
+		labelStyle.Render("Total:  "),
 		inStyle.Render(formatTokenCount(totalIn)),
 		outStyle.Render(formatTokenCount(totalOut)),
 	)
-	goroutinesLine := fmt.Sprintf("%s %s",
-		dimStyle.Render("∴"),
-		dimStyle.Render(fmt.Sprintf("%d go", p.resourceStats.Goroutines)),
+	lines = append(lines, totalLine)
+
+	// === SECTION 2: Quorum | Machine (side by side, same format) ===
+	lines = append(lines, sepStyle.Render(strings.Repeat("─", p.width-6)))
+
+	// Headers
+	leftHeader := resourceStyle.Render("Quorum")
+	rightHeader := machineStyle.Render("Machine")
+	lines = append(lines, p.formatTwoColumns(leftHeader, rightHeader, colWidth))
+
+	// Row 1: RAM
+	quorumRAM := fmt.Sprintf("%s %s",
+		labelStyle.Render("RAM:"),
+		valueStyle.Render(fmt.Sprintf("%.1f MB", p.resourceStats.MemoryMB)),
 	)
-	lines = append(lines, p.formatTwoColumns(totalLine, goroutinesLine, colWidth))
+	machineRAM := fmt.Sprintf("%s %.1f/%.1f GB",
+		labelStyle.Render("RAM:"),
+		p.machineStats.MemUsedMB/1024,
+		p.machineStats.MemTotalMB/1024,
+	)
+	lines = append(lines, p.formatTwoColumns(quorumRAM, machineRAM, colWidth))
+
+	// Row 2: CPU
+	quorumCPU := fmt.Sprintf("%s %s %s%d",
+		labelStyle.Render("CPU:"),
+		valueStyle.Render(fmt.Sprintf("%5.1f%%", p.resourceStats.CPUPercent)),
+		dimStyle.Render("∴"),
+		p.resourceStats.Goroutines,
+	)
+	machineCPU := fmt.Sprintf("%s %s %s%.0f%%",
+		labelStyle.Render("CPU:"),
+		valueStyle.Render(fmt.Sprintf("%5.1f%%", p.machineStats.CPUPercent)),
+		dimStyle.Render("@"),
+		p.machineStats.MemPercent,
+	)
+	lines = append(lines, p.formatTwoColumns(quorumCPU, machineCPU, colWidth))
+
+	// Row 3: Uptime | Load
+	quorumUp := fmt.Sprintf("%s %s",
+		labelStyle.Render("Up:"),
+		dimStyle.Render(formatDuration(p.resourceStats.Uptime)),
+	)
+	machineLoad := fmt.Sprintf("%s %.1f %.1f %.1f",
+		labelStyle.Render("Load:"),
+		p.machineStats.LoadAvg1,
+		p.machineStats.LoadAvg5,
+		p.machineStats.LoadAvg15,
+	)
+	lines = append(lines, p.formatTwoColumns(quorumUp, machineLoad, colWidth))
+
+	// Row 4: Goroutines | Disk
+	quorumGo := fmt.Sprintf("%s %s",
+		labelStyle.Render("Go:"),
+		dimStyle.Render(fmt.Sprintf("%d routines", p.resourceStats.Goroutines)),
+	)
+	machineDisk := fmt.Sprintf("%s %.0f/%.0fG",
+		labelStyle.Render("Disk:"),
+		p.machineStats.DiskUsedGB,
+		p.machineStats.DiskTotalGB,
+	)
+	lines = append(lines, p.formatTwoColumns(quorumGo, machineDisk, colWidth))
 
 	return strings.Join(lines, "\n")
+}
+
+// getTopModels returns the top N models by total tokens
+func (p *LogsPanel) getTopModels(n int) []TokenStats {
+	if len(p.tokenStats) <= n {
+		return p.tokenStats
+	}
+
+	// Simple selection of top N by total tokens
+	type modelTotal struct {
+		stats TokenStats
+		total int
+	}
+
+	models := make([]modelTotal, len(p.tokenStats))
+	for i, ts := range p.tokenStats {
+		models[i] = modelTotal{stats: ts, total: ts.TokensIn + ts.TokensOut}
+	}
+
+	// Simple bubble sort for small n
+	for i := 0; i < n; i++ {
+		maxIdx := i
+		for j := i + 1; j < len(models); j++ {
+			if models[j].total > models[maxIdx].total {
+				maxIdx = j
+			}
+		}
+		models[i], models[maxIdx] = models[maxIdx], models[i]
+	}
+
+	result := make([]TokenStats, n)
+	for i := 0; i < n; i++ {
+		result[i] = models[i].stats
+	}
+	return result
+}
+
+// truncateModel truncates model name to max length
+func truncateModel(name string, maxLen int) string {
+	if len(name) <= maxLen {
+		return name
+	}
+	return name[:maxLen-1] + "…"
 }
 
 // formatTwoColumns formats two strings into columns

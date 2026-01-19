@@ -70,6 +70,13 @@ func NewCommandRegistry() *CommandRegistry {
 	})
 
 	r.Register(&Command{
+		Name:        "analyze",
+		Aliases:     []string{"an"},
+		Description: "Run multi-agent analysis (V1/V2/V3)",
+		Usage:       "/analyze <prompt>",
+	})
+
+	r.Register(&Command{
 		Name:        "plan",
 		Aliases:     []string{"p"},
 		Description: "Generate a plan from prompt",
