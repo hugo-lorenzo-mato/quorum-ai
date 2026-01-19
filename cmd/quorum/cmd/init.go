@@ -40,6 +40,7 @@ func runInit(_ *cobra.Command, _ []string) error {
 
 	// Create default config
 	defaultConfig := `# Quorum AI Configuration
+# Documentation: https://github.com/hugo-lorenzo-mato/quorum-ai/blob/main/docs/CONFIGURATION.md
 
 # Logging configuration
 log:
@@ -59,34 +60,70 @@ trace:
   max_files: 500
   include_phases: [analyze, consensus, plan, execute]
 
+# Report configuration (Markdown output)
+report:
+  enabled: true
+  base_dir: ".quorum-output"
+  use_utc: true
+  include_raw: true
+
+# Prompt optimizer configuration
+optimizer:
+  enabled: true
+  agent: claude
+  model: "claude-opus-4-5-20251101"
+
 # Agent configuration
+# All agents are enabled by default for multi-agent consensus
 agents:
   default: claude
+
+  # Claude (Anthropic) - Primary agent
+  # Uses Opus 4.5 for deep analysis
   claude:
     enabled: true
     path: "claude"
-    model: "claude-sonnet-4-20250514"
+    model: "claude-opus-4-5-20251101"
     phase_models:
-      analyze: "claude-opus-4-20250514"
-      plan: "claude-sonnet-4-20250514"
-      execute: "claude-3-5-haiku-20241022"
+      analyze: "claude-opus-4-5-20251101"
+      plan: "claude-opus-4-5-20251101"
+      execute: "claude-opus-4-5-20251101"
+
+  # Gemini (Google) - Secondary agent
+  # Uses Gemini 3 Pro (preview) for deep analysis
   gemini:
     enabled: true
     path: "gemini"
-    model: "gemini-2.5-flash"
+    model: "gemini-3-pro-preview"
     phase_models:
-      analyze: "gemini-2.5-pro"
-      plan: "gemini-2.5-flash"
-      execute: "gemini-2.5-flash"
-  # Optional agents (disabled by default)
+      analyze: "gemini-3-pro-preview"
+      plan: "gemini-3-pro-preview"
+      execute: "gemini-3-flash-preview"
+
+  # Codex (OpenAI) - Tertiary agent
+  # Uses GPT-5.2 with xhigh reasoning for analysis
+  # Uses GPT-5.2-codex with xhigh reasoning for planning
+  # Uses GPT-5.2-codex with high reasoning for execution
   codex:
-    enabled: false
+    enabled: true
     path: "codex"
-    model: "gpt-5.1-codex"
+    model: "gpt-5.2"
+    phase_models:
+      analyze: "gpt-5.2"
+      plan: "gpt-5.2-codex"
+      execute: "gpt-5.2-codex"
+
+  # Copilot (GitHub) - Quaternary agent
+  # Uses Claude Sonnet 4.5 for analysis and planning (high quality)
+  # Uses Claude Haiku 4.5 for execution (0.33x cost, fast)
   copilot:
-    enabled: false
+    enabled: true
     path: "copilot"
-    model: "claude-sonnet-4-5"
+    model: "claude-sonnet-4.5"
+    phase_models:
+      analyze: "claude-sonnet-4.5"
+      plan: "claude-sonnet-4.5"
+      execute: "claude-haiku-4.5"
 
 # Workflow settings
 workflow:
@@ -96,6 +133,11 @@ workflow:
 # Consensus settings
 consensus:
   threshold: 0.75
+
+# Consolidator settings (for analysis synthesis)
+consolidator:
+  agent: claude
+  model: "claude-opus-4-5-20251101"
 
 # State persistence
 state:

@@ -43,8 +43,23 @@ func NewCopilotAdapter(cfg AgentConfig) (core.Agent, error) {
 			SupportsTools:     true,
 			MaxContextTokens:  200000,
 			MaxOutputTokens:   16384,
-			SupportedModels:   []string{"claude-sonnet-4-5", "claude-sonnet-4", "gpt-5"},
-			DefaultModel:      "claude-sonnet-4-5",
+			SupportedModels: []string{
+				"claude-sonnet-4.5",
+				"claude-haiku-4.5",
+				"claude-opus-4.5",
+				"claude-sonnet-4",
+				"gpt-5.2-codex",
+				"gpt-5.1-codex-max",
+				"gpt-5.1-codex",
+				"gpt-5.2",
+				"gpt-5.1",
+				"gpt-5",
+				"gpt-5.1-codex-mini",
+				"gpt-5-mini",
+				"gpt-4.1",
+				"gemini-3-pro-preview",
+			},
+			DefaultModel: "claude-sonnet-4.5",
 		},
 	}
 
@@ -220,6 +235,20 @@ func (c *CopilotAdapter) extractUsage(result *CommandResult, execResult *core.Ex
 		if matches := re.FindStringSubmatch(combined); len(matches) > 1 {
 			if val, err := strconv.Atoi(matches[1]); err == nil {
 				*tp.field = val
+			}
+		}
+	}
+
+	// Fallback: estimate tokens if not found in output
+	// Copilot CLI doesn't always report tokens, so we estimate based on content
+	if execResult.TokensIn == 0 && execResult.TokensOut == 0 {
+		// Estimate output tokens from response (roughly 4 chars per token)
+		execResult.TokensOut = c.estimateTokens(execResult.Output)
+		// Estimate input tokens as ~30% of output for typical prompts
+		if execResult.TokensOut > 0 {
+			execResult.TokensIn = execResult.TokensOut / 3
+			if execResult.TokensIn < 10 {
+				execResult.TokensIn = 10
 			}
 		}
 	}
