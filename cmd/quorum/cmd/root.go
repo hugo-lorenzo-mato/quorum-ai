@@ -55,7 +55,7 @@ func GetVersion() string {
 
 func init() {
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "",
-		"config file (default: .quorum.yaml)")
+		"config file (default: .quorum/config.yaml)")
 	rootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "info",
 		"log level (debug, info, warn, error)")
 	rootCmd.PersistentFlags().StringVar(&logFormat, "log-format", "auto",

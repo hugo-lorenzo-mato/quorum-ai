@@ -54,9 +54,10 @@ func (l *Loader) Viper() *viper.Viper {
 // Precedence (highest to lowest):
 // 1. CLI flags (set via viper.BindPFlag)
 // 2. Environment variables (QUORUM_*)
-// 3. Project config (.quorum.yaml in current directory)
-// 4. User config (~/.config/quorum/config.yaml)
-// 5. Defaults
+// 3. Project config (.quorum/config.yaml - new location)
+// 4. Legacy project config (.quorum.yaml - for backwards compatibility)
+// 5. User config (~/.config/quorum/config.yaml)
+// 6. Defaults
 func (l *Loader) Load() (*Config, error) {
 	// Set defaults first
 	l.setDefaults()
@@ -70,14 +71,21 @@ func (l *Loader) Load() (*Config, error) {
 	if l.configFile != "" {
 		l.v.SetConfigFile(l.configFile)
 	} else {
-		l.v.SetConfigName(".quorum")
-		l.v.SetConfigType("yaml")
+		// Try new location first: .quorum/config.yaml
+		newConfigPath := filepath.Join(".quorum", "config.yaml")
+		if _, err := os.Stat(newConfigPath); err == nil {
+			l.v.SetConfigFile(newConfigPath)
+		} else {
+			// Fall back to legacy location: .quorum.yaml
+			l.v.SetConfigName(".quorum")
+			l.v.SetConfigType("yaml")
 
-		// Add search paths in precedence order (first found wins)
-		// Project config takes precedence over user config
-		l.v.AddConfigPath(".")
-		if home, err := os.UserHomeDir(); err == nil {
-			l.v.AddConfigPath(filepath.Join(home, ".config", "quorum"))
+			// Add search paths in precedence order (first found wins)
+			// Project config takes precedence over user config
+			l.v.AddConfigPath(".")
+			if home, err := os.UserHomeDir(); err == nil {
+				l.v.AddConfigPath(filepath.Join(home, ".config", "quorum"))
+			}
 		}
 	}
 
