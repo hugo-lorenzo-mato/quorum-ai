@@ -18,8 +18,7 @@ quorum-ai reduces LLM hallucinations and increases output reliability by running
 - **Dialectic Protocol**: V1/V2/V3 (Thesis-Antithesis-Synthesis) process refines divergent outputs
 - **Git Worktree Isolation**: Each task executes in isolated worktrees to prevent conflicts
 - **Resume from Checkpoint**: Recover from failures without re-running completed work
-- **Cost Tracking**: Monitor token usage and costs across all agents
-- **Secret Sanitization**: Multi-pattern regex ensures API keys never appear in logs
+- **Token Monitor**: Track token usage across all agents during workflow execution
 - **Trace Mode**: Optional file-based traces for prompts, outputs, and consensus decisions
 
 ---
