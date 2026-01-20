@@ -9,40 +9,6 @@ import (
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/logging"
 )
 
-func TestAnalyzer_selectCritiqueAgent(t *testing.T) {
-	analyzer := NewAnalyzer(&mockConsensusEvaluator{score: 0.8})
-
-	registry := &mockAgentRegistry{}
-	registry.Register("claude", &mockAgent{})
-	registry.Register("gemini", &mockAgent{})
-
-	wctx := &Context{
-		Agents: registry,
-		Logger: logging.NewNop(),
-	}
-
-	t.Run("selects different agent", func(t *testing.T) {
-		result := analyzer.selectCritiqueAgent(context.Background(), wctx, "claude")
-		if result == "claude" {
-			t.Error("should select a different agent when available")
-		}
-	})
-
-	t.Run("returns original when no other available", func(t *testing.T) {
-		singleRegistry := &mockAgentRegistry{}
-		singleRegistry.Register("claude", &mockAgent{})
-		singleCtx := &Context{
-			Agents: singleRegistry,
-			Logger: logging.NewNop(),
-		}
-
-		result := analyzer.selectCritiqueAgent(context.Background(), singleCtx, "claude")
-		if result != "claude" {
-			t.Errorf("should return original agent when no other available, got %q", result)
-		}
-	})
-}
-
 func TestAnalyzer_Run_NeedsHumanReview(t *testing.T) {
 	// Setup mocks with score below human threshold
 	consensus := &mockConsensusEvaluator{

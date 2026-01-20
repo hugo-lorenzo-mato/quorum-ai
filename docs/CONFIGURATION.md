@@ -360,9 +360,40 @@ state:
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `path` | string | `.quorum/state/state.json` | Primary state file path |
-| `backup_path` | string | `.quorum/state/state.json.bak` | Backup state file path |
+| `path` | string | `.quorum/state/state.json` | Base state directory (workflows stored in `workflows/` subdirectory) |
+| `backup_path` | string | `.quorum/state/state.json.bak` | Legacy backup path (per-workflow backups in `workflows/<id>.json.bak`) |
 | `lock_ttl` | duration | `1h` | Lock file TTL before considered stale |
+
+**Multi-workflow storage:**
+
+Workflows are stored in separate files under `.quorum/state/workflows/`:
+- Each workflow: `.quorum/state/workflows/<workflow-id>.json`
+- Active workflow tracking: `.quorum/state/workflows/active.json`
+- Per-workflow backups: `.quorum/state/workflows/<workflow-id>.json.bak`
+
+**Workflow continuity:**
+
+The `/plan` and `/execute` commands (both CLI and TUI) automatically continue from the active workflow when no prompt is provided:
+
+```bash
+# Start a new workflow
+quorum run "Implement feature X"
+
+# Continue planning (uses active workflow)
+quorum plan
+
+# Execute tasks (uses active workflow)
+quorum execute
+
+# Resume a specific workflow
+quorum plan --workflow wf-abc123
+quorum execute --workflow wf-abc123
+
+# List available workflows
+quorum workflows
+```
+
+In TUI mode, use `/workflows` to list workflows and `/plan` or `/execute` without arguments to continue the active workflow
 
 ---
 

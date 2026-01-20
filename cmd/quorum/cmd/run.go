@@ -534,6 +534,10 @@ func (a *stateManagerAdapter) Load(ctx context.Context) (*core.WorkflowState, er
 	return a.sm.Load(ctx)
 }
 
+func (a *stateManagerAdapter) LoadByID(ctx context.Context, id core.WorkflowID) (*core.WorkflowState, error) {
+	return a.sm.LoadByID(ctx, id)
+}
+
 func (a *stateManagerAdapter) AcquireLock(ctx context.Context) error {
 	return a.sm.AcquireLock(ctx)
 }

@@ -111,12 +111,18 @@ func (r *PromptRenderer) RenderAnalyzeV1(params AnalyzeV1Params) (string, error)
 	return r.render("analyze-v1", params)
 }
 
+// V1AnalysisSummary represents a summary of one V1 analysis for V2 critique.
+type V1AnalysisSummary struct {
+	AgentName string
+	Output    string
+}
+
 // AnalyzeV2Params contains parameters for analyze-v2 template.
+// V2 critiques receive ALL V1 analyses for comprehensive cross-review.
 type AnalyzeV2Params struct {
-	Prompt      string
-	V1Analysis  string
-	AgentName   string
-	Constraints []string
+	Prompt        string
+	AllV1Analyses []V1AnalysisSummary
+	Constraints   []string
 }
 
 // RenderAnalyzeV2 renders the critique analysis prompt.

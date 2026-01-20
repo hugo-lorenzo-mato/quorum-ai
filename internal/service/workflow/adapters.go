@@ -216,10 +216,17 @@ func (a *PromptRendererAdapter) RenderAnalyzeV1(params AnalyzeV1Params) (string,
 
 // RenderAnalyzeV2 renders the critique analysis prompt.
 func (a *PromptRendererAdapter) RenderAnalyzeV2(params AnalyzeV2Params) (string, error) {
+	// Convert workflow V1 summaries to service V1 summaries
+	serviceV1Analyses := make([]service.V1AnalysisSummary, len(params.AllV1Analyses))
+	for i, v1 := range params.AllV1Analyses {
+		serviceV1Analyses[i] = service.V1AnalysisSummary{
+			AgentName: v1.AgentName,
+			Output:    v1.Output,
+		}
+	}
 	return a.renderer.RenderAnalyzeV2(service.AnalyzeV2Params{
-		Prompt:     params.Prompt,
-		V1Analysis: params.V1Analysis,
-		AgentName:  params.AgentName,
+		Prompt:        params.Prompt,
+		AllV1Analyses: serviceV1Analyses,
 	})
 }
 

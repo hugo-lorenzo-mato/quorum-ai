@@ -92,9 +92,9 @@ func (g *GeminiAdapter) Execute(ctx context.Context, opts core.ExecuteOptions) (
 	var result *CommandResult
 	var err error
 	if g.eventHandler != nil {
-		result, err = g.ExecuteWithStreaming(ctx, "gemini", args, prompt, opts.WorkDir)
+		result, err = g.ExecuteWithStreaming(ctx, "gemini", args, prompt, opts.WorkDir, opts.Timeout)
 	} else {
-		result, err = g.ExecuteCommand(ctx, args, prompt, opts.WorkDir)
+		result, err = g.ExecuteCommand(ctx, args, prompt, opts.WorkDir, opts.Timeout)
 	}
 	if err != nil {
 		return nil, err

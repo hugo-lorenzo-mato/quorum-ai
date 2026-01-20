@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"syscall"
 	"time"
 
@@ -17,23 +18,35 @@ import (
 )
 
 // JSONStateManager implements StateManager with JSON file storage.
+// Supports multi-workflow storage with active workflow tracking.
 type JSONStateManager struct {
-	path       string
-	backupPath string
-	lockPath   string
-	lockTTL    time.Duration
+	baseDir      string // Base directory for state files (e.g., .quorum/state)
+	workflowsDir string // Directory for workflow files (e.g., .quorum/state/workflows)
+	activePath   string // Path to active workflow ID file
+	lockPath     string
+	lockTTL      time.Duration
+
+	// Legacy single-file support for migration
+	legacyPath       string
+	legacyBackupPath string
 }
 
 // JSONStateManagerOption configures the manager.
 type JSONStateManagerOption func(*JSONStateManager)
 
 // NewJSONStateManager creates a new JSON state manager.
+// The path parameter is the base state directory (e.g., ".quorum/state/state.json").
+// For backwards compatibility, if the legacy file exists, it will be used.
 func NewJSONStateManager(path string, opts ...JSONStateManagerOption) *JSONStateManager {
+	baseDir := filepath.Dir(path)
 	m := &JSONStateManager{
-		path:       path,
-		backupPath: path + ".bak",
-		lockPath:   path + ".lock",
-		lockTTL:    time.Hour,
+		baseDir:          baseDir,
+		workflowsDir:     filepath.Join(baseDir, "workflows"),
+		activePath:       filepath.Join(baseDir, "active.json"),
+		lockPath:         path + ".lock",
+		lockTTL:          time.Hour,
+		legacyPath:       path,
+		legacyBackupPath: path + ".bak",
 	}
 	for _, opt := range opts {
 		opt(m)
@@ -41,10 +54,10 @@ func NewJSONStateManager(path string, opts ...JSONStateManagerOption) *JSONState
 	return m
 }
 
-// WithBackupPath sets the backup file path.
+// WithBackupPath sets the legacy backup file path.
 func WithBackupPath(path string) JSONStateManagerOption {
 	return func(m *JSONStateManager) {
-		m.backupPath = path
+		m.legacyBackupPath = path
 	}
 }
 
@@ -63,18 +76,21 @@ type stateEnvelope struct {
 	State     *core.WorkflowState `json:"state"`
 }
 
-// Save persists workflow state atomically.
-func (m *JSONStateManager) Save(_ context.Context, state *core.WorkflowState) error {
-	// Ensure directory exists
-	dir := filepath.Dir(m.path)
-	if err := os.MkdirAll(dir, 0o750); err != nil {
-		return fmt.Errorf("creating state directory: %w", err)
+// Save persists workflow state atomically and sets it as the active workflow.
+func (m *JSONStateManager) Save(ctx context.Context, state *core.WorkflowState) error {
+	// Ensure workflows directory exists
+	if err := os.MkdirAll(m.workflowsDir, 0o750); err != nil {
+		return fmt.Errorf("creating workflows directory: %w", err)
 	}
 
-	// Create backup of existing state
-	if m.Exists() {
-		if err := m.createBackup(); err != nil {
-			return fmt.Errorf("creating backup: %w", err)
+	// Determine workflow file path
+	workflowPath := m.workflowPath(state.WorkflowID)
+
+	// Create backup of existing workflow state if it exists
+	if _, err := os.Stat(workflowPath); err == nil {
+		backupPath := workflowPath + ".bak"
+		if data, readErr := fsutil.ReadFileScoped(workflowPath); readErr == nil {
+			_ = atomicWriteFile(backupPath, data, 0o600)
 		}
 	}
 
@@ -108,30 +124,193 @@ func (m *JSONStateManager) Save(_ context.Context, state *core.WorkflowState) er
 		return fmt.Errorf("marshaling envelope: %w", err)
 	}
 
-	// Atomic write
-	if err := atomicWriteFile(m.path, data, 0o600); err != nil {
-		return fmt.Errorf("writing state file: %w", err)
+	// Atomic write to workflow file
+	if err := atomicWriteFile(workflowPath, data, 0o600); err != nil {
+		return fmt.Errorf("writing workflow state file: %w", err)
+	}
+
+	// Set this workflow as active
+	if err := m.SetActiveWorkflowID(ctx, state.WorkflowID); err != nil {
+		return fmt.Errorf("setting active workflow: %w", err)
 	}
 
 	return nil
 }
 
-// Load retrieves workflow state.
-func (m *JSONStateManager) Load(_ context.Context) (*core.WorkflowState, error) {
-	if !m.Exists() {
+// workflowPath returns the file path for a workflow by ID.
+func (m *JSONStateManager) workflowPath(id core.WorkflowID) string {
+	return filepath.Join(m.workflowsDir, string(id)+".json")
+}
+
+// Load retrieves the active workflow state.
+// First tries the new multi-workflow structure, then falls back to legacy single-file.
+func (m *JSONStateManager) Load(ctx context.Context) (*core.WorkflowState, error) {
+	// Try to get active workflow ID
+	activeID, err := m.GetActiveWorkflowID(ctx)
+	if err == nil && activeID != "" {
+		// Load the active workflow
+		state, loadErr := m.LoadByID(ctx, activeID)
+		if loadErr != nil {
+			return nil, loadErr
+		}
+		if state != nil {
+			return state, nil
+		}
+	}
+
+	// Fall back to legacy single-file for backwards compatibility
+	if _, statErr := os.Stat(m.legacyPath); statErr == nil {
+		state, loadErr := m.loadFromPath(m.legacyPath)
+		if loadErr != nil {
+			// Try loading from legacy backup
+			backupState, backupErr := m.loadFromPath(m.legacyBackupPath)
+			if backupErr != nil {
+				return nil, fmt.Errorf("loading legacy state: %w (backup also failed: %v)", loadErr, backupErr)
+			}
+			return backupState, nil
+		}
+		return state, nil
+	}
+
+	return nil, nil
+}
+
+// LoadByID retrieves a specific workflow state by its ID.
+func (m *JSONStateManager) LoadByID(_ context.Context, id core.WorkflowID) (*core.WorkflowState, error) {
+	workflowPath := m.workflowPath(id)
+	if _, err := os.Stat(workflowPath); os.IsNotExist(err) {
 		return nil, nil
 	}
 
-	state, err := m.loadFromPath(m.path)
+	state, err := m.loadFromPath(workflowPath)
 	if err != nil {
-		// Try loading from backup
-		backupState, backupErr := m.loadFromPath(m.backupPath)
+		// Try backup
+		backupPath := workflowPath + ".bak"
+		backupState, backupErr := m.loadFromPath(backupPath)
 		if backupErr != nil {
-			return nil, fmt.Errorf("loading state: %w (backup also failed: %v)", err, backupErr)
+			return nil, fmt.Errorf("loading workflow %s: %w (backup also failed: %v)", id, err, backupErr)
 		}
 		return backupState, nil
 	}
 	return state, nil
+}
+
+// activeWorkflowFile stores the active workflow ID.
+type activeWorkflowFile struct {
+	WorkflowID core.WorkflowID `json:"workflow_id"`
+	UpdatedAt  time.Time       `json:"updated_at"`
+}
+
+// GetActiveWorkflowID returns the ID of the currently active workflow.
+func (m *JSONStateManager) GetActiveWorkflowID(_ context.Context) (core.WorkflowID, error) {
+	data, err := fsutil.ReadFileScoped(m.activePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+		return "", fmt.Errorf("reading active workflow file: %w", err)
+	}
+
+	var active activeWorkflowFile
+	if err := json.Unmarshal(data, &active); err != nil {
+		return "", fmt.Errorf("parsing active workflow file: %w", err)
+	}
+
+	return active.WorkflowID, nil
+}
+
+// SetActiveWorkflowID sets the active workflow ID.
+func (m *JSONStateManager) SetActiveWorkflowID(_ context.Context, id core.WorkflowID) error {
+	// Ensure base directory exists
+	if err := os.MkdirAll(m.baseDir, 0o750); err != nil {
+		return fmt.Errorf("creating state directory: %w", err)
+	}
+
+	active := activeWorkflowFile{
+		WorkflowID: id,
+		UpdatedAt:  time.Now(),
+	}
+
+	data, err := json.MarshalIndent(active, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshaling active workflow: %w", err)
+	}
+
+	if err := atomicWriteFile(m.activePath, data, 0o600); err != nil {
+		return fmt.Errorf("writing active workflow file: %w", err)
+	}
+
+	return nil
+}
+
+// ListWorkflows returns summaries of all available workflows.
+func (m *JSONStateManager) ListWorkflows(ctx context.Context) ([]core.WorkflowSummary, error) {
+	var summaries []core.WorkflowSummary
+
+	// Get active workflow ID for marking
+	activeID, _ := m.GetActiveWorkflowID(ctx)
+
+	// Check for legacy workflow first
+	if _, err := os.Stat(m.legacyPath); err == nil {
+		state, loadErr := m.loadFromPath(m.legacyPath)
+		if loadErr == nil && state != nil {
+			summaries = append(summaries, m.stateToSummary(state, activeID))
+		}
+	}
+
+	// Scan workflows directory
+	if _, err := os.Stat(m.workflowsDir); os.IsNotExist(err) {
+		return summaries, nil
+	}
+
+	entries, err := os.ReadDir(m.workflowsDir)
+	if err != nil {
+		return summaries, fmt.Errorf("reading workflows directory: %w", err)
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() || !isJSONFile(entry.Name()) || isBackupFile(entry.Name()) {
+			continue
+		}
+
+		workflowPath := filepath.Join(m.workflowsDir, entry.Name())
+		state, loadErr := m.loadFromPath(workflowPath)
+		if loadErr != nil {
+			continue // Skip corrupted files
+		}
+
+		summaries = append(summaries, m.stateToSummary(state, activeID))
+	}
+
+	return summaries, nil
+}
+
+// stateToSummary converts a WorkflowState to a WorkflowSummary.
+func (m *JSONStateManager) stateToSummary(state *core.WorkflowState, activeID core.WorkflowID) core.WorkflowSummary {
+	prompt := state.Prompt
+	if len(prompt) > 80 {
+		prompt = prompt[:77] + "..."
+	}
+
+	return core.WorkflowSummary{
+		WorkflowID:   state.WorkflowID,
+		Status:       state.Status,
+		CurrentPhase: state.CurrentPhase,
+		Prompt:       prompt,
+		CreatedAt:    state.CreatedAt,
+		UpdatedAt:    state.UpdatedAt,
+		IsActive:     state.WorkflowID == activeID,
+	}
+}
+
+// isJSONFile checks if a filename is a JSON file.
+func isJSONFile(name string) bool {
+	return filepath.Ext(name) == ".json"
+}
+
+// isBackupFile checks if a filename is a backup file.
+func isBackupFile(name string) bool {
+	return strings.HasSuffix(name, ".bak") || strings.HasSuffix(name, ".json.bak")
 }
 
 func (m *JSONStateManager) loadFromPath(path string) (*core.WorkflowState, error) {
@@ -174,31 +353,61 @@ func (m *JSONStateManager) loadFromPath(path string) (*core.WorkflowState, error
 	return envelope.State, nil
 }
 
-func (m *JSONStateManager) createBackup() error {
-	data, err := fsutil.ReadFileScoped(m.path)
+// createBackup creates a backup of a specific workflow file.
+func (m *JSONStateManager) createBackupForWorkflow(id core.WorkflowID) error {
+	workflowPath := m.workflowPath(id)
+	data, err := fsutil.ReadFileScoped(workflowPath)
 	if err != nil {
 		return err
 	}
-	return atomicWriteFile(m.backupPath, data, 0o600)
+	return atomicWriteFile(workflowPath+".bak", data, 0o600)
 }
 
-// Exists checks if state file exists.
+// Exists checks if any state exists (active workflow or legacy).
 func (m *JSONStateManager) Exists() bool {
-	_, err := os.Stat(m.path)
+	// Check for active workflow
+	if _, err := os.Stat(m.activePath); err == nil {
+		return true
+	}
+	// Check for any workflow files
+	if _, err := os.Stat(m.workflowsDir); err == nil {
+		entries, _ := os.ReadDir(m.workflowsDir)
+		for _, e := range entries {
+			if !e.IsDir() && isJSONFile(e.Name()) && !isBackupFile(e.Name()) {
+				return true
+			}
+		}
+	}
+	// Check for legacy state file
+	_, err := os.Stat(m.legacyPath)
 	return err == nil
 }
 
-// Backup creates a backup of the current state.
-func (m *JSONStateManager) Backup(_ context.Context) error {
-	if !m.Exists() {
+// Backup creates a backup of the active workflow state.
+func (m *JSONStateManager) Backup(ctx context.Context) error {
+	activeID, err := m.GetActiveWorkflowID(ctx)
+	if err != nil || activeID == "" {
+		// Try legacy backup
+		if _, statErr := os.Stat(m.legacyPath); statErr == nil {
+			data, readErr := fsutil.ReadFileScoped(m.legacyPath)
+			if readErr != nil {
+				return readErr
+			}
+			return atomicWriteFile(m.legacyBackupPath, data, 0o600)
+		}
 		return nil
 	}
-	return m.createBackup()
+	return m.createBackupForWorkflow(activeID)
 }
 
-// Restore restores from the most recent backup.
-func (m *JSONStateManager) Restore(_ context.Context) (*core.WorkflowState, error) {
-	return m.loadFromPath(m.backupPath)
+// Restore restores from the most recent backup of the active workflow.
+func (m *JSONStateManager) Restore(ctx context.Context) (*core.WorkflowState, error) {
+	activeID, err := m.GetActiveWorkflowID(ctx)
+	if err != nil || activeID == "" {
+		// Try legacy restore
+		return m.loadFromPath(m.legacyBackupPath)
+	}
+	return m.loadFromPath(m.workflowPath(activeID) + ".bak")
 }
 
 // lockInfo represents lock file contents.
@@ -296,14 +505,19 @@ func (m *JSONStateManager) ReleaseLock(_ context.Context) error {
 	return nil
 }
 
-// Path returns the state file path.
+// Path returns the legacy state file path (for backwards compatibility).
 func (m *JSONStateManager) Path() string {
-	return m.path
+	return m.legacyPath
 }
 
-// BackupPath returns the backup file path.
+// BackupPath returns the legacy backup file path (for backwards compatibility).
 func (m *JSONStateManager) BackupPath() string {
-	return m.backupPath
+	return m.legacyBackupPath
+}
+
+// WorkflowsDir returns the directory containing workflow files.
+func (m *JSONStateManager) WorkflowsDir() string {
+	return m.workflowsDir
 }
 
 // processExists checks if a process is running.

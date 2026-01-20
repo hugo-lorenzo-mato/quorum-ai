@@ -3,15 +3,26 @@
 ## Original Request
 {{.Prompt}}
 
-## Previous Analysis (by {{.AgentName}})
-{{.V1Analysis}}
+## Previous V1 Analyses
+
+You are reviewing ALL V1 analyses from multiple agents. Critically evaluate each one.
+
+{{range .AllV1Analyses}}
+### Analysis by {{.AgentName}}
+{{.Output}}
+
+---
+{{end}}
 
 ## Instructions
-Review the analysis above and provide your own independent analysis.
+Review ALL the analyses above and provide a comprehensive cross-review.
 Focus on:
-- Areas where you agree with the previous analysis
-- Areas where you disagree or have concerns
-- Additional insights not covered
+- Common themes and agreements across all analyses
+- Areas of disagreement or conflicting conclusions between agents
+- Blind spots - important aspects that no agent addressed
+- Quality assessment of each agent's reasoning
+- Synthesis of the strongest points from each analysis
+- Additional insights not covered by any analysis
 
 {{if .Constraints}}
 ## Constraints
@@ -19,19 +30,25 @@ Focus on:
 {{end}}{{end}}
 
 ## Response Format
-Provide your analysis using the following Markdown structure:
+Provide your critique using the following Markdown structure:
+
+## Summary
+- Brief overview of the collective analysis quality
 
 ## Claims
-- Your factual findings
+- Consolidated factual findings (noting agent agreement levels)
 
 ## Risks
-- Identified risks or concerns
+- All identified risks and concerns (indicating which agents raised each)
 
 ## Recommendations
-- Your suggested actions
+- Synthesized recommendations from all analyses
 
 ## Agreements
-- Points where you agree with the previous analysis
+- Points where all/most agents agree
 
 ## Disagreements
-- Points where you disagree or have concerns
+- Points of contention between agents and your assessment
+
+## Missing Considerations
+- Important aspects overlooked by the analyses

@@ -34,6 +34,7 @@ var (
 	planDryRun     bool
 	planMaxRetries int
 	planOutput     string
+	planWorkflowID string
 )
 
 func init() {
@@ -42,6 +43,7 @@ func init() {
 	planCmd.Flags().BoolVar(&planDryRun, "dry-run", false, "Simulate without executing")
 	planCmd.Flags().IntVar(&planMaxRetries, "max-retries", 3, "Maximum retry attempts")
 	planCmd.Flags().StringVarP(&planOutput, "output", "o", "", "Output mode (tui, plain, json, quiet)")
+	planCmd.Flags().StringVarP(&planWorkflowID, "workflow", "w", "", "Resume specific workflow by ID")
 }
 
 func runPlan(_ *cobra.Command, _ []string) error {
@@ -87,12 +89,26 @@ func runPlan(_ *cobra.Command, _ []string) error {
 	defer func() { _ = deps.StateAdapter.ReleaseLock(ctx) }()
 
 	// Load existing state
-	workflowState, err := deps.StateAdapter.Load(ctx)
-	if err != nil {
-		return fmt.Errorf("loading state: %w", err)
-	}
-	if workflowState == nil {
-		return core.ErrState("NO_STATE", "no workflow state found; run 'quorum analyze' first")
+	var workflowState *core.WorkflowState
+
+	if planWorkflowID != "" {
+		// Load specific workflow by ID
+		workflowState, err = deps.StateAdapter.LoadByID(ctx, core.WorkflowID(planWorkflowID))
+		if err != nil {
+			return fmt.Errorf("loading workflow %s: %w", planWorkflowID, err)
+		}
+		if workflowState == nil {
+			return core.ErrState("NO_STATE", fmt.Sprintf("workflow %s not found", planWorkflowID))
+		}
+	} else {
+		// Load active workflow
+		workflowState, err = deps.StateAdapter.Load(ctx)
+		if err != nil {
+			return fmt.Errorf("loading state: %w", err)
+		}
+		if workflowState == nil {
+			return core.ErrState("NO_STATE", "no workflow state found; run 'quorum analyze' first or use --workflow <id>")
+		}
 	}
 
 	// Verify analyze phase completed

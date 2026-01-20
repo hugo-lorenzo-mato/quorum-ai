@@ -204,7 +204,9 @@ IMPORTANT: Do NOT invent commands or features not listed above. If unsure, say y
 type WorkflowRunner interface {
 	Run(ctx context.Context, prompt string) error
 	Analyze(ctx context.Context, prompt string) error
+	Resume(ctx context.Context) error
 	GetState(ctx context.Context) (*core.WorkflowState, error)
+	ListWorkflows(ctx context.Context) ([]core.WorkflowSummary, error)
 }
 
 // Model is the Bubble Tea model for the chat interface.
@@ -2129,8 +2131,9 @@ func (m Model) buildConversationMessages() []core.Message {
 // sendToAgentWithCtx sends a message to the specified agent with a cancellable context.
 func (m Model) sendToAgentWithCtx(ctx context.Context, input, agentName string) tea.Cmd {
 	agents := m.agents
-	// Build conversation messages before the goroutine
+	// Capture values before the goroutine to avoid race conditions
 	conversationMessages := m.buildConversationMessages()
+	currentModel := m.currentModel // Pass the selected model to the agent
 
 	return func() tea.Msg {
 		agent, err := agents.Get(agentName)
@@ -2145,6 +2148,7 @@ func (m Model) sendToAgentWithCtx(ctx context.Context, input, agentName string) 
 			Prompt:       input,
 			SystemPrompt: quorumSystemPrompt,
 			Messages:     conversationMessages, // Pass structured messages
+			Model:        currentModel,         // Use selected model (empty = adapter default)
 			Format:       core.OutputFormatText,
 			Phase:        core.PhaseExecute,
 		}
@@ -2221,6 +2225,48 @@ func (m Model) handleCommand(cmd *Command, args []string) (tea.Model, tea.Cmd) {
 		}
 		m.updateViewport()
 
+	case "workflows":
+		if m.runner == nil {
+			m.history.Add(NewSystemMessage("Workflow runner not configured"))
+			m.updateViewport()
+			return m, nil
+		}
+		// List workflows from runner
+		ctx := context.Background()
+		workflows, err := m.runner.ListWorkflows(ctx)
+		if err != nil {
+			m.history.Add(NewSystemMessage(fmt.Sprintf("Error listing workflows: %v", err)))
+			m.updateViewport()
+			return m, nil
+		}
+		if len(workflows) == 0 {
+			m.history.Add(NewSystemMessage("No workflows found. Use '/analyze <prompt>' to start one."))
+			m.updateViewport()
+			return m, nil
+		}
+		var sb strings.Builder
+		sb.WriteString("Available workflows:\n\n")
+		for _, wf := range workflows {
+			prefix := "  "
+			if wf.IsActive {
+				prefix = "* "
+			}
+			prompt := wf.Prompt
+			if len(prompt) > 50 {
+				prompt = prompt[:47] + "..."
+			}
+			sb.WriteString(fmt.Sprintf("%s%s [%s] %s - %s\n",
+				prefix,
+				wf.WorkflowID,
+				wf.Status,
+				wf.CurrentPhase,
+				prompt,
+			))
+		}
+		sb.WriteString("\n* = active workflow")
+		m.history.Add(NewSystemMessage(sb.String()))
+		m.updateViewport()
+
 	case "cancel":
 		if m.controlPlane != nil && m.workflowRunning {
 			m.controlPlane.Cancel()
@@ -2253,7 +2299,38 @@ func (m Model) handleCommand(cmd *Command, args []string) (tea.Model, tea.Cmd) {
 		m.updateViewport()
 		return m, m.runAnalyze(prompt)
 
-	case "plan", "run":
+	case "plan":
+		if m.runner == nil {
+			m.history.Add(NewSystemMessage("Workflow runner not configured"))
+			m.updateViewport()
+			return m, nil
+		}
+		if m.workflowRunning {
+			m.history.Add(NewSystemMessage("Workflow already running. Use /cancel first."))
+			m.updateViewport()
+			return m, nil
+		}
+
+		// If no args, continue from active workflow (after /analyze)
+		if len(args) == 0 {
+			if m.workflowState != nil && m.workflowState.CurrentPhase == core.PhasePlan {
+				m.history.Add(NewUserMessage("/plan"))
+				m.history.Add(NewSystemMessage("Continuing planning phase from active workflow..."))
+				m.updateViewport()
+				return m, m.runPlanPhase()
+			}
+			m.history.Add(NewSystemMessage("No active workflow to continue. Use '/plan <prompt>' to start new or '/analyze' first."))
+			m.updateViewport()
+			return m, nil
+		}
+
+		// With args, start new workflow
+		prompt := strings.Join(args, " ")
+		m.history.Add(NewUserMessage(fmt.Sprintf("/plan %s", prompt)))
+		m.updateViewport()
+		return m, m.runWorkflow(prompt)
+
+	case "run":
 		if m.runner == nil {
 			m.history.Add(NewSystemMessage("Workflow runner not configured"))
 			m.updateViewport()
@@ -2265,19 +2342,36 @@ func (m Model) handleCommand(cmd *Command, args []string) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if len(args) == 0 {
-			m.history.Add(NewSystemMessage(fmt.Sprintf("Usage: /%s <prompt>", cmd.Name)))
+			m.history.Add(NewSystemMessage("Usage: /run <prompt>"))
 			m.updateViewport()
 			return m, nil
 		}
 
 		prompt := strings.Join(args, " ")
-		m.history.Add(NewUserMessage(fmt.Sprintf("/%s %s", cmd.Name, prompt)))
+		m.history.Add(NewUserMessage(fmt.Sprintf("/run %s", prompt)))
 		m.updateViewport()
 		return m, m.runWorkflow(prompt)
 
 	case "execute":
-		m.history.Add(NewSystemMessage("Use /plan first, then /execute"))
-		m.updateViewport()
+		if m.runner == nil {
+			m.history.Add(NewSystemMessage("Workflow runner not configured"))
+			m.updateViewport()
+			return m, nil
+		}
+		if m.workflowRunning {
+			m.history.Add(NewSystemMessage("Workflow already running. Use /cancel first."))
+			m.updateViewport()
+			return m, nil
+		}
+
+		// Continue from active workflow (after /plan)
+		if m.workflowState != nil && m.workflowState.CurrentPhase == core.PhaseExecute {
+			m.history.Add(NewUserMessage("/execute"))
+			m.history.Add(NewSystemMessage("Continuing execution phase from active workflow..."))
+			m.updateViewport()
+			return m, m.runExecutePhase()
+		}
+		m.history.Add(NewSystemMessage("No active workflow to execute. Use '/plan' first."))
 
 	case "retry":
 		if m.controlPlane == nil {
@@ -2708,6 +2802,40 @@ func (m Model) runAnalyze(prompt string) tea.Cmd {
 		func() tea.Msg {
 			ctx := context.Background()
 			err := runner.Analyze(ctx, prompt)
+			if err != nil {
+				return WorkflowErrorMsg{Error: err}
+			}
+			state, _ := runner.GetState(ctx)
+			return WorkflowCompletedMsg{State: state}
+		},
+	)
+}
+
+// runPlanPhase continues the workflow from the plan phase.
+func (m Model) runPlanPhase() tea.Cmd {
+	runner := m.runner
+	return tea.Batch(
+		func() tea.Msg { return WorkflowStartedMsg{Prompt: "(continuing from analysis)"} },
+		func() tea.Msg {
+			ctx := context.Background()
+			err := runner.Resume(ctx)
+			if err != nil {
+				return WorkflowErrorMsg{Error: err}
+			}
+			state, _ := runner.GetState(ctx)
+			return WorkflowCompletedMsg{State: state}
+		},
+	)
+}
+
+// runExecutePhase continues the workflow from the execute phase.
+func (m Model) runExecutePhase() tea.Cmd {
+	runner := m.runner
+	return tea.Batch(
+		func() tea.Msg { return WorkflowStartedMsg{Prompt: "(continuing from plan)"} },
+		func() tea.Msg {
+			ctx := context.Background()
+			err := runner.Resume(ctx)
 			if err != nil {
 				return WorkflowErrorMsg{Error: err}
 			}

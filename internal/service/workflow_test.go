@@ -130,6 +130,48 @@ func (m *mockWorkflowStateManager) Restore(ctx context.Context) (*core.WorkflowS
 	return m.state, nil
 }
 
+func (m *mockWorkflowStateManager) LoadByID(ctx context.Context, id core.WorkflowID) (*core.WorkflowState, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.loadError != nil {
+		return nil, m.loadError
+	}
+	if m.state != nil && m.state.WorkflowID == id {
+		return m.state, nil
+	}
+	return nil, nil
+}
+
+func (m *mockWorkflowStateManager) ListWorkflows(ctx context.Context) ([]core.WorkflowSummary, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.state == nil {
+		return nil, nil
+	}
+	return []core.WorkflowSummary{{
+		WorkflowID:   m.state.WorkflowID,
+		Status:       m.state.Status,
+		CurrentPhase: m.state.CurrentPhase,
+		Prompt:       m.state.Prompt,
+		CreatedAt:    m.state.CreatedAt,
+		UpdatedAt:    m.state.UpdatedAt,
+		IsActive:     true,
+	}}, nil
+}
+
+func (m *mockWorkflowStateManager) GetActiveWorkflowID(ctx context.Context) (core.WorkflowID, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.state != nil {
+		return m.state.WorkflowID, nil
+	}
+	return "", nil
+}
+
+func (m *mockWorkflowStateManager) SetActiveWorkflowID(ctx context.Context, id core.WorkflowID) error {
+	return nil
+}
+
 func createTestWorkflowRunner(agents ...core.Agent) (*WorkflowRunner, *mockWorkflowStateManager, *mockAgentRegistry) {
 	stateManager := newMockWorkflowStateManager()
 	registry := newMockAgentRegistry()

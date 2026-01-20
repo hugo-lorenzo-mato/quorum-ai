@@ -64,8 +64,9 @@ func TestJSONStateManager_Save(t *testing.T) {
 		t.Error("state file should exist after save")
 	}
 
-	// Verify file contents
-	data, err := os.ReadFile(statePath)
+	// Verify file contents (now saved in workflows directory)
+	workflowPath := filepath.Join(tmpDir, "workflows", string(state.WorkflowID)+".json")
+	data, err := os.ReadFile(workflowPath)
 	if err != nil {
 		t.Fatalf("ReadFile() error = %v", err)
 	}
@@ -83,6 +84,20 @@ func TestJSONStateManager_Save(t *testing.T) {
 	}
 	if envelope.State.WorkflowID != "wf-test-123" {
 		t.Errorf("WorkflowID = %s, want wf-test-123", envelope.State.WorkflowID)
+	}
+
+	// Verify active workflow file
+	activePath := filepath.Join(tmpDir, "active.json")
+	activeData, err := os.ReadFile(activePath)
+	if err != nil {
+		t.Fatalf("ReadFile(active) error = %v", err)
+	}
+	var active activeWorkflowFile
+	if err := json.Unmarshal(activeData, &active); err != nil {
+		t.Fatalf("Unmarshal(active) error = %v", err)
+	}
+	if active.WorkflowID != "wf-test-123" {
+		t.Errorf("ActiveWorkflowID = %s, want wf-test-123", active.WorkflowID)
 	}
 }
 
@@ -172,8 +187,11 @@ func TestJSONStateManager_ChecksumVerification(t *testing.T) {
 		t.Fatalf("Save() error = %v", err)
 	}
 
+	// Get the actual workflow file path
+	workflowPath := filepath.Join(tmpDir, "workflows", string(state.WorkflowID)+".json")
+
 	// Corrupt the file
-	data, err := os.ReadFile(statePath)
+	data, err := os.ReadFile(workflowPath)
 	if err != nil {
 		t.Fatalf("ReadFile() error = %v", err)
 	}
@@ -190,7 +208,7 @@ func TestJSONStateManager_ChecksumVerification(t *testing.T) {
 		t.Fatalf("Marshal() error = %v", err)
 	}
 
-	if err := os.WriteFile(statePath, corruptedData, 0o644); err != nil {
+	if err := os.WriteFile(workflowPath, corruptedData, 0o644); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 
@@ -208,24 +226,24 @@ func TestJSONStateManager_BackupRecovery(t *testing.T) {
 	manager := NewJSONStateManager(statePath)
 	ctx := context.Background()
 
-	// Save first state
-	state1 := newTestState()
-	state1.WorkflowID = "wf-first"
-	if err := manager.Save(ctx, state1); err != nil {
+	// Save state first time
+	state := newTestState()
+	state.WorkflowID = "wf-backup-test"
+	state.Prompt = "original prompt"
+	if err := manager.Save(ctx, state); err != nil {
 		t.Fatalf("Save() first error = %v", err)
 	}
 
-	// Save second state (creates backup)
-	state2 := newTestState()
-	state2.WorkflowID = "wf-second"
-	if err := manager.Save(ctx, state2); err != nil {
+	// Save same workflow again (creates backup)
+	state.Prompt = "updated prompt"
+	if err := manager.Save(ctx, state); err != nil {
 		t.Fatalf("Save() second error = %v", err)
 	}
 
 	// Verify backup exists
-	backupPath := manager.BackupPath()
-	if _, err := os.Stat(backupPath); os.IsNotExist(err) {
-		t.Error("backup file should exist")
+	workflowBackupPath := filepath.Join(tmpDir, "workflows", string(state.WorkflowID)+".json.bak")
+	if _, err := os.Stat(workflowBackupPath); os.IsNotExist(err) {
+		t.Error("workflow backup file should exist")
 	}
 
 	// Restore from backup
@@ -234,8 +252,11 @@ func TestJSONStateManager_BackupRecovery(t *testing.T) {
 		t.Fatalf("Restore() error = %v", err)
 	}
 
-	if restored.WorkflowID != "wf-first" {
-		t.Errorf("Restored WorkflowID = %s, want wf-first", restored.WorkflowID)
+	if restored.WorkflowID != "wf-backup-test" {
+		t.Errorf("Restored WorkflowID = %s, want wf-backup-test", restored.WorkflowID)
+	}
+	if restored.Prompt != "original prompt" {
+		t.Errorf("Restored Prompt = %s, want 'original prompt'", restored.Prompt)
 	}
 }
 
@@ -434,9 +455,10 @@ func TestJSONStateManager_Backup(t *testing.T) {
 		t.Fatalf("Backup() error = %v", err)
 	}
 
-	// Verify backup exists
-	if _, err := os.Stat(manager.BackupPath()); os.IsNotExist(err) {
-		t.Error("backup file should exist")
+	// Verify backup exists at workflow-specific path
+	workflowBackupPath := filepath.Join(tmpDir, "workflows", string(state.WorkflowID)+".json.bak")
+	if _, err := os.Stat(workflowBackupPath); os.IsNotExist(err) {
+		t.Errorf("backup file should exist at %s", workflowBackupPath)
 	}
 }
 

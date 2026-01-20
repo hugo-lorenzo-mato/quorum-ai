@@ -36,6 +36,39 @@ func (m *mockStateManager) Restore(ctx context.Context) (*core.WorkflowState, er
 	return m.state, nil
 }
 
+func (m *mockStateManager) LoadByID(ctx context.Context, id core.WorkflowID) (*core.WorkflowState, error) {
+	if m.state != nil && m.state.WorkflowID == id {
+		return m.state, nil
+	}
+	return nil, nil
+}
+
+func (m *mockStateManager) ListWorkflows(ctx context.Context) ([]core.WorkflowSummary, error) {
+	if m.state == nil {
+		return nil, nil
+	}
+	return []core.WorkflowSummary{{
+		WorkflowID:   m.state.WorkflowID,
+		Status:       m.state.Status,
+		CurrentPhase: m.state.CurrentPhase,
+		Prompt:       m.state.Prompt,
+		CreatedAt:    m.state.CreatedAt,
+		UpdatedAt:    m.state.UpdatedAt,
+		IsActive:     true,
+	}}, nil
+}
+
+func (m *mockStateManager) GetActiveWorkflowID(ctx context.Context) (core.WorkflowID, error) {
+	if m.state != nil {
+		return m.state.WorkflowID, nil
+	}
+	return "", nil
+}
+
+func (m *mockStateManager) SetActiveWorkflowID(ctx context.Context, id core.WorkflowID) error {
+	return nil
+}
+
 func newTestWorkflowState() *core.WorkflowState {
 	return &core.WorkflowState{
 		Version:      1,

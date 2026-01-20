@@ -159,11 +159,17 @@ type AnalyzeV1Params struct {
 	Context string
 }
 
+// V1AnalysisSummary represents a summary of one V1 analysis for V2 critique.
+type V1AnalysisSummary struct {
+	AgentName string
+	Output    string
+}
+
 // AnalyzeV2Params holds parameters for V2 critique prompt.
+// V2 critiques receive ALL V1 analyses for comprehensive cross-review.
 type AnalyzeV2Params struct {
-	Prompt     string
-	V1Analysis string
-	AgentName  string
+	Prompt        string
+	AllV1Analyses []V1AnalysisSummary
 }
 
 // AnalyzeV3Params holds parameters for V3 reconciliation prompt.

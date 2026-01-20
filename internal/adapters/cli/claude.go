@@ -89,9 +89,9 @@ func (c *ClaudeAdapter) Execute(ctx context.Context, opts core.ExecuteOptions) (
 	var result *CommandResult
 	var err error
 	if c.eventHandler != nil {
-		result, err = c.ExecuteWithStreaming(ctx, "claude", args, fullPrompt, opts.WorkDir)
+		result, err = c.ExecuteWithStreaming(ctx, "claude", args, fullPrompt, opts.WorkDir, opts.Timeout)
 	} else {
-		result, err = c.ExecuteCommand(ctx, args, fullPrompt, opts.WorkDir)
+		result, err = c.ExecuteCommand(ctx, args, fullPrompt, opts.WorkDir, opts.Timeout)
 	}
 	if err != nil {
 		return nil, err

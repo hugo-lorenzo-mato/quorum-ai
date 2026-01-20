@@ -128,11 +128,26 @@ type AgentRegistry interface {
 // StateManager defines the contract for workflow state persistence.
 type StateManager interface {
 	// Save persists the current workflow state atomically.
+	// Also sets the saved workflow as the active workflow.
 	Save(ctx context.Context, state *WorkflowState) error
 
-	// Load retrieves the workflow state from storage.
+	// Load retrieves the active workflow state from storage.
 	// Returns nil state and no error if state doesn't exist.
 	Load(ctx context.Context) (*WorkflowState, error)
+
+	// LoadByID retrieves a specific workflow state by its ID.
+	// Returns nil state and no error if workflow doesn't exist.
+	LoadByID(ctx context.Context, id WorkflowID) (*WorkflowState, error)
+
+	// ListWorkflows returns summaries of all available workflows.
+	ListWorkflows(ctx context.Context) ([]WorkflowSummary, error)
+
+	// GetActiveWorkflowID returns the ID of the currently active workflow.
+	// Returns empty string if no active workflow.
+	GetActiveWorkflowID(ctx context.Context) (WorkflowID, error)
+
+	// SetActiveWorkflowID sets the active workflow ID.
+	SetActiveWorkflowID(ctx context.Context, id WorkflowID) error
 
 	// AcquireLock obtains an exclusive lock on the state file.
 	// Returns error if lock cannot be acquired (another process holds it).
@@ -149,6 +164,17 @@ type StateManager interface {
 
 	// Restore restores from the most recent backup.
 	Restore(ctx context.Context) (*WorkflowState, error)
+}
+
+// WorkflowSummary provides a lightweight summary of a workflow for listing.
+type WorkflowSummary struct {
+	WorkflowID   WorkflowID     `json:"workflow_id"`
+	Status       WorkflowStatus `json:"status"`
+	CurrentPhase Phase          `json:"current_phase"`
+	Prompt       string         `json:"prompt"` // Truncated for display
+	CreatedAt    time.Time      `json:"created_at"`
+	UpdatedAt    time.Time      `json:"updated_at"`
+	IsActive     bool           `json:"is_active"`
 }
 
 // WorkflowState represents the persisted state of a workflow.

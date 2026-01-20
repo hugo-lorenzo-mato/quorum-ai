@@ -79,8 +79,8 @@ func NewCommandRegistry() *CommandRegistry {
 	r.Register(&Command{
 		Name:        "plan",
 		Aliases:     []string{"p"},
-		Description: "Generate a plan from prompt",
-		Usage:       "/plan <prompt>",
+		Description: "Continue planning or start new workflow",
+		Usage:       "/plan [prompt]",
 	})
 
 	r.Register(&Command{
@@ -92,9 +92,16 @@ func NewCommandRegistry() *CommandRegistry {
 
 	r.Register(&Command{
 		Name:        "execute",
-		Aliases:     []string{"exec", "e"},
-		Description: "Execute pending tasks",
+		Aliases:     []string{"exec"},
+		Description: "Execute tasks from active workflow",
 		Usage:       "/execute",
+	})
+
+	r.Register(&Command{
+		Name:        "workflows",
+		Aliases:     []string{"wf", "wfs"},
+		Description: "List available workflows",
+		Usage:       "/workflows",
 	})
 
 	r.Register(&Command{

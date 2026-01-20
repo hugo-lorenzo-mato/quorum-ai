@@ -77,9 +77,11 @@ func TestPromptRenderer_RenderAnalyzeV2(t *testing.T) {
 	}
 
 	params := AnalyzeV2Params{
-		Prompt:      "Add a new feature",
-		V1Analysis:  "Previous analysis content here",
-		AgentName:   "claude",
+		Prompt: "Add a new feature",
+		AllV1Analyses: []V1AnalysisSummary{
+			{AgentName: "claude", Output: "Previous analysis content from Claude"},
+			{AgentName: "gemini", Output: "Previous analysis content from Gemini"},
+		},
 		Constraints: []string{"Must be backward compatible"},
 	}
 
@@ -88,8 +90,8 @@ func TestPromptRenderer_RenderAnalyzeV2(t *testing.T) {
 		t.Fatalf("RenderAnalyzeV2() error = %v", err)
 	}
 
-	if !strings.Contains(result, "Previous analysis content") {
-		t.Error("result should contain V1 analysis")
+	if !strings.Contains(result, "Previous analysis content from Claude") {
+		t.Error("result should contain V1 analysis from Claude")
 	}
 	if !strings.Contains(result, "claude") {
 		t.Error("result should contain agent name")

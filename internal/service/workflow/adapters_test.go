@@ -333,9 +333,11 @@ func TestPromptRendererAdapter_RenderAnalyzeV2(t *testing.T) {
 
 	adapter := NewPromptRendererAdapter(renderer)
 	params := AnalyzeV2Params{
-		Prompt:     "Analyze this codebase",
-		V1Analysis: "Initial analysis result",
-		AgentName:  "claude",
+		Prompt: "Analyze this codebase",
+		AllV1Analyses: []V1AnalysisSummary{
+			{AgentName: "claude", Output: "Claude's analysis"},
+			{AgentName: "gemini", Output: "Gemini's analysis"},
+		},
 	}
 
 	result, err := adapter.RenderAnalyzeV2(params)

@@ -141,6 +141,19 @@ func (c *CopilotAdapter) Execute(ctx context.Context, opts core.ExecuteOptions) 
 		prompt = "[System Instructions]\n" + opts.SystemPrompt + "\n\n[User Message]\n" + prompt
 	}
 
+	// Set timeout: prefer explicit timeout, then config, then default
+	timeout := opts.Timeout
+	if timeout == 0 {
+		timeout = c.config.Timeout
+	}
+	if timeout == 0 {
+		timeout = 5 * time.Minute
+	}
+
+	// Apply timeout to context
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
 	// #nosec G204 -- command path is from trusted config
 	cmd := exec.CommandContext(ctx, cmdParts[0], allArgs...)
 	cmd.Dir = opts.WorkDir
@@ -155,15 +168,6 @@ func (c *CopilotAdapter) Execute(ctx context.Context, opts core.ExecuteOptions) 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
-
-	// Set timeout
-	timeout := opts.Timeout
-	if timeout == 0 {
-		timeout = c.config.Timeout
-	}
-	if timeout == 0 {
-		timeout = 5 * time.Minute
-	}
 
 	startTime := time.Now()
 

@@ -93,9 +93,9 @@ func (c *CodexAdapter) Execute(ctx context.Context, opts core.ExecuteOptions) (*
 	var result *CommandResult
 	var err error
 	if c.eventHandler != nil {
-		result, err = c.ExecuteWithStreaming(ctx, "codex", args, prompt, opts.WorkDir)
+		result, err = c.ExecuteWithStreaming(ctx, "codex", args, prompt, opts.WorkDir, opts.Timeout)
 	} else {
-		result, err = c.ExecuteCommand(ctx, args, prompt, opts.WorkDir)
+		result, err = c.ExecuteCommand(ctx, args, prompt, opts.WorkDir, opts.Timeout)
 	}
 	if err != nil {
 		return nil, err

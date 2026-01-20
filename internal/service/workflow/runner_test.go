@@ -248,6 +248,16 @@ func (m *mockStateManager) ReleaseLock(_ context.Context) error {
 	return nil
 }
 
+func (m *mockStateManager) LoadByID(_ context.Context, id core.WorkflowID) (*core.WorkflowState, error) {
+	if m.loadErr != nil {
+		return nil, m.loadErr
+	}
+	if m.state != nil && m.state.WorkflowID == id {
+		return m.state, nil
+	}
+	return nil, nil
+}
+
 func TestRunner_SetDryRun(t *testing.T) {
 	runner := &Runner{
 		config: DefaultRunnerConfig(),

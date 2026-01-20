@@ -238,11 +238,9 @@ func (a *Analyzer) runV1Analysis(ctx context.Context, wctx *Context) ([]Analysis
 		"total", len(agentNames),
 	)
 
-	// Need at least 2 successful outputs for consensus
-	minRequired := 2
-	if len(agentNames) < 2 {
-		minRequired = 1
-	}
+	// Need at least 2 successful outputs for meaningful consensus
+	// Without at least 2 agents, there's no cross-validation benefit
+	const minRequired = 2
 
 	if len(outputs) < minRequired {
 		// Collect error messages
@@ -348,7 +346,9 @@ func (a *Analyzer) runAnalysisWithAgent(ctx context.Context, wctx *Context, agen
 	durationMS := time.Since(startTime).Milliseconds()
 
 	// Parse output with metrics
-	output := parseAnalysisOutputWithMetrics(agentName, model, result, durationMS)
+	// Use v1-{agent} naming convention for V1 outputs
+	outputName := fmt.Sprintf("v1-%s", agentName)
+	output := parseAnalysisOutputWithMetrics(outputName, model, result, durationMS)
 
 	// Write V1 analysis report
 	if wctx.Report != nil {
@@ -371,132 +371,222 @@ func (a *Analyzer) runAnalysisWithAgent(ctx context.Context, wctx *Context, agen
 	return output, nil
 }
 
-// runV2Critique runs critical review of V1 outputs.
+// runV2Critique runs critical review of ALL V1 outputs in parallel.
+// Each V2 critique agent receives ALL V1 analyses for comprehensive cross-review.
+// All V2 critiques run in parallel and must complete before V3 can start.
+// Requires at least 2 successful V2 critiques to proceed to V3.
 func (a *Analyzer) runV2Critique(ctx context.Context, wctx *Context, v1Outputs []AnalysisOutput) ([]AnalysisOutput, error) {
-	wctx.Logger.Info("starting V2 critique phase")
+	wctx.Logger.Info("starting V2 critique phase",
+		"v1_count", len(v1Outputs),
+	)
 	if wctx.Output != nil {
-		wctx.Output.Log("info", "analyzer", "V2 Critique: cross-reviewing agent outputs")
+		wctx.Output.Log("info", "analyzer", fmt.Sprintf("V2 Critique: cross-reviewing all %d V1 analyses", len(v1Outputs)))
 	}
 
-	outputs := make([]AnalysisOutput, 0)
-
-	// Each agent critiques the other's output
+	// Build all V1 summaries once - every V2 critique will receive ALL of these
+	allV1Summaries := make([]V1AnalysisSummary, len(v1Outputs))
+	v1AgentNames := make(map[string]bool)
 	for i, v1 := range v1Outputs {
-		critiqueAgent := a.selectCritiqueAgent(ctx, wctx, v1.AgentName)
-		agent, err := wctx.Agents.Get(critiqueAgent)
-		if err != nil {
-			wctx.Logger.Warn("critique agent not available",
-				"agent", critiqueAgent,
-				"error", err,
-			)
-			continue
+		allV1Summaries[i] = V1AnalysisSummary{
+			AgentName: v1.AgentName,
+			Output:    v1.RawOutput,
 		}
+		v1AgentNames[v1.AgentName] = true
+	}
 
-		// Acquire rate limit
-		limiter := wctx.RateLimits.Get(critiqueAgent)
-		if err := limiter.Acquire(); err != nil {
-			wctx.Logger.Warn("rate limit exceeded for critique", "agent", critiqueAgent)
-			continue
+	// Get available agents for V2 critique
+	// Prefer agents that didn't participate in V1, but use any available if needed
+	availableAgents := wctx.Agents.Available(ctx)
+	critiqueAgents := make([]string, 0)
+	for _, ag := range availableAgents {
+		if !v1AgentNames[ag] {
+			critiqueAgents = append(critiqueAgents, ag)
 		}
+	}
+	// If no different agents available, use V1 agents for self-critique
+	if len(critiqueAgents) == 0 {
+		critiqueAgents = availableAgents
+	}
 
-		prompt, err := wctx.Prompts.RenderAnalyzeV2(AnalyzeV2Params{
-			Prompt:     GetEffectivePrompt(wctx.State),
-			V1Analysis: v1.RawOutput,
-			AgentName:  v1.AgentName,
-		})
-		if err != nil {
-			wctx.Logger.Warn("failed to render V2 prompt", "error", err)
-			continue
+	if wctx.Output != nil {
+		wctx.Output.Log("info", "analyzer", fmt.Sprintf("V2 Critique: querying %d agents in parallel (%s)", len(critiqueAgents), strings.Join(critiqueAgents, ", ")))
+	}
+
+	// Use sync.WaitGroup for parallel execution (same pattern as V1)
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	outputs := make([]AnalysisOutput, 0, len(critiqueAgents))
+	errors := make(map[string]error)
+
+	// Run V2 critiques in PARALLEL - each reviews ALL V1 outputs
+	for i, critiqueAgent := range critiqueAgents {
+		critiqueAgent := critiqueAgent // capture
+		idx := i                       // capture index
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			output, err := a.runV2CritiqueWithAgent(ctx, wctx, critiqueAgent, idx, allV1Summaries, v1Outputs)
+			mu.Lock()
+			defer mu.Unlock()
+			if err != nil {
+				wctx.Logger.Error("V2 critique failed",
+					"agent", critiqueAgent,
+					"error", err,
+				)
+				errors[critiqueAgent] = err
+			} else {
+				outputs = append(outputs, output)
+			}
+		}()
+	}
+
+	// Wait for ALL V2 critiques to complete (success or failure)
+	wg.Wait()
+
+	// Log summary
+	wctx.Logger.Info("V2 critique phase complete",
+		"succeeded", len(outputs),
+		"failed", len(errors),
+		"total", len(critiqueAgents),
+	)
+
+	// Need at least 2 successful V2 outputs to proceed to V3
+	const minRequired = 2
+
+	if len(outputs) < minRequired {
+		// Collect error messages
+		var errMsgs []string
+		for agent, err := range errors {
+			errMsgs = append(errMsgs, fmt.Sprintf("%s: %v", agent, err))
 		}
+		return nil, fmt.Errorf("insufficient V2 critiques succeeded (%d/%d required): %s",
+			len(outputs), minRequired, strings.Join(errMsgs, "; "))
+	}
 
-		// Resolve model and track time
-		model := ResolvePhaseModel(wctx.Config, critiqueAgent, core.PhaseAnalyze, "")
-		startTime := time.Now()
-
-		// Emit started event
+	// Log which agents failed but we're continuing
+	if len(errors) > 0 {
+		var failedAgents []string
+		for agent := range errors {
+			failedAgents = append(failedAgents, agent)
+		}
 		if wctx.Output != nil {
-			wctx.Output.AgentEvent("started", critiqueAgent, fmt.Sprintf("Running V2 critique of %s", v1.AgentName), map[string]interface{}{
-				"phase":        "analyze_v2",
-				"target_agent": v1.AgentName,
-				"model":        model,
-			})
-		}
-
-		var result *core.ExecuteResult
-		err = wctx.Retry.Execute(func() error {
-			var execErr error
-			result, execErr = agent.Execute(ctx, core.ExecuteOptions{
-				Prompt:  prompt,
-				Format:  core.OutputFormatText,
-				Model:   model,
-				Timeout: wctx.Config.PhaseTimeouts.Analyze,
-				Sandbox: wctx.Config.Sandbox,
-				Phase:   core.PhaseAnalyze,
-			})
-			return execErr
-		})
-
-		if err != nil {
-			if wctx.Output != nil {
-				wctx.Output.AgentEvent("error", critiqueAgent, err.Error(), map[string]interface{}{
-					"phase":        "analyze_v2",
-					"target_agent": v1.AgentName,
-					"model":        model,
-					"duration_ms":  time.Since(startTime).Milliseconds(),
-					"error_type":   fmt.Sprintf("%T", err),
-				})
-			}
-		}
-
-		if err == nil {
-			if wctx.Output != nil {
-				wctx.Output.AgentEvent("completed", critiqueAgent, fmt.Sprintf("V2 critique of %s completed", v1.AgentName), map[string]interface{}{
-					"phase":        "analyze_v2",
-					"target_agent": v1.AgentName,
-					"model":        result.Model,
-					"tokens_in":    result.TokensIn,
-					"tokens_out":   result.TokensOut,
-					"cost_usd":     result.CostUSD,
-					"duration_ms":  time.Since(startTime).Milliseconds(),
-				})
-			}
-			durationMS := time.Since(startTime).Milliseconds()
-			outputName := fmt.Sprintf("%s-critique-%d", critiqueAgent, i)
-			output := parseAnalysisOutputWithMetrics(outputName, model, result, durationMS)
-			outputs = append(outputs, output)
-
-			// Write V2 critique report
-			if wctx.Report != nil {
-				critiqueData := report.CritiqueData{
-					CriticAgent:   critiqueAgent,
-					CriticModel:   model,
-					TargetAgent:   v1.AgentName,
-					RawOutput:     result.Output,
-					TokensIn:      result.TokensIn,
-					TokensOut:     result.TokensOut,
-					CostUSD:       result.CostUSD,
-					DurationMS:    durationMS,
-				}
-				// Parse critique-specific fields from JSON
-				a.parseCritiqueFields(result.Output, &critiqueData)
-
-				if reportErr := wctx.Report.WriteV2Critique(critiqueData); reportErr != nil {
-					wctx.Logger.Warn("failed to write V2 critique report",
-						"critic", critiqueAgent,
-						"target", v1.AgentName,
-						"error", reportErr,
-					)
-				}
-			}
-		} else {
-			wctx.Logger.Warn("V2 critique failed",
-				"agent", critiqueAgent,
-				"error", err,
-			)
+			wctx.Output.Log("warn", "analyzer", fmt.Sprintf("V2 continuing with %d/%d agents (failed: %s)",
+				len(outputs), len(critiqueAgents), strings.Join(failedAgents, ", ")))
 		}
 	}
 
 	return outputs, nil
+}
+
+// runV2CritiqueWithAgent runs a single V2 critique with a specific agent.
+func (a *Analyzer) runV2CritiqueWithAgent(ctx context.Context, wctx *Context, critiqueAgent string, idx int, allV1Summaries []V1AnalysisSummary, v1Outputs []AnalysisOutput) (AnalysisOutput, error) {
+	agent, err := wctx.Agents.Get(critiqueAgent)
+	if err != nil {
+		return AnalysisOutput{}, fmt.Errorf("getting agent %s: %w", critiqueAgent, err)
+	}
+
+	// Acquire rate limit
+	limiter := wctx.RateLimits.Get(critiqueAgent)
+	if err := limiter.Acquire(); err != nil {
+		return AnalysisOutput{}, fmt.Errorf("rate limit: %w", err)
+	}
+
+	// Render prompt with ALL V1 analyses
+	prompt, err := wctx.Prompts.RenderAnalyzeV2(AnalyzeV2Params{
+		Prompt:        GetEffectivePrompt(wctx.State),
+		AllV1Analyses: allV1Summaries,
+	})
+	if err != nil {
+		return AnalysisOutput{}, fmt.Errorf("rendering prompt: %w", err)
+	}
+
+	// Resolve model and track time
+	model := ResolvePhaseModel(wctx.Config, critiqueAgent, core.PhaseAnalyze, "")
+	startTime := time.Now()
+
+	// Emit started event
+	if wctx.Output != nil {
+		wctx.Output.AgentEvent("started", critiqueAgent, fmt.Sprintf("Running V2 critique reviewing all %d V1 analyses", len(v1Outputs)), map[string]interface{}{
+			"phase":           "analyze_v2",
+			"v1_agents_count": len(v1Outputs),
+			"model":           model,
+		})
+	}
+
+	var result *core.ExecuteResult
+	err = wctx.Retry.Execute(func() error {
+		var execErr error
+		result, execErr = agent.Execute(ctx, core.ExecuteOptions{
+			Prompt:  prompt,
+			Format:  core.OutputFormatText,
+			Model:   model,
+			Timeout: wctx.Config.PhaseTimeouts.Analyze,
+			Sandbox: wctx.Config.Sandbox,
+			Phase:   core.PhaseAnalyze,
+		})
+		return execErr
+	})
+
+	if err != nil {
+		if wctx.Output != nil {
+			wctx.Output.AgentEvent("error", critiqueAgent, err.Error(), map[string]interface{}{
+				"phase":           "analyze_v2",
+				"v1_agents_count": len(v1Outputs),
+				"model":           model,
+				"duration_ms":     time.Since(startTime).Milliseconds(),
+				"error_type":      fmt.Sprintf("%T", err),
+			})
+		}
+		return AnalysisOutput{}, err
+	}
+
+	// Emit completed event
+	if wctx.Output != nil {
+		wctx.Output.AgentEvent("completed", critiqueAgent, "V2 critique of all V1 analyses completed", map[string]interface{}{
+			"phase":           "analyze_v2",
+			"v1_agents_count": len(v1Outputs),
+			"model":           result.Model,
+			"tokens_in":       result.TokensIn,
+			"tokens_out":      result.TokensOut,
+			"cost_usd":        result.CostUSD,
+			"duration_ms":     time.Since(startTime).Milliseconds(),
+		})
+	}
+
+	durationMS := time.Since(startTime).Milliseconds()
+	// Use v2-{agent} naming convention for V2 outputs
+	outputName := fmt.Sprintf("v2-%s", critiqueAgent)
+	output := parseAnalysisOutputWithMetrics(outputName, model, result, durationMS)
+
+	// Write V2 critique report
+	if wctx.Report != nil {
+		// Build target agents string for report
+		var targetAgents []string
+		for _, v1 := range v1Outputs {
+			targetAgents = append(targetAgents, v1.AgentName)
+		}
+		critiqueData := report.CritiqueData{
+			CriticAgent: critiqueAgent,
+			CriticModel: model,
+			TargetAgent: strings.Join(targetAgents, ", "),
+			RawOutput:   result.Output,
+			TokensIn:    result.TokensIn,
+			TokensOut:   result.TokensOut,
+			CostUSD:     result.CostUSD,
+			DurationMS:  durationMS,
+		}
+		// Parse critique-specific fields from JSON
+		a.parseCritiqueFields(result.Output, &critiqueData)
+
+		if reportErr := wctx.Report.WriteV2Critique(critiqueData); reportErr != nil {
+			wctx.Logger.Warn("failed to write V2 critique report",
+				"critic", critiqueAgent,
+				"error", reportErr,
+			)
+		}
+	}
+
+	return output, nil
 }
 
 // runV3Reconciliation runs synthesis of conflicting analyses.
@@ -819,16 +909,6 @@ func (a *Analyzer) consolidateAnalysisFallback(wctx *Context, outputs []Analysis
 	})
 }
 
-// selectCritiqueAgent selects a different available agent for critique.
-func (a *Analyzer) selectCritiqueAgent(ctx context.Context, wctx *Context, original string) string {
-	agents := wctx.Agents.Available(ctx)
-	for _, ag := range agents {
-		if ag != original {
-			return ag
-		}
-	}
-	return original
-}
 
 // buildConsensusData converts ConsensusResult to report.ConsensusData.
 func (a *Analyzer) buildConsensusData(cr ConsensusResult, outputs []AnalysisOutput) report.ConsensusData {

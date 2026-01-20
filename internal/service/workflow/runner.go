@@ -23,6 +23,7 @@ var idCounter uint64
 type StateManager interface {
 	Save(ctx context.Context, state *core.WorkflowState) error
 	Load(ctx context.Context) (*core.WorkflowState, error)
+	LoadByID(ctx context.Context, id core.WorkflowID) (*core.WorkflowState, error)
 	AcquireLock(ctx context.Context) error
 	ReleaseLock(ctx context.Context) error
 }
@@ -500,6 +501,31 @@ func (r *Runner) Analyze(ctx context.Context, prompt string) error {
 // GetState returns the current workflow state.
 func (r *Runner) GetState(ctx context.Context) (*core.WorkflowState, error) {
 	return r.state.Load(ctx)
+}
+
+// ListWorkflows returns summaries of all available workflows.
+func (r *Runner) ListWorkflows(ctx context.Context) ([]core.WorkflowSummary, error) {
+	// Check if state manager supports listing
+	type workflowLister interface {
+		ListWorkflows(ctx context.Context) ([]core.WorkflowSummary, error)
+	}
+	if lister, ok := r.state.(workflowLister); ok {
+		return lister.ListWorkflows(ctx)
+	}
+	// Fallback: return single workflow if available
+	state, err := r.state.Load(ctx)
+	if err != nil || state == nil {
+		return nil, err
+	}
+	return []core.WorkflowSummary{{
+		WorkflowID:   state.WorkflowID,
+		Status:       state.Status,
+		CurrentPhase: state.CurrentPhase,
+		Prompt:       state.Prompt,
+		CreatedAt:    state.CreatedAt,
+		UpdatedAt:    state.UpdatedAt,
+		IsActive:     true,
+	}}, nil
 }
 
 // SetDryRun enables or disables dry-run mode.

@@ -189,19 +189,21 @@ func TestAnalyzeV1Params_Fields(t *testing.T) {
 
 func TestAnalyzeV2Params_Fields(t *testing.T) {
 	params := AnalyzeV2Params{
-		Prompt:     "Test prompt",
-		V1Analysis: "V1 analysis result",
-		AgentName:  "claude",
+		Prompt: "Test prompt",
+		AllV1Analyses: []V1AnalysisSummary{
+			{AgentName: "claude", Output: "Claude's V1 analysis"},
+			{AgentName: "gemini", Output: "Gemini's V1 analysis"},
+		},
 	}
 
 	if params.Prompt != "Test prompt" {
 		t.Errorf("Prompt = %q, want %q", params.Prompt, "Test prompt")
 	}
-	if params.V1Analysis != "V1 analysis result" {
-		t.Errorf("V1Analysis = %q, want %q", params.V1Analysis, "V1 analysis result")
+	if len(params.AllV1Analyses) != 2 {
+		t.Errorf("AllV1Analyses length = %d, want 2", len(params.AllV1Analyses))
 	}
-	if params.AgentName != "claude" {
-		t.Errorf("AgentName = %q, want %q", params.AgentName, "claude")
+	if params.AllV1Analyses[0].AgentName != "claude" {
+		t.Errorf("AllV1Analyses[0].AgentName = %q, want %q", params.AllV1Analyses[0].AgentName, "claude")
 	}
 }
 

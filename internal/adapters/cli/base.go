@@ -89,9 +89,13 @@ type CommandResult struct {
 
 // ExecuteCommand runs a CLI command with the given options.
 // If a LogCallback is set, stderr lines are streamed in real-time.
-func (b *BaseAdapter) ExecuteCommand(ctx context.Context, args []string, stdin, workDir string) (*CommandResult, error) {
-	// Apply timeout
-	timeout := b.config.Timeout
+// The optTimeout parameter allows overriding the default timeout; pass 0 to use config default.
+func (b *BaseAdapter) ExecuteCommand(ctx context.Context, args []string, stdin, workDir string, optTimeout time.Duration) (*CommandResult, error) {
+	// Apply timeout: prefer explicit timeout, then config, then default
+	timeout := optTimeout
+	if timeout == 0 {
+		timeout = b.config.Timeout
+	}
 	if timeout == 0 {
 		timeout = 5 * time.Minute
 	}
@@ -219,13 +223,14 @@ func (b *BaseAdapter) streamStderr(pipe io.ReadCloser, buf *bytes.Buffer) {
 
 // ExecuteWithStreaming runs a CLI command with real-time event streaming.
 // It uses the appropriate streaming method based on the CLI's StreamConfig.
-func (b *BaseAdapter) ExecuteWithStreaming(ctx context.Context, adapterName string, args []string, stdin, workDir string) (*CommandResult, error) {
+// The optTimeout parameter allows overriding the default timeout; pass 0 to use config default.
+func (b *BaseAdapter) ExecuteWithStreaming(ctx context.Context, adapterName string, args []string, stdin, workDir string, optTimeout time.Duration) (*CommandResult, error) {
 	streamCfg := GetStreamConfig(adapterName)
 	parser := GetStreamParser(adapterName)
 
 	// If no event handler or streaming not supported, fall back to normal execution
 	if b.eventHandler == nil || streamCfg.Method == StreamMethodNone {
-		return b.ExecuteCommand(ctx, args, stdin, workDir)
+		return b.ExecuteCommand(ctx, args, stdin, workDir, optTimeout)
 	}
 
 	// Build command string for logging (before streaming args are added)
@@ -244,11 +249,11 @@ func (b *BaseAdapter) ExecuteWithStreaming(ctx context.Context, adapterName stri
 
 	switch streamCfg.Method {
 	case StreamMethodJSONStdout:
-		return b.executeWithJSONStreaming(ctx, adapterName, args, stdin, workDir, streamCfg, parser)
+		return b.executeWithJSONStreaming(ctx, adapterName, args, stdin, workDir, optTimeout, streamCfg, parser)
 	case StreamMethodLogFile:
-		return b.executeWithLogFileStreaming(ctx, adapterName, args, stdin, workDir, streamCfg, parser)
+		return b.executeWithLogFileStreaming(ctx, adapterName, args, stdin, workDir, optTimeout, streamCfg, parser)
 	default:
-		return b.ExecuteCommand(ctx, args, stdin, workDir)
+		return b.ExecuteCommand(ctx, args, stdin, workDir, optTimeout)
 	}
 }
 
@@ -258,14 +263,18 @@ func (b *BaseAdapter) executeWithJSONStreaming(
 	adapterName string,
 	args []string,
 	stdin, workDir string,
+	optTimeout time.Duration,
 	cfg StreamConfig,
 	parser StreamParser,
 ) (*CommandResult, error) {
 	// Modify args to enable streaming output
 	streamArgs := b.addStreamingArgs(args, cfg)
 
-	// Apply timeout
-	timeout := b.config.Timeout
+	// Apply timeout: prefer explicit timeout, then config, then default
+	timeout := optTimeout
+	if timeout == 0 {
+		timeout = b.config.Timeout
+	}
 	if timeout == 0 {
 		timeout = 5 * time.Minute
 	}
@@ -400,6 +409,7 @@ func (b *BaseAdapter) executeWithLogFileStreaming(
 	adapterName string,
 	args []string,
 	stdin, workDir string,
+	optTimeout time.Duration,
 	cfg StreamConfig,
 	parser StreamParser,
 ) (*CommandResult, error) {
@@ -407,7 +417,7 @@ func (b *BaseAdapter) executeWithLogFileStreaming(
 	logDir, err := os.MkdirTemp("", "quorum-logs-*")
 	if err != nil {
 		// Fall back to normal execution
-		return b.ExecuteCommand(ctx, args, stdin, workDir)
+		return b.ExecuteCommand(ctx, args, stdin, workDir, optTimeout)
 	}
 	defer os.RemoveAll(logDir)
 
@@ -417,8 +427,11 @@ func (b *BaseAdapter) executeWithLogFileStreaming(
 		logArgs = append(logArgs, cfg.LogLevelFlag, cfg.LogLevelValue)
 	}
 
-	// Apply timeout
-	timeout := b.config.Timeout
+	// Apply timeout: prefer explicit timeout, then config, then default
+	timeout := optTimeout
+	if timeout == 0 {
+		timeout = b.config.Timeout
+	}
 	if timeout == 0 {
 		timeout = 5 * time.Minute
 	}
@@ -728,7 +741,7 @@ func (b *BaseAdapter) ExtractByPattern(output, pattern string) ([]string, error)
 
 // GetVersion retrieves the CLI version.
 func (b *BaseAdapter) GetVersion(ctx context.Context, versionArg string) (string, error) {
-	result, err := b.ExecuteCommand(ctx, []string{versionArg}, "", "")
+	result, err := b.ExecuteCommand(ctx, []string{versionArg}, "", "", 0)
 	if err != nil {
 		return "", err
 	}

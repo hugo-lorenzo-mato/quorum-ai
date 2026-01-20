@@ -36,6 +36,7 @@ var (
 	executeMaxRetries int
 	executeOutput     string
 	executeSandbox    bool
+	executeWorkflowID string
 )
 
 func init() {
@@ -45,6 +46,7 @@ func init() {
 	executeCmd.Flags().IntVar(&executeMaxRetries, "max-retries", 3, "Maximum retry attempts")
 	executeCmd.Flags().StringVarP(&executeOutput, "output", "o", "", "Output mode (tui, plain, json, quiet)")
 	executeCmd.Flags().BoolVar(&executeSandbox, "sandbox", false, "Run in sandboxed mode")
+	executeCmd.Flags().StringVarP(&executeWorkflowID, "workflow", "w", "", "Resume specific workflow by ID")
 }
 
 func runExecute(_ *cobra.Command, _ []string) error {
@@ -90,12 +92,26 @@ func runExecute(_ *cobra.Command, _ []string) error {
 	defer func() { _ = deps.StateAdapter.ReleaseLock(ctx) }()
 
 	// Load existing state
-	workflowState, err := deps.StateAdapter.Load(ctx)
-	if err != nil {
-		return fmt.Errorf("loading state: %w", err)
-	}
-	if workflowState == nil {
-		return core.ErrState("NO_STATE", "no workflow state found; run 'quorum analyze' and 'quorum plan' first")
+	var workflowState *core.WorkflowState
+
+	if executeWorkflowID != "" {
+		// Load specific workflow by ID
+		workflowState, err = deps.StateAdapter.LoadByID(ctx, core.WorkflowID(executeWorkflowID))
+		if err != nil {
+			return fmt.Errorf("loading workflow %s: %w", executeWorkflowID, err)
+		}
+		if workflowState == nil {
+			return core.ErrState("NO_STATE", fmt.Sprintf("workflow %s not found", executeWorkflowID))
+		}
+	} else {
+		// Load active workflow
+		workflowState, err = deps.StateAdapter.Load(ctx)
+		if err != nil {
+			return fmt.Errorf("loading state: %w", err)
+		}
+		if workflowState == nil {
+			return core.ErrState("NO_STATE", "no workflow state found; run 'quorum analyze' and 'quorum plan' first or use --workflow <id>")
+		}
 	}
 
 	// Verify plan phase completed

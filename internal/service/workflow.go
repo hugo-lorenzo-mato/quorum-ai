@@ -453,8 +453,9 @@ func (w *WorkflowRunner) runAnalysisWithAgent(ctx context.Context, state *core.W
 		return AnalysisOutput{}, err
 	}
 
-	// Parse output
-	output := w.parseAnalysisOutput(agentName, result)
+	// Parse output - use v1-{agent} naming convention
+	outputName := fmt.Sprintf("v1-%s", agentName)
+	output := w.parseAnalysisOutput(outputName, result)
 	w.logger.Info("analyze:v1 agent done",
 		"agent", agentName,
 		"model", model,
@@ -481,115 +482,192 @@ func (w *WorkflowRunner) runAnalysisWithAgent(ctx context.Context, state *core.W
 	return output, nil
 }
 
-// runV2Critique runs critical review of V1 outputs.
+// runV2Critique runs critical review of ALL V1 outputs in parallel.
+// Each V2 critique agent receives ALL V1 analyses for comprehensive cross-review.
+// All V2 critiques run in parallel and must complete before V3 can start.
+// Requires at least 2 successful V2 critiques to proceed to V3.
 func (w *WorkflowRunner) runV2Critique(ctx context.Context, state *core.WorkflowState, v1Outputs []AnalysisOutput) ([]AnalysisOutput, error) {
-	w.logger.Info("starting V2 critique phase")
+	w.logger.Info("starting V2 critique phase",
+		"v1_count", len(v1Outputs),
+	)
 
-	outputs := make([]AnalysisOutput, 0)
-
-	// Each agent critiques the other's output
+	// Build all V1 summaries once - every V2 critique will receive ALL of these
+	allV1Summaries := make([]V1AnalysisSummary, len(v1Outputs))
+	v1AgentNames := make(map[string]bool)
 	for i, v1 := range v1Outputs {
-		critiqueAgent := w.selectCritiqueAgent(ctx, v1.AgentName)
-		agent, err := w.agents.Get(critiqueAgent)
-		if err != nil {
-			w.logger.Warn("critique agent not available",
-				"agent", critiqueAgent,
-				"error", err,
-			)
-			continue
+		allV1Summaries[i] = V1AnalysisSummary{
+			AgentName: v1.AgentName,
+			Output:    v1.RawOutput,
 		}
+		v1AgentNames[v1.AgentName] = true
+	}
 
-		// Set up event handler for streaming
-		w.setupAgentEventHandler(agent, critiqueAgent)
-
-		// Acquire rate limit
-		limiter := w.rateLimits.Get(critiqueAgent)
-		if err := limiter.Acquire(ctx); err != nil {
-			w.logger.Warn("rate limit exceeded for critique", "agent", critiqueAgent)
-			continue
+	// Get available agents for V2 critique
+	// Prefer agents that didn't participate in V1, but use any available if needed
+	availableAgents := w.agents.Available(ctx)
+	critiqueAgents := make([]string, 0)
+	for _, ag := range availableAgents {
+		if !v1AgentNames[ag] {
+			critiqueAgents = append(critiqueAgents, ag)
 		}
+	}
+	// If no different agents available, use V1 agents for self-critique
+	if len(critiqueAgents) == 0 {
+		critiqueAgents = availableAgents
+	}
 
-		prompt, err := w.prompts.RenderAnalyzeV2(AnalyzeV2Params{
-			Prompt:     state.Prompt,
-			V1Analysis: v1.RawOutput,
-			AgentName:  v1.AgentName,
-		})
-		if err != nil {
-			w.logger.Warn("failed to render V2 prompt", "error", err)
-			continue
+	w.logger.Info("V2 critique: querying agents in parallel",
+		"agents", strings.Join(critiqueAgents, ", "),
+		"count", len(critiqueAgents),
+	)
+
+	// Use sync.WaitGroup for parallel execution (same pattern as V1)
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	outputs := make([]AnalysisOutput, 0, len(critiqueAgents))
+	errors := make(map[string]error)
+
+	// Run V2 critiques in PARALLEL - each reviews ALL V1 outputs
+	for i, critiqueAgent := range critiqueAgents {
+		critiqueAgent := critiqueAgent // capture
+		idx := i                       // capture index
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			output, err := w.runV2CritiqueWithAgent(ctx, state, critiqueAgent, idx, allV1Summaries, v1Outputs)
+			mu.Lock()
+			defer mu.Unlock()
+			if err != nil {
+				w.logger.Error("V2 critique failed",
+					"agent", critiqueAgent,
+					"error", err,
+				)
+				errors[critiqueAgent] = err
+			} else {
+				outputs = append(outputs, output)
+			}
+		}()
+	}
+
+	// Wait for ALL V2 critiques to complete (success or failure)
+	wg.Wait()
+
+	// Log summary
+	w.logger.Info("V2 critique phase complete",
+		"succeeded", len(outputs),
+		"failed", len(errors),
+		"total", len(critiqueAgents),
+	)
+
+	// Need at least 2 successful V2 outputs to proceed to V3
+	const minRequired = 2
+
+	if len(outputs) < minRequired {
+		// Collect error messages
+		var errMsgs []string
+		for agent, err := range errors {
+			errMsgs = append(errMsgs, fmt.Sprintf("%s: %v", agent, err))
 		}
-
-		model := w.resolveModel(critiqueAgent, core.PhaseAnalyze, "")
-		w.logger.Info("analyze:v2 start",
-			"agent", critiqueAgent,
-			"critiquing", v1.AgentName,
-			"model", model,
-		)
-		_ = w.trace.Record(ctx, TraceEvent{
-			Phase:     "analyze",
-			Step:      "v2",
-			EventType: "prompt",
-			Agent:     critiqueAgent,
-			Model:     model,
-			FileExt:   "txt",
-			Content:   []byte(prompt),
-			Metadata: map[string]interface{}{
-				"critiquing": v1.AgentName,
-				"format":     "json",
-			},
-		})
-
-		var result *core.ExecuteResult
-		err = w.retry.Execute(ctx, func(ctx context.Context) error {
-			var execErr error
-			result, execErr = agent.Execute(ctx, core.ExecuteOptions{
-				Prompt:  prompt,
-				Format:  core.OutputFormatJSON,
-				Model:   model,
-				Timeout: 5 * time.Minute,
-				Sandbox: w.config.Sandbox,
-			})
-			return execErr
-		})
-
-		if err == nil {
-			output := w.parseAnalysisOutput(fmt.Sprintf("%s-critique-%d", critiqueAgent, i), result)
-			w.logger.Info("analyze:v2 agent done",
-				"agent", critiqueAgent,
-				"model", model,
-			)
-			w.logger.Debug("analyze:v2 agent usage",
-				"agent", critiqueAgent,
-				"model", model,
-				"tokens_in", result.TokensIn,
-				"tokens_out", result.TokensOut,
-				"cost_usd", result.CostUSD,
-			)
-			_ = w.trace.Record(ctx, TraceEvent{
-				Phase:     "analyze",
-				Step:      "v2",
-				EventType: "response",
-				Agent:     critiqueAgent,
-				Model:     model,
-				FileExt:   "json",
-				Content:   []byte(result.Output),
-				TokensIn:  result.TokensIn,
-				TokensOut: result.TokensOut,
-				CostUSD:   result.CostUSD,
-				Metadata: map[string]interface{}{
-					"critiquing": v1.AgentName,
-				},
-			})
-			outputs = append(outputs, output)
-		} else {
-			w.logger.Warn("V2 critique failed",
-				"agent", critiqueAgent,
-				"error", err,
-			)
-		}
+		return nil, fmt.Errorf("insufficient V2 critiques succeeded (%d/%d required): %s",
+			len(outputs), minRequired, strings.Join(errMsgs, "; "))
 	}
 
 	return outputs, nil
+}
+
+// runV2CritiqueWithAgent runs a single V2 critique with a specific agent.
+func (w *WorkflowRunner) runV2CritiqueWithAgent(ctx context.Context, state *core.WorkflowState, critiqueAgent string, idx int, allV1Summaries []V1AnalysisSummary, v1Outputs []AnalysisOutput) (AnalysisOutput, error) {
+	agent, err := w.agents.Get(critiqueAgent)
+	if err != nil {
+		return AnalysisOutput{}, fmt.Errorf("getting agent %s: %w", critiqueAgent, err)
+	}
+
+	// Set up event handler for streaming
+	w.setupAgentEventHandler(agent, critiqueAgent)
+
+	// Acquire rate limit
+	limiter := w.rateLimits.Get(critiqueAgent)
+	if err := limiter.Acquire(ctx); err != nil {
+		return AnalysisOutput{}, fmt.Errorf("rate limit: %w", err)
+	}
+
+	// Render prompt with ALL V1 analyses
+	prompt, err := w.prompts.RenderAnalyzeV2(AnalyzeV2Params{
+		Prompt:        state.Prompt,
+		AllV1Analyses: allV1Summaries,
+	})
+	if err != nil {
+		return AnalysisOutput{}, fmt.Errorf("rendering prompt: %w", err)
+	}
+
+	model := w.resolveModel(critiqueAgent, core.PhaseAnalyze, "")
+	w.logger.Info("analyze:v2 start",
+		"agent", critiqueAgent,
+		"v1_agents_count", len(v1Outputs),
+		"model", model,
+	)
+	_ = w.trace.Record(ctx, TraceEvent{
+		Phase:     "analyze",
+		Step:      "v2",
+		EventType: "prompt",
+		Agent:     critiqueAgent,
+		Model:     model,
+		FileExt:   "txt",
+		Content:   []byte(prompt),
+		Metadata: map[string]interface{}{
+			"v1_agents_count": len(v1Outputs),
+			"format":          "json",
+		},
+	})
+
+	var result *core.ExecuteResult
+	err = w.retry.Execute(ctx, func(ctx context.Context) error {
+		var execErr error
+		result, execErr = agent.Execute(ctx, core.ExecuteOptions{
+			Prompt:  prompt,
+			Format:  core.OutputFormatJSON,
+			Model:   model,
+			Timeout: 5 * time.Minute,
+			Sandbox: w.config.Sandbox,
+		})
+		return execErr
+	})
+
+	if err != nil {
+		return AnalysisOutput{}, err
+	}
+
+	// Use v2-{agent} naming convention for V2 outputs
+	outputName := fmt.Sprintf("v2-%s", critiqueAgent)
+	output := w.parseAnalysisOutput(outputName, result)
+	w.logger.Info("analyze:v2 agent done",
+		"agent", critiqueAgent,
+		"model", model,
+	)
+	w.logger.Debug("analyze:v2 agent usage",
+		"agent", critiqueAgent,
+		"model", model,
+		"tokens_in", result.TokensIn,
+		"tokens_out", result.TokensOut,
+		"cost_usd", result.CostUSD,
+	)
+	_ = w.trace.Record(ctx, TraceEvent{
+		Phase:     "analyze",
+		Step:      "v2",
+		EventType: "response",
+		Agent:     critiqueAgent,
+		Model:     model,
+		FileExt:   "json",
+		Content:   []byte(result.Output),
+		TokensIn:  result.TokensIn,
+		TokensOut: result.TokensOut,
+		CostUSD:   result.CostUSD,
+		Metadata: map[string]interface{}{
+			"v1_agents_count": len(v1Outputs),
+		},
+	})
+
+	return output, nil
 }
 
 // runV3Reconciliation runs synthesis of conflicting analyses.
