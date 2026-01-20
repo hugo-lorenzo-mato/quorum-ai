@@ -7,7 +7,9 @@
 
 **Multi-agent LLM orchestrator with consensus-based validation for reliable software engineering workflows.**
 
-quorum-ai orchestrates locally installed CLI agents (Claude Code, Gemini CLI, Codex, GitHub Copilot) without managing API keys or credentials. Each agent handles its own authentication, and quorum-ai coordinates their execution through a dialectic consensus protocol to reduce hallucinations and increase output reliability.
+quorum-ai orchestrates locally installed CLI agents without managing API keys or credentials. Each agent handles its own authentication, and quorum-ai coordinates their execution through a dialectic consensus protocol to reduce hallucinations and increase output reliability.
+
+Currently supports Claude Code, Gemini CLI, Codex, and GitHub Copilot, with more agents planned.
 
 ---
 
@@ -20,7 +22,7 @@ quorum-ai orchestrates locally installed CLI agents (Claude Code, Gemini CLI, Co
 - **Git Worktree Isolation**: Each task executes in isolated worktrees to prevent conflicts
 - **Multi-Workflow Management**: Run multiple workflows concurrently and resume by ID
 - **Resume from Checkpoint**: Recover from failures without re-running completed work
-- **Interactive TUI**: Chat interface for direct agent interaction and workflow control
+- **Multiple Interfaces**: CLI for scripts, TUI for interactive use, web panel coming soon
 - **Token Monitor**: Track token usage across all agents during workflow execution
 - **Trace Mode**: Optional file-based traces for prompts, outputs, and consensus decisions
 
