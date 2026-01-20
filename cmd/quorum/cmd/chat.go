@@ -213,18 +213,6 @@ func createWorkflowRunner(
 	}
 	stateManager := state.NewJSONStateManager(statePath)
 
-	// Create consensus checker
-	consensusChecker := service.NewConsensusCheckerWithThresholds(
-		cfg.Consensus.Threshold,
-		cfg.Consensus.V2Threshold,
-		cfg.Consensus.HumanThreshold,
-		service.CategoryWeights{
-			Claims:          cfg.Consensus.Weights.Claims,
-			Risks:           cfg.Consensus.Weights.Risks,
-			Recommendations: cfg.Consensus.Weights.Recommendations,
-		},
-	)
-
 	// Create prompt renderer
 	promptRenderer, err := service.NewPromptRenderer()
 	if err != nil {
@@ -249,7 +237,6 @@ func createWorkflowRunner(
 		Sandbox:      cfg.Workflow.Sandbox,
 		DenyTools:    cfg.Workflow.DenyTools,
 		DefaultAgent: defaultAgent,
-		V3Agent:      "claude",
 		AgentPhaseModels: map[string]map[string]string{
 			"claude":  cfg.Agents.Claude.PhaseModels,
 			"gemini":  cfg.Agents.Gemini.PhaseModels,
@@ -275,6 +262,16 @@ func createWorkflowRunner(
 			UseUTC:     cfg.Report.UseUTC,
 			IncludeRaw: cfg.Report.IncludeRaw,
 		},
+		Arbiter: workflow.ArbiterConfig{
+			Enabled:             cfg.Consensus.Arbiter.Enabled,
+			Agent:               cfg.Consensus.Arbiter.Agent,
+			Model:               cfg.Consensus.Arbiter.Model,
+			Threshold:           cfg.Consensus.Arbiter.Threshold,
+			MinRounds:           cfg.Consensus.Arbiter.MinRounds,
+			MaxRounds:           cfg.Consensus.Arbiter.MaxRounds,
+			AbortThreshold:      cfg.Consensus.Arbiter.AbortThreshold,
+			StagnationThreshold: cfg.Consensus.Arbiter.StagnationThreshold,
+		},
 	}
 
 	// Create service components
@@ -298,7 +295,6 @@ func createWorkflowRunner(
 	}
 
 	// Create adapters
-	consensusAdapter := workflow.NewConsensusAdapter(consensusChecker)
 	checkpointAdapter := workflow.NewCheckpointAdapter(checkpointManager, ctx)
 	retryAdapter := workflow.NewRetryAdapter(retryPolicy, ctx)
 	rateLimiterAdapter := workflow.NewRateLimiterRegistryAdapter(rateLimiterRegistry, ctx)
@@ -324,7 +320,6 @@ func createWorkflowRunner(
 		Config:         runnerConfig,
 		State:          stateAdapter,
 		Agents:         registry,
-		Consensus:      consensusAdapter,
 		DAG:            dagAdapter,
 		Checkpoint:     checkpointAdapter,
 		ResumeProvider: resumeAdapter,

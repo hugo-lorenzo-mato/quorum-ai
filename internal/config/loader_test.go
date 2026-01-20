@@ -327,3 +327,40 @@ func TestDefaultConfig_SandboxEnabled(t *testing.T) {
 		t.Error("Expected workflow.sandbox to default to true")
 	}
 }
+
+func TestLoader_ArbiterDefaults(t *testing.T) {
+	loader := NewLoader()
+	cfg, err := loader.Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	// Verify arbiter defaults
+	if cfg.Consensus.Arbiter.Enabled {
+		t.Error("Consensus.Arbiter.Enabled = true, want false (default)")
+	}
+	// Agent and Model have NO defaults - user must configure them explicitly
+	// We cannot assume any CLI is installed on the user's system
+	if cfg.Consensus.Arbiter.Agent != "" {
+		t.Errorf("Consensus.Arbiter.Agent = %q, want empty (no default)", cfg.Consensus.Arbiter.Agent)
+	}
+	if cfg.Consensus.Arbiter.Model != "" {
+		t.Errorf("Consensus.Arbiter.Model = %q, want empty (no default)", cfg.Consensus.Arbiter.Model)
+	}
+	// Numeric thresholds have sensible defaults
+	if cfg.Consensus.Arbiter.Threshold != 0.90 {
+		t.Errorf("Consensus.Arbiter.Threshold = %f, want %f", cfg.Consensus.Arbiter.Threshold, 0.90)
+	}
+	if cfg.Consensus.Arbiter.MinRounds != 2 {
+		t.Errorf("Consensus.Arbiter.MinRounds = %d, want %d", cfg.Consensus.Arbiter.MinRounds, 2)
+	}
+	if cfg.Consensus.Arbiter.MaxRounds != 5 {
+		t.Errorf("Consensus.Arbiter.MaxRounds = %d, want %d", cfg.Consensus.Arbiter.MaxRounds, 5)
+	}
+	if cfg.Consensus.Arbiter.AbortThreshold != 0.30 {
+		t.Errorf("Consensus.Arbiter.AbortThreshold = %f, want %f", cfg.Consensus.Arbiter.AbortThreshold, 0.30)
+	}
+	if cfg.Consensus.Arbiter.StagnationThreshold != 0.02 {
+		t.Errorf("Consensus.Arbiter.StagnationThreshold = %f, want %f", cfg.Consensus.Arbiter.StagnationThreshold, 0.02)
+	}
+}

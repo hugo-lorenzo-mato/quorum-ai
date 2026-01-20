@@ -107,6 +107,29 @@ type ConsensusConfig struct {
 	V2Threshold    float64         `mapstructure:"v2_threshold"`
 	HumanThreshold float64         `mapstructure:"human_threshold"`
 	Weights        ConsensusWeight `mapstructure:"weights"`
+	Arbiter        ArbiterConfig   `mapstructure:"arbiter"`
+}
+
+// ArbiterConfig configures the semantic arbiter LLM for consensus evaluation.
+type ArbiterConfig struct {
+	// Enabled activates semantic consensus evaluation via an arbiter LLM.
+	// When enabled, replaces Jaccard-based consensus with semantic evaluation.
+	Enabled bool `mapstructure:"enabled"`
+	// Agent specifies which agent to use as arbiter (claude, gemini, codex, copilot).
+	Agent string `mapstructure:"agent"`
+	// Model specifies the model to use (optional, uses agent's default if empty).
+	Model string `mapstructure:"model"`
+	// Threshold is the semantic consensus score required to pass (0.0-1.0, default: 0.90).
+	Threshold float64 `mapstructure:"threshold"`
+	// MinRounds is the minimum number of rounds before accepting consensus (default: 2).
+	// Even if threshold is met earlier, refinement continues until min_rounds is reached.
+	MinRounds int `mapstructure:"min_rounds"`
+	// MaxRounds limits the number of V(n) refinement rounds (default: 5).
+	MaxRounds int `mapstructure:"max_rounds"`
+	// AbortThreshold triggers human review if score drops below this (default: 0.30).
+	AbortThreshold float64 `mapstructure:"abort_threshold"`
+	// StagnationThreshold triggers early exit if score improvement is below this (default: 0.02).
+	StagnationThreshold float64 `mapstructure:"stagnation_threshold"`
 }
 
 // ConsensusWeight configures component weights for consensus.

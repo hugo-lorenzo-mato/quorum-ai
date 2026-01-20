@@ -22,8 +22,8 @@ func validConfig() *Config {
 			MaxFiles:      500,
 			IncludePhases: []string{"analyze", "consensus", "plan", "execute"},
 		},
-	Workflow: WorkflowConfig{
-		Timeout:    "12h",
+		Workflow: WorkflowConfig{
+			Timeout:    "12h",
 			MaxRetries: 3,
 		},
 		Agents: AgentsConfig{

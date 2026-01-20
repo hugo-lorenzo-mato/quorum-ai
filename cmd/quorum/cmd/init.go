@@ -156,6 +156,15 @@ workflow:
 # Consensus settings
 consensus:
   threshold: 0.75
+  arbiter:
+    enabled: true
+    agent: claude
+    model: "claude-opus-4-5-20251101"
+    threshold: 0.90
+    min_rounds: 2
+    max_rounds: 2
+    abort_threshold: 0.30
+    stagnation_threshold: 0.02
 
 # Consolidator settings (for analysis synthesis)
 analysis_consolidator:

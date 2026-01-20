@@ -35,7 +35,7 @@ type PhaseRunnerDeps struct {
 	StateManager      *state.JSONStateManager
 	StateAdapter      workflow.StateManager
 	Registry          *cli.Registry
-	ConsensusAdapter  *workflow.ConsensusAdapter
+	ArbiterConfig     workflow.ArbiterConfig
 	CheckpointAdapter *workflow.CheckpointAdapter
 	RetryAdapter      *workflow.RetryAdapter
 	RateLimiterAdapt  *workflow.RateLimiterRegistryAdapter
@@ -93,17 +93,17 @@ func InitPhaseRunner(ctx context.Context, phase core.Phase, maxRetries int, dryR
 		return nil, fmt.Errorf("configuring agents: %w", err)
 	}
 
-	// Create consensus checker from unified config
-	consensusChecker := service.NewConsensusCheckerWithThresholds(
-		cfg.Consensus.Threshold,
-		cfg.Consensus.V2Threshold,
-		cfg.Consensus.HumanThreshold,
-		service.CategoryWeights{
-			Claims:          cfg.Consensus.Weights.Claims,
-			Risks:           cfg.Consensus.Weights.Risks,
-			Recommendations: cfg.Consensus.Weights.Recommendations,
-		},
-	)
+	// Create arbiter config from unified config
+	arbiterConfig := workflow.ArbiterConfig{
+		Enabled:             cfg.Consensus.Arbiter.Enabled,
+		Agent:               cfg.Consensus.Arbiter.Agent,
+		Model:               cfg.Consensus.Arbiter.Model,
+		Threshold:           cfg.Consensus.Arbiter.Threshold,
+		MinRounds:           cfg.Consensus.Arbiter.MinRounds,
+		MaxRounds:           cfg.Consensus.Arbiter.MaxRounds,
+		AbortThreshold:      cfg.Consensus.Arbiter.AbortThreshold,
+		StagnationThreshold: cfg.Consensus.Arbiter.StagnationThreshold,
+	}
 
 	// Create prompt renderer
 	promptRenderer, err := service.NewPromptRenderer()
@@ -154,7 +154,6 @@ func InitPhaseRunner(ctx context.Context, phase core.Phase, maxRetries int, dryR
 		Sandbox:      sandbox || cfg.Workflow.Sandbox,
 		DenyTools:    cfg.Workflow.DenyTools,
 		DefaultAgent: defaultAgent,
-		V3Agent:      "claude",
 		AgentPhaseModels: map[string]map[string]string{
 			"claude":  cfg.Agents.Claude.PhaseModels,
 			"gemini":  cfg.Agents.Gemini.PhaseModels,
@@ -202,7 +201,6 @@ func InitPhaseRunner(ctx context.Context, phase core.Phase, maxRetries int, dryR
 	}
 
 	// Create adapters for modular runner interfaces
-	consensusAdapter := workflow.NewConsensusAdapter(consensusChecker)
 	checkpointAdapter := workflow.NewCheckpointAdapter(checkpointManager, ctx)
 	retryAdapter := workflow.NewRetryAdapter(retryPolicy, ctx)
 	rateLimiterAdapter := workflow.NewRateLimiterRegistryAdapter(rateLimiterRegistry, ctx)
@@ -219,7 +217,7 @@ func InitPhaseRunner(ctx context.Context, phase core.Phase, maxRetries int, dryR
 		StateManager:      stateManager,
 		StateAdapter:      stateAdapter,
 		Registry:          registry,
-		ConsensusAdapter:  consensusAdapter,
+		ArbiterConfig:     arbiterConfig,
 		CheckpointAdapter: checkpointAdapter,
 		RetryAdapter:      retryAdapter,
 		RateLimiterAdapt:  rateLimiterAdapter,
@@ -248,13 +246,13 @@ func CreateWorkflowContext(deps *PhaseRunnerDeps, state *core.WorkflowState) *wo
 			Sandbox:            deps.RunnerConfig.Sandbox,
 			DenyTools:          deps.RunnerConfig.DenyTools,
 			DefaultAgent:       deps.RunnerConfig.DefaultAgent,
-			V3Agent:            deps.RunnerConfig.V3Agent,
 			AgentPhaseModels:   deps.RunnerConfig.AgentPhaseModels,
 			WorktreeAutoClean:  deps.RunnerConfig.WorktreeAutoClean,
 			WorktreeMode:       deps.RunnerConfig.WorktreeMode,
 			MaxCostPerWorkflow: deps.RunnerConfig.MaxCostPerWorkflow,
 			MaxCostPerTask:     deps.RunnerConfig.MaxCostPerTask,
 			PhaseTimeouts:      deps.RunnerConfig.PhaseTimeouts,
+			Arbiter:            deps.ArbiterConfig,
 		},
 	}
 }

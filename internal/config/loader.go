@@ -181,6 +181,16 @@ func (l *Loader) setDefaults() {
 	l.v.SetDefault("consensus.weights.risks", 0.30)
 	l.v.SetDefault("consensus.weights.recommendations", 0.30)
 
+	// Semantic arbiter defaults (for LLM-based consensus evaluation)
+	// NOTE: agent and model have NO defaults - user must explicitly configure them
+	// because we cannot assume any CLI is installed on the user's system
+	l.v.SetDefault("consensus.arbiter.enabled", false)
+	l.v.SetDefault("consensus.arbiter.threshold", 0.90)
+	l.v.SetDefault("consensus.arbiter.min_rounds", 2)
+	l.v.SetDefault("consensus.arbiter.max_rounds", 5)
+	l.v.SetDefault("consensus.arbiter.abort_threshold", 0.30)
+	l.v.SetDefault("consensus.arbiter.stagnation_threshold", 0.02)
+
 	// Costs defaults
 	l.v.SetDefault("costs.max_per_workflow", 10.0)
 	l.v.SetDefault("costs.max_per_task", 2.0)

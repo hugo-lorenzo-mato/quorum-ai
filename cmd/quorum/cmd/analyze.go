@@ -109,8 +109,11 @@ func runAnalyze(_ *cobra.Command, args []string) error {
 	// Create workflow context
 	wctx := CreateWorkflowContext(deps, workflowState)
 
-	// Create analyzer
-	analyzer := workflow.NewAnalyzer(deps.ConsensusAdapter)
+	// Create analyzer with arbiter configuration
+	analyzer, err := workflow.NewAnalyzer(deps.ArbiterConfig)
+	if err != nil {
+		return fmt.Errorf("creating analyzer: %w", err)
+	}
 
 	output.PhaseStarted(core.PhaseAnalyze)
 
