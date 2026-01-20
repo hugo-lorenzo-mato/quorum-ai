@@ -16,9 +16,9 @@ drift.
 
 ### 2. Consensus Protocol
 
-- V1/V2/V3 dialectic protocol to resolve divergent agent outputs.
-- Jaccard similarity with category weights for consensus scoring.
-- Thresholds gate escalation and human review.
+- V(n) iterative refinement protocol with semantic arbiter for consensus evaluation.
+- Configurable thresholds for consensus, abort, and stagnation detection.
+- Min/max rounds gate iteration and human review.
 
 ### 3. State and Persistence
 

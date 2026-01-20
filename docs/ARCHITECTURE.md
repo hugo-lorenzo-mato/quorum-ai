@@ -24,7 +24,7 @@ graph TB
     subgraph "Service Layer"
         WF[Workflow Runner]
         DAG[DAG Builder]
-        CONS[Consensus Checker]
+        ARB[Semantic Arbiter]
         PROMPT[Prompt Renderer]
         RETRY[Retry Policy]
         RATE[Rate Limiter]
@@ -68,14 +68,14 @@ graph TB
     PLAIN --> WF
 
     WF --> DAG
-    WF --> CONS
+    WF --> ARB
     WF --> PROMPT
     WF --> RETRY
     WF --> RATE
     WF --> CKPT
 
     DAG --> ENTITIES
-    CONS --> ENTITIES
+    ARB --> ENTITIES
     CKPT --> PORTS
 
     WF --> PORTS
@@ -117,7 +117,7 @@ Core responsibilities:
 
 - **Workflow orchestration** across optimize, analyze, plan, and execute phases
 - **Dependency management** with DAG construction and ready-task selection
-- **Consensus evaluation** using Jaccard similarity and category weights
+- **Consensus evaluation** using semantic arbiter for iterative refinement
 - **Prompt rendering** for phase-specific tasks
 - **Resilience controls** (retry and rate limiting)
 - **Checkpointing** for resume and recovery
@@ -129,7 +129,7 @@ Core responsibilities:
 2. Acquire process lock
 3. For each phase (Optimize -> Analyze -> Plan -> Execute):
    a. Optimize: Enhance user prompt for LLM effectiveness
-   b. Analyze: Run V1/V2/V3 consensus protocol
+   b. Analyze: Run V(n) iterative refinement with semantic arbiter
    c. Plan: Build DAG and task dependencies
    d. Execute: Run tasks in parallel worktrees
    e. Save checkpoint after each phase
@@ -264,8 +264,8 @@ User Input (prompt)
 | ANALYZE      |
 | Phase        |
 |  - V1: All   |  <- Parallel agent execution
-|  - Consensus |  <- Jaccard calculation
-|  - V2/V3?    |  <- Dialectic if needed
+|  - V(n) Loop |  <- Iterative refinement
+|  - Arbiter   |  <- Semantic consensus eval
 +------+-------+
        |
        v
@@ -322,9 +322,9 @@ User Input (prompt)
 ### Consensus Invariants
 
 1. **Score Range**: Consensus score is always in [0.0, 1.0]
-2. **Threshold Gating**: Low consensus triggers escalation
-3. **Human Override**: System never proceeds without human approval below 50%
-4. **Deterministic**: Same inputs produce same consensus score
+2. **Threshold Gating**: Low consensus triggers additional refinement rounds
+3. **Abort Threshold**: System aborts when consensus falls below abort threshold
+4. **Iteration Bounded**: Maximum rounds prevent infinite refinement loops
 
 ---
 

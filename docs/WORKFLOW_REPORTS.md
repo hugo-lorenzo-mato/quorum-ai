@@ -7,9 +7,9 @@ Este documento describe el sistema de generación automática de reportes Markdo
 - [Visión General](#visión-general)
 - [Estructura de Directorios](#estructura-de-directorios)
 - [Fases del Análisis](#fases-del-análisis)
-  - [Análisis V1 - Análisis Profundo](#análisis-v1---análisis-profundo)
-  - [Crítica V2 - Análisis Ultra-Crítico](#crítica-v2---análisis-ultra-crítico)
-  - [Reconciliación V3 - Arbitraje Final](#reconciliación-v3---arbitraje-final)
+  - [Análisis V1 - Análisis Inicial](#análisis-v1---análisis-inicial)
+  - [V(n) Refinamiento Iterativo](#vn-refinamiento-iterativo)
+  - [Evaluación del Árbitro](#evaluación-del-árbitro)
   - [Análisis Consolidado](#análisis-consolidado)
 - [Configuración](#configuración)
 - [Formato de los Reportes](#formato-de-los-reportes)
@@ -21,9 +21,8 @@ Quorum AI genera automáticamente reportes Markdown estructurados para cada ejec
 
 - El prompt original y optimizado
 - Los análisis independientes de cada agente (V1)
-- Las críticas cruzadas entre agentes (V2)
-- Las reconciliaciones de divergencias (V3)
-- Los reportes de consenso
+- Los refinamientos iterativos V(n) entre agentes
+- Las evaluaciones de consenso del árbitro semántico
 - El análisis consolidado final
 - Los resultados de planificación y ejecución
 
@@ -44,17 +43,18 @@ Quorum AI genera automáticamente reportes Markdown estructurados para cada ejec
     │   │   ├── gemini-gemini-2.0-flash.md
     │   │   └── ...
     │   │
-    │   ├── v2/                          # Críticas V2 (cruzadas)
-    │   │   ├── claude-critiques-gemini.md
-    │   │   ├── gemini-critiques-claude.md
+    │   ├── v2/                          # Refinamiento V2
+    │   │   ├── claude-refinement.md
+    │   │   ├── gemini-refinement.md
     │   │   └── ...
     │   │
-    │   ├── v3/                          # Reconciliación V3
-    │   │   └── claude-reconciliation.md
+    │   ├── v3/                          # Refinamiento V3 (si necesario)
+    │   │   └── ...
     │   │
-    │   ├── consensus/                   # Reportes de consenso
-    │   │   ├── after-v1.md
-    │   │   └── after-v2.md
+    │   ├── consensus/                   # Evaluaciones del árbitro
+    │   │   ├── arbiter-round-2.md
+    │   │   ├── arbiter-round-3.md
+    │   │   └── ...
     │   │
     │   └── consolidated.md              # Análisis consolidado final
     │
@@ -73,7 +73,7 @@ Quorum AI genera automáticamente reportes Markdown estructurados para cada ejec
 
 ## Fases del Análisis
 
-### Análisis V1 - Análisis Profundo
+### Análisis V1 - Análisis Inicial
 
 El análisis V1 es el análisis inicial realizado **independientemente por cada agente**. Se caracteriza por:
 
@@ -93,44 +93,50 @@ Cada análisis V1 incluye:
 - **Risks (Riesgos Identificados)**: Riesgos técnicos, de seguridad, rendimiento y mantenibilidad detectados
 - **Recommendations (Recomendaciones Accionables)**: Recomendaciones específicas alineadas con convenciones y estándares del ecosistema
 
-### Crítica V2 - Análisis Ultra-Crítico
+### V(n) Refinamiento Iterativo
 
-La fase V2 representa un **análisis ultra-crítico y exhaustivo** donde cada agente evalúa críticamente el análisis de otro agente.
+Los rounds V(n) (V2, V3, etc.) representan **refinamientos iterativos** donde cada agente revisa y mejora el análisis de la ronda anterior.
 
-#### Características de la Crítica V2
+#### Características del Refinamiento V(n)
 
-1. **Evalúa TODOS los análisis V1**: Contrasta las conclusiones de todos los agentes participantes
-2. **Identifica inconsistencias**: Detecta contradicciones y gaps entre diferentes análisis
+1. **Evalúa la ronda anterior**: Cada V(n+1) revisa solo los outputs de V(n)
+2. **Identifica inconsistencias**: Detecta contradicciones y gaps en los análisis
 3. **Cuestiona fundamentación**: Verifica que cada afirmación esté respaldada por evidencia concreta
 4. **Valida contra documentación**: Comprueba las recomendaciones contra documentación oficial actualizada
-5. **Evalúa completitud**: Identifica aspectos no cubiertos en los análisis originales
-6. **Perspectiva adversarial**: Busca activamente debilidades y puntos ciegos
+5. **Evalúa completitud**: Identifica aspectos no cubiertos en los análisis anteriores
+6. **Perspectiva crítica**: Busca activamente debilidades y puntos ciegos
 
-#### Contenido de la Crítica V2
+#### Contenido del Refinamiento V(n)
 
-- **Puntos de Acuerdo Validados**: Conclusiones del análisis original que se consideran correctas y bien fundamentadas
-- **Puntos de Desacuerdo / Correcciones**: Aspectos donde el análisis original es incorrecto, incompleto o mal fundamentado
-- **Riesgos Adicionales No Identificados**: Riesgos que el análisis original pasó por alto o subestimó
+- **Puntos de Acuerdo Validados**: Conclusiones del análisis anterior que se consideran correctas y bien fundamentadas
+- **Puntos de Desacuerdo / Correcciones**: Aspectos donde el análisis anterior es incorrecto, incompleto o mal fundamentado
+- **Riesgos Adicionales No Identificados**: Riesgos que el análisis anterior pasó por alto o subestimó
 
-### Reconciliación V3 - Arbitraje Final
+### Evaluación del Árbitro
 
-La reconciliación V3 se activa cuando el consenso entre agentes está por debajo del umbral configurado. Es el **arbitraje final** del proceso.
+El árbitro semántico evalúa el consenso entre los agentes después de cada ronda de refinamiento.
 
-#### Proceso de Reconciliación
+#### Proceso de Evaluación
 
-1. **Síntesis de divergencias**: Resuelve las diferencias identificadas entre análisis V1 y críticas V2
-2. **Decisión fundamentada**: Cada resolución está respaldada por evidencia técnica objetiva
-3. **Priorización de riesgos**: Ordena y consolida riesgos según impacto y probabilidad
-4. **Recomendaciones unificadas**: Genera un conjunto coherente de acciones a tomar
-5. **Documentación trazable**: Mantiene referencias a los análisis originales
+1. **Análisis semántico**: El árbitro evalúa el acuerdo semántico entre los outputs de los agentes
+2. **Puntuación de consenso**: Genera un porcentaje de consenso (0-100%)
+3. **Identificación de divergencias**: Documenta los puntos de desacuerdo significativos
+4. **Recomendación**: Indica si continuar con más rounds o proceder a consolidación
+
+#### Criterios del Árbitro
+
+- **Threshold de consenso**: Por defecto 90% para proceder
+- **Rounds mínimos**: Al menos 2 rounds antes de declarar consenso
+- **Rounds máximos**: Máximo 5 rounds antes de abortar o consolidar
+- **Detección de estancamiento**: Si la mejora entre rounds es < 2%, se considera estancado
 
 ### Análisis Consolidado
 
 El documento final que integra todas las perspectivas:
 
 1. **Análisis V1 independientes**: Cada agente realizó un análisis profundo y exhaustivo
-2. **Críticas V2 cruzadas**: Los agentes evaluaron críticamente los análisis de otros
-3. **Reconciliación V3** (si aplica): Se resolvieron divergencias significativas
+2. **Refinamientos V(n)**: Los agentes refinaron iterativamente sus análisis
+3. **Evaluaciones del árbitro**: El árbitro semántico validó el consenso
 4. **Consolidación final**: Se integran todas las perspectivas en un documento unificado
 
 ## Configuración
@@ -187,7 +193,7 @@ duration_ms: 12543
 ### Secciones Estándar
 
 - **Metodología**: Descripción del enfoque utilizado para el análisis
-- **Contenido Principal**: El análisis, crítica o síntesis
+- **Contenido Principal**: El análisis, refinamiento o evaluación
 - **Métricas**: Tokens, costo y duración de la operación
 - **Raw Output** (opcional): JSON completo de la respuesta del agente
 
@@ -203,25 +209,24 @@ El análisis debe ser:
 - **Práctico**: Con recomendaciones accionables y específicas
 - **Objetivo**: Sin sesgos hacia tecnologías o patrones específicos
 
-### Para Críticas V2
+### Para Refinamientos V(n)
 
-La crítica debe ser:
+El refinamiento debe ser:
 
-- **Integral**: Considerar TODOS los análisis V1 generados
-- **Rigurosa**: No aceptar afirmaciones sin evidencia sólida
-- **Constructiva**: Identificar mejoras, no solo criticar
-- **Adversarial**: Buscar activamente puntos débiles
-- **Documentada**: Con referencias a documentación oficial
+- **Iterativo**: Revisar solo la ronda anterior, no rounds anteriores
+- **Riguroso**: No aceptar afirmaciones sin evidencia sólida
+- **Constructivo**: Identificar mejoras, no solo criticar
+- **Crítico**: Buscar activamente puntos débiles
+- **Documentado**: Con referencias a documentación oficial
 
-### Para Reconciliación V3
+### Para Evaluación del Árbitro
 
-La reconciliación debe:
+El árbitro debe:
 
-- **Resolver divergencias**: No ignorar desacuerdos
-- **Priorizar**: Según impacto y probabilidad de los riesgos
-- **Fundamentar**: Cada decisión con evidencia técnica
-- **Unificar**: Producir un resultado coherente y accionable
-- **Trazar**: Mantener referencias a los análisis originales
+- **Evaluar semánticamente**: Entender el significado, no solo comparar texto
+- **Ser objetivo**: Aplicar criterios consistentes
+- **Documentar divergencias**: Explicar los puntos de desacuerdo
+- **Fundamentar**: Justificar la puntuación de consenso
 
 ## Uso de los Reportes
 
@@ -267,4 +272,3 @@ Para mejorar el sistema de reportes:
 
 - [ARCHITECTURE.md](./ARCHITECTURE.md) - Arquitectura general de Quorum
 - [CONFIGURATION.md](./CONFIGURATION.md) - Guía de configuración completa
-- [ANALYZE_OUTPUT_PROPOSAL.md](./ANALYZE_OUTPUT_PROPOSAL.md) - Propuesta original del sistema

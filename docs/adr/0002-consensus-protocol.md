@@ -8,29 +8,45 @@ Accepted
 
 The POC relies on multiple autonomous agents whose outputs vary in quality and
 may conflict. We need a repeatable way to determine when outputs agree, when to
-escalate to critique, and when to require human review.
+trigger additional refinement, and when to require human review.
 
 ## Decision
 
-Adopt a three-round dialectic protocol (V1/V2/V3) and a weighted Jaccard
-similarity score across categorized content (claims, risks, recommendations).
-Use explicit thresholds to decide whether to proceed, run critique rounds, or
-require human review.
+Adopt a semantic arbiter-based consensus protocol with iterative V(n) refinement
+rounds. An AI arbiter evaluates semantic agreement between agent outputs and
+determines when consensus has been reached.
+
+### Protocol Flow
+
+1. **V1 Analysis**: All enabled agents independently analyze the prompt
+2. **V2 Refinement**: Agents review V1 outputs and refine their analysis
+3. **Arbiter Evaluation**: The arbiter evaluates semantic consensus between V2 outputs
+4. **Iteration**: If consensus threshold not met, repeat with V(n+1) refinement
+5. **Consolidation**: Once consensus reached or max rounds exceeded, consolidate final output
+
+### Configuration Parameters
+
+- `threshold`: Minimum consensus score to proceed (default: 0.90)
+- `min_rounds`: Minimum refinement rounds before consensus can be declared (default: 2)
+- `max_rounds`: Maximum refinement rounds before aborting (default: 5)
+- `abort_threshold`: Score below this aborts workflow (default: 0.30)
+- `stagnation_threshold`: Minimum improvement required between rounds (default: 0.02)
 
 ## Consequences
 
 ### Positive
-- Provides a measurable, repeatable consensus signal across agents.
-- Encourages structured disagreement and refinement before execution.
+- Provides semantic understanding of agreement rather than lexical comparison
+- Adapts to context and nuance in agent outputs
+- Encourages iterative refinement with feedback
 
 ### Negative
-- Adds extra runs and cost when consensus is low.
-- Requires consistent categorization of agent outputs to compute scores.
+- Adds extra arbiter calls and cost when consensus is low
+- Depends on arbiter model quality for accurate consensus assessment
 
 ### Neutral
-- Thresholds may be tuned over time based on observed results.
+- Thresholds may be tuned over time based on observed results
 
 ## References
 
-- docs/vision/QUORUM-POC-VISION-v1.md
-- docs/vision/POC-DECISIONS.md
+- docs/CONFIGURATION.md#consensus
+- docs/ARCHITECTURE.md

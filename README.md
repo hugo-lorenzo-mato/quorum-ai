@@ -17,8 +17,8 @@ Currently supports Claude Code, Gemini CLI, Codex, and GitHub Copilot, with more
 
 - **Local CLI Orchestration**: Coordinates existing CLI tools without requiring API keys or credentials
 - **Multi-Agent Execution**: Run Claude, Gemini, Codex, and Copilot agents in parallel
-- **Consensus Validation**: Jaccard similarity algorithm measures agreement across agent outputs
-- **Dialectic Protocol**: V1/V2/V3 (Thesis-Antithesis-Synthesis) process refines divergent outputs
+- **Semantic Arbiter Consensus**: AI-powered arbiter evaluates semantic agreement across agent outputs
+- **Iterative Refinement**: V(n) rounds with arbiter evaluation until consensus threshold is reached
 - **Git Worktree Isolation**: Each task executes in isolated worktrees to prevent conflicts
 - **Multi-Workflow Management**: Run multiple workflows concurrently and resume by ID
 - **Resume from Checkpoint**: Recover from failures without re-running completed work
@@ -181,7 +181,10 @@ agents:
     enabled: true
 
 consensus:
-  threshold: 0.80
+  arbiter:
+    enabled: true
+    agent: claude
+    threshold: 0.90
 
 log:
   level: info
@@ -295,7 +298,7 @@ graph LR
 
     subgraph "Service Layer"
         B[Workflow Runner]
-        C[Consensus Checker]
+        C[Semantic Arbiter]
         D[DAG Builder]
     end
 
@@ -337,15 +340,22 @@ Skip with `--skip-optimize` or disable in config.
 
 ### 2. Analyze Phase
 
-Multiple agents independently analyze the task:
+Multiple agents independently analyze the task through iterative refinement:
 
 ```
-Claude Agent ----+
-                 |---> Consensus Check ---> 80%+ Agreement? ---> Proceed
-Gemini Agent ----+                     |
-                                       +---> <80%? ---> V2 Critique
-                                       +---> <60%? ---> V3 Synthesis
+                         ┌────────────────────────────────────────┐
+                         │          V(n) Iterative Flow          │
+                         └────────────────────────────────────────┘
+                                          │
+Claude Agent ──┬── V1 Analysis ──┬── V2 Refinement ──┬── Arbiter ──┬── Consensus? ── Proceed
+               │                 │                   │  Evaluation │        │
+Gemini Agent ──┘                 └───────────────────┘             │        │
+                                                                   │        └── No ──┐
+                                                                   │                 │
+                                                                   └─── V(n+1) ◄─────┘
 ```
+
+The semantic arbiter evaluates agreement after each refinement round until the consensus threshold is reached or max rounds exceeded.
 
 ### 3. Plan Phase
 

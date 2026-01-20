@@ -8,7 +8,7 @@ Accepted
 The `WorkflowRunner` in `internal/service/workflow.go` has grown to ~950 lines and violates the Single Responsibility Principle (SRP). It currently handles:
 
 1. Workflow orchestration (Run, Resume)
-2. Analysis phase execution (V1, V2, V3 protocol)
+2. Analysis phase execution (V(n) iterative refinement with semantic arbiter)
 3. Plan phase generation
 4. Task execution and DAG traversal
 5. Error handling and checkpointing
@@ -32,14 +32,15 @@ internal/service/
 ├── workflow/
 │   ├── runner.go          # WorkflowRunner - orchestrator only (~150 lines)
 │   ├── runner_test.go
-│   ├── analyzer.go         # AnalysisPhaseRunner - V1/V2/V3 protocol (~200 lines)
+│   ├── analyzer.go         # AnalysisPhaseRunner - V(n) iterative refinement (~200 lines)
 │   ├── analyzer_test.go
+│   ├── arbiter.go          # SemanticArbiter - consensus evaluation (~150 lines)
+│   ├── arbiter_test.go
 │   ├── planner.go          # PlanPhaseRunner - plan generation (~150 lines)
 │   ├── planner_test.go
 │   ├── executor.go         # ExecutePhaseRunner - task execution (~200 lines)
 │   ├── executor_test.go
 │   └── context.go          # WorkflowContext - shared execution context
-├── consensus.go            # (existing)
 ├── checkpoint.go           # (existing)
 ├── retry.go                # (existing)
 └── ratelimit.go            # (existing)
@@ -55,21 +56,26 @@ internal/service/
 
 2. **AnalysisPhaseRunner**
    - Run V1 parallel analysis
-   - Run V2 critique when needed
-   - Run V3 reconciliation when needed
+   - Run V(n) iterative refinement rounds
+   - Coordinate with semantic arbiter for consensus evaluation
    - Consolidate analysis outputs
 
-3. **PlanPhaseRunner**
+3. **SemanticArbiter**
+   - Evaluate semantic consensus between agent outputs
+   - Generate consensus scores and divergence reports
+   - Determine when to continue or stop refinement
+
+4. **PlanPhaseRunner**
    - Generate execution plan from analysis
    - Parse and validate task structure
    - Build dependency graph
 
-4. **ExecutePhaseRunner**
+5. **ExecutePhaseRunner**
    - Execute tasks according to DAG
    - Handle task-level retries
    - Track task metrics
 
-5. **WorkflowContext**
+6. **WorkflowContext**
    - Shared state accessor
    - Logger and metrics
    - Configuration
@@ -113,12 +119,13 @@ type WorkflowContext struct {
 
 1. Create `internal/service/workflow/` package
 2. Extract `WorkflowContext` type
-3. Extract `AnalysisPhaseRunner` with V1/V2/V3 methods
-4. Extract `PlanPhaseRunner`
-5. Extract `ExecutePhaseRunner`
-6. Refactor `WorkflowRunner` to orchestrator role
-7. Update tests and imports
-8. Verify all tests pass
+3. Extract `AnalysisPhaseRunner` with V(n) iterative refinement methods
+4. Extract `SemanticArbiter` for consensus evaluation
+5. Extract `PlanPhaseRunner`
+6. Extract `ExecutePhaseRunner`
+7. Refactor `WorkflowRunner` to orchestrator role
+8. Update tests and imports
+9. Verify all tests pass
 
 ## References
 

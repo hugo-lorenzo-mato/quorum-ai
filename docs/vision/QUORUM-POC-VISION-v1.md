@@ -102,46 +102,53 @@ ANALYZE -> PLAN -> EXECUTE
 - Results validated before merge
 - Human review gates critical operations
 
-### 3.3 Consensus Protocol: V1/V2/V3 (Thesis-Antithesis-Synthesis)
+### 3.3 Consensus Protocol: V(n) Iterative Refinement with Semantic Arbiter
 
-The dialectic protocol ensures iterative refinement:
+The consensus protocol uses iterative refinement with a semantic arbiter:
 
 | Round | Name | Purpose |
 |-------|------|---------|
-| **V1** | Thesis | Initial independent analysis by all agents |
-| **V2** | Antithesis | Agents critique each other's V1 outputs |
-| **V3** | Synthesis | Single agent reconciles divergences |
+| **V1** | Initial Analysis | Independent analysis by all agents |
+| **V2** | Refinement | Agents review V1 outputs and refine their analysis |
+| **V(n)** | Iterative Refinement | Additional rounds if consensus not reached |
+| **Arbiter** | Evaluation | Semantic arbiter evaluates consensus after each round |
 
-**Escalation Logic:**
-
-```
-V1 Consensus >= 80%  ->  Proceed to PLAN
-V1 Consensus >= 60%  ->  Run V2 (critique)
-V1 Consensus < 60%   ->  Run V2 + V3 (full dialectic)
-Any Consensus < 50%  ->  Human Review Required
-```
-
-### 3.4 Consensus Algorithm: Weighted Jaccard Similarity
-
-Agreement is measured using Jaccard similarity across categorized content:
+**Consensus Flow:**
 
 ```
-Jaccard(A, B) = |A intersection B| / |A union B|
+V1 Analysis (all agents)
+    ↓
+V2 Refinement (all agents review V1)
+    ↓
+Arbiter Evaluation -> Score >= threshold? -> Proceed to PLAN
+    ↓ No
+V(n+1) Refinement
+    ↓
+Arbiter Evaluation -> Repeat until consensus or max rounds
+    ↓
+Score < abort_threshold -> Human Review Required
 ```
 
-**Category Weights:**
+### 3.4 Consensus Algorithm: Semantic Arbiter Evaluation
 
-| Category | Weight | Rationale |
-|----------|--------|-----------|
-| Claims | 0.40 | Core factual assertions |
-| Risks | 0.30 | Identified concerns and edge cases |
-| Recommendations | 0.30 | Proposed actions |
+Agreement is measured using a semantic arbiter that evaluates the conceptual alignment between agent outputs:
 
-**Consensus Score Calculation:**
+**Arbiter Configuration:**
 
-```
-ConsensusScore = Sum(CategoryWeight * AvgJaccardPerCategory)
-```
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `threshold` | 0.90 | Minimum consensus score to proceed |
+| `min_rounds` | 2 | Minimum refinement rounds |
+| `max_rounds` | 5 | Maximum refinement rounds |
+| `abort_threshold` | 0.30 | Score below which workflow aborts |
+| `stagnation_threshold` | 0.02 | Minimum improvement between rounds |
+
+**Consensus Score:**
+
+The arbiter outputs a semantic consensus score (0.0 - 1.0) based on:
+- Alignment of core claims and findings
+- Agreement on identified risks
+- Consistency of recommendations
 
 ---
 
@@ -164,17 +171,17 @@ ConsensusScore = Sum(CategoryWeight * AvgJaccardPerCategory)
 | Analyze Phase Duration | <= 30 min | timestamps |
 | Plan Phase Duration | <= 15 min | timestamps |
 | Execute Phase Duration | <= 60 min (3 tasks) | timestamps |
-| V3 Invocation Rate | <= 30% | workflows_with_v3 / total |
+| Average Refinement Rounds | <= 3 | avg(rounds_per_workflow) |
 | Retry Rate | <= 20% | sum(retries) / count(tasks) |
 
 ### 4.3 Validation Experiments
 
 The POC includes controlled experiments:
 
-1. **Threshold Sensitivity**: Test consensus thresholds (0.70, 0.75, 0.80, 0.85, 0.90)
+1. **Threshold Sensitivity**: Test consensus thresholds (0.80, 0.85, 0.90, 0.95)
 2. **Single vs Multi-Agent**: Compare error rates between single and ensemble execution
 3. **Cost Analysis**: Measure token usage and cost per workflow phase
-4. **V3 Effectiveness**: Measure quality improvement from synthesis round
+4. **Refinement Effectiveness**: Measure quality improvement from iterative rounds
 
 ---
 
@@ -188,7 +195,7 @@ The POC includes controlled experiments:
 | Configuration | Viper with YAML/ENV/flags hierarchy |
 | State Persistence | JSON with atomic writes and locking |
 | Agent Adapters | Claude (primary), Gemini (secondary) |
-| Consensus | Jaccard similarity with category weights |
+| Consensus | Semantic arbiter with iterative refinement |
 | Git Integration | Worktree isolation per execution |
 | TUI | Bubbletea with plain-text fallback |
 | Logging | slog with secret sanitization |
@@ -241,7 +248,7 @@ The POC includes controlled experiments:
 
 - [ ] End-to-end workflow execution (analyze -> plan -> execute)
 - [ ] At least 2 functional CLI adapters (Claude + Gemini)
-- [ ] Jaccard consensus implemented and validated
+- [ ] Semantic arbiter consensus implemented and validated
 - [ ] Resume from checkpoint functional
 - [ ] Complete CI/CD pipeline (lint, test, build, security)
 - [ ] Test coverage >= 80%
@@ -287,7 +294,7 @@ This project is motivated by the observation that independently generated
 specifications from multiple models converge on a stable set of architectural
 decisions. The convergence is most apparent on core constraints such as
 hexagonal architecture, JSON state persistence for v1, CLI-first delivery, and
-Jaccard-based consensus scoring. While long-form comparative reports are not
+semantic arbiter-based consensus evaluation. While long-form comparative reports are not
 maintained in this repository, the key takeaway is preserved here: cross-model
 agreement on foundational decisions reduces subjective bias and improves
 confidence in the POC scope.

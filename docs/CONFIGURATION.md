@@ -443,35 +443,46 @@ github:
 
 ### consensus
 
-Configures the multi-agent consensus validation system.
+Configures the semantic arbiter consensus validation system.
 
 ```yaml
 consensus:
-  threshold: 0.80
-  v2_threshold: 0.60
-  human_threshold: 0.50
-  weights:
-    claims: 0.40
-    risks: 0.30
-    recommendations: 0.30
+  arbiter:
+    enabled: true
+    agent: claude
+    model: claude-opus-4-5-20251101
+    threshold: 0.90
+    min_rounds: 2
+    max_rounds: 5
+    abort_threshold: 0.30
+    stagnation_threshold: 0.02
 ```
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `threshold` | float | `0.80` | Minimum consensus score to proceed (0.0-1.0) |
-| `v2_threshold` | float | `0.60` | Score below this triggers V2 critique phase |
-| `human_threshold` | float | `0.50` | Score below this aborts for human review |
-| `weights.claims` | float | `0.40` | Weight for claims/findings similarity |
-| `weights.risks` | float | `0.30` | Weight for risks/concerns similarity |
-| `weights.recommendations` | float | `0.30` | Weight for recommendations similarity |
+| `arbiter.enabled` | bool | `true` | Enable/disable semantic arbiter consensus |
+| `arbiter.agent` | string | `claude` | Agent to use as arbiter |
+| `arbiter.model` | string | `claude-opus-4-5-20251101` | Model for arbiter evaluations |
+| `arbiter.threshold` | float | `0.90` | Minimum consensus score to proceed (0.0-1.0) |
+| `arbiter.min_rounds` | int | `2` | Minimum refinement rounds before consensus can be declared |
+| `arbiter.max_rounds` | int | `5` | Maximum refinement rounds before aborting |
+| `arbiter.abort_threshold` | float | `0.30` | Score below this aborts workflow |
+| `arbiter.stagnation_threshold` | float | `0.02` | Minimum improvement required between rounds |
 
-**Escalation policy (80/60/50):**
+**Consensus flow:**
 
 ```
-Score >= 80%  →  Proceed to next phase
-Score 60-79%  →  Trigger V2 critique (cross-agent review)
-Score 50-59%  →  Trigger V3 synthesis (consolidation attempt)
-Score < 50%   →  Abort workflow, require human review
+V1 Analysis (all agents)
+    ↓
+V2 Refinement (all agents review V1)
+    ↓
+Arbiter Evaluation → Score >= 90%? → Proceed to consolidation
+    ↓ No
+V(n+1) Refinement
+    ↓
+Arbiter Evaluation → Score >= 90%? → Proceed to consolidation
+    ↓ No (max rounds or stagnation)
+Abort or proceed with best result
 ```
 
 ---
@@ -503,7 +514,7 @@ All configuration options can be overridden via environment variables using the 
 QUORUM_LOG_LEVEL=debug
 QUORUM_WORKFLOW_TIMEOUT=4h
 QUORUM_AGENTS_CLAUDE_MODEL=claude-opus-4-5-20251101
-QUORUM_CONSENSUS_THRESHOLD=0.85
+QUORUM_CONSENSUS_ARBITER_THRESHOLD=0.95
 ```
 
 Nested keys use underscores: `agents.claude.model` → `QUORUM_AGENTS_CLAUDE_MODEL`
@@ -522,7 +533,10 @@ agents:
     enabled: true
 
 consensus:
-  threshold: 0.80
+  arbiter:
+    enabled: true
+    agent: claude
+    threshold: 0.90
 ```
 
 ### High-Quality Analysis
@@ -550,8 +564,13 @@ prompt_optimizer:
   agent: claude
 
 consensus:
-  threshold: 0.85
-  v2_threshold: 0.70
+  arbiter:
+    enabled: true
+    agent: claude
+    model: claude-opus-4-5-20251101
+    threshold: 0.95
+    min_rounds: 2
+    max_rounds: 5
 
 costs:
   max_per_workflow: 25.0
@@ -573,7 +592,12 @@ prompt_optimizer:
   enabled: false
 
 consensus:
-  threshold: 0.75
+  arbiter:
+    enabled: true
+    agent: gemini
+    model: gemini-2.5-flash
+    threshold: 0.85
+    max_rounds: 3
 
 costs:
   max_per_workflow: 5.0
