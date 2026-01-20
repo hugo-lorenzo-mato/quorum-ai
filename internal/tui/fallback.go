@@ -115,17 +115,6 @@ func (f *FallbackOutput) TaskSkipped(task *core.Task, reason string) {
 	f.printf("%s [SKIPPED] %s: %s\n", icon, task.Name, reason)
 }
 
-// ConsensusResult logs consensus evaluation.
-func (f *FallbackOutput) ConsensusResult(score float64, needsV3 bool) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	f.printf("  Consensus Score: %.2f%%\n", score*100)
-	if needsV3 {
-		f.printf("  %s V3 reconciliation required\n", f.warnIcon())
-	}
-}
-
 // WorkflowCompleted logs workflow completion.
 func (f *FallbackOutput) WorkflowCompleted(state *core.WorkflowState) {
 	f.mu.Lock()
@@ -314,14 +303,6 @@ func (f *FallbackOutput) statusIcon(status string) string {
 	}
 
 	return f.colorize(icon, colors[status])
-}
-
-func (f *FallbackOutput) warnIcon() string {
-	icon := "⚠"
-	if f.useColor {
-		return f.colorize(icon, "yellow")
-	}
-	return icon
 }
 
 func (f *FallbackOutput) formatLevel(level string) string {

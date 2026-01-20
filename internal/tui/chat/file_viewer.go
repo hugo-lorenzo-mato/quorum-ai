@@ -27,13 +27,13 @@ type FileViewer struct {
 	isBinary  bool
 	error     string
 
-	viewport       viewport.Model
-	width          int
-	height         int
-	visible        bool
-	ready          bool
+	viewport         viewport.Model
+	width            int
+	height           int
+	visible          bool
+	ready            bool
 	horizontalOffset int // horizontal scroll offset
-	maxLineWidth   int   // max width of any line (for scroll limits)
+	maxLineWidth     int // max width of any line (for scroll limits)
 }
 
 // NewFileViewer creates a new file viewer
@@ -157,22 +157,22 @@ func (f *FileViewer) SetSize(width, height int) {
 
 // ScrollUp scrolls up
 func (f *FileViewer) ScrollUp() {
-	f.viewport.LineUp(1)
+	f.viewport.ScrollUp(1)
 }
 
 // ScrollDown scrolls down
 func (f *FileViewer) ScrollDown() {
-	f.viewport.LineDown(1)
+	f.viewport.ScrollDown(1)
 }
 
 // PageUp scrolls up a page
 func (f *FileViewer) PageUp() {
-	f.viewport.HalfViewUp()
+	f.viewport.HalfPageUp()
 }
 
 // PageDown scrolls down a page
 func (f *FileViewer) PageDown() {
-	f.viewport.HalfViewDown()
+	f.viewport.HalfPageDown()
 }
 
 // ScrollTop goes to top
@@ -321,7 +321,7 @@ func getVisiblePortion(line string, offset, width int) string {
 	}
 	if startIdx+len([]rune(visibleStr)) < len(runes) {
 		// Show right indicator
-		if len(visibleStr) > 0 {
+		if visibleStr != "" {
 			visibleRunes := []rune(visibleStr)
 			visibleStr = string(visibleRunes[:len(visibleRunes)-1]) + "▶"
 		}
@@ -331,7 +331,7 @@ func getVisiblePortion(line string, offset, width int) string {
 }
 
 // runeWidth returns the display width of a rune
-func runeWidth(r rune) int {
+func runeWidth(_ rune) int {
 	// Simple approximation - most characters are width 1
 	// Wide characters (CJK, emoji) would need proper handling
 	return 1
@@ -529,24 +529,3 @@ func isBinaryContent(data []byte) bool {
 	// If more than 10% non-printable, consider binary
 	return float64(nonPrintable)/float64(len(sample)) > 0.1
 }
-
-// truncateLine truncates a line to fit within maxWidth
-func truncateLine(line string, maxWidth int) string {
-	// Replace tabs with spaces
-	line = strings.ReplaceAll(line, "\t", "    ")
-
-	if lipgloss.Width(line) <= maxWidth {
-		return line
-	}
-
-	// Truncate carefully for Unicode
-	truncated := ""
-	for _, r := range line {
-		if lipgloss.Width(truncated+string(r)+"…") > maxWidth {
-			break
-		}
-		truncated += string(r)
-	}
-	return truncated + "…"
-}
-

@@ -222,8 +222,8 @@ type Model struct {
 	suggestions     []string
 	showSuggestions bool
 	suggestionIndex int
-	suggestionType  string            // "command", "agent", "model"
-	availableAgents []string          // List of enabled agent names
+	suggestionType  string              // "command", "agent", "model"
+	availableAgents []string            // List of enabled agent names
 	agentModels     map[string][]string // Models available per agent
 
 	// Workflow integration
@@ -508,7 +508,7 @@ type (
 	WorkflowStartedMsg   struct{ Prompt string }
 	WorkflowCompletedMsg struct{ State *core.WorkflowState }
 	WorkflowErrorMsg     struct{ Error error }
-	WorkflowLogMsg struct {
+	WorkflowLogMsg       struct {
 		Level   string
 		Source  string
 		Message string
@@ -519,9 +519,9 @@ type (
 		Message string
 		Data    map[string]any
 	}
-	TickMsg            struct{ Time time.Time }
-	ExplorerRefreshMsg struct{} // File system change detected
-	StatsTickMsg       struct{} // Periodic stats update
+	TickMsg             struct{ Time time.Time }
+	ExplorerRefreshMsg  struct{} // File system change detected
+	StatsTickMsg        struct{} // Periodic stats update
 	ChatProgressTickMsg struct {
 		Elapsed time.Duration
 	}
@@ -533,7 +533,7 @@ func (m Model) chatProgressTick() tea.Cmd {
 	if interval == 0 {
 		interval = 15 * time.Second
 	}
-	return tea.Tick(interval, func(t time.Time) tea.Msg {
+	return tea.Tick(interval, func(_ time.Time) tea.Msg {
 		return ChatProgressTickMsg{Elapsed: time.Since(m.chatStartedAt)}
 	})
 }
@@ -1847,13 +1847,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				details += " [" + strings.Join(stats, " | ") + "]"
 			}
 			m.logsPanel.AddSuccess(source, "✓ "+details)
-			// Update agent status to done
+			// Update agent status to done and accumulate token counts
 			for _, a := range m.agentInfos {
 				if strings.EqualFold(a.Name, msg.Agent) {
 					a.Status = AgentStatusDone
+					// Accumulate token counts from event data
+					if tokensIn, ok := msg.Data["tokens_in"].(int); ok {
+						a.TokensIn += tokensIn
+					}
+					if tokensOut, ok := msg.Data["tokens_out"].(int); ok {
+						a.TokensOut += tokensOut
+					}
 					break
 				}
 			}
+			// Refresh stats panels after token update
+			m.updateLogsPanelTokenStats()
+			m.updateStatsPanelTokenStats()
 
 		case "error":
 			details := msg.Message
@@ -2210,9 +2220,15 @@ func (m Model) handleCommand(cmd *Command, args []string) (tea.Model, tea.Cmd) {
 	case "agent":
 		if len(args) > 0 {
 			m.currentAgent = args[0]
-			m.history.Add(NewSystemMessage("Agent: " + m.currentAgent))
+			// Reset model to empty so the agent uses its configured default
+			m.currentModel = ""
+			m.history.Add(NewSystemMessage("Agent: " + m.currentAgent + " (using default model)"))
 		} else {
-			m.history.Add(NewSystemMessage("Current agent: " + m.currentAgent))
+			modelInfo := m.currentModel
+			if modelInfo == "" {
+				modelInfo = "default"
+			}
+			m.history.Add(NewSystemMessage(fmt.Sprintf("Current agent: %s (model: %s)", m.currentAgent, modelInfo)))
 		}
 		m.updateViewport()
 

@@ -180,44 +180,6 @@ func TestFallbackOutput_TaskSkipped(t *testing.T) {
 	}
 }
 
-func TestFallbackOutput_ConsensusResult(t *testing.T) {
-	tests := []struct {
-		name    string
-		score   float64
-		needsV3 bool
-		want    []string
-	}{
-		{
-			name:    "high score",
-			score:   0.9,
-			needsV3: false,
-			want:    []string{"Consensus Score:", "90"},
-		},
-		{
-			name:    "low score with V3",
-			score:   0.5,
-			needsV3: true,
-			want:    []string{"Consensus Score:", "50", "V3 reconciliation"},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			buf := &bytes.Buffer{}
-			f := NewFallbackOutput(false, false).WithWriter(buf)
-
-			f.ConsensusResult(tt.score, tt.needsV3)
-
-			output := buf.String()
-			for _, want := range tt.want {
-				if !strings.Contains(output, want) {
-					t.Errorf("output should contain %q, got %q", want, output)
-				}
-			}
-		})
-	}
-}
-
 func TestFallbackOutput_WorkflowCompleted(t *testing.T) {
 	buf := &bytes.Buffer{}
 	f := NewFallbackOutput(false, false).WithWriter(buf)

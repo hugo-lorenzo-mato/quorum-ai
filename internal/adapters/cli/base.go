@@ -383,7 +383,7 @@ func (b *BaseAdapter) executeWithJSONStreaming(
 }
 
 // streamJSONOutput reads JSON events from stdout and parses them into AgentEvents.
-func (b *BaseAdapter) streamJSONOutput(pipe io.ReadCloser, buf *bytes.Buffer, adapterName string, parser StreamParser) {
+func (b *BaseAdapter) streamJSONOutput(pipe io.ReadCloser, buf *bytes.Buffer, _ string, parser StreamParser) {
 	scanner := bufio.NewScanner(pipe)
 	// Increase buffer size for large JSON lines
 	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
@@ -421,8 +421,10 @@ func (b *BaseAdapter) executeWithLogFileStreaming(
 	}
 	defer os.RemoveAll(logDir)
 
-	// Add log flags to args
-	logArgs := append(args, cfg.LogDirFlag, logDir)
+	// Add log flags to args (create new slice to avoid modifying original)
+	logArgs := make([]string, len(args), len(args)+4)
+	copy(logArgs, args)
+	logArgs = append(logArgs, cfg.LogDirFlag, logDir)
 	if cfg.LogLevelFlag != "" && cfg.LogLevelValue != "" {
 		logArgs = append(logArgs, cfg.LogLevelFlag, cfg.LogLevelValue)
 	}
@@ -562,7 +564,7 @@ func (b *BaseAdapter) tailLogFiles(ctx context.Context, logDir, adapterName stri
 }
 
 // readNewLogContent reads new content from a log file since last read.
-func (b *BaseAdapter) readNewLogContent(filePath string, seenFiles map[string]int64, adapterName string, parser StreamParser) {
+func (b *BaseAdapter) readNewLogContent(filePath string, seenFiles map[string]int64, _ string, parser StreamParser) {
 	info, err := os.Stat(filePath)
 	if err != nil {
 		return
@@ -583,7 +585,7 @@ func (b *BaseAdapter) readNewLogContent(filePath string, seenFiles map[string]in
 
 	// Seek to last position
 	if lastPos > 0 {
-		file.Seek(lastPos, 0)
+		_, _ = file.Seek(lastPos, 0)
 	}
 
 	scanner := bufio.NewScanner(file)
