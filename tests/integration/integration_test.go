@@ -162,34 +162,6 @@ func TestIntegration_DAGExecution(t *testing.T) {
 	}
 }
 
-func TestIntegration_ConsensusCheck(t *testing.T) {
-	checker := service.NewConsensusChecker(0.75, service.DefaultWeights())
-
-	// Test with similar outputs
-	outputs := []service.AnalysisOutput{
-		{
-			AgentName:       "claude",
-			Claims:          []string{"Code is well structured", "Follows SOLID principles"},
-			Risks:           []string{"No major security vulnerabilities"},
-			Recommendations: []string{"Add more tests"},
-		},
-		{
-			AgentName:       "gemini",
-			Claims:          []string{"Code structure is good", "Adheres to SOLID principles"},
-			Risks:           []string{"No significant security issues"},
-			Recommendations: []string{"Consider adding tests"},
-		},
-	}
-
-	result := checker.Evaluate(outputs)
-
-	if result.Score < 0 || result.Score > 1 {
-		t.Errorf("invalid score: %f", result.Score)
-	}
-
-	t.Logf("Consensus result: score=%.2f, needsV3=%v", result.Score, result.NeedsV3)
-}
-
 func TestIntegration_WorkflowCreation(t *testing.T) {
 	// Test workflow creation and state management
 	wf := core.NewWorkflow("test-wf", "Analyze the codebase", nil)

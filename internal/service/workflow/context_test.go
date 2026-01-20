@@ -75,7 +75,6 @@ func TestConfig_Defaults(t *testing.T) {
 		DryRun:       false,
 		Sandbox:      true,
 		DefaultAgent: "claude",
-		V3Agent:      "claude",
 	}
 
 	if cfg.DryRun {
@@ -86,9 +85,6 @@ func TestConfig_Defaults(t *testing.T) {
 	}
 	if cfg.DefaultAgent != "claude" {
 		t.Errorf("DefaultAgent = %q, want %q", cfg.DefaultAgent, "claude")
-	}
-	if cfg.V3Agent != "claude" {
-		t.Errorf("V3Agent = %q, want %q", cfg.V3Agent, "claude")
 	}
 }
 

@@ -97,16 +97,6 @@ func (m *CheckpointManager) TaskCheckpoint(ctx context.Context, state *core.Work
 	})
 }
 
-// ConsensusCheckpoint creates a checkpoint after consensus evaluation.
-func (m *CheckpointManager) ConsensusCheckpoint(ctx context.Context, state *core.WorkflowState, result ConsensusResult) error {
-	return m.CreateCheckpoint(ctx, state, CheckpointConsensus, map[string]interface{}{
-		"score":              result.Score,
-		"needs_v3":           result.NeedsV3,
-		"needs_human_review": result.NeedsHumanReview,
-		"category_scores":    result.CategoryScores,
-	})
-}
-
 // ErrorCheckpoint creates a checkpoint on error.
 func (m *CheckpointManager) ErrorCheckpoint(ctx context.Context, state *core.WorkflowState, err error) error {
 	return m.CreateCheckpoint(ctx, state, CheckpointError, map[string]interface{}{

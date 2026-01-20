@@ -189,29 +189,10 @@ type WorkflowState struct {
 	TaskOrder       []TaskID              `json:"task_order"`
 	Config          *WorkflowConfig       `json:"config"`
 	Metrics         *StateMetrics         `json:"metrics"`
-	ConsensusResult *ConsensusResultState `json:"consensus_result,omitempty"`
 	Checkpoints     []Checkpoint          `json:"checkpoints"`
 	CreatedAt       time.Time             `json:"created_at"`
 	UpdatedAt       time.Time             `json:"updated_at"`
 	Checksum        string                `json:"checksum,omitempty"`
-}
-
-// ConsensusResultState represents persisted consensus result.
-type ConsensusResultState struct {
-	Score          float64             `json:"score"`
-	CategoryScores map[string]float64  `json:"category_scores"`
-	Divergences    []DivergenceState   `json:"divergences"`
-	Agreement      map[string][]string `json:"agreement"`
-}
-
-// DivergenceState represents a persisted divergence detail.
-type DivergenceState struct {
-	Category     string   `json:"category"`
-	Agent1       string   `json:"agent1"`
-	Agent1Items  []string `json:"agent1_items"`
-	Agent2       string   `json:"agent2"`
-	Agent2Items  []string `json:"agent2_items"`
-	JaccardScore float64  `json:"jaccard_score"`
 }
 
 // TaskState represents persisted task state.

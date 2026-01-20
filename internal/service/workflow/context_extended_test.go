@@ -127,7 +127,6 @@ func TestConfig_AllFields(t *testing.T) {
 		Sandbox:      false,
 		DenyTools:    []string{"rm", "sudo"},
 		DefaultAgent: "gemini",
-		V3Agent:      "claude",
 		AgentPhaseModels: map[string]map[string]string{
 			"claude": {"analyze": "opus", "plan": "sonnet"},
 			"gemini": {"analyze": "pro"},
@@ -136,6 +135,14 @@ func TestConfig_AllFields(t *testing.T) {
 		WorktreeMode:       "parallel",
 		MaxCostPerWorkflow: 50.0,
 		MaxCostPerTask:     5.0,
+		Arbiter: ArbiterConfig{
+			Enabled:   true,
+			Agent:     "claude",
+			Model:     "opus",
+			Threshold: 0.90,
+			MinRounds: 2,
+			MaxRounds: 3,
+		},
 	}
 
 	if !cfg.DryRun {
@@ -149,9 +156,6 @@ func TestConfig_AllFields(t *testing.T) {
 	}
 	if cfg.DefaultAgent != "gemini" {
 		t.Errorf("DefaultAgent = %q, want gemini", cfg.DefaultAgent)
-	}
-	if cfg.V3Agent != "claude" {
-		t.Errorf("V3Agent = %q, want claude", cfg.V3Agent)
 	}
 	if len(cfg.AgentPhaseModels) != 2 {
 		t.Errorf("len(AgentPhaseModels) = %d, want 2", len(cfg.AgentPhaseModels))
@@ -171,6 +175,12 @@ func TestConfig_AllFields(t *testing.T) {
 	if cfg.MaxCostPerTask != 5.0 {
 		t.Errorf("MaxCostPerTask = %v, want 5.0", cfg.MaxCostPerTask)
 	}
+	if !cfg.Arbiter.Enabled {
+		t.Error("Arbiter.Enabled should be true")
+	}
+	if cfg.Arbiter.Agent != "claude" {
+		t.Errorf("Arbiter.Agent = %q, want claude", cfg.Arbiter.Agent)
+	}
 }
 
 func TestAnalyzeV1Params_Fields(t *testing.T) {
@@ -184,48 +194,6 @@ func TestAnalyzeV1Params_Fields(t *testing.T) {
 	}
 	if params.Context != "Test context" {
 		t.Errorf("Context = %q, want %q", params.Context, "Test context")
-	}
-}
-
-func TestAnalyzeV2Params_Fields(t *testing.T) {
-	params := AnalyzeV2Params{
-		Prompt: "Test prompt",
-		AllV1Analyses: []V1AnalysisSummary{
-			{AgentName: "claude", Output: "Claude's V1 analysis"},
-			{AgentName: "gemini", Output: "Gemini's V1 analysis"},
-		},
-	}
-
-	if params.Prompt != "Test prompt" {
-		t.Errorf("Prompt = %q, want %q", params.Prompt, "Test prompt")
-	}
-	if len(params.AllV1Analyses) != 2 {
-		t.Errorf("AllV1Analyses length = %d, want 2", len(params.AllV1Analyses))
-	}
-	if params.AllV1Analyses[0].AgentName != "claude" {
-		t.Errorf("AllV1Analyses[0].AgentName = %q, want %q", params.AllV1Analyses[0].AgentName, "claude")
-	}
-}
-
-func TestAnalyzeV3Params_Fields(t *testing.T) {
-	params := AnalyzeV3Params{
-		Prompt:      "Test prompt",
-		V1Analysis:  "V1 analysis",
-		V2Analysis:  "V2 analysis",
-		Divergences: []string{"diff1", "diff2"},
-	}
-
-	if params.Prompt != "Test prompt" {
-		t.Errorf("Prompt = %q, want %q", params.Prompt, "Test prompt")
-	}
-	if params.V1Analysis != "V1 analysis" {
-		t.Errorf("V1Analysis = %q, want %q", params.V1Analysis, "V1 analysis")
-	}
-	if params.V2Analysis != "V2 analysis" {
-		t.Errorf("V2Analysis = %q, want %q", params.V2Analysis, "V2 analysis")
-	}
-	if len(params.Divergences) != 2 {
-		t.Errorf("len(Divergences) = %d, want 2", len(params.Divergences))
 	}
 }
 

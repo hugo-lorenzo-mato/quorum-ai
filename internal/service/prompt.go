@@ -100,10 +100,11 @@ func (r *PromptRenderer) RenderOptimizePrompt(params OptimizePromptParams) (stri
 
 // AnalyzeV1Params contains parameters for analyze-v1 template.
 type AnalyzeV1Params struct {
-	Prompt      string
-	ProjectPath string
-	Context     string
-	Constraints []string
+	Prompt         string
+	ProjectPath    string
+	Context        string
+	Constraints    []string
+	OutputFilePath string // Optional: if set, LLM should write output to this file
 }
 
 // RenderAnalyzeV1 renders the initial analysis prompt.
@@ -111,58 +112,25 @@ func (r *PromptRenderer) RenderAnalyzeV1(params AnalyzeV1Params) (string, error)
 	return r.render("analyze-v1", params)
 }
 
-// V1AnalysisSummary represents a summary of one V1 analysis for V2 critique.
-type V1AnalysisSummary struct {
-	AgentName string
-	Output    string
-}
-
-// AnalyzeV2Params contains parameters for analyze-v2 template.
-// V2 critiques receive ALL V1 analyses for comprehensive cross-review.
-type AnalyzeV2Params struct {
-	Prompt        string
-	AllV1Analyses []V1AnalysisSummary
-	Constraints   []string
-}
-
-// RenderAnalyzeV2 renders the critique analysis prompt.
-func (r *PromptRenderer) RenderAnalyzeV2(params AnalyzeV2Params) (string, error) {
-	return r.render("analyze-v2-critique", params)
-}
-
-// AnalyzeV3Params contains parameters for analyze-v3 template.
-type AnalyzeV3Params struct {
-	Prompt      string
-	V1Analysis  string
-	V2Analysis  string
-	Divergences []Divergence
-}
-
-// RenderAnalyzeV3 renders the reconciliation prompt.
-func (r *PromptRenderer) RenderAnalyzeV3(params AnalyzeV3Params) (string, error) {
-	return r.render("analyze-v3-reconcile", params)
+// AnalysisOutput represents the output from an analysis agent for templates.
+type AnalysisOutput struct {
+	AgentName       string
+	RawOutput       string
+	Claims          []string
+	Risks           []string
+	Recommendations []string
 }
 
 // ConsolidateAnalysisParams contains parameters for consolidate-analysis template.
 type ConsolidateAnalysisParams struct {
-	Prompt   string
-	Analyses []AnalysisOutput
+	Prompt         string
+	Analyses       []AnalysisOutput
+	OutputFilePath string // Optional: if set, LLM should write output to this file
 }
 
 // RenderConsolidateAnalysis renders the analysis consolidation prompt.
 func (r *PromptRenderer) RenderConsolidateAnalysis(params ConsolidateAnalysisParams) (string, error) {
 	return r.render("consolidate-analysis", params)
-}
-
-// ConsensusParams contains parameters for consensus check template.
-type ConsensusParams struct {
-	Analyses []AnalysisOutput
-	Result   ConsensusResult
-}
-
-// RenderConsensusCheck renders the consensus evaluation prompt.
-func (r *PromptRenderer) RenderConsensusCheck(params ConsensusParams) (string, error) {
-	return r.render("consensus-check", params)
 }
 
 // PlanParams contains parameters for plan generation template.
@@ -232,4 +200,52 @@ func (r *PromptRenderer) HasTemplate(name string) bool {
 	defer r.mu.RUnlock()
 	_, ok := r.templates[name]
 	return ok
+}
+
+// ArbiterAnalysisSummary represents an analysis for arbiter evaluation.
+type ArbiterAnalysisSummary struct {
+	AgentName string
+	Output    string
+}
+
+// ArbiterEvaluateParams contains parameters for arbiter-evaluate template.
+type ArbiterEvaluateParams struct {
+	Prompt         string
+	Round          int
+	Analyses       []ArbiterAnalysisSummary
+	BelowThreshold bool
+}
+
+// RenderArbiterEvaluate renders the arbiter semantic evaluation prompt.
+func (r *PromptRenderer) RenderArbiterEvaluate(params ArbiterEvaluateParams) (string, error) {
+	return r.render("arbiter-evaluate", params)
+}
+
+// VnDivergenceInfo contains divergence information for V(n) refinement.
+type VnDivergenceInfo struct {
+	Category       string
+	YourPosition   string
+	OtherPositions string
+	Guidance       string
+}
+
+// VnRefineParams contains parameters for vn-refine template.
+type VnRefineParams struct {
+	Prompt              string
+	Context             string
+	Round               int
+	PreviousRound       int
+	PreviousAnalysis    string
+	ConsensusScore      float64
+	Threshold           float64
+	Agreements          []string
+	Divergences         []VnDivergenceInfo
+	MissingPerspectives []string
+	Constraints         []string
+	OutputFilePath      string // Optional: if set, LLM should write output to this file
+}
+
+// RenderVnRefine renders the V(n) refinement prompt.
+func (r *PromptRenderer) RenderVnRefine(params VnRefineParams) (string, error) {
+	return r.render("vn-refine", params)
 }

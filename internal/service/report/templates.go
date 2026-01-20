@@ -41,181 +41,9 @@ func formatDuration(ms int64) string {
 	return fmt.Sprintf("%dm %ds", int(d.Minutes()), int(d.Seconds())%60)
 }
 
-// renderList renders a list of strings as markdown
-func renderList(items []string) string {
-	if len(items) == 0 {
-		return "_No items_\n"
-	}
-	var sb strings.Builder
-	for i, item := range items {
-		sb.WriteString(fmt.Sprintf("%d. %s\n", i+1, item))
-	}
-	return sb.String()
-}
-
 // ========================================
 // Template Renderers
 // ========================================
-
-// renderOptimizedPromptTemplate renders the optimized prompt template
-func renderOptimizedPromptTemplate(original, optimized string, metrics PromptMetrics) string {
-	var sb strings.Builder
-
-	sb.WriteString("# Prompt Optimizado\n\n")
-
-	sb.WriteString("## Prompt Original\n\n")
-	sb.WriteString("> " + strings.ReplaceAll(original, "\n", "\n> ") + "\n\n")
-
-	sb.WriteString("## Prompt Optimizado\n\n")
-	sb.WriteString(optimized + "\n\n")
-
-	sb.WriteString("## Mejoras Aplicadas\n\n")
-	sb.WriteString("| Aspecto | Original | Optimizado |\n")
-	sb.WriteString("|---------|----------|------------|\n")
-	sb.WriteString(fmt.Sprintf("| Caracteres | %d | %d |\n", metrics.OriginalCharCount, metrics.OptimizedCharCount))
-	sb.WriteString(fmt.Sprintf("| Ratio de mejora | - | %.2fx |\n", metrics.ImprovementRatio))
-
-	sb.WriteString("\n## Métricas\n\n")
-	sb.WriteString(fmt.Sprintf("- **Agente**: %s\n", metrics.OptimizerAgent))
-	sb.WriteString(fmt.Sprintf("- **Modelo**: %s\n", metrics.OptimizerModel))
-	sb.WriteString(fmt.Sprintf("- **Tokens usados**: %d\n", metrics.TokensUsed))
-	sb.WriteString(fmt.Sprintf("- **Costo**: $%.4f USD\n", metrics.CostUSD))
-	sb.WriteString(fmt.Sprintf("- **Duración**: %s\n", formatDuration(metrics.DurationMS)))
-
-	return sb.String()
-}
-
-// renderAnalysisTemplate renders an analysis report
-func renderAnalysisTemplate(data AnalysisData, version string, includeRaw bool) string {
-	var sb strings.Builder
-
-	title := fmt.Sprintf("# Análisis %s: %s (%s)\n\n", strings.ToUpper(version), data.AgentName, data.Model)
-	sb.WriteString(title)
-
-	// V1 Analysis methodology description
-	sb.WriteString("## Metodología de Análisis\n\n")
-	sb.WriteString("Este análisis ha sido generado siguiendo los principios de **análisis profundo y exhaustivo**:\n\n")
-	sb.WriteString("- **Basado en código**: Revisión directa del código fuente y estructura del proyecto\n")
-	sb.WriteString("- **Buenas prácticas**: Evaluación contra patrones de diseño y prácticas reconocidas de la industria\n")
-	sb.WriteString("- **Documentación oficial**: Verificación con la documentación oficial de frameworks y librerías\n")
-	sb.WriteString("- **Versiones y estándares**: Ajustado a las versiones específicas de los lenguajes y herramientas empleadas\n")
-	sb.WriteString("- **Sin limitaciones**: Análisis completo sin restricciones de profundidad o alcance\n\n")
-
-	sb.WriteString("---\n\n")
-
-	sb.WriteString("## Claims (Afirmaciones Fundamentadas)\n\n")
-	sb.WriteString("_Afirmaciones técnicas respaldadas por evidencia del código y documentación oficial._\n\n")
-	sb.WriteString(renderList(data.Claims))
-
-	sb.WriteString("\n## Risks (Riesgos Identificados)\n\n")
-	sb.WriteString("_Riesgos técnicos, de seguridad, rendimiento y mantenibilidad detectados._\n\n")
-	sb.WriteString(renderList(data.Risks))
-
-	sb.WriteString("\n## Recommendations (Recomendaciones Accionables)\n\n")
-	sb.WriteString("_Recomendaciones específicas alineadas con convenciones y estándares del ecosistema._\n\n")
-	sb.WriteString(renderList(data.Recommendations))
-
-	sb.WriteString("\n## Métricas del Análisis\n\n")
-	sb.WriteString("| Métrica | Valor |\n")
-	sb.WriteString("|---------|-------|\n")
-	sb.WriteString(fmt.Sprintf("| Tokens entrada | %d |\n", data.TokensIn))
-	sb.WriteString(fmt.Sprintf("| Tokens salida | %d |\n", data.TokensOut))
-	sb.WriteString(fmt.Sprintf("| Costo | $%.4f USD |\n", data.CostUSD))
-	sb.WriteString(fmt.Sprintf("| Duración | %s |\n", formatDuration(data.DurationMS)))
-
-	if includeRaw && data.RawOutput != "" {
-		sb.WriteString("\n## Raw Output (JSON)\n\n")
-		sb.WriteString("```json\n")
-		sb.WriteString(data.RawOutput)
-		sb.WriteString("\n```\n")
-	}
-
-	return sb.String()
-}
-
-// renderCritiqueTemplate renders a V2 critique report
-func renderCritiqueTemplate(data CritiqueData, includeRaw bool) string {
-	var sb strings.Builder
-
-	title := fmt.Sprintf("# Crítica V2: %s critica a %s\n\n", data.CriticAgent, data.TargetAgent)
-	sb.WriteString(title)
-
-	sb.WriteString(fmt.Sprintf("**Agente Crítico**: %s (%s)\n", data.CriticAgent, data.CriticModel))
-	sb.WriteString(fmt.Sprintf("**Análisis Criticado**: %s\n\n", data.TargetAgent))
-
-	// V2 Critique methodology description
-	sb.WriteString("## Metodología de Crítica V2\n\n")
-	sb.WriteString("Esta crítica representa un **análisis ultra-crítico y exhaustivo** que:\n\n")
-	sb.WriteString("- **Evalúa TODOS los análisis V1**: Contrasta las conclusiones de todos los agentes participantes\n")
-	sb.WriteString("- **Identifica inconsistencias**: Detecta contradicciones y gaps entre diferentes análisis\n")
-	sb.WriteString("- **Cuestiona fundamentación**: Verifica que cada afirmación esté respaldada por evidencia concreta\n")
-	sb.WriteString("- **Valida contra documentación**: Comprueba las recomendaciones contra documentación oficial actualizada\n")
-	sb.WriteString("- **Evalúa completitud**: Identifica aspectos no cubiertos en los análisis originales\n")
-	sb.WriteString("- **Perspectiva adversarial**: Busca activamente debilidades y puntos ciegos\n\n")
-
-	sb.WriteString("---\n\n")
-
-	sb.WriteString("## Puntos de Acuerdo Validados\n\n")
-	sb.WriteString("_Conclusiones del análisis original que se consideran correctas y bien fundamentadas._\n\n")
-	sb.WriteString(renderList(data.Agreements))
-
-	sb.WriteString("\n## Puntos de Desacuerdo / Correcciones\n\n")
-	sb.WriteString("_Aspectos donde el análisis original es incorrecto, incompleto o mal fundamentado._\n\n")
-	sb.WriteString(renderList(data.Disagreements))
-
-	sb.WriteString("\n## Riesgos Adicionales No Identificados\n\n")
-	sb.WriteString("_Riesgos que el análisis original pasó por alto o subestimó._\n\n")
-	sb.WriteString(renderList(data.AdditionalRisks))
-
-	sb.WriteString("\n## Métricas de la Crítica\n\n")
-	sb.WriteString("| Métrica | Valor |\n")
-	sb.WriteString("|---------|-------|\n")
-	sb.WriteString(fmt.Sprintf("| Tokens entrada | %d |\n", data.TokensIn))
-	sb.WriteString(fmt.Sprintf("| Tokens salida | %d |\n", data.TokensOut))
-	sb.WriteString(fmt.Sprintf("| Costo | $%.4f USD |\n", data.CostUSD))
-	sb.WriteString(fmt.Sprintf("| Duración | %s |\n", formatDuration(data.DurationMS)))
-
-	if includeRaw && data.RawOutput != "" {
-		sb.WriteString("\n## Raw Output (JSON)\n\n")
-		sb.WriteString("```json\n")
-		sb.WriteString(data.RawOutput)
-		sb.WriteString("\n```\n")
-	}
-
-	return sb.String()
-}
-
-// renderReconciliationTemplate renders a V3 reconciliation report
-func renderReconciliationTemplate(data ReconciliationData, includeRaw bool) string {
-	var sb strings.Builder
-
-	sb.WriteString(fmt.Sprintf("# Reconciliación V3: %s\n\n", data.Agent))
-	sb.WriteString(fmt.Sprintf("**Agente Reconciliador**: %s (%s)\n\n", data.Agent, data.Model))
-
-	// V3 Reconciliation methodology description
-	sb.WriteString("## Metodología de Reconciliación V3\n\n")
-	sb.WriteString("La reconciliación V3 es el **arbitraje final** del proceso de análisis multi-agente:\n\n")
-	sb.WriteString("- **Síntesis de divergencias**: Resuelve las diferencias identificadas entre análisis V1 y críticas V2\n")
-	sb.WriteString("- **Decisión fundamentada**: Cada resolución está respaldada por evidencia técnica objetiva\n")
-	sb.WriteString("- **Priorización de riesgos**: Ordena y consolida riesgos según impacto y probabilidad\n")
-	sb.WriteString("- **Recomendaciones unificadas**: Genera un conjunto coherente de acciones a tomar\n")
-	sb.WriteString("- **Documentación trazable**: Mantiene referencias a los análisis originales\n\n")
-
-	sb.WriteString("---\n\n")
-
-	sb.WriteString("## Síntesis Final\n\n")
-	sb.WriteString(data.RawOutput + "\n\n")
-
-	sb.WriteString("## Métricas de Reconciliación\n\n")
-	sb.WriteString("| Métrica | Valor |\n")
-	sb.WriteString("|---------|-------|\n")
-	sb.WriteString(fmt.Sprintf("| Tokens entrada | %d |\n", data.TokensIn))
-	sb.WriteString(fmt.Sprintf("| Tokens salida | %d |\n", data.TokensOut))
-	sb.WriteString(fmt.Sprintf("| Costo | $%.4f USD |\n", data.CostUSD))
-	sb.WriteString(fmt.Sprintf("| Duración | %s |\n", formatDuration(data.DurationMS)))
-
-	return sb.String()
-}
 
 // renderConsensusTemplate renders a consensus report
 func renderConsensusTemplate(data ConsensusData, afterPhase string) string {
@@ -261,44 +89,50 @@ func renderConsensusTemplate(data ConsensusData, afterPhase string) string {
 	return sb.String()
 }
 
-// renderConsolidationTemplate renders the consolidated analysis
-func renderConsolidationTemplate(data ConsolidationData) string {
+// renderArbiterTemplate renders a semantic arbiter evaluation report
+func renderArbiterTemplate(data ArbiterData, includeRaw bool) string {
 	var sb strings.Builder
 
-	sb.WriteString("# Análisis Consolidado Final\n\n")
+	sb.WriteString(fmt.Sprintf("# Evaluación del Árbitro Semántico (Ronda %d)\n\n", data.Round))
 
-	synthesizedStr := "Síntesis LLM Inteligente"
-	if !data.Synthesized {
-		synthesizedStr = "Concatenación (fallback)"
+	// Score indicator
+	scoreEmoji := "🟢"
+	if data.Score < 0.70 {
+		scoreEmoji = "🔴"
+	} else if data.Score < 0.90 {
+		scoreEmoji = "🟡"
 	}
 
-	sb.WriteString("## Información del Proceso\n\n")
-	sb.WriteString(fmt.Sprintf("- **Método de consolidación**: %s\n", synthesizedStr))
-	sb.WriteString(fmt.Sprintf("- **Agente consolidador**: %s (%s)\n", data.Agent, data.Model))
-	sb.WriteString(fmt.Sprintf("- **Análisis procesados**: %d\n", data.AnalysesCount))
-	sb.WriteString(fmt.Sprintf("- **Score de consenso**: %.2f%%\n\n", data.ConsensusScore*100))
+	sb.WriteString(fmt.Sprintf("## %s Consenso Semántico: %.0f%%\n\n", scoreEmoji, data.Score*100))
 
-	sb.WriteString("## Proceso de Consolidación\n\n")
-	sb.WriteString("Este documento representa la **síntesis final** del análisis multi-agente:\n\n")
-	sb.WriteString("1. **Análisis V1 independientes**: Cada agente realizó un análisis profundo y exhaustivo\n")
-	sb.WriteString("2. **Críticas V2 cruzadas**: Los agentes evaluaron críticamente los análisis de otros\n")
-	sb.WriteString("3. **Reconciliación V3** (si aplica): Se resolvieron divergencias significativas\n")
-	sb.WriteString("4. **Consolidación final**: Se integran todas las perspectivas en un documento unificado\n\n")
+	sb.WriteString("## Información del Árbitro\n\n")
+	sb.WriteString(fmt.Sprintf("- **Agente**: %s\n", data.Agent))
+	sb.WriteString(fmt.Sprintf("- **Modelo**: %s\n", data.Model))
+	sb.WriteString(fmt.Sprintf("- **Ronda**: %d\n", data.Round))
+	sb.WriteString(fmt.Sprintf("- **Acuerdos identificados**: %d\n", data.AgreementsCount))
+	sb.WriteString(fmt.Sprintf("- **Divergencias identificadas**: %d\n\n", data.DivergencesCount))
 
-	sb.WriteString("---\n\n")
-
-	sb.WriteString("## Análisis Consolidado\n\n")
-	sb.WriteString(data.Content + "\n\n")
+	sb.WriteString("## Metodología de Evaluación\n\n")
+	sb.WriteString("El árbitro semántico evalúa el **consenso real** entre los análisis:\n\n")
+	sb.WriteString("- **Evaluación semántica**: Compara significados, no palabras exactas\n")
+	sb.WriteString("- **Identificación de acuerdos**: Detecta convergencias genuinas entre agentes\n")
+	sb.WriteString("- **Análisis de divergencias**: Identifica diferencias sustanciales a resolver\n")
+	sb.WriteString("- **Puntuación objetiva**: Calcula un porcentaje basado en evidencia\n\n")
 
 	sb.WriteString("---\n\n")
 
-	sb.WriteString("## Métricas Totales del Proceso de Análisis\n\n")
+	if includeRaw && data.RawOutput != "" {
+		sb.WriteString("## Evaluación Completa del Árbitro\n\n")
+		sb.WriteString(data.RawOutput + "\n\n")
+	}
+
+	sb.WriteString("## Métricas del Árbitro\n\n")
 	sb.WriteString("| Métrica | Valor |\n")
 	sb.WriteString("|---------|-------|\n")
-	sb.WriteString(fmt.Sprintf("| Tokens entrada (total) | %d |\n", data.TotalTokensIn))
-	sb.WriteString(fmt.Sprintf("| Tokens salida (total) | %d |\n", data.TotalTokensOut))
-	sb.WriteString(fmt.Sprintf("| Costo total análisis | $%.4f USD |\n", data.TotalCostUSD))
-	sb.WriteString(fmt.Sprintf("| Duración consolidación | %s |\n", formatDuration(data.TotalDurationMS)))
+	sb.WriteString(fmt.Sprintf("| Tokens entrada | %d |\n", data.TokensIn))
+	sb.WriteString(fmt.Sprintf("| Tokens salida | %d |\n", data.TokensOut))
+	sb.WriteString(fmt.Sprintf("| Costo | $%.4f USD |\n", data.CostUSD))
+	sb.WriteString(fmt.Sprintf("| Duración | %s |\n", formatDuration(data.DurationMS)))
 
 	return sb.String()
 }
@@ -500,7 +334,7 @@ func renderWorkflowSummaryTemplate(data WorkflowMetadata) string {
 
 func containsPhase(phases []string, target string) bool {
 	for _, p := range phases {
-		if strings.ToLower(p) == strings.ToLower(target) {
+		if strings.EqualFold(p, target) {
 			return true
 		}
 	}

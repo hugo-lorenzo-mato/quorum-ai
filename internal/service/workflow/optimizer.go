@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
-	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service/report"
 )
 
 // OptimizerConfig configures the optimizer phase.
@@ -187,32 +186,6 @@ func (o *Optimizer) Run(ctx context.Context, wctx *Context) error {
 			)
 			if wctx.Output != nil {
 				wctx.Output.Log("success", "optimizer", fmt.Sprintf("Prompt enhanced: %d → %d chars", len(wctx.State.Prompt), len(optimized)))
-			}
-
-			// Write optimized prompt report
-			if wctx.Report != nil {
-				originalLen := len(wctx.State.Prompt)
-				optimizedLen := len(optimized)
-				var improvementRatio float64
-				if originalLen > 0 {
-					improvementRatio = float64(originalLen-optimizedLen) / float64(originalLen)
-				}
-				if reportErr := wctx.Report.WriteOptimizedPrompt(
-					wctx.State.Prompt,
-					optimized,
-					report.PromptMetrics{
-						OriginalCharCount:  originalLen,
-						OptimizedCharCount: optimizedLen,
-						ImprovementRatio:   improvementRatio,
-						TokensUsed:         result.TokensIn + result.TokensOut,
-						CostUSD:            result.CostUSD,
-						DurationMS:         durationMS,
-						OptimizerAgent:     agentName,
-						OptimizerModel:     model,
-					},
-				); reportErr != nil {
-					wctx.Logger.Warn("failed to write optimized prompt report", "error", reportErr)
-				}
 			}
 		}
 	}

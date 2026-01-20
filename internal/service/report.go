@@ -38,7 +38,7 @@ func (r *ReportGenerator) GenerateTextReport(w io.Writer) error {
 	fmt.Fprintf(w, "  Tasks Failed:    %d\n", wm.TasksFailed)
 	fmt.Fprintf(w, "  Tasks Skipped:   %d\n", wm.TasksSkipped)
 	fmt.Fprintf(w, "  Retries:         %d\n", wm.RetriesTotal)
-	fmt.Fprintf(w, "  V3 Invocations:  %d\n", wm.V3Invocations)
+	fmt.Fprintf(w, "  Arbiter Rounds:  %d\n", wm.ArbiterRounds)
 	fmt.Fprintln(w, "")
 
 	// Token usage
@@ -137,24 +137,23 @@ func (r *ReportGenerator) writeTaskTable(w io.Writer) error {
 	return nil
 }
 
-// writeConsensusSummary writes consensus summary.
+// writeConsensusSummary writes arbiter evaluation summary.
 func (r *ReportGenerator) writeConsensusSummary(w io.Writer) {
-	consensus := r.metrics.GetConsensusMetrics()
-	if len(consensus) == 0 {
+	arbiter := r.metrics.GetArbiterMetrics()
+	if len(arbiter) == 0 {
 		return
 	}
 
-	fmt.Fprintln(w, "CONSENSUS EVALUATIONS")
+	fmt.Fprintln(w, "ARBITER EVALUATIONS")
 	fmt.Fprintln(w, strings.Repeat("-", 40))
 
-	for _, cm := range consensus {
-		fmt.Fprintf(w, "  Phase: %s\n", cm.Phase)
-		fmt.Fprintf(w, "    Score:        %.2f%%\n", cm.Score*100)
-		fmt.Fprintf(w, "    Claims:       %.2f%%\n", cm.ClaimsScore*100)
-		fmt.Fprintf(w, "    Risks:        %.2f%%\n", cm.RisksScore*100)
-		fmt.Fprintf(w, "    Recs:         %.2f%%\n", cm.RecsScore*100)
-		fmt.Fprintf(w, "    V3 Required:  %v\n", cm.V3Required)
-		fmt.Fprintf(w, "    Divergences:  %d\n", cm.DivergenceCount)
+	for _, am := range arbiter {
+		fmt.Fprintf(w, "  Phase: %s (Round %d)\n", am.Phase, am.Round)
+		fmt.Fprintf(w, "    Score:        %.2f%%\n", am.Score*100)
+		fmt.Fprintf(w, "    Agreements:   %d\n", am.AgreementCount)
+		fmt.Fprintf(w, "    Divergences:  %d\n", am.DivergenceCount)
+		fmt.Fprintf(w, "    Tokens:       %d in / %d out\n", am.TokensIn, am.TokensOut)
+		fmt.Fprintf(w, "    Cost:         $%.4f\n", am.CostUSD)
 		fmt.Fprintln(w, "")
 	}
 }
@@ -166,7 +165,7 @@ func (r *ReportGenerator) GenerateJSONReport(w io.Writer) error {
 		Workflow:    r.metrics.GetWorkflowMetrics(),
 		Agents:      r.metrics.GetAgentMetrics(),
 		Tasks:       r.metrics.GetAllTaskMetrics(),
-		Consensus:   r.metrics.GetConsensusMetrics(),
+		Arbiter:     r.metrics.GetArbiterMetrics(),
 	}
 
 	enc := json.NewEncoder(w)
@@ -179,12 +178,12 @@ func (r *ReportGenerator) GenerateSummary() string {
 	wm := r.metrics.GetWorkflowMetrics()
 
 	return fmt.Sprintf(
-		"Duration: %s | Tasks: %d/%d | Cost: $%.4f | V3: %d",
+		"Duration: %s | Tasks: %d/%d | Cost: $%.4f | Arbiter: %d rounds",
 		wm.TotalDuration.Round(time.Second),
 		wm.TasksCompleted,
 		wm.TasksTotal,
 		wm.TotalCostUSD,
-		wm.V3Invocations,
+		wm.ArbiterRounds,
 	)
 }
 
@@ -194,7 +193,7 @@ type Report struct {
 	Workflow    WorkflowMetrics          `json:"workflow"`
 	Agents      map[string]*AgentMetrics `json:"agents"`
 	Tasks       []*TaskMetrics           `json:"tasks"`
-	Consensus   []ConsensusMetrics       `json:"consensus"`
+	Arbiter     []ArbiterMetrics         `json:"arbiter"`
 }
 
 func truncate(s string, maxLen int) string {

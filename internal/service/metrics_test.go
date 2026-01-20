@@ -111,31 +111,30 @@ func TestMetricsCollector_AgentMetrics(t *testing.T) {
 	testutil.AssertEqual(t, claude.TotalCostUSD, 0.03)
 }
 
-func TestMetricsCollector_Consensus(t *testing.T) {
+func TestMetricsCollector_Arbiter(t *testing.T) {
 	collector := service.NewMetricsCollector()
 
-	result := service.ConsensusResult{
-		Score:   0.85,
-		NeedsV3: true,
-		CategoryScores: map[string]float64{
-			"claims":          0.9,
-			"risks":           0.8,
-			"recommendations": 0.85,
-		},
-		Divergences: []service.Divergence{
-			{Category: "claims", JaccardScore: 0.5},
-		},
+	input := service.ArbiterMetricsInput{
+		Score:           0.85,
+		DivergenceCount: 2,
+		AgreementCount:  5,
+		TokensIn:        500,
+		TokensOut:       300,
+		CostUSD:         0.05,
+		DurationMS:      1500,
 	}
 
-	collector.RecordConsensus(result, core.PhaseAnalyze)
+	collector.RecordArbiterEvaluation(input, core.PhaseAnalyze, 2)
 
 	wm := collector.GetWorkflowMetrics()
-	testutil.AssertEqual(t, wm.V3Invocations, 1)
+	testutil.AssertEqual(t, wm.ArbiterRounds, 1)
 
-	consensus := collector.GetConsensusMetrics()
-	testutil.AssertLen(t, consensus, 1)
-	testutil.AssertEqual(t, consensus[0].Score, 0.85)
-	testutil.AssertEqual(t, consensus[0].V3Required, true)
+	arbiter := collector.GetArbiterMetrics()
+	testutil.AssertLen(t, arbiter, 1)
+	testutil.AssertEqual(t, arbiter[0].Score, 0.85)
+	testutil.AssertEqual(t, arbiter[0].Round, 2)
+	testutil.AssertEqual(t, arbiter[0].DivergenceCount, 2)
+	testutil.AssertEqual(t, arbiter[0].AgreementCount, 5)
 }
 
 func TestMetricsCollector_Skipped(t *testing.T) {

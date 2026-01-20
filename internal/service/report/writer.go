@@ -56,7 +56,8 @@ func NewWorkflowReportWriter(cfg Config, workflowID string) *WorkflowReportWrite
 	}
 }
 
-// Initialize creates the directory structure (called lazily on first write)
+// Initialize creates the base directory structure (called lazily on first write)
+// Versioned directories (v1, v2, v3, etc.) are created on demand when writing files
 func (w *WorkflowReportWriter) Initialize() error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -65,23 +66,19 @@ func (w *WorkflowReportWriter) Initialize() error {
 		return nil
 	}
 
-	// Create all necessary directories
+	// Create only base directories - version directories (v1, v2, etc.) are created on demand
 	dirs := []string{
 		w.ExecutionPath(),
 		w.AnalyzePhasePath(),
-		filepath.Join(w.AnalyzePhasePath(), "v1"),
-		filepath.Join(w.AnalyzePhasePath(), "v2"),
-		filepath.Join(w.AnalyzePhasePath(), "v3"),
 		filepath.Join(w.AnalyzePhasePath(), "consensus"),
 		w.PlanPhasePath(),
-		filepath.Join(w.PlanPhasePath(), "v1"),
 		filepath.Join(w.PlanPhasePath(), "consensus"),
 		w.ExecutePhasePath(),
 		filepath.Join(w.ExecutePhasePath(), "tasks"),
 	}
 
 	for _, dir := range dirs {
-		if err := os.MkdirAll(dir, 0755); err != nil {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return fmt.Errorf("creating directory %s: %w", dir, err)
 		}
 	}
@@ -123,19 +120,45 @@ func (w *WorkflowReportWriter) GetExecutionDir() string {
 }
 
 // ========================================
+// Path Getters (for LLM-directed file writing)
+// ========================================
+
+// V1AnalysisPath returns the path where the LLM should write a V1 analysis
+func (w *WorkflowReportWriter) V1AnalysisPath(agentName, model string) string {
+	filename := fmt.Sprintf("%s-%s.md", agentName, sanitizeFilename(model))
+	return filepath.Join(w.AnalyzePhasePath(), "v1", filename)
+}
+
+// VnAnalysisPath returns the path where the LLM should write a V(n) analysis
+func (w *WorkflowReportWriter) VnAnalysisPath(agentName, model string, round int) string {
+	filename := fmt.Sprintf("%s-%s.md", agentName, sanitizeFilename(model))
+	return filepath.Join(w.AnalyzePhasePath(), fmt.Sprintf("v%d", round), filename)
+}
+
+// ConsolidatedAnalysisPath returns the path where the LLM should write the consolidated analysis
+func (w *WorkflowReportWriter) ConsolidatedAnalysisPath() string {
+	return filepath.Join(w.AnalyzePhasePath(), "consolidated.md")
+}
+
+// OptimizedPromptPath returns the path where the LLM should write the optimized prompt
+func (w *WorkflowReportWriter) OptimizedPromptPath() string {
+	return filepath.Join(w.AnalyzePhasePath(), "01-optimized-prompt.md")
+}
+
+// ========================================
 // Analyze Phase Writers
 // ========================================
 
 // PromptMetrics contains metrics about prompt processing
 type PromptMetrics struct {
-	OriginalCharCount   int
-	OptimizedCharCount  int
-	ImprovementRatio    float64
-	TokensUsed          int
-	CostUSD             float64
-	DurationMS          int64
-	OptimizerAgent      string
-	OptimizerModel      string
+	OriginalCharCount  int
+	OptimizedCharCount int
+	ImprovementRatio   float64
+	TokensUsed         int
+	CostUSD            float64
+	DurationMS         int64
+	OptimizerAgent     string
+	OptimizerModel     string
 }
 
 // WriteOriginalPrompt writes the original user prompt
@@ -161,8 +184,8 @@ func (w *WorkflowReportWriter) WriteOriginalPrompt(prompt string) error {
 	return w.writeFile(path, fm, content)
 }
 
-// WriteOptimizedPrompt writes the optimized prompt
-func (w *WorkflowReportWriter) WriteOptimizedPrompt(original, optimized string, metrics PromptMetrics) error {
+// WriteOptimizedPrompt writes the optimized prompt (raw content only, no metadata)
+func (w *WorkflowReportWriter) WriteOptimizedPrompt(_, optimized string, _ PromptMetrics) error {
 	if !w.config.Enabled {
 		return nil
 	}
@@ -172,22 +195,8 @@ func (w *WorkflowReportWriter) WriteOptimizedPrompt(original, optimized string, 
 
 	path := filepath.Join(w.AnalyzePhasePath(), "01-optimized-prompt.md")
 
-	fm := NewFrontmatter()
-	fm.Set("type", "optimized_prompt")
-	fm.Set("timestamp", w.formatTime(time.Now()))
-	fm.Set("workflow_id", w.workflowID)
-	fm.Set("optimizer_agent", metrics.OptimizerAgent)
-	fm.Set("optimizer_model", metrics.OptimizerModel)
-	fm.Set("original_char_count", metrics.OriginalCharCount)
-	fm.Set("optimized_char_count", metrics.OptimizedCharCount)
-	fm.Set("improvement_ratio", fmt.Sprintf("%.2f", metrics.ImprovementRatio))
-	fm.Set("tokens_used", metrics.TokensUsed)
-	fm.Set("cost_usd", fmt.Sprintf("%.4f", metrics.CostUSD))
-	fm.Set("duration_ms", metrics.DurationMS)
-
-	content := renderOptimizedPromptTemplate(original, optimized, metrics)
-
-	return w.writeFile(path, fm, content)
+	// Write only the optimized prompt content, no frontmatter or metadata
+	return w.writeFileRaw(path, optimized+"\n")
 }
 
 // AnalysisData contains data for an analysis report
@@ -204,7 +213,7 @@ type AnalysisData struct {
 	DurationMS      int64
 }
 
-// WriteV1Analysis writes a V1 analysis report
+// WriteV1Analysis writes a V1 analysis report (raw LLM output only, no metadata)
 func (w *WorkflowReportWriter) WriteV1Analysis(data AnalysisData) error {
 	if !w.config.Enabled {
 		return nil
@@ -213,122 +222,30 @@ func (w *WorkflowReportWriter) WriteV1Analysis(data AnalysisData) error {
 		return err
 	}
 
+	// Create v1 directory if needed (lazy creation)
+	v1Dir := filepath.Join(w.AnalyzePhasePath(), "v1")
+	if err := os.MkdirAll(v1Dir, 0o755); err != nil {
+		return fmt.Errorf("creating v1 directory: %w", err)
+	}
+
 	filename := fmt.Sprintf("%s-%s.md", data.AgentName, sanitizeFilename(data.Model))
-	path := filepath.Join(w.AnalyzePhasePath(), "v1", filename)
+	path := filepath.Join(v1Dir, filename)
 
-	fm := NewFrontmatter()
-	fm.Set("type", "analysis")
-	fm.Set("version", "v1")
-	fm.Set("agent", data.AgentName)
-	fm.Set("model", data.Model)
-	fm.Set("timestamp", w.formatTime(time.Now()))
-	fm.Set("workflow_id", w.workflowID)
-	fm.Set("tokens_in", data.TokensIn)
-	fm.Set("tokens_out", data.TokensOut)
-	fm.Set("cost_usd", fmt.Sprintf("%.4f", data.CostUSD))
-	fm.Set("duration_ms", data.DurationMS)
-
-	content := renderAnalysisTemplate(data, "v1", w.config.IncludeRaw)
-
-	return w.writeFile(path, fm, content)
-}
-
-// CritiqueData contains data for a V2 critique report
-type CritiqueData struct {
-	CriticAgent     string
-	CriticModel     string
-	TargetAgent     string
-	RawOutput       string
-	Agreements      []string
-	Disagreements   []string
-	AdditionalRisks []string
-	TokensIn        int
-	TokensOut       int
-	CostUSD         float64
-	DurationMS      int64
-}
-
-// WriteV2Critique writes a V2 critique report
-func (w *WorkflowReportWriter) WriteV2Critique(data CritiqueData) error {
-	if !w.config.Enabled {
-		return nil
-	}
-	if err := w.Initialize(); err != nil {
-		return err
-	}
-
-	filename := fmt.Sprintf("%s-critiques-%s.md", data.CriticAgent, data.TargetAgent)
-	path := filepath.Join(w.AnalyzePhasePath(), "v2", filename)
-
-	fm := NewFrontmatter()
-	fm.Set("type", "critique")
-	fm.Set("version", "v2")
-	fm.Set("critic_agent", data.CriticAgent)
-	fm.Set("critic_model", data.CriticModel)
-	fm.Set("target_agent", data.TargetAgent)
-	fm.Set("timestamp", w.formatTime(time.Now()))
-	fm.Set("workflow_id", w.workflowID)
-	fm.Set("tokens_in", data.TokensIn)
-	fm.Set("tokens_out", data.TokensOut)
-	fm.Set("cost_usd", fmt.Sprintf("%.4f", data.CostUSD))
-	fm.Set("duration_ms", data.DurationMS)
-
-	content := renderCritiqueTemplate(data, w.config.IncludeRaw)
-
-	return w.writeFile(path, fm, content)
-}
-
-// ReconciliationData contains data for V3 reconciliation
-type ReconciliationData struct {
-	Agent       string
-	Model       string
-	RawOutput   string
-	TokensIn    int
-	TokensOut   int
-	CostUSD     float64
-	DurationMS  int64
-}
-
-// WriteV3Reconciliation writes a V3 reconciliation report
-func (w *WorkflowReportWriter) WriteV3Reconciliation(data ReconciliationData) error {
-	if !w.config.Enabled {
-		return nil
-	}
-	if err := w.Initialize(); err != nil {
-		return err
-	}
-
-	filename := fmt.Sprintf("%s-reconciliation.md", data.Agent)
-	path := filepath.Join(w.AnalyzePhasePath(), "v3", filename)
-
-	fm := NewFrontmatter()
-	fm.Set("type", "reconciliation")
-	fm.Set("version", "v3")
-	fm.Set("agent", data.Agent)
-	fm.Set("model", data.Model)
-	fm.Set("timestamp", w.formatTime(time.Now()))
-	fm.Set("workflow_id", w.workflowID)
-	fm.Set("tokens_in", data.TokensIn)
-	fm.Set("tokens_out", data.TokensOut)
-	fm.Set("cost_usd", fmt.Sprintf("%.4f", data.CostUSD))
-	fm.Set("duration_ms", data.DurationMS)
-
-	content := renderReconciliationTemplate(data, w.config.IncludeRaw)
-
-	return w.writeFile(path, fm, content)
+	// Write only the raw LLM output, no frontmatter or metadata
+	return w.writeFileRaw(path, data.RawOutput+"\n")
 }
 
 // ConsensusData contains consensus evaluation data
 type ConsensusData struct {
-	Score             float64
-	Threshold         float64
-	NeedsEscalation   bool
-	NeedsHumanReview  bool
-	AgentsCount       int
-	ClaimsScore       float64
-	RisksScore        float64
+	Score                float64
+	Threshold            float64
+	NeedsEscalation      bool
+	NeedsHumanReview     bool
+	AgentsCount          int
+	ClaimsScore          float64
+	RisksScore           float64
 	RecommendationsScore float64
-	Divergences       []DivergenceData
+	Divergences          []DivergenceData
 }
 
 // DivergenceData represents a divergence between agents
@@ -381,7 +298,94 @@ type ConsolidationData struct {
 	TotalDurationMS int64
 }
 
-// WriteConsolidatedAnalysis writes the consolidated analysis
+// ArbiterData contains data for a semantic arbiter evaluation report
+type ArbiterData struct {
+	Agent            string
+	Model            string
+	Round            int
+	Score            float64
+	RawOutput        string
+	AgreementsCount  int
+	DivergencesCount int
+	TokensIn         int
+	TokensOut        int
+	CostUSD          float64
+	DurationMS       int64
+}
+
+// WriteArbiterReport writes a semantic arbiter evaluation report
+func (w *WorkflowReportWriter) WriteArbiterReport(data ArbiterData) error {
+	if !w.config.Enabled {
+		return nil
+	}
+	if err := w.Initialize(); err != nil {
+		return err
+	}
+
+	// Create arbiter directory if needed
+	arbiterDir := filepath.Join(w.AnalyzePhasePath(), "arbiter")
+	if err := os.MkdirAll(arbiterDir, 0o755); err != nil {
+		return fmt.Errorf("creating arbiter directory: %w", err)
+	}
+
+	filename := fmt.Sprintf("round-%d.md", data.Round)
+	path := filepath.Join(arbiterDir, filename)
+
+	fm := NewFrontmatter()
+	fm.Set("type", "arbiter_evaluation")
+	fm.Set("round", data.Round)
+	fm.Set("agent", data.Agent)
+	fm.Set("model", data.Model)
+	fm.Set("timestamp", w.formatTime(time.Now()))
+	fm.Set("workflow_id", w.workflowID)
+	fm.Set("consensus_score", fmt.Sprintf("%.4f", data.Score))
+	fm.Set("agreements_count", data.AgreementsCount)
+	fm.Set("divergences_count", data.DivergencesCount)
+	fm.Set("tokens_in", data.TokensIn)
+	fm.Set("tokens_out", data.TokensOut)
+	fm.Set("cost_usd", fmt.Sprintf("%.4f", data.CostUSD))
+	fm.Set("duration_ms", data.DurationMS)
+
+	content := renderArbiterTemplate(data, w.config.IncludeRaw)
+
+	return w.writeFile(path, fm, content)
+}
+
+// VnAnalysisData contains data for a V(n) iterative analysis report
+type VnAnalysisData struct {
+	AgentName  string
+	Model      string
+	Round      int
+	RawOutput  string
+	TokensIn   int
+	TokensOut  int
+	CostUSD    float64
+	DurationMS int64
+}
+
+// WriteVnAnalysis writes a V(n) iterative analysis report (raw LLM output only, no metadata)
+func (w *WorkflowReportWriter) WriteVnAnalysis(data VnAnalysisData) error {
+	if !w.config.Enabled {
+		return nil
+	}
+	if err := w.Initialize(); err != nil {
+		return err
+	}
+
+	// Create vn directory for this round if needed
+	vnDir := filepath.Join(w.AnalyzePhasePath(), fmt.Sprintf("v%d", data.Round))
+	if err := os.MkdirAll(vnDir, 0o755); err != nil {
+		return fmt.Errorf("creating v%d directory: %w", data.Round, err)
+	}
+
+	filename := fmt.Sprintf("%s-%s.md", data.AgentName, sanitizeFilename(data.Model))
+	path := filepath.Join(vnDir, filename)
+
+	// Write only the raw LLM output, no frontmatter or metadata
+	return w.writeFileRaw(path, data.RawOutput+"\n")
+}
+
+// WriteConsolidatedAnalysis writes the consolidated analysis (raw LLM output only, no metadata)
 func (w *WorkflowReportWriter) WriteConsolidatedAnalysis(data ConsolidationData) error {
 	if !w.config.Enabled {
 		return nil
@@ -392,23 +396,8 @@ func (w *WorkflowReportWriter) WriteConsolidatedAnalysis(data ConsolidationData)
 
 	path := filepath.Join(w.AnalyzePhasePath(), "consolidated.md")
 
-	fm := NewFrontmatter()
-	fm.Set("type", "consolidated")
-	fm.Set("agent", data.Agent)
-	fm.Set("model", data.Model)
-	fm.Set("timestamp", w.formatTime(time.Now()))
-	fm.Set("workflow_id", w.workflowID)
-	fm.Set("analyses_count", data.AnalysesCount)
-	fm.Set("synthesized", data.Synthesized)
-	fm.Set("consensus_score", fmt.Sprintf("%.4f", data.ConsensusScore))
-	fm.Set("total_tokens_in", data.TotalTokensIn)
-	fm.Set("total_tokens_out", data.TotalTokensOut)
-	fm.Set("total_cost_usd", fmt.Sprintf("%.4f", data.TotalCostUSD))
-	fm.Set("total_duration_ms", data.TotalDurationMS)
-
-	content := renderConsolidationTemplate(data)
-
-	return w.writeFile(path, fm, content)
+	// Write only the raw LLM output, no frontmatter or metadata
+	return w.writeFileRaw(path, data.Content+"\n")
 }
 
 // ========================================
@@ -435,8 +424,14 @@ func (w *WorkflowReportWriter) WritePlan(data PlanData) error {
 		return err
 	}
 
+	// Create v1 directory if needed (lazy creation)
+	v1Dir := filepath.Join(w.PlanPhasePath(), "v1")
+	if err := os.MkdirAll(v1Dir, 0o755); err != nil {
+		return fmt.Errorf("creating plan v1 directory: %w", err)
+	}
+
 	filename := fmt.Sprintf("%s-plan.md", data.Agent)
-	path := filepath.Join(w.PlanPhasePath(), "v1", filename)
+	path := filepath.Join(v1Dir, filename)
 
 	fm := NewFrontmatter()
 	fm.Set("type", "plan")
@@ -481,17 +476,17 @@ func (w *WorkflowReportWriter) WriteFinalPlan(content string) error {
 
 // TaskResultData contains data for a task execution result
 type TaskResultData struct {
-	TaskID      string
-	TaskName    string
-	Agent       string
-	Model       string
-	Status      string // "completed", "failed", "skipped"
-	Output      string
-	Error       string
-	TokensIn    int
-	TokensOut   int
-	CostUSD     float64
-	DurationMS  int64
+	TaskID     string
+	TaskName   string
+	Agent      string
+	Model      string
+	Status     string // "completed", "failed", "skipped"
+	Output     string
+	Error      string
+	TokensIn   int
+	TokensOut  int
+	CostUSD    float64
+	DurationMS int64
 }
 
 // WriteTaskResult writes a task execution result
@@ -527,15 +522,15 @@ func (w *WorkflowReportWriter) WriteTaskResult(data TaskResultData) error {
 
 // ExecutionSummaryData contains summary of task execution
 type ExecutionSummaryData struct {
-	TotalTasks     int
-	CompletedTasks int
-	FailedTasks    int
-	SkippedTasks   int
-	TotalTokensIn  int
-	TotalTokensOut int
-	TotalCostUSD   float64
+	TotalTasks      int
+	CompletedTasks  int
+	FailedTasks     int
+	SkippedTasks    int
+	TotalTokensIn   int
+	TotalTokensOut  int
+	TotalCostUSD    float64
 	TotalDurationMS int64
-	Tasks          []TaskResultData
+	Tasks           []TaskResultData
 }
 
 // WriteExecutionSummary writes the execution summary
@@ -655,6 +650,24 @@ func (w *WorkflowReportWriter) writeFile(path string, fm *Frontmatter, content s
 	}
 
 	// Write content
+	if _, err := file.WriteString(content); err != nil {
+		return fmt.Errorf("writing content: %w", err)
+	}
+
+	return nil
+}
+
+// writeFileRaw writes content directly without frontmatter
+func (w *WorkflowReportWriter) writeFileRaw(path, content string) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	file, err := os.Create(path)
+	if err != nil {
+		return fmt.Errorf("creating file %s: %w", path, err)
+	}
+	defer file.Close()
+
 	if _, err := file.WriteString(content); err != nil {
 		return fmt.Errorf("writing content: %w", err)
 	}

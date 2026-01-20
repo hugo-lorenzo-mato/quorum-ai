@@ -10,70 +10,6 @@ import (
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service"
 )
 
-// ConsensusAdapter wraps service.ConsensusChecker to satisfy ConsensusEvaluator.
-type ConsensusAdapter struct {
-	checker *service.ConsensusChecker
-}
-
-// NewConsensusAdapter creates a new consensus adapter.
-func NewConsensusAdapter(checker *service.ConsensusChecker) *ConsensusAdapter {
-	return &ConsensusAdapter{checker: checker}
-}
-
-// Evaluate evaluates consensus between analysis outputs.
-func (a *ConsensusAdapter) Evaluate(outputs []AnalysisOutput) ConsensusResult {
-	// Convert workflow.AnalysisOutput to service.AnalysisOutput
-	serviceOutputs := make([]service.AnalysisOutput, len(outputs))
-	for i, o := range outputs {
-		serviceOutputs[i] = service.AnalysisOutput{
-			AgentName:       o.AgentName,
-			RawOutput:       o.RawOutput,
-			Claims:          o.Claims,
-			Risks:           o.Risks,
-			Recommendations: o.Recommendations,
-		}
-	}
-
-	result := a.checker.Evaluate(serviceOutputs)
-
-	// Convert divergences preserving full structure
-	divergences := make([]Divergence, len(result.Divergences))
-	for i, d := range result.Divergences {
-		divergences[i] = Divergence{
-			Category:     d.Category,
-			Agent1:       d.Agent1,
-			Agent1Items:  d.Agent1Items,
-			Agent2:       d.Agent2,
-			Agent2Items:  d.Agent2Items,
-			JaccardScore: d.JaccardScore,
-		}
-	}
-
-	return ConsensusResult{
-		Score:            result.Score,
-		NeedsV3:          result.NeedsV3,
-		NeedsHumanReview: result.NeedsHumanReview,
-		CategoryScores:   result.CategoryScores,
-		Divergences:      divergences,
-		Agreement:        result.Agreement,
-	}
-}
-
-// Threshold returns the consensus threshold value.
-func (a *ConsensusAdapter) Threshold() float64 {
-	return a.checker.GetThreshold()
-}
-
-// V2Threshold returns the V2 escalation threshold.
-func (a *ConsensusAdapter) V2Threshold() float64 {
-	return a.checker.GetV2Threshold()
-}
-
-// HumanThreshold returns the human review threshold.
-func (a *ConsensusAdapter) HumanThreshold() float64 {
-	return a.checker.GetHumanThreshold()
-}
-
 // CheckpointAdapter wraps service.CheckpointManager to satisfy CheckpointCreator.
 type CheckpointAdapter struct {
 	manager *service.CheckpointManager
@@ -93,33 +29,6 @@ func (a *CheckpointAdapter) PhaseCheckpoint(state *core.WorkflowState, phase cor
 // TaskCheckpoint creates a checkpoint for task transitions.
 func (a *CheckpointAdapter) TaskCheckpoint(state *core.WorkflowState, task *core.Task, completed bool) error {
 	return a.manager.TaskCheckpoint(a.ctx, state, task, completed)
-}
-
-// ConsensusCheckpoint creates a checkpoint after consensus evaluation.
-func (a *CheckpointAdapter) ConsensusCheckpoint(state *core.WorkflowState, result ConsensusResult) error {
-	// Convert workflow.Divergence to service.Divergence
-	serviceDivergences := make([]service.Divergence, len(result.Divergences))
-	for i, d := range result.Divergences {
-		serviceDivergences[i] = service.Divergence{
-			Category:     d.Category,
-			Agent1:       d.Agent1,
-			Agent1Items:  d.Agent1Items,
-			Agent2:       d.Agent2,
-			Agent2Items:  d.Agent2Items,
-			JaccardScore: d.JaccardScore,
-		}
-	}
-
-	// Convert workflow.ConsensusResult to service.ConsensusResult
-	serviceResult := service.ConsensusResult{
-		Score:            result.Score,
-		NeedsV3:          result.NeedsV3,
-		NeedsHumanReview: result.NeedsHumanReview,
-		CategoryScores:   result.CategoryScores,
-		Divergences:      serviceDivergences,
-		Agreement:        result.Agreement,
-	}
-	return a.manager.ConsensusCheckpoint(a.ctx, state, serviceResult)
 }
 
 // ErrorCheckpoint creates a checkpoint on error.
@@ -209,39 +118,9 @@ func (a *PromptRendererAdapter) RenderOptimizePrompt(params OptimizePromptParams
 // RenderAnalyzeV1 renders the initial analysis prompt.
 func (a *PromptRendererAdapter) RenderAnalyzeV1(params AnalyzeV1Params) (string, error) {
 	return a.renderer.RenderAnalyzeV1(service.AnalyzeV1Params{
-		Prompt:  params.Prompt,
-		Context: params.Context,
-	})
-}
-
-// RenderAnalyzeV2 renders the critique analysis prompt.
-func (a *PromptRendererAdapter) RenderAnalyzeV2(params AnalyzeV2Params) (string, error) {
-	// Convert workflow V1 summaries to service V1 summaries
-	serviceV1Analyses := make([]service.V1AnalysisSummary, len(params.AllV1Analyses))
-	for i, v1 := range params.AllV1Analyses {
-		serviceV1Analyses[i] = service.V1AnalysisSummary{
-			AgentName: v1.AgentName,
-			Output:    v1.Output,
-		}
-	}
-	return a.renderer.RenderAnalyzeV2(service.AnalyzeV2Params{
-		Prompt:        params.Prompt,
-		AllV1Analyses: serviceV1Analyses,
-	})
-}
-
-// RenderAnalyzeV3 renders the reconciliation prompt.
-func (a *PromptRendererAdapter) RenderAnalyzeV3(params AnalyzeV3Params) (string, error) {
-	// Convert []string divergences to []service.Divergence
-	divergences := make([]service.Divergence, len(params.Divergences))
-	for i, d := range params.Divergences {
-		divergences[i] = service.Divergence{Category: d}
-	}
-	return a.renderer.RenderAnalyzeV3(service.AnalyzeV3Params{
-		Prompt:      params.Prompt,
-		V1Analysis:  params.V1Analysis,
-		V2Analysis:  params.V2Analysis,
-		Divergences: divergences,
+		Prompt:         params.Prompt,
+		Context:        params.Context,
+		OutputFilePath: params.OutputFilePath,
 	})
 }
 
@@ -259,8 +138,9 @@ func (a *PromptRendererAdapter) RenderConsolidateAnalysis(params ConsolidateAnal
 		}
 	}
 	return a.renderer.RenderConsolidateAnalysis(service.ConsolidateAnalysisParams{
-		Prompt:   params.Prompt,
-		Analyses: serviceAnalyses,
+		Prompt:         params.Prompt,
+		Analyses:       serviceAnalyses,
+		OutputFilePath: params.OutputFilePath,
 	})
 }
 
@@ -278,6 +158,52 @@ func (a *PromptRendererAdapter) RenderTaskExecute(params TaskExecuteParams) (str
 	return a.renderer.RenderTaskExecute(service.TaskExecuteParams{
 		Task:    params.Task,
 		Context: params.Context,
+	})
+}
+
+// RenderArbiterEvaluate renders the semantic arbiter evaluation prompt.
+func (a *PromptRendererAdapter) RenderArbiterEvaluate(params ArbiterEvaluateParams) (string, error) {
+	// Convert workflow.ArbiterAnalysisSummary to service.ArbiterAnalysisSummary
+	serviceAnalyses := make([]service.ArbiterAnalysisSummary, len(params.Analyses))
+	for i, analysis := range params.Analyses {
+		serviceAnalyses[i] = service.ArbiterAnalysisSummary{
+			AgentName: analysis.AgentName,
+			Output:    analysis.Output,
+		}
+	}
+	return a.renderer.RenderArbiterEvaluate(service.ArbiterEvaluateParams{
+		Prompt:         params.Prompt,
+		Round:          params.Round,
+		Analyses:       serviceAnalyses,
+		BelowThreshold: params.BelowThreshold,
+	})
+}
+
+// RenderVnRefine renders the V(n) refinement prompt.
+func (a *PromptRendererAdapter) RenderVnRefine(params VnRefineParams) (string, error) {
+	// Convert workflow.VnDivergenceInfo to service.VnDivergenceInfo
+	serviceDivergences := make([]service.VnDivergenceInfo, len(params.Divergences))
+	for i, div := range params.Divergences {
+		serviceDivergences[i] = service.VnDivergenceInfo{
+			Category:       div.Category,
+			YourPosition:   div.YourPosition,
+			OtherPositions: div.OtherPositions,
+			Guidance:       div.Guidance,
+		}
+	}
+	return a.renderer.RenderVnRefine(service.VnRefineParams{
+		Prompt:              params.Prompt,
+		Context:             params.Context,
+		Round:               params.Round,
+		PreviousRound:       params.PreviousRound,
+		PreviousAnalysis:    params.PreviousAnalysis,
+		ConsensusScore:      params.ConsensusScore,
+		Threshold:           params.Threshold,
+		Agreements:          params.Agreements,
+		Divergences:         serviceDivergences,
+		MissingPerspectives: params.MissingPerspectives,
+		Constraints:         params.Constraints,
+		OutputFilePath:      params.OutputFilePath,
 	})
 }
 

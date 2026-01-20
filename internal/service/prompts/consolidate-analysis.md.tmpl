@@ -4,7 +4,7 @@
 {{.Prompt}}
 
 ## Agent Analyses
-The following analyses were produced by different AI agents for the same request:
+Los siguientes análisis fueron producidos por diferentes agentes IA para la misma solicitud:
 
 {{range .Analyses}}
 ### Analysis from {{.AgentName}}
@@ -12,32 +12,37 @@ The following analyses were produced by different AI agents for the same request
 
 {{end}}
 
-## Instructions
-Synthesize the above analyses into a single, coherent consolidated report. Your task is to:
+## Instrucciones
 
-1. **Merge Claims**: Combine factual findings from all agents, removing duplicates and resolving contradictions
-2. **Aggregate Risks**: Collect all identified risks, prioritizing those mentioned by multiple agents
-3. **Reconcile Recommendations**: Synthesize recommendations, choosing the best approach when agents disagree
+Tu trabajo es generar el **MEJOR ANÁLISIS CONSOLIDADO POSIBLE**, no una simple síntesis mecánica.
 
-When agents disagree:
-- Prefer the most specific and actionable recommendation
-- If approaches are mutually exclusive, choose based on simplicity and best practices
-- Note significant trade-offs in your reasoning
+1. **Identifica la MEJOR interpretación** de cada aspecto
+   - ¿Cuál agente tiene la evidencia más sólida para cada afirmación?
+   - ¿Cuál análisis es más específico y actionable?
 
-## Response Format
-Provide the consolidated analysis using the following Markdown structure:
+2. **Fundamenta con evidencia del código**
+   - Cada afirmación en tu consolidación debe poder rastrearse a evidencia concreta
+   - Descarta afirmaciones vagas o no fundamentadas
 
-## Claims
-- Consolidated factual finding 1
-- Consolidated factual finding 2
+3. Genera el análisis más completo y fundamentado posible
 
-## Risks
-- Aggregated risk with priority 1
-- Aggregated risk with priority 2
+**Cuando los agentes difieran:**
+- Evalúa la calidad de la evidencia de cada posición
+- Prefiere el enfoque más específico y actionable
+- Si los enfoques son mutuamente excluyentes, elige basándote en simplicidad y mejores prácticas
+- Documenta trade-offs significativos
 
-## Recommendations
-- Reconciled actionable recommendation 1
-- Reconciled actionable recommendation 2
+Genera tu análisis consolidado en formato markdown, estructurándolo con las secciones que consideres más apropiadas para comunicar los hallazgos de manera clara y efectiva.
+{{if .OutputFilePath}}
 
-## Reasoning
-Brief explanation of how conflicts were resolved and why certain recommendations were prioritized.
+---
+## Output Location
+
+Escribe tu análisis consolidado en el siguiente archivo:
+
+```
+{{.OutputFilePath}}
+```
+
+Usa tu herramienta de escritura de archivos para crear este documento markdown.
+{{end}}

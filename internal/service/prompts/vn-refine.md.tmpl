@@ -1,0 +1,92 @@
+# Analysis Refinement (Round {{.Round}})
+
+## REGLA CRÍTICA
+
+⚠️ **SOLO debes revisar la versión V{{.PreviousRound}} proporcionada.**
+
+- NO hagas referencia a versiones anteriores (V1, V2, etc. si {{.PreviousRound}} > 1)
+- NO intentes "volver atrás" para ver análisis anteriores
+- Tu ÚNICA entrada es el análisis V{{.PreviousRound}} de abajo
+- Tu trabajo es MEJORAR V{{.PreviousRound}}, no reconstruir desde cero
+
+## Original Request
+{{.Prompt}}
+
+## Project Context
+{{.Context}}
+
+## Análisis V{{.PreviousRound}} a Revisar
+
+Tu análisis de la ronda anterior:
+{{.PreviousAnalysis}}
+
+## Arbiter Evaluation
+
+Un árbitro imparcial evaluó el consenso entre todos los agentes. Score actual: **{{printf "%.0f" .ConsensusScore}}%** (threshold: {{printf "%.0f" .Threshold}}%)
+
+### Established Agreements (PRESERVE THESE)
+Los siguientes puntos tienen consenso entre todos los agentes. DEBES mantenerlos en tu análisis refinado:
+{{if .Agreements}}
+{{range .Agreements}}- {{.}}
+{{end}}
+{{else}}
+No hay acuerdos establecidos aún.
+{{end}}
+
+### Divergences to Resolve
+El árbitro identificó estas divergencias que necesitan resolución:
+{{if .Divergences}}
+{{range .Divergences}}
+#### {{.Category}}
+- Tu posición: {{.YourPosition}}
+- Otros agentes: {{.OtherPositions}}
+- Guía del árbitro: {{.Guidance}}
+{{end}}
+{{else}}
+No se identificaron divergencias específicas.
+{{end}}
+
+### Missing Perspectives
+{{if .MissingPerspectives}}
+Estos aspectos necesitan ser abordados:
+{{range .MissingPerspectives}}- {{.}}
+{{end}}
+{{else}}
+No se identificaron perspectivas faltantes.
+{{end}}
+
+## Tu Tarea
+
+1. **Valida** cada afirmación de V{{.PreviousRound}} con evidencia del código
+2. **Cuestiona** suposiciones no fundamentadas
+3. **Busca consenso** en las partes donde los agentes difieren
+4. **Completa** aspectos omitidos identificados por el árbitro
+5. **Genera** V{{.Round}} como una versión mejorada y más fundamentada
+
+Proporciona un análisis refinado que:
+
+1. **PRESERVA todos los acuerdos** - No contradigas ni elimines puntos de consenso establecido
+2. **ABORDA divergencias** - Reconsidera tu posición en puntos disputados con evidencia
+3. **LLENA vacíos** - Añade perspectivas faltantes identificadas por el árbitro
+4. **MEJORA claridad** - Sé más preciso y basado en evidencia
+
+{{if .Constraints}}
+## Constraints
+{{range .Constraints}}- {{.}}
+{{end}}
+{{end}}
+
+Genera tu análisis refinado V{{.Round}} en formato markdown, estructurándolo con las secciones que consideres más apropiadas para comunicar los hallazgos de manera clara y efectiva.
+{{if .OutputFilePath}}
+
+---
+## Output Location
+
+Escribe tu análisis refinado V{{.Round}} en el siguiente archivo:
+
+```
+{{.OutputFilePath}}
+```
+
+Usa tu herramienta de escritura de archivos para crear este documento markdown.
+{{end}}

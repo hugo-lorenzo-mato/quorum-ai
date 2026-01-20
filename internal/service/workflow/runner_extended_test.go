@@ -107,9 +107,6 @@ func TestDefaultRunnerConfig_Values(t *testing.T) {
 	if cfg.DefaultAgent != "claude" {
 		t.Errorf("DefaultAgent = %q, want %q", cfg.DefaultAgent, "claude")
 	}
-	if cfg.V3Agent != "claude" {
-		t.Errorf("V3Agent = %q, want %q", cfg.V3Agent, "claude")
-	}
 	if cfg.WorktreeMode != "always" {
 		t.Errorf("WorktreeMode = %q, want %q", cfg.WorktreeMode, "always")
 	}
@@ -288,7 +285,6 @@ func TestRunnerConfig_Fields(t *testing.T) {
 		Sandbox:            false,
 		DenyTools:          []string{"rm", "sudo", "mkfs"},
 		DefaultAgent:       "gemini",
-		V3Agent:            "claude",
 		AgentPhaseModels:   map[string]map[string]string{"claude": {"analyze": "opus"}},
 		WorktreeAutoClean:  true,
 		WorktreeMode:       "parallel",
@@ -313,9 +309,6 @@ func TestRunnerConfig_Fields(t *testing.T) {
 	}
 	if cfg.DefaultAgent != "gemini" {
 		t.Errorf("DefaultAgent = %q, want %q", cfg.DefaultAgent, "gemini")
-	}
-	if cfg.V3Agent != "claude" {
-		t.Errorf("V3Agent = %q, want %q", cfg.V3Agent, "claude")
 	}
 	if !cfg.WorktreeAutoClean {
 		t.Error("WorktreeAutoClean should be true")

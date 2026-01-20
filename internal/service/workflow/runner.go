@@ -48,7 +48,6 @@ type RunnerConfig struct {
 	Sandbox      bool
 	DenyTools    []string
 	DefaultAgent string
-	V3Agent      string
 	// AgentPhaseModels allows per-agent, per-phase model overrides.
 	AgentPhaseModels map[string]map[string]string
 	// WorktreeAutoClean controls automatic worktree cleanup after task execution.
@@ -67,6 +66,8 @@ type RunnerConfig struct {
 	Report report.Config
 	// PhaseTimeouts holds per-phase timeout durations.
 	PhaseTimeouts PhaseTimeouts
+	// Arbiter configures the semantic arbiter for consensus evaluation.
+	Arbiter ArbiterConfig
 }
 
 // ConsolidatorConfig configures the analysis consolidation phase.
@@ -85,7 +86,6 @@ func DefaultRunnerConfig() *RunnerConfig {
 		DryRun:           false,
 		Sandbox:          true,
 		DefaultAgent:     "claude",
-		V3Agent:          "claude",
 		AgentPhaseModels: map[string]map[string]string{},
 		WorktreeMode:     "always",
 		Consolidator: ConsolidatorConfig{
@@ -97,6 +97,16 @@ func DefaultRunnerConfig() *RunnerConfig {
 			Analyze: 2 * time.Hour,
 			Plan:    2 * time.Hour,
 			Execute: 2 * time.Hour,
+		},
+		Arbiter: ArbiterConfig{
+			Enabled:             true,
+			Agent:               "claude",
+			Model:               "claude-opus-4-5-20251101",
+			Threshold:           0.90,
+			MinRounds:           2,
+			MaxRounds:           5,
+			AbortThreshold:      0.30,
+			StagnationThreshold: 0.02,
 		},
 	}
 }
@@ -126,11 +136,10 @@ type Runner struct {
 
 // RunnerDeps holds dependencies for creating a Runner.
 type RunnerDeps struct {
-	Config    *RunnerConfig
-	State     StateManager
-	Agents    core.AgentRegistry
-	Consensus ConsensusEvaluator
-	DAG       interface {
+	Config *RunnerConfig
+	State  StateManager
+	Agents core.AgentRegistry
+	DAG    interface {
 		DAGBuilder
 		TaskDAG
 	}
@@ -147,6 +156,7 @@ type RunnerDeps struct {
 }
 
 // NewRunner creates a new workflow runner with all dependencies.
+// Returns nil if the arbiter cannot be created (invalid config).
 func NewRunner(deps RunnerDeps) *Runner {
 	if deps.Config == nil {
 		deps.Config = DefaultRunnerConfig()
@@ -158,12 +168,19 @@ func NewRunner(deps RunnerDeps) *Runner {
 		deps.Output = NopOutputNotifier{}
 	}
 
+	// Create analyzer with arbiter config
+	analyzer, err := NewAnalyzer(deps.Config.Arbiter)
+	if err != nil {
+		deps.Logger.Error("failed to create analyzer", "error", err)
+		return nil
+	}
+
 	return &Runner{
 		config:         deps.Config,
 		state:          deps.State,
 		agents:         deps.Agents,
 		optimizer:      NewOptimizer(deps.Config.Optimizer),
-		analyzer:       NewAnalyzer(deps.Consensus),
+		analyzer:       analyzer,
 		planner:        NewPlanner(deps.DAG, deps.State),
 		executor:       NewExecutor(deps.DAG, deps.State, deps.Config.DenyTools),
 		checkpoint:     deps.Checkpoint,
@@ -376,7 +393,6 @@ func (r *Runner) createContext(state *core.WorkflowState) *Context {
 			Sandbox:            r.config.Sandbox,
 			DenyTools:          r.config.DenyTools,
 			DefaultAgent:       r.config.DefaultAgent,
-			V3Agent:            r.config.V3Agent,
 			AgentPhaseModels:   r.config.AgentPhaseModels,
 			WorktreeAutoClean:  r.config.WorktreeAutoClean,
 			WorktreeMode:       r.config.WorktreeMode,

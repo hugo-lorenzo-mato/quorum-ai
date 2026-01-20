@@ -1,7 +1,6 @@
 package workflow
 
 import (
-	"context"
 	"errors"
 	"testing"
 
@@ -9,71 +8,14 @@ import (
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/logging"
 )
 
-func TestAnalyzer_Run_NeedsHumanReview(t *testing.T) {
-	// Setup mocks with score below human threshold
-	consensus := &mockConsensusEvaluator{
-		score:            0.3,
-		needsV3:          true,
-		needsHumanReview: true,
-		threshold:        0.75,
-		v2Threshold:      0.60,
-		humanThreshold:   0.50,
-	}
-	analyzer := NewAnalyzer(consensus)
-
-	registry := &mockAgentRegistry{}
-	agent := &mockAgent{
-		result: &core.ExecuteResult{
-			Output:    `{"claims":["c1"],"risks":["r1"],"recommendations":["rec1"]}`,
-			TokensIn:  100,
-			TokensOut: 50,
-		},
-	}
-	registry.Register("claude", agent)
-	registry.Register("gemini", agent)
-
-	wctx := &Context{
-		State: &core.WorkflowState{
-			WorkflowID:   "wf-test",
-			CurrentPhase: core.PhaseAnalyze,
-			Prompt:       "test prompt",
-			Tasks:        make(map[core.TaskID]*core.TaskState),
-			TaskOrder:    []core.TaskID{},
-			Checkpoints:  []core.Checkpoint{},
-			Metrics:      &core.StateMetrics{},
-		},
-		Agents:     registry,
-		Prompts:    &mockPromptRenderer{},
-		Checkpoint: &mockCheckpointCreator{},
-		Retry:      &mockRetryExecutor{},
-		RateLimits: &mockRateLimiterGetter{},
-		Logger:     logging.NewNop(),
-		Config: &Config{
-			DryRun:       false,
-			Sandbox:      true,
-			DefaultAgent: "claude",
-			V3Agent:      "claude",
-		},
-	}
-
-	err := analyzer.Run(context.Background(), wctx)
-	if err == nil {
-		t.Fatal("expected error for human review required")
-	}
-
-	// Check it's the right type of error
-	domErr, ok := err.(*core.DomainError)
-	if !ok {
-		t.Fatalf("expected DomainError, got %T", err)
-	}
-	if domErr.Category != core.ErrCatConsensus {
-		t.Errorf("expected consensus error category, got %v", domErr.Category)
-	}
-}
-
 func TestAnalyzer_Run_AgentExecutionError(t *testing.T) {
-	consensus := &mockConsensusEvaluator{score: 0.9, threshold: 0.75}
-	analyzer := NewAnalyzer(consensus)
+	config := ArbiterConfig{
+		Enabled: false, // Disable arbiter for this test
+	}
+	analyzer, err := NewAnalyzer(config)
+	if err != nil {
+		t.Fatalf("NewAnalyzer() error = %v", err)
+	}
 
 	registry := &mockAgentRegistry{}
 	agent := &mockAgent{
@@ -101,38 +43,12 @@ func TestAnalyzer_Run_AgentExecutionError(t *testing.T) {
 			DryRun:       false,
 			Sandbox:      true,
 			DefaultAgent: "claude",
-			V3Agent:      "claude",
 		},
 	}
 
-	err := analyzer.Run(context.Background(), wctx)
+	err = analyzer.Run(t.Context(), wctx)
 	if err == nil {
 		t.Fatal("expected error when agent execution fails")
-	}
-}
-
-func TestConsensusResult_Fields(t *testing.T) {
-	result := ConsensusResult{
-		Score:            0.85,
-		NeedsV3:          true,
-		NeedsHumanReview: false,
-		Divergences: []Divergence{
-			{Category: "risk", Agent1: "claude", Agent2: "gemini"},
-			{Category: "priority", Agent1: "claude", Agent2: "gemini"},
-		},
-	}
-
-	if result.Score != 0.85 {
-		t.Errorf("Score = %v, want 0.85", result.Score)
-	}
-	if !result.NeedsV3 {
-		t.Error("NeedsV3 should be true")
-	}
-	if result.NeedsHumanReview {
-		t.Error("NeedsHumanReview should be false")
-	}
-	if len(result.Divergences) != 2 {
-		t.Errorf("len(Divergences) = %d, want 2", len(result.Divergences))
 	}
 }
 
@@ -231,20 +147,5 @@ func TestGetConsolidatedAnalysis_MissingContent(t *testing.T) {
 	result := GetConsolidatedAnalysis(state)
 	if result != "" {
 		t.Errorf("GetConsolidatedAnalysis() = %q, want empty when content missing", result)
-	}
-}
-
-func TestMockConsensusEvaluator_DefaultThresholds(t *testing.T) {
-	evaluator := &mockConsensusEvaluator{
-		score:     0.8,
-		threshold: 0.75,
-		// v2Threshold and humanThreshold not set
-	}
-
-	if evaluator.V2Threshold() != 0.60 {
-		t.Errorf("V2Threshold() = %v, want 0.60 (default)", evaluator.V2Threshold())
-	}
-	if evaluator.HumanThreshold() != 0.50 {
-		t.Errorf("HumanThreshold() = %v, want 0.50 (default)", evaluator.HumanThreshold())
 	}
 }

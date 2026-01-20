@@ -23,11 +23,11 @@ func TestPromptRenderer_Load(t *testing.T) {
 	// Check expected templates exist
 	expectedTemplates := []string{
 		"analyze-v1",
-		"analyze-v2-critique",
-		"analyze-v3-reconcile",
-		"consensus-check",
 		"plan-generate",
 		"task-execute",
+		"arbiter-evaluate",
+		"vn-refine",
+		"consolidate-analysis",
 	}
 
 	for _, expected := range expectedTemplates {
@@ -65,114 +65,8 @@ func TestPromptRenderer_RenderAnalyzeV1(t *testing.T) {
 	if !strings.Contains(result, "No breaking changes") {
 		t.Error("result should contain constraints")
 	}
-	if !strings.Contains(result, "Claims") {
-		t.Error("result should contain 'Claims' instruction")
-	}
-}
-
-func TestPromptRenderer_RenderAnalyzeV2(t *testing.T) {
-	renderer, err := NewPromptRenderer()
-	if err != nil {
-		t.Fatalf("NewPromptRenderer() error = %v", err)
-	}
-
-	params := AnalyzeV2Params{
-		Prompt: "Add a new feature",
-		AllV1Analyses: []V1AnalysisSummary{
-			{AgentName: "claude", Output: "Previous analysis content from Claude"},
-			{AgentName: "gemini", Output: "Previous analysis content from Gemini"},
-		},
-		Constraints: []string{"Must be backward compatible"},
-	}
-
-	result, err := renderer.RenderAnalyzeV2(params)
-	if err != nil {
-		t.Fatalf("RenderAnalyzeV2() error = %v", err)
-	}
-
-	if !strings.Contains(result, "Previous analysis content from Claude") {
-		t.Error("result should contain V1 analysis from Claude")
-	}
-	if !strings.Contains(result, "claude") {
-		t.Error("result should contain agent name")
-	}
-	if !strings.Contains(result, "Critical Review") {
-		t.Error("result should contain 'Critical Review' header")
-	}
-}
-
-func TestPromptRenderer_RenderAnalyzeV3(t *testing.T) {
-	renderer, err := NewPromptRenderer()
-	if err != nil {
-		t.Fatalf("NewPromptRenderer() error = %v", err)
-	}
-
-	params := AnalyzeV3Params{
-		Prompt:     "Add a new feature",
-		V1Analysis: "V1 analysis content",
-		V2Analysis: "V2 analysis content",
-		Divergences: []Divergence{
-			{
-				Category:     "claims",
-				Agent1:       "claude",
-				Agent1Items:  []string{"Claim A"},
-				Agent2:       "gemini",
-				Agent2Items:  []string{"Claim B"},
-				JaccardScore: 0.3,
-			},
-		},
-	}
-
-	result, err := renderer.RenderAnalyzeV3(params)
-	if err != nil {
-		t.Fatalf("RenderAnalyzeV3() error = %v", err)
-	}
-
-	if !strings.Contains(result, "Reconciliation") {
-		t.Error("result should contain 'Reconciliation' header")
-	}
-	if !strings.Contains(result, "claims") {
-		t.Error("result should contain divergence category")
-	}
-	if !strings.Contains(result, "0.30") {
-		t.Error("result should contain formatted Jaccard score")
-	}
-}
-
-func TestPromptRenderer_RenderConsensusCheck(t *testing.T) {
-	renderer, err := NewPromptRenderer()
-	if err != nil {
-		t.Fatalf("NewPromptRenderer() error = %v", err)
-	}
-
-	params := ConsensusParams{
-		Analyses: []AnalysisOutput{
-			{
-				AgentName:       "claude",
-				Claims:          []string{"Claim 1", "Claim 2"},
-				Risks:           []string{"Risk 1"},
-				Recommendations: []string{"Rec 1"},
-			},
-		},
-		Result: ConsensusResult{
-			Score: 0.85,
-			CategoryScores: map[string]float64{
-				"claims": 0.9,
-				"risks":  0.8,
-			},
-		},
-	}
-
-	result, err := renderer.RenderConsensusCheck(params)
-	if err != nil {
-		t.Fatalf("RenderConsensusCheck() error = %v", err)
-	}
-
-	if !strings.Contains(result, "claude") {
-		t.Error("result should contain agent name")
-	}
-	if !strings.Contains(result, "0.85") {
-		t.Error("result should contain overall score")
+	if !strings.Contains(result, "Investigar el código") {
+		t.Error("result should contain analysis instructions")
 	}
 }
 
@@ -307,6 +201,83 @@ func TestPromptRenderer_HasTemplate(t *testing.T) {
 
 	if renderer.HasTemplate("nonexistent") {
 		t.Error("HasTemplate should return false for non-existing template")
+	}
+}
+
+func TestPromptRenderer_RenderArbiterEvaluate(t *testing.T) {
+	renderer, err := NewPromptRenderer()
+	if err != nil {
+		t.Fatalf("NewPromptRenderer() error = %v", err)
+	}
+
+	params := ArbiterEvaluateParams{
+		Prompt: "Add a new feature",
+		Round:  2,
+		Analyses: []ArbiterAnalysisSummary{
+			{AgentName: "claude", Output: "Analysis from Claude"},
+			{AgentName: "gemini", Output: "Analysis from Gemini"},
+		},
+		BelowThreshold: true,
+	}
+
+	result, err := renderer.RenderArbiterEvaluate(params)
+	if err != nil {
+		t.Fatalf("RenderArbiterEvaluate() error = %v", err)
+	}
+
+	if !strings.Contains(result, "Round 2") {
+		t.Error("result should contain round number")
+	}
+	if !strings.Contains(result, "claude") {
+		t.Error("result should contain agent name")
+	}
+	if !strings.Contains(result, "CONSENSUS_SCORE") {
+		t.Error("result should contain consensus score instruction")
+	}
+}
+
+func TestPromptRenderer_RenderVnRefine(t *testing.T) {
+	renderer, err := NewPromptRenderer()
+	if err != nil {
+		t.Fatalf("NewPromptRenderer() error = %v", err)
+	}
+
+	params := VnRefineParams{
+		Prompt:           "Add a new feature",
+		Context:          "Project context",
+		Round:            3,
+		PreviousRound:    2,
+		PreviousAnalysis: "Previous analysis content",
+		ConsensusScore:   75.0,
+		Threshold:        90.0,
+		Agreements:       []string{"Agreement 1", "Agreement 2"},
+		Divergences: []VnDivergenceInfo{
+			{
+				Category:       "claims",
+				YourPosition:   "Position A",
+				OtherPositions: "Position B",
+				Guidance:       "Refine based on evidence",
+			},
+		},
+		MissingPerspectives: []string{"Missing perspective 1"},
+	}
+
+	result, err := renderer.RenderVnRefine(params)
+	if err != nil {
+		t.Fatalf("RenderVnRefine() error = %v", err)
+	}
+
+	if !strings.Contains(result, "Round 3") {
+		t.Error("result should contain round number")
+	}
+	if !strings.Contains(result, "Agreement 1") {
+		t.Error("result should contain agreements")
+	}
+	if !strings.Contains(result, "75") {
+		t.Error("result should contain consensus score")
+	}
+	if !strings.Contains(result, "Previous analysis content") {
+		t.Error("result should contain previous analysis")
 	}
 }
 

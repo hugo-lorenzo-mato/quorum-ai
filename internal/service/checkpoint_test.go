@@ -198,41 +198,6 @@ func TestCheckpointManager_TaskCheckpoint(t *testing.T) {
 	}
 }
 
-func TestCheckpointManager_ConsensusCheckpoint(t *testing.T) {
-	stateManager := &mockStateManager{}
-	logger := logging.NewNop()
-	manager := NewCheckpointManager(stateManager, logger)
-
-	state := newTestWorkflowState()
-	ctx := context.Background()
-
-	result := ConsensusResult{
-		Score:            0.85,
-		NeedsV3:          false,
-		NeedsHumanReview: false,
-		CategoryScores: map[string]float64{
-			"claims": 0.9,
-			"risks":  0.8,
-		},
-	}
-
-	err := manager.ConsensusCheckpoint(ctx, state, result)
-	if err != nil {
-		t.Fatalf("ConsensusCheckpoint() error = %v", err)
-	}
-
-	cp := state.Checkpoints[0]
-	if cp.Type != string(CheckpointConsensus) {
-		t.Errorf("Type = %s, want %s", cp.Type, CheckpointConsensus)
-	}
-
-	var metadata map[string]interface{}
-	json.Unmarshal(cp.Data, &metadata)
-	if metadata["score"].(float64) != 0.85 {
-		t.Errorf("metadata[score] = %v, want 0.85", metadata["score"])
-	}
-}
-
 func TestCheckpointManager_ErrorCheckpoint(t *testing.T) {
 	stateManager := &mockStateManager{}
 	logger := logging.NewNop()

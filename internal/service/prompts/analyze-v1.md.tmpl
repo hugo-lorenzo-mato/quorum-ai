@@ -7,28 +7,30 @@
 {{.Context}}
 
 ## Instructions
-Analyze the request above and provide a structured response with:
 
-1. **Claims**: Factual findings about the codebase
-2. **Risks**: Potential issues or concerns
-3. **Recommendations**: Suggested approach
+Analiza el codebase de forma exhaustiva y profunda. Tu análisis debe:
+
+1. **Investigar el código** - Lee archivos, entiende la arquitectura, identifica patrones
+2. **Fundamentar cada afirmación** - Cita archivos y líneas específicas como evidencia
+3. **Identificar riesgos reales** - Basados en el código, no suposiciones
+4. **Proponer recomendaciones actionables** - Específicas y priorizadas
+
+Proporciona un análisis completo y detallado con evidencia específica del código. Genera tu análisis en formato markdown, estructurándolo con las secciones que consideres más apropiadas para comunicar tus hallazgos de manera clara y efectiva.
 
 {{if .Constraints}}
 ## Constraints
 {{range .Constraints}}- {{.}}
 {{end}}{{end}}
+{{if .OutputFilePath}}
 
-## Response Format
-Provide your analysis using the following Markdown structure:
+---
+## Output Location
 
-## Claims
-- Factual finding 1
-- Factual finding 2
+Escribe tu análisis completo en el siguiente archivo:
 
-## Risks
-- Potential issue 1
-- Potential issue 2
+```
+{{.OutputFilePath}}
+```
 
-## Recommendations
-- Suggested action 1
-- Suggested action 2
+Usa tu herramienta de escritura de archivos para crear este documento markdown.
+{{end}}

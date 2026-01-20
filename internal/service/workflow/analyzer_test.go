@@ -2,48 +2,13 @@ package workflow
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"testing"
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/logging"
 )
-
-// mockConsensusEvaluator implements ConsensusEvaluator for testing.
-type mockConsensusEvaluator struct {
-	score            float64
-	needsV3          bool
-	needsHumanReview bool
-	threshold        float64
-	v2Threshold      float64
-	humanThreshold   float64
-}
-
-func (m *mockConsensusEvaluator) Evaluate(_ []AnalysisOutput) ConsensusResult {
-	return ConsensusResult{
-		Score:            m.score,
-		NeedsV3:          m.needsV3,
-		NeedsHumanReview: m.needsHumanReview,
-	}
-}
-
-func (m *mockConsensusEvaluator) Threshold() float64 {
-	return m.threshold
-}
-
-func (m *mockConsensusEvaluator) V2Threshold() float64 {
-	if m.v2Threshold == 0 {
-		return 0.60
-	}
-	return m.v2Threshold
-}
-
-func (m *mockConsensusEvaluator) HumanThreshold() float64 {
-	if m.humanThreshold == 0 {
-		return 0.50
-	}
-	return m.humanThreshold
-}
 
 // mockAgentRegistry implements core.AgentRegistry for testing.
 type mockAgentRegistry struct {
@@ -145,8 +110,6 @@ func (m *mockRetryExecutor) ExecuteWithNotify(fn func() error, _ func(int, error
 type mockPromptRenderer struct {
 	optimizeErr error
 	v1Err       error
-	v2Err       error
-	v3Err       error
 	planErr     error
 	taskErr     error
 }
@@ -165,20 +128,6 @@ func (m *mockPromptRenderer) RenderAnalyzeV1(_ AnalyzeV1Params) (string, error) 
 	return "analyze v1 prompt", nil
 }
 
-func (m *mockPromptRenderer) RenderAnalyzeV2(_ AnalyzeV2Params) (string, error) {
-	if m.v2Err != nil {
-		return "", m.v2Err
-	}
-	return "analyze v2 prompt", nil
-}
-
-func (m *mockPromptRenderer) RenderAnalyzeV3(_ AnalyzeV3Params) (string, error) {
-	if m.v3Err != nil {
-		return "", m.v3Err
-	}
-	return "analyze v3 prompt", nil
-}
-
 func (m *mockPromptRenderer) RenderConsolidateAnalysis(_ ConsolidateAnalysisParams) (string, error) {
 	return "consolidate analysis prompt", nil
 }
@@ -195,6 +144,14 @@ func (m *mockPromptRenderer) RenderTaskExecute(_ TaskExecuteParams) (string, err
 		return "", m.taskErr
 	}
 	return "task prompt", nil
+}
+
+func (m *mockPromptRenderer) RenderArbiterEvaluate(_ ArbiterEvaluateParams) (string, error) {
+	return "arbiter evaluate prompt", nil
+}
+
+func (m *mockPromptRenderer) RenderVnRefine(_ VnRefineParams) (string, error) {
+	return "vn refine prompt", nil
 }
 
 // mockCheckpointCreator implements CheckpointCreator for testing.
@@ -217,13 +174,6 @@ func (m *mockCheckpointCreator) TaskCheckpoint(_ *core.WorkflowState, task *core
 	return nil
 }
 
-func (m *mockCheckpointCreator) ConsensusCheckpoint(_ *core.WorkflowState, _ ConsensusResult) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.checkpoints = append(m.checkpoints, "consensus")
-	return nil
-}
-
 func (m *mockCheckpointCreator) ErrorCheckpoint(_ *core.WorkflowState, _ error) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -239,21 +189,52 @@ func (m *mockCheckpointCreator) CreateCheckpoint(_ *core.WorkflowState, checkpoi
 }
 
 func TestNewAnalyzer(t *testing.T) {
-	consensus := &mockConsensusEvaluator{score: 0.8, threshold: 0.75}
-	analyzer := NewAnalyzer(consensus)
+	config := ArbiterConfig{
+		Enabled:   true,
+		Agent:     "claude",
+		Model:     "claude-opus",
+		Threshold: 0.90,
+		MinRounds: 2,
+		MaxRounds: 3,
+	}
+	analyzer, err := NewAnalyzer(config)
+	if err != nil {
+		t.Fatalf("NewAnalyzer() error = %v", err)
+	}
 
 	if analyzer == nil {
 		t.Fatal("NewAnalyzer() returned nil")
 	}
-	if analyzer.consensus != consensus {
-		t.Error("NewAnalyzer() did not set consensus evaluator")
+	if analyzer.arbiter == nil {
+		t.Error("NewAnalyzer() did not set arbiter")
 	}
 }
 
-func TestAnalyzer_Run_WithHighConsensus(t *testing.T) {
-	// Setup mocks
-	consensus := &mockConsensusEvaluator{score: 0.9, needsV3: false, threshold: 0.75}
-	analyzer := NewAnalyzer(consensus)
+func TestNewAnalyzer_Disabled(t *testing.T) {
+	config := ArbiterConfig{
+		Enabled: false,
+	}
+	analyzer, err := NewAnalyzer(config)
+	if err != nil {
+		t.Fatalf("NewAnalyzer() error = %v", err)
+	}
+
+	if analyzer == nil {
+		t.Fatal("NewAnalyzer() returned nil")
+	}
+	// When disabled, arbiter should still be created but will be inactive
+}
+
+func TestAnalyzer_Run_WithArbiterDisabled_ReturnsError(t *testing.T) {
+	// When arbiter is disabled, analyzer.Run should return an error
+	// because the new design requires semantic arbiter for consensus
+	config := ArbiterConfig{
+		Enabled: false,
+	}
+	analyzer, err := NewAnalyzer(config)
+	if err != nil {
+		t.Fatalf("NewAnalyzer() error = %v", err)
+	}
 
 	registry := &mockAgentRegistry{}
 	agent := &mockAgent{
@@ -286,19 +267,29 @@ func TestAnalyzer_Run_WithHighConsensus(t *testing.T) {
 			DryRun:       false,
 			Sandbox:      true,
 			DefaultAgent: "claude",
-			V3Agent:      "claude",
 		},
 	}
 
-	err := analyzer.Run(context.Background(), wctx)
-	if err != nil {
-		t.Fatalf("Analyzer.Run() error = %v", err)
+	err = analyzer.Run(context.Background(), wctx)
+	if err == nil {
+		t.Fatal("Analyzer.Run() should return error when arbiter is disabled")
+	}
+	if !strings.Contains(err.Error(), "semantic arbiter is required") {
+		t.Errorf("error message should mention arbiter required, got: %v", err)
 	}
 }
 
 func TestAnalyzer_Run_NoAgents(t *testing.T) {
-	consensus := &mockConsensusEvaluator{score: 0.9, threshold: 0.75}
-	analyzer := NewAnalyzer(consensus)
+	config := ArbiterConfig{
+		Enabled:   true,
+		Agent:     "claude",
+		Model:     "claude-opus",
+		Threshold: 0.90,
+	}
+	analyzer, err := NewAnalyzer(config)
+	if err != nil {
+		t.Fatalf("NewAnalyzer() error = %v", err)
+	}
 
 	registry := &mockAgentRegistry{} // Empty registry
 
@@ -316,7 +307,7 @@ func TestAnalyzer_Run_NoAgents(t *testing.T) {
 		Config:     &Config{},
 	}
 
-	err := analyzer.Run(context.Background(), wctx)
+	err = analyzer.Run(context.Background(), wctx)
 	if err == nil {
 		t.Fatal("Analyzer.Run() with no agents should return error")
 	}

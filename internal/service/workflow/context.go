@@ -44,13 +44,13 @@ type OutputNotifier interface {
 // NopOutputNotifier is a no-op implementation of OutputNotifier.
 type NopOutputNotifier struct{}
 
-func (n NopOutputNotifier) PhaseStarted(_ core.Phase)                   {}
-func (n NopOutputNotifier) TaskStarted(_ *core.Task)                    {}
-func (n NopOutputNotifier) TaskCompleted(_ *core.Task, _ time.Duration) {}
-func (n NopOutputNotifier) TaskFailed(_ *core.Task, _ error)            {}
-func (n NopOutputNotifier) TaskSkipped(_ *core.Task, _ string)          {}
-func (n NopOutputNotifier) WorkflowStateUpdated(_ *core.WorkflowState)       {}
-func (n NopOutputNotifier) Log(_, _, _ string)                               {}
+func (n NopOutputNotifier) PhaseStarted(_ core.Phase)                           {}
+func (n NopOutputNotifier) TaskStarted(_ *core.Task)                            {}
+func (n NopOutputNotifier) TaskCompleted(_ *core.Task, _ time.Duration)         {}
+func (n NopOutputNotifier) TaskFailed(_ *core.Task, _ error)                    {}
+func (n NopOutputNotifier) TaskSkipped(_ *core.Task, _ string)                  {}
+func (n NopOutputNotifier) WorkflowStateUpdated(_ *core.WorkflowState)          {}
+func (n NopOutputNotifier) Log(_, _, _ string)                                  {}
 func (n NopOutputNotifier) AgentEvent(_, _, _ string, _ map[string]interface{}) {}
 
 // Context provides shared resources for workflow phases.
@@ -105,7 +105,6 @@ type Config struct {
 	Sandbox      bool
 	DenyTools    []string
 	DefaultAgent string
-	V3Agent      string
 	// AgentPhaseModels allows per-agent, per-phase model overrides.
 	AgentPhaseModels map[string]map[string]string
 	// WorktreeAutoClean controls automatic worktree cleanup after task execution.
@@ -122,6 +121,28 @@ type Config struct {
 	ConsolidatorModel string
 	// PhaseTimeouts holds per-phase timeout durations.
 	PhaseTimeouts PhaseTimeouts
+	// Arbiter configures semantic consensus evaluation via an arbiter LLM.
+	Arbiter ArbiterConfig
+}
+
+// ArbiterConfig configures the semantic arbiter LLM for consensus evaluation.
+type ArbiterConfig struct {
+	// Enabled activates semantic consensus evaluation via an arbiter LLM.
+	Enabled bool
+	// Agent specifies which agent to use as arbiter (claude, gemini, codex, copilot).
+	Agent string
+	// Model specifies the model to use (optional, uses agent's default if empty).
+	Model string
+	// Threshold is the semantic consensus score required to pass (0.0-1.0, default: 0.90).
+	Threshold float64
+	// MinRounds is the minimum number of rounds before accepting consensus (default: 2).
+	MinRounds int
+	// MaxRounds limits the number of V(n) refinement rounds (default: 5).
+	MaxRounds int
+	// AbortThreshold triggers human review if score drops below this (default: 0.30).
+	AbortThreshold float64
+	// StagnationThreshold triggers early exit if score improvement is below this (default: 0.02).
+	StagnationThreshold float64
 }
 
 // PhaseTimeouts holds timeout durations for each workflow phase.
@@ -135,17 +156,18 @@ type PhaseTimeouts struct {
 type PromptRenderer interface {
 	RenderOptimizePrompt(params OptimizePromptParams) (string, error)
 	RenderAnalyzeV1(params AnalyzeV1Params) (string, error)
-	RenderAnalyzeV2(params AnalyzeV2Params) (string, error)
-	RenderAnalyzeV3(params AnalyzeV3Params) (string, error)
 	RenderConsolidateAnalysis(params ConsolidateAnalysisParams) (string, error)
 	RenderPlanGenerate(params PlanParams) (string, error)
 	RenderTaskExecute(params TaskExecuteParams) (string, error)
+	RenderArbiterEvaluate(params ArbiterEvaluateParams) (string, error)
+	RenderVnRefine(params VnRefineParams) (string, error)
 }
 
 // ConsolidateAnalysisParams holds parameters for analysis consolidation prompt.
 type ConsolidateAnalysisParams struct {
-	Prompt   string
-	Analyses []AnalysisOutput
+	Prompt         string
+	Analyses       []AnalysisOutput
+	OutputFilePath string // Path where LLM should write output
 }
 
 // OptimizePromptParams holds parameters for prompt optimization.
@@ -155,29 +177,9 @@ type OptimizePromptParams struct {
 
 // AnalyzeV1Params holds parameters for V1 analysis prompt.
 type AnalyzeV1Params struct {
-	Prompt  string
-	Context string
-}
-
-// V1AnalysisSummary represents a summary of one V1 analysis for V2 critique.
-type V1AnalysisSummary struct {
-	AgentName string
-	Output    string
-}
-
-// AnalyzeV2Params holds parameters for V2 critique prompt.
-// V2 critiques receive ALL V1 analyses for comprehensive cross-review.
-type AnalyzeV2Params struct {
-	Prompt        string
-	AllV1Analyses []V1AnalysisSummary
-}
-
-// AnalyzeV3Params holds parameters for V3 reconciliation prompt.
-type AnalyzeV3Params struct {
-	Prompt      string
-	V1Analysis  string
-	V2Analysis  string
-	Divergences []string
+	Prompt         string
+	Context        string
+	OutputFilePath string // Path where LLM should write output
 }
 
 // PlanParams holds parameters for plan generation prompt.
@@ -193,42 +195,50 @@ type TaskExecuteParams struct {
 	Context string
 }
 
+// ArbiterAnalysisSummary represents an analysis for arbiter evaluation.
+type ArbiterAnalysisSummary struct {
+	AgentName string
+	Output    string
+}
+
+// ArbiterEvaluateParams holds parameters for arbiter semantic evaluation prompt.
+type ArbiterEvaluateParams struct {
+	Prompt         string
+	Round          int
+	Analyses       []ArbiterAnalysisSummary
+	BelowThreshold bool
+}
+
+// VnDivergenceInfo contains divergence information for V(n) refinement.
+type VnDivergenceInfo struct {
+	Category       string
+	YourPosition   string
+	OtherPositions string
+	Guidance       string
+}
+
+// VnRefineParams holds parameters for V(n) refinement prompt.
+type VnRefineParams struct {
+	Prompt              string
+	Context             string
+	Round               int
+	PreviousRound       int
+	PreviousAnalysis    string
+	ConsensusScore      float64
+	Threshold           float64
+	Agreements          []string
+	Divergences         []VnDivergenceInfo
+	MissingPerspectives []string
+	Constraints         []string
+	OutputFilePath      string // Path where LLM should write output
+}
+
 // CheckpointCreator creates checkpoints during workflow execution.
 type CheckpointCreator interface {
 	PhaseCheckpoint(state *core.WorkflowState, phase core.Phase, completed bool) error
 	TaskCheckpoint(state *core.WorkflowState, task *core.Task, completed bool) error
-	ConsensusCheckpoint(state *core.WorkflowState, result ConsensusResult) error
 	ErrorCheckpoint(state *core.WorkflowState, err error) error
 	CreateCheckpoint(state *core.WorkflowState, checkpointType string, metadata map[string]interface{}) error
-}
-
-// ConsensusResult represents the result of consensus evaluation.
-type ConsensusResult struct {
-	Score            float64
-	NeedsV3          bool
-	NeedsHumanReview bool
-	CategoryScores   map[string]float64
-	Divergences      []Divergence
-	Agreement        map[string][]string
-}
-
-// Divergence represents a disagreement between agents.
-type Divergence struct {
-	Category     string
-	Agent1       string
-	Agent1Items  []string
-	Agent2       string
-	Agent2Items  []string
-	JaccardScore float64
-}
-
-// DivergenceStrings returns a simplified string representation for logging.
-func (r ConsensusResult) DivergenceStrings() []string {
-	result := make([]string, len(r.Divergences))
-	for i, d := range r.Divergences {
-		result[i] = d.Category + ": " + d.Agent1 + " vs " + d.Agent2
-	}
-	return result
 }
 
 // RetryExecutor provides retry capabilities.

@@ -166,7 +166,6 @@ func TestRunner_createContext(t *testing.T) {
 		Sandbox:      false,
 		DenyTools:    []string{"rm", "sudo"},
 		DefaultAgent: "gemini",
-		V3Agent:      "claude",
 	}
 
 	runner := &Runner{
@@ -196,9 +195,6 @@ func TestRunner_createContext(t *testing.T) {
 	}
 	if ctx.Config.DefaultAgent != config.DefaultAgent {
 		t.Errorf("DefaultAgent = %q, want %q", ctx.Config.DefaultAgent, config.DefaultAgent)
-	}
-	if ctx.Config.V3Agent != config.V3Agent {
-		t.Errorf("V3Agent = %q, want %q", ctx.Config.V3Agent, config.V3Agent)
 	}
 }
 

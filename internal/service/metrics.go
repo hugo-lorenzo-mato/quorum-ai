@@ -9,11 +9,11 @@ import (
 
 // MetricsCollector collects workflow metrics.
 type MetricsCollector struct {
-	workflow  WorkflowMetrics
-	tasks     map[core.TaskID]*TaskMetrics
-	agents    map[string]*AgentMetrics
-	consensus []ConsensusMetrics
-	mu        sync.RWMutex
+	workflow WorkflowMetrics
+	tasks    map[core.TaskID]*TaskMetrics
+	agents   map[string]*AgentMetrics
+	arbiter  []ArbiterMetrics
+	mu       sync.RWMutex
 }
 
 // WorkflowMetrics holds workflow-level metrics.
@@ -29,7 +29,7 @@ type WorkflowMetrics struct {
 	TasksFailed    int           `json:"tasks_failed"`
 	TasksSkipped   int           `json:"tasks_skipped"`
 	RetriesTotal   int           `json:"retries_total"`
-	V3Invocations  int           `json:"v3_invocations"`
+	ArbiterRounds  int           `json:"arbiter_rounds"`
 }
 
 // TaskMetrics holds task-level metrics.
@@ -63,25 +63,37 @@ type AgentMetrics struct {
 	AvgTokensOut   int           `json:"avg_tokens_out"`
 }
 
-// ConsensusMetrics holds consensus evaluation metrics.
-type ConsensusMetrics struct {
+// ArbiterMetrics holds arbiter evaluation metrics.
+type ArbiterMetrics struct {
 	Phase           core.Phase `json:"phase"`
+	Round           int        `json:"round"`
 	Score           float64    `json:"score"`
-	ClaimsScore     float64    `json:"claims_score"`
-	RisksScore      float64    `json:"risks_score"`
-	RecsScore       float64    `json:"recs_score"`
-	V3Required      bool       `json:"v3_required"`
-	HumanRequired   bool       `json:"human_required"`
 	DivergenceCount int        `json:"divergence_count"`
+	AgreementCount  int        `json:"agreement_count"`
+	TokensIn        int        `json:"tokens_in"`
+	TokensOut       int        `json:"tokens_out"`
+	CostUSD         float64    `json:"cost_usd"`
+	DurationMS      int64      `json:"duration_ms"`
 	Timestamp       time.Time  `json:"timestamp"`
+}
+
+// ArbiterMetricsInput is the input for recording arbiter evaluations.
+type ArbiterMetricsInput struct {
+	Score           float64
+	DivergenceCount int
+	AgreementCount  int
+	TokensIn        int
+	TokensOut       int
+	CostUSD         float64
+	DurationMS      int64
 }
 
 // NewMetricsCollector creates a new metrics collector.
 func NewMetricsCollector() *MetricsCollector {
 	return &MetricsCollector{
-		tasks:     make(map[core.TaskID]*TaskMetrics),
-		agents:    make(map[string]*AgentMetrics),
-		consensus: make([]ConsensusMetrics, 0),
+		tasks:   make(map[core.TaskID]*TaskMetrics),
+		agents:  make(map[string]*AgentMetrics),
+		arbiter: make([]ArbiterMetrics, 0),
 	}
 }
 
@@ -162,35 +174,26 @@ func (m *MetricsCollector) RecordRetry(taskID core.TaskID) {
 	m.workflow.RetriesTotal++
 }
 
-// RecordConsensus records consensus evaluation.
-func (m *MetricsCollector) RecordConsensus(result ConsensusResult, phase core.Phase) {
+// RecordArbiterEvaluation records an arbiter evaluation.
+func (m *MetricsCollector) RecordArbiterEvaluation(input ArbiterMetricsInput, phase core.Phase, round int) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	cm := ConsensusMetrics{
+	am := ArbiterMetrics{
 		Phase:           phase,
-		Score:           result.Score,
-		V3Required:      result.NeedsV3,
-		HumanRequired:   result.NeedsHumanReview,
-		DivergenceCount: len(result.Divergences),
+		Round:           round,
+		Score:           input.Score,
+		DivergenceCount: input.DivergenceCount,
+		AgreementCount:  input.AgreementCount,
+		TokensIn:        input.TokensIn,
+		TokensOut:       input.TokensOut,
+		CostUSD:         input.CostUSD,
+		DurationMS:      input.DurationMS,
 		Timestamp:       time.Now(),
 	}
 
-	if scores, ok := result.CategoryScores["claims"]; ok {
-		cm.ClaimsScore = scores
-	}
-	if scores, ok := result.CategoryScores["risks"]; ok {
-		cm.RisksScore = scores
-	}
-	if scores, ok := result.CategoryScores["recommendations"]; ok {
-		cm.RecsScore = scores
-	}
-
-	m.consensus = append(m.consensus, cm)
-
-	if result.NeedsV3 {
-		m.workflow.V3Invocations++
-	}
+	m.arbiter = append(m.arbiter, am)
+	m.workflow.ArbiterRounds++
 }
 
 // RecordSkipped records a skipped task.
@@ -267,11 +270,11 @@ func (m *MetricsCollector) GetAgentMetrics() map[string]*AgentMetrics {
 	return result
 }
 
-// GetConsensusMetrics returns consensus metrics.
-func (m *MetricsCollector) GetConsensusMetrics() []ConsensusMetrics {
+// GetArbiterMetrics returns arbiter evaluation metrics.
+func (m *MetricsCollector) GetArbiterMetrics() []ArbiterMetrics {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	return append([]ConsensusMetrics{}, m.consensus...)
+	return append([]ArbiterMetrics{}, m.arbiter...)
 }
 
 // Reset clears all metrics.
@@ -282,5 +285,5 @@ func (m *MetricsCollector) Reset() {
 	m.workflow = WorkflowMetrics{}
 	m.tasks = make(map[core.TaskID]*TaskMetrics)
 	m.agents = make(map[string]*AgentMetrics)
-	m.consensus = make([]ConsensusMetrics, 0)
+	m.arbiter = make([]ArbiterMetrics, 0)
 }
