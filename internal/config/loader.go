@@ -125,9 +125,9 @@ func (l *Loader) setDefaults() {
 
 	// Workflow defaults
 	l.v.SetDefault("workflow.timeout", "12h")
-	l.v.SetDefault("workflow.phase_timeouts.analyze", "2h")
-	l.v.SetDefault("workflow.phase_timeouts.plan", "2h")
-	l.v.SetDefault("workflow.phase_timeouts.execute", "2h")
+	l.v.SetDefault("workflow.phase_timeouts.analyze", "1h")
+	l.v.SetDefault("workflow.phase_timeouts.plan", "30m")
+	l.v.SetDefault("workflow.phase_timeouts.execute", "1h")
 	l.v.SetDefault("workflow.max_retries", 3)
 	l.v.SetDefault("workflow.dry_run", false)
 	l.v.SetDefault("workflow.sandbox", true) // Security: sandbox enabled by default

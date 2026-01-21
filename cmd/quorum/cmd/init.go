@@ -149,9 +149,9 @@ workflow:
   timeout: "4h"
   # Per-phase timeouts (each phase can run up to this duration)
   phase_timeouts:
-    analyze: "2h"
-    plan: "2h"
-    execute: "2h"
+    analyze: "1h"
+    plan: "30m"
+    execute: "1h"
 
 # Consensus settings
 consensus:

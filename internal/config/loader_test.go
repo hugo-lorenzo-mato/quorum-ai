@@ -25,14 +25,14 @@ func TestLoader_Defaults(t *testing.T) {
 	if cfg.Workflow.Timeout != "12h" {
 		t.Errorf("Workflow.Timeout = %q, want %q", cfg.Workflow.Timeout, "12h")
 	}
-	if cfg.Workflow.PhaseTimeouts.Analyze != "2h" {
-		t.Errorf("Workflow.PhaseTimeouts.Analyze = %q, want %q", cfg.Workflow.PhaseTimeouts.Analyze, "2h")
+	if cfg.Workflow.PhaseTimeouts.Analyze != "1h" {
+		t.Errorf("Workflow.PhaseTimeouts.Analyze = %q, want %q", cfg.Workflow.PhaseTimeouts.Analyze, "1h")
 	}
-	if cfg.Workflow.PhaseTimeouts.Plan != "2h" {
-		t.Errorf("Workflow.PhaseTimeouts.Plan = %q, want %q", cfg.Workflow.PhaseTimeouts.Plan, "2h")
+	if cfg.Workflow.PhaseTimeouts.Plan != "30m" {
+		t.Errorf("Workflow.PhaseTimeouts.Plan = %q, want %q", cfg.Workflow.PhaseTimeouts.Plan, "30m")
 	}
-	if cfg.Workflow.PhaseTimeouts.Execute != "2h" {
-		t.Errorf("Workflow.PhaseTimeouts.Execute = %q, want %q", cfg.Workflow.PhaseTimeouts.Execute, "2h")
+	if cfg.Workflow.PhaseTimeouts.Execute != "1h" {
+		t.Errorf("Workflow.PhaseTimeouts.Execute = %q, want %q", cfg.Workflow.PhaseTimeouts.Execute, "1h")
 	}
 	if cfg.Workflow.MaxRetries != 3 {
 		t.Errorf("Workflow.MaxRetries = %d, want %d", cfg.Workflow.MaxRetries, 3)
