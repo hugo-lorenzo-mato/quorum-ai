@@ -306,6 +306,16 @@ func createWorkflowRunner(
 	// Create output notifier for chat (minimal output)
 	outputNotifier := &chatOutputNotifier{eventBus: eventBus}
 
+	// Connect registry to event bus for real-time streaming events from CLI adapters
+	registry.SetEventHandler(func(event core.AgentEvent) {
+		// Convert core.AgentEvent to chatOutputNotifier event format
+		data := make(map[string]interface{})
+		for k, v := range event.Data {
+			data[k] = v
+		}
+		outputNotifier.AgentEvent(string(event.Type), event.Agent, event.Message, data)
+	})
+
 	// Create mode enforcer
 	modeEnforcer := service.NewModeEnforcer(service.ExecutionMode{
 		DryRun:      runnerConfig.DryRun,

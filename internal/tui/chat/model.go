@@ -852,7 +852,6 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 			m.explorerFocus = false
 			m.inputFocused = false
 			m.textarea.Blur()
-			m.logsPanel.AddInfo("system", "Logs panel opened (↑↓ scroll, c=copy, Esc=return)")
 		} else {
 			m.logsFocus = false
 			m.inputFocused = true
@@ -872,7 +871,6 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 			m.inputFocused = false
 			m.textarea.Blur()
 			m.explorerPanel.SetFocused(true)
-			m.logsPanel.AddInfo("system", "Explorer opened (arrows to navigate, Enter to open, Esc to close)")
 		} else {
 			m.explorerFocus = false
 			m.inputFocused = true
@@ -894,7 +892,6 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 			m.explorerFocus = false
 			m.inputFocused = false
 			m.textarea.Blur()
-			m.logsPanel.AddInfo("system", "Stats panel opened (^S to close)")
 		} else {
 			m.statsFocus = false
 			m.inputFocused = true
@@ -909,20 +906,12 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 	case tea.KeyCtrlK:
 		// Toggle consensus panel
 		m.consensusPanel.Toggle()
-		if m.consensusPanel.IsVisible() {
-			m.logsPanel.AddInfo("system", "Consensus panel opened")
-		}
 		return m, nil, true
 
 	case tea.KeyCtrlD:
 		// Toggle diff view
 		if m.diffView.HasContent() {
 			m.diffView.Toggle()
-			if m.diffView.IsVisible() {
-				m.logsPanel.AddInfo("system", "Diff view opened")
-			}
-		} else {
-			m.logsPanel.AddWarn("system", "No agent outputs to compare")
 		}
 		return m, nil, true
 
@@ -1690,7 +1679,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Auto-show logs panel when workflow starts so user can see progress
 		if !m.showLogs {
 			m.showLogs = true
-			m.logsPanel.AddInfo("system", "Logs panel opened - press Ctrl+L to toggle")
 			// Recalculate layout with logs panel visible
 			if m.width > 0 && m.height > 0 {
 				m.recalculateLayout()
@@ -2387,12 +2375,6 @@ func (m Model) handleCommand(cmd *Command, args []string) (tea.Model, tea.Cmd) {
 	case "logs":
 		// Toggle logs panel
 		m.showLogs = !m.showLogs
-		if m.showLogs {
-			m.logsPanel.AddInfo("system", "Logs panel opened via /logs command")
-			m.history.Add(NewSystemMessage("Logs panel opened (Ctrl+L to toggle)"))
-		} else {
-			m.history.Add(NewSystemMessage("Logs panel closed"))
-		}
 		if m.width > 0 && m.height > 0 {
 			m.recalculateLayout()
 		}

@@ -1,9 +1,11 @@
 package cli
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"regexp"
@@ -163,18 +165,27 @@ func (c *CopilotAdapter) Execute(ctx context.Context, opts core.ExecuteOptions) 
 		cmd.Stdin = strings.NewReader(prompt)
 	}
 
-	// Capture output
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
+	// Use pipes to stream stdout in real-time
+	stdoutPipe, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, fmt.Errorf("creating stdout pipe: %w", err)
+	}
+
+	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 
 	startTime := time.Now()
 
-	// Emit progress event
-	c.emitEvent(core.NewAgentEvent(core.AgentEventProgress, "copilot", "Processing request..."))
+	if err := cmd.Start(); err != nil {
+		return nil, fmt.Errorf("starting command: %w", err)
+	}
 
-	// Run command
-	err := cmd.Run()
+	// Stream stdout and detect activity patterns
+	var stdout bytes.Buffer
+	c.streamStdoutWithEvents(stdoutPipe, &stdout)
+
+	// Wait for command
+	err = cmd.Wait()
 	duration := time.Since(startTime)
 
 	if ctx.Err() == context.DeadlineExceeded {
@@ -214,6 +225,38 @@ func (c *CopilotAdapter) Execute(ctx context.Context, opts core.ExecuteOptions) 
 	}))
 
 	return execResult, nil
+}
+
+// streamStdoutWithEvents reads stdout line by line and emits each line as a progress event.
+// This gives real-time visibility into what Copilot is doing.
+func (c *CopilotAdapter) streamStdoutWithEvents(pipe io.ReadCloser, buf *bytes.Buffer) {
+	scanner := bufio.NewScanner(pipe)
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		buf.WriteString(line)
+		buf.WriteString("\n")
+
+		// Skip empty lines and stats output
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		// Skip statistics lines at the end
+		if strings.HasPrefix(trimmed, "Total usage") ||
+			strings.HasPrefix(trimmed, "Total duration") ||
+			strings.HasPrefix(trimmed, "Total code changes") ||
+			strings.HasPrefix(trimmed, "Usage by model") {
+			continue
+		}
+
+		// Emit the line as progress (truncate if too long)
+		activity := trimmed
+		if len(activity) > 60 {
+			activity = activity[:57] + "..."
+		}
+		c.emitEvent(core.NewAgentEvent(core.AgentEventProgress, "copilot", activity))
+	}
 }
 
 // buildArgs constructs CLI arguments for Copilot.
