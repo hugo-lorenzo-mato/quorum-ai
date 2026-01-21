@@ -175,8 +175,9 @@ func TestGeminiAdapter_BuildArgsExtended(t *testing.T) {
 		},
 		{
 			name: "with JSON format",
+			// Note: --output-format is now added by streaming config, not buildArgs
 			opts: core.ExecuteOptions{Format: core.OutputFormatJSON},
-			want: []string{"--model", "gemini-2.5-flash", "--output-format", "json", "--approval-mode", "yolo"},
+			want: []string{"--model", "gemini-2.5-flash", "--approval-mode", "yolo"},
 		},
 		{
 			name: "with custom model",
@@ -251,88 +252,8 @@ func TestGeminiAdapter_ExtractUsageTokens(t *testing.T) {
 	}
 }
 
-func TestGeminiAdapter_ExtractContentScenarios(t *testing.T) {
-	adapter, _ := NewGeminiAdapter(AgentConfig{Path: "gemini"})
-	gemini := adapter.(*GeminiAdapter)
-
-	tests := []struct {
-		name string
-		resp *geminiJSONResponse
-		want string
-	}{
-		{
-			name: "empty response",
-			resp: &geminiJSONResponse{},
-			want: "",
-		},
-		{
-			name: "single part",
-			resp: &geminiJSONResponse{
-				Candidates: []struct {
-					Content struct {
-						Parts []struct {
-							Text string `json:"text"`
-						} `json:"parts"`
-					} `json:"content"`
-					FinishReason string `json:"finishReason"`
-				}{
-					{
-						Content: struct {
-							Parts []struct {
-								Text string `json:"text"`
-							} `json:"parts"`
-						}{
-							Parts: []struct {
-								Text string `json:"text"`
-							}{
-								{Text: "Hello world"},
-							},
-						},
-					},
-				},
-			},
-			want: "Hello world",
-		},
-		{
-			name: "multiple parts",
-			resp: &geminiJSONResponse{
-				Candidates: []struct {
-					Content struct {
-						Parts []struct {
-							Text string `json:"text"`
-						} `json:"parts"`
-					} `json:"content"`
-					FinishReason string `json:"finishReason"`
-				}{
-					{
-						Content: struct {
-							Parts []struct {
-								Text string `json:"text"`
-							} `json:"parts"`
-						}{
-							Parts: []struct {
-								Text string `json:"text"`
-							}{
-								{Text: "Part 1"},
-								{Text: "Part 2"},
-							},
-						},
-					},
-				},
-			},
-			want: "Part 1\nPart 2",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := gemini.extractContent(tt.resp)
-			if got != tt.want {
-				t.Errorf("extractContent() = %q, want %q", got, tt.want)
-			}
-		})
-	}
-}
+// Note: TestGeminiAdapter_ExtractContentScenarios removed - geminiJSONResponse and extractContent
+// were removed as part of the stream-json migration (JSON parsing no longer needed)
 
 func TestGeminiAdapter_EstimateCostCalc(t *testing.T) {
 	adapter, _ := NewGeminiAdapter(AgentConfig{Path: "gemini"})
@@ -351,11 +272,12 @@ func TestGeminiAdapter_ParseOutputFormats(t *testing.T) {
 	adapter, _ := NewGeminiAdapter(AgentConfig{Path: "gemini"})
 	gemini := adapter.(*GeminiAdapter)
 
+	// Note: parseOutput no longer parses JSON as part of stream-json migration.
+	// The LLM writes output directly to files, so JSON parsing is not needed.
 	tests := []struct {
-		name       string
-		result     *CommandResult
-		format     core.OutputFormat
-		wantParsed bool
+		name   string
+		result *CommandResult
+		format core.OutputFormat
 	}{
 		{
 			name: "text output",
@@ -363,8 +285,7 @@ func TestGeminiAdapter_ParseOutputFormats(t *testing.T) {
 				Stdout:   "plain text response",
 				Duration: time.Second,
 			},
-			format:     core.OutputFormatText,
-			wantParsed: false,
+			format: core.OutputFormatText,
 		},
 		{
 			name: "JSON output",
@@ -372,8 +293,7 @@ func TestGeminiAdapter_ParseOutputFormats(t *testing.T) {
 				Stdout:   `{"response": "hello"}`,
 				Duration: time.Second,
 			},
-			format:     core.OutputFormatJSON,
-			wantParsed: true,
+			format: core.OutputFormatJSON,
 		},
 	}
 
@@ -383,9 +303,12 @@ func TestGeminiAdapter_ParseOutputFormats(t *testing.T) {
 			if err != nil {
 				t.Fatalf("parseOutput() error = %v", err)
 			}
-			hasParsed := got.Parsed != nil
-			if hasParsed != tt.wantParsed {
-				t.Errorf("hasParsed = %v, want %v", hasParsed, tt.wantParsed)
+			// Verify basic parsing works (returns output and duration)
+			if got.Output != tt.result.Stdout {
+				t.Errorf("Output = %q, want %q", got.Output, tt.result.Stdout)
+			}
+			if got.Duration != tt.result.Duration {
+				t.Errorf("Duration = %v, want %v", got.Duration, tt.result.Duration)
 			}
 		})
 	}
@@ -400,11 +323,11 @@ func TestCodexAdapter_BuildArgsExtended(t *testing.T) {
 	})
 	codex := adapter.(*CodexAdapter)
 
+	// Note: --json is now added by streaming config, not buildArgs
 	tests := []struct {
 		name     string
 		opts     core.ExecuteOptions
 		wantExec bool
-		wantJSON bool
 	}{
 		{
 			name:     "default args",
@@ -414,7 +337,7 @@ func TestCodexAdapter_BuildArgsExtended(t *testing.T) {
 		{
 			name:     "with JSON format",
 			opts:     core.ExecuteOptions{Format: core.OutputFormatJSON},
-			wantJSON: true,
+			wantExec: true, // Still has exec, --json added by streaming
 		},
 	}
 
@@ -423,18 +346,6 @@ func TestCodexAdapter_BuildArgsExtended(t *testing.T) {
 			got := codex.buildArgs(tt.opts)
 			if tt.wantExec && got[0] != "exec" {
 				t.Errorf("expected first arg to be 'exec', got %q", got[0])
-			}
-			if tt.wantJSON {
-				hasJSON := false
-				for _, arg := range got {
-					if arg == "--json" {
-						hasJSON = true
-						break
-					}
-				}
-				if !hasJSON {
-					t.Error("expected --json flag in args")
-				}
 			}
 		})
 	}
@@ -490,10 +401,12 @@ func TestCodexAdapter_ExtractUsageTokens(t *testing.T) {
 	}
 }
 
-func TestCodexAdapter_ParseOutputJSON(t *testing.T) {
+func TestCodexAdapter_ParseOutput(t *testing.T) {
 	adapter, _ := NewCodexAdapter(AgentConfig{Path: "codex"})
 	codex := adapter.(*CodexAdapter)
 
+	// Note: parseOutput no longer parses JSON as part of stream-json migration.
+	// The LLM writes output directly to files, so JSON parsing is not needed.
 	result := &CommandResult{
 		Stdout:   `{"code": "print('hello')"}`,
 		Duration: time.Second,
@@ -503,8 +416,9 @@ func TestCodexAdapter_ParseOutputJSON(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseOutput() error = %v", err)
 	}
-	if got.Parsed == nil {
-		t.Error("expected parsed JSON")
+	// Verify basic parsing works
+	if got.Output != result.Stdout {
+		t.Errorf("Output = %q, want %q", got.Output, result.Stdout)
 	}
 }
 
@@ -584,11 +498,12 @@ func TestClaudeAdapter_ParseOutputFormats(t *testing.T) {
 	adapter, _ := NewClaudeAdapter(AgentConfig{Path: "claude"})
 	claude := adapter.(*ClaudeAdapter)
 
+	// Note: parseOutput no longer parses JSON as part of stream-json migration.
+	// The LLM writes output directly to files, so JSON parsing is not needed.
 	tests := []struct {
-		name       string
-		result     *CommandResult
-		format     core.OutputFormat
-		wantParsed bool
+		name   string
+		result *CommandResult
+		format core.OutputFormat
 	}{
 		{
 			name: "text output",
@@ -596,8 +511,7 @@ func TestClaudeAdapter_ParseOutputFormats(t *testing.T) {
 				Stdout:   "plain text response",
 				Duration: time.Second,
 			},
-			format:     core.OutputFormatText,
-			wantParsed: false,
+			format: core.OutputFormatText,
 		},
 		{
 			name: "JSON output",
@@ -605,8 +519,7 @@ func TestClaudeAdapter_ParseOutputFormats(t *testing.T) {
 				Stdout:   `{"response": "hello"}`,
 				Duration: time.Second,
 			},
-			format:     core.OutputFormatJSON,
-			wantParsed: true,
+			format: core.OutputFormatJSON,
 		},
 		{
 			name: "invalid JSON output",
@@ -614,8 +527,7 @@ func TestClaudeAdapter_ParseOutputFormats(t *testing.T) {
 				Stdout:   `not valid json`,
 				Duration: time.Second,
 			},
-			format:     core.OutputFormatJSON,
-			wantParsed: false,
+			format: core.OutputFormatJSON,
 		},
 	}
 
@@ -625,12 +537,12 @@ func TestClaudeAdapter_ParseOutputFormats(t *testing.T) {
 			if err != nil {
 				t.Fatalf("parseOutput() error = %v", err)
 			}
+			// Verify basic parsing works - output should be returned as-is
 			if got.Output != tt.result.Stdout {
 				t.Errorf("Output = %q, want %q", got.Output, tt.result.Stdout)
 			}
-			hasParsed := got.Parsed != nil
-			if hasParsed != tt.wantParsed {
-				t.Errorf("hasParsed = %v, want %v", hasParsed, tt.wantParsed)
+			if got.Duration != tt.result.Duration {
+				t.Errorf("Duration = %v, want %v", got.Duration, tt.result.Duration)
 			}
 		})
 	}

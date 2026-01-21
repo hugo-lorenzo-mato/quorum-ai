@@ -4,7 +4,6 @@ import (
 	"context"
 	"regexp"
 	"strconv"
-	"strings"
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/logging"
@@ -116,10 +115,8 @@ func (g *GeminiAdapter) buildArgs(opts core.ExecuteOptions) []string {
 		args = append(args, "--model", model)
 	}
 
-	// Output format
-	if opts.Format == core.OutputFormatJSON {
-		args = append(args, "--output-format", "json")
-	}
+	// Note: --output-format stream-json is added by ExecuteWithStreaming via streaming config
+	// This enables real-time progress monitoring while the LLM writes output files directly
 
 	// Headless auto-approval
 	args = append(args, "--approval-mode", "yolo")
@@ -128,7 +125,7 @@ func (g *GeminiAdapter) buildArgs(opts core.ExecuteOptions) []string {
 }
 
 // parseOutput parses Gemini CLI output.
-func (g *GeminiAdapter) parseOutput(result *CommandResult, format core.OutputFormat) (*core.ExecuteResult, error) {
+func (g *GeminiAdapter) parseOutput(result *CommandResult, _ core.OutputFormat) (*core.ExecuteResult, error) {
 	output := result.Stdout
 
 	execResult := &core.ExecuteResult{
@@ -138,14 +135,6 @@ func (g *GeminiAdapter) parseOutput(result *CommandResult, format core.OutputFor
 
 	// Extract usage from output
 	g.extractUsage(result, execResult)
-
-	// Parse JSON if requested
-	if format == core.OutputFormatJSON {
-		var parsed map[string]interface{}
-		if err := g.ParseJSON(output, &parsed); err == nil {
-			execResult.Parsed = parsed
-		}
-	}
 
 	return execResult, nil
 }
@@ -194,34 +183,6 @@ func (g *GeminiAdapter) estimateCost(tokensIn, tokensOut int) float64 {
 	return inputCost + outputCost
 }
 
-// geminiJSONResponse represents Gemini's JSON output structure.
-type geminiJSONResponse struct {
-	Candidates []struct {
-		Content struct {
-			Parts []struct {
-				Text string `json:"text"`
-			} `json:"parts"`
-		} `json:"content"`
-		FinishReason string `json:"finishReason"`
-	} `json:"candidates"`
-	UsageMetadata struct {
-		PromptTokenCount     int `json:"promptTokenCount"`
-		CandidatesTokenCount int `json:"candidatesTokenCount"`
-		TotalTokenCount      int `json:"totalTokenCount"`
-	} `json:"usageMetadata"`
-}
-
-// extractContent extracts text content from Gemini response.
-func (g *GeminiAdapter) extractContent(resp *geminiJSONResponse) string {
-	if len(resp.Candidates) == 0 {
-		return ""
-	}
-	var parts []string
-	for _, part := range resp.Candidates[0].Content.Parts {
-		parts = append(parts, part.Text)
-	}
-	return strings.Join(parts, "\n")
-}
 
 // Ensure GeminiAdapter implements core.Agent and core.StreamingCapable
 var _ core.Agent = (*GeminiAdapter)(nil)

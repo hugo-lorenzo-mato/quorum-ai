@@ -138,16 +138,14 @@ func (c *CodexAdapter) buildArgs(opts core.ExecuteOptions) []string {
 	// Max tokens and temperature are configured via Codex config files,
 	// not as CLI flags for `codex exec`.
 
-	// Output format
-	if opts.Format == core.OutputFormatJSON {
-		args = append(args, "--json")
-	}
+	// Note: --json flag is added by ExecuteWithStreaming via streaming config
+	// This enables real-time JSONL events while the LLM writes output files directly
 
 	return args
 }
 
 // parseOutput parses Codex CLI output.
-func (c *CodexAdapter) parseOutput(result *CommandResult, format core.OutputFormat) (*core.ExecuteResult, error) {
+func (c *CodexAdapter) parseOutput(result *CommandResult, _ core.OutputFormat) (*core.ExecuteResult, error) {
 	output := result.Stdout
 
 	execResult := &core.ExecuteResult{
@@ -156,13 +154,6 @@ func (c *CodexAdapter) parseOutput(result *CommandResult, format core.OutputForm
 	}
 
 	c.extractUsage(result, execResult)
-
-	if format == core.OutputFormatJSON {
-		var parsed map[string]interface{}
-		if err := c.ParseJSON(output, &parsed); err == nil {
-			execResult.Parsed = parsed
-		}
-	}
 
 	return execResult, nil
 }

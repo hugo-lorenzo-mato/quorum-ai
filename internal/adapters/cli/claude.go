@@ -155,10 +155,8 @@ func (c *ClaudeAdapter) buildArgs(opts core.ExecuteOptions) []string {
 		args = append(args, "--system-prompt", opts.SystemPrompt)
 	}
 
-	// Output format
-	if opts.Format == core.OutputFormatJSON {
-		args = append(args, "--output-format", "json")
-	}
+	// Note: --output-format stream-json is added by ExecuteWithStreaming via streaming config
+	// This enables real-time progress monitoring while the LLM writes output files directly
 
 	// Auto-accept for non-interactive mode
 	args = append(args, "--dangerously-skip-permissions")
@@ -167,7 +165,7 @@ func (c *ClaudeAdapter) buildArgs(opts core.ExecuteOptions) []string {
 }
 
 // parseOutput parses Claude CLI output.
-func (c *ClaudeAdapter) parseOutput(result *CommandResult, format core.OutputFormat) (*core.ExecuteResult, error) {
+func (c *ClaudeAdapter) parseOutput(result *CommandResult, _ core.OutputFormat) (*core.ExecuteResult, error) {
 	output := result.Stdout
 
 	execResult := &core.ExecuteResult{
@@ -177,14 +175,6 @@ func (c *ClaudeAdapter) parseOutput(result *CommandResult, format core.OutputFor
 
 	// Try to extract usage information from stderr or output
 	c.extractUsage(result, execResult)
-
-	// Parse JSON if requested
-	if format == core.OutputFormatJSON {
-		var parsed map[string]interface{}
-		if err := c.ParseJSON(output, &parsed); err == nil {
-			execResult.Parsed = parsed
-		}
-	}
 
 	return execResult, nil
 }

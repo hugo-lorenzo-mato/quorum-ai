@@ -3,6 +3,7 @@ package chat
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -28,6 +29,12 @@ type AgentInfo struct {
 	Time      string
 	Output    string
 	Error     string
+
+	// Real-time activity tracking
+	CurrentActivity string    // Current activity description (e.g., "read_file config.go")
+	ActivityIcon    string    // Icon for current activity (e.g., "🔧", "💭")
+	StartedAt       time.Time // When agent started running
+	Phase           string    // Current workflow phase (e.g., "analyze", "critique")
 }
 
 // Default agent colors
@@ -282,4 +289,254 @@ func GetStats(agents []*AgentInfo) (active, total, tokens int, runningAgent stri
 		}
 	}
 	return
+}
+
+// Progress bar characters
+const (
+	progressFilled = "▓"
+	progressEmpty  = "░"
+	progressWidth  = 10
+)
+
+// estimateProgress calculates estimated progress (0-100) based on elapsed time.
+// Assumes typical agent execution takes ~2 minutes.
+func estimateProgress(startedAt time.Time, status AgentStatus) int {
+	if status == AgentStatusDone {
+		return 100
+	}
+	if status != AgentStatusRunning || startedAt.IsZero() {
+		return 0
+	}
+
+	elapsed := time.Since(startedAt)
+	// Assume 2 minutes = 100%, but cap at 95% while still running
+	expectedDuration := 2 * time.Minute
+	pct := int((elapsed.Seconds() / expectedDuration.Seconds()) * 100)
+	if pct > 95 {
+		pct = 95 // Never show 100% while still running
+	}
+	return pct
+}
+
+// formatElapsed formats elapsed time compactly
+func formatElapsed(startedAt time.Time) string {
+	if startedAt.IsZero() {
+		return ""
+	}
+	elapsed := time.Since(startedAt)
+	if elapsed < time.Minute {
+		return fmt.Sprintf("%ds", int(elapsed.Seconds()))
+	}
+	return fmt.Sprintf("%dm%02ds", int(elapsed.Minutes()), int(elapsed.Seconds())%60)
+}
+
+// RenderAgentProgressBars renders progress bars for all agents with current activity.
+// Example output:
+//
+//	claude  [▓▓▓▓▓▓▓▓░░] 🔧 read_file config.go     45s
+//	gemini  [▓▓▓▓░░░░░░] 💭 thinking...             32s
+//	codex   [▓▓░░░░░░░░] 🔧 glob **/*.go            28s
+//	copilot [░░░░░░░░░░] ○ queued
+func RenderAgentProgressBars(agents []*AgentInfo, width int) string {
+	if len(agents) == 0 {
+		return agentDimStyle.Render("No agents configured")
+	}
+
+	// Calculate max name length for alignment
+	maxNameLen := 0
+	for _, a := range agents {
+		if len(a.Name) > maxNameLen {
+			maxNameLen = len(a.Name)
+		}
+	}
+	if maxNameLen < 7 {
+		maxNameLen = 7 // minimum for "copilot"
+	}
+
+	var lines []string
+
+	for _, agent := range agents {
+		var line strings.Builder
+
+		// Agent name (left-aligned, padded)
+		nameStyle := lipgloss.NewStyle().Foreground(agent.Color).Bold(agent.Status == AgentStatusRunning)
+		name := agent.Name
+		if len(name) < maxNameLen {
+			name += strings.Repeat(" ", maxNameLen-len(name))
+		}
+		line.WriteString(nameStyle.Render(name))
+		line.WriteString(" ")
+
+		// Progress bar
+		pct := estimateProgress(agent.StartedAt, agent.Status)
+		filled := (progressWidth * pct) / 100
+		if filled > progressWidth {
+			filled = progressWidth
+		}
+
+		var barStyle lipgloss.Style
+		switch agent.Status {
+		case AgentStatusDone:
+			barStyle = agentSuccessStyle
+		case AgentStatusRunning:
+			barStyle = lipgloss.NewStyle().Foreground(agent.Color)
+		case AgentStatusError:
+			barStyle = agentErrorStyle
+		default:
+			barStyle = agentDimStyle
+		}
+
+		bar := "[" + barStyle.Render(strings.Repeat(progressFilled, filled)) +
+			agentDimStyle.Render(strings.Repeat(progressEmpty, progressWidth-filled)) + "]"
+		line.WriteString(bar)
+		line.WriteString(" ")
+
+		// Activity icon and description
+		activityWidth := width - maxNameLen - progressWidth - 15 // leave room for time
+		if activityWidth < 20 {
+			activityWidth = 20
+		}
+
+		var activity string
+		switch agent.Status {
+		case AgentStatusDisabled:
+			activity = agentDimStyle.Render("○ disabled")
+		case AgentStatusIdle:
+			activity = agentDimStyle.Render("○ idle")
+		case AgentStatusRunning:
+			icon := agent.ActivityIcon
+			if icon == "" {
+				icon = "◐"
+			}
+			desc := agent.CurrentActivity
+			if desc == "" {
+				desc = "processing..."
+			}
+			// Truncate if too long
+			if len(desc) > activityWidth-3 {
+				desc = desc[:activityWidth-6] + "..."
+			}
+			activity = agentWarnStyle.Render(icon) + " " + desc
+		case AgentStatusDone:
+			tokens := agent.TokensIn + agent.TokensOut
+			if tokens > 0 {
+				activity = agentSuccessStyle.Render("✓") + " " + agentDimStyle.Render(fmt.Sprintf("done (%d tok)", tokens))
+			} else {
+				activity = agentSuccessStyle.Render("✓ done")
+			}
+		case AgentStatusError:
+			errMsg := agent.Error
+			if errMsg == "" {
+				errMsg = "failed"
+			}
+			if len(errMsg) > activityWidth-3 {
+				errMsg = errMsg[:activityWidth-6] + "..."
+			}
+			activity = agentErrorStyle.Render("✗ " + errMsg)
+		}
+
+		// Pad activity to fixed width
+		activityPlain := stripANSI(activity)
+		if len(activityPlain) < activityWidth {
+			activity += strings.Repeat(" ", activityWidth-len(activityPlain))
+		}
+		line.WriteString(activity)
+
+		// Elapsed time (right-aligned)
+		if agent.Status == AgentStatusRunning && !agent.StartedAt.IsZero() {
+			elapsed := formatElapsed(agent.StartedAt)
+			line.WriteString(" ")
+			line.WriteString(agentDimStyle.Render(elapsed))
+		} else if agent.Time != "" {
+			line.WriteString(" ")
+			line.WriteString(agentDimStyle.Render(agent.Time))
+		}
+
+		lines = append(lines, line.String())
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+// stripANSI removes ANSI escape sequences for length calculation
+func stripANSI(s string) string {
+	var result strings.Builder
+	inEscape := false
+	for _, r := range s {
+		if r == '\x1b' {
+			inEscape = true
+			continue
+		}
+		if inEscape {
+			if r == 'm' {
+				inEscape = false
+			}
+			continue
+		}
+		result.WriteRune(r)
+	}
+	return result.String()
+}
+
+// UpdateAgentActivity updates an agent's current activity.
+// Returns true if the agent was found and updated.
+func UpdateAgentActivity(agents []*AgentInfo, name, icon, activity string) bool {
+	for _, a := range agents {
+		if strings.EqualFold(a.Name, name) {
+			a.ActivityIcon = icon
+			a.CurrentActivity = activity
+			return true
+		}
+	}
+	return false
+}
+
+// StartAgent marks an agent as running and records the start time.
+func StartAgent(agents []*AgentInfo, name, phase string) bool {
+	for _, a := range agents {
+		if strings.EqualFold(a.Name, name) {
+			a.Status = AgentStatusRunning
+			a.StartedAt = time.Now()
+			a.Phase = phase
+			a.CurrentActivity = "starting..."
+			a.ActivityIcon = "▶"
+			return true
+		}
+	}
+	return false
+}
+
+// CompleteAgent marks an agent as done and records elapsed time.
+func CompleteAgent(agents []*AgentInfo, name string, tokensIn, tokensOut int) bool {
+	for _, a := range agents {
+		if strings.EqualFold(a.Name, name) {
+			a.Status = AgentStatusDone
+			a.TokensIn += tokensIn
+			a.TokensOut += tokensOut
+			if !a.StartedAt.IsZero() {
+				a.Time = formatElapsed(a.StartedAt)
+			}
+			a.CurrentActivity = ""
+			a.ActivityIcon = ""
+			return true
+		}
+	}
+	return false
+}
+
+// FailAgent marks an agent as failed with an error message.
+func FailAgent(agents []*AgentInfo, name, errMsg string) bool {
+	for _, a := range agents {
+		if strings.EqualFold(a.Name, name) {
+			a.Status = AgentStatusError
+			a.Error = errMsg
+			if !a.StartedAt.IsZero() {
+				a.Time = formatElapsed(a.StartedAt)
+			}
+			a.CurrentActivity = ""
+			a.ActivityIcon = ""
+			return true
+		}
+	}
+	return false
 }

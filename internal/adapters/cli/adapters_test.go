@@ -215,9 +215,8 @@ func TestClaudeAdapter_BuildArgs(t *testing.T) {
 	if !containsString(args, "--dangerously-skip-permissions") {
 		t.Error("should include --dangerously-skip-permissions")
 	}
-	if !containsString(args, "--output-format") {
-		t.Error("should include --output-format for JSON")
-	}
+	// Note: --output-format is now added by ExecuteWithStreaming via streaming config,
+	// not by buildArgs directly. This enables real-time progress monitoring.
 }
 
 func TestClaudeAdapter_EstimateCost(t *testing.T) {
@@ -301,9 +300,8 @@ func TestGeminiAdapter_BuildArgs(t *testing.T) {
 	if !containsString(args, "--model") {
 		t.Error("should include --model")
 	}
-	if !containsString(args, "--output-format") {
-		t.Error("should include --output-format for JSON format")
-	}
+	// Note: --output-format is now added by ExecuteWithStreaming via streaming config,
+	// not by buildArgs directly. This enables real-time progress monitoring.
 	if !containsString(args, "--approval-mode") {
 		t.Error("should include --approval-mode for headless execution")
 	}
@@ -322,41 +320,8 @@ func TestGeminiAdapter_EstimateCost(t *testing.T) {
 	}
 }
 
-func TestGeminiAdapter_ExtractContent(t *testing.T) {
-	adapter, _ := NewGeminiAdapter(AgentConfig{})
-	gemini := adapter.(*GeminiAdapter)
-
-	resp := &geminiJSONResponse{
-		Candidates: []struct {
-			Content struct {
-				Parts []struct {
-					Text string `json:"text"`
-				} `json:"parts"`
-			} `json:"content"`
-			FinishReason string `json:"finishReason"`
-		}{
-			{
-				Content: struct {
-					Parts []struct {
-						Text string `json:"text"`
-					} `json:"parts"`
-				}{
-					Parts: []struct {
-						Text string `json:"text"`
-					}{
-						{Text: "Hello"},
-						{Text: "World"},
-					},
-				},
-			},
-		},
-	}
-
-	content := gemini.extractContent(resp)
-	if content != "Hello\nWorld" {
-		t.Errorf("extractContent() = %q, want %q", content, "Hello\nWorld")
-	}
-}
+// Note: TestGeminiAdapter_ExtractContent removed - geminiJSONResponse and extractContent
+// were removed as part of the stream-json migration (JSON parsing no longer needed)
 
 // =============================================================================
 // Codex Adapter Tests
@@ -413,9 +378,8 @@ func TestCodexAdapter_BuildArgs(t *testing.T) {
 	if len(args) == 0 || args[0] != "exec" {
 		t.Error("should include exec subcommand for headless execution")
 	}
-	if !containsString(args, "--json") {
-		t.Error("should include --json for JSON format")
-	}
+	// Note: --json is now added by ExecuteWithStreaming via streaming config,
+	// not by buildArgs directly. This enables real-time JSONL events.
 	if !containsString(args, `approval_policy="never"`) {
 		t.Error("should include approval_policy override")
 	}

@@ -14,10 +14,11 @@ type AgentFactory func(cfg AgentConfig) (core.Agent, error)
 
 // Registry manages available CLI agents.
 type Registry struct {
-	factories map[string]AgentFactory
-	agents    map[string]core.Agent
-	configs   map[string]AgentConfig
-	mu        sync.RWMutex
+	factories    map[string]AgentFactory
+	agents       map[string]core.Agent
+	configs      map[string]AgentConfig
+	eventHandler core.AgentEventHandler // shared event handler for all agents
+	mu           sync.RWMutex
 }
 
 // NewRegistry creates a new agent registry.
@@ -92,6 +93,13 @@ func (r *Registry) Get(name string) (core.Agent, error) {
 	agent, err := factory(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("creating agent %s: %w", name, err)
+	}
+
+	// Configure event handler if one is set
+	if r.eventHandler != nil {
+		if sc, ok := agent.(core.StreamingCapable); ok {
+			sc.SetEventHandler(r.eventHandler)
+		}
 	}
 
 	// Cache agent
@@ -275,6 +283,36 @@ func (r *Registry) SetLogCallbackForAgent(name string, cb LogCallback) error {
 	}
 	if setter, ok := agent.(LogCallbackSetter); ok {
 		setter.SetLogCallback(cb)
+	}
+	return nil
+}
+
+// SetEventHandler sets an event handler on all streaming-capable agents.
+// The handler receives real-time streaming events during agent execution.
+// New agents created after this call will also receive the handler.
+func (r *Registry) SetEventHandler(handler core.AgentEventHandler) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	// Store handler for future agents
+	r.eventHandler = handler
+
+	// Apply to existing agents
+	for _, agent := range r.agents {
+		if sc, ok := agent.(core.StreamingCapable); ok {
+			sc.SetEventHandler(handler)
+		}
+	}
+}
+
+// SetEventHandlerForAgent sets an event handler on a specific agent.
+func (r *Registry) SetEventHandlerForAgent(name string, handler core.AgentEventHandler) error {
+	agent, err := r.Get(name)
+	if err != nil {
+		return err
+	}
+	if sc, ok := agent.(core.StreamingCapable); ok {
+		sc.SetEventHandler(handler)
 	}
 	return nil
 }

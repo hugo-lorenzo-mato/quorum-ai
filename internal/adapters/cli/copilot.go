@@ -3,7 +3,6 @@ package cli
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -232,19 +231,15 @@ func (c *CopilotAdapter) buildArgs(opts core.ExecuteOptions) []string {
 	args = append(args, "--allow-all-paths")
 	args = append(args, "--allow-all-urls")
 
-	// Silent mode for cleaner output (only agent response, no stats)
-	args = append(args, "--silent")
-
-	// Note: Copilot CLI does not support --output-format json.
-	// JSON output format requested via opts.Format is acknowledged but not applied.
-	// The output will be plain text and parsed as-is.
-	_ = opts.Format
+	// Note: Copilot CLI does not support --output-format json or stream-json.
+	// Streaming is handled via log files (see streaming.go StreamMethodLogFile).
+	// We don't use --silent to allow some progress visibility in output.
 
 	return args
 }
 
 // parseOutput parses Copilot CLI output.
-func (c *CopilotAdapter) parseOutput(result *CommandResult, format core.OutputFormat) (*core.ExecuteResult, error) {
+func (c *CopilotAdapter) parseOutput(result *CommandResult, _ core.OutputFormat) (*core.ExecuteResult, error) {
 	output := result.Stdout
 
 	// Clean ANSI escape sequences
@@ -253,14 +248,6 @@ func (c *CopilotAdapter) parseOutput(result *CommandResult, format core.OutputFo
 	execResult := &core.ExecuteResult{
 		Output:   strings.TrimSpace(output),
 		Duration: result.Duration,
-	}
-
-	// Try to parse JSON if requested
-	if format == core.OutputFormatJSON && output != "" {
-		var parsed map[string]interface{}
-		if err := json.Unmarshal([]byte(output), &parsed); err == nil {
-			execResult.Parsed = parsed
-		}
 	}
 
 	return execResult, nil

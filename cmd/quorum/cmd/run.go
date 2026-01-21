@@ -342,6 +342,11 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 		ModeEnforcer:   modeEnforcerAdapter,
 	})
 
+	// Connect agent streaming events to the output notifier for real-time progress
+	registry.SetEventHandler(func(event core.AgentEvent) {
+		outputNotifier.AgentEvent(string(event.Type), event.Agent, event.Message, event.Data)
+	})
+
 	// Resume or run new workflow
 	if runResume {
 		logger.Info("resuming workflow from checkpoint")

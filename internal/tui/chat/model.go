@@ -1262,7 +1262,6 @@ func (m Model) handleMouseClick(x, _ int) (tea.Model, tea.Cmd, bool) {
 			m.inputFocused = false
 			m.textarea.Blur()
 			m.explorerPanel.SetFocused(true)
-			m.logsPanel.AddInfo("system", "Explorer focused (click)")
 			return m, nil, true
 		}
 		return m, nil, false // Already focused, let it handle internally
@@ -1290,7 +1289,6 @@ func (m Model) handleMouseClick(x, _ int) (tea.Model, tea.Cmd, bool) {
 			m.inputFocused = true
 			m.textarea.Focus()
 			m.explorerPanel.SetFocused(false)
-			m.logsPanel.AddInfo("system", "Input focused (click)")
 			return m, nil, true
 		}
 		// Already in main area, check if clicking on input
@@ -1770,66 +1768,74 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		switch msg.Kind {
 		case "started":
+			// Extract phase from event data
+			phase := ""
+			if p, ok := msg.Data["phase"].(string); ok {
+				phase = p
+			}
+			// Update agent to running state with start time
+			StartAgent(m.agentInfos, msg.Agent, phase)
+
+			// Log started event (important - keep in logs)
 			details := msg.Message
 			if model, ok := msg.Data["model"].(string); ok && model != "" {
 				details += fmt.Sprintf(" [%s]", model)
 			}
-			if phase, ok := msg.Data["phase"].(string); ok {
+			if phase != "" {
 				details = fmt.Sprintf("[%s] %s", phase, details)
 			}
 			m.logsPanel.AddInfo(source, "▶ "+details)
-			// Show CLI command for debugging
-			if cmd, ok := msg.Data["command"].(string); ok && cmd != "" {
-				m.logsPanel.AddDebug(source, "$ "+cmd)
-			}
-			// Update agent status to running
-			for _, a := range m.agentInfos {
-				if strings.EqualFold(a.Name, msg.Agent) {
-					a.Status = AgentStatusRunning
-					break
-				}
-			}
 
 		case "tool_use":
-			m.logsPanel.AddInfo(source, "🔧 Tool: "+msg.Message)
+			// Update agent activity (shown in progress bar)
+			UpdateAgentActivity(m.agentInfos, msg.Agent, "🔧", msg.Message)
+			// Don't log tool_use - shown in progress bar instead
 
 		case "thinking":
-			m.logsPanel.AddDebug(source, "💭 Thinking...")
+			// Update agent activity (shown in progress bar)
+			UpdateAgentActivity(m.agentInfos, msg.Agent, "💭", "thinking...")
+			// Don't log thinking - shown in progress bar instead
 
 		case "chunk":
-			// Skip chunk events for now to avoid log spam
+			// Skip chunk events - too noisy
 
 		case "progress":
+			// Update agent activity for retries
 			details := msg.Message
 			if attempt, ok := msg.Data["attempt"].(int); ok {
 				if errMsg, ok := msg.Data["error"].(string); ok {
-					details = fmt.Sprintf("Retry #%d: %s", attempt, errMsg)
+					details = fmt.Sprintf("retry #%d: %s", attempt, errMsg)
 				}
 			}
+			UpdateAgentActivity(m.agentInfos, msg.Agent, "⟳", details)
+			// Log progress/retries (important - keep in logs)
 			m.logsPanel.AddWarn(source, "⟳ "+details)
 
 		case "completed":
+			// Extract token counts
+			tokensIn := 0
+			tokensOut := 0
+			if ti, ok := msg.Data["tokens_in"].(int); ok {
+				tokensIn = ti
+			}
+			if to, ok := msg.Data["tokens_out"].(int); ok {
+				tokensOut = to
+			}
+			// Update agent to completed state
+			CompleteAgent(m.agentInfos, msg.Agent, tokensIn, tokensOut)
+
+			// Log completed event (important - keep in logs)
 			details := msg.Message
 			var stats []string
-
-			// Add model info
 			if model, ok := msg.Data["model"].(string); ok && model != "" {
 				stats = append(stats, model)
 			}
-
-			// Add token info
-			if tokensIn, ok := msg.Data["tokens_in"].(int); ok {
-				if tokensOut, ok := msg.Data["tokens_out"].(int); ok {
-					stats = append(stats, fmt.Sprintf("↑%d ↓%d tok", tokensIn, tokensOut))
-				}
+			if tokensIn > 0 || tokensOut > 0 {
+				stats = append(stats, fmt.Sprintf("↑%d ↓%d tok", tokensIn, tokensOut))
 			}
-
-			// Add cost info
 			if cost, ok := msg.Data["cost_usd"].(float64); ok && cost > 0 {
 				stats = append(stats, fmt.Sprintf("$%.4f", cost))
 			}
-
-			// Add duration info
 			if durationMS, ok := msg.Data["duration_ms"].(int64); ok {
 				if durationMS >= 1000 {
 					stats = append(stats, fmt.Sprintf("%.1fs", float64(durationMS)/1000))
@@ -1837,82 +1843,47 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					stats = append(stats, fmt.Sprintf("%dms", durationMS))
 				}
 			}
-
-			// Add tool calls info
 			if toolCalls, ok := msg.Data["tool_calls"].(int); ok && toolCalls > 0 {
 				stats = append(stats, fmt.Sprintf("%d tools", toolCalls))
 			}
-
 			if len(stats) > 0 {
 				details += " [" + strings.Join(stats, " | ") + "]"
 			}
 			m.logsPanel.AddSuccess(source, "✓ "+details)
-			// Update agent status to done and accumulate token counts
-			for _, a := range m.agentInfos {
-				if strings.EqualFold(a.Name, msg.Agent) {
-					a.Status = AgentStatusDone
-					// Accumulate token counts from event data
-					if tokensIn, ok := msg.Data["tokens_in"].(int); ok {
-						a.TokensIn += tokensIn
-					}
-					if tokensOut, ok := msg.Data["tokens_out"].(int); ok {
-						a.TokensOut += tokensOut
-					}
-					break
-				}
-			}
+
 			// Refresh stats panels after token update
 			m.updateLogsPanelTokenStats()
 			m.updateStatsPanelTokenStats()
 
 		case "error":
+			// Update agent to error state
+			FailAgent(m.agentInfos, msg.Agent, msg.Message)
+
+			// Log error event (important - keep in logs)
 			details := msg.Message
 			var errorInfo []string
-
-			// Add error type
 			if errType, ok := msg.Data["error_type"].(string); ok && errType != "" {
 				errorInfo = append(errorInfo, errType)
 			}
-
-			// Add model info
 			if model, ok := msg.Data["model"].(string); ok && model != "" {
 				errorInfo = append(errorInfo, model)
 			}
-
-			// Add phase info
 			if phase, ok := msg.Data["phase"].(string); ok {
 				errorInfo = append(errorInfo, phase)
 			}
-
-			// Add duration info
 			if durationMS, ok := msg.Data["duration_ms"].(int64); ok {
 				errorInfo = append(errorInfo, fmt.Sprintf("%dms", durationMS))
 			}
-
-			// Add retry info
 			if retries, ok := msg.Data["retries"].(int); ok && retries > 0 {
 				errorInfo = append(errorInfo, fmt.Sprintf("%d retries", retries))
 			}
-
-			// Add fallback indicator
-			if fallback, ok := msg.Data["fallback"].(bool); ok && fallback {
-				errorInfo = append(errorInfo, "using fallback")
-			}
-
 			if len(errorInfo) > 0 {
 				details += " [" + strings.Join(errorInfo, " | ") + "]"
 			}
 			m.logsPanel.AddError(source, "✗ "+details)
-			// Update agent status to error
-			for _, a := range m.agentInfos {
-				if strings.EqualFold(a.Name, msg.Agent) {
-					a.Status = AgentStatusError
-					break
-				}
-			}
 
 		default:
-			m.logsPanel.AddDebug(source, msg.Message)
+			// Skip unknown event types - don't log to reduce noise
 		}
 		// Continue listening for more events
 		cmds = append(cmds, m.listenForLogEvents())
@@ -2657,9 +2628,15 @@ func (m *Model) recalculateLayout() {
 	// Input area: border top (1) + content lines + border bottom (1) + margin (1) = inputLines + 3
 	inputHeight := inputLines + 3
 
-	// Status line when streaming/running = 1
+	// Status line / progress bars height
 	statusHeight := 0
-	if m.streaming || m.workflowRunning {
+	if m.workflowRunning {
+		// Progress bars: one line per agent
+		statusHeight = len(m.agentInfos)
+		if statusHeight < 1 {
+			statusHeight = 1
+		}
+	} else if m.streaming {
 		statusHeight = 1
 	}
 
@@ -3442,14 +3419,11 @@ func (m Model) renderMainContent(w int) string {
 	sb.WriteString(m.viewport.View())
 	sb.WriteString("\n")
 
-	// === STATUS LINE (when streaming/running) ===
+	// === STATUS LINE / PROGRESS BARS (when streaming/running) ===
 	if m.workflowRunning {
-		elapsed := time.Since(m.workflowStartedAt)
-		statusLine := lipgloss.NewStyle().
-			Foreground(primaryColor).
-			Bold(true).
-			Render(fmt.Sprintf("%s Processing workflow... %s", m.spinner.View(), formatDuration(elapsed)))
-		sb.WriteString("  " + statusLine + "\n")
+		// Show progress bars for all agents with real-time activity
+		progressBars := RenderAgentProgressBars(m.agentInfos, w-4)
+		sb.WriteString("  " + strings.ReplaceAll(progressBars, "\n", "\n  ") + "\n")
 	} else if m.streaming {
 		elapsed := time.Since(m.chatStartedAt)
 		agent := m.chatAgent
