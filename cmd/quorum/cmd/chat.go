@@ -225,6 +225,20 @@ func createWorkflowRunner(
 		return nil, fmt.Errorf("parsing workflow timeout %q: %w", cfg.Workflow.Timeout, err)
 	}
 
+	// Parse phase timeouts
+	analyzeTimeout, err := parseDurationDefault(cfg.Workflow.PhaseTimeouts.Analyze, defaultPhaseTimeout)
+	if err != nil {
+		return nil, fmt.Errorf("parsing analyze phase timeout %q: %w", cfg.Workflow.PhaseTimeouts.Analyze, err)
+	}
+	planTimeout, err := parseDurationDefault(cfg.Workflow.PhaseTimeouts.Plan, defaultPhaseTimeout)
+	if err != nil {
+		return nil, fmt.Errorf("parsing plan phase timeout %q: %w", cfg.Workflow.PhaseTimeouts.Plan, err)
+	}
+	executeTimeout, err := parseDurationDefault(cfg.Workflow.PhaseTimeouts.Execute, defaultPhaseTimeout)
+	if err != nil {
+		return nil, fmt.Errorf("parsing execute phase timeout %q: %w", cfg.Workflow.PhaseTimeouts.Execute, err)
+	}
+
 	defaultAgent := cfg.Agents.Default
 	if defaultAgent == "" {
 		defaultAgent = "claude"
@@ -271,6 +285,11 @@ func createWorkflowRunner(
 			MaxRounds:           cfg.Consensus.Arbiter.MaxRounds,
 			AbortThreshold:      cfg.Consensus.Arbiter.AbortThreshold,
 			StagnationThreshold: cfg.Consensus.Arbiter.StagnationThreshold,
+		},
+		PhaseTimeouts: workflow.PhaseTimeouts{
+			Analyze: analyzeTimeout,
+			Plan:    planTimeout,
+			Execute: executeTimeout,
 		},
 	}
 
