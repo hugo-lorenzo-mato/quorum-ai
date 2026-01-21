@@ -286,9 +286,21 @@ func (b *BaseAdapter) ExecuteWithStreaming(ctx context.Context, adapterName stri
 		fullCmd = cmdPath + " " + strings.Join(args, " ")
 	}
 
-	// Emit started event with command info
+	// Calculate actual timeout for event data
+	actualTimeout := optTimeout
+	if actualTimeout == 0 {
+		actualTimeout = b.config.Timeout
+	}
+	if actualTimeout == 0 {
+		actualTimeout = 5 * time.Minute
+	}
+
+	// Emit started event with command info and timeout
 	b.emitEvent(core.NewAgentEvent(core.AgentEventStarted, adapterName, "Starting execution").
-		WithData(map[string]any{"command": fullCmd}))
+		WithData(map[string]any{
+			"command":         fullCmd,
+			"timeout_seconds": int(actualTimeout.Seconds()),
+		}))
 
 	switch streamCfg.Method {
 	case StreamMethodJSONStdout:

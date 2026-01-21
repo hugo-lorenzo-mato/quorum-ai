@@ -124,9 +124,6 @@ func (c *CopilotAdapter) Ping(ctx context.Context) error {
 
 // Execute runs a prompt through Copilot CLI.
 func (c *CopilotAdapter) Execute(ctx context.Context, opts core.ExecuteOptions) (*core.ExecuteResult, error) {
-	// Emit started event
-	c.emitEvent(core.NewAgentEvent(core.AgentEventStarted, "copilot", "Starting execution"))
-
 	args := c.buildArgs(opts)
 
 	// Create command
@@ -150,6 +147,10 @@ func (c *CopilotAdapter) Execute(ctx context.Context, opts core.ExecuteOptions) 
 	if timeout == 0 {
 		timeout = 5 * time.Minute
 	}
+
+	// Emit started event with timeout info
+	c.emitEvent(core.NewAgentEvent(core.AgentEventStarted, "copilot", "Starting execution").
+		WithData(map[string]any{"timeout_seconds": int(timeout.Seconds())}))
 
 	// Apply timeout to context
 	ctx, cancel := context.WithTimeout(ctx, timeout)
