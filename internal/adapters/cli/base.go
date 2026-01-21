@@ -170,7 +170,7 @@ func (b *BaseAdapter) ExecuteCommand(ctx context.Context, args []string, stdin, 
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			b.streamStderr(stderrPipe, &stderr)
+			b.streamStderr(stderrPipe, &stderr, b.config.Name)
 		}()
 	}
 
@@ -206,7 +206,8 @@ func (b *BaseAdapter) ExecuteCommand(ctx context.Context, args []string, stdin, 
 
 // streamStderr reads stderr line by line, calling the callback for each line
 // while also writing to the buffer for final capture.
-func (b *BaseAdapter) streamStderr(pipe io.ReadCloser, buf *bytes.Buffer) {
+// Also emits agent events based on common progress patterns.
+func (b *BaseAdapter) streamStderr(pipe io.ReadCloser, buf *bytes.Buffer, adapterName string) {
 	scanner := bufio.NewScanner(pipe)
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -217,8 +218,50 @@ func (b *BaseAdapter) streamStderr(pipe io.ReadCloser, buf *bytes.Buffer) {
 		if b.logCallback != nil {
 			b.logCallback(line)
 		}
+		// Emit events based on common stderr patterns
+		b.emitStderrEvent(adapterName, line)
 	}
 	// Ignore scanner errors - pipe may close abruptly on timeout
+}
+
+// emitStderrEvent parses stderr lines for progress indicators and emits appropriate events.
+func (b *BaseAdapter) emitStderrEvent(adapterName, line string) {
+	if b.eventHandler == nil {
+		return
+	}
+
+	lineLower := strings.ToLower(line)
+
+	// Tool/action patterns
+	toolPatterns := []string{
+		"reading", "writing", "executing", "running", "calling",
+		"searching", "analyzing", "processing", "fetching", "loading",
+		"tool:", "using tool", "function call", "bash:",
+	}
+
+	for _, pattern := range toolPatterns {
+		if strings.Contains(lineLower, pattern) {
+			// Extract a meaningful description from the line
+			desc := line
+			if len(desc) > 50 {
+				desc = desc[:47] + "..."
+			}
+			b.emitEvent(core.NewAgentEvent(core.AgentEventToolUse, adapterName, desc))
+			return
+		}
+	}
+
+	// Thinking patterns
+	thinkingPatterns := []string{
+		"thinking", "reasoning", "considering", "evaluating",
+	}
+
+	for _, pattern := range thinkingPatterns {
+		if strings.Contains(lineLower, pattern) {
+			b.emitEvent(core.NewAgentEvent(core.AgentEventThinking, adapterName, "Thinking..."))
+			return
+		}
+	}
 }
 
 // ExecuteWithStreaming runs a CLI command with real-time event streaming.
@@ -344,7 +387,7 @@ func (b *BaseAdapter) executeWithJSONStreaming(
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		b.streamStderr(stderrPipe, &stderr)
+		b.streamStderr(stderrPipe, &stderr, adapterName)
 	}()
 
 	// Wait for command

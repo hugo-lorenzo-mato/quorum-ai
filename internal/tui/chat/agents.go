@@ -498,8 +498,8 @@ func StartAgent(agents []*AgentInfo, name, phase string) bool {
 			a.Status = AgentStatusRunning
 			a.StartedAt = time.Now()
 			a.Phase = phase
-			a.CurrentActivity = "starting..."
-			a.ActivityIcon = "▶"
+			a.CurrentActivity = "working..."
+			a.ActivityIcon = "◐"
 			return true
 		}
 	}
