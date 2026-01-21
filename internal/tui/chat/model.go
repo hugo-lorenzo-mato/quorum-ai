@@ -1771,15 +1771,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Update agent to running state with start time
 			StartAgent(m.agentInfos, msg.Agent, phase, maxTimeout)
 
-			// Log started event (important - keep in logs)
-			details := msg.Message
-			if model, ok := msg.Data["model"].(string); ok && model != "" {
-				details += fmt.Sprintf(" [%s]", model)
-			}
+			// Only log workflow-level started events (those with phase info)
+			// Skip CLI adapter events as they're redundant with progress bars
 			if phase != "" {
+				details := msg.Message
+				if model, ok := msg.Data["model"].(string); ok && model != "" {
+					details += fmt.Sprintf(" [%s]", model)
+				}
 				details = fmt.Sprintf("[%s] %s", phase, details)
+				m.logsPanel.AddInfo(source, "▶ "+details)
 			}
-			m.logsPanel.AddInfo(source, "▶ "+details)
 
 		case "tool_use":
 			// Update agent activity (shown in progress bar)
@@ -1795,16 +1796,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Skip chunk events - too noisy
 
 		case "progress":
-			// Update agent activity for retries
+			// Update agent activity (shown in progress bar)
 			details := msg.Message
-			if attempt, ok := msg.Data["attempt"].(int); ok {
+			isRetry := false
+			if attempt, ok := msg.Data["attempt"].(int); ok && attempt > 0 {
+				isRetry = true
 				if errMsg, ok := msg.Data["error"].(string); ok {
 					details = fmt.Sprintf("retry #%d: %s", attempt, errMsg)
 				}
 			}
 			UpdateAgentActivity(m.agentInfos, msg.Agent, "⟳", details)
-			// Log progress/retries (important - keep in logs)
-			m.logsPanel.AddWarn(source, "⟳ "+details)
+			// Only log retries (important for debugging), skip streaming activity
+			if isRetry {
+				m.logsPanel.AddWarn(source, "⟳ "+details)
+			}
 
 		case "completed":
 			// Extract token counts
