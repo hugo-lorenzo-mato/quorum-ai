@@ -412,17 +412,22 @@ func RenderAgentProgressBars(agents []*AgentInfo, width int) string {
 		line.WriteString(" ")
 
 		// Activity icon and description
-		activityWidth := width - maxNameLen - progressWidth - 15 // leave room for time
-		if activityWidth < 20 {
-			activityWidth = 20
+		// Fixed width for activity section to ensure time column alignment
+		// Format: "icon desc" where icon is ~2 chars wide (emoji)
+		activityWidth := width - maxNameLen - progressWidth - 20 // room for time column (e.g., "5m42s/1h")
+		if activityWidth < 30 {
+			activityWidth = 30
 		}
 
 		var activity string
+		var activityLen int // track visible length for padding
 		switch agent.Status {
 		case AgentStatusDisabled:
 			activity = agentDimStyle.Render("○ disabled")
+			activityLen = 10
 		case AgentStatusIdle:
 			activity = agentDimStyle.Render("○ idle")
+			activityLen = 6
 		case AgentStatusRunning:
 			icon := agent.ActivityIcon
 			if icon == "" {
@@ -432,33 +437,45 @@ func RenderAgentProgressBars(agents []*AgentInfo, width int) string {
 			if desc == "" {
 				desc = "processing..."
 			}
-			// Truncate if too long
-			if len(desc) > activityWidth-3 {
-				desc = desc[:activityWidth-6] + "..."
+			// Icon takes ~2 visual chars + space = 3. Leave room for desc.
+			maxDescLen := activityWidth - 3
+			if maxDescLen < 10 {
+				maxDescLen = 10
+			}
+			if len(desc) > maxDescLen {
+				desc = desc[:maxDescLen-3] + "..."
 			}
 			activity = agentWarnStyle.Render(icon) + " " + desc
+			activityLen = 2 + 1 + len(desc) // icon(2) + space(1) + desc
 		case AgentStatusDone:
 			tokens := agent.TokensIn + agent.TokensOut
 			if tokens > 0 {
-				activity = agentSuccessStyle.Render("✓") + " " + agentDimStyle.Render(fmt.Sprintf("done (%d tok)", tokens))
+				tokStr := fmt.Sprintf("done (%d tok)", tokens)
+				activity = agentSuccessStyle.Render("✓") + " " + agentDimStyle.Render(tokStr)
+				activityLen = 2 + 1 + len(tokStr)
 			} else {
 				activity = agentSuccessStyle.Render("✓ done")
+				activityLen = 6
 			}
 		case AgentStatusError:
 			errMsg := agent.Error
 			if errMsg == "" {
 				errMsg = "failed"
 			}
-			if len(errMsg) > activityWidth-3 {
-				errMsg = errMsg[:activityWidth-6] + "..."
+			maxErrLen := activityWidth - 3
+			if maxErrLen < 10 {
+				maxErrLen = 10
+			}
+			if len(errMsg) > maxErrLen {
+				errMsg = errMsg[:maxErrLen-3] + "..."
 			}
 			activity = agentErrorStyle.Render("✗ " + errMsg)
+			activityLen = 2 + len(errMsg)
 		}
 
-		// Pad activity to fixed width
-		activityPlain := stripANSI(activity)
-		if len(activityPlain) < activityWidth {
-			activity += strings.Repeat(" ", activityWidth-len(activityPlain))
+		// Pad activity to exactly activityWidth for consistent time alignment
+		if activityLen < activityWidth {
+			activity += strings.Repeat(" ", activityWidth-activityLen)
 		}
 		line.WriteString(activity)
 
@@ -476,26 +493,6 @@ func RenderAgentProgressBars(agents []*AgentInfo, width int) string {
 	}
 
 	return strings.Join(lines, "\n")
-}
-
-// stripANSI removes ANSI escape sequences for length calculation
-func stripANSI(s string) string {
-	var result strings.Builder
-	inEscape := false
-	for _, r := range s {
-		if r == '\x1b' {
-			inEscape = true
-			continue
-		}
-		if inEscape {
-			if r == 'm' {
-				inEscape = false
-			}
-			continue
-		}
-		result.WriteRune(r)
-	}
-	return result.String()
 }
 
 // UpdateAgentActivity updates an agent's current activity.
