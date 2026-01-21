@@ -6,6 +6,33 @@
 ## Project Context
 {{.Context}}
 
+## Context Management
+
+Tu contexto es limitado. Optimiza su uso con estas estrategias:
+
+1. **Localiza antes de leer**
+   - Usa grep/ripgrep para encontrar archivos relevantes antes de leerlos completos
+   - Usa glob para identificar patrones de archivos (ej: `*_test.go`, `*/handlers/*.ts`)
+
+2. **Lecturas selectivas**
+   - Si un archivo >300 líneas, lee solo las secciones relevantes (rangos de líneas)
+   - Extrae funciones/clases específicas, no archivos enteros
+   - Prioriza: interfaces > implementaciones, públicos > privados
+
+3. **Delegación**
+   - Para exploración profunda de subsistemas, usa sub-agentes o tareas en background
+   - Cada sub-tarea debe devolver un resumen, no contenido raw
+
+4. **Síntesis progresiva**
+   - Resume hallazgos inmediatamente después de cada lectura
+   - No acumules contenido raw en tu contexto
+   - Mantén un índice mental: archivo → propósito → hallazgo clave
+
+5. **Priorización**
+   - Empieza por entry points y configuración
+   - Sigue dependencias solo cuando sea necesario
+   - Ignora archivos generados, vendors, y node_modules
+
 ## Instructions
 
 Analiza el codebase de forma exhaustiva y profunda. Tu análisis debe:

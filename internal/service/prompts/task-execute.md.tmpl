@@ -17,6 +17,15 @@
 {{range .Constraints}}- {{.}}
 {{end}}{{end}}
 
+## Context Management
+
+Optimiza el uso de tu contexto:
+
+- **Localiza primero**: Usa grep para encontrar las líneas exactas antes de leer archivos completos
+- **Lecturas acotadas**: Si necesitas un archivo grande, lee solo el rango de líneas relevante
+- **Un cambio a la vez**: Completa y verifica cada modificación antes de pasar a la siguiente
+- **Delega si es necesario**: Para refactors grandes, considera dividir en sub-tareas
+
 ## Instructions
 Execute the task described above. Follow these guidelines:
 1. Make minimal, focused changes
