@@ -31,10 +31,11 @@ type AgentInfo struct {
 	Error     string
 
 	// Real-time activity tracking
-	CurrentActivity string    // Current activity description (e.g., "read_file config.go")
-	ActivityIcon    string    // Icon for current activity (e.g., "🔧", "💭")
-	StartedAt       time.Time // When agent started running
-	Phase           string    // Current workflow phase (e.g., "analyze", "critique")
+	CurrentActivity string        // Current activity description (e.g., "read_file config.go")
+	ActivityIcon    string        // Icon for current activity (e.g., "🔧", "💭")
+	StartedAt       time.Time     // When agent started running
+	MaxTimeout      time.Duration // Maximum timeout for this phase
+	Phase           string        // Current workflow phase (e.g., "analyze", "critique")
 }
 
 // Default agent colors
@@ -319,15 +320,34 @@ func estimateProgress(startedAt time.Time, status AgentStatus) int {
 }
 
 // formatElapsed formats elapsed time compactly
-func formatElapsed(startedAt time.Time) string {
+func formatElapsed(startedAt time.Time, maxTimeout time.Duration) string {
 	if startedAt.IsZero() {
 		return ""
 	}
 	elapsed := time.Since(startedAt)
+
+	// Format elapsed time
+	var elapsedStr string
 	if elapsed < time.Minute {
-		return fmt.Sprintf("%ds", int(elapsed.Seconds()))
+		elapsedStr = fmt.Sprintf("%ds", int(elapsed.Seconds()))
+	} else {
+		elapsedStr = fmt.Sprintf("%dm%02ds", int(elapsed.Minutes()), int(elapsed.Seconds())%60)
 	}
-	return fmt.Sprintf("%dm%02ds", int(elapsed.Minutes()), int(elapsed.Seconds())%60)
+
+	// Add max timeout if available
+	if maxTimeout > 0 {
+		var maxStr string
+		if maxTimeout < time.Minute {
+			maxStr = fmt.Sprintf("%ds", int(maxTimeout.Seconds()))
+		} else if maxTimeout < time.Hour {
+			maxStr = fmt.Sprintf("%dm", int(maxTimeout.Minutes()))
+		} else {
+			maxStr = fmt.Sprintf("%dh", int(maxTimeout.Hours()))
+		}
+		return elapsedStr + "/" + maxStr
+	}
+
+	return elapsedStr
 }
 
 // RenderAgentProgressBars renders progress bars for all agents with current activity.
@@ -444,7 +464,7 @@ func RenderAgentProgressBars(agents []*AgentInfo, width int) string {
 
 		// Elapsed time (right-aligned)
 		if agent.Status == AgentStatusRunning && !agent.StartedAt.IsZero() {
-			elapsed := formatElapsed(agent.StartedAt)
+			elapsed := formatElapsed(agent.StartedAt, agent.MaxTimeout)
 			line.WriteString(" ")
 			line.WriteString(agentDimStyle.Render(elapsed))
 		} else if agent.Time != "" {
@@ -492,16 +512,18 @@ func UpdateAgentActivity(agents []*AgentInfo, name, icon, activity string) bool 
 }
 
 // StartAgent marks an agent as running and records the start time.
-func StartAgent(agents []*AgentInfo, name, phase string) bool {
+func StartAgent(agents []*AgentInfo, name, phase string, maxTimeout time.Duration) bool {
 	for _, a := range agents {
-		if strings.EqualFold(a.Name, name) {
-			a.Status = AgentStatusRunning
-			a.StartedAt = time.Now()
-			a.Phase = phase
-			a.CurrentActivity = "working..."
-			a.ActivityIcon = "◐"
-			return true
+		if !strings.EqualFold(a.Name, name) {
+			continue
 		}
+		a.Status = AgentStatusRunning
+		a.StartedAt = time.Now()
+		a.MaxTimeout = maxTimeout
+		a.Phase = phase
+		a.CurrentActivity = "working..."
+		a.ActivityIcon = "◐"
+		return true
 	}
 	return false
 }
@@ -509,17 +531,18 @@ func StartAgent(agents []*AgentInfo, name, phase string) bool {
 // CompleteAgent marks an agent as done and records elapsed time.
 func CompleteAgent(agents []*AgentInfo, name string, tokensIn, tokensOut int) bool {
 	for _, a := range agents {
-		if strings.EqualFold(a.Name, name) {
-			a.Status = AgentStatusDone
-			a.TokensIn += tokensIn
-			a.TokensOut += tokensOut
-			if !a.StartedAt.IsZero() {
-				a.Time = formatElapsed(a.StartedAt)
-			}
-			a.CurrentActivity = ""
-			a.ActivityIcon = ""
-			return true
+		if !strings.EqualFold(a.Name, name) {
+			continue
 		}
+		a.Status = AgentStatusDone
+		a.TokensIn += tokensIn
+		a.TokensOut += tokensOut
+		if !a.StartedAt.IsZero() {
+			a.Time = formatElapsed(a.StartedAt, a.MaxTimeout)
+		}
+		a.CurrentActivity = ""
+		a.ActivityIcon = ""
+		return true
 	}
 	return false
 }
@@ -527,16 +550,17 @@ func CompleteAgent(agents []*AgentInfo, name string, tokensIn, tokensOut int) bo
 // FailAgent marks an agent as failed with an error message.
 func FailAgent(agents []*AgentInfo, name, errMsg string) bool {
 	for _, a := range agents {
-		if strings.EqualFold(a.Name, name) {
-			a.Status = AgentStatusError
-			a.Error = errMsg
-			if !a.StartedAt.IsZero() {
-				a.Time = formatElapsed(a.StartedAt)
-			}
-			a.CurrentActivity = ""
-			a.ActivityIcon = ""
-			return true
+		if !strings.EqualFold(a.Name, name) {
+			continue
 		}
+		a.Status = AgentStatusError
+		a.Error = errMsg
+		if !a.StartedAt.IsZero() {
+			a.Time = formatElapsed(a.StartedAt, a.MaxTimeout)
+		}
+		a.CurrentActivity = ""
+		a.ActivityIcon = ""
+		return true
 	}
 	return false
 }

@@ -15,20 +15,21 @@ import (
 
 // ClaudeStreamParser parses Claude Code CLI's stream-json output format.
 // Real format from `claude --print --output-format stream-json`:
-//   {"type":"system","subtype":"init","session_id":"...","tools":["Bash","Glob",...]}
-//   {"type":"assistant","message":{"content":[{"type":"tool_use","id":"...","name":"Bash","input":{...}}]}}
-//   {"type":"assistant","message":{"content":[{"type":"text","text":"..."}]}}
-//   {"type":"result","subtype":"success","result":"...","session_id":"..."}
+//
+//	{"type":"system","subtype":"init","session_id":"...","tools":["Bash","Glob",...]}
+//	{"type":"assistant","message":{"content":[{"type":"tool_use","id":"...","name":"Bash","input":{...}}]}}
+//	{"type":"assistant","message":{"content":[{"type":"text","text":"..."}]}}
+//	{"type":"result","subtype":"success","result":"...","session_id":"..."}
 type ClaudeStreamParser struct{}
 
 // claudeStreamEvent represents a single event in Claude Code's stream-json output.
 type claudeStreamEvent struct {
-	Type     string `json:"type"`
-	Subtype  string `json:"subtype"`
-	Message  *claudeMessage `json:"message,omitempty"`
-	Result   string `json:"result,omitempty"`
-	Error    string `json:"error,omitempty"`
-	Tools    []string `json:"tools,omitempty"`
+	Type    string         `json:"type"`
+	Subtype string         `json:"subtype"`
+	Message *claudeMessage `json:"message,omitempty"`
+	Result  string         `json:"result,omitempty"`
+	Error   string         `json:"error,omitempty"`
+	Tools   []string       `json:"tools,omitempty"`
 }
 
 type claudeMessage struct {
@@ -135,23 +136,24 @@ func (p *ClaudeStreamParser) AgentName() string {
 
 // GeminiStreamParser parses Gemini CLI's stream-json output format.
 // Real format from `gemini --output-format stream-json`:
-//   {"type":"init","model":"gemini-2.5-flash"}
-//   {"type":"tool_use","tool_name":"read_file","args":{"path":"..."}}
-//   {"type":"tool_result","tool_name":"read_file","result":"..."}
-//   {"type":"text","text":"..."}
-//   {"type":"result","response":"..."}
+//
+//	{"type":"init","model":"gemini-2.5-flash"}
+//	{"type":"tool_use","tool_name":"read_file","args":{"path":"..."}}
+//	{"type":"tool_result","tool_name":"read_file","result":"..."}
+//	{"type":"text","text":"..."}
+//	{"type":"result","response":"..."}
 type GeminiStreamParser struct{}
 
 // geminiStreamEvent represents a single event in Gemini's stream-json output.
 type geminiStreamEvent struct {
 	Type       string `json:"type"`
-	Model      string `json:"model,omitempty"`      // for init
-	ToolName   string `json:"tool_name,omitempty"`  // for tool_use, tool_result
-	Args       any    `json:"args,omitempty"`       // for tool_use
-	ToolResult string `json:"result,omitempty"`     // for tool_result
-	Text       string `json:"text,omitempty"`       // for text
-	Response   string `json:"response,omitempty"`   // for result
-	Error      string `json:"error,omitempty"`      // for error
+	Model      string `json:"model,omitempty"`     // for init
+	ToolName   string `json:"tool_name,omitempty"` // for tool_use, tool_result
+	Args       any    `json:"args,omitempty"`      // for tool_use
+	ToolResult string `json:"result,omitempty"`    // for tool_result
+	Text       string `json:"text,omitempty"`      // for text
+	Response   string `json:"response,omitempty"`  // for result
+	Error      string `json:"error,omitempty"`     // for error
 }
 
 // ParseLine parses a single line of Gemini stream-json output.
@@ -242,13 +244,14 @@ func (p *GeminiStreamParser) AgentName() string {
 
 // CodexStreamParser parses OpenAI Codex CLI's --json output format.
 // Real format from `codex exec --json`:
-//   {"type":"thread.started","thread_id":"..."}
-//   {"type":"turn.started"}
-//   {"type":"item.completed","item":{"type":"reasoning","text":"..."}}
-//   {"type":"item.started","item":{"type":"command_execution","command":"ls",...}}
-//   {"type":"item.completed","item":{"type":"command_execution","command":"ls","exit_code":0,...}}
-//   {"type":"item.completed","item":{"type":"agent_message","text":"..."}}
-//   {"type":"turn.completed","usage":{"input_tokens":...,"output_tokens":...}}
+//
+//	{"type":"thread.started","thread_id":"..."}
+//	{"type":"turn.started"}
+//	{"type":"item.completed","item":{"type":"reasoning","text":"..."}}
+//	{"type":"item.started","item":{"type":"command_execution","command":"ls",...}}
+//	{"type":"item.completed","item":{"type":"command_execution","command":"ls","exit_code":0,...}}
+//	{"type":"item.completed","item":{"type":"agent_message","text":"..."}}
+//	{"type":"turn.completed","usage":{"input_tokens":...,"output_tokens":...}}
 type CodexStreamParser struct{}
 
 // codexStreamEvent represents a single event in Codex's JSON output.
@@ -262,10 +265,10 @@ type codexStreamEvent struct {
 
 type codexItem struct {
 	ID      string `json:"id,omitempty"`
-	Type    string `json:"type"`                // "command_execution", "reasoning", "agent_message", "file_edit"
-	Command string `json:"command,omitempty"`   // for command_execution
-	Text    string `json:"text,omitempty"`      // for reasoning, agent_message
-	Status  string `json:"status,omitempty"`    // "in_progress", "completed"
+	Type    string `json:"type"`              // "command_execution", "reasoning", "agent_message", "file_edit"
+	Command string `json:"command,omitempty"` // for command_execution
+	Text    string `json:"text,omitempty"`    // for reasoning, agent_message
+	Status  string `json:"status,omitempty"`  // "in_progress", "completed"
 }
 
 type codexUsage struct {

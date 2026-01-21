@@ -1761,8 +1761,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if p, ok := msg.Data["phase"].(string); ok {
 				phase = p
 			}
+			// Extract timeout from event data (in seconds or as duration)
+			var maxTimeout time.Duration
+			if t, ok := msg.Data["timeout_seconds"].(float64); ok && t > 0 {
+				maxTimeout = time.Duration(t) * time.Second
+			} else if t, ok := msg.Data["timeout_seconds"].(int); ok && t > 0 {
+				maxTimeout = time.Duration(t) * time.Second
+			}
 			// Update agent to running state with start time
-			StartAgent(m.agentInfos, msg.Agent, phase)
+			StartAgent(m.agentInfos, msg.Agent, phase, maxTimeout)
 
 			// Log started event (important - keep in logs)
 			details := msg.Message

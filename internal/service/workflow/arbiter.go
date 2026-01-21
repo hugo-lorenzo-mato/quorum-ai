@@ -122,10 +122,11 @@ func (a *SemanticArbiter) Evaluate(ctx context.Context, wctx *Context, round int
 	// Emit started event
 	if wctx.Output != nil {
 		wctx.Output.AgentEvent("started", arbiterAgentName, fmt.Sprintf("Running semantic arbiter evaluation (round %d)", round), map[string]interface{}{
-			"phase":          "arbiter",
-			"round":          round,
-			"model":          model,
-			"analyses_count": len(outputs),
+			"phase":           "arbiter",
+			"round":           round,
+			"model":           model,
+			"analyses_count":  len(outputs),
+			"timeout_seconds": int(wctx.Config.PhaseTimeouts.Analyze.Seconds()),
 		})
 	}
 

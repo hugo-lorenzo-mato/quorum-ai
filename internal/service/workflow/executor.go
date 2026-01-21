@@ -257,11 +257,12 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 	// Emit agent started event
 	if wctx.Output != nil {
 		wctx.Output.AgentEvent("started", agentName, "Executing task: "+task.Name, map[string]interface{}{
-			"task_id":   string(task.ID),
-			"task_name": task.Name,
-			"phase":     "execute",
-			"model":     model,
-			"workdir":   workDir,
+			"task_id":         string(task.ID),
+			"task_name":       task.Name,
+			"phase":           "execute",
+			"model":           model,
+			"workdir":         workDir,
+			"timeout_seconds": int(wctx.Config.PhaseTimeouts.Execute.Seconds()),
 		})
 	}
 

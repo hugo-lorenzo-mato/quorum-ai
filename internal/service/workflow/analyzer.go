@@ -398,9 +398,10 @@ func (a *Analyzer) runVnRefinementWithAgent(ctx context.Context, wctx *Context, 
 
 	if wctx.Output != nil {
 		wctx.Output.AgentEvent("started", agentName, fmt.Sprintf("Running V%d refinement", round), map[string]interface{}{
-			"phase": fmt.Sprintf("analyze_v%d", round),
-			"model": model,
-			"round": round,
+			"phase":           fmt.Sprintf("analyze_v%d", round),
+			"model":           model,
+			"round":           round,
+			"timeout_seconds": int(wctx.Config.PhaseTimeouts.Analyze.Seconds()),
 		})
 	}
 
@@ -568,8 +569,9 @@ func (a *Analyzer) runAnalysisWithAgent(ctx context.Context, wctx *Context, agen
 	// Emit started event
 	if wctx.Output != nil {
 		wctx.Output.AgentEvent("started", agentName, "Running V1 analysis", map[string]interface{}{
-			"phase": "analyze_v1",
-			"model": model,
+			"phase":           "analyze_v1",
+			"model":           model,
+			"timeout_seconds": int(wctx.Config.PhaseTimeouts.Analyze.Seconds()),
 		})
 	}
 
@@ -686,9 +688,10 @@ func (a *Analyzer) consolidateAnalysis(ctx context.Context, wctx *Context, outpu
 	// Emit started event
 	if wctx.Output != nil {
 		wctx.Output.AgentEvent("started", consolidatorAgent, "Consolidating analyses", map[string]interface{}{
-			"phase":          "consolidate",
-			"model":          model,
-			"analyses_count": len(outputs),
+			"phase":           "consolidate",
+			"model":           model,
+			"analyses_count":  len(outputs),
+			"timeout_seconds": int(wctx.Config.PhaseTimeouts.Analyze.Seconds()),
 		})
 	}
 

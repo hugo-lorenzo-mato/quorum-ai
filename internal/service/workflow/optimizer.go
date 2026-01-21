@@ -107,9 +107,10 @@ func (o *Optimizer) Run(ctx context.Context, wctx *Context) error {
 	// Emit started event
 	if wctx.Output != nil {
 		wctx.Output.AgentEvent("started", agentName, "Optimizing prompt", map[string]interface{}{
-			"phase":         "optimize",
-			"model":         model,
-			"prompt_length": len(wctx.State.Prompt),
+			"phase":           "optimize",
+			"model":           model,
+			"prompt_length":   len(wctx.State.Prompt),
+			"timeout_seconds": 180, // 3 minutes hardcoded for optimizer
 		})
 	}
 

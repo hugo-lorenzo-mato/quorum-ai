@@ -83,8 +83,9 @@ func (p *Planner) Run(ctx context.Context, wctx *Context) error {
 
 	if wctx.Output != nil {
 		wctx.Output.AgentEvent("started", agentName, "Generating execution plan", map[string]interface{}{
-			"phase": "plan",
-			"model": model,
+			"phase":           "plan",
+			"model":           model,
+			"timeout_seconds": int(wctx.Config.PhaseTimeouts.Plan.Seconds()),
 		})
 	}
 

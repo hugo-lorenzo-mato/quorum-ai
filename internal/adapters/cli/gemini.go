@@ -183,7 +183,6 @@ func (g *GeminiAdapter) estimateCost(tokensIn, tokensOut int) float64 {
 	return inputCost + outputCost
 }
 
-
 // Ensure GeminiAdapter implements core.Agent and core.StreamingCapable
 var _ core.Agent = (*GeminiAdapter)(nil)
 var _ core.StreamingCapable = (*GeminiAdapter)(nil)
