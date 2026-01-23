@@ -17,11 +17,17 @@ type TaskDAG interface {
 	GetReadyTasks(completed map[core.TaskID]bool) []*core.Task
 }
 
+// GitClientFactory creates git clients for specific paths.
+type GitClientFactory interface {
+	NewClient(repoPath string) (core.GitClient, error)
+}
+
 // Executor runs tasks according to the dependency graph.
 type Executor struct {
 	dag        TaskDAG
 	stateSaver StateSaver
 	denyTools  []string
+	gitFactory GitClientFactory
 }
 
 // NewExecutor creates a new executor.
@@ -33,12 +39,24 @@ func NewExecutor(dag TaskDAG, stateSaver StateSaver, denyTools []string) *Execut
 	}
 }
 
+// WithGitFactory sets the git client factory for finalization.
+func (e *Executor) WithGitFactory(factory GitClientFactory) *Executor {
+	e.gitFactory = factory
+	return e
+}
+
 // Run executes the execute phase.
 func (e *Executor) Run(ctx context.Context, wctx *Context) error {
 	wctx.Logger.Info("starting execute phase",
 		"workflow_id", wctx.State.WorkflowID,
 		"tasks", len(wctx.State.Tasks),
 	)
+
+	// Defensive validation: ensure tasks exist before executing
+	// This catches edge cases like corrupted checkpoints or skipped planning
+	if len(wctx.State.Tasks) == 0 {
+		return core.ErrValidation(core.CodeMissingTasks, "no tasks to execute: the planning phase may have failed or been skipped")
+	}
 
 	wctx.State.CurrentPhase = core.PhaseExecute
 	if wctx.Output != nil {
@@ -377,6 +395,17 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 		return costErr
 	}
 
+	// Finalize task (commit, push, PR) if configured
+	if finalizeErr := e.finalizeTask(ctx, wctx, task, taskState, workDir); finalizeErr != nil {
+		wctx.Logger.Warn("task finalization failed",
+			"task_id", task.ID,
+			"error", finalizeErr,
+		)
+		if wctx.Output != nil {
+			wctx.Output.Log("warn", "executor", fmt.Sprintf("Task finalization failed: %s", finalizeErr.Error()))
+		}
+	}
+
 	if err := wctx.Checkpoint.TaskCheckpoint(wctx.State, task, true); err != nil {
 		wctx.Logger.Warn("failed to create task complete checkpoint", "error", err)
 	}
@@ -436,12 +465,31 @@ func (e *Executor) checkCostLimits(wctx *Context, task *core.Task, taskState *co
 }
 
 // setupWorktree creates a worktree for task isolation if enabled.
+// If the task has dependencies, the worktree is created from the most recent
+// completed dependency's branch to inherit its changes.
 func (e *Executor) setupWorktree(ctx context.Context, wctx *Context, task *core.Task, taskState *core.TaskState, useWorktrees bool) (workDir string, created bool) {
 	if !useWorktrees || wctx.Worktrees == nil {
 		return "", false
 	}
 
-	wtInfo, err := wctx.Worktrees.Create(ctx, task, "")
+	// Find base branch from dependencies (if any)
+	baseBranch := e.findDependencyBranch(wctx, task)
+
+	var wtInfo *core.WorktreeInfo
+	var err error
+
+	if baseBranch != "" {
+		// Create worktree from dependency's branch
+		wctx.Logger.Info("creating worktree from dependency branch",
+			"task_id", task.ID,
+			"base_branch", baseBranch,
+		)
+		wtInfo, err = wctx.Worktrees.CreateFromBranch(ctx, task, "", baseBranch)
+	} else {
+		// Create worktree from HEAD
+		wtInfo, err = wctx.Worktrees.Create(ctx, task, "")
+	}
+
 	if err != nil {
 		wctx.Logger.Warn("failed to create worktree, executing in main repo",
 			"task_id", task.ID,
@@ -457,9 +505,51 @@ func (e *Executor) setupWorktree(ctx context.Context, wctx *Context, task *core.
 	wctx.Logger.Info("created worktree for task",
 		"task_id", task.ID,
 		"worktree_path", wtInfo.Path,
+		"branch", wtInfo.Branch,
 	)
 
 	return wtInfo.Path, true
+}
+
+// findDependencyBranch returns the branch of the most recently completed dependency.
+// This allows dependent tasks to start with the changes from their dependencies.
+func (e *Executor) findDependencyBranch(wctx *Context, task *core.Task) string {
+	if len(task.Dependencies) == 0 {
+		return ""
+	}
+
+	wctx.RLock()
+	defer wctx.RUnlock()
+
+	// Find the most recently completed dependency with a worktree
+	var latestBranch string
+	for _, depID := range task.Dependencies {
+		depState := wctx.State.Tasks[depID]
+		if depState == nil || depState.Status != core.TaskStatusCompleted {
+			continue
+		}
+		if depState.WorktreePath == "" {
+			continue
+		}
+
+		// Get the branch from the dependency's worktree
+		depTask := &core.Task{
+			ID:          depID,
+			Name:        depState.Name,
+			Description: depState.Name, // Use name as description for worktree naming
+		}
+		wtInfo, err := wctx.Worktrees.Get(context.Background(), depTask)
+		if err != nil || wtInfo == nil {
+			continue
+		}
+
+		// Use the most recent dependency's branch
+		// (In practice, we'd want to merge multiple branches, but for simplicity
+		// we use the last one found - typically tasks have single dependencies)
+		latestBranch = wtInfo.Branch
+	}
+
+	return latestBranch
 }
 
 // cleanupWorktree removes the worktree if auto_clean is enabled.
@@ -476,6 +566,98 @@ func (e *Executor) cleanupWorktree(ctx context.Context, wctx *Context, task *cor
 	} else {
 		wctx.Logger.Info("cleaned up worktree", "task_id", task.ID)
 	}
+}
+
+// finalizeTask handles post-task git operations (commit, push, PR).
+func (e *Executor) finalizeTask(ctx context.Context, wctx *Context, task *core.Task, taskState *core.TaskState, workDir string) error {
+	cfg := wctx.Config.Finalization
+	if !cfg.AutoCommit {
+		return nil
+	}
+
+	// Determine the git repo path and branch
+	gitPath := workDir
+	if gitPath == "" {
+		// No worktree, use main repo
+		if wctx.Git == nil {
+			return nil
+		}
+		gitPath, _ = wctx.Git.RepoRoot(ctx)
+	}
+	if gitPath == "" {
+		return nil
+	}
+
+	// Get the branch name from the worktree path (stored in taskState)
+	branch := ""
+	if taskState.WorktreePath != "" {
+		// Extract branch from worktree info
+		if wctx.Worktrees != nil {
+			wtInfo, err := wctx.Worktrees.Get(ctx, task)
+			if err == nil && wtInfo != nil {
+				branch = wtInfo.Branch
+			}
+		}
+	}
+	if branch == "" {
+		// Fall back to current branch in the working directory
+		if wctx.Git != nil {
+			branch, _ = wctx.Git.CurrentBranch(ctx)
+		}
+	}
+
+	// Create a git client for the specific path
+	var gitClient core.GitClient
+	if e.gitFactory != nil {
+		var err error
+		gitClient, err = e.gitFactory.NewClient(gitPath)
+		if err != nil {
+			return fmt.Errorf("creating git client for worktree: %w", err)
+		}
+	} else if wctx.Git != nil {
+		gitClient = wctx.Git
+	} else {
+		return nil
+	}
+
+	// Create and run finalizer
+	finalizer := NewTaskFinalizer(gitClient, wctx.GitHub, cfg)
+	result, err := finalizer.Finalize(ctx, task, gitPath, branch)
+	if err != nil {
+		return err
+	}
+
+	// Log finalization results
+	if result.CommitSHA != "" {
+		wctx.Logger.Info("task committed",
+			"task_id", task.ID,
+			"commit", result.CommitSHA,
+		)
+	}
+	if result.Pushed {
+		wctx.Logger.Info("task pushed to remote",
+			"task_id", task.ID,
+			"branch", branch,
+		)
+	}
+	if result.PRNumber > 0 {
+		wctx.Logger.Info("PR created for task",
+			"task_id", task.ID,
+			"pr_number", result.PRNumber,
+			"pr_url", result.PRURL,
+		)
+		if wctx.Output != nil {
+			wctx.Output.Log("info", "executor", fmt.Sprintf("PR created: %s", result.PRURL))
+		}
+	}
+	if result.Merged {
+		wctx.Logger.Info("PR merged for task",
+			"task_id", task.ID,
+			"pr_number", result.PRNumber,
+		)
+	}
+
+	return nil
 }
 
 func shouldUseWorktrees(mode string, readyCount int) bool {

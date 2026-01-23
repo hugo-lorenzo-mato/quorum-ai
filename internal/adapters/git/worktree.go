@@ -181,6 +181,13 @@ type Worktree struct {
 
 // Create creates a new worktree for a branch.
 func (m *WorktreeManager) Create(ctx context.Context, name, branch string) (*Worktree, error) {
+	return m.CreateFromBranch(ctx, name, branch, "")
+}
+
+// CreateFromBranch creates a new worktree for a branch, optionally from a base branch.
+// If baseBranch is empty and the branch doesn't exist, it will be created from HEAD.
+// If baseBranch is specified and the branch doesn't exist, it will be created from baseBranch.
+func (m *WorktreeManager) CreateFromBranch(ctx context.Context, name, branch, baseBranch string) (*Worktree, error) {
 	if err := validateWorktreeName(name); err != nil {
 		return nil, err
 	}
@@ -221,8 +228,14 @@ func (m *WorktreeManager) Create(ctx context.Context, name, branch string) (*Wor
 	if branchExists {
 		args = []string{"worktree", "add", worktreePath, branch}
 	} else {
-		// Create new branch from current HEAD
-		args = []string{"worktree", "add", "-b", branch, worktreePath}
+		// Create new branch
+		if baseBranch != "" {
+			// Create from specified base branch (for dependencies)
+			args = []string{"worktree", "add", "-b", branch, worktreePath, baseBranch}
+		} else {
+			// Create from current HEAD
+			args = []string{"worktree", "add", "-b", branch, worktreePath}
+		}
 	}
 
 	_, err = m.git.run(ctx, args...)
@@ -505,6 +518,12 @@ func NewTaskWorktreeManager(git *Client, baseDir string) *TaskWorktreeManager {
 
 // Create creates a new worktree for a task (implements core.WorktreeManager).
 func (m *TaskWorktreeManager) Create(ctx context.Context, task *core.Task, branch string) (*core.WorktreeInfo, error) {
+	return m.CreateFromBranch(ctx, task, branch, "")
+}
+
+// CreateFromBranch creates a new worktree for a task from a specified base branch.
+// This is useful for dependent tasks that need to start from another task's branch.
+func (m *TaskWorktreeManager) CreateFromBranch(ctx context.Context, task *core.Task, branch, baseBranch string) (*core.WorktreeInfo, error) {
 	name, usedFallback, err := buildWorktreeName(task)
 	if err != nil {
 		return nil, err
@@ -521,7 +540,7 @@ func (m *TaskWorktreeManager) Create(ctx context.Context, task *core.Task, branc
 	if err != nil {
 		return nil, err
 	}
-	wt, err := m.manager.Create(ctx, name, resolvedBranch)
+	wt, err := m.manager.CreateFromBranch(ctx, name, resolvedBranch, baseBranch)
 	if err != nil {
 		return nil, err
 	}

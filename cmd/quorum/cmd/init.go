@@ -60,6 +60,7 @@ func runInit(_ *cobra.Command, _ []string) error {
 log:
   level: info
   format: auto
+  file: ""
 
 # Trace configuration
 trace:
@@ -72,109 +73,151 @@ trace:
   max_bytes: 262144
   total_max_bytes: 10485760
   max_files: 500
-  include_phases: [analyze, consensus, plan, execute]
+  include_phases: [refine, analyze, plan, execute]
 
-# Report configuration (Markdown output)
-report:
-  enabled: true
-  base_dir: ".quorum/output"
-  use_utc: true
-  include_raw: true
+# Workflow execution settings
+workflow:
+  timeout: 12h
+  max_retries: 3
+  dry_run: false
+  sandbox: true
+  deny_tools: []
 
-# Prompt optimizer configuration
-prompt_optimizer:
-  enabled: true
-  agent: claude
-  model: "claude-opus-4-5-20251101"
+# Phase configuration
+phases:
+  # Analyze phase settings
+  analyze:
+    timeout: 2h
+    # Prompt refiner - enhances user prompt before analysis
+    refiner:
+      enabled: true
+      agent: claude
+    # Analysis synthesizer - consolidates multi-agent analyses
+    synthesizer:
+      agent: claude
+    # Semantic moderator for multi-agent consensus evaluation
+    moderator:
+      enabled: true
+      agent: claude
+      threshold: 0.90
+      min_rounds: 2
+      max_rounds: 5
+      abort_threshold: 0.30
+      stagnation_threshold: 0.02
+  # Plan phase settings
+  plan:
+    timeout: 1h
+    # Plan synthesizer - when enabled, all agents with plan phase enabled
+    # propose plans in parallel, then synthesizer consolidates them.
+    # When disabled (default), uses single-agent planning with the default agent.
+    synthesizer:
+      enabled: false
+      agent: claude
+  # Execute phase settings
+  execute:
+    timeout: 2h
 
 # Agent configuration
-# All agents are enabled by default for multi-agent consensus
+# Note: temperature and max_tokens are omitted - let each CLI use its optimized defaults
 agents:
   default: claude
 
   # Claude (Anthropic) - Primary agent
-  # Uses Opus 4.5 for deep analysis
   claude:
     enabled: true
-    path: "claude"
-    model: "claude-opus-4-5-20251101"
-    max_tokens: 32000
+    path: claude
+    model: claude-opus-4-5-20251101
+    # Per-task model overrides. Only specify phases that need a different model.
+    # Unspecified phases use the default model above.
     phase_models:
-      analyze: "claude-opus-4-5-20251101"
-      plan: "claude-opus-4-5-20251101"
-      execute: "claude-opus-4-5-20251101"
+      refine: claude-opus-4-5-20251101
+      analyze: claude-opus-4-5-20251101
+      moderate: claude-opus-4-5-20251101
+      synthesize: claude-opus-4-5-20251101
+      plan: claude-opus-4-5-20251101
+      execute: claude-opus-4-5-20251101
 
   # Gemini (Google) - Secondary agent
-  # Uses Gemini 3 Pro (preview) for deep analysis
   gemini:
     enabled: true
-    path: "gemini"
-    model: "gemini-3-pro-preview"
-    max_tokens: 65536
+    path: gemini
+    model: gemini-3-flash-preview
     phase_models:
-      analyze: "gemini-3-pro-preview"
-      plan: "gemini-3-pro-preview"
-      execute: "gemini-3-flash-preview"
+      refine: gemini-3-pro-preview
+      analyze: gemini-3-pro-preview
+      moderate: gemini-3-pro-preview
+      synthesize: gemini-3-pro-preview
+      plan: gemini-3-pro-preview
+      execute: gemini-3-flash-preview
 
   # Codex (OpenAI) - Tertiary agent
-  # Uses GPT-5.2 with xhigh reasoning for analysis
-  # Uses GPT-5.2-codex with xhigh reasoning for planning
-  # Uses GPT-5.2-codex with high reasoning for execution
   codex:
     enabled: true
-    path: "codex"
-    model: "gpt-5.2"
-    max_tokens: 32000
+    path: codex
+    model: gpt-5.2-codex
+    # Codex-specific: default reasoning effort (minimal/low/medium/high/xhigh)
+    reasoning_effort: high
     phase_models:
-      analyze: "gpt-5.2"
-      plan: "gpt-5.2-codex"
-      execute: "gpt-5.2-codex"
+      refine: gpt-5.2-codex
+      analyze: gpt-5.2-codex
+      moderate: gpt-5.2-codex
+      synthesize: gpt-5.2-codex
+      plan: gpt-5.2-codex
+      execute: gpt-5.2-codex
+    # Per-phase reasoning effort overrides (optional)
+    reasoning_effort_phases:
+      refine: xhigh
+      analyze: xhigh
+      plan: xhigh
 
   # Copilot (GitHub) - Quaternary agent
-  # Uses Claude Sonnet 4.5 for analysis and planning (high quality)
-  # Uses Claude Haiku 4.5 for execution (0.33x cost, fast)
   copilot:
-    enabled: true
-    path: "copilot"
-    model: "claude-sonnet-4.5"
-    max_tokens: 32000
+    enabled: false
+    path: copilot
+    model: claude-sonnet-4-5
     phase_models:
-      analyze: "claude-sonnet-4.5"
-      plan: "claude-sonnet-4.5"
-      execute: "claude-haiku-4.5"
-
-# Workflow settings
-workflow:
-  max_retries: 3
-  timeout: "4h"
-  # Per-phase timeouts (each phase can run up to this duration)
-  phase_timeouts:
-    analyze: "1h"
-    plan: "30m"
-    execute: "1h"
-
-# Consensus settings
-consensus:
-  threshold: 0.75
-  arbiter:
-    enabled: true
-    agent: claude
-    model: "claude-opus-4-5-20251101"
-    threshold: 0.90
-    min_rounds: 2
-    max_rounds: 2
-    abort_threshold: 0.30
-    stagnation_threshold: 0.02
-
-# Consolidator settings (for analysis synthesis)
-analysis_consolidator:
-  agent: claude
-  model: "claude-opus-4-5-20251101"
+      refine: claude-sonnet-4-5
+      analyze: claude-sonnet-4-5
+      moderate: claude-sonnet-4-5
+      synthesize: claude-sonnet-4-5
+      plan: claude-sonnet-4-5
+      execute: claude-sonnet-4-5
 
 # State persistence
 state:
-  path: ".quorum/state/state.json"
-  backup_path: ".quorum/state/state.json.bak"
+  path: .quorum/state/state.json
+  backup_path: .quorum/state/state.json.bak
+  lock_ttl: 1h
+
+# Git configuration
+git:
+  worktree_dir: .worktrees
+  auto_clean: true
+  worktree_mode: parallel
+  # Task finalization: commit, push, and PR creation
+  # Each task runs in its own branch. After completion:
+  auto_commit: true
+  auto_push: true
+  auto_pr: true
+  # IMPORTANT: auto_merge is disabled by default for safety.
+  # Enable only if you want PRs merged automatically without review.
+  auto_merge: false
+  # Target branch for PRs (empty = repository default branch)
+  pr_base_branch: ""
+  # Merge strategy: merge, squash, rebase
+  merge_strategy: squash
+
+# GitHub integration
+github:
+  token: ""
+  remote: origin
+
+# Report configuration (Markdown output)
+report:
+  enabled: true
+  base_dir: .quorum/output
+  use_utc: true
+  include_raw: true
 `
 
 	if err := os.WriteFile(configPath, []byte(defaultConfig), 0o600); err != nil {

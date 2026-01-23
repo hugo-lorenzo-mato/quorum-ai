@@ -24,6 +24,13 @@ func (m *mockWorktreeManager) Create(_ context.Context, _ *core.Task, _ string) 
 	return m.createInfo, nil
 }
 
+func (m *mockWorktreeManager) CreateFromBranch(_ context.Context, _ *core.Task, _, _ string) (*core.WorktreeInfo, error) {
+	if m.createErr != nil {
+		return nil, m.createErr
+	}
+	return m.createInfo, nil
+}
+
 func (m *mockWorktreeManager) Get(_ context.Context, _ *core.Task) (*core.WorktreeInfo, error) {
 	return m.createInfo, nil
 }
@@ -884,5 +891,52 @@ func TestExecutor_Run_SaveStateFails(t *testing.T) {
 	err := executor.Run(context.Background(), wctx)
 	if err == nil {
 		t.Error("Run() should return error when state save fails")
+	}
+}
+
+func TestExecutor_Run_NoTasks(t *testing.T) {
+	dag := &mockDAGBuilder{}
+	saver := &mockStateSaver{}
+	executor := NewExecutor(dag, saver, nil)
+
+	// No tasks added to DAG
+
+	registry := &mockAgentRegistry{}
+
+	wctx := &Context{
+		State: &core.WorkflowState{
+			WorkflowID:   "wf-test",
+			CurrentPhase: core.PhasePlan, // Previous phase
+			Tasks:        map[core.TaskID]*core.TaskState{},
+			TaskOrder:    []core.TaskID{},
+			Checkpoints:  []core.Checkpoint{},
+			Metrics:      &core.StateMetrics{},
+		},
+		Agents:     registry,
+		Prompts:    &mockPromptRenderer{},
+		Checkpoint: &mockCheckpointCreator{},
+		Retry:      &mockRetryExecutor{},
+		RateLimits: &mockRateLimiterGetter{},
+		Logger:     logging.NewNop(),
+		Config: &Config{
+			DryRun:       false,
+			DefaultAgent: "claude",
+			WorktreeMode: "disabled",
+		},
+	}
+
+	err := executor.Run(context.Background(), wctx)
+	if err == nil {
+		t.Error("Run() should return error when no tasks to execute")
+	}
+
+	// Verify it's a validation error with the correct code
+	var qErr *core.DomainError
+	if errors.As(err, &qErr) {
+		if qErr.Code != core.CodeMissingTasks {
+			t.Errorf("error code = %q, want %q", qErr.Code, core.CodeMissingTasks)
+		}
+	} else {
+		t.Error("expected *core.DomainError")
 	}
 }

@@ -57,7 +57,7 @@ func init() {
 		flag.NoOptDefVal = "summary"
 	}
 	runCmd.Flags().StringVarP(&runOutput, "output", "o", "", "Output mode (tui, plain, json, quiet)")
-	runCmd.Flags().BoolVar(&runSkipOptimize, "skip-optimize", false, "Skip prompt optimization phase")
+	runCmd.Flags().BoolVar(&runSkipOptimize, "skip-refine", false, "Skip prompt refinement phase")
 }
 
 func parseLogLevel(level string) slog.Level {
@@ -206,8 +206,22 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 	if defaultAgent == "" {
 		defaultAgent = "claude"
 	}
-	// Optimizer config: disabled if --skip-optimize flag is set
-	optimizerEnabled := cfg.PromptOptimizer.Enabled && !runSkipOptimize
+	// Parse phase timeouts
+	analyzeTimeout, err := parseDurationDefault(cfg.Phases.Analyze.Timeout, defaultPhaseTimeout)
+	if err != nil {
+		return fmt.Errorf("parsing analyze phase timeout %q: %w", cfg.Phases.Analyze.Timeout, err)
+	}
+	planTimeout, err := parseDurationDefault(cfg.Phases.Plan.Timeout, defaultPhaseTimeout)
+	if err != nil {
+		return fmt.Errorf("parsing plan phase timeout %q: %w", cfg.Phases.Plan.Timeout, err)
+	}
+	executeTimeout, err := parseDurationDefault(cfg.Phases.Execute.Timeout, defaultPhaseTimeout)
+	if err != nil {
+		return fmt.Errorf("parsing execute phase timeout %q: %w", cfg.Phases.Execute.Timeout, err)
+	}
+
+	// Refiner config: disabled if --skip-refine flag is set
+	refinerEnabled := cfg.Phases.Analyze.Refiner.Enabled && !runSkipOptimize
 	runnerConfig := &workflow.RunnerConfig{
 		Timeout:      timeout,
 		MaxRetries:   runMaxRetries,
@@ -225,24 +239,39 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 		WorktreeMode:       cfg.Git.WorktreeMode,
 		MaxCostPerWorkflow: cfg.Costs.MaxPerWorkflow,
 		MaxCostPerTask:     cfg.Costs.MaxPerTask,
-		Optimizer: workflow.OptimizerConfig{
-			Enabled: optimizerEnabled,
-			Agent:   cfg.PromptOptimizer.Agent,
-			Model:   cfg.PromptOptimizer.Model,
+		Refiner: workflow.RefinerConfig{
+			Enabled: refinerEnabled,
+			Agent:   cfg.Phases.Analyze.Refiner.Agent,
 		},
-		Consolidator: workflow.ConsolidatorConfig{
-			Agent: cfg.AnalysisConsolidator.Agent,
-			Model: cfg.AnalysisConsolidator.Model,
+		Synthesizer: workflow.SynthesizerConfig{
+			Agent: cfg.Phases.Analyze.Synthesizer.Agent,
 		},
-		Arbiter: workflow.ArbiterConfig{
-			Enabled:             cfg.Consensus.Arbiter.Enabled,
-			Agent:               cfg.Consensus.Arbiter.Agent,
-			Model:               cfg.Consensus.Arbiter.Model,
-			Threshold:           cfg.Consensus.Arbiter.Threshold,
-			MinRounds:           cfg.Consensus.Arbiter.MinRounds,
-			MaxRounds:           cfg.Consensus.Arbiter.MaxRounds,
-			AbortThreshold:      cfg.Consensus.Arbiter.AbortThreshold,
-			StagnationThreshold: cfg.Consensus.Arbiter.StagnationThreshold,
+		PlanSynthesizer: workflow.PlanSynthesizerConfig{
+			Enabled: cfg.Phases.Plan.Synthesizer.Enabled,
+			Agent:   cfg.Phases.Plan.Synthesizer.Agent,
+		},
+		Moderator: workflow.ModeratorConfig{
+			Enabled:             cfg.Phases.Analyze.Moderator.Enabled,
+			Agent:               cfg.Phases.Analyze.Moderator.Agent,
+			Threshold:           cfg.Phases.Analyze.Moderator.Threshold,
+			MinRounds:           cfg.Phases.Analyze.Moderator.MinRounds,
+			MaxRounds:           cfg.Phases.Analyze.Moderator.MaxRounds,
+			AbortThreshold:      cfg.Phases.Analyze.Moderator.AbortThreshold,
+			StagnationThreshold: cfg.Phases.Analyze.Moderator.StagnationThreshold,
+		},
+		PhaseTimeouts: workflow.PhaseTimeouts{
+			Analyze: analyzeTimeout,
+			Plan:    planTimeout,
+			Execute: executeTimeout,
+		},
+		Finalization: workflow.FinalizationConfig{
+			AutoCommit:    cfg.Git.AutoCommit,
+			AutoPush:      cfg.Git.AutoPush,
+			AutoPR:        cfg.Git.AutoPR,
+			AutoMerge:     cfg.Git.AutoMerge,
+			PRBaseBranch:  cfg.Git.PRBaseBranch,
+			MergeStrategy: cfg.Git.MergeStrategy,
+			Remote:        cfg.GitHub.Remote,
 		},
 	}
 
@@ -458,47 +487,52 @@ func configureAgentsFromConfig(registry *cli.Registry, cfg *config.Config, _ *co
 	// Configure Claude
 	if cfg.Agents.Claude.Enabled {
 		registry.Configure("claude", cli.AgentConfig{
-			Name:        "claude",
-			Path:        cfg.Agents.Claude.Path,
-			Model:       cfg.Agents.Claude.Model,
-			MaxTokens:   cfg.Agents.Claude.MaxTokens,
-			Temperature: cfg.Agents.Claude.Temperature,
-			Timeout:     5 * time.Minute,
+			Name:                  "claude",
+			Path:                  cfg.Agents.Claude.Path,
+			Model:                 cfg.Agents.Claude.Model,
+			Timeout:               5 * time.Minute,
+			Phases:                cfg.Agents.Claude.Phases,
+			ReasoningEffort:       cfg.Agents.Claude.ReasoningEffort,
+			ReasoningEffortPhases: cfg.Agents.Claude.ReasoningEffortPhases,
 		})
 	}
 
 	// Configure Gemini
 	if cfg.Agents.Gemini.Enabled {
 		registry.Configure("gemini", cli.AgentConfig{
-			Name:        "gemini",
-			Path:        cfg.Agents.Gemini.Path,
-			Model:       cfg.Agents.Gemini.Model,
-			MaxTokens:   cfg.Agents.Gemini.MaxTokens,
-			Temperature: cfg.Agents.Gemini.Temperature,
-			Timeout:     5 * time.Minute,
+			Name:                  "gemini",
+			Path:                  cfg.Agents.Gemini.Path,
+			Model:                 cfg.Agents.Gemini.Model,
+			Timeout:               5 * time.Minute,
+			Phases:                cfg.Agents.Gemini.Phases,
+			ReasoningEffort:       cfg.Agents.Gemini.ReasoningEffort,
+			ReasoningEffortPhases: cfg.Agents.Gemini.ReasoningEffortPhases,
 		})
 	}
 
 	// Configure Codex
 	if cfg.Agents.Codex.Enabled {
 		registry.Configure("codex", cli.AgentConfig{
-			Name:        "codex",
-			Path:        cfg.Agents.Codex.Path,
-			Model:       cfg.Agents.Codex.Model,
-			MaxTokens:   cfg.Agents.Codex.MaxTokens,
-			Temperature: cfg.Agents.Codex.Temperature,
-			Timeout:     5 * time.Minute,
+			Name:                  "codex",
+			Path:                  cfg.Agents.Codex.Path,
+			Model:                 cfg.Agents.Codex.Model,
+			Timeout:               5 * time.Minute,
+			Phases:                cfg.Agents.Codex.Phases,
+			ReasoningEffort:       cfg.Agents.Codex.ReasoningEffort,
+			ReasoningEffortPhases: cfg.Agents.Codex.ReasoningEffortPhases,
 		})
 	}
 
 	// Configure Copilot
 	if cfg.Agents.Copilot.Enabled {
 		registry.Configure("copilot", cli.AgentConfig{
-			Name:        "copilot",
-			Path:        cfg.Agents.Copilot.Path,
-			MaxTokens:   cfg.Agents.Copilot.MaxTokens,
-			Temperature: cfg.Agents.Copilot.Temperature,
-			Timeout:     5 * time.Minute,
+			Name:                  "copilot",
+			Path:                  cfg.Agents.Copilot.Path,
+			Model:                 cfg.Agents.Copilot.Model,
+			Timeout:               5 * time.Minute,
+			Phases:                cfg.Agents.Copilot.Phases,
+			ReasoningEffort:       cfg.Agents.Copilot.ReasoningEffort,
+			ReasoningEffortPhases: cfg.Agents.Copilot.ReasoningEffortPhases,
 		})
 	}
 

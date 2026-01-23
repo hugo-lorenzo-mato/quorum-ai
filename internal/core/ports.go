@@ -119,6 +119,10 @@ type AgentRegistry interface {
 
 	// Available returns agents that pass Ping.
 	Available(ctx context.Context) []string
+
+	// AvailableForPhase returns agents that pass Ping AND are enabled for the given phase.
+	// Phase should be one of: "optimize", "analyze", "plan", "execute"
+	AvailableForPhase(ctx context.Context, phase string) []string
 }
 
 // =============================================================================
