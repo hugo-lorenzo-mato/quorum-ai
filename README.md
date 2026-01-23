@@ -17,8 +17,8 @@ Currently supports Claude Code, Gemini CLI, Codex, and GitHub Copilot, with more
 
 - **Local CLI Orchestration**: Coordinates existing CLI tools without requiring API keys or credentials
 - **Multi-Agent Execution**: Run Claude, Gemini, Codex, and Copilot agents in parallel
-- **Semantic Arbiter Consensus**: AI-powered arbiter evaluates semantic agreement across agent outputs
-- **Iterative Refinement**: V(n) rounds with arbiter evaluation until consensus threshold is reached
+- **Semantic Moderator Consensus**: AI-powered moderator evaluates semantic agreement across agent outputs
+- **Iterative Refinement**: V(n) rounds with moderator evaluation until consensus threshold is reached
 - **Git Worktree Isolation**: Each task executes in isolated worktrees to prevent conflicts
 - **Multi-Workflow Management**: Run multiple workflows concurrently and resume by ID
 - **Resume from Checkpoint**: Recover from failures without re-running completed work
@@ -175,16 +175,28 @@ Create a configuration file at `.quorum.yaml` in your project root:
 ```yaml
 # Minimal configuration
 agents:
+  default: claude
   claude:
     enabled: true
+    path: claude
+    phase_models:
+      refine: claude-opus-4-5-20251101
+      analyze: claude-opus-4-5-20251101
+      plan: claude-opus-4-5-20251101
   gemini:
     enabled: true
+    path: gemini
+    phase_models:
+      analyze: gemini-3-pro-preview
 
-consensus:
-  arbiter:
-    enabled: true
-    agent: claude
-    threshold: 0.90
+phases:
+  analyze:
+    synthesizer:
+      agent: claude
+    moderator:
+      enabled: true
+      agent: claude
+      threshold: 0.90
 
 log:
   level: info
@@ -198,11 +210,11 @@ For complete configuration options, see the [Configuration Reference](docs/CONFI
 # Verify prerequisites
 quorum doctor
 
-# Run full workflow (optimize -> analyze -> plan -> execute)
+# Run full workflow (refine -> analyze -> plan -> execute)
 quorum run "Implement user authentication with JWT tokens"
 
-# Skip prompt optimization (use original prompt directly)
-quorum run --skip-optimize "Implement user authentication with JWT tokens"
+# Skip prompt refinement (use original prompt directly)
+quorum run --skip-refine "Implement user authentication with JWT tokens"
 
 # Check workflow status
 quorum status
@@ -298,7 +310,7 @@ graph LR
 
     subgraph "Service Layer"
         B[Workflow Runner]
-        C[Semantic Arbiter]
+        C[Semantic Moderator]
         D[DAG Builder]
     end
 
@@ -324,19 +336,19 @@ For detailed architecture documentation, see [docs/ARCHITECTURE.md](docs/ARCHITE
 
 ## How It Works
 
-### 1. Optimize Phase (Optional)
+### 1. Refine Phase (Optional)
 
 Before analysis, the user's prompt is enhanced for clarity:
 
 ```
-User Prompt ---> Optimizer Agent ---> Enhanced Prompt ---> Subsequent Phases
+User Prompt ---> Refiner Agent ---> Refined Prompt ---> Subsequent Phases
                        |
                        +---> Preserves original intent
                        +---> Adds clarity and structure
                        +---> Falls back to original on error
 ```
 
-Skip with `--skip-optimize` or disable in config.
+Skip with `--skip-refine` or disable in config (`phases.analyze.refiner.enabled: false`).
 
 ### 2. Analyze Phase
 
@@ -347,7 +359,7 @@ Multiple agents independently analyze the task through iterative refinement:
                          │          V(n) Iterative Flow          │
                          └────────────────────────────────────────┘
                                           │
-Claude Agent ──┬── V1 Analysis ──┬── V2 Refinement ──┬── Arbiter ──┬── Consensus? ── Proceed
+Claude Agent ──┬── V1 Analysis ──┬── V2 Refinement ──┬── Moderator ──┬── Consensus? ── Proceed
                │                 │                   │  Evaluation │        │
 Gemini Agent ──┘                 └───────────────────┘             │        │
                                                                    │        └── No ──┐
@@ -355,7 +367,7 @@ Gemini Agent ──┘                 └────────────�
                                                                    └─── V(n+1) ◄─────┘
 ```
 
-The semantic arbiter evaluates agreement after each refinement round until the consensus threshold is reached or max rounds exceeded.
+The semantic moderator evaluates agreement after each refinement round until the consensus threshold is reached or max rounds exceeded.
 
 ### 3. Plan Phase
 
