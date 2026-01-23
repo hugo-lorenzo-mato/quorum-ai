@@ -367,6 +367,20 @@ func (p *CodexStreamParser) ParseLine(line string) []core.AgentEvent {
 		if event.Usage != nil {
 			data["tokens_in"] = event.Usage.InputTokens
 			data["tokens_out"] = event.Usage.OutputTokens
+
+			// Debug: log suspicious values from stream
+			const maxReasonableTokens = 1_000_000
+			if event.Usage.InputTokens > maxReasonableTokens || event.Usage.OutputTokens > maxReasonableTokens {
+				events = append(events, core.NewAgentEvent(
+					core.AgentEventProgress,
+					"codex",
+					"[DEBUG] Stream: suspicious token values",
+				).WithData(map[string]any{
+					"tokens_in":  event.Usage.InputTokens,
+					"tokens_out": event.Usage.OutputTokens,
+					"source":     "stream_parser",
+				}))
+			}
 		}
 		events = append(events, core.NewAgentEvent(
 			core.AgentEventCompleted,

@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"fmt"
 	"regexp"
 	"strconv"
 
@@ -34,10 +35,11 @@ func NewGeminiAdapter(cfg AgentConfig) (core.Agent, error) {
 			MaxContextTokens:  1000000, // 1M context window
 			MaxOutputTokens:   8192,
 			SupportedModels: []string{
-				"gemini-3-pro-preview",
-				"gemini-3-flash-preview",
 				"gemini-2.5-pro",
 				"gemini-2.5-flash",
+				"gemini-2.5-flash-lite",
+				"gemini-3-pro-preview",
+				"gemini-3-flash-preview",
 			},
 			DefaultModel: "gemini-2.5-flash",
 		},
@@ -143,11 +145,15 @@ func (g *GeminiAdapter) parseOutput(result *CommandResult, _ core.OutputFormat) 
 func (g *GeminiAdapter) extractUsage(result *CommandResult, execResult *core.ExecuteResult) {
 	combined := result.Stdout + result.Stderr
 
+	// Debug: track source of token values
+	var tokenSource string
+
 	// Gemini-specific token patterns
 	inputPattern := regexp.MustCompile(`input[_\s]?tokens?:?\s*(\d+)`)
 	if matches := inputPattern.FindStringSubmatch(combined); len(matches) == 2 {
 		if in, err := strconv.Atoi(matches[1]); err == nil {
 			execResult.TokensIn = in
+			tokenSource = "parsed"
 		}
 	}
 
@@ -164,10 +170,41 @@ func (g *GeminiAdapter) extractUsage(result *CommandResult, execResult *core.Exe
 	// and use a heuristic for TokensIn (typically prompts are shorter than responses)
 	if execResult.TokensOut == 0 {
 		execResult.TokensOut = g.TokenEstimate(result.Stdout)
+		tokenSource = "estimated"
 	}
 	if execResult.TokensIn == 0 && execResult.TokensOut > 0 {
 		// Heuristic: input is typically 20-50% of output for conversational prompts
 		execResult.TokensIn = execResult.TokensOut / 3
+	}
+
+	// Cap token values to avoid corrupted/unrealistic values
+	// Max reasonable is ~500k (very large context + response)
+	const maxReasonableTokens = 500_000
+	if execResult.TokensIn > maxReasonableTokens {
+		g.emitEvent(core.NewAgentEvent(
+			core.AgentEventProgress,
+			"gemini",
+			fmt.Sprintf("[WARN] Capped unrealistic TokensIn: %d -> %d", execResult.TokensIn, maxReasonableTokens),
+		).WithData(map[string]any{
+			"original":      execResult.TokensIn,
+			"capped":        maxReasonableTokens,
+			"source":        tokenSource,
+			"stdout_sample": truncateForDebug(result.Stdout, 200),
+		}))
+		execResult.TokensIn = maxReasonableTokens
+	}
+	if execResult.TokensOut > maxReasonableTokens {
+		g.emitEvent(core.NewAgentEvent(
+			core.AgentEventProgress,
+			"gemini",
+			fmt.Sprintf("[WARN] Capped unrealistic TokensOut: %d -> %d", execResult.TokensOut, maxReasonableTokens),
+		).WithData(map[string]any{
+			"original":      execResult.TokensOut,
+			"capped":        maxReasonableTokens,
+			"source":        tokenSource,
+			"stdout_sample": truncateForDebug(result.Stdout, 200),
+		}))
+		execResult.TokensOut = maxReasonableTokens
 	}
 
 	// Estimate cost

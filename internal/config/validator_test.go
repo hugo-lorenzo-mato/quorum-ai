@@ -20,7 +20,7 @@ func validConfig() *Config {
 			MaxBytes:      262144,
 			TotalMaxBytes: 10485760,
 			MaxFiles:      500,
-			IncludePhases: []string{"analyze", "consensus", "plan", "execute"},
+			IncludePhases: []string{"analyze", "plan", "execute"},
 		},
 		Workflow: WorkflowConfig{
 			Timeout:    "12h",
@@ -29,11 +29,9 @@ func validConfig() *Config {
 		Agents: AgentsConfig{
 			Default: "claude",
 			Claude: AgentConfig{
-				Enabled:     true, // Default agent must be enabled for valid config
-				Path:        "claude",
-				Model:       "claude-sonnet-4-20250514",
-				MaxTokens:   4096,
-				Temperature: 0.7,
+				Enabled: true, // Default agent must be enabled for valid config
+				Path:    "claude",
+				Model:   "claude-sonnet-4-20250514",
 			},
 			Gemini: AgentConfig{
 				Enabled: false,
@@ -57,12 +55,25 @@ func validConfig() *Config {
 		GitHub: GitHubConfig{
 			Remote: "origin",
 		},
-		Consensus: ConsensusConfig{
-			Threshold: 0.75,
-			Weights: ConsensusWeight{
-				Claims:          0.40,
-				Risks:           0.30,
-				Recommendations: 0.30,
+		Phases: PhasesConfig{
+			Analyze: AnalyzePhaseConfig{
+				Timeout: "2h",
+				Refiner: RefinerConfig{
+					Enabled: false,
+				},
+				Synthesizer: SynthesizerConfig{
+					Agent: "claude",
+				},
+				Moderator: ModeratorConfig{
+					Enabled:   false,
+					Threshold: 0.90,
+				},
+			},
+			Plan: PlanPhaseConfig{
+				Timeout: "1h",
+			},
+			Execute: ExecutePhaseConfig{
+				Timeout: "2h",
 			},
 		},
 		Costs: CostsConfig{
@@ -179,35 +190,7 @@ func TestValidator_MaxRetriesOutOfRange(t *testing.T) {
 	}
 }
 
-func TestValidator_WeightSum(t *testing.T) {
-	cfg := validConfig()
-	cfg.Consensus.Weights.Claims = 0.5
-	cfg.Consensus.Weights.Risks = 0.5
-	cfg.Consensus.Weights.Recommendations = 0.5 // Total = 1.5, should fail
-
-	v := NewValidator()
-	err := v.Validate(cfg)
-	if err == nil {
-		t.Error("Validate() error = nil, want error for weights not summing to 1.0")
-	}
-
-	if !strings.Contains(err.Error(), "consensus.weights") {
-		t.Errorf("error = %v, should mention consensus.weights", err)
-	}
-}
-
-func TestValidator_WeightOutOfRange(t *testing.T) {
-	cfg := validConfig()
-	cfg.Consensus.Weights.Claims = -0.1
-
-	v := NewValidator()
-	err := v.Validate(cfg)
-	if err == nil {
-		t.Error("Validate() error = nil, want error for negative weight")
-	}
-}
-
-func TestValidator_ThresholdOutOfRange(t *testing.T) {
+func TestValidator_ModeratorThresholdOutOfRange(t *testing.T) {
 	tests := []struct {
 		name  string
 		value float64
@@ -219,7 +202,9 @@ func TestValidator_ThresholdOutOfRange(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := validConfig()
-			cfg.Consensus.Threshold = tt.value
+			cfg.Phases.Analyze.Moderator.Enabled = true
+			cfg.Phases.Analyze.Moderator.Agent = "claude"
+			cfg.Phases.Analyze.Moderator.Threshold = tt.value
 
 			v := NewValidator()
 			err := v.Validate(cfg)
@@ -296,27 +281,9 @@ func TestValidator_DisabledAgentSkipsValidation(t *testing.T) {
 	}
 }
 
-func TestValidator_AgentTemperatureOutOfRange(t *testing.T) {
-	cfg := validConfig()
-	cfg.Agents.Claude.Temperature = 3.0
-
-	v := NewValidator()
-	err := v.Validate(cfg)
-	if err == nil {
-		t.Error("Validate() error = nil, want error for temperature > 2")
-	}
-}
-
-func TestValidator_AgentMaxTokensOutOfRange(t *testing.T) {
-	cfg := validConfig()
-	cfg.Agents.Claude.MaxTokens = -1
-
-	v := NewValidator()
-	err := v.Validate(cfg)
-	if err == nil {
-		t.Error("Validate() error = nil, want error for negative max_tokens")
-	}
-}
+// Note: TestValidator_AgentTemperatureOutOfRange and TestValidator_AgentMaxTokensOutOfRange
+// were removed because temperature and max_tokens are no longer part of AgentConfig.
+// Each CLI tool should use its own optimized defaults.
 
 func TestValidator_EmptyStatePath(t *testing.T) {
 	cfg := validConfig()

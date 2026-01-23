@@ -25,8 +25,9 @@ workflow:
 	f.Add(`log:
   level: debug
   format: json
-consensus:
-  threshold: 0.75
+phases:
+  analyze:
+    timeout: 2h
 `)
 	f.Add(`{}`)
 	f.Add(``)
@@ -53,12 +54,12 @@ git:
   worktree_dir: .quorum/worktrees
 github:
   remote: origin
-consensus:
-  threshold: 0.8
-  weights:
-    claims: 0.35
-    risks: 0.35
-    recommendations: 0.30
+phases:
+  analyze:
+    timeout: 2h
+    moderator:
+      enabled: true
+      threshold: 0.80
 costs:
   max_per_workflow: 10.0
   max_per_task: 1.0
@@ -85,7 +86,7 @@ costs:
 	})
 }
 
-func FuzzConsensusThreshold(f *testing.F) {
+func FuzzModeratorThreshold(f *testing.F) {
 	f.Add(0.0)
 	f.Add(0.5)
 	f.Add(0.75)
@@ -104,6 +105,10 @@ func FuzzConsensusThreshold(f *testing.F) {
 			},
 			Agents: config.AgentsConfig{
 				Default: "claude",
+				Claude: config.AgentConfig{
+					Enabled: true,
+					Path:    "claude",
+				},
 			},
 			Workflow: config.WorkflowConfig{
 				Timeout:    "30m",
@@ -119,13 +124,17 @@ func FuzzConsensusThreshold(f *testing.F) {
 			GitHub: config.GitHubConfig{
 				Remote: "origin",
 			},
-			Consensus: config.ConsensusConfig{
-				Threshold: threshold,
-				Weights: config.ConsensusWeight{
-					Claims:          0.35,
-					Risks:           0.35,
-					Recommendations: 0.30,
+			Phases: config.PhasesConfig{
+				Analyze: config.AnalyzePhaseConfig{
+					Timeout: "2h",
+					Moderator: config.ModeratorConfig{
+						Enabled:   true,
+						Agent:     "claude",
+						Threshold: threshold,
+					},
 				},
+				Plan:    config.PlanPhaseConfig{Timeout: "1h"},
+				Execute: config.ExecutePhaseConfig{Timeout: "2h"},
 			},
 		}
 
@@ -158,6 +167,10 @@ func FuzzConfigMaxRetries(f *testing.F) {
 			},
 			Agents: config.AgentsConfig{
 				Default: "claude",
+				Claude: config.AgentConfig{
+					Enabled: true,
+					Path:    "claude",
+				},
 			},
 			Workflow: config.WorkflowConfig{
 				Timeout:    "30m",
@@ -173,13 +186,10 @@ func FuzzConfigMaxRetries(f *testing.F) {
 			GitHub: config.GitHubConfig{
 				Remote: "origin",
 			},
-			Consensus: config.ConsensusConfig{
-				Threshold: 0.75,
-				Weights: config.ConsensusWeight{
-					Claims:          0.35,
-					Risks:           0.35,
-					Recommendations: 0.30,
-				},
+			Phases: config.PhasesConfig{
+				Analyze: config.AnalyzePhaseConfig{Timeout: "2h"},
+				Plan:    config.PlanPhaseConfig{Timeout: "1h"},
+				Execute: config.ExecutePhaseConfig{Timeout: "2h"},
 			},
 		}
 
@@ -229,13 +239,10 @@ func FuzzConfigAgentModel(f *testing.F) {
 			GitHub: config.GitHubConfig{
 				Remote: "origin",
 			},
-			Consensus: config.ConsensusConfig{
-				Threshold: 0.75,
-				Weights: config.ConsensusWeight{
-					Claims:          0.35,
-					Risks:           0.35,
-					Recommendations: 0.30,
-				},
+			Phases: config.PhasesConfig{
+				Analyze: config.AnalyzePhaseConfig{Timeout: "2h"},
+				Plan:    config.PlanPhaseConfig{Timeout: "1h"},
+				Execute: config.ExecutePhaseConfig{Timeout: "2h"},
 			},
 		}
 

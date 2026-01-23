@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"fmt"
 	"regexp"
 	"strconv"
 
@@ -108,15 +109,8 @@ func (c *CodexAdapter) Execute(ctx context.Context, opts core.ExecuteOptions) (*
 func (c *CodexAdapter) buildArgs(opts core.ExecuteOptions) []string {
 	args := []string{"exec", "--skip-git-repo-check"}
 
-	// Determine reasoning effort based on phase
-	// Use "xhigh" (extra high) for analyze/optimize/plan, "high" for execute
-	reasoningEffort := "high"
-	switch opts.Phase {
-	case core.PhaseOptimize, core.PhaseAnalyze, core.PhasePlan:
-		reasoningEffort = "xhigh"
-	case core.PhaseExecute:
-		reasoningEffort = "high"
-	}
+	// Determine reasoning effort: config > phase-based defaults
+	reasoningEffort := c.getReasoningEffort(opts.Phase)
 
 	// Headless approvals/sandbox via config overrides
 	args = append(args,
@@ -144,6 +138,25 @@ func (c *CodexAdapter) buildArgs(opts core.ExecuteOptions) []string {
 	return args
 }
 
+// getReasoningEffort returns reasoning effort for the given phase.
+// Priority: config > phase-based defaults.
+func (c *CodexAdapter) getReasoningEffort(phase core.Phase) string {
+	// Check config first
+	if effort := c.config.GetReasoningEffort(string(phase)); effort != "" {
+		return effort
+	}
+
+	// Fall back to phase-based defaults
+	switch phase {
+	case core.PhaseRefine, core.PhaseAnalyze, core.PhasePlan:
+		return "xhigh"
+	case core.PhaseExecute:
+		return "high"
+	default:
+		return "high"
+	}
+}
+
 // parseOutput parses Codex CLI output.
 func (c *CodexAdapter) parseOutput(result *CommandResult, _ core.OutputFormat) (*core.ExecuteResult, error) {
 	output := result.Stdout
@@ -162,11 +175,15 @@ func (c *CodexAdapter) parseOutput(result *CommandResult, _ core.OutputFormat) (
 func (c *CodexAdapter) extractUsage(result *CommandResult, execResult *core.ExecuteResult) {
 	combined := result.Stdout + result.Stderr
 
+	// Debug: track source of token values
+	var tokenSource string
+
 	// OpenAI-style usage patterns
 	promptTokens := regexp.MustCompile(`prompt_tokens?:?\s*(\d+)`)
 	if matches := promptTokens.FindStringSubmatch(combined); len(matches) == 2 {
 		if in, err := strconv.Atoi(matches[1]); err == nil {
 			execResult.TokensIn = in
+			tokenSource = "parsed"
 		}
 	}
 
@@ -183,10 +200,41 @@ func (c *CodexAdapter) extractUsage(result *CommandResult, execResult *core.Exec
 	// and use a heuristic for TokensIn (typically prompts are shorter than responses)
 	if execResult.TokensOut == 0 {
 		execResult.TokensOut = c.TokenEstimate(result.Stdout)
+		tokenSource = "estimated"
 	}
 	if execResult.TokensIn == 0 && execResult.TokensOut > 0 {
 		// Heuristic: input is typically 20-50% of output for conversational prompts
 		execResult.TokensIn = execResult.TokensOut / 3
+	}
+
+	// Cap token values to avoid corrupted/unrealistic values
+	// Max reasonable is ~500k (very large context + response)
+	const maxReasonableTokens = 500_000
+	if execResult.TokensIn > maxReasonableTokens {
+		c.emitEvent(core.NewAgentEvent(
+			core.AgentEventProgress,
+			"codex",
+			fmt.Sprintf("[WARN] Capped unrealistic TokensIn: %d -> %d", execResult.TokensIn, maxReasonableTokens),
+		).WithData(map[string]any{
+			"original":      execResult.TokensIn,
+			"capped":        maxReasonableTokens,
+			"source":        tokenSource,
+			"stdout_sample": truncateForDebug(result.Stdout, 200),
+		}))
+		execResult.TokensIn = maxReasonableTokens
+	}
+	if execResult.TokensOut > maxReasonableTokens {
+		c.emitEvent(core.NewAgentEvent(
+			core.AgentEventProgress,
+			"codex",
+			fmt.Sprintf("[WARN] Capped unrealistic TokensOut: %d -> %d", execResult.TokensOut, maxReasonableTokens),
+		).WithData(map[string]any{
+			"original":      execResult.TokensOut,
+			"capped":        maxReasonableTokens,
+			"source":        tokenSource,
+			"stdout_sample": truncateForDebug(result.Stdout, 200),
+		}))
+		execResult.TokensOut = maxReasonableTokens
 	}
 
 	execResult.CostUSD = c.estimateCost(execResult.TokensIn, execResult.TokensOut)

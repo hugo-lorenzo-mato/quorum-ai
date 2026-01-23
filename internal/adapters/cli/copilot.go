@@ -301,6 +301,9 @@ func (c *CopilotAdapter) parseOutput(result *CommandResult, _ core.OutputFormat)
 func (c *CopilotAdapter) extractUsage(result *CommandResult, execResult *core.ExecuteResult) {
 	combined := result.Stdout + result.Stderr
 
+	// Debug: track source of token values
+	var tokenSource string
+
 	// Look for token patterns
 	tokenPatterns := []struct {
 		pattern string
@@ -317,6 +320,7 @@ func (c *CopilotAdapter) extractUsage(result *CommandResult, execResult *core.Ex
 		if matches := re.FindStringSubmatch(combined); len(matches) > 1 {
 			if val, err := strconv.Atoi(matches[1]); err == nil {
 				*tp.field = val
+				tokenSource = "parsed"
 			}
 		}
 	}
@@ -326,6 +330,7 @@ func (c *CopilotAdapter) extractUsage(result *CommandResult, execResult *core.Ex
 	if execResult.TokensIn == 0 && execResult.TokensOut == 0 {
 		// Estimate output tokens from response (roughly 4 chars per token)
 		execResult.TokensOut = c.estimateTokens(execResult.Output)
+		tokenSource = "estimated"
 		// Estimate input tokens as ~30% of output for typical prompts
 		if execResult.TokensOut > 0 {
 			execResult.TokensIn = execResult.TokensOut / 3
@@ -333,6 +338,36 @@ func (c *CopilotAdapter) extractUsage(result *CommandResult, execResult *core.Ex
 				execResult.TokensIn = 10
 			}
 		}
+	}
+
+	// Cap token values to avoid corrupted/unrealistic values
+	// Max reasonable is ~500k (very large context + response)
+	const maxReasonableTokens = 500_000
+	if execResult.TokensIn > maxReasonableTokens {
+		c.emitEvent(core.NewAgentEvent(
+			core.AgentEventProgress,
+			"copilot",
+			fmt.Sprintf("[WARN] Capped unrealistic TokensIn: %d -> %d", execResult.TokensIn, maxReasonableTokens),
+		).WithData(map[string]any{
+			"original":      execResult.TokensIn,
+			"capped":        maxReasonableTokens,
+			"source":        tokenSource,
+			"stdout_sample": truncateForDebug(result.Stdout, 200),
+		}))
+		execResult.TokensIn = maxReasonableTokens
+	}
+	if execResult.TokensOut > maxReasonableTokens {
+		c.emitEvent(core.NewAgentEvent(
+			core.AgentEventProgress,
+			"copilot",
+			fmt.Sprintf("[WARN] Capped unrealistic TokensOut: %d -> %d", execResult.TokensOut, maxReasonableTokens),
+		).WithData(map[string]any{
+			"original":      execResult.TokensOut,
+			"capped":        maxReasonableTokens,
+			"source":        tokenSource,
+			"stdout_sample": truncateForDebug(result.Stdout, 200),
+		}))
+		execResult.TokensOut = maxReasonableTokens
 	}
 
 	// Estimate cost (Copilot is subscription-based, but we estimate for tracking)

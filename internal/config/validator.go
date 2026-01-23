@@ -6,8 +6,6 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-
-	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 )
 
 // ValidationError represents a configuration validation error.
@@ -55,11 +53,10 @@ func (v *Validator) Validate(cfg *Config) error {
 	v.validateTrace(&cfg.Trace)
 	v.validateWorkflow(&cfg.Workflow)
 	v.validateAgents(&cfg.Agents)
-	v.validatePromptOptimizer(&cfg.PromptOptimizer, &cfg.Agents)
+	v.validatePhases(&cfg.Phases, &cfg.Agents)
 	v.validateState(&cfg.State)
 	v.validateGit(&cfg.Git)
 	v.validateGitHub(&cfg.GitHub)
-	v.validateConsensus(&cfg.Consensus)
 	v.validateCosts(&cfg.Costs)
 
 	if len(v.errors) > 0 {
@@ -137,7 +134,7 @@ func (v *Validator) validateTrace(cfg *TraceConfig) {
 
 	if len(cfg.IncludePhases) > 0 {
 		validPhases := map[string]bool{
-			"optimize": true, "analyze": true, "plan": true, "execute": true, "consensus": true,
+			"refine": true, "analyze": true, "plan": true, "execute": true,
 		}
 		for _, phase := range cfg.IncludePhases {
 			if !validPhases[phase] {
@@ -153,20 +150,6 @@ func (v *Validator) validateWorkflow(cfg *WorkflowConfig) {
 	}
 	if _, err := time.ParseDuration(cfg.Timeout); err != nil {
 		v.addError("workflow.timeout", cfg.Timeout, "invalid duration format")
-	}
-
-	phaseTimeouts := map[string]string{
-		"workflow.phase_timeouts.analyze": cfg.PhaseTimeouts.Analyze,
-		"workflow.phase_timeouts.plan":    cfg.PhaseTimeouts.Plan,
-		"workflow.phase_timeouts.execute": cfg.PhaseTimeouts.Execute,
-	}
-	for field, value := range phaseTimeouts {
-		if strings.TrimSpace(value) == "" {
-			continue
-		}
-		if _, err := time.ParseDuration(value); err != nil {
-			v.addError(field, value, "invalid duration format")
-		}
 	}
 
 	if cfg.MaxRetries < 0 || cfg.MaxRetries > 10 {
@@ -209,14 +192,8 @@ func (v *Validator) validateAgent(prefix string, cfg *AgentConfig) {
 	}
 
 	v.validatePhaseModels(prefix+".phase_models", cfg.PhaseModels)
-
-	if cfg.MaxTokens < 0 || cfg.MaxTokens > 200000 {
-		v.addError(prefix+".max_tokens", cfg.MaxTokens, "must be between 0 and 200000")
-	}
-
-	if cfg.Temperature < 0 || cfg.Temperature > 2 {
-		v.addError(prefix+".temperature", cfg.Temperature, "must be between 0 and 2")
-	}
+	v.validateReasoningEffortDefault(prefix+".reasoning_effort", cfg.ReasoningEffort)
+	v.validateReasoningEffortPhases(prefix+".reasoning_effort_phases", cfg.ReasoningEffortPhases)
 }
 
 func (v *Validator) validatePhaseModels(prefix string, phaseModels map[string]string) {
@@ -224,13 +201,73 @@ func (v *Validator) validatePhaseModels(prefix string, phaseModels map[string]st
 		return
 	}
 
-	for phase, model := range phaseModels {
-		if !core.ValidPhase(core.Phase(phase)) {
-			v.addError(prefix, phase, "unknown phase")
+	validKeys := map[string]bool{
+		"refine":     true,
+		"analyze":    true,
+		"moderate":   true,
+		"synthesize": true,
+		"plan":       true,
+		"execute":    true,
+	}
+
+	for key, model := range phaseModels {
+		if !validKeys[key] {
+			v.addError(prefix, key, "unknown phase or task (valid: refine, analyze, moderate, synthesize, plan, execute)")
 			continue
 		}
 		if strings.TrimSpace(model) == "" {
-			v.addError(prefix+"."+phase, model, "model cannot be empty")
+			v.addError(prefix+"."+key, model, "model cannot be empty")
+		}
+	}
+}
+
+func (v *Validator) validateReasoningEffortDefault(prefix, effort string) {
+	if effort == "" {
+		return
+	}
+
+	validEfforts := map[string]bool{
+		"minimal": true,
+		"low":     true,
+		"medium":  true,
+		"high":    true,
+		"xhigh":   true,
+	}
+
+	if !validEfforts[effort] {
+		v.addError(prefix, effort, "invalid reasoning effort (valid: minimal, low, medium, high, xhigh)")
+	}
+}
+
+func (v *Validator) validateReasoningEffortPhases(prefix string, phases map[string]string) {
+	if len(phases) == 0 {
+		return
+	}
+
+	validKeys := map[string]bool{
+		"refine":     true,
+		"analyze":    true,
+		"moderate":   true,
+		"synthesize": true,
+		"plan":       true,
+		"execute":    true,
+	}
+
+	validEfforts := map[string]bool{
+		"minimal": true,
+		"low":     true,
+		"medium":  true,
+		"high":    true,
+		"xhigh":   true,
+	}
+
+	for key, effort := range phases {
+		if !validKeys[key] {
+			v.addError(prefix, key, "unknown phase (valid: refine, analyze, moderate, synthesize, plan, execute)")
+			continue
+		}
+		if !validEfforts[effort] {
+			v.addError(prefix+"."+key, effort, "invalid reasoning effort (valid: minimal, low, medium, high, xhigh)")
 		}
 	}
 }
@@ -249,14 +286,31 @@ func (v *Validator) validateGit(cfg *GitConfig) {
 	if cfg.WorktreeDir == "" {
 		v.addError("git.worktree_dir", cfg.WorktreeDir, "worktree directory required")
 	}
-	if strings.TrimSpace(cfg.WorktreeMode) == "" {
-		return
+	if strings.TrimSpace(cfg.WorktreeMode) != "" {
+		switch strings.ToLower(strings.TrimSpace(cfg.WorktreeMode)) {
+		case "always", "parallel", "disabled":
+			// ok
+		default:
+			v.addError("git.worktree_mode", cfg.WorktreeMode, "must be always, parallel, or disabled")
+		}
 	}
-	switch strings.ToLower(strings.TrimSpace(cfg.WorktreeMode)) {
-	case "always", "parallel", "disabled":
-		// ok
-	default:
-		v.addError("git.worktree_mode", cfg.WorktreeMode, "must be always, parallel, or disabled")
+
+	// Validate merge strategy
+	if cfg.MergeStrategy != "" {
+		switch strings.ToLower(cfg.MergeStrategy) {
+		case "merge", "squash", "rebase":
+			// ok
+		default:
+			v.addError("git.merge_strategy", cfg.MergeStrategy, "must be merge, squash, or rebase")
+		}
+	}
+
+	// Validate dependency chain: auto_pr requires auto_push, auto_merge requires auto_pr
+	if cfg.AutoPR && !cfg.AutoPush {
+		v.addError("git.auto_pr", cfg.AutoPR, "auto_pr requires auto_push to be enabled")
+	}
+	if cfg.AutoMerge && !cfg.AutoPR {
+		v.addError("git.auto_merge", cfg.AutoMerge, "auto_merge requires auto_pr to be enabled")
 	}
 }
 
@@ -267,24 +321,121 @@ func (v *Validator) validateGitHub(cfg *GitHubConfig) {
 	}
 }
 
-func (v *Validator) validateConsensus(cfg *ConsensusConfig) {
+func (v *Validator) validatePhases(cfg *PhasesConfig, agents *AgentsConfig) {
+	// Validate analyze phase
+	v.validatePhaseTimeout("phases.analyze.timeout", cfg.Analyze.Timeout)
+	v.validateRefiner(&cfg.Analyze.Refiner, agents)
+	v.validateModerator(&cfg.Analyze.Moderator, agents)
+	v.validateSynthesizer("phases.analyze.synthesizer", cfg.Analyze.Synthesizer.Agent, agents)
+
+	// Validate plan phase
+	v.validatePhaseTimeout("phases.plan.timeout", cfg.Plan.Timeout)
+	if cfg.Plan.Synthesizer.Enabled {
+		v.validateSynthesizer("phases.plan.synthesizer", cfg.Plan.Synthesizer.Agent, agents)
+	}
+
+	// Validate execute phase
+	v.validatePhaseTimeout("phases.execute.timeout", cfg.Execute.Timeout)
+}
+
+func (v *Validator) validatePhaseTimeout(field, value string) {
+	if strings.TrimSpace(value) == "" {
+		return
+	}
+	if _, err := time.ParseDuration(value); err != nil {
+		v.addError(field, value, "invalid duration format")
+	}
+}
+
+func (v *Validator) validateRefiner(cfg *RefinerConfig, agents *AgentsConfig) {
+	if !cfg.Enabled {
+		return
+	}
+
+	validAgents := map[string]bool{
+		"claude": true, "gemini": true, "codex": true, "copilot": true,
+	}
+	if !validAgents[cfg.Agent] {
+		v.addError("phases.analyze.refiner.agent", cfg.Agent, "unknown agent")
+		return
+	}
+
+	// Validate that the specified agent is enabled
+	agentEnabled := map[string]bool{
+		"claude":  agents.Claude.Enabled,
+		"gemini":  agents.Gemini.Enabled,
+		"codex":   agents.Codex.Enabled,
+		"copilot": agents.Copilot.Enabled,
+	}
+	if !agentEnabled[cfg.Agent] {
+		v.addError("phases.analyze.refiner.agent", cfg.Agent, "specified agent must be enabled")
+	}
+}
+
+func (v *Validator) validateModerator(cfg *ModeratorConfig, agents *AgentsConfig) {
+	if !cfg.Enabled {
+		return
+	}
+
+	validAgents := map[string]bool{
+		"claude": true, "gemini": true, "codex": true, "copilot": true,
+	}
+	if !validAgents[cfg.Agent] {
+		v.addError("phases.analyze.moderator.agent", cfg.Agent, "unknown agent")
+		return
+	}
+
+	// Validate that the specified agent is enabled
+	agentEnabled := map[string]bool{
+		"claude":  agents.Claude.Enabled,
+		"gemini":  agents.Gemini.Enabled,
+		"codex":   agents.Codex.Enabled,
+		"copilot": agents.Copilot.Enabled,
+	}
+	if !agentEnabled[cfg.Agent] {
+		v.addError("phases.analyze.moderator.agent", cfg.Agent, "specified agent must be enabled")
+	}
+
 	if cfg.Threshold < 0 || cfg.Threshold > 1 {
-		v.addError("consensus.threshold", cfg.Threshold, "must be between 0 and 1")
+		v.addError("phases.analyze.moderator.threshold", cfg.Threshold, "must be between 0 and 1")
+	}
+	if cfg.AbortThreshold < 0 || cfg.AbortThreshold > 1 {
+		v.addError("phases.analyze.moderator.abort_threshold", cfg.AbortThreshold, "must be between 0 and 1")
+	}
+	if cfg.StagnationThreshold < 0 || cfg.StagnationThreshold > 1 {
+		v.addError("phases.analyze.moderator.stagnation_threshold", cfg.StagnationThreshold, "must be between 0 and 1")
+	}
+	if cfg.MinRounds < 1 {
+		v.addError("phases.analyze.moderator.min_rounds", cfg.MinRounds, "must be at least 1")
+	}
+	if cfg.MaxRounds < cfg.MinRounds {
+		v.addError("phases.analyze.moderator.max_rounds", cfg.MaxRounds, "must be >= min_rounds")
+	}
+}
+
+func (v *Validator) validateSynthesizer(prefix, agent string, agents *AgentsConfig) {
+	if agent == "" {
+		// Synthesizer agent is optional - will use default agent
+		return
 	}
 
-	totalWeight := cfg.Weights.Claims + cfg.Weights.Risks + cfg.Weights.Recommendations
-	if totalWeight < 0.99 || totalWeight > 1.01 {
-		v.addError("consensus.weights", totalWeight, "weights must sum to 1.0")
+	validAgents := map[string]bool{
+		"claude": true, "gemini": true, "codex": true, "copilot": true,
+	}
+	if !validAgents[agent] {
+		v.addError(prefix+".agent", agent, "unknown agent")
+		return
 	}
 
-	for name, weight := range map[string]float64{
-		"claims":          cfg.Weights.Claims,
-		"risks":           cfg.Weights.Risks,
-		"recommendations": cfg.Weights.Recommendations,
-	} {
-		if weight < 0 || weight > 1 {
-			v.addError("consensus.weights."+name, weight, "must be between 0 and 1")
-		}
+	// Validate that the specified agent is enabled
+	agentEnabled := map[string]bool{
+		"claude":  agents.Claude.Enabled,
+		"gemini":  agents.Gemini.Enabled,
+		"codex":   agents.Codex.Enabled,
+		"copilot": agents.Copilot.Enabled,
+	}
+	if !agentEnabled[agent] {
+		v.addError(prefix+".agent", agent, "specified agent must be enabled")
 	}
 }
 
@@ -299,31 +450,6 @@ func (v *Validator) validateCosts(cfg *CostsConfig) {
 
 	if cfg.AlertThreshold < 0 || cfg.AlertThreshold > 1 {
 		v.addError("costs.alert_threshold", cfg.AlertThreshold, "must be between 0 and 1")
-	}
-}
-
-func (v *Validator) validatePromptOptimizer(cfg *PromptOptimizerConfig, agents *AgentsConfig) {
-	if !cfg.Enabled {
-		return
-	}
-
-	validAgents := map[string]bool{
-		"claude": true, "gemini": true, "codex": true, "copilot": true,
-	}
-	if !validAgents[cfg.Agent] {
-		v.addError("prompt_optimizer.agent", cfg.Agent, "unknown agent")
-		return
-	}
-
-	// Validate that the specified agent is enabled
-	agentEnabled := map[string]bool{
-		"claude":  agents.Claude.Enabled,
-		"gemini":  agents.Gemini.Enabled,
-		"codex":   agents.Codex.Enabled,
-		"copilot": agents.Copilot.Enabled,
-	}
-	if !agentEnabled[cfg.Agent] {
-		v.addError("prompt_optimizer.agent", cfg.Agent, "specified agent must be enabled")
 	}
 }
 

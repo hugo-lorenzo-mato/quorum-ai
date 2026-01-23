@@ -24,15 +24,47 @@ type LogCallback func(line string)
 
 // AgentConfig holds adapter configuration.
 type AgentConfig struct {
-	Name        string
-	Path        string
-	Model       string
-	MaxTokens   int
-	Temperature float64
-	Timeout     time.Duration
-	WorkDir     string
+	Name    string
+	Path    string
+	Model   string
+	Timeout time.Duration
+	WorkDir string
 	// EnableStreaming enables real-time event streaming if supported
 	EnableStreaming bool
+	// Phases controls which workflow phases this agent participates in.
+	// Keys: "refine", "analyze", "plan", "execute"
+	// If nil, agent is available for all phases.
+	Phases map[string]bool
+	// ReasoningEffort is the default reasoning effort for all phases (Codex-specific).
+	// Valid values: minimal, low, medium, high, xhigh.
+	ReasoningEffort string
+	// ReasoningEffortPhases allows per-phase overrides of reasoning effort.
+	ReasoningEffortPhases map[string]string
+}
+
+// IsEnabledForPhase returns true if the agent is enabled for the given phase.
+func (c AgentConfig) IsEnabledForPhase(phase string) bool {
+	if len(c.Phases) == 0 {
+		return true // No restrictions = enabled for all
+	}
+	enabled, exists := c.Phases[phase]
+	if !exists {
+		return true // Not specified = enabled (opt-out model)
+	}
+	return enabled
+}
+
+// GetReasoningEffort returns the reasoning effort for a phase.
+// Priority: phase-specific > default > empty (adapter uses hardcoded defaults).
+func (c AgentConfig) GetReasoningEffort(phase string) string {
+	// Check phase-specific override first
+	if c.ReasoningEffortPhases != nil {
+		if effort, ok := c.ReasoningEffortPhases[phase]; ok && effort != "" {
+			return effort
+		}
+	}
+	// Fall back to default
+	return c.ReasoningEffort
 }
 
 // BaseAdapter provides common CLI execution functionality.
@@ -438,6 +470,7 @@ func (b *BaseAdapter) executeWithJSONStreaming(
 }
 
 // streamJSONOutput reads JSON events from stdout and parses them into AgentEvents.
+// It extracts text content from the stream instead of storing raw JSON.
 func (b *BaseAdapter) streamJSONOutput(pipe io.ReadCloser, buf *bytes.Buffer, _ string, parser StreamParser) {
 	scanner := bufio.NewScanner(pipe)
 	// Increase buffer size for large JSON lines
@@ -445,8 +478,12 @@ func (b *BaseAdapter) streamJSONOutput(pipe io.ReadCloser, buf *bytes.Buffer, _ 
 
 	for scanner.Scan() {
 		line := scanner.Text()
-		buf.WriteString(line)
-		buf.WriteString("\n")
+
+		// Extract text content from JSON events instead of storing raw JSON
+		text := extractTextFromJSONLine(line)
+		if text != "" {
+			buf.WriteString(text)
+		}
 
 		// Parse and emit events
 		if parser != nil {
@@ -456,6 +493,71 @@ func (b *BaseAdapter) streamJSONOutput(pipe io.ReadCloser, buf *bytes.Buffer, _ 
 			}
 		}
 	}
+}
+
+// extractTextFromJSONLine extracts human-readable text from a JSON stream line.
+// It handles various event formats from different CLI tools (Claude, Gemini, Codex).
+func extractTextFromJSONLine(line string) string {
+	line = strings.TrimSpace(line)
+	if line == "" || !strings.HasPrefix(line, "{") {
+		return ""
+	}
+
+	// Generic structure to parse any streaming event
+	var event struct {
+		Type    string `json:"type"`
+		Subtype string `json:"subtype"`
+		Result  string `json:"result"` // Claude/Gemini result
+		Text    string `json:"text"`   // Gemini direct text
+		Message *struct {
+			Content []struct {
+				Type string `json:"type"`
+				Text string `json:"text"`
+			} `json:"content"`
+		} `json:"message"` // Claude assistant message
+		Item *struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		} `json:"item"` // Codex item
+		Response string `json:"response"` // Gemini final response
+	}
+
+	if err := json.Unmarshal([]byte(line), &event); err != nil {
+		return ""
+	}
+
+	// Handle result events (final output)
+	if event.Type == "result" && event.Subtype == "success" {
+		if event.Result != "" {
+			return event.Result
+		}
+		if event.Response != "" {
+			return event.Response
+		}
+	}
+
+	// Handle Claude assistant message with text content
+	if event.Type == "assistant" && event.Message != nil {
+		for _, content := range event.Message.Content {
+			if content.Type == "text" && content.Text != "" {
+				return content.Text
+			}
+		}
+	}
+
+	// Handle Gemini direct text events
+	if event.Type == "text" && event.Text != "" {
+		return event.Text
+	}
+
+	// Handle Codex agent_message
+	if event.Type == "item.completed" && event.Item != nil {
+		if event.Item.Type == "agent_message" && event.Item.Text != "" {
+			return event.Item.Text
+		}
+	}
+
+	return ""
 }
 
 // executeWithLogFileStreaming handles CLIs that write logs to a file (like Copilot).
@@ -680,27 +782,94 @@ func (b *BaseAdapter) addStreamingArgs(args []string, cfg StreamConfig) []string
 
 // classifyError converts command errors to domain errors.
 func (b *BaseAdapter) classifyError(result *CommandResult) error {
-	stderr := strings.ToLower(result.Stderr)
+	// Try to get error message from stderr first, then stdout
+	errorMsg := strings.TrimSpace(result.Stderr)
+	if errorMsg == "" {
+		// Try to extract error from stdout (some CLIs output errors as JSON to stdout)
+		errorMsg = extractErrorFromOutput(result.Stdout)
+	}
+	if errorMsg == "" {
+		errorMsg = "(no error message captured)"
+	}
+
+	errorMsgLower := strings.ToLower(errorMsg)
 
 	// Rate limit detection
-	if containsAny(stderr, []string{"rate limit", "too many requests", "429", "quota"}) {
-		return core.ErrRateLimit(result.Stderr)
+	if containsAny(errorMsgLower, []string{"rate limit", "too many requests", "429", "quota"}) {
+		return core.ErrRateLimit(errorMsg)
 	}
 
 	// Authentication errors
-	if containsAny(stderr, []string{"unauthorized", "authentication", "api key", "token"}) {
-		return core.ErrAuth(result.Stderr)
+	if containsAny(errorMsgLower, []string{"unauthorized", "authentication", "api key", "token"}) {
+		return core.ErrAuth(errorMsg)
 	}
 
 	// Network errors
-	if containsAny(stderr, []string{"connection", "network", "timeout", "unreachable"}) {
-		return core.ErrExecution("NETWORK", result.Stderr)
+	if containsAny(errorMsgLower, []string{"connection", "network", "timeout", "unreachable"}) {
+		return core.ErrExecution("NETWORK", errorMsg)
 	}
 
 	// Generic execution error
 	return core.ErrExecution("CLI_ERROR",
-		fmt.Sprintf("command failed with exit code %d: %s", result.ExitCode, result.Stderr),
+		fmt.Sprintf("command failed with exit code %d: %s", result.ExitCode, errorMsg),
 	)
+}
+
+// extractErrorFromOutput tries to extract error messages from stdout.
+// Many CLIs output JSON with error fields to stdout.
+func extractErrorFromOutput(stdout string) string {
+	// Try to find JSON error objects in the output
+	lines := strings.Split(stdout, "\n")
+	for i := len(lines) - 1; i >= 0; i-- { // Start from end, errors often at the end
+		line := strings.TrimSpace(lines[i])
+		if !strings.HasPrefix(line, "{") {
+			continue
+		}
+
+		// Try to parse as JSON and extract error
+		var obj map[string]interface{}
+		if err := json.Unmarshal([]byte(line), &obj); err != nil {
+			continue
+		}
+
+		// Check for common error fields
+		if errMsg, ok := obj["error"].(string); ok && errMsg != "" {
+			return errMsg
+		}
+		if errObj, ok := obj["error"].(map[string]interface{}); ok {
+			if msg, ok := errObj["message"].(string); ok && msg != "" {
+				return msg
+			}
+		}
+		// Claude CLI format: {"type":"result","subtype":"error","error":"..."}
+		if objType, ok := obj["type"].(string); ok && objType == "result" {
+			if subtype, ok := obj["subtype"].(string); ok && subtype == "error" {
+				if errMsg, ok := obj["error"].(string); ok && errMsg != "" {
+					return errMsg
+				}
+			}
+		}
+		// Claude CLI format: {"type":"error","error":"..."}
+		if objType, ok := obj["type"].(string); ok && objType == "error" {
+			if errMsg, ok := obj["error"].(string); ok && errMsg != "" {
+				return errMsg
+			}
+		}
+	}
+
+	// If no JSON error found, return last non-empty line as fallback
+	for i := len(lines) - 1; i >= 0; i-- {
+		line := strings.TrimSpace(lines[i])
+		if line != "" && !strings.HasPrefix(line, "{") {
+			// Limit length
+			if len(line) > 200 {
+				return line[:200] + "..."
+			}
+			return line
+		}
+	}
+
+	return ""
 }
 
 func containsAny(s string, substrings []string) bool {
@@ -839,6 +1008,14 @@ func (b *BaseAdapter) CheckAvailability(_ context.Context) error {
 func (b *BaseAdapter) TokenEstimate(text string) int {
 	// Rough estimate: ~4 characters per token for English
 	return len(text) / 4
+}
+
+// truncateForDebug truncates a string for debug output.
+func truncateForDebug(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "...[truncated]"
 }
 
 // TruncateToTokenLimit truncates text to approximately fit within token limit.

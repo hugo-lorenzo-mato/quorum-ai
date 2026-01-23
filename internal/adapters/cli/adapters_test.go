@@ -195,8 +195,7 @@ func TestClaudeAdapter_Capabilities(t *testing.T) {
 
 func TestClaudeAdapter_BuildArgs(t *testing.T) {
 	cfg := AgentConfig{
-		Model:     "claude-sonnet-4-20250514",
-		MaxTokens: 4096,
+		Model: "claude-sonnet-4-20250514",
 	}
 	adapter, _ := NewClaudeAdapter(cfg)
 	claude := adapter.(*ClaudeAdapter)
@@ -359,9 +358,7 @@ func TestCodexAdapter_Capabilities(t *testing.T) {
 
 func TestCodexAdapter_BuildArgs(t *testing.T) {
 	cfg := AgentConfig{
-		Model:       "gpt-5.1-codex",
-		MaxTokens:   4096,
-		Temperature: 0.7,
+		Model: "gpt-5.1-codex",
 	}
 	adapter, _ := NewCodexAdapter(cfg)
 	codex := adapter.(*CodexAdapter)
@@ -570,12 +567,10 @@ func TestBaseAdapter_ExtractJSON(t *testing.T) {
 
 func TestBaseAdapter_Config(t *testing.T) {
 	cfg := AgentConfig{
-		Name:        "test",
-		Path:        "/usr/bin/test",
-		Model:       "test-model",
-		MaxTokens:   1000,
-		Temperature: 0.5,
-		Timeout:     time.Minute,
+		Name:    "test",
+		Path:    "/usr/bin/test",
+		Model:   "test-model",
+		Timeout: time.Minute,
 	}
 
 	base := NewBaseAdapter(cfg, nil)

@@ -198,6 +198,42 @@ func (r *Registry) Available(ctx context.Context) []string {
 	return available
 }
 
+// AvailableForPhase returns agents that pass Ping AND are enabled for the given phase.
+// Phase should be one of: "optimize", "analyze", "plan", "execute"
+func (r *Registry) AvailableForPhase(ctx context.Context, phase string) []string {
+	results := r.PingAll(ctx)
+	available := make([]string, 0)
+
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	for name, err := range results {
+		if err != nil {
+			continue
+		}
+		// Check if agent is enabled for this phase
+		if cfg, ok := r.configs[name]; ok {
+			if !cfg.IsEnabledForPhase(phase) {
+				continue
+			}
+		}
+		available = append(available, name)
+	}
+	return available
+}
+
+// IsEnabledForPhase checks if a specific agent is enabled for a phase.
+func (r *Registry) IsEnabledForPhase(name, phase string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	cfg, ok := r.configs[name]
+	if !ok {
+		return true // Not configured = use defaults = enabled for all
+	}
+	return cfg.IsEnabledForPhase(phase)
+}
+
 // Clear removes all cached agents.
 func (r *Registry) Clear() {
 	r.mu.Lock()
@@ -206,39 +242,36 @@ func (r *Registry) Clear() {
 }
 
 // defaultConfig returns default configuration for an agent.
+// NOTE: Model has NO default - it must be configured in the config file
+// or the CLI will use its own default. The source of truth is always
+// the config file (.quorum/config.yaml).
+// Temperature and max_tokens are intentionally omitted - let each CLI
+// use its optimized defaults for coding tasks.
 func defaultConfig(name string) AgentConfig {
 	defaults := map[string]AgentConfig{
 		"claude": {
-			Name:        "claude",
-			Path:        "claude",
-			Model:       "claude-sonnet-4-20250514",
-			MaxTokens:   4096,
-			Temperature: 0.7,
-			Timeout:     5 * time.Minute,
+			Name:    "claude",
+			Path:    "claude",
+			Model:   "", // NO default - must be configured or CLI uses its default
+			Timeout: 5 * time.Minute,
 		},
 		"gemini": {
-			Name:        "gemini",
-			Path:        "gemini",
-			Model:       "gemini-2.5-flash",
-			MaxTokens:   4096,
-			Temperature: 0.7,
-			Timeout:     5 * time.Minute,
+			Name:    "gemini",
+			Path:    "gemini",
+			Model:   "", // NO default - must be configured or CLI uses its default
+			Timeout: 5 * time.Minute,
 		},
 		"codex": {
-			Name:        "codex",
-			Path:        "codex",
-			Model:       "gpt-5.1-codex",
-			MaxTokens:   4096,
-			Temperature: 0.7,
-			Timeout:     5 * time.Minute,
+			Name:    "codex",
+			Path:    "codex",
+			Model:   "", // NO default - must be configured or CLI uses its default
+			Timeout: 5 * time.Minute,
 		},
 		"copilot": {
-			Name:        "copilot",
-			Path:        "copilot",
-			Model:       "claude-sonnet-4-5",
-			MaxTokens:   16384,
-			Temperature: 0.7,
-			Timeout:     5 * time.Minute,
+			Name:    "copilot",
+			Path:    "copilot",
+			Model:   "", // NO default - must be configured or CLI uses its default
+			Timeout: 5 * time.Minute,
 		},
 	}
 
@@ -247,10 +280,8 @@ func defaultConfig(name string) AgentConfig {
 	}
 
 	return AgentConfig{
-		Name:        name,
-		MaxTokens:   4096,
-		Temperature: 0.7,
-		Timeout:     5 * time.Minute,
+		Name:    name,
+		Timeout: 5 * time.Minute,
 	}
 }
 

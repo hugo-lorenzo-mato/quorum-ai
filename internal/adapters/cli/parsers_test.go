@@ -359,3 +359,71 @@ func TestParserAgentNames(t *testing.T) {
 		})
 	}
 }
+
+func TestExtractTextFromJSONLine(t *testing.T) {
+	tests := []struct {
+		name string
+		line string
+		want string
+	}{
+		{
+			name: "empty line",
+			line: "",
+			want: "",
+		},
+		{
+			name: "non-json line",
+			line: "just some text",
+			want: "",
+		},
+		{
+			name: "claude system init (no text)",
+			line: `{"type":"system","subtype":"init","session_id":"abc","tools":["Bash"]}`,
+			want: "",
+		},
+		{
+			name: "claude result success",
+			line: `{"type":"result","subtype":"success","result":"Hello, I can help you with that!","session_id":"abc"}`,
+			want: "Hello, I can help you with that!",
+		},
+		{
+			name: "claude assistant text",
+			line: `{"type":"assistant","message":{"content":[{"type":"text","text":"This is a response"}]}}`,
+			want: "This is a response",
+		},
+		{
+			name: "claude tool_use (no text)",
+			line: `{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_123","name":"Bash"}]}}`,
+			want: "",
+		},
+		{
+			name: "gemini text event",
+			line: `{"type":"text","text":"Gemini response text"}`,
+			want: "Gemini response text",
+		},
+		{
+			name: "gemini result with response",
+			line: `{"type":"result","subtype":"success","response":"Final gemini response"}`,
+			want: "Final gemini response",
+		},
+		{
+			name: "codex agent_message",
+			line: `{"type":"item.completed","item":{"type":"agent_message","text":"Codex says hello"}}`,
+			want: "Codex says hello",
+		},
+		{
+			name: "codex reasoning (no text extracted)",
+			line: `{"type":"item.completed","item":{"type":"reasoning","text":"Thinking about it"}}`,
+			want: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := extractTextFromJSONLine(tt.line)
+			if got != tt.want {
+				t.Errorf("extractTextFromJSONLine() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

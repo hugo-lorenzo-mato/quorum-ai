@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
@@ -35,12 +36,14 @@ func NewClaudeAdapter(cfg AgentConfig) (core.Agent, error) {
 			MaxContextTokens:  200000,
 			MaxOutputTokens:   8192,
 			SupportedModels: []string{
+				"claude-opus-4-5-20251101",
+				"claude-sonnet-4-5-20250929",
+				"claude-haiku-4-5-20251001",
 				"claude-sonnet-4-20250514",
 				"claude-opus-4-20250514",
-				"claude-3-5-sonnet-20241022",
-				"claude-3-5-haiku-20241022",
+				"claude-opus-4-1-20250805",
 			},
-			DefaultModel: "claude-sonnet-4-20250514",
+			DefaultModel: "claude-sonnet-4-5-20250929",
 		},
 	}
 
@@ -183,12 +186,16 @@ func (c *ClaudeAdapter) parseOutput(result *CommandResult, _ core.OutputFormat) 
 func (c *ClaudeAdapter) extractUsage(result *CommandResult, execResult *core.ExecuteResult) {
 	combined := result.Stdout + result.Stderr
 
+	// Debug: track source of token values
+	var tokenSource string
+
 	// Pattern for token usage
 	// Example: "tokens: 1234 in, 567 out"
 	tokenPattern := regexp.MustCompile(`tokens?:?\s*(\d+)\s*in\D*(\d+)\s*out`)
 	if matches := tokenPattern.FindStringSubmatch(combined); len(matches) == 3 {
 		if in, err := strconv.Atoi(matches[1]); err == nil {
 			execResult.TokensIn = in
+			tokenSource = "parsed"
 		}
 		if out, err := strconv.Atoi(matches[2]); err == nil {
 			execResult.TokensOut = out
@@ -210,10 +217,41 @@ func (c *ClaudeAdapter) extractUsage(result *CommandResult, execResult *core.Exe
 	// and use a heuristic for TokensIn (typically prompts are shorter than responses)
 	if execResult.TokensOut == 0 {
 		execResult.TokensOut = c.TokenEstimate(result.Stdout)
+		tokenSource = "estimated"
 	}
 	if execResult.TokensIn == 0 && execResult.TokensOut > 0 {
 		// Heuristic: input is typically 20-50% of output for conversational prompts
 		execResult.TokensIn = execResult.TokensOut / 3
+	}
+
+	// Cap token values to avoid corrupted/unrealistic values
+	// Max reasonable is ~500k (very large context + response)
+	const maxReasonableTokens = 500_000
+	if execResult.TokensIn > maxReasonableTokens {
+		c.emitEvent(core.NewAgentEvent(
+			core.AgentEventProgress,
+			"claude",
+			fmt.Sprintf("[WARN] Capped unrealistic TokensIn: %d -> %d", execResult.TokensIn, maxReasonableTokens),
+		).WithData(map[string]any{
+			"original":      execResult.TokensIn,
+			"capped":        maxReasonableTokens,
+			"source":        tokenSource,
+			"stdout_sample": truncateForDebug(result.Stdout, 200),
+		}))
+		execResult.TokensIn = maxReasonableTokens
+	}
+	if execResult.TokensOut > maxReasonableTokens {
+		c.emitEvent(core.NewAgentEvent(
+			core.AgentEventProgress,
+			"claude",
+			fmt.Sprintf("[WARN] Capped unrealistic TokensOut: %d -> %d", execResult.TokensOut, maxReasonableTokens),
+		).WithData(map[string]any{
+			"original":      execResult.TokensOut,
+			"capped":        maxReasonableTokens,
+			"source":        tokenSource,
+			"stdout_sample": truncateForDebug(result.Stdout, 200),
+		}))
+		execResult.TokensOut = maxReasonableTokens
 	}
 
 	// Estimate cost if not found

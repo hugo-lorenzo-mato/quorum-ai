@@ -305,13 +305,11 @@ func TestCommandResult(t *testing.T) {
 
 func TestAgentConfig(t *testing.T) {
 	cfg := AgentConfig{
-		Name:        "test-agent",
-		Path:        "/usr/bin/test",
-		Model:       "test-model",
-		MaxTokens:   4096,
-		Temperature: 0.7,
-		Timeout:     time.Minute,
-		WorkDir:     "/work",
+		Name:    "test-agent",
+		Path:    "/usr/bin/test",
+		Model:   "test-model",
+		Timeout: time.Minute,
+		WorkDir: "/work",
 	}
 
 	if cfg.Name != "test-agent" {
@@ -322,12 +320,6 @@ func TestAgentConfig(t *testing.T) {
 	}
 	if cfg.Model != "test-model" {
 		t.Errorf("Model = %q, want test-model", cfg.Model)
-	}
-	if cfg.MaxTokens != 4096 {
-		t.Errorf("MaxTokens = %d, want 4096", cfg.MaxTokens)
-	}
-	if cfg.Temperature != 0.7 {
-		t.Errorf("Temperature = %f, want 0.7", cfg.Temperature)
 	}
 	if cfg.Timeout != time.Minute {
 		t.Errorf("Timeout = %v, want 1m", cfg.Timeout)
