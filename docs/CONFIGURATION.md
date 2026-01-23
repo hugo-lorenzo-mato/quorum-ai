@@ -10,12 +10,11 @@ This document describes all configuration options available in quorum-ai. Config
   - [log](#log)
   - [trace](#trace)
   - [workflow](#workflow)
+  - [phases](#phases)
   - [agents](#agents)
-  - [prompt_optimizer](#prompt_optimizer)
   - [state](#state)
   - [git](#git)
   - [github](#github)
-  - [consensus](#consensus)
   - [costs](#costs)
 
 ---
@@ -84,7 +83,7 @@ trace:
   max_bytes: 262144
   total_max_bytes: 10485760
   max_files: 500
-  include_phases: [optimize, analyze, consensus, plan, execute]
+  include_phases: [refine, analyze, plan, execute]
 ```
 
 | Field | Type | Default | Description |
@@ -115,24 +114,141 @@ Controls workflow execution behavior.
 ```yaml
 workflow:
   timeout: 12h
-  phase_timeouts:
-    analyze: 2h
-    plan: 2h
-    execute: 2h
   max_retries: 3
   dry_run: false
-  sandbox: false
+  sandbox: true
   deny_tools: []
 ```
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `timeout` | duration | `12h` | Maximum workflow execution time |
-| `phase_timeouts` | map | `analyze: 2h`, `plan: 2h`, `execute: 2h` | Maximum duration for `quorum analyze`, `quorum plan`, and `quorum execute` |
 | `max_retries` | int | `3` | Maximum retry attempts per failed task |
 | `dry_run` | bool | `false` | Simulate execution without running agents |
-| `sandbox` | bool | `false` | Restrict dangerous operations |
+| `sandbox` | bool | `true` | Restrict dangerous operations (security default) |
 | `deny_tools` | []string | `[]` | Tool names to deny during execution |
+
+---
+
+### phases
+
+Configures per-phase settings including timeouts and phase-specific components.
+
+```yaml
+phases:
+  analyze:
+    timeout: 2h
+    refiner:
+      enabled: true
+      agent: claude
+    synthesizer:
+      agent: claude
+    moderator:
+      enabled: true
+      agent: claude
+      threshold: 0.90
+      min_rounds: 2
+      max_rounds: 5
+      abort_threshold: 0.30
+      stagnation_threshold: 0.02
+  plan:
+    timeout: 1h
+    synthesizer:
+      enabled: false
+      agent: claude
+  execute:
+    timeout: 2h
+```
+
+#### Analyze Phase
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `timeout` | duration | `2h` | Maximum duration for analyze phase |
+| `refiner.enabled` | bool | `false` | Enable prompt refinement before analysis |
+| `refiner.agent` | string | - | Agent to use for refinement (model from `phase_models.refine`) |
+| `synthesizer.agent` | string | - | Agent to synthesize multi-agent analyses (model from `phase_models.analyze`) |
+| `moderator.enabled` | bool | `false` | Enable semantic moderator for consensus evaluation |
+| `moderator.agent` | string | - | Agent to use as moderator (model from `phase_models.analyze`) |
+| `moderator.threshold` | float | `0.90` | Minimum consensus score to proceed (0.0-1.0) |
+| `moderator.min_rounds` | int | `2` | Minimum refinement rounds before consensus can be declared |
+| `moderator.max_rounds` | int | `5` | Maximum refinement rounds before aborting |
+| `moderator.abort_threshold` | float | `0.30` | Score below this aborts workflow |
+| `moderator.stagnation_threshold` | float | `0.02` | Minimum improvement required between rounds |
+
+#### Plan Phase
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `timeout` | duration | `1h` | Maximum duration for plan phase |
+| `synthesizer.enabled` | bool | `false` | Enable multi-agent plan synthesis |
+| `synthesizer.agent` | string | - | Agent to synthesize plans (model from `phase_models.plan`) |
+
+#### Execute Phase
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `timeout` | duration | `2h` | Maximum duration for execute phase |
+
+#### Prompt Refiner
+
+The refiner optimizes the user prompt before analysis for better LLM effectiveness.
+
+**How it works:**
+
+1. User provides a prompt to `quorum run`
+2. The refiner enhances the prompt for clarity and LLM effectiveness
+3. The refined prompt is used for all subsequent phases
+4. Original prompt is preserved in state for reference
+
+**Disabling refinement:**
+
+```bash
+# Via CLI flag
+quorum run --skip-refine "your prompt"
+
+# Via configuration
+phases:
+  analyze:
+    refiner:
+      enabled: false
+```
+
+**Behavior in special modes:**
+
+- **Dry-run mode**: Refinement is skipped, original prompt is used
+- **Individual phase commands** (`quorum analyze`, etc.): Refinement is skipped
+- **Refinement failure**: Falls back to original prompt with a warning
+
+#### Semantic Moderator
+
+The moderator evaluates semantic agreement across agent outputs using weighted divergence scoring.
+
+**Consensus flow:**
+
+```
+V1 Analysis (all agents)
+    ↓
+V2 Refinement (all agents review V1, ultra-critical self-review)
+    ↓
+Moderator Evaluation → Score >= 90%? → Proceed to consolidation
+    ↓ No
+V(n+1) Refinement (integrate moderator feedback)
+    ↓
+Moderator Evaluation → Score >= 90%? → Proceed to consolidation
+    ↓ No (max rounds or stagnation)
+Abort or proceed with best result
+```
+
+**Weighted Divergence Scoring:**
+
+Not all disagreements are equal:
+
+| Impact Level | Weight | Examples |
+|--------------|--------|----------|
+| **High** | Major reduction | Architectural decisions, core logic, security, breaking changes |
+| **Medium** | Moderate reduction | Implementation details, edge cases, performance |
+| **Low** | Minimal reduction | Naming conventions, code style, documentation, cosmetic choices |
 
 ---
 
@@ -298,55 +414,6 @@ copilot /login  # Authenticate with GitHub
 
 ---
 
-### prompt_optimizer
-
-Configures the prompt optimization phase that runs before analysis.
-
-```yaml
-prompt_optimizer:
-  enabled: true
-  agent: claude
-  model: ""
-```
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `enabled` | bool | `true` | Enable/disable prompt optimization |
-| `agent` | string | `claude` | Agent to use for optimization |
-| `model` | string | `""` | Model override (uses agent's `phase_models.optimize` if empty) |
-
-**How it works:**
-
-1. User provides a prompt to `quorum run`
-2. The optimizer enhances the prompt for clarity and LLM effectiveness
-3. The optimized prompt is used for all subsequent phases
-4. Original prompt is preserved in state for reference
-
-**Model resolution for optimization:**
-
-1. `prompt_optimizer.model` if specified
-2. Agent's `phase_models.optimize` if defined
-3. Agent's default `model` as fallback
-
-**Disabling optimization:**
-
-```bash
-# Via CLI flag
-quorum run --skip-optimize "your prompt"
-
-# Via configuration
-prompt_optimizer:
-  enabled: false
-```
-
-**Behavior in special modes:**
-
-- **Dry-run mode**: Optimization is skipped, original prompt is used
-- **Individual phase commands** (`quorum analyze`, etc.): Optimization is skipped
-- **Optimization failure**: Falls back to original prompt with a warning
-
----
-
 ### state
 
 Configures workflow state persistence for resume capability.
@@ -393,7 +460,24 @@ quorum execute --workflow wf-abc123
 quorum workflows
 ```
 
-In TUI mode, use `/workflows` to list workflows and `/plan` or `/execute` without arguments to continue the active workflow
+**TUI mode commands:**
+
+```
+/workflows       List all available workflows
+/load [id]       Load and switch to a specific workflow
+/status          Show current workflow status
+/plan            Continue to planning phase (from completed analyze)
+/execute         Continue to execution phase (from completed plan)
+```
+
+Example TUI workflow:
+```
+/workflows               # List available workflows
+/load wf-1234567890-1    # Switch to a specific workflow
+/status                  # Check current state
+/plan                    # Continue to planning (if analyze completed)
+/execute                 # Continue to execution (if plan completed)
+```
 
 ---
 
@@ -441,52 +525,6 @@ github:
 
 ---
 
-### consensus
-
-Configures the semantic arbiter consensus validation system.
-
-```yaml
-consensus:
-  arbiter:
-    enabled: true
-    agent: claude
-    model: claude-opus-4-5-20251101
-    threshold: 0.90
-    min_rounds: 2
-    max_rounds: 5
-    abort_threshold: 0.30
-    stagnation_threshold: 0.02
-```
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `arbiter.enabled` | bool | `true` | Enable/disable semantic arbiter consensus |
-| `arbiter.agent` | string | `claude` | Agent to use as arbiter |
-| `arbiter.model` | string | `claude-opus-4-5-20251101` | Model for arbiter evaluations |
-| `arbiter.threshold` | float | `0.90` | Minimum consensus score to proceed (0.0-1.0) |
-| `arbiter.min_rounds` | int | `2` | Minimum refinement rounds before consensus can be declared |
-| `arbiter.max_rounds` | int | `5` | Maximum refinement rounds before aborting |
-| `arbiter.abort_threshold` | float | `0.30` | Score below this aborts workflow |
-| `arbiter.stagnation_threshold` | float | `0.02` | Minimum improvement required between rounds |
-
-**Consensus flow:**
-
-```
-V1 Analysis (all agents)
-    ↓
-V2 Refinement (all agents review V1)
-    ↓
-Arbiter Evaluation → Score >= 90%? → Proceed to consolidation
-    ↓ No
-V(n+1) Refinement
-    ↓
-Arbiter Evaluation → Score >= 90%? → Proceed to consolidation
-    ↓ No (max rounds or stagnation)
-Abort or proceed with best result
-```
-
----
-
 ### costs
 
 Configures cost tracking and limits.
@@ -514,10 +552,11 @@ All configuration options can be overridden via environment variables using the 
 QUORUM_LOG_LEVEL=debug
 QUORUM_WORKFLOW_TIMEOUT=4h
 QUORUM_AGENTS_CLAUDE_MODEL=claude-opus-4-5-20251101
-QUORUM_CONSENSUS_ARBITER_THRESHOLD=0.95
+QUORUM_PHASES_ANALYZE_MODERATOR_THRESHOLD=0.95
+QUORUM_PHASES_ANALYZE_REFINER_ENABLED=true
 ```
 
-Nested keys use underscores: `agents.claude.model` → `QUORUM_AGENTS_CLAUDE_MODEL`
+Nested keys use underscores: `phases.analyze.moderator.threshold` → `QUORUM_PHASES_ANALYZE_MODERATOR_THRESHOLD`
 
 ---
 
@@ -527,16 +566,29 @@ Nested keys use underscores: `agents.claude.model` → `QUORUM_AGENTS_CLAUDE_MOD
 
 ```yaml
 agents:
+  default: claude
   claude:
     enabled: true
+    path: claude
+    phase_models:
+      refine: claude-opus-4-5-20251101
+      analyze: claude-opus-4-5-20251101
+      plan: claude-opus-4-5-20251101
   gemini:
     enabled: true
+    path: gemini
+    phase_models:
+      analyze: gemini-3-pro-preview
+      plan: gemini-3-pro-preview
 
-consensus:
-  arbiter:
-    enabled: true
-    agent: claude
-    threshold: 0.90
+phases:
+  analyze:
+    synthesizer:
+      agent: claude
+    moderator:
+      enabled: true
+      agent: claude
+      threshold: 0.90
 ```
 
 ### High-Quality Analysis
@@ -547,30 +599,30 @@ agents:
   claude:
     enabled: true
     phase_models:
-      optimize: claude-opus-4-5-20251101
+      refine: claude-opus-4-5-20251101
       analyze: claude-opus-4-5-20251101
       plan: claude-sonnet-4-5-20250929
       execute: claude-haiku-4-5-20251001
   gemini:
     enabled: true
     phase_models:
-      optimize: gemini-2.5-pro
       analyze: gemini-2.5-pro
       plan: gemini-2.5-flash
       execute: gemini-2.5-flash
 
-prompt_optimizer:
-  enabled: true
-  agent: claude
-
-consensus:
-  arbiter:
-    enabled: true
-    agent: claude
-    model: claude-opus-4-5-20251101
-    threshold: 0.95
-    min_rounds: 2
-    max_rounds: 5
+phases:
+  analyze:
+    refiner:
+      enabled: true
+      agent: claude
+    synthesizer:
+      agent: claude
+    moderator:
+      enabled: true
+      agent: claude
+      threshold: 0.95
+      min_rounds: 2
+      max_rounds: 5
 
 costs:
   max_per_workflow: 25.0
@@ -586,18 +638,22 @@ agents:
   gemini:
     enabled: true
     model: gemini-2.5-flash-lite
+    phase_models:
+      analyze: gemini-2.5-flash
+      plan: gemini-2.5-flash
 
-# Disable optimization to reduce costs
-prompt_optimizer:
-  enabled: false
-
-consensus:
-  arbiter:
-    enabled: true
-    agent: gemini
-    model: gemini-2.5-flash
-    threshold: 0.85
-    max_rounds: 3
+# Disable refinement to reduce costs
+phases:
+  analyze:
+    refiner:
+      enabled: false
+    synthesizer:
+      agent: gemini
+    moderator:
+      enabled: true
+      agent: gemini
+      threshold: 0.85
+      max_rounds: 3
 
 costs:
   max_per_workflow: 5.0
@@ -619,9 +675,17 @@ workflow:
   dry_run: true
 
 agents:
+  default: claude
   claude:
     enabled: true
     model: claude-haiku-4-5-20251001
+    phase_models:
+      analyze: claude-haiku-4-5-20251001
+
+phases:
+  analyze:
+    synthesizer:
+      agent: claude
 ```
 
 ---
