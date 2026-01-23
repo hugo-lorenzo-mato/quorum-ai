@@ -24,9 +24,10 @@ import (
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/events"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/logging"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/tui"
 )
 
-// Color palette - modern dark theme
+// Color palette - modern dark theme (default)
 var (
 	primaryColor   = lipgloss.Color("#7C3AED") // Purple
 	secondaryColor = lipgloss.Color("#06B6D4") // Cyan
@@ -39,6 +40,111 @@ var (
 	borderColor    = lipgloss.Color("#374151") // Border
 	surfaceColor   = lipgloss.Color("#1F2937") // Surface background
 )
+
+// applyDarkTheme sets the color palette to dark theme.
+func applyDarkTheme() {
+	primaryColor = lipgloss.Color("#7C3AED")   // Purple
+	secondaryColor = lipgloss.Color("#06B6D4") // Cyan
+	successColor = lipgloss.Color("#10B981")   // Green
+	warningColor = lipgloss.Color("#F59E0B")   // Amber
+	errorColor = lipgloss.Color("#EF4444")     // Red
+	mutedColor = lipgloss.Color("#6B7280")     // Gray
+	textColor = lipgloss.Color("#F9FAFB")      // White
+	dimColor = lipgloss.Color("#9CA3AF")       // Light gray
+	borderColor = lipgloss.Color("#374151")    // Border
+	surfaceColor = lipgloss.Color("#1F2937")   // Surface background
+	refreshStyles()
+}
+
+// applyLightTheme sets the color palette to light theme.
+func applyLightTheme() {
+	primaryColor = lipgloss.Color("#6D28D9")   // Darker purple for contrast
+	secondaryColor = lipgloss.Color("#0891B2") // Darker cyan
+	successColor = lipgloss.Color("#059669")   // Darker green
+	warningColor = lipgloss.Color("#D97706")   // Darker amber
+	errorColor = lipgloss.Color("#DC2626")     // Darker red
+	mutedColor = lipgloss.Color("#6B7280")     // Gray
+	textColor = lipgloss.Color("#1F2937")      // Dark text
+	dimColor = lipgloss.Color("#6B7280")       // Muted gray
+	borderColor = lipgloss.Color("#D1D5DB")    // Light border
+	surfaceColor = lipgloss.Color("#F9FAFB")   // Light background
+	refreshStyles()
+}
+
+// refreshStyles recreates all styles with the current color values.
+func refreshStyles() {
+	// Header styles
+	logoStyle = lipgloss.NewStyle().
+		Bold(true).
+		Foreground(primaryColor)
+
+	// Tab-style agent bar
+	tabActiveStyle = lipgloss.NewStyle().
+		Foreground(textColor).
+		Background(primaryColor).
+		Padding(0, 1).
+		Bold(true)
+
+	tabInactiveStyle = lipgloss.NewStyle().
+		Foreground(dimColor).
+		Padding(0, 1)
+
+	tabRunningStyle = lipgloss.NewStyle().
+		Foreground(warningColor).
+		Background(surfaceColor).
+		Padding(0, 1).
+		Bold(true)
+
+	tabErrorStyle = lipgloss.NewStyle().
+		Foreground(errorColor).
+		Background(surfaceColor).
+		Padding(0, 1)
+
+	tabSeparatorStyle = lipgloss.NewStyle().
+		Foreground(borderColor)
+
+	// Message styles
+	userLabelStyle = lipgloss.NewStyle().
+		Foreground(successColor).
+		Bold(true)
+
+	userMsgStyle = lipgloss.NewStyle().
+		Foreground(textColor).
+		PaddingLeft(2)
+
+	agentLabelStyle = lipgloss.NewStyle().
+		Foreground(primaryColor).
+		Bold(true)
+
+	agentMsgStyle = lipgloss.NewStyle().
+		Foreground(textColor).
+		PaddingLeft(2)
+
+	systemMsgStyle = lipgloss.NewStyle().
+		Foreground(warningColor).
+		Italic(true).
+		PaddingLeft(2)
+
+	// Input styles
+	inputContainerStyle = lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(borderColor).
+		Padding(0, 1)
+
+	inputActiveStyle = lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(primaryColor).
+		Padding(0, 1)
+
+	inputShellStyle = lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("#f97316")). // Orange
+		Padding(0, 1)
+
+	// Spinner style
+	spinnerStyle = lipgloss.NewStyle().
+		Foreground(primaryColor)
+}
 
 // Nerd Font icons (fallback to Unicode if not available)
 const (
@@ -166,8 +272,11 @@ Quorum AI orchestrates multiple AI agents (Claude, Gemini, etc.) to work in para
 
 ## Chat Mode Commands (inside quorum chat):
 - /analyze <prompt> - Run multi-agent analysis (V1/V2/V3)
-- /plan <prompt>    - Generate a plan from analysis
+- /plan [prompt]    - Continue planning or start new workflow
+- /execute          - Execute tasks from active workflow
 - /run <prompt>     - Run complete workflow
+- /workflows        - List available workflows
+- /load [id]        - Load and switch to a workflow
 - /status           - Show workflow status
 - /cancel           - Cancel current workflow
 - /model <name>     - Set current model
@@ -204,9 +313,11 @@ IMPORTANT: Do NOT invent commands or features not listed above. If unsure, say y
 type WorkflowRunner interface {
 	Run(ctx context.Context, prompt string) error
 	Analyze(ctx context.Context, prompt string) error
+	Plan(ctx context.Context) error
 	Resume(ctx context.Context) error
 	GetState(ctx context.Context) (*core.WorkflowState, error)
 	ListWorkflows(ctx context.Context) ([]core.WorkflowSummary, error)
+	LoadWorkflow(ctx context.Context, workflowID string) (*core.WorkflowState, error)
 }
 
 // Model is the Bubble Tea model for the chat interface.
@@ -222,9 +333,10 @@ type Model struct {
 	suggestions     []string
 	showSuggestions bool
 	suggestionIndex int
-	suggestionType  string              // "command", "agent", "model"
-	availableAgents []string            // List of enabled agent names
-	agentModels     map[string][]string // Models available per agent
+	suggestionType  string                 // "command", "agent", "model", "workflow"
+	availableAgents []string               // List of enabled agent names
+	agentModels     map[string][]string    // Models available per agent
+	workflowCache   []core.WorkflowSummary // Cached workflows for suggestions
 
 	// Workflow integration
 	controlPlane  *control.ControlPlane
@@ -262,6 +374,7 @@ type Model struct {
 	chatStartedAt     time.Time // When the current chat message was sent
 	chatAgent         string    // Agent handling current chat message
 	inputFocused      bool
+	darkTheme         bool // Current theme (true=dark, false=light)
 
 	// Logs panel
 	logsPanel *LogsPanel
@@ -389,6 +502,7 @@ func NewModel(cp *control.ControlPlane, agents core.AgentRegistry, defaultAgent,
 		fileViewer:       NewFileViewer(),
 		statsWidget:      NewStatsWidget(),
 		machineCollector: NewMachineStatsCollector(),
+		darkTheme:        true, // Default to dark theme
 	}
 }
 
@@ -447,9 +561,34 @@ func (m Model) Init() tea.Cmd {
 		m.listenForInputRequests(),
 		m.listenForExplorerChanges(),
 		m.listenForLogEvents(),
+		m.loadActiveWorkflow(),    // Auto-load active workflow on startup
 		statsTickCmd(),            // Start stats updates
 		tea.EnableMouseCellMotion, // Enable mouse support for click-to-focus
 	)
+}
+
+// loadActiveWorkflow returns a command that loads the active workflow on startup.
+func (m Model) loadActiveWorkflow() tea.Cmd {
+	if m.runner == nil {
+		return nil
+	}
+	return func() tea.Msg {
+		ctx := context.Background()
+		workflows, err := m.runner.ListWorkflows(ctx)
+		if err != nil {
+			return nil
+		}
+		for _, wf := range workflows {
+			if wf.IsActive {
+				state, err := m.runner.LoadWorkflow(ctx, string(wf.WorkflowID))
+				if err == nil && state != nil {
+					return ActiveWorkflowLoadMsg{State: state}
+				}
+				break
+			}
+		}
+		return nil
+	}
 }
 
 // listenForLogEvents creates a command that listens for log events from the workflow.
@@ -519,12 +658,11 @@ type (
 		Message string
 		Data    map[string]any
 	}
-	TickMsg             struct{ Time time.Time }
-	ExplorerRefreshMsg  struct{} // File system change detected
-	StatsTickMsg        struct{} // Periodic stats update
-	ChatProgressTickMsg struct {
-		Elapsed time.Duration
-	}
+	TickMsg               struct{ Time time.Time }
+	ExplorerRefreshMsg    struct{} // File system change detected
+	StatsTickMsg          struct{} // Periodic stats update
+	ChatProgressTickMsg   struct{ Elapsed time.Duration }
+	ActiveWorkflowLoadMsg struct{ State *core.WorkflowState } // Auto-load active workflow on startup
 )
 
 // chatProgressTick returns a command that sends periodic progress updates during chat execution.
@@ -580,8 +718,25 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 	if m.panelNavMode {
 		switch msg.Type {
 		case tea.KeyEsc:
-			// Cancel panel nav mode
+			// Cancel panel nav mode and return focus to chat
 			m.panelNavMode = false
+			m.explorerFocus = false
+			m.logsFocus = false
+			m.statsFocus = false
+			m.inputFocused = true
+			m.textarea.Focus()
+			m.explorerPanel.SetFocused(false)
+			return m, nil, true
+		case tea.KeyEnter, tea.KeySpace:
+			// Return focus to chat input
+			m.panelNavMode = false
+			m.explorerFocus = false
+			m.logsFocus = false
+			m.statsFocus = false
+			m.inputFocused = true
+			m.textarea.Focus()
+			m.explorerPanel.SetFocused(false)
+			m.logsPanel.AddInfo("system", "Chat input focused")
 			return m, nil, true
 		case tea.KeyLeft:
 			// Focus explorer (left panel)
@@ -596,18 +751,10 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 				m.logsPanel.AddInfo("system", "Explorer focused (Esc to return)")
 			}
 			return m, nil, true
-		case tea.KeyRight:
-			// Focus right sidebar (stats or logs)
+		case tea.KeyRight, tea.KeyUp, tea.KeyDown:
+			// Focus right sidebar (logs only - stats is view-only, no focus needed)
 			m.panelNavMode = false
-			if m.showStats {
-				m.statsFocus = true
-				m.logsFocus = false
-				m.explorerFocus = false
-				m.inputFocused = false
-				m.textarea.Blur()
-				m.explorerPanel.SetFocused(false)
-				m.logsPanel.AddInfo("system", "Stats focused (↑↓ scroll, Esc to return)")
-			} else if m.showLogs {
+			if m.showLogs {
 				m.logsFocus = true
 				m.statsFocus = false
 				m.explorerFocus = false
@@ -617,35 +764,19 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 				m.logsPanel.AddInfo("system", "Logs focused (↑↓ scroll, Esc to return)")
 			}
 			return m, nil, true
-		case tea.KeyUp, tea.KeyDown:
-			// Switch between stats and logs in right sidebar
-			m.panelNavMode = false
-			if m.showStats && m.showLogs {
-				if m.statsFocus || msg.Type == tea.KeyUp {
-					m.logsFocus = true
-					m.statsFocus = false
-					m.logsPanel.AddInfo("system", "Logs focused (↑↓ scroll, Esc to return)")
-				} else {
-					m.statsFocus = true
-					m.logsFocus = false
-					m.logsPanel.AddInfo("system", "Stats focused (↑↓ scroll, Esc to return)")
-				}
-				m.explorerFocus = false
-				m.inputFocused = false
-				m.textarea.Blur()
-				m.explorerPanel.SetFocused(false)
-			}
-			return m, nil, true
 		default:
-			// Any other key cancels panel nav mode
+			// Any other key cancels panel nav mode and returns focus to input
 			m.panelNavMode = false
+			m.inputFocused = true
+			m.textarea.Focus()
+			return m, nil, true
 		}
 	}
 
 	// Ctrl+b enters panel navigation mode (tmux-style)
 	if msg.Type == tea.KeyCtrlB {
 		m.panelNavMode = true
-		m.logsPanel.AddInfo("system", "Panel nav: ←→ switch panels, ↑↓ logs/stats, Esc cancel")
+		m.logsPanel.AddInfo("system", "Panel nav: ← explorer, → logs, Enter/Esc=chat")
 		return m, nil, true
 	}
 
@@ -673,6 +804,25 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 			case "model":
 				// Complete and execute /model command
 				m.textarea.SetValue("/model " + selected)
+				m.showSuggestions = false
+				m.suggestionIndex = 0
+				m.suggestionType = ""
+				model, teaCmd := m.handleSubmit()
+				return model, teaCmd, true
+
+			case "workflow":
+				// Complete and execute /load command
+				m.textarea.SetValue("/load " + selected)
+				m.showSuggestions = false
+				m.suggestionIndex = 0
+				m.suggestionType = ""
+				m.workflowCache = nil // Clear cache to refresh on next use
+				model, teaCmd := m.handleSubmit()
+				return model, teaCmd, true
+
+			case "theme":
+				// Complete and execute /theme command
+				m.textarea.SetValue("/theme " + selected)
 				m.showSuggestions = false
 				m.suggestionIndex = 0
 				m.suggestionType = ""
@@ -720,6 +870,10 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 				m.textarea.SetValue("/agent " + m.suggestions[m.suggestionIndex])
 			case "model":
 				m.textarea.SetValue("/model " + m.suggestions[m.suggestionIndex])
+			case "workflow":
+				m.textarea.SetValue("/load " + m.suggestions[m.suggestionIndex])
+			case "theme":
+				m.textarea.SetValue("/theme " + m.suggestions[m.suggestionIndex])
 			default:
 				m.textarea.SetValue("/" + m.suggestions[m.suggestionIndex] + " ")
 			}
@@ -770,42 +924,6 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 			m.logsFocus = false
 			m.inputFocused = true
 			m.textarea.Focus()
-			return m, nil, true
-		} else if m.statsFocus && m.showStats {
-			// Return focus from stats to input
-			m.statsFocus = false
-			m.inputFocused = true
-			m.textarea.Focus()
-			return m, nil, true
-		} else if m.streaming || m.workflowRunning {
-			// Cancel current operation
-			if m.cancelFunc != nil {
-				m.cancelFunc()
-				m.cancelFunc = nil
-			}
-			if m.controlPlane != nil && m.workflowRunning {
-				m.controlPlane.Cancel()
-			}
-			wasStreaming := m.streaming
-			wasWorkflow := m.workflowRunning
-			m.streaming = false
-			m.workflowRunning = false
-
-			if wasWorkflow {
-				m.workflowPhase = "idle"
-				// Reset agent states
-				for _, a := range m.agentInfos {
-					if a.Status == AgentStatusRunning {
-						a.Status = AgentStatusIdle
-					}
-				}
-				m.logsPanel.AddWarn("system", "Workflow interrupted by user (Esc)")
-				m.history.Add(NewSystemMessage("Workflow interrupted"))
-			} else if wasStreaming {
-				m.logsPanel.AddWarn("system", "Request interrupted by user (Esc)")
-				m.history.Add(NewSystemMessage("Request interrupted"))
-			}
-			m.updateViewport()
 			return m, nil, true
 		} else if m.pendingInputRequest != nil {
 			if m.controlPlane != nil {
@@ -884,24 +1002,46 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		return m, nil, true
 
 	case tea.KeyCtrlS:
-		// Toggle stats panel
+		// Toggle stats panel (view-only, no focus change)
 		m.showStats = !m.showStats
-		if m.showStats {
-			m.statsFocus = true
-			m.logsFocus = false
-			m.explorerFocus = false
-			m.inputFocused = false
-			m.textarea.Blur()
-		} else {
-			m.statsFocus = false
-			m.inputFocused = true
-			m.textarea.Focus()
-		}
 		// Recalculate layout
 		if m.width > 0 && m.height > 0 {
 			m.recalculateLayout()
 		}
 		return m, nil, true
+
+	case tea.KeyCtrlX:
+		// Cancel current operation (streaming or workflow)
+		if m.streaming || m.workflowRunning {
+			if m.cancelFunc != nil {
+				m.cancelFunc()
+				m.cancelFunc = nil
+			}
+			if m.controlPlane != nil && m.workflowRunning {
+				m.controlPlane.Cancel()
+			}
+			wasStreaming := m.streaming
+			wasWorkflow := m.workflowRunning
+			m.streaming = false
+			m.workflowRunning = false
+
+			if wasWorkflow {
+				m.workflowPhase = "idle"
+				// Reset agent states
+				for _, a := range m.agentInfos {
+					if a.Status == AgentStatusRunning {
+						a.Status = AgentStatusIdle
+					}
+				}
+				m.logsPanel.AddWarn("system", "Workflow interrupted by user (Ctrl+X)")
+				m.history.Add(NewSystemMessage("Workflow interrupted"))
+			} else if wasStreaming {
+				m.logsPanel.AddWarn("system", "Request interrupted by user (Ctrl+X)")
+				m.history.Add(NewSystemMessage("Request interrupted"))
+			}
+			m.updateViewport()
+			return m, nil, true
+		}
 
 	case tea.KeyCtrlK:
 		// Toggle consensus panel
@@ -1191,8 +1331,9 @@ func (m Model) handleMouseClick(x, _ int) (tea.Model, tea.Cmd, bool) {
 	logsWidth := 0
 
 	// Determine how many sidebars are open for dynamic sizing
-	bothSidebarsOpen := m.showExplorer && m.showLogs
-	oneSidebarOpen := (m.showExplorer || m.showLogs) && !bothSidebarsOpen
+	rightSidebarOpen := m.showLogs || m.showStats
+	bothSidebarsOpen := m.showExplorer && rightSidebarOpen
+	oneSidebarOpen := (m.showExplorer || rightSidebarOpen) && !bothSidebarsOpen
 
 	if m.showExplorer {
 		if oneSidebarOpen {
@@ -1214,7 +1355,8 @@ func (m Model) handleMouseClick(x, _ int) (tea.Model, tea.Cmd, bool) {
 		}
 	}
 
-	if m.showLogs {
+	// Right sidebar width (logs and/or stats)
+	if m.showLogs || m.showStats {
 		if oneSidebarOpen {
 			logsWidth = m.width * 2 / 5
 			if logsWidth < 40 {
@@ -1256,25 +1398,31 @@ func (m Model) handleMouseClick(x, _ int) (tea.Model, tea.Cmd, bool) {
 		return m, nil, false // Already focused, let it handle internally
 	}
 
-	// Check if click is in Logs panel
+	// Check if click is in right sidebar (logs panel only - stats is view-only)
 	if m.showLogs && x > mainEnd {
+		// Right sidebar (logs) was clicked
 		if !m.logsFocus {
 			m.logsFocus = true
+			m.statsFocus = false
 			m.explorerFocus = false
 			m.inputFocused = false
 			m.textarea.Blur()
 			m.explorerPanel.SetFocused(false)
-			m.logsPanel.AddInfo("system", "Logs panel focused (↑↓ to scroll)")
 			return m, nil, true
 		}
-		return m, nil, false // Already focused
+		// Already focused on logs - clicking again should return to main
+		m.logsFocus = false
+		m.inputFocused = true
+		m.textarea.Focus()
+		return m, nil, true
 	}
 
-	// Click is in Main content area
+	// Click is in Main content area - return focus to chat input
 	if x >= mainStart && x < mainEnd {
-		if m.explorerFocus || m.logsFocus {
+		if m.explorerFocus || m.logsFocus || m.statsFocus {
 			m.explorerFocus = false
 			m.logsFocus = false
+			m.statsFocus = false
 			m.inputFocused = true
 			m.textarea.Focus()
 			m.explorerPanel.SetFocused(false)
@@ -1397,6 +1545,32 @@ func (m *Model) updateSuggestions() {
 		return
 	}
 
+	// Check for /load with space - show workflow suggestions
+	if strings.HasPrefix(valLower, "/load ") || strings.HasPrefix(valLower, "/switch ") || strings.HasPrefix(valLower, "/select ") {
+		partial := strings.TrimSpace(val[strings.Index(val, " ")+1:])
+		newSuggestions := m.suggestWorkflows(partial)
+		if len(newSuggestions) != len(m.suggestions) || m.suggestionType != "workflow" {
+			m.suggestionIndex = 0
+		}
+		m.suggestions = newSuggestions
+		m.suggestionType = "workflow"
+		m.showSuggestions = len(m.suggestions) > 0
+		return
+	}
+
+	// Check for /theme with space - show theme suggestions
+	if strings.HasPrefix(valLower, "/theme ") || strings.HasPrefix(valLower, "/t ") {
+		partial := strings.TrimSpace(val[strings.Index(val, " ")+1:])
+		newSuggestions := m.suggestThemes(partial)
+		if len(newSuggestions) != len(m.suggestions) || m.suggestionType != "theme" {
+			m.suggestionIndex = 0
+		}
+		m.suggestions = newSuggestions
+		m.suggestionType = "theme"
+		m.showSuggestions = len(m.suggestions) > 0
+		return
+	}
+
 	// Regular command suggestions (no space yet)
 	if strings.HasPrefix(val, "/") && !strings.Contains(val, " ") {
 		newSuggestions := m.commands.Suggest(val)
@@ -1453,32 +1627,40 @@ func (m *Model) suggestModels(partial string) []string {
 		case "claude":
 			models = []string{
 				"claude-opus-4-5-20251101",
+				"claude-sonnet-4-5-20250929",
+				"claude-haiku-4-5-20251001",
 				"claude-sonnet-4-20250514",
-				"claude-sonnet-4-5-20251101",
-				"claude-haiku-4-5-20251101",
+				"claude-opus-4-20250514",
 			}
 		case "gemini":
 			models = []string{
 				"gemini-2.5-pro",
 				"gemini-2.5-flash",
+				"gemini-2.5-flash-lite",
 				"gemini-3-pro-preview",
 				"gemini-3-flash-preview",
 			}
 		case "codex":
 			models = []string{
-				"gpt-5.1",
-				"gpt-5.1-codex",
-				"gpt-5.2",
 				"gpt-5.2-codex",
-				"o3",
-				"o3-mini",
+				"gpt-5.2",
+				"gpt-5.1-codex-max",
+				"gpt-5.1-codex",
+				"gpt-5.1",
+				"gpt-5",
+				"gpt-5-mini",
+				"gpt-4.1",
 			}
 		case "copilot":
 			models = []string{
-				"claude-sonnet-4-5",
-				"claude-haiku-4-5",
-				"gpt-4o",
-				"o3-mini",
+				"claude-sonnet-4.5",
+				"claude-haiku-4.5",
+				"claude-opus-4.5",
+				"claude-sonnet-4",
+				"gpt-5.2-codex",
+				"gpt-5.1-codex-max",
+				"gpt-5.1-codex",
+				"gemini-3-pro-preview",
 			}
 		default:
 			models = []string{m.currentModel}
@@ -1497,6 +1679,75 @@ func (m *Model) suggestModels(partial string) []string {
 		}
 	}
 	return matches
+}
+
+// suggestWorkflows returns workflow ID suggestions filtered by partial input.
+func (m *Model) suggestWorkflows(partial string) []string {
+	// Refresh workflow cache if empty or stale
+	if len(m.workflowCache) == 0 && m.runner != nil {
+		ctx := context.Background()
+		workflows, err := m.runner.ListWorkflows(ctx)
+		if err == nil {
+			m.workflowCache = workflows
+		}
+	}
+
+	if len(m.workflowCache) == 0 {
+		return nil
+	}
+
+	var matches []string
+	partialLower := strings.ToLower(partial)
+
+	for _, wf := range m.workflowCache {
+		// Match against workflow ID or prompt
+		idLower := strings.ToLower(string(wf.WorkflowID))
+		promptLower := strings.ToLower(wf.Prompt)
+
+		if partial == "" || strings.Contains(idLower, partialLower) || strings.Contains(promptLower, partialLower) {
+			matches = append(matches, string(wf.WorkflowID))
+		}
+	}
+	return matches
+}
+
+// suggestThemes returns theme suggestions filtered by partial input.
+func (m *Model) suggestThemes(partial string) []string {
+	themes := []string{"dark", "light"}
+
+	if partial == "" {
+		return themes
+	}
+
+	partialLower := strings.ToLower(partial)
+	var matches []string
+	for _, theme := range themes {
+		if strings.HasPrefix(theme, partialLower) {
+			matches = append(matches, theme)
+		}
+	}
+	return matches
+}
+
+// getWorkflowDescription returns the description for a workflow ID (for suggestions display).
+func (m *Model) getWorkflowDescription(workflowID string) string {
+	for _, wf := range m.workflowCache {
+		if string(wf.WorkflowID) == workflowID {
+			// Format: [STATUS/PHASE] truncated prompt
+			prompt := wf.Prompt
+			maxLen := 55
+			if len(prompt) > maxLen {
+				prompt = prompt[:maxLen-3] + "..."
+			}
+			status := strings.ToUpper(string(wf.Status))
+			phase := string(wf.CurrentPhase)
+			if wf.IsActive {
+				return fmt.Sprintf("* %s @%s: %s", status, phase, prompt)
+			}
+			return fmt.Sprintf("%s @%s: %s", status, phase, prompt)
+		}
+	}
+	return ""
 }
 
 // Update handles messages.
@@ -1606,11 +1857,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		} else {
 			m.history.Add(NewAgentMessage(msg.Agent, msg.Content))
-			// Update token counts for the agent
+			// Update token counts for the agent (validate to avoid corrupted values)
+			// Cap matches the adapter-level cap (500k) to ensure consistency
+			const maxReasonableTokens = 500_000
 			for _, a := range m.agentInfos {
 				if strings.EqualFold(a.Name, msg.Agent) {
-					a.TokensIn += msg.TokensIn
-					a.TokensOut += msg.TokensOut
+					if msg.TokensIn > 0 && msg.TokensIn <= maxReasonableTokens {
+						a.TokensIn += msg.TokensIn
+					}
+					if msg.TokensOut > 0 && msg.TokensOut <= maxReasonableTokens {
+						a.TokensOut += msg.TokensOut
+					}
 					break
 				}
 			}
@@ -1664,6 +1921,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case WorkflowUpdateMsg:
 		m.workflowState = msg.State
 
+	case ActiveWorkflowLoadMsg:
+		// Auto-loaded active workflow on startup
+		if msg.State != nil {
+			m.workflowState = msg.State
+			// Show a brief notification
+			prompt := msg.State.Prompt
+			if len(prompt) > 50 {
+				prompt = prompt[:47] + "..."
+			}
+			m.history.Add(NewSystemMessage(fmt.Sprintf("Session restored: %s @%s\n\"%s\"",
+				strings.ToUpper(string(msg.State.Status)),
+				msg.State.CurrentPhase,
+				prompt)))
+			m.updateViewport()
+		}
+
 	case WorkflowStartedMsg:
 		m.workflowRunning = true
 		m.workflowStartedAt = time.Now()
@@ -1704,10 +1977,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.totalCost = msg.State.Metrics.TotalCostUSD
 			m.totalTokensIn = msg.State.Metrics.TotalTokensIn
 			m.totalTokensOut = msg.State.Metrics.TotalTokensOut
-			m.logsPanel.AddInfo("workflow", fmt.Sprintf("Total cost: $%.4f, tokens: ↑%d ↓%d", m.totalCost, m.totalTokensIn, m.totalTokensOut))
 		}
-		m.logsPanel.AddSuccess("workflow", fmt.Sprintf("Workflow completed in %s", formatDuration(elapsed)))
-		m.history.Add(NewSystemMessage(fmt.Sprintf("Workflow completed in %s", formatDuration(elapsed))))
+		// Build a user-friendly completion summary
+		summaryParts := []string{fmt.Sprintf("✓ Workflow completed in %s", formatDuration(elapsed))}
+		if msg.State != nil && msg.State.Metrics != nil {
+			summaryParts = append(summaryParts, fmt.Sprintf("Tokens: %s in / %s out", formatTokens(m.totalTokensIn), formatTokens(m.totalTokensOut)))
+			summaryParts = append(summaryParts, fmt.Sprintf("Cost: $%.4f", m.totalCost))
+			if msg.State.Metrics.ConsensusScore > 0 {
+				summaryParts = append(summaryParts, fmt.Sprintf("Consensus: %.0f%%", msg.State.Metrics.ConsensusScore*100))
+			}
+		}
+		m.logsPanel.AddSuccess("workflow", strings.Join(summaryParts, " | "))
+		m.history.Add(NewSystemMessage(strings.Join(summaryParts, "\n")))
 		if msg.State != nil {
 			m.history.Add(NewSystemMessage(formatWorkflowStatus(msg.State)))
 		}
@@ -1812,17 +2093,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "completed":
-			// Extract token counts
-			tokensIn := 0
-			tokensOut := 0
-			if ti, ok := msg.Data["tokens_in"].(int); ok {
-				tokensIn = ti
-			}
-			if to, ok := msg.Data["tokens_out"].(int); ok {
-				tokensOut = to
-			}
+			// Extract token counts with flexible type handling
+			tokensIn := extractTokenValue(msg.Data, "tokens_in")
+			tokensOut := extractTokenValue(msg.Data, "tokens_out")
+
 			// Update agent to completed state
-			CompleteAgent(m.agentInfos, msg.Agent, tokensIn, tokensOut)
+			found, rejectedIn, rejectedOut := CompleteAgent(m.agentInfos, msg.Agent, tokensIn, tokensOut)
+
+			// Debug: log when values are rejected as suspicious
+			if found && (rejectedIn > 0 || rejectedOut > 0) {
+				m.logsPanel.AddWarn(source, fmt.Sprintf("⚠ Rejected suspicious tokens: in=%d out=%d (raw types: %T / %T)",
+					rejectedIn, rejectedOut, msg.Data["tokens_in"], msg.Data["tokens_out"]))
+			}
 
 			// Log completed event (important - keep in logs)
 			details := msg.Message
@@ -1934,6 +2216,11 @@ func (m Model) handleSubmit() (tea.Model, tea.Cmd) {
 		m.history.Add(NewUserMessage(input))
 		m.pendingInputRequest = nil
 		m.updateViewport()
+		return m, nil
+	}
+
+	// Ignore empty input (only whitespace/newlines)
+	if input == "" {
 		return m, nil
 	}
 
@@ -2208,9 +2495,23 @@ func (m Model) handleCommand(cmd *Command, args []string) (tea.Model, tea.Cmd) {
 			status := formatWorkflowStatus(m.workflowState)
 			m.history.Add(NewSystemMessage(status))
 		} else {
-			m.history.Add(NewSystemMessage("No active workflow"))
+			// Check if there's an active workflow in state that could be loaded
+			var hint string
+			if m.runner != nil {
+				ctx := context.Background()
+				if workflows, err := m.runner.ListWorkflows(ctx); err == nil {
+					for _, wf := range workflows {
+						if wf.IsActive {
+							hint = fmt.Sprintf("\n\nTip: /load %s to continue your previous session", wf.WorkflowID)
+							break
+						}
+					}
+				}
+			}
+			m.history.Add(NewSystemMessage("/status\n\nNo workflow loaded in this session." + hint))
 		}
 		m.updateViewport()
+		return m, nil
 
 	case "workflows":
 		if m.runner == nil {
@@ -2232,27 +2533,149 @@ func (m Model) handleCommand(cmd *Command, args []string) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		var sb strings.Builder
-		sb.WriteString("Available workflows:\n\n")
-		for _, wf := range workflows {
-			prefix := "  "
+		sb.WriteString("/workflows\n\n")
+		for i, wf := range workflows {
+			marker := "  "
 			if wf.IsActive {
-				prefix = "* "
+				marker = "> "
 			}
 			prompt := wf.Prompt
-			if len(prompt) > 50 {
-				prompt = prompt[:47] + "..."
+			if len(prompt) > 60 {
+				prompt = prompt[:57] + "..."
 			}
-			sb.WriteString(fmt.Sprintf("%s%s [%s] %s - %s\n",
-				prefix,
-				wf.WorkflowID,
-				wf.Status,
-				wf.CurrentPhase,
-				prompt,
-			))
+			status := strings.ToUpper(string(wf.Status))
+			sb.WriteString(fmt.Sprintf("%s#%d  %-11s @%-8s  %s\n", marker, i+1, status, wf.CurrentPhase, wf.WorkflowID))
+			sb.WriteString(fmt.Sprintf("    \"%s\"\n\n", prompt))
 		}
-		sb.WriteString("\n* = active workflow")
+		sb.WriteString("> = active  |  /load <ID> to switch")
 		m.history.Add(NewSystemMessage(sb.String()))
 		m.updateViewport()
+
+	case "load":
+		if m.runner == nil {
+			m.history.Add(NewSystemMessage("Workflow runner not configured"))
+			m.updateViewport()
+			return m, nil
+		}
+		if m.workflowRunning {
+			m.history.Add(NewSystemMessage("Workflow already running. Use /cancel first."))
+			m.updateViewport()
+			return m, nil
+		}
+
+		ctx := context.Background()
+
+		// If no args, show available workflows to select from
+		if len(args) == 0 {
+			workflows, err := m.runner.ListWorkflows(ctx)
+			if err != nil {
+				m.history.Add(NewSystemMessage(fmt.Sprintf("Error listing workflows: %v", err)))
+				m.updateViewport()
+				return m, nil
+			}
+			if len(workflows) == 0 {
+				m.history.Add(NewSystemMessage("No workflows found. Use '/analyze <prompt>' to start one."))
+				m.updateViewport()
+				return m, nil
+			}
+			var sb strings.Builder
+			sb.WriteString("/load\n\n")
+			for i, wf := range workflows {
+				marker := "  "
+				if wf.IsActive {
+					marker = "> "
+				}
+				prompt := wf.Prompt
+				if len(prompt) > 60 {
+					prompt = prompt[:57] + "..."
+				}
+				status := strings.ToUpper(string(wf.Status))
+				sb.WriteString(fmt.Sprintf("%s#%d  %-11s @%-8s  %s\n", marker, i+1, status, wf.CurrentPhase, wf.WorkflowID))
+				sb.WriteString(fmt.Sprintf("    \"%s\"\n\n", prompt))
+			}
+			sb.WriteString("> = active  |  /load <ID> to switch")
+			m.history.Add(NewSystemMessage(sb.String()))
+			m.updateViewport()
+			return m, nil
+		}
+
+		// Load the specified workflow
+		workflowID := args[0]
+		state, err := m.runner.LoadWorkflow(ctx, workflowID)
+		if err != nil {
+			m.history.Add(NewSystemMessage(fmt.Sprintf("Error loading workflow: %v", err)))
+			m.updateViewport()
+			return m, nil
+		}
+
+		// Update internal state
+		m.workflowState = state
+
+		// Show success message with workflow details
+		var sb strings.Builder
+		sb.WriteString(fmt.Sprintf("/load %s\n\n", workflowID))
+
+		// Status with icon
+		statusIcon := "○"
+		switch state.Status {
+		case core.WorkflowStatusCompleted:
+			statusIcon = "●"
+		case core.WorkflowStatusRunning:
+			statusIcon = "◐"
+		case core.WorkflowStatusFailed:
+			statusIcon = "✗"
+		}
+		sb.WriteString(fmt.Sprintf("%s Loaded  |  %s @%s\n\n", statusIcon, strings.ToUpper(string(state.Status)), state.CurrentPhase))
+
+		// Prompt
+		if state.Prompt != "" {
+			prompt := state.Prompt
+			if len(prompt) > 70 {
+				prompt = prompt[:67] + "..."
+			}
+			sb.WriteString(fmt.Sprintf("\"%s\"\n\n", prompt))
+		}
+
+		// Metrics inline
+		var info []string
+		if state.Metrics != nil && state.Metrics.ConsensusScore > 0 {
+			info = append(info, fmt.Sprintf("Consensus: %.0f%%", state.Metrics.ConsensusScore*100))
+		}
+		if len(state.Tasks) > 0 {
+			info = append(info, fmt.Sprintf("Tasks: %d", len(state.Tasks)))
+		}
+		if len(info) > 0 {
+			sb.WriteString(strings.Join(info, "  |  ") + "\n\n")
+		}
+
+		// Next action
+		sb.WriteString("Next: ")
+		switch state.CurrentPhase {
+		case core.PhaseAnalyze:
+			if state.Status == core.WorkflowStatusCompleted {
+				sb.WriteString("/plan")
+			} else {
+				sb.WriteString("/analyze")
+			}
+		case core.PhasePlan:
+			if state.Status == core.WorkflowStatusCompleted {
+				sb.WriteString("/execute")
+			} else {
+				sb.WriteString("/plan")
+			}
+		case core.PhaseExecute:
+			if state.Status == core.WorkflowStatusCompleted {
+				sb.WriteString("Done!")
+			} else {
+				sb.WriteString("/execute")
+			}
+		default:
+			sb.WriteString("/analyze <prompt>")
+		}
+		sb.WriteString("  |  /status for details")
+		m.history.Add(NewSystemMessage(sb.String()))
+		m.updateViewport()
+		return m, nil // Important: return modified m with workflowState set
 
 	case "cancel":
 		if m.controlPlane != nil && m.workflowRunning {
@@ -2300,9 +2723,29 @@ func (m Model) handleCommand(cmd *Command, args []string) (tea.Model, tea.Cmd) {
 
 		// If no args, continue from active workflow (after /analyze)
 		if len(args) == 0 {
-			if m.workflowState != nil && m.workflowState.CurrentPhase == core.PhasePlan {
+			// Try to load active workflow state if not in memory
+			if m.workflowState == nil {
+				if state, err := m.runner.GetState(context.Background()); err == nil && state != nil {
+					m.workflowState = state
+				}
+			}
+
+			// Check if we can continue to plan phase:
+			// - Already in plan phase, OR
+			// - Analyze phase completed (status=completed with analyze as current phase)
+			canContinue := false
+			if m.workflowState != nil {
+				if m.workflowState.CurrentPhase == core.PhasePlan {
+					canContinue = true
+				} else if m.workflowState.CurrentPhase == core.PhaseAnalyze && m.workflowState.Status == core.WorkflowStatusCompleted {
+					// Analyze completed - can advance to plan
+					canContinue = true
+				}
+			}
+
+			if canContinue {
 				m.history.Add(NewUserMessage("/plan"))
-				m.history.Add(NewSystemMessage("Continuing planning phase from active workflow..."))
+				m.history.Add(NewSystemMessage("Continuing to planning phase from active workflow..."))
 				m.updateViewport()
 				return m, m.runPlanPhase()
 			}
@@ -2351,10 +2794,29 @@ func (m Model) handleCommand(cmd *Command, args []string) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		// Continue from active workflow (after /plan)
-		if m.workflowState != nil && m.workflowState.CurrentPhase == core.PhaseExecute {
+		// Try to load active workflow state if not in memory
+		if m.workflowState == nil {
+			if state, err := m.runner.GetState(context.Background()); err == nil && state != nil {
+				m.workflowState = state
+			}
+		}
+
+		// Check if we can continue to execute phase:
+		// - Already in execute phase, OR
+		// - Plan phase completed (status=completed with plan as current phase)
+		canContinue := false
+		if m.workflowState != nil {
+			if m.workflowState.CurrentPhase == core.PhaseExecute {
+				canContinue = true
+			} else if m.workflowState.CurrentPhase == core.PhasePlan && m.workflowState.Status == core.WorkflowStatusCompleted {
+				// Plan completed - can advance to execute
+				canContinue = true
+			}
+		}
+
+		if canContinue {
 			m.history.Add(NewUserMessage("/execute"))
-			m.history.Add(NewSystemMessage("Continuing execution phase from active workflow..."))
+			m.history.Add(NewSystemMessage("Continuing to execution phase from active workflow..."))
 			m.updateViewport()
 			return m, m.runExecutePhase()
 		}
@@ -2424,6 +2886,36 @@ func (m Model) handleCommand(cmd *Command, args []string) (tea.Model, tea.Cmd) {
 		}
 		if m.width > 0 && m.height > 0 {
 			m.recalculateLayout()
+		}
+		m.updateViewport()
+
+	case "theme":
+		// Toggle or set theme
+		var themeName string
+		if len(args) > 0 {
+			themeName = strings.ToLower(args[0])
+		} else {
+			// Toggle: if currently dark, switch to light; if light, switch to dark
+			if m.darkTheme {
+				themeName = "light"
+			} else {
+				themeName = "dark"
+			}
+		}
+
+		switch themeName {
+		case "dark":
+			m.darkTheme = true
+			tui.SetColorScheme(tui.DarkScheme)
+			applyDarkTheme()
+			m.history.Add(NewSystemMessage("Theme: dark"))
+		case "light":
+			m.darkTheme = false
+			tui.SetColorScheme(tui.LightScheme)
+			applyLightTheme()
+			m.history.Add(NewSystemMessage("Theme: light"))
+		default:
+			m.history.Add(NewSystemMessage("Usage: /theme [dark|light]"))
 		}
 		m.updateViewport()
 	}
@@ -2799,13 +3291,14 @@ func (m Model) runAnalyze(prompt string) tea.Cmd {
 }
 
 // runPlanPhase continues the workflow from the plan phase.
+// Uses Plan() instead of Resume() to ensure only planning runs, not execution.
 func (m Model) runPlanPhase() tea.Cmd {
 	runner := m.runner
 	return tea.Batch(
 		func() tea.Msg { return WorkflowStartedMsg{Prompt: "(continuing from analysis)"} },
 		func() tea.Msg {
 			ctx := context.Background()
-			err := runner.Resume(ctx)
+			err := runner.Plan(ctx)
 			if err != nil {
 				return WorkflowErrorMsg{Error: err}
 			}
@@ -2862,29 +3355,52 @@ func (m Model) renderHistory() string {
 		wrapWidth = 80
 	}
 
+	// Border styles for message grouping
+	userBorderStyle := lipgloss.NewStyle().
+		BorderLeft(true).
+		BorderStyle(lipgloss.NormalBorder()).
+		BorderForeground(primaryColor).
+		PaddingLeft(1).
+		MarginBottom(1)
+
+	systemBorderStyle := lipgloss.NewStyle().
+		BorderLeft(true).
+		BorderStyle(lipgloss.NormalBorder()).
+		BorderForeground(warningColor).
+		PaddingLeft(1).
+		MarginBottom(1)
+
+	agentBorderStyle := lipgloss.NewStyle().
+		BorderLeft(true).
+		BorderStyle(lipgloss.NormalBorder()).
+		BorderForeground(successColor).
+		PaddingLeft(1).
+		MarginBottom(1)
+
 	for _, msg := range msgs {
 		switch msg.Role {
 		case RoleUser:
-			sb.WriteString(userLabelStyle.Render("You") + "\n")
-			// Wrap user message to fit viewport width
-			wrappedContent := wrapText(msg.Content, wrapWidth)
-			sb.WriteString(userMsgStyle.Render(wrappedContent))
-			sb.WriteString("\n\n")
+			// User message with colored left border
+			content := userLabelStyle.Render("You") + "\n" + wrapText(msg.Content, wrapWidth-4)
+			sb.WriteString(userBorderStyle.Render(content))
+			sb.WriteString("\n")
 
 		case RoleAgent:
-			sb.WriteString(agentLabelStyle.Render("Quorum") + "\n")
+			// Agent response with colored left border
 			content := msg.Content
 			if m.mdRenderer != nil {
 				if rendered, err := m.mdRenderer.Render(msg.Content); err == nil {
 					content = strings.TrimSpace(rendered)
 				}
 			}
-			sb.WriteString(agentMsgStyle.Render(content))
-			sb.WriteString("\n\n")
+			agentContent := agentLabelStyle.Render("Quorum") + "\n" + content
+			sb.WriteString(agentBorderStyle.Render(agentContent))
+			sb.WriteString("\n")
 
 		case RoleSystem:
-			sb.WriteString(systemMsgStyle.Render("* " + msg.Content))
-			sb.WriteString("\n\n")
+			// System message with colored left border
+			sb.WriteString(systemBorderStyle.Render(msg.Content))
+			sb.WriteString("\n")
 		}
 	}
 
@@ -3046,6 +3562,27 @@ func (m Model) View() string {
 	}
 
 	return ensureFullScreen(baseView)
+}
+
+// extractTokenValue safely extracts a token count from event data, handling different types
+func extractTokenValue(data map[string]any, key string) int {
+	v, ok := data[key]
+	if !ok {
+		return 0
+	}
+
+	switch val := v.(type) {
+	case int:
+		return val
+	case int64:
+		return int(val)
+	case float64:
+		return int(val)
+	case float32:
+		return int(val)
+	default:
+		return 0
+	}
 }
 
 // dimLine applies ANSI dim effect to a line while preserving existing styles
@@ -3655,6 +4192,14 @@ func (m Model) renderInlineSuggestions(width int) string {
 		}
 		itemType = "models"
 		showDescription = false
+	case "workflow":
+		headerText = "Workflows"
+		itemType = "workflows"
+		showDescription = false
+	case "theme":
+		headerText = "Themes"
+		itemType = "themes"
+		showDescription = false
 	}
 
 	// Scroll up indicator
@@ -3682,7 +4227,7 @@ func (m Model) renderInlineSuggestions(width int) string {
 		itemName := m.suggestions[i]
 		desc := ""
 
-		// For commands, show description; for agents/models, show status info
+		// For commands, show description; for agents/models/workflows, show status info
 		if showDescription {
 			cmd := m.commands.Get(itemName)
 			itemName = "/" + itemName
@@ -3699,6 +4244,9 @@ func (m Model) renderInlineSuggestions(width int) string {
 			if strings.EqualFold(itemName, m.currentModel) {
 				desc = "(current)"
 			}
+		} else if m.suggestionType == "workflow" {
+			// Show workflow status and truncated prompt
+			desc = m.getWorkflowDescription(itemName)
 		}
 
 		// Truncate description if needed
@@ -3803,7 +4351,7 @@ func (m Model) renderFooter(width int) string {
 		}
 	} else if m.streaming || m.workflowRunning {
 		keys = []string{
-			keyHintStyle.Render("Esc") + labelStyle.Render(" stop"),
+			keyHintStyle.Render("^X") + labelStyle.Render(" stop"),
 			keyHintStyle.Render("^E") + labelStyle.Render(" files"),
 			keyHintStyle.Render("^L") + labelStyle.Render(" logs"),
 			keyHintStyle.Render("?") + labelStyle.Render(" help"),
@@ -3831,26 +4379,127 @@ func (m Model) renderFooter(width int) string {
 
 func formatWorkflowStatus(state *core.WorkflowState) string {
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("Workflow: %s\n", state.WorkflowID))
-	sb.WriteString(fmt.Sprintf("Phase: %s\n", state.CurrentPhase))
 
-	completed, running, failed := 0, 0, 0
-	for _, task := range state.Tasks {
-		switch task.Status {
-		case core.TaskStatusCompleted:
-			completed++
-		case core.TaskStatusRunning:
-			running++
-		case core.TaskStatusFailed:
-			failed++
+	// Command header
+	sb.WriteString("/status\n\n")
+
+	// Status indicator with visual bar
+	statusIcon := "○"
+	switch state.Status {
+	case core.WorkflowStatusCompleted:
+		statusIcon = "●"
+	case core.WorkflowStatusRunning:
+		statusIcon = "◐"
+	case core.WorkflowStatusFailed:
+		statusIcon = "✗"
+	}
+
+	// Phase progress visualization
+	phases := []string{"analyze", "plan", "execute"}
+	phaseIdx := 0
+	for i, p := range phases {
+		if string(state.CurrentPhase) == p {
+			phaseIdx = i
+			break
 		}
 	}
 
-	sb.WriteString(fmt.Sprintf("Tasks: %d total, %d done, %d running, %d failed\n",
-		len(state.Tasks), completed, running, failed))
+	// Build phase progress bar
+	var progressBar string
+	for i, p := range phases {
+		if i < phaseIdx {
+			progressBar += fmt.Sprintf("[%s] ", p)
+		} else if i == phaseIdx {
+			progressBar += fmt.Sprintf(">[%s]< ", strings.ToUpper(p))
+		} else {
+			progressBar += fmt.Sprintf("(%s) ", p)
+		}
+	}
 
+	sb.WriteString(fmt.Sprintf("%s %s  %s\n\n", statusIcon, strings.ToUpper(string(state.Status)), progressBar))
+
+	// Workflow ID
+	sb.WriteString(fmt.Sprintf("ID: %s\n\n", state.WorkflowID))
+
+	// Prompt
+	if state.Prompt != "" {
+		prompt := state.Prompt
+		if len(prompt) > 80 {
+			prompt = prompt[:77] + "..."
+		}
+		sb.WriteString(fmt.Sprintf("Prompt:\n  \"%s\"\n\n", prompt))
+	}
+
+	// Metrics in a compact format
+	var metrics []string
 	if state.Metrics != nil {
-		sb.WriteString(fmt.Sprintf("Cost: $%.4f\n", state.Metrics.TotalCostUSD))
+		if state.Metrics.ConsensusScore > 0 {
+			metrics = append(metrics, fmt.Sprintf("Consensus: %.0f%%", state.Metrics.ConsensusScore*100))
+		}
+		if state.Metrics.TotalTokensIn > 0 || state.Metrics.TotalTokensOut > 0 {
+			metrics = append(metrics, fmt.Sprintf("Tokens: %s/%s",
+				formatTokens(state.Metrics.TotalTokensIn),
+				formatTokens(state.Metrics.TotalTokensOut)))
+		}
+		if state.Metrics.TotalCostUSD > 0 {
+			metrics = append(metrics, fmt.Sprintf("Cost: $%.4f", state.Metrics.TotalCostUSD))
+		}
+	}
+	if len(metrics) > 0 {
+		sb.WriteString(strings.Join(metrics, "  |  ") + "\n\n")
+	}
+
+	// Tasks summary in compact format
+	if len(state.Tasks) > 0 {
+		completed := 0
+		failed := 0
+		pending := 0
+		for _, task := range state.Tasks {
+			switch task.Status {
+			case core.TaskStatusCompleted:
+				completed++
+			case core.TaskStatusFailed:
+				failed++
+			default:
+				pending++
+			}
+		}
+		taskStatus := fmt.Sprintf("Tasks: %d total", len(state.Tasks))
+		if completed > 0 {
+			taskStatus += fmt.Sprintf(", %d done", completed)
+		}
+		if failed > 0 {
+			taskStatus += fmt.Sprintf(", %d failed", failed)
+		}
+		if pending > 0 {
+			taskStatus += fmt.Sprintf(", %d pending", pending)
+		}
+		sb.WriteString(taskStatus + "\n\n")
+	}
+
+	// Next action
+	sb.WriteString("Next: ")
+	switch state.CurrentPhase {
+	case core.PhaseAnalyze:
+		if state.Status == core.WorkflowStatusCompleted {
+			sb.WriteString("/plan")
+		} else {
+			sb.WriteString("/analyze (resume)")
+		}
+	case core.PhasePlan:
+		if state.Status == core.WorkflowStatusCompleted {
+			sb.WriteString("/execute")
+		} else {
+			sb.WriteString("/plan (resume)")
+		}
+	case core.PhaseExecute:
+		if state.Status == core.WorkflowStatusCompleted {
+			sb.WriteString("Done!")
+		} else {
+			sb.WriteString("/execute (resume)")
+		}
+	default:
+		sb.WriteString("/analyze <prompt>")
 	}
 
 	return sb.String()

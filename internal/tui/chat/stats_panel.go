@@ -107,6 +107,42 @@ func (p *StatsPanel) ScrollDown() {
 	}
 }
 
+// PageUp scrolls up by half a page
+func (p *StatsPanel) PageUp() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.ready {
+		p.viewport.HalfViewUp()
+	}
+}
+
+// PageDown scrolls down by half a page
+func (p *StatsPanel) PageDown() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.ready {
+		p.viewport.HalfViewDown()
+	}
+}
+
+// GotoTop scrolls to the top
+func (p *StatsPanel) GotoTop() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.ready {
+		p.viewport.GotoTop()
+	}
+}
+
+// GotoBottom scrolls to the bottom
+func (p *StatsPanel) GotoBottom() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.ready {
+		p.viewport.GotoBottom()
+	}
+}
+
 // Width returns panel width
 func (p *StatsPanel) Width() int {
 	p.mu.Lock()

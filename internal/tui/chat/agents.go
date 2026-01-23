@@ -319,7 +319,36 @@ func estimateProgress(startedAt time.Time, status AgentStatus) int {
 	return pct
 }
 
-// formatElapsed formats elapsed time compactly
+// truncateToWidth truncates a string to fit within a maximum visual width.
+// Uses rune-safe iteration to avoid breaking multi-byte characters.
+// Adds "..." if truncation is needed.
+func truncateToWidth(s string, maxWidth int) string {
+	if maxWidth <= 3 {
+		return "..."
+	}
+	currentWidth := lipgloss.Width(s)
+	if currentWidth <= maxWidth {
+		return s
+	}
+
+	// Build truncated string rune by rune
+	var result strings.Builder
+	width := 0
+	targetWidth := maxWidth - 3 // leave room for "..."
+
+	for _, r := range s {
+		runeWidth := lipgloss.Width(string(r))
+		if width+runeWidth > targetWidth {
+			break
+		}
+		result.WriteRune(r)
+		width += runeWidth
+	}
+	result.WriteString("...")
+	return result.String()
+}
+
+// formatElapsed formats elapsed time compactly with fixed width for alignment
 func formatElapsed(startedAt time.Time, maxTimeout time.Duration) string {
 	if startedAt.IsZero() {
 		return ""
@@ -335,6 +364,7 @@ func formatElapsed(startedAt time.Time, maxTimeout time.Duration) string {
 	}
 
 	// Add max timeout if available
+	var result string
 	if maxTimeout > 0 {
 		var maxStr string
 		if maxTimeout < time.Minute {
@@ -344,10 +374,17 @@ func formatElapsed(startedAt time.Time, maxTimeout time.Duration) string {
 		} else {
 			maxStr = fmt.Sprintf("%dh", int(maxTimeout.Hours()))
 		}
-		return elapsedStr + "/" + maxStr
+		result = elapsedStr + "/" + maxStr
+	} else {
+		result = elapsedStr
 	}
 
-	return elapsedStr
+	// Right-align to fixed width (12 chars handles "59m59s/59m" comfortably)
+	const timeWidth = 12
+	if len(result) < timeWidth {
+		return strings.Repeat(" ", timeWidth-len(result)) + result
+	}
+	return result
 }
 
 // RenderAgentProgressBars renders progress bars for all agents with current activity.
@@ -420,7 +457,7 @@ func RenderAgentProgressBars(agents []*AgentInfo, width int) string {
 		}
 
 		var activity string
-		var activityLen int // track visible length for padding
+		var activityLen int // track visible length for padding (use lipgloss.Width for Unicode)
 		switch agent.Status {
 		case AgentStatusDisabled:
 			activity = agentDimStyle.Render("○ disabled")
@@ -437,22 +474,23 @@ func RenderAgentProgressBars(agents []*AgentInfo, width int) string {
 			if desc == "" {
 				desc = "processing..."
 			}
-			// Icon takes ~2 visual chars + space = 3. Leave room for desc.
-			maxDescLen := activityWidth - 3
+			// Calculate icon visual width (emojis may be 2 chars wide)
+			iconWidth := lipgloss.Width(icon)
+			// Leave room for icon + space + desc
+			maxDescLen := activityWidth - iconWidth - 1
 			if maxDescLen < 10 {
 				maxDescLen = 10
 			}
-			if len(desc) > maxDescLen {
-				desc = desc[:maxDescLen-3] + "..."
-			}
+			// Truncate description using visual width (rune-safe)
+			desc = truncateToWidth(desc, maxDescLen)
 			activity = agentWarnStyle.Render(icon) + " " + desc
-			activityLen = 2 + 1 + len(desc) // icon(2) + space(1) + desc
+			activityLen = iconWidth + 1 + lipgloss.Width(desc)
 		case AgentStatusDone:
 			tokens := agent.TokensIn + agent.TokensOut
 			if tokens > 0 {
 				tokStr := fmt.Sprintf("done (%d tok)", tokens)
 				activity = agentSuccessStyle.Render("✓") + " " + agentDimStyle.Render(tokStr)
-				activityLen = 2 + 1 + len(tokStr)
+				activityLen = 2 + 1 + lipgloss.Width(tokStr)
 			} else {
 				activity = agentSuccessStyle.Render("✓ done")
 				activityLen = 6
@@ -462,15 +500,14 @@ func RenderAgentProgressBars(agents []*AgentInfo, width int) string {
 			if errMsg == "" {
 				errMsg = "failed"
 			}
-			maxErrLen := activityWidth - 3
+			maxErrLen := activityWidth - 2 // room for "✗ "
 			if maxErrLen < 10 {
 				maxErrLen = 10
 			}
-			if len(errMsg) > maxErrLen {
-				errMsg = errMsg[:maxErrLen-3] + "..."
-			}
+			// Truncate error using visual width (rune-safe)
+			errMsg = truncateToWidth(errMsg, maxErrLen)
 			activity = agentErrorStyle.Render("✗ " + errMsg)
-			activityLen = 2 + len(errMsg)
+			activityLen = 2 + lipgloss.Width(errMsg)
 		}
 
 		// Pad activity to exactly activityWidth for consistent time alignment
@@ -509,15 +546,40 @@ func UpdateAgentActivity(agents []*AgentInfo, name, icon, activity string) bool 
 }
 
 // StartAgent marks an agent as running and records the start time.
+// If the agent is already running, preserves existing MaxTimeout if new one is 0.
 func StartAgent(agents []*AgentInfo, name, phase string, maxTimeout time.Duration) bool {
 	for _, a := range agents {
 		if !strings.EqualFold(a.Name, name) {
 			continue
 		}
+		// Preserve existing MaxTimeout if already running and new timeout is 0
+		// This prevents CLI adapter events from clearing workflow-set timeouts
+		if a.Status == AgentStatusRunning && maxTimeout == 0 && a.MaxTimeout > 0 {
+			// Just update activity, don't reset timeout
+			if phase != "" && phase != a.Phase {
+				// Phase changed - reset start time for new phase timing
+				a.StartedAt = time.Now()
+				a.Phase = phase
+			}
+			return true
+		}
+		// Reset start time when:
+		// 1. Agent wasn't running before (first start)
+		// 2. Phase changes (new phase should have fresh timing)
+		// 3. Agent was previously done/error (restarting)
+		phaseChanged := phase != "" && phase != a.Phase
+		wasNotRunning := a.Status != AgentStatusRunning
+		if a.StartedAt.IsZero() || phaseChanged || wasNotRunning {
+			a.StartedAt = time.Now()
+		}
 		a.Status = AgentStatusRunning
-		a.StartedAt = time.Now()
-		a.MaxTimeout = maxTimeout
-		a.Phase = phase
+		// Only update MaxTimeout if new value is provided
+		if maxTimeout > 0 {
+			a.MaxTimeout = maxTimeout
+		}
+		if phase != "" {
+			a.Phase = phase
+		}
 		a.CurrentActivity = "working..."
 		a.ActivityIcon = "◐"
 		return true
@@ -526,22 +588,34 @@ func StartAgent(agents []*AgentInfo, name, phase string, maxTimeout time.Duratio
 }
 
 // CompleteAgent marks an agent as done and records elapsed time.
-func CompleteAgent(agents []*AgentInfo, name string, tokensIn, tokensOut int) bool {
+// Returns (found, rejectedIn, rejectedOut) where rejected values indicate suspicious data.
+func CompleteAgent(agents []*AgentInfo, name string, tokensIn, tokensOut int) (found bool, rejectedIn, rejectedOut int) {
 	for _, a := range agents {
 		if !strings.EqualFold(a.Name, name) {
 			continue
 		}
 		a.Status = AgentStatusDone
-		a.TokensIn += tokensIn
-		a.TokensOut += tokensOut
+		// Validate token values - ignore obviously wrong values (negative or > 10M per call)
+		// These could indicate parsing errors or corrupted data
+		const maxReasonableTokens = 10_000_000
+		if tokensIn > 0 && tokensIn < maxReasonableTokens {
+			a.TokensIn += tokensIn
+		} else if tokensIn >= maxReasonableTokens {
+			rejectedIn = tokensIn
+		}
+		if tokensOut > 0 && tokensOut < maxReasonableTokens {
+			a.TokensOut += tokensOut
+		} else if tokensOut >= maxReasonableTokens {
+			rejectedOut = tokensOut
+		}
 		if !a.StartedAt.IsZero() {
 			a.Time = formatElapsed(a.StartedAt, a.MaxTimeout)
 		}
 		a.CurrentActivity = ""
 		a.ActivityIcon = ""
-		return true
+		return true, rejectedIn, rejectedOut
 	}
-	return false
+	return false, 0, 0
 }
 
 // FailAgent marks an agent as failed with an error message.
