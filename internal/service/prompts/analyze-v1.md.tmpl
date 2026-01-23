@@ -8,41 +8,41 @@
 
 ## Context Management
 
-Tu contexto es limitado. Optimiza su uso con estas estrategias:
+Your context is limited. Optimize its use with these strategies:
 
-1. **Localiza antes de leer**
-   - Usa grep/ripgrep para encontrar archivos relevantes antes de leerlos completos
-   - Usa glob para identificar patrones de archivos (ej: `*_test.go`, `*/handlers/*.ts`)
+1. **Locate before reading**
+   - Use grep/ripgrep to find relevant files before reading them completely
+   - Use glob to identify file patterns (e.g.: `*_test.go`, `*/handlers/*.ts`)
 
-2. **Lecturas selectivas**
-   - Si un archivo >300 líneas, lee solo las secciones relevantes (rangos de líneas)
-   - Extrae funciones/clases específicas, no archivos enteros
-   - Prioriza: interfaces > implementaciones, públicos > privados
+2. **Selective reading**
+   - If a file >300 lines, read only the relevant sections (line ranges)
+   - Extract specific functions/classes, not entire files
+   - Prioritize: interfaces > implementations, public > private
 
-3. **Delegación**
-   - Para exploración profunda de subsistemas, usa sub-agentes o tareas en background
-   - Cada sub-tarea debe devolver un resumen, no contenido raw
+3. **Delegation**
+   - For deep exploration of subsystems, use sub-agents or background tasks
+   - Each sub-task should return a summary, not raw content
 
-4. **Síntesis progresiva**
-   - Resume hallazgos inmediatamente después de cada lectura
-   - No acumules contenido raw en tu contexto
-   - Mantén un índice mental: archivo → propósito → hallazgo clave
+4. **Progressive synthesis**
+   - Summarize findings immediately after each reading
+   - Do not accumulate raw content in your context
+   - Maintain a mental index: file → purpose → key finding
 
-5. **Priorización**
-   - Empieza por entry points y configuración
-   - Sigue dependencias solo cuando sea necesario
-   - Ignora archivos generados, vendors, y node_modules
+5. **Prioritization**
+   - Start with entry points and configuration
+   - Follow dependencies only when necessary
+   - Ignore generated files, vendors, and node_modules
 
 ## Instructions
 
-Analiza el codebase de forma exhaustiva y profunda. Tu análisis debe:
+Analyze the codebase **exhaustively and in depth**. Your analysis must:
 
-1. **Investigar el código** - Lee archivos, entiende la arquitectura, identifica patrones
-2. **Fundamentar cada afirmación** - Cita archivos y líneas específicas como evidencia
-3. **Identificar riesgos reales** - Basados en el código, no suposiciones
-4. **Proponer recomendaciones actionables** - Específicas y priorizadas
+1. **Investigate the code** - Read files, understand the architecture, identify patterns
+2. **Ground each statement** - Cite specific files and lines as evidence
+3. **Identify real risks** - Based on code, not assumptions
+4. **Propose actionable recommendations** - Specific and prioritized
 
-Proporciona un análisis completo y detallado con evidencia específica del código. Genera tu análisis en formato markdown, estructurándolo con las secciones que consideres más apropiadas para comunicar tus hallazgos de manera clara y efectiva.
+**Do not omit any relevant aspect.** Provide a complete and detailed analysis with specific code evidence. Generate your analysis in markdown format, structuring it with the sections you consider most appropriate to communicate your findings clearly and effectively.
 
 {{if .Constraints}}
 ## Constraints
@@ -53,11 +53,18 @@ Proporciona un análisis completo y detallado con evidencia específica del cód
 ---
 ## Output Location
 
-Escribe tu análisis completo en el siguiente archivo:
+Write your complete analysis to the following file:
 
 ```
 {{.OutputFilePath}}
 ```
 
-Usa tu herramienta de escritura de archivos para crear este documento markdown.
+**IMPORTANT - File format:**
+- Write ONLY the analysis content in markdown
+- DO NOT add YAML frontmatter (`---` ... `---` blocks at the beginning)
+- DO NOT add metadata, file headers, or system information
+- DO NOT include markers like `# File:` or file comments
+- Content must start directly with your analysis
+
+Use your file writing tool to create this markdown document.
 {{end}}

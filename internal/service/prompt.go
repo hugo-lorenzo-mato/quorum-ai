@@ -74,6 +74,8 @@ func templateFuncs() template.FuncMap {
 		"contains":  strings.Contains,
 		"hasPrefix": strings.HasPrefix,
 		"hasSuffix": strings.HasSuffix,
+		"add":       func(a, b int) int { return a + b },
+		"sub":       func(a, b int) int { return a - b },
 	}
 }
 
@@ -88,14 +90,14 @@ func indent(spaces int, s string) string {
 	return strings.Join(lines, "\n")
 }
 
-// OptimizePromptParams contains parameters for optimize-prompt template.
-type OptimizePromptParams struct {
+// RefinePromptParams contains parameters for prompt refinement template.
+type RefinePromptParams struct {
 	OriginalPrompt string
 }
 
-// RenderOptimizePrompt renders the prompt optimization template.
-func (r *PromptRenderer) RenderOptimizePrompt(params OptimizePromptParams) (string, error) {
-	return r.render("optimize-prompt", params)
+// RenderRefinePrompt renders the prompt refinement template.
+func (r *PromptRenderer) RenderRefinePrompt(params RefinePromptParams) (string, error) {
+	return r.render("refine-prompt", params)
 }
 
 // AnalyzeV1Params contains parameters for analyze-v1 template.
@@ -121,16 +123,16 @@ type AnalysisOutput struct {
 	Recommendations []string
 }
 
-// ConsolidateAnalysisParams contains parameters for consolidate-analysis template.
-type ConsolidateAnalysisParams struct {
+// SynthesizeAnalysisParams contains parameters for analysis synthesis template.
+type SynthesizeAnalysisParams struct {
 	Prompt         string
 	Analyses       []AnalysisOutput
 	OutputFilePath string // Optional: if set, LLM should write output to this file
 }
 
-// RenderConsolidateAnalysis renders the analysis consolidation prompt.
-func (r *PromptRenderer) RenderConsolidateAnalysis(params ConsolidateAnalysisParams) (string, error) {
-	return r.render("consolidate-analysis", params)
+// RenderSynthesizeAnalysis renders the analysis synthesis prompt.
+func (r *PromptRenderer) RenderSynthesizeAnalysis(params SynthesizeAnalysisParams) (string, error) {
+	return r.render("synthesize-analysis", params)
 }
 
 // PlanParams contains parameters for plan generation template.
@@ -144,6 +146,26 @@ type PlanParams struct {
 // RenderPlanGenerate renders the plan generation prompt.
 func (r *PromptRenderer) RenderPlanGenerate(params PlanParams) (string, error) {
 	return r.render("plan-generate", params)
+}
+
+// PlanProposal represents a plan proposal from an agent.
+type PlanProposal struct {
+	AgentName string
+	Model     string
+	Content   string
+}
+
+// SynthesizePlansParams contains parameters for plan synthesis template.
+type SynthesizePlansParams struct {
+	Prompt   string
+	Analysis string
+	Plans    []PlanProposal
+	MaxTasks int
+}
+
+// RenderSynthesizePlans renders the multi-agent plan synthesis prompt.
+func (r *PromptRenderer) RenderSynthesizePlans(params SynthesizePlansParams) (string, error) {
+	return r.render("consolidate-plans", params)
 }
 
 // TaskExecuteParams contains parameters for task execution template.
@@ -202,23 +224,25 @@ func (r *PromptRenderer) HasTemplate(name string) bool {
 	return ok
 }
 
-// ArbiterAnalysisSummary represents an analysis for arbiter evaluation.
-type ArbiterAnalysisSummary struct {
+// ModeratorAnalysisSummary represents an analysis for moderator evaluation.
+type ModeratorAnalysisSummary struct {
 	AgentName string
 	Output    string
 }
 
-// ArbiterEvaluateParams contains parameters for arbiter-evaluate template.
-type ArbiterEvaluateParams struct {
+// ModeratorEvaluateParams contains parameters for moderator evaluation template.
+type ModeratorEvaluateParams struct {
 	Prompt         string
 	Round          int
-	Analyses       []ArbiterAnalysisSummary
+	NextRound      int // Round + 1, for recommendations
+	Analyses       []ModeratorAnalysisSummary
 	BelowThreshold bool
+	OutputFilePath string // Path where LLM should write moderator report
 }
 
-// RenderArbiterEvaluate renders the arbiter semantic evaluation prompt.
-func (r *PromptRenderer) RenderArbiterEvaluate(params ArbiterEvaluateParams) (string, error) {
-	return r.render("arbiter-evaluate", params)
+// RenderModeratorEvaluate renders the moderator semantic evaluation prompt.
+func (r *PromptRenderer) RenderModeratorEvaluate(params ModeratorEvaluateParams) (string, error) {
+	return r.render("moderator-evaluate", params)
 }
 
 // VnDivergenceInfo contains divergence information for V(n) refinement.
@@ -231,18 +255,19 @@ type VnDivergenceInfo struct {
 
 // VnRefineParams contains parameters for vn-refine template.
 type VnRefineParams struct {
-	Prompt              string
-	Context             string
-	Round               int
-	PreviousRound       int
-	PreviousAnalysis    string
-	ConsensusScore      float64
-	Threshold           float64
-	Agreements          []string
-	Divergences         []VnDivergenceInfo
-	MissingPerspectives []string
-	Constraints         []string
-	OutputFilePath      string // Optional: if set, LLM should write output to this file
+	Prompt               string
+	Context              string
+	Round                int
+	PreviousRound        int
+	PreviousAnalysis     string
+	HasArbiterEvaluation bool    // True if arbiter has evaluated (V3+), false for V2
+	ConsensusScore       float64 // Only meaningful if HasArbiterEvaluation is true
+	Threshold            float64
+	Agreements           []string
+	Divergences          []VnDivergenceInfo
+	MissingPerspectives  []string
+	Constraints          []string
+	OutputFilePath       string // Optional: if set, LLM should write output to this file
 }
 
 // RenderVnRefine renders the V(n) refinement prompt.

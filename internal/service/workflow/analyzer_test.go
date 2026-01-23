@@ -42,6 +42,11 @@ func (m *mockAgentRegistry) Available(_ context.Context) []string {
 	return m.List()
 }
 
+func (m *mockAgentRegistry) AvailableForPhase(_ context.Context, _ string) []string {
+	// Mock returns all agents for any phase (can be extended for more specific tests)
+	return m.List()
+}
+
 // mockAgent implements core.Agent for testing.
 type mockAgent struct {
 	name   string
@@ -114,11 +119,11 @@ type mockPromptRenderer struct {
 	taskErr     error
 }
 
-func (m *mockPromptRenderer) RenderOptimizePrompt(_ OptimizePromptParams) (string, error) {
+func (m *mockPromptRenderer) RenderRefinePrompt(_ RefinePromptParams) (string, error) {
 	if m.optimizeErr != nil {
 		return "", m.optimizeErr
 	}
-	return "optimized prompt", nil
+	return "refined prompt", nil
 }
 
 func (m *mockPromptRenderer) RenderAnalyzeV1(_ AnalyzeV1Params) (string, error) {
@@ -128,8 +133,8 @@ func (m *mockPromptRenderer) RenderAnalyzeV1(_ AnalyzeV1Params) (string, error) 
 	return "analyze v1 prompt", nil
 }
 
-func (m *mockPromptRenderer) RenderConsolidateAnalysis(_ ConsolidateAnalysisParams) (string, error) {
-	return "consolidate analysis prompt", nil
+func (m *mockPromptRenderer) RenderSynthesizeAnalysis(_ SynthesizeAnalysisParams) (string, error) {
+	return "synthesize analysis prompt", nil
 }
 
 func (m *mockPromptRenderer) RenderPlanGenerate(_ PlanParams) (string, error) {
@@ -139,6 +144,10 @@ func (m *mockPromptRenderer) RenderPlanGenerate(_ PlanParams) (string, error) {
 	return "plan prompt", nil
 }
 
+func (m *mockPromptRenderer) RenderSynthesizePlans(_ SynthesizePlansParams) (string, error) {
+	return "synthesize plans prompt", nil
+}
+
 func (m *mockPromptRenderer) RenderTaskExecute(_ TaskExecuteParams) (string, error) {
 	if m.taskErr != nil {
 		return "", m.taskErr
@@ -146,8 +155,8 @@ func (m *mockPromptRenderer) RenderTaskExecute(_ TaskExecuteParams) (string, err
 	return "task prompt", nil
 }
 
-func (m *mockPromptRenderer) RenderArbiterEvaluate(_ ArbiterEvaluateParams) (string, error) {
-	return "arbiter evaluate prompt", nil
+func (m *mockPromptRenderer) RenderModeratorEvaluate(_ ModeratorEvaluateParams) (string, error) {
+	return "moderator evaluate prompt", nil
 }
 
 func (m *mockPromptRenderer) RenderVnRefine(_ VnRefineParams) (string, error) {
@@ -189,10 +198,9 @@ func (m *mockCheckpointCreator) CreateCheckpoint(_ *core.WorkflowState, checkpoi
 }
 
 func TestNewAnalyzer(t *testing.T) {
-	config := ArbiterConfig{
+	config := ModeratorConfig{
 		Enabled:   true,
 		Agent:     "claude",
-		Model:     "claude-opus",
 		Threshold: 0.90,
 		MinRounds: 2,
 		MaxRounds: 3,
@@ -205,13 +213,13 @@ func TestNewAnalyzer(t *testing.T) {
 	if analyzer == nil {
 		t.Fatal("NewAnalyzer() returned nil")
 	}
-	if analyzer.arbiter == nil {
-		t.Error("NewAnalyzer() did not set arbiter")
+	if analyzer.moderator == nil {
+		t.Error("NewAnalyzer() did not set moderator")
 	}
 }
 
 func TestNewAnalyzer_Disabled(t *testing.T) {
-	config := ArbiterConfig{
+	config := ModeratorConfig{
 		Enabled: false,
 	}
 	analyzer, err := NewAnalyzer(config)
@@ -222,13 +230,13 @@ func TestNewAnalyzer_Disabled(t *testing.T) {
 	if analyzer == nil {
 		t.Fatal("NewAnalyzer() returned nil")
 	}
-	// When disabled, arbiter should still be created but will be inactive
+	// When disabled, moderator should still be created but will be inactive
 }
 
-func TestAnalyzer_Run_WithArbiterDisabled_ReturnsError(t *testing.T) {
-	// When arbiter is disabled, analyzer.Run should return an error
-	// because the new design requires semantic arbiter for consensus
-	config := ArbiterConfig{
+func TestAnalyzer_Run_WithModeratorDisabled_ReturnsError(t *testing.T) {
+	// When moderator is disabled, analyzer.Run should return an error
+	// because the new design requires semantic moderator for consensus
+	config := ModeratorConfig{
 		Enabled: false,
 	}
 	analyzer, err := NewAnalyzer(config)
@@ -274,16 +282,15 @@ func TestAnalyzer_Run_WithArbiterDisabled_ReturnsError(t *testing.T) {
 	if err == nil {
 		t.Fatal("Analyzer.Run() should return error when arbiter is disabled")
 	}
-	if !strings.Contains(err.Error(), "semantic arbiter is required") {
-		t.Errorf("error message should mention arbiter required, got: %v", err)
+	if !strings.Contains(err.Error(), "semantic moderator is required") {
+		t.Errorf("error message should mention moderator required, got: %v", err)
 	}
 }
 
 func TestAnalyzer_Run_NoAgents(t *testing.T) {
-	config := ArbiterConfig{
+	config := ModeratorConfig{
 		Enabled:   true,
 		Agent:     "claude",
-		Model:     "claude-opus",
 		Threshold: 0.90,
 	}
 	analyzer, err := NewAnalyzer(config)
@@ -515,6 +522,127 @@ func TestGetConsolidatedAnalysis(t *testing.T) {
 			got := GetConsolidatedAnalysis(tt.state)
 			if got != tt.wantContent {
 				t.Errorf("GetConsolidatedAnalysis() = %q, want %q", got, tt.wantContent)
+			}
+		})
+	}
+}
+
+func TestAnalyzer_Run_SkipsWhenPhaseCompleted(t *testing.T) {
+	config := ModeratorConfig{
+		Enabled:   true,
+		Agent:     "claude",
+		Threshold: 0.90,
+	}
+	analyzer, err := NewAnalyzer(config)
+	if err != nil {
+		t.Fatalf("NewAnalyzer() error = %v", err)
+	}
+
+	checkpoint := &mockCheckpointCreator{}
+
+	// Create a state that has a phase_complete checkpoint for analyze
+	wctx := &Context{
+		State: &core.WorkflowState{
+			WorkflowID: "wf-test",
+			Prompt:     "test prompt",
+			Checkpoints: []core.Checkpoint{
+				{
+					Type:  "phase_complete",
+					Phase: core.PhaseAnalyze,
+				},
+			},
+		},
+		Agents:     &mockAgentRegistry{agents: map[string]core.Agent{"claude": &mockAgent{}}},
+		Prompts:    &mockPromptRenderer{},
+		Checkpoint: checkpoint,
+		Retry:      &mockRetryExecutor{},
+		RateLimits: &mockRateLimiterGetter{},
+		Logger:     logging.NewNop(),
+		Config:     &Config{},
+	}
+
+	err = analyzer.Run(context.Background(), wctx)
+	if err != nil {
+		t.Fatalf("Analyzer.Run() error = %v, want nil (should skip)", err)
+	}
+
+	// Verify that no new checkpoints were created (analyzer was skipped)
+	checkpoint.mu.Lock()
+	checkpointCount := len(checkpoint.checkpoints)
+	checkpoint.mu.Unlock()
+	if checkpointCount > 0 {
+		t.Errorf("Analyzer.Run() created %d checkpoint(s), want 0 when phase is already completed", checkpointCount)
+	}
+}
+
+func TestIsPhaseCompleted(t *testing.T) {
+	tests := []struct {
+		name       string
+		state      *core.WorkflowState
+		phase      core.Phase
+		wantResult bool
+	}{
+		{
+			name: "no checkpoints",
+			state: &core.WorkflowState{
+				Checkpoints: []core.Checkpoint{},
+			},
+			phase:      core.PhaseAnalyze,
+			wantResult: false,
+		},
+		{
+			name: "has phase_complete for analyze",
+			state: &core.WorkflowState{
+				Checkpoints: []core.Checkpoint{
+					{Type: "phase_start", Phase: core.PhaseAnalyze},
+					{Type: "phase_complete", Phase: core.PhaseAnalyze},
+				},
+			},
+			phase:      core.PhaseAnalyze,
+			wantResult: true,
+		},
+		{
+			name: "has phase_complete for different phase",
+			state: &core.WorkflowState{
+				Checkpoints: []core.Checkpoint{
+					{Type: "phase_complete", Phase: core.PhaseRefine},
+				},
+			},
+			phase:      core.PhaseAnalyze,
+			wantResult: false,
+		},
+		{
+			name: "only has phase_start",
+			state: &core.WorkflowState{
+				Checkpoints: []core.Checkpoint{
+					{Type: "phase_start", Phase: core.PhaseAnalyze},
+				},
+			},
+			phase:      core.PhaseAnalyze,
+			wantResult: false,
+		},
+		{
+			name: "phase_complete exists among multiple checkpoints",
+			state: &core.WorkflowState{
+				Checkpoints: []core.Checkpoint{
+					{Type: "phase_start", Phase: core.PhaseRefine},
+					{Type: "phase_complete", Phase: core.PhaseRefine},
+					{Type: "phase_start", Phase: core.PhaseAnalyze},
+					{Type: "consolidated_analysis", Phase: core.PhaseAnalyze},
+					{Type: "phase_complete", Phase: core.PhaseAnalyze},
+					{Type: "phase_start", Phase: core.PhaseAnalyze}, // Extra (should still find phase_complete)
+				},
+			},
+			phase:      core.PhaseAnalyze,
+			wantResult: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isPhaseCompleted(tt.state, tt.phase)
+			if got != tt.wantResult {
+				t.Errorf("isPhaseCompleted() = %v, want %v", got, tt.wantResult)
 			}
 		})
 	}

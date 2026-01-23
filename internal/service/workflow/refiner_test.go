@@ -2,7 +2,7 @@ package workflow
 
 import "testing"
 
-func TestParseOptimizationResult(t *testing.T) {
+func TestParseRefinerResult(t *testing.T) {
 	tests := []struct {
 		name    string
 		output  string
@@ -65,13 +65,13 @@ func TestParseOptimizationResult(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := parseOptimizationResult(tt.output)
+			got, err := parseRefinementResult(tt.output)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("parseOptimizationResult() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("parseRefinementResult() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if got != tt.want {
-				t.Errorf("parseOptimizationResult() = %q, want %q", got, tt.want)
+				t.Errorf("parseRefinementResult() = %q, want %q", got, tt.want)
 			}
 		})
 	}

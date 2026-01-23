@@ -168,6 +168,10 @@ func (m *CheckpointManager) GetResumePoint(state *core.WorkflowState) (*ResumePo
 	switch CheckpointType(lastCP.Type) {
 	case CheckpointPhaseStart:
 		resumePoint.RestartPhase = true
+	case CheckpointPhaseComplete:
+		// Phase completed - advance to the next phase
+		// This is critical for /plan after /analyze to work correctly
+		resumePoint.Phase = nextPhase(lastCP.Phase)
 	case CheckpointTaskStart:
 		resumePoint.RestartTask = true
 	case CheckpointError:
@@ -175,6 +179,20 @@ func (m *CheckpointManager) GetResumePoint(state *core.WorkflowState) (*ResumePo
 	}
 
 	return resumePoint, nil
+}
+
+// nextPhase returns the phase that follows the given phase.
+func nextPhase(current core.Phase) core.Phase {
+	switch current {
+	case core.PhaseRefine:
+		return core.PhaseAnalyze
+	case core.PhaseAnalyze:
+		return core.PhasePlan
+	case core.PhasePlan:
+		return core.PhaseExecute
+	default:
+		return current // No next phase
+	}
 }
 
 // CleanupOldCheckpoints removes checkpoints older than the retention period.

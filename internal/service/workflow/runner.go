@@ -58,39 +58,57 @@ type RunnerConfig struct {
 	MaxCostPerWorkflow float64
 	// MaxCostPerTask is the maximum cost per task in USD (0 = unlimited).
 	MaxCostPerTask float64
-	// Optimizer configures the prompt optimization phase.
-	Optimizer OptimizerConfig
-	// Consolidator configures the analysis consolidation phase.
-	Consolidator ConsolidatorConfig
+	// Refiner configures the prompt refinement phase.
+	Refiner RefinerConfig
+	// Synthesizer configures the analysis synthesis phase.
+	Synthesizer SynthesizerConfig
+	// PlanSynthesizer configures multi-agent plan synthesis.
+	PlanSynthesizer PlanSynthesizerConfig
 	// Report configures the markdown report output.
 	Report report.Config
 	// PhaseTimeouts holds per-phase timeout durations.
 	PhaseTimeouts PhaseTimeouts
-	// Arbiter configures the semantic arbiter for consensus evaluation.
-	Arbiter ArbiterConfig
+	// Moderator configures the semantic moderator for consensus evaluation.
+	Moderator ModeratorConfig
+	// Finalization configures post-task git operations (commit, push, PR).
+	Finalization FinalizationConfig
 }
 
-// ConsolidatorConfig configures the analysis consolidation phase.
-type ConsolidatorConfig struct {
-	// Agent specifies which agent to use for consolidation (e.g., "claude", "gemini").
+// SynthesizerConfig configures the analysis synthesis phase.
+type SynthesizerConfig struct {
+	// Agent specifies which agent to use for synthesis (e.g., "claude", "gemini").
+	// The model is resolved from AgentPhaseModels[Agent][analyze] at runtime.
 	Agent string
-	// Model specifies the model to use (optional, uses agent's phase_models.analyze if empty).
-	Model string
+}
+
+// PlanSynthesizerConfig configures multi-agent plan synthesis.
+type PlanSynthesizerConfig struct {
+	// Enabled controls whether multi-agent planning is used.
+	Enabled bool
+	// Agent specifies which agent to use for plan synthesis.
+	// The model is resolved from AgentPhaseModels[Agent][plan] at runtime.
+	Agent string
 }
 
 // DefaultRunnerConfig returns default configuration.
+// NOTE: DefaultAgent, Synthesizer.Agent, and Moderator fields have NO defaults.
+// These MUST be configured explicitly in the config file (.quorum/config.yaml).
+// The source of truth is always the config file, never code defaults.
 func DefaultRunnerConfig() *RunnerConfig {
 	return &RunnerConfig{
 		Timeout:          time.Hour,
 		MaxRetries:       3,
 		DryRun:           false,
 		Sandbox:          true,
-		DefaultAgent:     "claude",
+		DefaultAgent:     "", // NO default - must be configured
 		AgentPhaseModels: map[string]map[string]string{},
 		WorktreeMode:     "always",
-		Consolidator: ConsolidatorConfig{
-			Agent: "claude",
-			Model: "",
+		Synthesizer: SynthesizerConfig{
+			Agent: "", // NO default - must be configured
+		},
+		PlanSynthesizer: PlanSynthesizerConfig{
+			Enabled: false, // Disabled by default - opt-in feature
+			Agent:   "",    // NO default - must be configured
 		},
 		Report: report.DefaultConfig(),
 		PhaseTimeouts: PhaseTimeouts{
@@ -98,10 +116,9 @@ func DefaultRunnerConfig() *RunnerConfig {
 			Plan:    2 * time.Hour,
 			Execute: 2 * time.Hour,
 		},
-		Arbiter: ArbiterConfig{
-			Enabled:             true,
-			Agent:               "claude",
-			Model:               "claude-opus-4-5-20251101",
+		Moderator: ModeratorConfig{
+			Enabled:             false, // Disabled by default - must be explicitly enabled
+			Agent:               "",    // NO default - must be configured
 			Threshold:           0.90,
 			MinRounds:           2,
 			MaxRounds:           5,
@@ -112,13 +129,13 @@ func DefaultRunnerConfig() *RunnerConfig {
 }
 
 // Runner orchestrates the complete workflow execution.
-// It coordinates the optimization, analysis, planning, and execution phases
+// It coordinates the refinement, analysis, planning, and execution phases
 // but delegates the actual work to specialized phase runners.
 type Runner struct {
 	config         *RunnerConfig
 	state          StateManager
 	agents         core.AgentRegistry
-	optimizer      *Optimizer
+	refiner        *Refiner
 	analyzer       *Analyzer
 	planner        *Planner
 	executor       *Executor
@@ -156,7 +173,7 @@ type RunnerDeps struct {
 }
 
 // NewRunner creates a new workflow runner with all dependencies.
-// Returns nil if the arbiter cannot be created (invalid config).
+// Returns nil if the moderator cannot be created (invalid config).
 func NewRunner(deps RunnerDeps) *Runner {
 	if deps.Config == nil {
 		deps.Config = DefaultRunnerConfig()
@@ -168,8 +185,8 @@ func NewRunner(deps RunnerDeps) *Runner {
 		deps.Output = NopOutputNotifier{}
 	}
 
-	// Create analyzer with arbiter config
-	analyzer, err := NewAnalyzer(deps.Config.Arbiter)
+	// Create analyzer with moderator config
+	analyzer, err := NewAnalyzer(deps.Config.Moderator)
 	if err != nil {
 		deps.Logger.Error("failed to create analyzer", "error", err)
 		return nil
@@ -179,7 +196,7 @@ func NewRunner(deps RunnerDeps) *Runner {
 		config:         deps.Config,
 		state:          deps.State,
 		agents:         deps.Agents,
-		optimizer:      NewOptimizer(deps.Config.Optimizer),
+		refiner:        NewRefiner(deps.Config.Refiner),
 		analyzer:       analyzer,
 		planner:        NewPlanner(deps.DAG, deps.State),
 		executor:       NewExecutor(deps.DAG, deps.State, deps.Config.DenyTools),
@@ -207,6 +224,11 @@ func (r *Runner) Run(ctx context.Context, prompt string) error {
 	ctx, cancel := context.WithTimeout(ctx, r.config.Timeout)
 	defer cancel()
 
+	// Validate all configured agents have their CLIs installed (fail fast)
+	if err := r.ValidateAgentAvailability(ctx); err != nil {
+		return err
+	}
+
 	// Acquire lock
 	if err := r.state.AcquireLock(ctx); err != nil {
 		return fmt.Errorf("acquiring lock: %w", err)
@@ -233,7 +255,12 @@ func (r *Runner) Run(ctx context.Context, prompt string) error {
 	wctx := r.createContext(workflowState)
 
 	// Run phases
-	if err := r.optimizer.Run(ctx, wctx); err != nil {
+	if err := r.refiner.Run(ctx, wctx); err != nil {
+		return r.handleError(ctx, workflowState, err)
+	}
+
+	// Validate arbiter config before analyze phase (requires arbiter for multi-agent)
+	if err := r.ValidateModeratorConfig(); err != nil {
 		return r.handleError(ctx, workflowState, err)
 	}
 
@@ -312,8 +339,8 @@ func (r *Runner) Resume(ctx context.Context) error {
 
 	// Resume from appropriate phase
 	switch resumePoint.Phase {
-	case core.PhaseOptimize:
-		if err := r.optimizer.Run(ctx, wctx); err != nil {
+	case core.PhaseRefine:
+		if err := r.refiner.Run(ctx, wctx); err != nil {
 			return r.handleError(ctx, workflowState, err)
 		}
 		fallthrough
@@ -359,7 +386,7 @@ func (r *Runner) initializeState(prompt string) *core.WorkflowState {
 		Version:      core.CurrentStateVersion,
 		WorkflowID:   core.WorkflowID(generateWorkflowID()),
 		Status:       core.WorkflowStatusRunning,
-		CurrentPhase: core.PhaseOptimize,
+		CurrentPhase: core.PhaseRefine,
 		Prompt:       prompt,
 		Tasks:        make(map[core.TaskID]*core.TaskState),
 		TaskOrder:    make([]core.TaskID, 0),
@@ -389,18 +416,21 @@ func (r *Runner) createContext(state *core.WorkflowState) *Context {
 		Control:      r.control,
 		Report:       reportWriter,
 		Config: &Config{
-			DryRun:             r.config.DryRun,
-			Sandbox:            r.config.Sandbox,
-			DenyTools:          r.config.DenyTools,
-			DefaultAgent:       r.config.DefaultAgent,
-			AgentPhaseModels:   r.config.AgentPhaseModels,
-			WorktreeAutoClean:  r.config.WorktreeAutoClean,
-			WorktreeMode:       r.config.WorktreeMode,
-			MaxCostPerWorkflow: r.config.MaxCostPerWorkflow,
-			MaxCostPerTask:     r.config.MaxCostPerTask,
-			ConsolidatorAgent:  r.config.Consolidator.Agent,
-			ConsolidatorModel:  r.config.Consolidator.Model,
-			PhaseTimeouts:      r.config.PhaseTimeouts,
+			DryRun:                 r.config.DryRun,
+			Sandbox:                r.config.Sandbox,
+			DenyTools:              r.config.DenyTools,
+			DefaultAgent:           r.config.DefaultAgent,
+			AgentPhaseModels:       r.config.AgentPhaseModels,
+			WorktreeAutoClean:      r.config.WorktreeAutoClean,
+			WorktreeMode:           r.config.WorktreeMode,
+			MaxCostPerWorkflow:     r.config.MaxCostPerWorkflow,
+			MaxCostPerTask:         r.config.MaxCostPerTask,
+			SynthesizerAgent:       r.config.Synthesizer.Agent,
+			PlanSynthesizerEnabled: r.config.PlanSynthesizer.Enabled,
+			PlanSynthesizerAgent:   r.config.PlanSynthesizer.Agent,
+			PhaseTimeouts:          r.config.PhaseTimeouts,
+			Moderator:              r.config.Moderator,
+			Finalization:           r.config.Finalization,
 		},
 	}
 }
@@ -441,6 +471,120 @@ func (r *Runner) validateRunInput(prompt string) error {
 	if len(r.agents.List()) == 0 {
 		return core.ErrValidation(core.CodeNoAgents, "no agents configured")
 	}
+	// Validate DefaultAgent is configured (required for planning/execution)
+	if r.config.DefaultAgent == "" {
+		return core.ErrValidation(core.CodeInvalidConfig,
+			"agents.default is not configured. "+
+				"Please set 'agents.default' in your .quorum/config.yaml file. "+
+				"Run 'quorum init' to generate a complete configuration.")
+	}
+	return nil
+}
+
+// ValidateAgentAvailability checks that all configured agents have their CLIs installed.
+// This runs early to fail fast with a clear error message before any phase starts.
+func (r *Runner) ValidateAgentAvailability(ctx context.Context) error {
+	configured := r.agents.List()
+	available := r.agents.Available(ctx)
+
+	// Build set of available agents
+	availableSet := make(map[string]bool)
+	for _, name := range available {
+		availableSet[strings.ToLower(name)] = true
+	}
+
+	// Check which configured agents are not available
+	var missing []string
+	for _, name := range configured {
+		if !availableSet[strings.ToLower(name)] {
+			missing = append(missing, name)
+		}
+	}
+
+	if len(missing) == 0 {
+		return nil
+	}
+
+	// Build helpful error message
+	if len(missing) == 1 {
+		return fmt.Errorf("agent %q is configured but CLI is not installed or not responding.\n\n"+
+			"To fix this:\n"+
+			"  1. Install the %s CLI (see documentation)\n"+
+			"  2. Or disable this agent in .quorum/config.yaml:\n"+
+			"     agents:\n"+
+			"       %s:\n"+
+			"         enabled: false\n\n"+
+			"Run 'quorum doctor' for detailed diagnostics.",
+			missing[0], missing[0], missing[0])
+	}
+
+	return fmt.Errorf("multiple agents are configured but their CLIs are not installed:\n"+
+		"  Missing: %v\n\n"+
+		"To fix this:\n"+
+		"  1. Install the missing CLIs (see documentation)\n"+
+		"  2. Or disable them in .quorum/config.yaml:\n"+
+		"     agents:\n"+
+		"       <agent_name>:\n"+
+		"         enabled: false\n\n"+
+		"Run 'quorum doctor' for detailed diagnostics.",
+		missing)
+}
+
+// ValidateModeratorConfig checks if moderator is properly configured for multi-agent analysis.
+// This should be called BEFORE starting the analyze phase to fail fast with a clear error.
+// Returns nil if validation passes or if moderator is not needed (single agent).
+func (r *Runner) ValidateModeratorConfig() error {
+	agents := r.agents.List()
+	enabledAgents := len(agents)
+
+	// Single agent doesn't need moderator
+	if enabledAgents <= 1 {
+		return nil
+	}
+
+	moderatorCfg := r.config.Moderator
+
+	// Check if moderator is enabled
+	if !moderatorCfg.Enabled {
+		return fmt.Errorf("multi-agent analysis requires semantic moderator. "+
+			"You have %d agents enabled but moderator is disabled.\n\n"+
+			"Add this to your .quorum/config.yaml:\n\n"+
+			"phases:\n"+
+			"  analyze:\n"+
+			"    moderator:\n"+
+			"      enabled: true\n"+
+			"      agent: claude\n\n"+
+			"Or run 'quorum init --force' to regenerate config with defaults.\n"+
+			"See: %s#phases-settings", enabledAgents, DocsConfigURL)
+	}
+
+	// Check if agent is specified
+	if moderatorCfg.Agent == "" {
+		return fmt.Errorf("moderator is enabled but no agent specified.\n\n"+
+			"Add 'agent' to your moderator config in .quorum/config.yaml:\n\n"+
+			"phases:\n"+
+			"  analyze:\n"+
+			"    moderator:\n"+
+			"      enabled: true\n"+
+			"      agent: claude  # or gemini, codex, copilot\n\n"+
+			"See: %s#phases-settings", DocsConfigURL)
+	}
+
+	// Verify the specified moderator agent exists
+	found := false
+	for _, agent := range agents {
+		if strings.EqualFold(agent, moderatorCfg.Agent) {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return fmt.Errorf("moderator agent %q is not available.\n\n"+
+			"Available agents: %v\n\n"+
+			"Either enable the %q agent or change phases.analyze.moderator.agent in .quorum/config.yaml.\n"+
+			"See: %s#phases-settings", moderatorCfg.Agent, agents, moderatorCfg.Agent, DocsConfigURL)
+	}
+
 	return nil
 }
 
@@ -455,6 +599,11 @@ func (r *Runner) Analyze(ctx context.Context, prompt string) error {
 	// Apply timeout
 	ctx, cancel := context.WithTimeout(ctx, r.config.Timeout)
 	defer cancel()
+
+	// Validate all configured agents have their CLIs installed (fail fast)
+	if err := r.ValidateAgentAvailability(ctx); err != nil {
+		return err
+	}
 
 	// Acquire lock
 	if err := r.state.AcquireLock(ctx); err != nil {
@@ -482,7 +631,12 @@ func (r *Runner) Analyze(ctx context.Context, prompt string) error {
 	wctx := r.createContext(workflowState)
 
 	// Run optimization phase (if enabled)
-	if err := r.optimizer.Run(ctx, wctx); err != nil {
+	if err := r.refiner.Run(ctx, wctx); err != nil {
+		return r.handleError(ctx, workflowState, err)
+	}
+
+	// Validate arbiter config before analyze phase (requires arbiter for multi-agent)
+	if err := r.ValidateModeratorConfig(); err != nil {
 		return r.handleError(ctx, workflowState, err)
 	}
 
@@ -508,6 +662,84 @@ func (r *Runner) Analyze(ctx context.Context, prompt string) error {
 	if r.output != nil {
 		r.output.Log("success", "workflow", fmt.Sprintf("Analysis completed: consensus %.1f%%, $%.4f",
 			workflowState.Metrics.ConsensusScore*100,
+			workflowState.Metrics.TotalCostUSD))
+	}
+
+	return r.state.Save(ctx, workflowState)
+}
+
+// Plan executes only the planning phase.
+// This is useful when you want to generate an execution plan without executing tasks.
+// Requires a completed analyze phase with consolidated analysis.
+func (r *Runner) Plan(ctx context.Context) error {
+	// Apply timeout
+	ctx, cancel := context.WithTimeout(ctx, r.config.Timeout)
+	defer cancel()
+
+	// Acquire lock
+	if err := r.state.AcquireLock(ctx); err != nil {
+		return fmt.Errorf("acquiring lock: %w", err)
+	}
+	defer func() { _ = r.state.ReleaseLock(ctx) }()
+
+	// Load existing state
+	workflowState, err := r.state.Load(ctx)
+	if err != nil {
+		return fmt.Errorf("loading state: %w", err)
+	}
+
+	if workflowState == nil {
+		return core.ErrState("NO_STATE", "no workflow state found to plan")
+	}
+
+	// Verify analyze phase completed
+	analysis := GetConsolidatedAnalysis(workflowState)
+	if analysis == "" {
+		return core.ErrState("MISSING_ANALYSIS", "no consolidated analysis found; run analyze phase first")
+	}
+
+	// Check if plan phase already completed
+	if isPhaseCompleted(workflowState, core.PhasePlan) {
+		r.logger.Info("plan phase already completed",
+			"workflow_id", workflowState.WorkflowID)
+		if r.output != nil {
+			r.output.Log("info", "workflow", "Plan phase already completed, skipping")
+		}
+		return nil
+	}
+
+	r.logger.Info("starting plan-only workflow",
+		"workflow_id", workflowState.WorkflowID,
+	)
+	if r.output != nil {
+		r.output.Log("info", "workflow", fmt.Sprintf("Plan-only workflow started: %s", workflowState.WorkflowID))
+	}
+
+	// Create workflow context for phase runners
+	wctx := r.createContext(workflowState)
+
+	// Run ONLY the planner - no fallthrough to execute
+	if err := r.planner.Run(ctx, wctx); err != nil {
+		return r.handleError(ctx, workflowState, err)
+	}
+
+	// Finalize metrics
+	r.finalizeMetrics(workflowState)
+
+	// Mark as completed (plan phase done, ready for execute)
+	workflowState.Status = core.WorkflowStatusCompleted
+	workflowState.CurrentPhase = core.PhaseExecute // Ready for next phase
+	workflowState.UpdatedAt = time.Now()
+
+	r.logger.Info("plan phase completed",
+		"workflow_id", workflowState.WorkflowID,
+		"task_count", len(workflowState.Tasks),
+		"duration", workflowState.Metrics.Duration,
+		"total_cost", workflowState.Metrics.TotalCostUSD,
+	)
+	if r.output != nil {
+		r.output.Log("success", "workflow", fmt.Sprintf("Planning completed: %d tasks created, $%.4f",
+			len(workflowState.Tasks),
 			workflowState.Metrics.TotalCostUSD))
 	}
 
@@ -544,15 +776,42 @@ func (r *Runner) ListWorkflows(ctx context.Context) ([]core.WorkflowSummary, err
 	}}, nil
 }
 
+// LoadWorkflow loads a specific workflow by ID and sets it as active.
+// Returns the loaded workflow state.
+func (r *Runner) LoadWorkflow(ctx context.Context, workflowID string) (*core.WorkflowState, error) {
+	// Load the workflow by ID
+	state, err := r.state.LoadByID(ctx, core.WorkflowID(workflowID))
+	if err != nil {
+		return nil, fmt.Errorf("loading workflow %s: %w", workflowID, err)
+	}
+	if state == nil {
+		return nil, fmt.Errorf("workflow %s not found", workflowID)
+	}
+
+	// Set it as active
+	type activeWorkflowSetter interface {
+		SetActiveWorkflowID(ctx context.Context, id core.WorkflowID) error
+	}
+	if setter, ok := r.state.(activeWorkflowSetter); ok {
+		if err := setter.SetActiveWorkflowID(ctx, core.WorkflowID(workflowID)); err != nil {
+			return nil, fmt.Errorf("setting active workflow: %w", err)
+		}
+	}
+
+	return state, nil
+}
+
 // SetDryRun enables or disables dry-run mode.
 func (r *Runner) SetDryRun(enabled bool) {
 	r.config.DryRun = enabled
 }
 
 // generateWorkflowID generates a unique workflow ID.
+// Format: wf-YYYYMMDD-HHMMSS-NNN (e.g., wf-20250121-153045-001)
 func generateWorkflowID() string {
 	counter := atomic.AddUint64(&idCounter, 1)
-	return fmt.Sprintf("wf-%d-%d", time.Now().UnixNano(), counter)
+	now := time.Now()
+	return fmt.Sprintf("wf-%s-%03d", now.Format("20060102-150405"), counter)
 }
 
 // finalizeMetrics calculates final aggregate metrics.

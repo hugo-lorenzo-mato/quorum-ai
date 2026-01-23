@@ -89,11 +89,11 @@ func renderConsensusTemplate(data ConsensusData, afterPhase string) string {
 	return sb.String()
 }
 
-// renderArbiterTemplate renders a semantic arbiter evaluation report
-func renderArbiterTemplate(data ArbiterData, includeRaw bool) string {
+// renderModeratorTemplate renders a semantic moderator evaluation report
+func renderModeratorTemplate(data ModeratorData, includeRaw bool) string {
 	var sb strings.Builder
 
-	sb.WriteString(fmt.Sprintf("# Evaluación del Árbitro Semántico (Ronda %d)\n\n", data.Round))
+	sb.WriteString(fmt.Sprintf("# Evaluación del Moderador Semántico (Ronda %d)\n\n", data.Round))
 
 	// Score indicator
 	scoreEmoji := "🟢"
@@ -105,7 +105,7 @@ func renderArbiterTemplate(data ArbiterData, includeRaw bool) string {
 
 	sb.WriteString(fmt.Sprintf("## %s Consenso Semántico: %.0f%%\n\n", scoreEmoji, data.Score*100))
 
-	sb.WriteString("## Información del Árbitro\n\n")
+	sb.WriteString("## Información del Moderador\n\n")
 	sb.WriteString(fmt.Sprintf("- **Agente**: %s\n", data.Agent))
 	sb.WriteString(fmt.Sprintf("- **Modelo**: %s\n", data.Model))
 	sb.WriteString(fmt.Sprintf("- **Ronda**: %d\n", data.Round))
@@ -113,7 +113,7 @@ func renderArbiterTemplate(data ArbiterData, includeRaw bool) string {
 	sb.WriteString(fmt.Sprintf("- **Divergencias identificadas**: %d\n\n", data.DivergencesCount))
 
 	sb.WriteString("## Metodología de Evaluación\n\n")
-	sb.WriteString("El árbitro semántico evalúa el **consenso real** entre los análisis:\n\n")
+	sb.WriteString("El moderador semántico evalúa el **consenso real** entre los análisis:\n\n")
 	sb.WriteString("- **Evaluación semántica**: Compara significados, no palabras exactas\n")
 	sb.WriteString("- **Identificación de acuerdos**: Detecta convergencias genuinas entre agentes\n")
 	sb.WriteString("- **Análisis de divergencias**: Identifica diferencias sustanciales a resolver\n")
@@ -122,11 +122,11 @@ func renderArbiterTemplate(data ArbiterData, includeRaw bool) string {
 	sb.WriteString("---\n\n")
 
 	if includeRaw && data.RawOutput != "" {
-		sb.WriteString("## Evaluación Completa del Árbitro\n\n")
+		sb.WriteString("## Evaluación Completa del Moderador\n\n")
 		sb.WriteString(data.RawOutput + "\n\n")
 	}
 
-	sb.WriteString("## Métricas del Árbitro\n\n")
+	sb.WriteString("## Métricas del Moderador\n\n")
 	sb.WriteString("| Métrica | Valor |\n")
 	sb.WriteString("|---------|-------|\n")
 	sb.WriteString(fmt.Sprintf("| Tokens entrada | %d |\n", data.TokensIn))
@@ -339,4 +339,136 @@ func containsPhase(phases []string, target string) bool {
 		}
 	}
 	return false
+}
+
+// renderTaskPlanTemplate renders a task plan document
+func renderTaskPlanTemplate(data TaskPlanData) string {
+	var sb strings.Builder
+
+	sb.WriteString(fmt.Sprintf("# Task: %s\n\n", data.Name))
+
+	if data.Description != "" {
+		sb.WriteString("## Description\n\n")
+		sb.WriteString(data.Description + "\n\n")
+	}
+
+	sb.WriteString("## Agent Assignment\n\n")
+	sb.WriteString(fmt.Sprintf("- **CLI**: %s\n", data.CLI))
+	sb.WriteString(fmt.Sprintf("- **Planned Model**: %s\n\n", data.PlannedModel))
+
+	sb.WriteString("## Execution Info\n\n")
+	sb.WriteString(fmt.Sprintf("- **Batch**: %d\n", data.ExecutionBatch))
+
+	if data.CanParallelize && len(data.ParallelWith) > 0 {
+		sb.WriteString(fmt.Sprintf("- **Can parallelize with**: %s\n", strings.Join(data.ParallelWith, ", ")))
+	} else if !data.CanParallelize {
+		sb.WriteString("- **Parallelization**: Not parallelizable (has dependencies)\n")
+	}
+
+	if len(data.Dependencies) == 0 {
+		sb.WriteString("- **Dependencies**: None (can start immediately)\n")
+	} else {
+		sb.WriteString(fmt.Sprintf("- **Dependencies**: %s\n", strings.Join(data.Dependencies, ", ")))
+	}
+
+	return sb.String()
+}
+
+// renderExecutionGraphTemplate renders the execution graph visualization
+func renderExecutionGraphTemplate(data ExecutionGraphData) string {
+	var sb strings.Builder
+
+	sb.WriteString("# Execution Graph\n\n")
+	sb.WriteString(fmt.Sprintf("**Total Tasks**: %d\n", data.TotalTasks))
+	sb.WriteString(fmt.Sprintf("**Parallel Batches**: %d\n\n", data.TotalBatches))
+
+	sb.WriteString("## Parallel Execution Batches\n\n")
+	sb.WriteString("Tasks are organized into batches that can execute in parallel. ")
+	sb.WriteString("Each batch contains tasks with no dependencies on each other, ")
+	sb.WriteString("but may depend on tasks from previous batches.\n\n")
+
+	for _, batch := range data.Batches {
+		sb.WriteString(fmt.Sprintf("### Batch %d", batch.BatchNumber))
+
+		if batch.BatchNumber == 1 {
+			sb.WriteString(" (No dependencies)\n\n")
+		} else {
+			sb.WriteString(fmt.Sprintf(" (Depends on Batch %d)\n\n", batch.BatchNumber-1))
+		}
+
+		for _, task := range batch.Tasks {
+			sb.WriteString(fmt.Sprintf("- **%s** (`%s`)\n", task.Name, task.TaskID))
+			sb.WriteString(fmt.Sprintf("  - Agent: %s\n", task.CLI))
+			sb.WriteString(fmt.Sprintf("  - Model: %s\n", task.PlannedModel))
+
+			if len(task.Dependencies) > 0 {
+				sb.WriteString(fmt.Sprintf("  - Depends on: %s\n", strings.Join(task.Dependencies, ", ")))
+			}
+			sb.WriteString("\n")
+		}
+	}
+
+	// Add simple text-based dependency visualization
+	if data.TotalBatches > 1 {
+		sb.WriteString("## Dependency Flow\n\n")
+		sb.WriteString("```\n")
+
+		for i, batch := range data.Batches {
+			// Print tasks in this batch
+			for j, task := range batch.Tasks {
+				sb.WriteString(fmt.Sprintf("[%s]", task.TaskID))
+
+				// Add connections
+				if i < len(data.Batches)-1 {
+					// Check if any task in next batch depends on this
+					hasDependent := false
+					for _, nextBatch := range data.Batches[i+1:] {
+						for _, nextTask := range nextBatch.Tasks {
+							for _, dep := range nextTask.Dependencies {
+								if dep == task.TaskID {
+									hasDependent = true
+									break
+								}
+							}
+						}
+					}
+					if hasDependent {
+						sb.WriteString(" ──> ")
+					} else {
+						sb.WriteString("     ")
+					}
+				}
+
+				// New line after each task except the last in batch
+				if j < len(batch.Tasks)-1 {
+					sb.WriteString("\n")
+				}
+			}
+
+			// Separator between batches
+			if i < len(data.Batches)-1 {
+				sb.WriteString("\n\n")
+			}
+		}
+
+		sb.WriteString("\n```\n\n")
+	}
+
+	sb.WriteString("## Model Distribution\n\n")
+
+	// Count tasks per agent
+	agentCounts := make(map[string]int)
+	for _, batch := range data.Batches {
+		for _, task := range batch.Tasks {
+			agentCounts[task.CLI]++
+		}
+	}
+
+	sb.WriteString("| Agent | Task Count |\n")
+	sb.WriteString("|-------|------------|\n")
+	for agent, count := range agentCounts {
+		sb.WriteString(fmt.Sprintf("| %s | %d |\n", agent, count))
+	}
+
+	return sb.String()
 }

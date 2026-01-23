@@ -9,8 +9,8 @@ import (
 )
 
 func TestAnalyzer_Run_AgentExecutionError(t *testing.T) {
-	config := ArbiterConfig{
-		Enabled: false, // Disable arbiter for this test
+	config := ModeratorConfig{
+		Enabled: false, // Disable moderator for this test
 	}
 	analyzer, err := NewAnalyzer(config)
 	if err != nil {

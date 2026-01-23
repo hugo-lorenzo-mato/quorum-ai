@@ -12,9 +12,31 @@
 {{end}}{{end}}
 
 ## Instructions
+
 Based on the analysis above, generate an execution plan with discrete tasks.
 
-Requirements:
+### CRITICAL: Self-Contained Task Descriptions
+
+**EXTREMELY IMPORTANT**: Each task description must be **COMPLETELY SELF-CONTAINED** and include:
+
+1. **ALL necessary context** - The executor will ONLY see this task description, not the consolidated analysis
+2. **Specific file references** - Exact files and lines that need modification (from the analysis)
+3. **Technical details** - All implementation specifics needed to complete the task
+4. **Dependencies explained** - Why this task depends on others (not just task IDs)
+5. **Expected outcome** - Clear definition of what "done" looks like
+
+**DO NOT** write vague descriptions like:
+- "Implement the feature discussed in the analysis" ❌
+- "Fix the bug as described" ❌
+- "Update the component" ❌
+
+**DO** write complete descriptions like:
+- "Add error handling to `internal/service/runner.go:145` in the `Execute()` method. Currently, if `agent.Run()` returns an error, it's silently ignored. Wrap the call in error checking and propagate the error up the chain. The function signature already returns `error`, so no interface changes needed." ✓
+
+Each task markdown will be the **ONLY INPUT** the executing agent receives. If information is missing from the task description, the executor will not have access to it.
+
+### Requirements
+
 - Maximum {{.MaxTasks}} tasks
 - Each task should be independently executable
 - Tasks should have clear dependencies
@@ -29,8 +51,8 @@ Requirements:
   "tasks": [
     {
       "id": "task-1",
-      "name": "Task name",
-      "description": "What this task accomplishes",
+      "name": "Short task name",
+      "description": "COMPLETE description with ALL context, file references, implementation details, and expected outcome. This is the ONLY information the executor will have.",
       "dependencies": [],
       "complexity": "low|medium|high",
       "agent": "preferred agent name"

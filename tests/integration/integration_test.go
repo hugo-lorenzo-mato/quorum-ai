@@ -61,14 +61,21 @@ func TestIntegration_ConfigLoader(t *testing.T) {
 	configContent := `log:
   level: info
 agents:
+  default: claude
   claude:
     enabled: true
+    path: claude
     model: claude-3-opus
   gemini:
     enabled: true
+    path: gemini
     model: gemini-pro
-consensus:
-  threshold: 0.75
+phases:
+  analyze:
+    moderator:
+      enabled: true
+      agent: claude
+      threshold: 0.75
 workflow:
   max_retries: 3
 `
@@ -84,8 +91,8 @@ workflow:
 		t.Fatalf("loading config: %v", err)
 	}
 
-	if cfg.Consensus.Threshold != 0.75 {
-		t.Errorf("threshold mismatch: got %f, want 0.75", cfg.Consensus.Threshold)
+	if cfg.Phases.Analyze.Moderator.Threshold != 0.75 {
+		t.Errorf("threshold mismatch: got %f, want 0.75", cfg.Phases.Analyze.Moderator.Threshold)
 	}
 
 	if cfg.Agents.Claude.Model != "claude-3-opus" {

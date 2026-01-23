@@ -350,6 +350,12 @@ func (r *MockRegistry) Available(ctx context.Context) []string {
 	return available
 }
 
+// AvailableForPhase returns agents that pass Ping and are enabled for the given phase.
+// In the mock, this just returns all available agents (can be extended for specific tests).
+func (r *MockRegistry) AvailableForPhase(ctx context.Context, _ string) []string {
+	return r.Available(ctx)
+}
+
 // Ensure interfaces are implemented
 var _ core.Agent = (*MockAgent)(nil)
 var _ core.StateManager = (*MockStateManager)(nil)

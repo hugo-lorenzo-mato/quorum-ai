@@ -2,19 +2,17 @@ package config
 
 // Config holds all application configuration.
 type Config struct {
-	Log                  LogConfig                  `mapstructure:"log"`
-	Trace                TraceConfig                `mapstructure:"trace"`
-	Workflow             WorkflowConfig             `mapstructure:"workflow"`
-	Agents               AgentsConfig               `mapstructure:"agents"`
-	PromptOptimizer      PromptOptimizerConfig      `mapstructure:"prompt_optimizer"`
-	AnalysisConsolidator AnalysisConsolidatorConfig `mapstructure:"analysis_consolidator"`
-	State                StateConfig                `mapstructure:"state"`
-	Git                  GitConfig                  `mapstructure:"git"`
-	GitHub               GitHubConfig               `mapstructure:"github"`
-	Consensus            ConsensusConfig            `mapstructure:"consensus"`
-	Costs                CostsConfig                `mapstructure:"costs"`
-	Chat                 ChatConfig                 `mapstructure:"chat"`
-	Report               ReportConfig               `mapstructure:"report"`
+	Log      LogConfig      `mapstructure:"log"`
+	Trace    TraceConfig    `mapstructure:"trace"`
+	Workflow WorkflowConfig `mapstructure:"workflow"`
+	Phases   PhasesConfig   `mapstructure:"phases"`
+	Agents   AgentsConfig   `mapstructure:"agents"`
+	State    StateConfig    `mapstructure:"state"`
+	Git      GitConfig      `mapstructure:"git"`
+	GitHub   GitHubConfig   `mapstructure:"github"`
+	Costs    CostsConfig    `mapstructure:"costs"`
+	Chat     ChatConfig     `mapstructure:"chat"`
+	Report   ReportConfig   `mapstructure:"report"`
 }
 
 // ChatConfig configures chat behavior in the TUI.
@@ -47,19 +45,98 @@ type TraceConfig struct {
 
 // WorkflowConfig configures workflow execution.
 type WorkflowConfig struct {
-	Timeout       string             `mapstructure:"timeout"`
-	PhaseTimeouts PhaseTimeoutConfig `mapstructure:"phase_timeouts"`
-	MaxRetries    int                `mapstructure:"max_retries"`
-	DryRun        bool               `mapstructure:"dry_run"`
-	Sandbox       bool               `mapstructure:"sandbox"`
-	DenyTools     []string           `mapstructure:"deny_tools"`
+	Timeout    string   `mapstructure:"timeout"`
+	MaxRetries int      `mapstructure:"max_retries"`
+	DryRun     bool     `mapstructure:"dry_run"`
+	Sandbox    bool     `mapstructure:"sandbox"`
+	DenyTools  []string `mapstructure:"deny_tools"`
 }
 
-// PhaseTimeoutConfig controls per-phase CLI execution limits.
-type PhaseTimeoutConfig struct {
-	Analyze string `mapstructure:"analyze"`
-	Plan    string `mapstructure:"plan"`
-	Execute string `mapstructure:"execute"`
+// PhasesConfig configures each workflow phase.
+type PhasesConfig struct {
+	Analyze AnalyzePhaseConfig `mapstructure:"analyze"`
+	Plan    PlanPhaseConfig    `mapstructure:"plan"`
+	Execute ExecutePhaseConfig `mapstructure:"execute"`
+}
+
+// AnalyzePhaseConfig configures the analysis phase.
+// Flow: refiner → multi-agent analysis → moderator (consensus) → synthesizer
+type AnalyzePhaseConfig struct {
+	// Timeout for the entire analysis phase (e.g., "2h").
+	Timeout string `mapstructure:"timeout"`
+	// Refiner refines and clarifies the prompt before analysis.
+	Refiner RefinerConfig `mapstructure:"refiner"`
+	// Moderator evaluates consensus between agent analyses.
+	Moderator ModeratorConfig `mapstructure:"moderator"`
+	// Synthesizer combines all analyses into a unified report.
+	Synthesizer SynthesizerConfig `mapstructure:"synthesizer"`
+}
+
+// PlanPhaseConfig configures the planning phase.
+type PlanPhaseConfig struct {
+	// Timeout for the entire planning phase (e.g., "2h").
+	Timeout string `mapstructure:"timeout"`
+	// Synthesizer combines multiple agent plans into one (multi-agent planning).
+	Synthesizer PlanSynthesizerConfig `mapstructure:"synthesizer"`
+}
+
+// ExecutePhaseConfig configures the execution phase.
+type ExecutePhaseConfig struct {
+	// Timeout for the entire execution phase (e.g., "2h").
+	Timeout string `mapstructure:"timeout"`
+}
+
+// RefinerConfig configures prompt refinement before analysis.
+type RefinerConfig struct {
+	// Enabled enables/disables prompt refinement.
+	Enabled bool `mapstructure:"enabled"`
+	// Agent specifies which agent to use for refinement.
+	Agent string `mapstructure:"agent"`
+	// Model overrides the agent's default model for refinement.
+	// If empty, uses agents.<agent>.phase_models.refine or agents.<agent>.model.
+	Model string `mapstructure:"model"`
+}
+
+// ModeratorConfig configures consensus moderation between agents.
+type ModeratorConfig struct {
+	// Enabled activates consensus moderation via an LLM.
+	Enabled bool `mapstructure:"enabled"`
+	// Agent specifies which agent to use as moderator.
+	Agent string `mapstructure:"agent"`
+	// Model overrides the agent's default model for moderation.
+	// If empty, uses agents.<agent>.phase_models.analyze or agents.<agent>.model.
+	Model string `mapstructure:"model"`
+	// Threshold is the consensus score required to pass (0.0-1.0, default: 0.90).
+	Threshold float64 `mapstructure:"threshold"`
+	// MinRounds is the minimum refinement rounds before accepting consensus (default: 2).
+	MinRounds int `mapstructure:"min_rounds"`
+	// MaxRounds limits the number of refinement rounds (default: 5).
+	MaxRounds int `mapstructure:"max_rounds"`
+	// AbortThreshold triggers human review if score drops below this (default: 0.30).
+	AbortThreshold float64 `mapstructure:"abort_threshold"`
+	// StagnationThreshold triggers early exit if score improvement is below this (default: 0.02).
+	StagnationThreshold float64 `mapstructure:"stagnation_threshold"`
+}
+
+// SynthesizerConfig configures analysis synthesis.
+type SynthesizerConfig struct {
+	// Agent specifies which agent to use for synthesis.
+	Agent string `mapstructure:"agent"`
+	// Model overrides the agent's default model for synthesis.
+	// If empty, uses agents.<agent>.phase_models.analyze or agents.<agent>.model.
+	Model string `mapstructure:"model"`
+}
+
+// PlanSynthesizerConfig configures multi-agent plan synthesis.
+type PlanSynthesizerConfig struct {
+	// Enabled controls whether multi-agent planning is used.
+	// When false (default), uses single-agent planning.
+	Enabled bool `mapstructure:"enabled"`
+	// Agent specifies which agent to use for plan synthesis.
+	Agent string `mapstructure:"agent"`
+	// Model overrides the agent's default model for plan synthesis.
+	// If empty, uses agents.<agent>.phase_models.plan or agents.<agent>.model.
+	Model string `mapstructure:"model"`
 }
 
 // AgentsConfig configures available AI agents.
@@ -71,14 +148,94 @@ type AgentsConfig struct {
 	Copilot AgentConfig `mapstructure:"copilot"`
 }
 
+// GetAgentConfig returns the config for a named agent, or nil if not found.
+func (c AgentsConfig) GetAgentConfig(name string) *AgentConfig {
+	switch name {
+	case "claude":
+		return &c.Claude
+	case "gemini":
+		return &c.Gemini
+	case "codex":
+		return &c.Codex
+	case "copilot":
+		return &c.Copilot
+	default:
+		return nil
+	}
+}
+
+// ListEnabledForPhase returns agent names that are enabled for the given phase.
+func (c AgentsConfig) ListEnabledForPhase(phase string) []string {
+	var result []string
+	agents := map[string]AgentConfig{
+		"claude":  c.Claude,
+		"gemini":  c.Gemini,
+		"codex":   c.Codex,
+		"copilot": c.Copilot,
+	}
+	for name, cfg := range agents {
+		if cfg.IsEnabledForPhase(phase) {
+			result = append(result, name)
+		}
+	}
+	return result
+}
+
 // AgentConfig configures a single AI agent.
 type AgentConfig struct {
 	Enabled     bool              `mapstructure:"enabled"`
 	Path        string            `mapstructure:"path"`
 	Model       string            `mapstructure:"model"`
 	PhaseModels map[string]string `mapstructure:"phase_models"`
-	MaxTokens   int               `mapstructure:"max_tokens"`
-	Temperature float64           `mapstructure:"temperature"`
+	// Phases controls which workflow phases this agent participates in.
+	// If nil or empty, agent is available for all phases (backward compatible).
+	// Keys: "refine", "analyze", "plan", "execute"
+	Phases map[string]bool `mapstructure:"phases"`
+	// ReasoningEffort is the default reasoning effort for all phases (Codex-specific).
+	// Valid values: minimal, low, medium, high, xhigh.
+	ReasoningEffort string `mapstructure:"reasoning_effort"`
+	// ReasoningEffortPhases allows per-phase overrides of reasoning effort.
+	// Keys: "refine", "analyze", "moderate", "synthesize", "plan", "execute"
+	ReasoningEffortPhases map[string]string `mapstructure:"reasoning_effort_phases"`
+}
+
+// IsEnabledForPhase returns true if the agent is enabled for the given phase.
+func (c AgentConfig) IsEnabledForPhase(phase string) bool {
+	if !c.Enabled {
+		return false
+	}
+	if len(c.Phases) == 0 {
+		return true // No phase restrictions = enabled for all
+	}
+	enabled, exists := c.Phases[phase]
+	if !exists {
+		return true // Phase not specified = enabled (opt-out model)
+	}
+	return enabled
+}
+
+// GetModelForPhase returns the model to use for a given phase.
+// Priority: phase_models[phase] > model (default).
+func (c AgentConfig) GetModelForPhase(phase string) string {
+	if c.PhaseModels != nil {
+		if model, ok := c.PhaseModels[phase]; ok && model != "" {
+			return model
+		}
+	}
+	return c.Model
+}
+
+// GetReasoningEffortForPhase returns the reasoning effort for a given phase.
+// Priority: phase-specific > default > empty (adapter uses hardcoded defaults).
+func (c AgentConfig) GetReasoningEffortForPhase(phase string) string {
+	// Check phase-specific override first
+	if c.ReasoningEffortPhases != nil {
+		if effort, ok := c.ReasoningEffortPhases[phase]; ok && effort != "" {
+			return effort
+		}
+	}
+	// Fall back to default
+	return c.ReasoningEffort
 }
 
 // StateConfig configures state persistence.
@@ -93,50 +250,24 @@ type GitConfig struct {
 	WorktreeDir  string `mapstructure:"worktree_dir"`
 	AutoClean    bool   `mapstructure:"auto_clean"`
 	WorktreeMode string `mapstructure:"worktree_mode"`
+	// AutoCommit commits changes after each task completes.
+	AutoCommit bool `mapstructure:"auto_commit"`
+	// AutoPush pushes the task branch to remote after commit.
+	AutoPush bool `mapstructure:"auto_push"`
+	// AutoPR creates a pull request for each task branch.
+	AutoPR bool `mapstructure:"auto_pr"`
+	// AutoMerge merges the PR automatically after creation.
+	AutoMerge bool `mapstructure:"auto_merge"`
+	// PRBaseBranch is the target branch for PRs (default: current branch).
+	PRBaseBranch string `mapstructure:"pr_base_branch"`
+	// MergeStrategy for auto-merge: merge, squash, rebase (default: squash).
+	MergeStrategy string `mapstructure:"merge_strategy"`
 }
 
 // GitHubConfig configures GitHub integration.
 type GitHubConfig struct {
 	Token  string `mapstructure:"token"`
 	Remote string `mapstructure:"remote"`
-}
-
-// ConsensusConfig configures consensus calculation.
-type ConsensusConfig struct {
-	Threshold      float64         `mapstructure:"threshold"`
-	V2Threshold    float64         `mapstructure:"v2_threshold"`
-	HumanThreshold float64         `mapstructure:"human_threshold"`
-	Weights        ConsensusWeight `mapstructure:"weights"`
-	Arbiter        ArbiterConfig   `mapstructure:"arbiter"`
-}
-
-// ArbiterConfig configures the semantic arbiter LLM for consensus evaluation.
-type ArbiterConfig struct {
-	// Enabled activates semantic consensus evaluation via an arbiter LLM.
-	// When enabled, replaces Jaccard-based consensus with semantic evaluation.
-	Enabled bool `mapstructure:"enabled"`
-	// Agent specifies which agent to use as arbiter (claude, gemini, codex, copilot).
-	Agent string `mapstructure:"agent"`
-	// Model specifies the model to use (optional, uses agent's default if empty).
-	Model string `mapstructure:"model"`
-	// Threshold is the semantic consensus score required to pass (0.0-1.0, default: 0.90).
-	Threshold float64 `mapstructure:"threshold"`
-	// MinRounds is the minimum number of rounds before accepting consensus (default: 2).
-	// Even if threshold is met earlier, refinement continues until min_rounds is reached.
-	MinRounds int `mapstructure:"min_rounds"`
-	// MaxRounds limits the number of V(n) refinement rounds (default: 5).
-	MaxRounds int `mapstructure:"max_rounds"`
-	// AbortThreshold triggers human review if score drops below this (default: 0.30).
-	AbortThreshold float64 `mapstructure:"abort_threshold"`
-	// StagnationThreshold triggers early exit if score improvement is below this (default: 0.02).
-	StagnationThreshold float64 `mapstructure:"stagnation_threshold"`
-}
-
-// ConsensusWeight configures component weights for consensus.
-type ConsensusWeight struct {
-	Claims          float64 `mapstructure:"claims"`
-	Risks           float64 `mapstructure:"risks"`
-	Recommendations float64 `mapstructure:"recommendations"`
 }
 
 // CostsConfig configures cost limits and alerts.
@@ -146,32 +277,10 @@ type CostsConfig struct {
 	AlertThreshold float64 `mapstructure:"alert_threshold"`
 }
 
-// PromptOptimizerConfig configures the prompt optimization phase.
-type PromptOptimizerConfig struct {
-	// Enabled enables/disables the prompt optimization phase.
-	Enabled bool `mapstructure:"enabled"`
-	// Agent specifies which agent to use for optimization (claude, gemini, etc.).
-	Agent string `mapstructure:"agent"`
-	// Model specifies the model to use (optional, uses agent's default if empty).
-	Model string `mapstructure:"model"`
-}
-
-// AnalysisConsolidatorConfig configures the analysis consolidation phase.
-type AnalysisConsolidatorConfig struct {
-	// Agent specifies which agent to use for consolidation (claude, gemini, etc.).
-	Agent string `mapstructure:"agent"`
-	// Model specifies the model to use (optional, uses agent's phase_models.analyze if empty).
-	Model string `mapstructure:"model"`
-}
-
 // ReportConfig configures markdown report generation.
 type ReportConfig struct {
-	// Enabled enables/disables report generation (default: true).
-	Enabled bool `mapstructure:"enabled"`
-	// BaseDir specifies the output directory (default: ".quorum/output").
-	BaseDir string `mapstructure:"base_dir"`
-	// UseUTC uses UTC timestamps for report directories (default: true).
-	UseUTC bool `mapstructure:"use_utc"`
-	// IncludeRaw includes raw JSON output in reports (default: true).
-	IncludeRaw bool `mapstructure:"include_raw"`
+	Enabled    bool   `mapstructure:"enabled"`
+	BaseDir    string `mapstructure:"base_dir"`
+	UseUTC     bool   `mapstructure:"use_utc"`
+	IncludeRaw bool   `mapstructure:"include_raw"`
 }

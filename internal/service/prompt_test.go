@@ -25,9 +25,9 @@ func TestPromptRenderer_Load(t *testing.T) {
 		"analyze-v1",
 		"plan-generate",
 		"task-execute",
-		"arbiter-evaluate",
+		"moderator-evaluate",
 		"vn-refine",
-		"consolidate-analysis",
+		"synthesize-analysis",
 	}
 
 	for _, expected := range expectedTemplates {
@@ -65,7 +65,7 @@ func TestPromptRenderer_RenderAnalyzeV1(t *testing.T) {
 	if !strings.Contains(result, "No breaking changes") {
 		t.Error("result should contain constraints")
 	}
-	if !strings.Contains(result, "Investigar el código") {
+	if !strings.Contains(result, "Investigate the code") {
 		t.Error("result should contain analysis instructions")
 	}
 }
@@ -204,23 +204,24 @@ func TestPromptRenderer_HasTemplate(t *testing.T) {
 	}
 }
 
-func TestPromptRenderer_RenderArbiterEvaluate(t *testing.T) {
+func TestPromptRenderer_RenderModeratorEvaluate(t *testing.T) {
 	renderer, err := NewPromptRenderer()
 	if err != nil {
 		t.Fatalf("NewPromptRenderer() error = %v", err)
 	}
 
-	params := ArbiterEvaluateParams{
-		Prompt: "Add a new feature",
-		Round:  2,
-		Analyses: []ArbiterAnalysisSummary{
+	params := ModeratorEvaluateParams{
+		Prompt:    "Add a new feature",
+		Round:     2,
+		NextRound: 3,
+		Analyses: []ModeratorAnalysisSummary{
 			{AgentName: "claude", Output: "Analysis from Claude"},
 			{AgentName: "gemini", Output: "Analysis from Gemini"},
 		},
 		BelowThreshold: true,
 	}
 
-	result, err := renderer.RenderArbiterEvaluate(params)
+	result, err := renderer.RenderModeratorEvaluate(params)
 	if err != nil {
 		t.Fatalf("RenderArbiterEvaluate() error = %v", err)
 	}
@@ -243,14 +244,15 @@ func TestPromptRenderer_RenderVnRefine(t *testing.T) {
 	}
 
 	params := VnRefineParams{
-		Prompt:           "Add a new feature",
-		Context:          "Project context",
-		Round:            3,
-		PreviousRound:    2,
-		PreviousAnalysis: "Previous analysis content",
-		ConsensusScore:   75.0,
-		Threshold:        90.0,
-		Agreements:       []string{"Agreement 1", "Agreement 2"},
+		Prompt:               "Add a new feature",
+		Context:              "Project context",
+		Round:                3,
+		PreviousRound:        2,
+		PreviousAnalysis:     "Previous analysis content",
+		HasArbiterEvaluation: true, // V3 has arbiter evaluation
+		ConsensusScore:       75.0,
+		Threshold:            90.0,
+		Agreements:           []string{"Agreement 1", "Agreement 2"},
 		Divergences: []VnDivergenceInfo{
 			{
 				Category:       "claims",
@@ -278,6 +280,48 @@ func TestPromptRenderer_RenderVnRefine(t *testing.T) {
 	}
 	if !strings.Contains(result, "Previous analysis content") {
 		t.Error("result should contain previous analysis")
+	}
+}
+
+func TestPromptRenderer_RenderVnRefine_V2_NoArbiter(t *testing.T) {
+	renderer, err := NewPromptRenderer()
+	if err != nil {
+		t.Fatalf("NewPromptRenderer() error = %v", err)
+	}
+
+	// V2 is the first refinement - no arbiter evaluation yet
+	params := VnRefineParams{
+		Prompt:               "Add a new feature",
+		Context:              "Project context",
+		Round:                2,
+		PreviousRound:        1,
+		PreviousAnalysis:     "Previous V1 analysis content",
+		HasArbiterEvaluation: false, // V2 has no arbiter evaluation yet
+		ConsensusScore:       0,
+		Threshold:            90.0,
+		Agreements:           nil,
+		Divergences:          nil,
+		MissingPerspectives:  nil,
+	}
+
+	result, err := renderer.RenderVnRefine(params)
+	if err != nil {
+		t.Fatalf("RenderVnRefine() error = %v", err)
+	}
+
+	if !strings.Contains(result, "Round 2") {
+		t.Error("result should contain round number")
+	}
+	if !strings.Contains(result, "Previous V1 analysis content") {
+		t.Error("result should contain previous analysis")
+	}
+	// V2 should show ultracritical review section, not arbiter evaluation
+	if !strings.Contains(result, "Ultra-Critical Review") {
+		t.Error("V2 result should contain ultracritical review section")
+	}
+	// V2 should NOT show arbiter evaluation
+	if strings.Contains(result, "Arbiter Evaluation") {
+		t.Error("V2 result should NOT contain arbiter evaluation section")
 	}
 }
 

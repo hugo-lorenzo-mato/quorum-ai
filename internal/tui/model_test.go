@@ -38,15 +38,15 @@ func TestRenderHeader_ShowsCurrentPhase(t *testing.T) {
 
 func TestRenderHeader_NoWorkflow(t *testing.T) {
 	model := Model{
-		currentPhase: core.PhaseOptimize,
+		currentPhase: core.PhaseRefine,
 		workflow:     nil,
 		width:        80,
 	}
 
 	header := model.renderHeader()
 
-	if !strings.Contains(header, "optimize") {
-		t.Errorf("header should show optimize phase, got: %s", header)
+	if !strings.Contains(header, "refine") {
+		t.Errorf("header should show refine phase, got: %s", header)
 	}
 }
 

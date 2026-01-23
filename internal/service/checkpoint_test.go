@@ -345,6 +345,53 @@ func TestCheckpointManager_GetResumePoint(t *testing.T) {
 			t.Error("AfterError should be true for error checkpoint")
 		}
 	})
+
+	t.Run("phase complete advances to next phase", func(t *testing.T) {
+		state := newTestWorkflowState()
+		state.CurrentPhase = core.PhaseAnalyze
+		// Create a phase_complete checkpoint for analyze
+		manager.PhaseCheckpoint(ctx, state, core.PhaseAnalyze, true)
+
+		resumePoint, err := manager.GetResumePoint(state)
+		if err != nil {
+			t.Fatalf("GetResumePoint() error = %v", err)
+		}
+		// Should advance to PhasePlan (next phase after Analyze)
+		if resumePoint.Phase != core.PhasePlan {
+			t.Errorf("Phase = %s, want %s (should advance after phase_complete)", resumePoint.Phase, core.PhasePlan)
+		}
+		if resumePoint.RestartPhase {
+			t.Error("RestartPhase should be false for phase_complete")
+		}
+	})
+
+	t.Run("phase complete refine advances to analyze", func(t *testing.T) {
+		state := newTestWorkflowState()
+		state.CurrentPhase = core.PhaseRefine
+		manager.PhaseCheckpoint(ctx, state, core.PhaseRefine, true)
+
+		resumePoint, err := manager.GetResumePoint(state)
+		if err != nil {
+			t.Fatalf("GetResumePoint() error = %v", err)
+		}
+		if resumePoint.Phase != core.PhaseAnalyze {
+			t.Errorf("Phase = %s, want %s", resumePoint.Phase, core.PhaseAnalyze)
+		}
+	})
+
+	t.Run("phase complete plan advances to execute", func(t *testing.T) {
+		state := newTestWorkflowState()
+		state.CurrentPhase = core.PhasePlan
+		manager.PhaseCheckpoint(ctx, state, core.PhasePlan, true)
+
+		resumePoint, err := manager.GetResumePoint(state)
+		if err != nil {
+			t.Fatalf("GetResumePoint() error = %v", err)
+		}
+		if resumePoint.Phase != core.PhaseExecute {
+			t.Errorf("Phase = %s, want %s", resumePoint.Phase, core.PhaseExecute)
+		}
+	})
 }
 
 func TestCheckpointManager_Cleanup(t *testing.T) {

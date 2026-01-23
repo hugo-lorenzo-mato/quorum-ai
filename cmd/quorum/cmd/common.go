@@ -35,7 +35,7 @@ type PhaseRunnerDeps struct {
 	StateManager      *state.JSONStateManager
 	StateAdapter      workflow.StateManager
 	Registry          *cli.Registry
-	ArbiterConfig     workflow.ArbiterConfig
+	ModeratorConfig   workflow.ModeratorConfig
 	CheckpointAdapter *workflow.CheckpointAdapter
 	RetryAdapter      *workflow.RetryAdapter
 	RateLimiterAdapt  *workflow.RateLimiterRegistryAdapter
@@ -93,16 +93,15 @@ func InitPhaseRunner(ctx context.Context, phase core.Phase, maxRetries int, dryR
 		return nil, fmt.Errorf("configuring agents: %w", err)
 	}
 
-	// Create arbiter config from unified config
-	arbiterConfig := workflow.ArbiterConfig{
-		Enabled:             cfg.Consensus.Arbiter.Enabled,
-		Agent:               cfg.Consensus.Arbiter.Agent,
-		Model:               cfg.Consensus.Arbiter.Model,
-		Threshold:           cfg.Consensus.Arbiter.Threshold,
-		MinRounds:           cfg.Consensus.Arbiter.MinRounds,
-		MaxRounds:           cfg.Consensus.Arbiter.MaxRounds,
-		AbortThreshold:      cfg.Consensus.Arbiter.AbortThreshold,
-		StagnationThreshold: cfg.Consensus.Arbiter.StagnationThreshold,
+	// Create moderator config from unified config
+	moderatorConfig := workflow.ModeratorConfig{
+		Enabled:             cfg.Phases.Analyze.Moderator.Enabled,
+		Agent:               cfg.Phases.Analyze.Moderator.Agent,
+		Threshold:           cfg.Phases.Analyze.Moderator.Threshold,
+		MinRounds:           cfg.Phases.Analyze.Moderator.MinRounds,
+		MaxRounds:           cfg.Phases.Analyze.Moderator.MaxRounds,
+		AbortThreshold:      cfg.Phases.Analyze.Moderator.AbortThreshold,
+		StagnationThreshold: cfg.Phases.Analyze.Moderator.StagnationThreshold,
 	}
 
 	// Create prompt renderer
@@ -117,24 +116,24 @@ func InitPhaseRunner(ctx context.Context, phase core.Phase, maxRetries int, dryR
 		return nil, fmt.Errorf("parsing workflow timeout %q: %w", cfg.Workflow.Timeout, err)
 	}
 
-	phaseTimeoutStr := phaseTimeoutValue(cfg.Workflow.PhaseTimeouts, phase)
+	phaseTimeoutStr := phaseTimeoutValue(&cfg.Phases, phase)
 	phaseTimeout, err := parseDurationDefault(phaseTimeoutStr, defaultPhaseTimeout)
 	if err != nil {
 		return nil, fmt.Errorf("parsing %s phase timeout %q: %w", strings.ToLower(string(phase)), phaseTimeoutStr, err)
 	}
 
 	// Parse all phase timeouts for passing to workflow runner
-	analyzeTimeout, err := parseDurationDefault(cfg.Workflow.PhaseTimeouts.Analyze, defaultPhaseTimeout)
+	analyzeTimeout, err := parseDurationDefault(cfg.Phases.Analyze.Timeout, defaultPhaseTimeout)
 	if err != nil {
-		return nil, fmt.Errorf("parsing analyze phase timeout %q: %w", cfg.Workflow.PhaseTimeouts.Analyze, err)
+		return nil, fmt.Errorf("parsing analyze phase timeout %q: %w", cfg.Phases.Analyze.Timeout, err)
 	}
-	planTimeout, err := parseDurationDefault(cfg.Workflow.PhaseTimeouts.Plan, defaultPhaseTimeout)
+	planTimeout, err := parseDurationDefault(cfg.Phases.Plan.Timeout, defaultPhaseTimeout)
 	if err != nil {
-		return nil, fmt.Errorf("parsing plan phase timeout %q: %w", cfg.Workflow.PhaseTimeouts.Plan, err)
+		return nil, fmt.Errorf("parsing plan phase timeout %q: %w", cfg.Phases.Plan.Timeout, err)
 	}
-	executeTimeout, err := parseDurationDefault(cfg.Workflow.PhaseTimeouts.Execute, defaultPhaseTimeout)
+	executeTimeout, err := parseDurationDefault(cfg.Phases.Execute.Timeout, defaultPhaseTimeout)
 	if err != nil {
-		return nil, fmt.Errorf("parsing execute phase timeout %q: %w", cfg.Workflow.PhaseTimeouts.Execute, err)
+		return nil, fmt.Errorf("parsing execute phase timeout %q: %w", cfg.Phases.Execute.Timeout, err)
 	}
 
 	defaultAgent := cfg.Agents.Default
@@ -164,12 +163,11 @@ func InitPhaseRunner(ctx context.Context, phase core.Phase, maxRetries int, dryR
 		WorktreeMode:       cfg.Git.WorktreeMode,
 		MaxCostPerWorkflow: cfg.Costs.MaxPerWorkflow,
 		MaxCostPerTask:     cfg.Costs.MaxPerTask,
-		// Optimizer disabled by default for independent phase runners
+		// Refiner disabled by default for independent phase runners
 		// (only enabled when running full workflow via `run` command)
-		Optimizer: workflow.OptimizerConfig{
+		Refiner: workflow.RefinerConfig{
 			Enabled: false,
-			Agent:   cfg.PromptOptimizer.Agent,
-			Model:   cfg.PromptOptimizer.Model,
+			Agent:   cfg.Phases.Analyze.Refiner.Agent,
 		},
 		PhaseTimeouts: workflow.PhaseTimeouts{
 			Analyze: analyzeTimeout,
@@ -217,7 +215,7 @@ func InitPhaseRunner(ctx context.Context, phase core.Phase, maxRetries int, dryR
 		StateManager:      stateManager,
 		StateAdapter:      stateAdapter,
 		Registry:          registry,
-		ArbiterConfig:     arbiterConfig,
+		ModeratorConfig:   moderatorConfig,
 		CheckpointAdapter: checkpointAdapter,
 		RetryAdapter:      retryAdapter,
 		RateLimiterAdapt:  rateLimiterAdapter,
@@ -252,7 +250,7 @@ func CreateWorkflowContext(deps *PhaseRunnerDeps, state *core.WorkflowState) *wo
 			MaxCostPerWorkflow: deps.RunnerConfig.MaxCostPerWorkflow,
 			MaxCostPerTask:     deps.RunnerConfig.MaxCostPerTask,
 			PhaseTimeouts:      deps.RunnerConfig.PhaseTimeouts,
-			Arbiter:            deps.ArbiterConfig,
+			Moderator:          deps.ModeratorConfig,
 		},
 	}
 }
@@ -263,7 +261,7 @@ func InitializeWorkflowState(prompt string) *core.WorkflowState {
 		Version:      core.CurrentStateVersion,
 		WorkflowID:   core.WorkflowID(generateCmdWorkflowID()),
 		Status:       core.WorkflowStatusRunning,
-		CurrentPhase: core.PhaseOptimize,
+		CurrentPhase: core.PhaseRefine,
 		Prompt:       prompt,
 		Tasks:        make(map[core.TaskID]*core.TaskState),
 		TaskOrder:    make([]core.TaskID, 0),
@@ -292,14 +290,14 @@ func parseDurationDefault(value string, fallback time.Duration) (time.Duration, 
 	return d, nil
 }
 
-func phaseTimeoutValue(cfg config.PhaseTimeoutConfig, phase core.Phase) string {
+func phaseTimeoutValue(cfg *config.PhasesConfig, phase core.Phase) string {
 	switch phase {
 	case core.PhaseAnalyze:
-		return cfg.Analyze
+		return cfg.Analyze.Timeout
 	case core.PhasePlan:
-		return cfg.Plan
+		return cfg.Plan.Timeout
 	case core.PhaseExecute:
-		return cfg.Execute
+		return cfg.Execute.Timeout
 	default:
 		return ""
 	}

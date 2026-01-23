@@ -6,9 +6,9 @@ import "fmt"
 type Phase string
 
 const (
-	// PhaseOptimize is the first phase where the user prompt is optimized.
+	// PhaseRefine is the first phase where the user prompt is refined.
 	// An LLM enhances the prompt for clarity and effectiveness.
-	PhaseOptimize Phase = "optimize"
+	PhaseRefine Phase = "refine"
 
 	// PhaseAnalyze is the second phase where agents analyze the problem.
 	// Multiple agents provide independent analyses (V1/V2).
@@ -25,13 +25,13 @@ const (
 
 // AllPhases returns all phases in execution order.
 func AllPhases() []Phase {
-	return []Phase{PhaseOptimize, PhaseAnalyze, PhasePlan, PhaseExecute}
+	return []Phase{PhaseRefine, PhaseAnalyze, PhasePlan, PhaseExecute}
 }
 
 // PhaseOrder returns the numeric order of a phase (0-indexed).
 func PhaseOrder(p Phase) int {
 	switch p {
-	case PhaseOptimize:
+	case PhaseRefine:
 		return 0
 	case PhaseAnalyze:
 		return 1
@@ -48,7 +48,7 @@ func PhaseOrder(p Phase) int {
 // Returns empty string if current phase is the last.
 func NextPhase(p Phase) Phase {
 	switch p {
-	case PhaseOptimize:
+	case PhaseRefine:
 		return PhaseAnalyze
 	case PhaseAnalyze:
 		return PhasePlan
@@ -64,7 +64,7 @@ func NextPhase(p Phase) Phase {
 func PrevPhase(p Phase) Phase {
 	switch p {
 	case PhaseAnalyze:
-		return PhaseOptimize
+		return PhaseRefine
 	case PhasePlan:
 		return PhaseAnalyze
 	case PhaseExecute:
@@ -77,7 +77,7 @@ func PrevPhase(p Phase) Phase {
 // ValidPhase checks if a phase string is valid.
 func ValidPhase(p Phase) bool {
 	switch p {
-	case PhaseOptimize, PhaseAnalyze, PhasePlan, PhaseExecute:
+	case PhaseRefine, PhaseAnalyze, PhasePlan, PhaseExecute:
 		return true
 	default:
 		return false
@@ -101,8 +101,8 @@ func (p Phase) String() string {
 // Description returns a human-readable description of the phase.
 func (p Phase) Description() string {
 	switch p {
-	case PhaseOptimize:
-		return "Optimize the user prompt for better LLM understanding"
+	case PhaseRefine:
+		return "Refine the user prompt for better LLM understanding"
 	case PhaseAnalyze:
 		return "Analyze the problem with multiple agents"
 	case PhasePlan:

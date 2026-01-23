@@ -12,6 +12,9 @@ import (
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 )
 
+// DocsConfigURL is the URL to the configuration documentation.
+const DocsConfigURL = "https://github.com/hugo-lorenzo-mato/quorum-ai/blob/main/docs/CONFIGURATION.md"
+
 // AnalysisOutput represents output from an analysis agent.
 type AnalysisOutput struct {
 	AgentName       string
@@ -26,28 +29,41 @@ type AnalysisOutput struct {
 	DurationMS      int64
 }
 
-// Analyzer runs the analysis phase with semantic arbiter consensus.
-// The arbiter evaluates semantic agreement between agent analyses and
+// Analyzer runs the analysis phase with semantic moderator consensus.
+// The moderator evaluates semantic agreement between agent analyses and
 // iteratively refines until consensus is reached or max rounds exceeded.
 type Analyzer struct {
-	arbiter *SemanticArbiter
+	moderator *SemanticModerator
 }
 
-// NewAnalyzer creates a new analyzer with semantic arbiter.
-// Returns an error if arbiter configuration is invalid.
-func NewAnalyzer(arbiterConfig ArbiterConfig) (*Analyzer, error) {
-	arbiter, err := NewSemanticArbiter(arbiterConfig)
+// NewAnalyzer creates a new analyzer with semantic moderator.
+// Returns an error if moderator configuration is invalid.
+func NewAnalyzer(moderatorConfig ModeratorConfig) (*Analyzer, error) {
+	moderator, err := NewSemanticModerator(moderatorConfig)
 	if err != nil {
-		return nil, fmt.Errorf("creating semantic arbiter: %w", err)
+		return nil, fmt.Errorf("creating semantic moderator: %w", err)
 	}
 	return &Analyzer{
-		arbiter: arbiter,
+		moderator: moderator,
 	}, nil
 }
 
-// Run executes the complete analysis phase using semantic arbiter consensus.
+// Run executes the complete analysis phase using semantic moderator consensus.
 func (a *Analyzer) Run(ctx context.Context, wctx *Context) error {
 	wctx.Logger.Info("starting analyze phase", "workflow_id", wctx.State.WorkflowID)
+
+	// Check if analyze phase is already completed by looking at checkpoints.
+	// This prevents re-running analysis when resuming a workflow that has
+	// already completed the analyze phase but was interrupted before saving
+	// the final state with current_phase=plan.
+	if isPhaseCompleted(wctx.State, core.PhaseAnalyze) {
+		wctx.Logger.Info("analyze phase already completed, skipping",
+			"workflow_id", wctx.State.WorkflowID)
+		if wctx.Output != nil {
+			wctx.Output.Log("info", "analyzer", "Analyze phase already completed, skipping")
+		}
+		return nil
+	}
 
 	wctx.State.CurrentPhase = core.PhaseAnalyze
 	if wctx.Output != nil {
@@ -58,36 +74,38 @@ func (a *Analyzer) Run(ctx context.Context, wctx *Context) error {
 		wctx.Logger.Warn("failed to create phase checkpoint", "error", err)
 	}
 
-	// Verify arbiter is configured
-	if a.arbiter == nil || !a.arbiter.IsEnabled() {
-		return fmt.Errorf("semantic arbiter is required but not configured")
+	// Verify moderator is configured
+	if a.moderator == nil || !a.moderator.IsEnabled() {
+		return fmt.Errorf("semantic moderator is required but not configured. "+
+			"Enable it in your config file under 'phases.analyze.moderator.enabled: true' with agent specified. "+
+			"See: %s#phases-settings", DocsConfigURL)
 	}
 
-	wctx.Logger.Info("using semantic arbiter for consensus evaluation",
-		"threshold", a.arbiter.Threshold(),
-		"min_rounds", a.arbiter.MinRounds(),
-		"max_rounds", a.arbiter.MaxRounds(),
+	wctx.Logger.Info("using semantic moderator for consensus evaluation",
+		"threshold", a.moderator.Threshold(),
+		"min_rounds", a.moderator.MinRounds(),
+		"max_rounds", a.moderator.MaxRounds(),
 	)
 	if wctx.Output != nil {
-		wctx.Output.Log("info", "analyzer", fmt.Sprintf("Semantic arbiter enabled (threshold: %.0f%%, min rounds: %d, max rounds: %d)",
-			a.arbiter.Threshold()*100, a.arbiter.MinRounds(), a.arbiter.MaxRounds()))
+		wctx.Output.Log("info", "analyzer", fmt.Sprintf("Semantic moderator enabled (threshold: %.0f%%, min rounds: %d, max rounds: %d)",
+			a.moderator.Threshold()*100, a.moderator.MinRounds(), a.moderator.MaxRounds()))
 	}
 
-	return a.runWithArbiter(ctx, wctx)
+	return a.runWithModerator(ctx, wctx)
 }
 
-// runWithArbiter executes the iterative V(n) analysis with semantic arbiter consensus.
+// runWithModerator executes the iterative V(n) analysis with semantic moderator consensus.
 // This replaces the legacy V1/V2/V3 flow with a more flexible iterative approach.
 //
 // CRITICAL FLOW RULE: V(n+1) works ONLY on V(n), NEVER on previous versions.
-//   - V1 → Initial independent analysis (NO arbiter evaluation)
+//   - V1 → Initial independent analysis (NO moderator evaluation)
 //   - V2 → Ultracritical review of ONLY V1
-//   - Arbiter evaluates AFTER V2
+//   - Moderator evaluates AFTER V2
 //   - V3 → Reviews ONLY V2 (if no consensus)
 //   - V(n+1) → Reviews ONLY V(n)
-func (a *Analyzer) runWithArbiter(ctx context.Context, wctx *Context) error {
+func (a *Analyzer) runWithModerator(ctx context.Context, wctx *Context) error {
 	// ========== PHASE 1: V1 Initial Analysis (Independent) ==========
-	wctx.Logger.Info("starting V1 analysis (initial, no arbiter)")
+	wctx.Logger.Info("starting V1 analysis (initial, no moderator)")
 	if wctx.Output != nil {
 		wctx.Output.Log("info", "analyzer", "V1: Running initial independent analysis")
 	}
@@ -116,20 +134,20 @@ func (a *Analyzer) runWithArbiter(ctx context.Context, wctx *Context) error {
 	// Track previous score for stagnation detection
 	var previousScore float64
 
-	// ========== PHASE 3: Arbiter Evaluation Loop (V2+) ==========
-	for round <= a.arbiter.MaxRounds() {
-		wctx.Logger.Info("arbiter evaluation starting",
+	// ========== PHASE 3: Moderator Evaluation Loop (V2+) ==========
+	for round <= a.moderator.MaxRounds() {
+		wctx.Logger.Info("moderator evaluation starting",
 			"round", round,
 			"agents", len(currentOutputs),
 		)
 		if wctx.Output != nil {
-			wctx.Output.Log("info", "analyzer", fmt.Sprintf("Round %d: Running arbiter evaluation", round))
+			wctx.Output.Log("info", "analyzer", fmt.Sprintf("Round %d: Running moderator evaluation", round))
 		}
 
-		// Run arbiter evaluation
-		evalResult, err := a.arbiter.Evaluate(ctx, wctx, round, currentOutputs)
+		// Run moderator evaluation
+		evalResult, err := a.moderator.Evaluate(ctx, wctx, round, currentOutputs)
 		if err != nil {
-			return fmt.Errorf("arbiter evaluation round %d: %w", round, err)
+			return fmt.Errorf("moderator evaluation round %d: %w", round, err)
 		}
 
 		// Update consensus score in metrics
@@ -137,10 +155,10 @@ func (a *Analyzer) runWithArbiter(ctx context.Context, wctx *Context) error {
 			m.ConsensusScore = evalResult.Score
 		})
 
-		wctx.Logger.Info("arbiter evaluation complete",
+		wctx.Logger.Info("moderator evaluation complete",
 			"round", round,
 			"score", evalResult.Score,
-			"threshold", a.arbiter.Threshold(),
+			"threshold", a.moderator.Threshold(),
 			"agreements", len(evalResult.Agreements),
 			"divergences", len(evalResult.Divergences),
 		)
@@ -148,20 +166,20 @@ func (a *Analyzer) runWithArbiter(ctx context.Context, wctx *Context) error {
 		if wctx.Output != nil {
 			statusIcon := "⚠"
 			level := "warn"
-			if evalResult.Score >= a.arbiter.Threshold() {
+			if evalResult.Score >= a.moderator.Threshold() {
 				statusIcon = "✓"
 				level = "success"
 			}
 			wctx.Output.Log(level, "analyzer", fmt.Sprintf("%s Round %d: Semantic consensus %.0f%% (threshold: %.0f%%)",
-				statusIcon, round, evalResult.Score*100, a.arbiter.Threshold()*100))
+				statusIcon, round, evalResult.Score*100, a.moderator.Threshold()*100))
 		}
 
 		// Check if consensus threshold is met AND minimum rounds completed
-		if evalResult.Score >= a.arbiter.Threshold() {
-			if round >= a.arbiter.MinRounds() {
+		if evalResult.Score >= a.moderator.Threshold() {
+			if round >= a.moderator.MinRounds() {
 				wctx.Logger.Info("consensus threshold met",
 					"score", evalResult.Score,
-					"threshold", a.arbiter.Threshold(),
+					"threshold", a.moderator.Threshold(),
 					"round", round,
 				)
 				if wctx.Output != nil {
@@ -172,40 +190,40 @@ func (a *Analyzer) runWithArbiter(ctx context.Context, wctx *Context) error {
 			// Threshold met but minimum rounds not reached - continue refinement
 			wctx.Logger.Info("consensus threshold met but minimum rounds not reached",
 				"score", evalResult.Score,
-				"threshold", a.arbiter.Threshold(),
+				"threshold", a.moderator.Threshold(),
 				"round", round,
-				"min_rounds", a.arbiter.MinRounds(),
+				"min_rounds", a.moderator.MinRounds(),
 			)
 			if wctx.Output != nil {
 				wctx.Output.Log("info", "analyzer", fmt.Sprintf("Threshold met (%.0f%%) but continuing to min rounds (%d/%d)",
-					evalResult.Score*100, round, a.arbiter.MinRounds()))
+					evalResult.Score*100, round, a.moderator.MinRounds()))
 			}
 		}
 
 		// Check abort threshold
-		if evalResult.Score < a.arbiter.AbortThreshold() {
+		if evalResult.Score < a.moderator.AbortThreshold() {
 			wctx.Logger.Error("consensus score below abort threshold",
 				"score", evalResult.Score,
-				"abort_threshold", a.arbiter.AbortThreshold(),
+				"abort_threshold", a.moderator.AbortThreshold(),
 			)
 			if wctx.Output != nil {
 				wctx.Output.Log("error", "analyzer", fmt.Sprintf("Human review required: consensus %.0f%% below abort threshold %.0f%%",
-					evalResult.Score*100, a.arbiter.AbortThreshold()*100))
+					evalResult.Score*100, a.moderator.AbortThreshold()*100))
 			}
-			return core.ErrHumanReviewRequired(evalResult.Score, a.arbiter.AbortThreshold())
+			return core.ErrHumanReviewRequired(evalResult.Score, a.moderator.AbortThreshold())
 		}
 
-		// Check for stagnation (score not improving) - only after first arbiter eval (round > 2)
+		// Check for stagnation (score not improving) - only after first moderator eval (round > 2)
 		if round > 2 {
 			improvement := evalResult.Score - previousScore
-			if improvement < a.arbiter.StagnationThreshold() {
+			if improvement < a.moderator.StagnationThreshold() {
 				wctx.Logger.Warn("consensus stagnating, exiting refinement loop",
 					"improvement", improvement,
-					"stagnation_threshold", a.arbiter.StagnationThreshold(),
+					"stagnation_threshold", a.moderator.StagnationThreshold(),
 				)
 				if wctx.Output != nil {
 					wctx.Output.Log("warn", "analyzer", fmt.Sprintf("Consensus stagnating (improvement %.1f%% < %.1f%%), proceeding with current score",
-						improvement*100, a.arbiter.StagnationThreshold()*100))
+						improvement*100, a.moderator.StagnationThreshold()*100))
 				}
 				break
 			}
@@ -213,15 +231,15 @@ func (a *Analyzer) runWithArbiter(ctx context.Context, wctx *Context) error {
 		previousScore = evalResult.Score
 
 		// Check if we've reached max rounds
-		if round >= a.arbiter.MaxRounds() {
+		if round >= a.moderator.MaxRounds() {
 			wctx.Logger.Warn("max rounds reached without consensus",
 				"round", round,
-				"max_rounds", a.arbiter.MaxRounds(),
+				"max_rounds", a.moderator.MaxRounds(),
 				"final_score", evalResult.Score,
 			)
 			if wctx.Output != nil {
 				wctx.Output.Log("warn", "analyzer", fmt.Sprintf("Max rounds (%d) reached. Final consensus: %.0f%%",
-					a.arbiter.MaxRounds(), evalResult.Score*100))
+					a.moderator.MaxRounds(), evalResult.Score*100))
 			}
 			break
 		}
@@ -270,10 +288,11 @@ func (a *Analyzer) runWithArbiter(ctx context.Context, wctx *Context) error {
 }
 
 // runVnRefinement runs a V(n) refinement round with all agents.
-func (a *Analyzer) runVnRefinement(ctx context.Context, wctx *Context, round int, previousOutputs []AnalysisOutput, evalResult *ArbiterEvaluationResult, agreements []string) ([]AnalysisOutput, error) {
-	agentNames := wctx.Agents.Available(ctx)
+func (a *Analyzer) runVnRefinement(ctx context.Context, wctx *Context, round int, previousOutputs []AnalysisOutput, evalResult *ModeratorEvaluationResult, agreements []string) ([]AnalysisOutput, error) {
+	// Use AvailableForPhase to only get agents enabled for analyze phase
+	agentNames := wctx.Agents.AvailableForPhase(ctx, "analyze")
 	if len(agentNames) == 0 {
-		return nil, core.ErrValidation(core.CodeNoAgents, "no agents available")
+		return nil, core.ErrValidation(core.CodeNoAgents, "no agents available for analyze phase")
 	}
 
 	// Build map of previous outputs by agent
@@ -348,7 +367,7 @@ func (a *Analyzer) runVnRefinement(ctx context.Context, wctx *Context, round int
 }
 
 // runVnRefinementWithAgent runs V(n) refinement with a specific agent.
-func (a *Analyzer) runVnRefinementWithAgent(ctx context.Context, wctx *Context, agentName string, round int, prevOutput AnalysisOutput, evalResult *ArbiterEvaluationResult, agreements []string) (AnalysisOutput, error) {
+func (a *Analyzer) runVnRefinementWithAgent(ctx context.Context, wctx *Context, agentName string, round int, prevOutput AnalysisOutput, evalResult *ModeratorEvaluationResult, agreements []string) (AnalysisOutput, error) {
 	agent, err := wctx.Agents.Get(agentName)
 	if err != nil {
 		return AnalysisOutput{}, fmt.Errorf("getting agent %s: %w", agentName, err)
@@ -359,15 +378,21 @@ func (a *Analyzer) runVnRefinementWithAgent(ctx context.Context, wctx *Context, 
 		return AnalysisOutput{}, fmt.Errorf("rate limit: %w", err)
 	}
 
-	// Build divergence info for this agent
+	// Build divergence info for this agent (evalResult may be nil for V2 first refinement)
 	divergences := make([]VnDivergenceInfo, 0)
-	for _, div := range evalResult.Divergences {
-		divergences = append(divergences, VnDivergenceInfo{
-			Category:       div.Description,
-			YourPosition:   "See your previous analysis",
-			OtherPositions: "See arbiter evaluation",
-			Guidance:       "Refine based on evidence",
-		})
+	var consensusScore float64
+	var missingPerspectives []string
+	if evalResult != nil {
+		for _, div := range evalResult.Divergences {
+			divergences = append(divergences, VnDivergenceInfo{
+				Category:       div.Description,
+				YourPosition:   "See your previous analysis",
+				OtherPositions: "See moderator evaluation",
+				Guidance:       "Refine based on evidence",
+			})
+		}
+		consensusScore = evalResult.Score * 100
+		missingPerspectives = evalResult.MissingPerspectives
 	}
 
 	model := ResolvePhaseModel(wctx.Config, agentName, core.PhaseAnalyze, "")
@@ -378,18 +403,32 @@ func (a *Analyzer) runVnRefinementWithAgent(ctx context.Context, wctx *Context, 
 		outputFilePath = wctx.Report.VnAnalysisPath(agentName, model, round)
 	}
 
+	// Build summary of previous analysis to avoid context overflow
+	// Single agent refinement can use more context than multi-agent moderator
+	const maxPrevAnalysisChars = 100000 // Generous limit
+	previousAnalysis := buildAnalysisSummary(prevOutput, maxPrevAnalysisChars)
+	if len(previousAnalysis) != len(prevOutput.RawOutput) {
+		wctx.Logger.Debug("using summary of previous analysis for Vn refinement",
+			"agent", agentName,
+			"round", round,
+			"original_len", len(prevOutput.RawOutput),
+			"summary_len", len(previousAnalysis),
+		)
+	}
+
 	prompt, err := wctx.Prompts.RenderVnRefine(VnRefineParams{
-		Prompt:              GetEffectivePrompt(wctx.State),
-		Context:             BuildContextString(wctx.State),
-		Round:               round,
-		PreviousRound:       round - 1,
-		PreviousAnalysis:    prevOutput.RawOutput,
-		ConsensusScore:      evalResult.Score * 100,
-		Threshold:           a.arbiter.Threshold() * 100,
-		Agreements:          agreements,
-		Divergences:         divergences,
-		MissingPerspectives: evalResult.MissingPerspectives,
-		OutputFilePath:      outputFilePath,
+		Prompt:               GetEffectivePrompt(wctx.State),
+		Context:              BuildContextString(wctx.State),
+		Round:                round,
+		PreviousRound:        round - 1,
+		PreviousAnalysis:     previousAnalysis,
+		HasArbiterEvaluation: evalResult != nil,
+		ConsensusScore:       consensusScore,
+		Threshold:            a.moderator.Threshold() * 100,
+		Agreements:           agreements,
+		Divergences:          divergences,
+		MissingPerspectives:  missingPerspectives,
+		OutputFilePath:       outputFilePath,
 	})
 	if err != nil {
 		return AnalysisOutput{}, fmt.Errorf("rendering V%d prompt: %w", round, err)
@@ -454,10 +493,10 @@ func (a *Analyzer) runVnRefinementWithAgent(ctx context.Context, wctx *Context, 
 // runV1Analysis runs initial analysis with multiple agents in parallel.
 // It tolerates partial failures - continues as long as at least 2 agents succeed.
 func (a *Analyzer) runV1Analysis(ctx context.Context, wctx *Context) ([]AnalysisOutput, error) {
-	// Use Available to get only agents that are actually reachable (pass Ping)
-	agentNames := wctx.Agents.Available(ctx)
+	// Use AvailableForPhase to only get agents enabled for analyze phase
+	agentNames := wctx.Agents.AvailableForPhase(ctx, "analyze")
 	if len(agentNames) == 0 {
-		return nil, core.ErrValidation(core.CodeNoAgents, "no agents available")
+		return nil, core.ErrValidation(core.CodeNoAgents, "no agents available for analyze phase")
 	}
 
 	wctx.Logger.Info("running V1 analysis",
@@ -627,35 +666,35 @@ func (a *Analyzer) runAnalysisWithAgent(ctx context.Context, wctx *Context, agen
 
 // consolidateAnalysis uses an LLM to synthesize all analysis outputs into a unified report.
 func (a *Analyzer) consolidateAnalysis(ctx context.Context, wctx *Context, outputs []AnalysisOutput) error {
-	// Get consolidator agent
-	consolidatorAgent := wctx.Config.ConsolidatorAgent
-	if consolidatorAgent == "" {
-		consolidatorAgent = wctx.Config.DefaultAgent
+	// Get synthesizer agent
+	synthesizerAgent := wctx.Config.SynthesizerAgent
+	if synthesizerAgent == "" {
+		// No fallback - synthesizer must be explicitly configured for multi-agent workflows
+		return fmt.Errorf("phases.analyze.synthesizer.agent is not configured. " +
+			"Multi-agent analysis requires a synthesizer to combine results. " +
+			"Please set 'phases.analyze.synthesizer.agent' in your .quorum/config.yaml file")
 	}
 
-	agent, err := wctx.Agents.Get(consolidatorAgent)
+	agent, err := wctx.Agents.Get(synthesizerAgent)
 	if err != nil {
-		wctx.Logger.Warn("consolidator agent not available, using concatenation fallback",
-			"agent", consolidatorAgent,
+		wctx.Logger.Warn("synthesizer agent not available, using concatenation fallback",
+			"agent", synthesizerAgent,
 			"error", err,
 		)
-		return a.consolidateAnalysisFallback(wctx, outputs)
+		return a.synthesizeAnalysisFallback(wctx, outputs)
 	}
 
 	// Acquire rate limit
-	limiter := wctx.RateLimits.Get(consolidatorAgent)
+	limiter := wctx.RateLimits.Get(synthesizerAgent)
 	if err := limiter.Acquire(); err != nil {
-		wctx.Logger.Warn("rate limit exceeded for consolidator, using fallback",
-			"agent", consolidatorAgent,
+		wctx.Logger.Warn("rate limit exceeded for synthesizer, using fallback",
+			"agent", synthesizerAgent,
 		)
-		return a.consolidateAnalysisFallback(wctx, outputs)
+		return a.synthesizeAnalysisFallback(wctx, outputs)
 	}
 
-	// Resolve model
-	model := wctx.Config.ConsolidatorModel
-	if model == "" {
-		model = ResolvePhaseModel(wctx.Config, consolidatorAgent, core.PhaseAnalyze, "")
-	}
+	// Resolve model from agent's phase_models.analyze or default model
+	model := ResolvePhaseModel(wctx.Config, synthesizerAgent, core.PhaseAnalyze, "")
 
 	// Get output file path for LLM to write directly
 	var outputFilePath string
@@ -663,21 +702,38 @@ func (a *Analyzer) consolidateAnalysis(ctx context.Context, wctx *Context, outpu
 		outputFilePath = wctx.Report.ConsolidatedAnalysisPath()
 	}
 
-	// Render consolidation prompt
-	prompt, err := wctx.Prompts.RenderConsolidateAnalysis(ConsolidateAnalysisParams{
+	// Build summaries of analyses to avoid context overflow in synthesis
+	// With 4 agents, ~80k chars each is generous while leaving room for prompt and output
+	const maxCharsPerAnalysisSynthesize = 80000
+	summarizedOutputs := make([]AnalysisOutput, len(outputs))
+	for i, out := range outputs {
+		summarizedOutputs[i] = out
+		summary := buildAnalysisSummary(out, maxCharsPerAnalysisSynthesize)
+		if len(summary) != len(out.RawOutput) {
+			summarizedOutputs[i].RawOutput = summary
+			wctx.Logger.Debug("using summary for synthesis",
+				"agent", out.AgentName,
+				"original_len", len(out.RawOutput),
+				"summary_len", len(summary),
+			)
+		}
+	}
+
+	// Render synthesis prompt
+	prompt, err := wctx.Prompts.RenderSynthesizeAnalysis(SynthesizeAnalysisParams{
 		Prompt:         GetEffectivePrompt(wctx.State),
-		Analyses:       outputs,
+		Analyses:       summarizedOutputs,
 		OutputFilePath: outputFilePath,
 	})
 	if err != nil {
-		wctx.Logger.Warn("failed to render consolidation prompt, using fallback",
+		wctx.Logger.Warn("failed to render synthesis prompt, using fallback",
 			"error", err,
 		)
-		return a.consolidateAnalysisFallback(wctx, outputs)
+		return a.synthesizeAnalysisFallback(wctx, outputs)
 	}
 
-	wctx.Logger.Info("consolidate start",
-		"agent", consolidatorAgent,
+	wctx.Logger.Info("synthesis start",
+		"agent", synthesizerAgent,
 		"model", model,
 		"analyses_count", len(outputs),
 	)
@@ -687,8 +743,8 @@ func (a *Analyzer) consolidateAnalysis(ctx context.Context, wctx *Context, outpu
 
 	// Emit started event
 	if wctx.Output != nil {
-		wctx.Output.AgentEvent("started", consolidatorAgent, "Consolidating analyses", map[string]interface{}{
-			"phase":           "consolidate",
+		wctx.Output.AgentEvent("started", synthesizerAgent, "Synthesizing analyses", map[string]interface{}{
+			"phase":           "synthesize",
 			"model":           model,
 			"analyses_count":  len(outputs),
 			"timeout_seconds": int(wctx.Config.PhaseTimeouts.Analyze.Seconds()),
@@ -712,8 +768,8 @@ func (a *Analyzer) consolidateAnalysis(ctx context.Context, wctx *Context, outpu
 
 	if err != nil {
 		if wctx.Output != nil {
-			wctx.Output.AgentEvent("error", consolidatorAgent, err.Error(), map[string]interface{}{
-				"phase":          "consolidate",
+			wctx.Output.AgentEvent("error", synthesizerAgent, err.Error(), map[string]interface{}{
+				"phase":          "synthesize",
 				"model":          model,
 				"analyses_count": len(outputs),
 				"duration_ms":    time.Since(startTime).Milliseconds(),
@@ -721,18 +777,18 @@ func (a *Analyzer) consolidateAnalysis(ctx context.Context, wctx *Context, outpu
 				"fallback":       true,
 			})
 		}
-		wctx.Logger.Warn("consolidation LLM call failed, using fallback",
+		wctx.Logger.Warn("synthesis LLM call failed, using fallback",
 			"error", err,
 		)
-		return a.consolidateAnalysisFallback(wctx, outputs)
+		return a.synthesizeAnalysisFallback(wctx, outputs)
 	}
 
 	durationMS := time.Since(startTime).Milliseconds()
 
 	// Emit completed event
 	if wctx.Output != nil {
-		wctx.Output.AgentEvent("completed", consolidatorAgent, "Consolidation completed", map[string]interface{}{
-			"phase":          "consolidate",
+		wctx.Output.AgentEvent("completed", synthesizerAgent, "Synthesis completed", map[string]interface{}{
+			"phase":          "synthesize",
 			"model":          result.Model,
 			"analyses_count": len(outputs),
 			"tokens_in":      result.TokensIn,
@@ -742,17 +798,17 @@ func (a *Analyzer) consolidateAnalysis(ctx context.Context, wctx *Context, outpu
 		})
 	}
 
-	wctx.Logger.Info("consolidate done",
-		"agent", consolidatorAgent,
+	wctx.Logger.Info("synthesis done",
+		"agent", synthesizerAgent,
 		"model", model,
 	)
 
-	// Store the LLM-synthesized consolidation as checkpoint
+	// Store the LLM-synthesized analysis as checkpoint
 	return wctx.Checkpoint.CreateCheckpoint(wctx.State, "consolidated_analysis", map[string]interface{}{
 		"content":     result.Output,
 		"agent_count": len(outputs),
 		"synthesized": true,
-		"agent":       consolidatorAgent,
+		"agent":       synthesizerAgent,
 		"model":       model,
 		"tokens_in":   result.TokensIn,
 		"tokens_out":  result.TokensOut,
@@ -760,8 +816,8 @@ func (a *Analyzer) consolidateAnalysis(ctx context.Context, wctx *Context, outpu
 	})
 }
 
-// consolidateAnalysisFallback concatenates analyses when LLM consolidation fails.
-func (a *Analyzer) consolidateAnalysisFallback(wctx *Context, outputs []AnalysisOutput) error {
+// synthesizeAnalysisFallback concatenates analyses when LLM synthesis fails.
+func (a *Analyzer) synthesizeAnalysisFallback(wctx *Context, outputs []AnalysisOutput) error {
 	var consolidated strings.Builder
 
 	for _, output := range outputs {
@@ -940,4 +996,20 @@ func GetConsolidatedAnalysis(state *core.WorkflowState) string {
 		}
 	}
 	return ""
+}
+
+// isPhaseCompleted checks if a phase has already been completed by looking
+// at the checkpoints. This is used to prevent re-running phases when resuming
+// a workflow that was interrupted after phase completion but before saving
+// the final state.
+func isPhaseCompleted(state *core.WorkflowState, phase core.Phase) bool {
+	// Look for a phase_complete checkpoint for the given phase.
+	// We scan from the end to find the most recent checkpoint.
+	for i := len(state.Checkpoints) - 1; i >= 0; i-- {
+		cp := state.Checkpoints[i]
+		if cp.Type == "phase_complete" && cp.Phase == phase {
+			return true
+		}
+	}
+	return false
 }

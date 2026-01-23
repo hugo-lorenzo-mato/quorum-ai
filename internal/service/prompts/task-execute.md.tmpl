@@ -17,21 +17,35 @@
 {{range .Constraints}}- {{.}}
 {{end}}{{end}}
 
+## CRITICAL: Scope Adherence
+
+**IMPORTANT**: The task description above contains **ALL** the information and context you need to complete this task.
+
+- **DO NOT** make changes outside the scope defined in the task description
+- **DO NOT** add features or improvements not explicitly requested
+- **DO NOT** assume or invent requirements not mentioned
+- **DO** follow the task description exactly as written
+- **DO** implement only what is explicitly requested
+- **DO** ask for clarification if the task description is ambiguous (report as blocker)
+
+The task description was carefully crafted to be self-contained. Trust it as your single source of truth.
+
 ## Context Management
 
-Optimiza el uso de tu contexto:
+Optimize the use of your context:
 
-- **Localiza primero**: Usa grep para encontrar las líneas exactas antes de leer archivos completos
-- **Lecturas acotadas**: Si necesitas un archivo grande, lee solo el rango de líneas relevante
-- **Un cambio a la vez**: Completa y verifica cada modificación antes de pasar a la siguiente
-- **Delega si es necesario**: Para refactors grandes, considera dividir en sub-tareas
+- **Locate first**: Use grep to find the exact lines before reading complete files
+- **Scoped reads**: If you need a large file, read only the relevant line range
+- **One change at a time**: Complete and verify each modification before moving to the next
+- **Delegate if necessary**: For large refactors, consider splitting into sub-tasks
 
 ## Instructions
+
 Execute the task described above. Follow these guidelines:
-1. Make minimal, focused changes
+1. Make minimal, focused changes as specified in the task
 2. Ensure code compiles and tests pass
 3. Document any significant decisions
-4. Report any blockers or issues
+4. Report any blockers or issues (especially if task description is unclear)
 
 ## Response Format
 ```json

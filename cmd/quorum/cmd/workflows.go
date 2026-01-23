@@ -133,8 +133,8 @@ func formatStatus(s core.WorkflowStatus) string {
 
 func formatPhase(p core.Phase) string {
 	switch p {
-	case core.PhaseOptimize:
-		return "optimize"
+	case core.PhaseRefine:
+		return "refine"
 	case core.PhaseAnalyze:
 		return "analyze"
 	case core.PhasePlan:

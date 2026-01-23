@@ -21,8 +21,9 @@ func TestDefaultRunnerConfig(t *testing.T) {
 	if cfg.MaxRetries <= 0 {
 		t.Error("MaxRetries should be positive")
 	}
-	if cfg.DefaultAgent == "" {
-		t.Error("DefaultAgent should not be empty")
+	// DefaultAgent has NO default - must be configured in config file
+	if cfg.DefaultAgent != "" {
+		t.Errorf("DefaultAgent = %q, want empty (no default)", cfg.DefaultAgent)
 	}
 }
 
@@ -31,6 +32,13 @@ func TestDefaultRunnerConfig_SandboxEnabled(t *testing.T) {
 	if !config.Sandbox {
 		t.Error("Expected DefaultRunnerConfig().Sandbox to be true")
 	}
+}
+
+// testRunnerConfig returns a config suitable for testing with required fields set.
+func testRunnerConfig() *RunnerConfig {
+	cfg := DefaultRunnerConfig()
+	cfg.DefaultAgent = "claude" // Required for tests
+	return cfg
 }
 
 func TestRunner_validateRunInput(t *testing.T) {
@@ -45,14 +53,14 @@ func TestRunner_validateRunInput(t *testing.T) {
 		{
 			name:    "valid prompt",
 			prompt:  "Analyze this code",
-			config:  DefaultRunnerConfig(),
+			config:  testRunnerConfig(),
 			agents:  []string{"claude"},
 			wantErr: false,
 		},
 		{
 			name:    "empty prompt",
 			prompt:  "",
-			config:  DefaultRunnerConfig(),
+			config:  testRunnerConfig(),
 			agents:  []string{"claude"},
 			wantErr: true,
 			errCode: core.CodeEmptyPrompt,
@@ -60,7 +68,7 @@ func TestRunner_validateRunInput(t *testing.T) {
 		{
 			name:    "whitespace only prompt",
 			prompt:  "   \t\n  ",
-			config:  DefaultRunnerConfig(),
+			config:  testRunnerConfig(),
 			agents:  []string{"claude"},
 			wantErr: true,
 			errCode: core.CodeEmptyPrompt,
@@ -68,7 +76,7 @@ func TestRunner_validateRunInput(t *testing.T) {
 		{
 			name:    "prompt too long",
 			prompt:  strings.Repeat("a", core.MaxPromptLength+1),
-			config:  DefaultRunnerConfig(),
+			config:  testRunnerConfig(),
 			agents:  []string{"claude"},
 			wantErr: true,
 			errCode: core.CodePromptTooLong,
@@ -87,10 +95,18 @@ func TestRunner_validateRunInput(t *testing.T) {
 		{
 			name:    "no agents",
 			prompt:  "test",
-			config:  DefaultRunnerConfig(),
+			config:  testRunnerConfig(),
 			agents:  []string{},
 			wantErr: true,
 			errCode: core.CodeNoAgents,
+		},
+		{
+			name:    "missing default agent",
+			prompt:  "test",
+			config:  DefaultRunnerConfig(), // No DefaultAgent set
+			agents:  []string{"claude"},
+			wantErr: true,
+			errCode: core.CodeInvalidConfig,
 		},
 	}
 
@@ -143,8 +159,8 @@ func TestRunner_initializeState(t *testing.T) {
 	if state.Status != core.WorkflowStatusRunning {
 		t.Errorf("Status = %v, want %v", state.Status, core.WorkflowStatusRunning)
 	}
-	if state.CurrentPhase != core.PhaseOptimize {
-		t.Errorf("CurrentPhase = %v, want %v", state.CurrentPhase, core.PhaseOptimize)
+	if state.CurrentPhase != core.PhaseRefine {
+		t.Errorf("CurrentPhase = %v, want %v", state.CurrentPhase, core.PhaseRefine)
 	}
 	if state.WorkflowID == "" {
 		t.Error("WorkflowID should not be empty")

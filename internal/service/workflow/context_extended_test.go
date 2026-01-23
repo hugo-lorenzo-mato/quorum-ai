@@ -135,10 +135,9 @@ func TestConfig_AllFields(t *testing.T) {
 		WorktreeMode:       "parallel",
 		MaxCostPerWorkflow: 50.0,
 		MaxCostPerTask:     5.0,
-		Arbiter: ArbiterConfig{
+		Moderator: ModeratorConfig{
 			Enabled:   true,
 			Agent:     "claude",
-			Model:     "opus",
 			Threshold: 0.90,
 			MinRounds: 2,
 			MaxRounds: 3,
@@ -175,11 +174,11 @@ func TestConfig_AllFields(t *testing.T) {
 	if cfg.MaxCostPerTask != 5.0 {
 		t.Errorf("MaxCostPerTask = %v, want 5.0", cfg.MaxCostPerTask)
 	}
-	if !cfg.Arbiter.Enabled {
-		t.Error("Arbiter.Enabled should be true")
+	if !cfg.Moderator.Enabled {
+		t.Error("Moderator.Enabled should be true")
 	}
-	if cfg.Arbiter.Agent != "claude" {
-		t.Errorf("Arbiter.Agent = %q, want claude", cfg.Arbiter.Agent)
+	if cfg.Moderator.Agent != "claude" {
+		t.Errorf("Moderator.Agent = %q, want claude", cfg.Moderator.Agent)
 	}
 }
 

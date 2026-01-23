@@ -235,6 +235,7 @@ const (
 	CodeInvalidConfig  = "INVALID_CONFIG"
 	CodeNoAgents       = "NO_AGENTS"
 	CodeInvalidTimeout = "INVALID_TIMEOUT"
+	CodeMissingTasks   = "MISSING_TASKS"
 
 	// Execution error codes
 	CodeAgentFailed    = "AGENT_FAILED"

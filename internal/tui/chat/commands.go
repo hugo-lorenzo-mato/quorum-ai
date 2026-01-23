@@ -105,6 +105,13 @@ func NewCommandRegistry() *CommandRegistry {
 	})
 
 	r.Register(&Command{
+		Name:        "load",
+		Aliases:     []string{"switch", "select"},
+		Description: "Load and activate a workflow",
+		Usage:       "/load [workflow-id]",
+	})
+
+	r.Register(&Command{
 		Name:        "status",
 		Aliases:     []string{"s", "st"},
 		Description: "Show workflow status",
@@ -193,6 +200,13 @@ func NewCommandRegistry() *CommandRegistry {
 		Aliases:     []string{"e", "files", "tree"},
 		Description: "Toggle file explorer (or Ctrl+E)",
 		Usage:       "/explorer",
+	})
+
+	r.Register(&Command{
+		Name:        "theme",
+		Aliases:     []string{"t"},
+		Description: "Toggle between dark and light theme",
+		Usage:       "/theme [dark|light]",
 	})
 
 	return r

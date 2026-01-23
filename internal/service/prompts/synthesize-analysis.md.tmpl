@@ -1,0 +1,111 @@
+# Analysis Consolidation Request
+
+## CRITICAL OBJECTIVE
+
+Your goal is to create the **DEFINITIVE CONSOLIDATED ANALYSIS** - an **ULTRA-EXHAUSTIVE** document that is **COMPLETE IN ITSELF** and contains **ALL** information necessary for the subsequent planning and execution phases.
+
+## ABSOLUTE RULES (NON-NEGOTIABLE)
+
+### 1. COMPLETELY AUTONOMOUS DOCUMENT
+- **NEVER** mention "the previous analyses", "according to the agents", "as previously indicated"
+- **NEVER** make references to external documents or source analyses
+- **NEVER** assume the reader has access to other documents
+- Your consolidation must be readable as if it were the **ONLY DOCUMENT** that exists
+- Each statement must include **ALL** its context - don't omit details "because they already appear before"
+
+### 2. ULTRA-EXHAUSTIVE - ZERO INFORMATION LOSS
+- **INCLUDE EVERY** relevant technical detail found in any analysis
+- **DO NOT SUMMARIZE** losing information - expand and complete
+- If an agent mentioned a specific file:line, **INCLUDE IT**
+- If an agent identified an edge case, **DOCUMENT IT**
+- A longer, complete document is preferable to a short one that omits details
+- **ZERO INFORMATION LOSS**: Every useful data point from the original analyses must appear in your consolidation
+
+### 3. PURE ANALYSIS - NEVER PLAN OR EXECUTE
+- Your role is to **ANALYZE**, not to plan or execute
+- **DO NOT** propose concrete implementation steps
+- **DO NOT** write solution code
+- **DO NOT** create task lists or roadmaps
+- **DO** identify problems, opportunities, risks, patterns, architecture
+- **DO** provide all information that whoever plans/executes will need
+
+### 4. GROUNDED WITH CONCRETE EVIDENCE
+- Each statement must have a specific reference: `file:line`
+- Without verifiable evidence = do not include
+- Clearly distinguish between verified facts and observations/hypotheses
+
+## User Prompt
+{{.Prompt}}
+
+## Agent Analyses (SOURCES - DO NOT REFERENCE IN YOUR OUTPUT)
+
+The following analyses are your **ONLY SOURCE** of information. Extract EVERYTHING valuable, but **NEVER mention them** in your consolidation:
+
+{{range .Analyses}}
+### Analysis from {{.AgentName}}
+{{.RawOutput}}
+
+{{end}}
+
+## CONSOLIDATION PROCESS
+
+### Step 1: Exhaustive Extraction
+For EACH analysis, extract:
+- All specific files and lines mentioned
+- All technical findings (bugs, improvements, patterns)
+- All identified risks with their evidence
+- All observations about architecture/design
+- All edge cases and special considerations
+
+### Step 2: Lossless Synthesis
+- Combine similar findings **keeping all details**
+- If two agents found the same problem with different evidence, **include both evidences**
+- If there are complementary perspectives, **integrate both completely**
+- In case of contradiction, investigate and take a grounded position
+
+### Step 3: Clear Structure
+Organize your consolidation with sections that facilitate subsequent phases:
+- Current context and architecture (with specific references)
+- Detailed technical findings (each with its evidence)
+- Risks and considerations (with impact and code location)
+- Identified opportunities (with technical justification)
+
+## OUTPUT FORMAT
+
+Your consolidation must:
+
+1. **Start directly** with the analysis (no preambles about "this document consolidates...")
+2. **Use structured markdown** with clear sections
+3. **Include all references** to files and lines
+4. **Be exhaustive** - better to err on the side of complete than concise
+5. **Be autonomous** - anyone should understand everything without reading anything else
+
+## FINAL VALIDATION
+
+Before finishing, verify:
+- [ ] Have I included ALL files/lines mentioned in the analyses?
+- [ ] Have I captured ALL technical findings without losing details?
+- [ ] Can my document be read without knowing the source analyses?
+- [ ] Have I avoided phrases like "the analyses indicate" or "according to the agents"?
+- [ ] Have I provided EVERYTHING necessary for someone to plan/execute?
+- [ ] Have I NOT included implementation steps, code, or tasks?
+{{if .OutputFilePath}}
+
+---
+## Output Location
+
+Write your consolidated analysis to the following file:
+
+```
+{{.OutputFilePath}}
+```
+
+**IMPORTANT - File format:**
+- Write ONLY the consolidated analysis content in markdown
+- DO NOT add YAML frontmatter (`---` ... `---` blocks at the beginning)
+- DO NOT add metadata, file headers, or system information
+- DO NOT include markers like `# File:` or file comments
+- Content must start directly with your analysis
+
+Use your file writing tool to create this markdown document.
+{{end}}

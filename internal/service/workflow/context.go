@@ -65,6 +65,8 @@ type Context struct {
 	Retry        RetryExecutor
 	RateLimits   RateLimiterGetter
 	Worktrees    WorktreeManager
+	Git          core.GitClient    // Git operations for commit/push
+	GitHub       core.GitHubClient // GitHub operations for PR creation
 	Logger       *logging.Logger
 	Config       *Config
 	Output       OutputNotifier
@@ -115,24 +117,29 @@ type Config struct {
 	MaxCostPerWorkflow float64
 	// MaxCostPerTask is the maximum cost per task in USD (0 = unlimited).
 	MaxCostPerTask float64
-	// ConsolidatorAgent specifies which agent to use for analysis consolidation.
-	ConsolidatorAgent string
-	// ConsolidatorModel specifies the model to use for consolidation (optional).
-	ConsolidatorModel string
+	// SynthesizerAgent specifies which agent to use for analysis synthesis.
+	// The model is resolved from AgentPhaseModels[agent][analyze].
+	SynthesizerAgent string
+	// PlanSynthesizerEnabled controls whether multi-agent planning is used.
+	PlanSynthesizerEnabled bool
+	// PlanSynthesizerAgent specifies which agent to use for plan synthesis.
+	// The model is resolved from AgentPhaseModels[agent][plan].
+	PlanSynthesizerAgent string
 	// PhaseTimeouts holds per-phase timeout durations.
 	PhaseTimeouts PhaseTimeouts
-	// Arbiter configures semantic consensus evaluation via an arbiter LLM.
-	Arbiter ArbiterConfig
+	// Moderator configures semantic consensus evaluation via a moderator LLM.
+	Moderator ModeratorConfig
+	// Finalization configures post-task git operations.
+	Finalization FinalizationConfig
 }
 
-// ArbiterConfig configures the semantic arbiter LLM for consensus evaluation.
-type ArbiterConfig struct {
-	// Enabled activates semantic consensus evaluation via an arbiter LLM.
+// ModeratorConfig configures the semantic moderator LLM for consensus evaluation.
+type ModeratorConfig struct {
+	// Enabled activates semantic consensus evaluation via a moderator LLM.
 	Enabled bool
-	// Agent specifies which agent to use as arbiter (claude, gemini, codex, copilot).
+	// Agent specifies which agent to use as moderator (claude, gemini, codex, copilot).
+	// The model is resolved from AgentPhaseModels[agent][analyze].
 	Agent string
-	// Model specifies the model to use (optional, uses agent's default if empty).
-	Model string
 	// Threshold is the semantic consensus score required to pass (0.0-1.0, default: 0.90).
 	Threshold float64
 	// MinRounds is the minimum number of rounds before accepting consensus (default: 2).
@@ -152,26 +159,45 @@ type PhaseTimeouts struct {
 	Execute time.Duration
 }
 
+// FinalizationConfig configures post-task git operations.
+type FinalizationConfig struct {
+	// AutoCommit commits changes after each task completes.
+	AutoCommit bool
+	// AutoPush pushes the task branch to remote after commit.
+	AutoPush bool
+	// AutoPR creates a pull request for each task branch.
+	AutoPR bool
+	// AutoMerge merges the PR automatically after creation.
+	AutoMerge bool
+	// PRBaseBranch is the target branch for PRs (empty = use current branch).
+	PRBaseBranch string
+	// MergeStrategy for auto-merge: merge, squash, rebase (default: squash).
+	MergeStrategy string
+	// Remote is the git remote name (default: origin).
+	Remote string
+}
+
 // PromptRenderer renders prompts for different phases.
 type PromptRenderer interface {
-	RenderOptimizePrompt(params OptimizePromptParams) (string, error)
+	RenderRefinePrompt(params RefinePromptParams) (string, error)
 	RenderAnalyzeV1(params AnalyzeV1Params) (string, error)
-	RenderConsolidateAnalysis(params ConsolidateAnalysisParams) (string, error)
+	RenderSynthesizeAnalysis(params SynthesizeAnalysisParams) (string, error)
 	RenderPlanGenerate(params PlanParams) (string, error)
+	RenderSynthesizePlans(params SynthesizePlansParams) (string, error)
 	RenderTaskExecute(params TaskExecuteParams) (string, error)
-	RenderArbiterEvaluate(params ArbiterEvaluateParams) (string, error)
+	RenderModeratorEvaluate(params ModeratorEvaluateParams) (string, error)
 	RenderVnRefine(params VnRefineParams) (string, error)
 }
 
-// ConsolidateAnalysisParams holds parameters for analysis consolidation prompt.
-type ConsolidateAnalysisParams struct {
+// SynthesizeAnalysisParams holds parameters for analysis synthesis prompt.
+type SynthesizeAnalysisParams struct {
 	Prompt         string
 	Analyses       []AnalysisOutput
 	OutputFilePath string // Path where LLM should write output
 }
 
-// OptimizePromptParams holds parameters for prompt optimization.
-type OptimizePromptParams struct {
+// RefinePromptParams holds parameters for prompt refinement.
+type RefinePromptParams struct {
 	OriginalPrompt string
 }
 
@@ -195,18 +221,20 @@ type TaskExecuteParams struct {
 	Context string
 }
 
-// ArbiterAnalysisSummary represents an analysis for arbiter evaluation.
-type ArbiterAnalysisSummary struct {
+// ModeratorAnalysisSummary represents an analysis for moderator evaluation.
+type ModeratorAnalysisSummary struct {
 	AgentName string
 	Output    string
 }
 
-// ArbiterEvaluateParams holds parameters for arbiter semantic evaluation prompt.
-type ArbiterEvaluateParams struct {
+// ModeratorEvaluateParams holds parameters for moderator semantic evaluation prompt.
+type ModeratorEvaluateParams struct {
 	Prompt         string
 	Round          int
-	Analyses       []ArbiterAnalysisSummary
+	NextRound      int // Round + 1, for recommendations to agents
+	Analyses       []ModeratorAnalysisSummary
 	BelowThreshold bool
+	OutputFilePath string // Path where LLM should write moderator report
 }
 
 // VnDivergenceInfo contains divergence information for V(n) refinement.
@@ -219,18 +247,19 @@ type VnDivergenceInfo struct {
 
 // VnRefineParams holds parameters for V(n) refinement prompt.
 type VnRefineParams struct {
-	Prompt              string
-	Context             string
-	Round               int
-	PreviousRound       int
-	PreviousAnalysis    string
-	ConsensusScore      float64
-	Threshold           float64
-	Agreements          []string
-	Divergences         []VnDivergenceInfo
-	MissingPerspectives []string
-	Constraints         []string
-	OutputFilePath      string // Path where LLM should write output
+	Prompt               string
+	Context              string
+	Round                int
+	PreviousRound        int
+	PreviousAnalysis     string
+	HasArbiterEvaluation bool    // True if arbiter has evaluated (V3+), false for V2
+	ConsensusScore       float64 // Only meaningful if HasArbiterEvaluation is true
+	Threshold            float64
+	Agreements           []string
+	Divergences          []VnDivergenceInfo
+	MissingPerspectives  []string
+	Constraints          []string
+	OutputFilePath       string // Path where LLM should write output
 }
 
 // CheckpointCreator creates checkpoints during workflow execution.
@@ -261,6 +290,9 @@ type RateLimiter interface {
 type WorktreeManager interface {
 	// Create creates a new worktree for a task.
 	Create(ctx context.Context, task *core.Task, branch string) (*core.WorktreeInfo, error)
+	// CreateFromBranch creates a new worktree for a task from a specified base branch.
+	// This is useful for dependent tasks that need to start from another task's branch.
+	CreateFromBranch(ctx context.Context, task *core.Task, branch, baseBranch string) (*core.WorktreeInfo, error)
 	// Get retrieves worktree info for a task.
 	Get(ctx context.Context, task *core.Task) (*core.WorktreeInfo, error)
 	// Remove cleans up a task's worktree.
@@ -338,4 +370,12 @@ func ResolvePhaseModel(cfg *Config, agentName string, phase core.Phase, taskMode
 		}
 	}
 	return ""
+}
+
+// SynthesizePlansParams holds parameters for multi-agent plan synthesis prompt.
+type SynthesizePlansParams struct {
+	Prompt   string
+	Analysis string
+	Plans    []PlanOutput
+	MaxTasks int
 }

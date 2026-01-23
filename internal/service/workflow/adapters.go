@@ -108,9 +108,9 @@ func NewPromptRendererAdapter(renderer *service.PromptRenderer) *PromptRendererA
 	return &PromptRendererAdapter{renderer: renderer}
 }
 
-// RenderOptimizePrompt renders the prompt optimization template.
-func (a *PromptRendererAdapter) RenderOptimizePrompt(params OptimizePromptParams) (string, error) {
-	return a.renderer.RenderOptimizePrompt(service.OptimizePromptParams{
+// RenderRefinePrompt renders the prompt refinement template.
+func (a *PromptRendererAdapter) RenderRefinePrompt(params RefinePromptParams) (string, error) {
+	return a.renderer.RenderRefinePrompt(service.RefinePromptParams{
 		OriginalPrompt: params.OriginalPrompt,
 	})
 }
@@ -124,8 +124,8 @@ func (a *PromptRendererAdapter) RenderAnalyzeV1(params AnalyzeV1Params) (string,
 	})
 }
 
-// RenderConsolidateAnalysis renders the analysis consolidation prompt.
-func (a *PromptRendererAdapter) RenderConsolidateAnalysis(params ConsolidateAnalysisParams) (string, error) {
+// RenderSynthesizeAnalysis renders the analysis synthesis prompt.
+func (a *PromptRendererAdapter) RenderSynthesizeAnalysis(params SynthesizeAnalysisParams) (string, error) {
 	// Convert workflow.AnalysisOutput to service.AnalysisOutput
 	serviceAnalyses := make([]service.AnalysisOutput, len(params.Analyses))
 	for i, ao := range params.Analyses {
@@ -137,7 +137,7 @@ func (a *PromptRendererAdapter) RenderConsolidateAnalysis(params ConsolidateAnal
 			Recommendations: ao.Recommendations,
 		}
 	}
-	return a.renderer.RenderConsolidateAnalysis(service.ConsolidateAnalysisParams{
+	return a.renderer.RenderSynthesizeAnalysis(service.SynthesizeAnalysisParams{
 		Prompt:         params.Prompt,
 		Analyses:       serviceAnalyses,
 		OutputFilePath: params.OutputFilePath,
@@ -153,6 +153,26 @@ func (a *PromptRendererAdapter) RenderPlanGenerate(params PlanParams) (string, e
 	})
 }
 
+// RenderSynthesizePlans renders the multi-agent plan synthesis prompt.
+func (a *PromptRendererAdapter) RenderSynthesizePlans(params SynthesizePlansParams) (string, error) {
+	// Convert PlanOutput to service layer types
+	plans := make([]service.PlanProposal, len(params.Plans))
+	for i, p := range params.Plans {
+		plans[i] = service.PlanProposal{
+			AgentName: p.AgentName,
+			Model:     p.Model,
+			Content:   p.RawOutput,
+		}
+	}
+
+	return a.renderer.RenderSynthesizePlans(service.SynthesizePlansParams{
+		Prompt:   params.Prompt,
+		Analysis: params.Analysis,
+		Plans:    plans,
+		MaxTasks: params.MaxTasks,
+	})
+}
+
 // RenderTaskExecute renders the task execution prompt.
 func (a *PromptRendererAdapter) RenderTaskExecute(params TaskExecuteParams) (string, error) {
 	return a.renderer.RenderTaskExecute(service.TaskExecuteParams{
@@ -161,21 +181,23 @@ func (a *PromptRendererAdapter) RenderTaskExecute(params TaskExecuteParams) (str
 	})
 }
 
-// RenderArbiterEvaluate renders the semantic arbiter evaluation prompt.
-func (a *PromptRendererAdapter) RenderArbiterEvaluate(params ArbiterEvaluateParams) (string, error) {
-	// Convert workflow.ArbiterAnalysisSummary to service.ArbiterAnalysisSummary
-	serviceAnalyses := make([]service.ArbiterAnalysisSummary, len(params.Analyses))
+// RenderModeratorEvaluate renders the semantic moderator evaluation prompt.
+func (a *PromptRendererAdapter) RenderModeratorEvaluate(params ModeratorEvaluateParams) (string, error) {
+	// Convert workflow.ModeratorAnalysisSummary to service.ModeratorAnalysisSummary
+	serviceAnalyses := make([]service.ModeratorAnalysisSummary, len(params.Analyses))
 	for i, analysis := range params.Analyses {
-		serviceAnalyses[i] = service.ArbiterAnalysisSummary{
+		serviceAnalyses[i] = service.ModeratorAnalysisSummary{
 			AgentName: analysis.AgentName,
 			Output:    analysis.Output,
 		}
 	}
-	return a.renderer.RenderArbiterEvaluate(service.ArbiterEvaluateParams{
+	return a.renderer.RenderModeratorEvaluate(service.ModeratorEvaluateParams{
 		Prompt:         params.Prompt,
 		Round:          params.Round,
+		NextRound:      params.Round + 1,
 		Analyses:       serviceAnalyses,
 		BelowThreshold: params.BelowThreshold,
+		OutputFilePath: params.OutputFilePath,
 	})
 }
 
@@ -192,18 +214,19 @@ func (a *PromptRendererAdapter) RenderVnRefine(params VnRefineParams) (string, e
 		}
 	}
 	return a.renderer.RenderVnRefine(service.VnRefineParams{
-		Prompt:              params.Prompt,
-		Context:             params.Context,
-		Round:               params.Round,
-		PreviousRound:       params.PreviousRound,
-		PreviousAnalysis:    params.PreviousAnalysis,
-		ConsensusScore:      params.ConsensusScore,
-		Threshold:           params.Threshold,
-		Agreements:          params.Agreements,
-		Divergences:         serviceDivergences,
-		MissingPerspectives: params.MissingPerspectives,
-		Constraints:         params.Constraints,
-		OutputFilePath:      params.OutputFilePath,
+		Prompt:               params.Prompt,
+		Context:              params.Context,
+		Round:                params.Round,
+		PreviousRound:        params.PreviousRound,
+		PreviousAnalysis:     params.PreviousAnalysis,
+		HasArbiterEvaluation: params.HasArbiterEvaluation,
+		ConsensusScore:       params.ConsensusScore,
+		Threshold:            params.Threshold,
+		Agreements:           params.Agreements,
+		Divergences:          serviceDivergences,
+		MissingPerspectives:  params.MissingPerspectives,
+		Constraints:          params.Constraints,
+		OutputFilePath:       params.OutputFilePath,
 	})
 }
 

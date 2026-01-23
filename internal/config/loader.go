@@ -121,46 +121,62 @@ func (l *Loader) setDefaults() {
 	l.v.SetDefault("trace.max_bytes", 262144)
 	l.v.SetDefault("trace.total_max_bytes", 10485760)
 	l.v.SetDefault("trace.max_files", 500)
-	l.v.SetDefault("trace.include_phases", []string{"analyze", "consensus", "plan", "execute"})
+	l.v.SetDefault("trace.include_phases", []string{"analyze", "plan", "execute"})
 
 	// Workflow defaults
 	l.v.SetDefault("workflow.timeout", "12h")
-	l.v.SetDefault("workflow.phase_timeouts.analyze", "1h")
-	l.v.SetDefault("workflow.phase_timeouts.plan", "30m")
-	l.v.SetDefault("workflow.phase_timeouts.execute", "1h")
 	l.v.SetDefault("workflow.max_retries", 3)
 	l.v.SetDefault("workflow.dry_run", false)
 	l.v.SetDefault("workflow.sandbox", true) // Security: sandbox enabled by default
 
+	// Phase defaults
+	// Analyze phase
+	l.v.SetDefault("phases.analyze.timeout", "2h")
+	l.v.SetDefault("phases.analyze.refiner.enabled", false)
+	l.v.SetDefault("phases.analyze.refiner.agent", "")
+	l.v.SetDefault("phases.analyze.moderator.enabled", false)
+	l.v.SetDefault("phases.analyze.moderator.agent", "")
+	l.v.SetDefault("phases.analyze.moderator.threshold", 0.90)
+	l.v.SetDefault("phases.analyze.moderator.min_rounds", 2)
+	l.v.SetDefault("phases.analyze.moderator.max_rounds", 5)
+	l.v.SetDefault("phases.analyze.moderator.abort_threshold", 0.30)
+	l.v.SetDefault("phases.analyze.moderator.stagnation_threshold", 0.02)
+	l.v.SetDefault("phases.analyze.synthesizer.agent", "")
+
+	// Plan phase
+	l.v.SetDefault("phases.plan.timeout", "1h")
+	l.v.SetDefault("phases.plan.synthesizer.enabled", false)
+	l.v.SetDefault("phases.plan.synthesizer.agent", "")
+
+	// Execute phase
+	l.v.SetDefault("phases.execute.timeout", "2h")
+
 	// Agent defaults
-	l.v.SetDefault("agents.default", "claude")
+	// NOTE: agents.default has NO default - user must explicitly configure it
+	// NOTE: agent models have NO defaults - user must explicitly configure them
+	l.v.SetDefault("agents.default", "")
 	l.v.SetDefault("agents.claude.enabled", false)
 	l.v.SetDefault("agents.claude.path", "claude")
-	l.v.SetDefault("agents.claude.model", "claude-sonnet-4-20250514")
+	l.v.SetDefault("agents.claude.model", "")
 	l.v.SetDefault("agents.claude.max_tokens", 4096)
 	l.v.SetDefault("agents.claude.temperature", 0.7)
 	l.v.SetDefault("agents.gemini.enabled", false)
 	l.v.SetDefault("agents.gemini.path", "gemini")
-	l.v.SetDefault("agents.gemini.model", "gemini-2.5-flash")
+	l.v.SetDefault("agents.gemini.model", "")
 	l.v.SetDefault("agents.gemini.max_tokens", 4096)
 	l.v.SetDefault("agents.gemini.temperature", 0.7)
 	l.v.SetDefault("agents.codex.enabled", false)
 	l.v.SetDefault("agents.codex.path", "codex")
-	l.v.SetDefault("agents.codex.model", "gpt-5.1-codex")
+	l.v.SetDefault("agents.codex.model", "")
 	l.v.SetDefault("agents.codex.max_tokens", 4096)
 	l.v.SetDefault("agents.codex.temperature", 0.7)
 	l.v.SetDefault("agents.copilot.enabled", false)
 	l.v.SetDefault("agents.copilot.path", "copilot")
-	l.v.SetDefault("agents.copilot.model", "claude-sonnet-4-5")
+	l.v.SetDefault("agents.copilot.model", "")
 	l.v.SetDefault("agents.copilot.max_tokens", 16384)
 	l.v.SetDefault("agents.copilot.temperature", 0.7)
 
-	// Prompt optimizer defaults
-	l.v.SetDefault("prompt_optimizer.enabled", true)
-	l.v.SetDefault("prompt_optimizer.agent", "claude")
-	l.v.SetDefault("prompt_optimizer.model", "")
-
-	// State defaults (unified under .quorum/)
+	// State defaults
 	l.v.SetDefault("state.path", ".quorum/state/state.json")
 	l.v.SetDefault("state.backup_path", ".quorum/state/state.json.bak")
 	l.v.SetDefault("state.lock_ttl", "1h")
@@ -172,24 +188,6 @@ func (l *Loader) setDefaults() {
 
 	// GitHub defaults
 	l.v.SetDefault("github.remote", "origin")
-
-	// Consensus defaults (80/60/50 escalation policy)
-	l.v.SetDefault("consensus.threshold", 0.80)
-	l.v.SetDefault("consensus.v2_threshold", 0.60)
-	l.v.SetDefault("consensus.human_threshold", 0.50)
-	l.v.SetDefault("consensus.weights.claims", 0.40)
-	l.v.SetDefault("consensus.weights.risks", 0.30)
-	l.v.SetDefault("consensus.weights.recommendations", 0.30)
-
-	// Semantic arbiter defaults (for LLM-based consensus evaluation)
-	// NOTE: agent and model have NO defaults - user must explicitly configure them
-	// because we cannot assume any CLI is installed on the user's system
-	l.v.SetDefault("consensus.arbiter.enabled", false)
-	l.v.SetDefault("consensus.arbiter.threshold", 0.90)
-	l.v.SetDefault("consensus.arbiter.min_rounds", 2)
-	l.v.SetDefault("consensus.arbiter.max_rounds", 5)
-	l.v.SetDefault("consensus.arbiter.abort_threshold", 0.30)
-	l.v.SetDefault("consensus.arbiter.stagnation_threshold", 0.02)
 
 	// Costs defaults
 	l.v.SetDefault("costs.max_per_workflow", 10.0)
@@ -231,4 +229,88 @@ func (l *Loader) IsSet(key string) bool {
 // AllSettings returns all settings as a map.
 func (l *Loader) AllSettings() map[string]interface{} {
 	return l.v.AllSettings()
+}
+
+// Validate checks configuration consistency and returns an error if invalid.
+// This provides fail-fast validation for agent references and model configuration.
+func Validate(cfg *Config) error {
+	// Validate default agent
+	if cfg.Agents.Default == "" {
+		return fmt.Errorf("agents.default is required")
+	}
+	defaultAgent := cfg.Agents.GetAgentConfig(cfg.Agents.Default)
+	if defaultAgent == nil {
+		return fmt.Errorf("agents.default references unknown agent %q", cfg.Agents.Default)
+	}
+	if !defaultAgent.Enabled {
+		return fmt.Errorf("agents.default references disabled agent %q", cfg.Agents.Default)
+	}
+
+	// Validate phases.analyze.refiner if enabled
+	if cfg.Phases.Analyze.Refiner.Enabled {
+		if cfg.Phases.Analyze.Refiner.Agent == "" {
+			return fmt.Errorf("phases.analyze.refiner.agent is required when refiner is enabled")
+		}
+		agent := cfg.Agents.GetAgentConfig(cfg.Phases.Analyze.Refiner.Agent)
+		if agent == nil {
+			return fmt.Errorf("phases.analyze.refiner.agent references unknown agent %q", cfg.Phases.Analyze.Refiner.Agent)
+		}
+		if !agent.Enabled {
+			return fmt.Errorf("phases.analyze.refiner.agent references disabled agent %q", cfg.Phases.Analyze.Refiner.Agent)
+		}
+		if agent.GetModelForPhase("optimize") == "" {
+			return fmt.Errorf("phases.analyze.refiner.agent %q has no model configured for optimize phase", cfg.Phases.Analyze.Refiner.Agent)
+		}
+	}
+
+	// Validate phases.analyze.synthesizer
+	if cfg.Phases.Analyze.Synthesizer.Agent == "" {
+		return fmt.Errorf("phases.analyze.synthesizer.agent is required")
+	}
+	synthAgent := cfg.Agents.GetAgentConfig(cfg.Phases.Analyze.Synthesizer.Agent)
+	if synthAgent == nil {
+		return fmt.Errorf("phases.analyze.synthesizer.agent references unknown agent %q", cfg.Phases.Analyze.Synthesizer.Agent)
+	}
+	if !synthAgent.Enabled {
+		return fmt.Errorf("phases.analyze.synthesizer.agent references disabled agent %q", cfg.Phases.Analyze.Synthesizer.Agent)
+	}
+	if synthAgent.GetModelForPhase("analyze") == "" {
+		return fmt.Errorf("phases.analyze.synthesizer.agent %q has no model configured for analyze phase", cfg.Phases.Analyze.Synthesizer.Agent)
+	}
+
+	// Validate phases.analyze.moderator if enabled
+	if cfg.Phases.Analyze.Moderator.Enabled {
+		if cfg.Phases.Analyze.Moderator.Agent == "" {
+			return fmt.Errorf("phases.analyze.moderator.agent is required when moderator is enabled")
+		}
+		agent := cfg.Agents.GetAgentConfig(cfg.Phases.Analyze.Moderator.Agent)
+		if agent == nil {
+			return fmt.Errorf("phases.analyze.moderator.agent references unknown agent %q", cfg.Phases.Analyze.Moderator.Agent)
+		}
+		if !agent.Enabled {
+			return fmt.Errorf("phases.analyze.moderator.agent references disabled agent %q", cfg.Phases.Analyze.Moderator.Agent)
+		}
+		if agent.GetModelForPhase("analyze") == "" {
+			return fmt.Errorf("phases.analyze.moderator.agent %q has no model configured for analyze phase", cfg.Phases.Analyze.Moderator.Agent)
+		}
+	}
+
+	// Validate phases.plan.synthesizer if enabled
+	if cfg.Phases.Plan.Synthesizer.Enabled {
+		if cfg.Phases.Plan.Synthesizer.Agent == "" {
+			return fmt.Errorf("phases.plan.synthesizer.agent is required when synthesizer is enabled")
+		}
+		agent := cfg.Agents.GetAgentConfig(cfg.Phases.Plan.Synthesizer.Agent)
+		if agent == nil {
+			return fmt.Errorf("phases.plan.synthesizer.agent references unknown agent %q", cfg.Phases.Plan.Synthesizer.Agent)
+		}
+		if !agent.Enabled {
+			return fmt.Errorf("phases.plan.synthesizer.agent references disabled agent %q", cfg.Phases.Plan.Synthesizer.Agent)
+		}
+		if agent.GetModelForPhase("plan") == "" {
+			return fmt.Errorf("phases.plan.synthesizer.agent %q has no model configured for plan phase", cfg.Phases.Plan.Synthesizer.Agent)
+		}
+	}
+
+	return nil
 }

@@ -1,13 +1,53 @@
 # Analysis Refinement (Round {{.Round}})
 
-## REGLA CRÍTICA
+## PRIMARY OBJECTIVE
 
-⚠️ **SOLO debes revisar la versión V{{.PreviousRound}} proporcionada.**
+Your goal is to create the **BEST POSSIBLE ANALYSIS** by synthesizing:
+- The strengths of all participating models/agents
+- The agreement points already established
+- Resolution of dissonant points with concrete evidence
 
-- NO hagas referencia a versiones anteriores (V1, V2, etc. si {{.PreviousRound}} > 1)
-- NO intentes "volver atrás" para ver análisis anteriores
-- Tu ÚNICA entrada es el análisis V{{.PreviousRound}} de abajo
-- Tu trabajo es MEJORAR V{{.PreviousRound}}, no reconstruir desde cero
+## CRITICAL RULES
+
+### 1. COMPLETE and Autonomous Analysis (MANDATORY)
+
+**Your V{{.Round}} must be a COMPLETE and INDEPENDENT analysis.**
+
+- **NEVER** reference previous versions (V1, V2, V3...)
+- **NEVER** mention "in the previous analysis", "as stated before", etc.
+- **NEVER** write "in addition to the above" or "keeping previous points"
+- Your analysis must be readable WITHOUT knowing any previous version
+- Each statement must be complete with its context and evidence
+
+### 2. Synthesis of Strengths
+
+**Integrate the best of each perspective without explicitly mentioning them.**
+
+- Gather valuable insights from other models/agents
+- Incorporate observations that complement your analysis
+- If another agent identified something you didn't see, include it as a natural part of your analysis
+- The result must be superior to any individual analysis
+
+### 3. Divergence Resolution
+
+**Progressively reduce points of disagreement.**
+
+- Ground each point with specific code evidence (file:line)
+- If there are contradictory positions, investigate the code to determine which is correct
+- If you cannot verify something, DO NOT include it
+- Eliminate hallucinations and unfounded statements
+
+**FORBIDDEN to write:**
+- "As I mentioned in V{{.PreviousRound}}..."
+- "In addition to the above..."
+- "The arbiter pointed out that..."
+- "Other agents indicated..."
+- "In the previous round..."
+
+**CORRECT:**
+- Write each point as if it were the first time you're presenting it
+- Integrate improvements naturally without external references
+- Each section must be self-contained and complete
 
 ## Original Request
 {{.Prompt}}
@@ -15,60 +55,86 @@
 ## Project Context
 {{.Context}}
 
-## Análisis V{{.PreviousRound}} a Revisar
+## Analysis V{{.PreviousRound}} to Review
 
-Tu análisis de la ronda anterior:
+Your analysis from the previous round (use as base, but generate a complete document):
 {{.PreviousAnalysis}}
 
+{{if .HasArbiterEvaluation}}
 ## Arbiter Evaluation
 
-Un árbitro imparcial evaluó el consenso entre todos los agentes. Score actual: **{{printf "%.0f" .ConsensusScore}}%** (threshold: {{printf "%.0f" .Threshold}}%)
+An impartial arbiter evaluated the consensus among all agents. Current score: **{{printf "%.0f" .ConsensusScore}}%** (threshold: {{printf "%.0f" .Threshold}}%)
 
 ### Established Agreements (PRESERVE THESE)
-Los siguientes puntos tienen consenso entre todos los agentes. DEBES mantenerlos en tu análisis refinado:
+The following points have consensus among all agents. You MUST keep them in your refined analysis:
 {{if .Agreements}}
 {{range .Agreements}}- {{.}}
 {{end}}
 {{else}}
-No hay acuerdos establecidos aún.
+No established agreements yet.
 {{end}}
 
 ### Divergences to Resolve
-El árbitro identificó estas divergencias que necesitan resolución:
+The arbiter identified these divergences that need resolution:
 {{if .Divergences}}
 {{range .Divergences}}
 #### {{.Category}}
-- Tu posición: {{.YourPosition}}
-- Otros agentes: {{.OtherPositions}}
-- Guía del árbitro: {{.Guidance}}
+- Your position: {{.YourPosition}}
+- Other agents: {{.OtherPositions}}
+- Arbiter guidance: {{.Guidance}}
 {{end}}
 {{else}}
-No se identificaron divergencias específicas.
+No specific divergences identified.
 {{end}}
 
 ### Missing Perspectives
 {{if .MissingPerspectives}}
-Estos aspectos necesitan ser abordados:
+These aspects need to be addressed:
 {{range .MissingPerspectives}}- {{.}}
 {{end}}
 {{else}}
-No se identificaron perspectivas faltantes.
+No missing perspectives identified.
 {{end}}
 
-## Tu Tarea
+## Your Task
 
-1. **Valida** cada afirmación de V{{.PreviousRound}} con evidencia del código
-2. **Cuestiona** suposiciones no fundamentadas
-3. **Busca consenso** en las partes donde los agentes difieren
-4. **Completa** aspectos omitidos identificados por el árbitro
-5. **Genera** V{{.Round}} como una versión mejorada y más fundamentada
+Generate V{{.Round}} as the **BEST POSSIBLE ANALYSIS** - complete, definitive, and autonomous:
 
-Proporciona un análisis refinado que:
+1. **SYNTHESIZE strengths** - Integrate the best insights from all agents into your analysis
+2. **PRESERVE agreements** - Include consensus points as your own statements (without mentioning they are consensus)
+3. **RESOLVE divergences** - Investigate the code and take a grounded position
+4. **FILL gaps** - Add missing perspectives, investigating the code
+5. **ELIMINATE errors** - Don't include anything you can't verify with evidence
+6. **NO REFERENCES** - NEVER mention previous versions, arbiters, or other agents
 
-1. **PRESERVA todos los acuerdos** - No contradigas ni elimines puntos de consenso establecido
-2. **ABORDA divergencias** - Reconsidera tu posición en puntos disputados con evidencia
-3. **LLENA vacíos** - Añade perspectivas faltantes identificadas por el árbitro
-4. **MEJORA claridad** - Sé más preciso y basado en evidencia
+**REMEMBER**: The reader of your V{{.Round}} doesn't know that previous versions existed. Write as if this were your only and definitive analysis.
+{{else}}
+## Ultra-Critical Review
+
+This is your opportunity to improve your analysis before it is compared with other agents.
+
+### Your Task
+
+Generate V{{.Round}} as the **BEST POSSIBLE ANALYSIS** - complete, definitive, and autonomous:
+
+1. **Verify each statement** - Is it grounded in code with specific file:line?
+2. **Question assumptions** - Did you assume something without verifying? Is there circular logic?
+3. **Identify omissions** - What important aspects did you NOT cover? Investigate them now
+4. **Look for counterexamples** - Is there code that contradicts your conclusions?
+5. **Eliminate the unverifiable** - If you can't ground something, DO NOT include it
+
+### Quality Criteria
+
+Your V{{.Round}} must be a **complete, autonomous, and definitive** document:
+
+- **NO REFERENCES** to previous versions - write as if it were your only analysis
+- **Grounded** - each point with specific code evidence
+- **Complete** - covers all relevant aspects
+- **Specific** - fewer generalities, more concrete references
+- **Clean** - no hallucinations or unverified statements
+
+**REMEMBER**: The reader doesn't know that previous versions existed. Write as if this were your only and definitive analysis.
+{{end}}
 
 {{if .Constraints}}
 ## Constraints
@@ -76,17 +142,30 @@ Proporciona un análisis refinado que:
 {{end}}
 {{end}}
 
-Genera tu análisis refinado V{{.Round}} en formato markdown, estructurándolo con las secciones que consideres más apropiadas para comunicar los hallazgos de manera clara y efectiva.
+---
+
+## Output Requirements
+
+Generate your V{{.Round}} analysis in markdown format with these characteristics:
+
+1. **Complete document** - Must contain the entire analysis, no references to previous versions
+2. **Clear structure** - Use sections that best communicate the findings
+3. **Specific evidence** - Cite files and lines of code
+4. **Autonomous** - Any reader must understand the analysis without seeing V{{.PreviousRound}}
 {{if .OutputFilePath}}
 
----
-## Output Location
-
-Escribe tu análisis refinado V{{.Round}} en el siguiente archivo:
+Write your complete V{{.Round}} analysis to the following file:
 
 ```
 {{.OutputFilePath}}
 ```
 
-Usa tu herramienta de escritura de archivos para crear este documento markdown.
+**IMPORTANT - File format:**
+- Write ONLY the analysis content in markdown
+- DO NOT add YAML frontmatter (`---` ... `---` blocks at the beginning)
+- DO NOT add metadata, file headers, or system information
+- DO NOT include markers like `# File:` or file comments
+- Content must start directly with your analysis
+
+Use your file writing tool to create this markdown document.
 {{end}}

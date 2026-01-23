@@ -104,8 +104,9 @@ func TestDefaultRunnerConfig_Values(t *testing.T) {
 	if cfg.Sandbox != true {
 		t.Error("Sandbox should be true by default")
 	}
-	if cfg.DefaultAgent != "claude" {
-		t.Errorf("DefaultAgent = %q, want %q", cfg.DefaultAgent, "claude")
+	// DefaultAgent has NO default - must be configured in config file
+	if cfg.DefaultAgent != "" {
+		t.Errorf("DefaultAgent = %q, want empty (no default)", cfg.DefaultAgent)
 	}
 	if cfg.WorktreeMode != "always" {
 		t.Errorf("WorktreeMode = %q, want %q", cfg.WorktreeMode, "always")

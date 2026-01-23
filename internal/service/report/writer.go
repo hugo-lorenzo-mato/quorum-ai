@@ -145,6 +145,11 @@ func (w *WorkflowReportWriter) OptimizedPromptPath() string {
 	return filepath.Join(w.AnalyzePhasePath(), "01-optimized-prompt.md")
 }
 
+// ModeratorReportPath returns the path where the LLM should write the moderator evaluation report
+func (w *WorkflowReportWriter) ModeratorReportPath(round int) string {
+	return filepath.Join(w.AnalyzePhasePath(), "consensus", fmt.Sprintf("round-%d.md", round))
+}
+
 // ========================================
 // Analyze Phase Writers
 // ========================================
@@ -184,8 +189,8 @@ func (w *WorkflowReportWriter) WriteOriginalPrompt(prompt string) error {
 	return w.writeFile(path, fm, content)
 }
 
-// WriteOptimizedPrompt writes the optimized prompt (raw content only, no metadata)
-func (w *WorkflowReportWriter) WriteOptimizedPrompt(_, optimized string, _ PromptMetrics) error {
+// WriteRefinedPrompt writes the refined prompt (raw content only, no metadata)
+func (w *WorkflowReportWriter) WriteRefinedPrompt(_, refined string, _ PromptMetrics) error {
 	if !w.config.Enabled {
 		return nil
 	}
@@ -193,10 +198,10 @@ func (w *WorkflowReportWriter) WriteOptimizedPrompt(_, optimized string, _ Promp
 		return err
 	}
 
-	path := filepath.Join(w.AnalyzePhasePath(), "01-optimized-prompt.md")
+	path := filepath.Join(w.AnalyzePhasePath(), "01-refined-prompt.md")
 
-	// Write only the optimized prompt content, no frontmatter or metadata
-	return w.writeFileRaw(path, optimized+"\n")
+	// Write only the refined prompt content, no frontmatter or metadata
+	return w.writeFileRaw(path, refined+"\n")
 }
 
 // AnalysisData contains data for an analysis report
@@ -298,8 +303,8 @@ type ConsolidationData struct {
 	TotalDurationMS int64
 }
 
-// ArbiterData contains data for a semantic arbiter evaluation report
-type ArbiterData struct {
+// ModeratorData contains data for a semantic moderator evaluation report
+type ModeratorData struct {
 	Agent            string
 	Model            string
 	Round            int
@@ -313,8 +318,8 @@ type ArbiterData struct {
 	DurationMS       int64
 }
 
-// WriteArbiterReport writes a semantic arbiter evaluation report
-func (w *WorkflowReportWriter) WriteArbiterReport(data ArbiterData) error {
+// WriteModeratorReport writes a semantic moderator evaluation report
+func (w *WorkflowReportWriter) WriteModeratorReport(data ModeratorData) error {
 	if !w.config.Enabled {
 		return nil
 	}
@@ -322,17 +327,17 @@ func (w *WorkflowReportWriter) WriteArbiterReport(data ArbiterData) error {
 		return err
 	}
 
-	// Create arbiter directory if needed
-	arbiterDir := filepath.Join(w.AnalyzePhasePath(), "arbiter")
-	if err := os.MkdirAll(arbiterDir, 0o755); err != nil {
-		return fmt.Errorf("creating arbiter directory: %w", err)
+	// Create moderator directory if needed
+	moderatorDir := filepath.Join(w.AnalyzePhasePath(), "moderator")
+	if err := os.MkdirAll(moderatorDir, 0o755); err != nil {
+		return fmt.Errorf("creating moderator directory: %w", err)
 	}
 
 	filename := fmt.Sprintf("round-%d.md", data.Round)
-	path := filepath.Join(arbiterDir, filename)
+	path := filepath.Join(moderatorDir, filename)
 
 	fm := NewFrontmatter()
-	fm.Set("type", "arbiter_evaluation")
+	fm.Set("type", "moderator_evaluation")
 	fm.Set("round", data.Round)
 	fm.Set("agent", data.Agent)
 	fm.Set("model", data.Model)
@@ -346,7 +351,7 @@ func (w *WorkflowReportWriter) WriteArbiterReport(data ArbiterData) error {
 	fm.Set("cost_usd", fmt.Sprintf("%.4f", data.CostUSD))
 	fm.Set("duration_ms", data.DurationMS)
 
-	content := renderArbiterTemplate(data, w.config.IncludeRaw)
+	content := renderModeratorTemplate(data, w.config.IncludeRaw)
 
 	return w.writeFile(path, fm, content)
 }
@@ -449,6 +454,38 @@ func (w *WorkflowReportWriter) WritePlan(data PlanData) error {
 	return w.writeFile(path, fm, content)
 }
 
+// WritePlanPath returns the path where a V1 plan should be written
+func (w *WorkflowReportWriter) WritePlanPath(agentName, model string) string {
+	filename := fmt.Sprintf("%s-plan.md", agentName)
+	return filepath.Join(w.PlanPhasePath(), "v1", filename)
+}
+
+// WriteConsolidatedPlan writes the consolidated plan (multi-agent)
+func (w *WorkflowReportWriter) WriteConsolidatedPlan(content string) error {
+	if !w.config.Enabled {
+		return nil
+	}
+	if err := w.Initialize(); err != nil {
+		return err
+	}
+
+	path := filepath.Join(w.PlanPhasePath(), "consolidated-plan.md")
+
+	fm := NewFrontmatter()
+	fm.Set("type", "consolidated_plan")
+	fm.Set("timestamp", w.formatTime(time.Now()))
+	fm.Set("workflow_id", w.workflowID)
+
+	mdContent := "# Consolidated Plan (Multi-Agent)\n\n" + content + "\n"
+
+	return w.writeFile(path, fm, mdContent)
+}
+
+// ConsolidatedPlanPath returns the path for the consolidated plan
+func (w *WorkflowReportWriter) ConsolidatedPlanPath() string {
+	return filepath.Join(w.PlanPhasePath(), "consolidated-plan.md")
+}
+
 // WriteFinalPlan writes the final approved plan
 func (w *WorkflowReportWriter) WriteFinalPlan(content string) error {
 	if !w.config.Enabled {
@@ -468,6 +505,98 @@ func (w *WorkflowReportWriter) WriteFinalPlan(content string) error {
 	mdContent := "# Plan Final Aprobado\n\n" + content + "\n"
 
 	return w.writeFile(path, fm, mdContent)
+}
+
+// TaskPlanData contains data for a single task plan
+type TaskPlanData struct {
+	TaskID         string
+	Name           string
+	Description    string
+	CLI            string
+	PlannedModel   string
+	ExecutionBatch int
+	ParallelWith   []string
+	Dependencies   []string
+	CanParallelize bool
+}
+
+// WriteTaskPlan writes an individual task plan file
+func (w *WorkflowReportWriter) WriteTaskPlan(data TaskPlanData) error {
+	if !w.config.Enabled {
+		return nil
+	}
+	if err := w.Initialize(); err != nil {
+		return err
+	}
+
+	// Create tasks directory
+	tasksDir := filepath.Join(w.PlanPhasePath(), "tasks")
+	if err := os.MkdirAll(tasksDir, 0o755); err != nil {
+		return fmt.Errorf("creating tasks directory: %w", err)
+	}
+
+	filename := fmt.Sprintf("%s-%s.md", data.TaskID, sanitizeFilename(data.Name))
+	path := filepath.Join(tasksDir, filename)
+
+	fm := NewFrontmatter()
+	fm.Set("type", "task_plan")
+	fm.Set("task_id", data.TaskID)
+	fm.Set("name", data.Name)
+	fm.Set("cli", data.CLI)
+	fm.Set("planned_model", data.PlannedModel)
+	fm.Set("execution_batch", data.ExecutionBatch)
+	fm.Set("can_parallelize", data.CanParallelize)
+	fm.Set("timestamp", w.formatTime(time.Now()))
+	fm.Set("workflow_id", w.workflowID)
+
+	content := renderTaskPlanTemplate(data)
+
+	return w.writeFile(path, fm, content)
+}
+
+// ExecutionGraphData contains data for the execution graph visualization
+type ExecutionGraphData struct {
+	Batches      []ExecutionBatch
+	TotalTasks   int
+	TotalBatches int
+}
+
+// ExecutionBatch represents a group of tasks that can execute in parallel
+type ExecutionBatch struct {
+	BatchNumber int
+	Tasks       []ExecutionTask
+}
+
+// ExecutionTask represents a task in the execution graph
+type ExecutionTask struct {
+	TaskID       string
+	Name         string
+	CLI          string
+	PlannedModel string
+	Dependencies []string
+}
+
+// WriteExecutionGraph writes the execution graph visualization
+func (w *WorkflowReportWriter) WriteExecutionGraph(data ExecutionGraphData) error {
+	if !w.config.Enabled {
+		return nil
+	}
+	if err := w.Initialize(); err != nil {
+		return err
+	}
+
+	path := filepath.Join(w.PlanPhasePath(), "execution-graph.md")
+
+	fm := NewFrontmatter()
+	fm.Set("type", "execution_graph")
+	fm.Set("timestamp", w.formatTime(time.Now()))
+	fm.Set("workflow_id", w.workflowID)
+	fm.Set("total_tasks", data.TotalTasks)
+	fm.Set("total_batches", data.TotalBatches)
+
+	content := renderExecutionGraphTemplate(data)
+
+	return w.writeFile(path, fm, content)
 }
 
 // ========================================
