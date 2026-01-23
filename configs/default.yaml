@@ -31,17 +31,12 @@ trace:
   # Max number of files per run
   max_files: 500
   # Phases to include in tracing
-  include_phases: [optimize, analyze, consensus, plan, execute]
+  include_phases: [refine, analyze, plan, execute]
 
 # Workflow execution settings
 workflow:
   # Maximum workflow execution time
   timeout: 12h
-  # Maximum duration per standalone phase command
-  phase_timeouts:
-    analyze: 2h
-    plan: 2h
-    execute: 2h
   # Maximum retry attempts per task
   max_retries: 3
   # Dry-run mode (simulate without executing)
@@ -52,7 +47,62 @@ workflow:
   # Tools to deny during execution
   deny_tools: []
 
+# Phase configuration
+phases:
+  # Analyze phase settings
+  analyze:
+    # Maximum duration for analyze phase
+    timeout: 2h
+    # Prompt refiner (optional) - enhances user prompt before analysis
+    refiner:
+      enabled: true
+      # Agent to use for refinement
+      agent: claude
+      # Model override (optional, defaults to agent's phase_models.refine)
+      # model: claude-opus-4-5-20251101
+    # Analysis synthesizer - consolidates multi-agent analyses
+    synthesizer:
+      # Agent to use for synthesis
+      agent: claude
+      # Model override (optional, defaults to agent's phase_models.analyze)
+      # model: claude-opus-4-5-20251101
+    # Semantic moderator for multi-agent consensus evaluation
+    moderator:
+      enabled: true
+      # Agent to use for moderation
+      agent: claude
+      # Model override (optional, defaults to agent's phase_models.analyze)
+      # model: claude-opus-4-5-20251101
+      # Minimum consensus score to accept (0.0-1.0)
+      threshold: 0.90
+      # Minimum refinement rounds before accepting consensus
+      min_rounds: 2
+      # Maximum refinement rounds before giving up
+      max_rounds: 5
+      # Score below which to abort workflow
+      abort_threshold: 0.30
+      # Score change below which is considered stagnation
+      stagnation_threshold: 0.02
+  # Plan phase settings
+  plan:
+    # Maximum duration for plan phase
+    timeout: 1h
+    # Plan synthesizer - when enabled, all agents with plan phase enabled
+    # propose plans in parallel, then synthesizer consolidates them.
+    # When disabled (default), uses single-agent planning with the default agent.
+    synthesizer:
+      enabled: false
+      # Agent to use for plan synthesis
+      agent: claude
+      # Model override (optional, defaults to agent's phase_models.plan)
+      # model: claude-opus-4-5-20251101
+  # Execute phase settings
+  execute:
+    # Maximum duration for execute phase
+    timeout: 2h
+
 # Agent configuration
+# Note: temperature and max_tokens are omitted - let each CLI use its optimized defaults
 agents:
   # Default agent for analysis tasks
   default: claude
@@ -60,51 +110,51 @@ agents:
   # Claude Code CLI configuration
   claude:
     enabled: true
-    # Path to claude CLI executable
     path: claude
-    # Default model (fallback when phase not specified)
+    # Default model
     model: claude-opus-4-5-20251101
-    # Per-phase model overrides (optimize/analyze/plan/execute)
+    # Per-task model overrides. Only specify phases that need a different model.
+    # Unspecified phases use the default model above.
     phase_models:
-      optimize: claude-opus-4-5-20251101
+      refine: claude-opus-4-5-20251101
       analyze: claude-opus-4-5-20251101
+      moderate: claude-opus-4-5-20251101
+      synthesize: claude-opus-4-5-20251101
       plan: claude-opus-4-5-20251101
       execute: claude-opus-4-5-20251101
-    # Maximum output tokens
-    max_tokens: 4096
-    # Temperature (0.0-2.0)
-    temperature: 0.7
 
   # Gemini CLI configuration
   gemini:
     enabled: true
     path: gemini
     model: gemini-3-flash-preview
-    # Per-phase model overrides (optimize/analyze/plan/execute)
     phase_models:
-      optimize: gemini-3-pro-preview
+      refine: gemini-3-pro-preview
       analyze: gemini-3-pro-preview
+      moderate: gemini-3-pro-preview
+      synthesize: gemini-3-pro-preview
       plan: gemini-3-pro-preview
       execute: gemini-3-flash-preview
-    max_tokens: 4096
-    temperature: 0.7
 
   # OpenAI Codex CLI configuration
-  # Note: reasoning_effort is configured per-phase in the adapter code
-  # optimize/analyze/plan use "xhigh" (extra high), execute uses "high"
   codex:
     enabled: true
     path: codex
-    # Default model (fallback when phase not specified)
     model: gpt-5.2-codex
-    # Per-phase model overrides (optimize/analyze/plan/execute)
+    # Codex-specific: default reasoning effort (minimal/low/medium/high/xhigh)
+    reasoning_effort: high
     phase_models:
-      optimize: gpt-5.2-codex
+      refine: gpt-5.2-codex
       analyze: gpt-5.2-codex
+      moderate: gpt-5.2-codex
+      synthesize: gpt-5.2-codex
       plan: gpt-5.2-codex
       execute: gpt-5.2-codex
-    max_tokens: 4096
-    temperature: 0.7
+    # Per-phase reasoning effort overrides (optional)
+    reasoning_effort_phases:
+      refine: xhigh
+      analyze: xhigh
+      plan: xhigh
 
   # GitHub Copilot CLI configuration (optional)
   # Uses the standalone `copilot` CLI (npm install -g @github/copilot)
@@ -112,35 +162,15 @@ agents:
   copilot:
     enabled: false
     path: copilot
-    # Default model (fallback when phase not specified)
     model: claude-sonnet-4-5
-    # Per-phase model overrides (optimize/analyze/plan/execute)
     # Available models: claude-sonnet-4-5 (default), claude-sonnet-4, gpt-5
     phase_models:
-      optimize: claude-sonnet-4-5
+      refine: claude-sonnet-4-5
       analyze: claude-sonnet-4-5
+      moderate: claude-sonnet-4-5
+      synthesize: claude-sonnet-4-5
       plan: claude-sonnet-4-5
       execute: claude-sonnet-4-5
-    max_tokens: 16384
-    temperature: 0.7
-
-# Prompt optimizer configuration
-# Optimizes the user prompt before analysis for better LLM effectiveness
-prompt_optimizer:
-  # Enable/disable prompt optimization phase
-  enabled: true
-  # Agent to use for optimization (claude, gemini, codex, copilot)
-  agent: claude
-  # Model override (optional, uses agent's phase_models.optimize or default if empty)
-  model: ""
-
-# Analysis consolidator configuration
-# Synthesizes multiple agent analyses into a single coherent report
-analysis_consolidator:
-  # Agent to use for consolidation (claude, gemini, codex, copilot)
-  agent: claude
-  # Model override (optional, uses agent's phase_models.analyze or default if empty)
-  model: claude-opus-4-5-20251101
 
 # State persistence configuration
 state:
@@ -159,6 +189,21 @@ git:
   auto_clean: true
   # When to create worktrees: always, parallel, disabled
   worktree_mode: parallel
+  # Task finalization: commit, push, and PR creation
+  # Each task runs in its own branch. After completion:
+  # Commit changes after each task completes
+  auto_commit: true
+  # Push the task branch to remote after commit
+  auto_push: true
+  # Create a pull request for each task branch
+  auto_pr: true
+  # IMPORTANT: auto_merge is disabled by default for safety.
+  # Enable only if you want PRs merged automatically without review.
+  auto_merge: false
+  # Target branch for PRs (empty = repository default branch)
+  pr_base_branch: ""
+  # Merge strategy: merge, squash, rebase
+  merge_strategy: squash
 
 # GitHub integration
 github:
@@ -167,28 +212,13 @@ github:
   # Remote name
   remote: origin
 
-# Consensus configuration (80/60/50 escalation policy)
-consensus:
-  # Minimum consensus score to proceed (0.0-1.0)
-  threshold: 0.80
-  # Threshold for V2 critique escalation (score below this triggers V2+V3)
-  v2_threshold: 0.60
-  # Threshold for human review (score below this aborts workflow)
-  human_threshold: 0.50
-  # Category weights for Jaccard similarity
-  weights:
-    # Weight for claims/findings (40%)
-    claims: 0.40
-    # Weight for risks/concerns (30%)
-    risks: 0.30
-    # Weight for recommendations (30%)
-    recommendations: 0.30
-
-# Cost limits
-costs:
-  # Maximum USD per workflow (0 = unlimited)
-  max_per_workflow: 10.0
-  # Maximum USD per task (0 = unlimited)
-  max_per_task: 2.0
-  # Alert threshold (warn when approaching limit)
-  alert_threshold: 0.80
+# Report configuration (Markdown output)
+report:
+  # Enable/disable markdown report generation
+  enabled: true
+  # Base directory for report output
+  base_dir: ".quorum/output"
+  # Use UTC timestamps in reports
+  use_utc: true
+  # Include raw agent outputs in reports
+  include_raw: true
