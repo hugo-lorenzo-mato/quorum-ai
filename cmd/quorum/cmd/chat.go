@@ -137,9 +137,10 @@ func runChat(_ *cobra.Command, _ []string) error {
 		availableAgents = append(availableAgents, "claude")
 		agentModels["claude"] = []string{
 			"claude-opus-4-5-20251101",
+			"claude-sonnet-4-5-20250929",
+			"claude-haiku-4-5-20251001",
 			"claude-sonnet-4-20250514",
-			"claude-sonnet-4-5-20251101",
-			"claude-haiku-4-5-20251101",
+			"claude-opus-4-20250514",
 		}
 	}
 	if cfg.Agents.Gemini.Enabled {
@@ -147,6 +148,7 @@ func runChat(_ *cobra.Command, _ []string) error {
 		agentModels["gemini"] = []string{
 			"gemini-2.5-pro",
 			"gemini-2.5-flash",
+			"gemini-2.5-flash-lite",
 			"gemini-3-pro-preview",
 			"gemini-3-flash-preview",
 		}
@@ -154,21 +156,27 @@ func runChat(_ *cobra.Command, _ []string) error {
 	if cfg.Agents.Codex.Enabled {
 		availableAgents = append(availableAgents, "codex")
 		agentModels["codex"] = []string{
-			"gpt-5.1",
-			"gpt-5.1-codex",
-			"gpt-5.2",
 			"gpt-5.2-codex",
-			"o3",
-			"o3-mini",
+			"gpt-5.2",
+			"gpt-5.1-codex-max",
+			"gpt-5.1-codex",
+			"gpt-5.1",
+			"gpt-5",
+			"gpt-5-mini",
+			"gpt-4.1",
 		}
 	}
 	if cfg.Agents.Copilot.Enabled {
 		availableAgents = append(availableAgents, "copilot")
 		agentModels["copilot"] = []string{
-			"claude-sonnet-4-5",
-			"claude-haiku-4-5",
-			"gpt-4o",
-			"o3-mini",
+			"claude-sonnet-4.5",
+			"claude-haiku-4.5",
+			"claude-opus-4.5",
+			"claude-sonnet-4",
+			"gpt-5.2-codex",
+			"gpt-5.1-codex-max",
+			"gpt-5.1-codex",
+			"gemini-3-pro-preview",
 		}
 	}
 
@@ -226,17 +234,17 @@ func createWorkflowRunner(
 	}
 
 	// Parse phase timeouts
-	analyzeTimeout, err := parseDurationDefault(cfg.Workflow.PhaseTimeouts.Analyze, defaultPhaseTimeout)
+	analyzeTimeout, err := parseDurationDefault(cfg.Phases.Analyze.Timeout, defaultPhaseTimeout)
 	if err != nil {
-		return nil, fmt.Errorf("parsing analyze phase timeout %q: %w", cfg.Workflow.PhaseTimeouts.Analyze, err)
+		return nil, fmt.Errorf("parsing analyze phase timeout %q: %w", cfg.Phases.Analyze.Timeout, err)
 	}
-	planTimeout, err := parseDurationDefault(cfg.Workflow.PhaseTimeouts.Plan, defaultPhaseTimeout)
+	planTimeout, err := parseDurationDefault(cfg.Phases.Plan.Timeout, defaultPhaseTimeout)
 	if err != nil {
-		return nil, fmt.Errorf("parsing plan phase timeout %q: %w", cfg.Workflow.PhaseTimeouts.Plan, err)
+		return nil, fmt.Errorf("parsing plan phase timeout %q: %w", cfg.Phases.Plan.Timeout, err)
 	}
-	executeTimeout, err := parseDurationDefault(cfg.Workflow.PhaseTimeouts.Execute, defaultPhaseTimeout)
+	executeTimeout, err := parseDurationDefault(cfg.Phases.Execute.Timeout, defaultPhaseTimeout)
 	if err != nil {
-		return nil, fmt.Errorf("parsing execute phase timeout %q: %w", cfg.Workflow.PhaseTimeouts.Execute, err)
+		return nil, fmt.Errorf("parsing execute phase timeout %q: %w", cfg.Phases.Execute.Timeout, err)
 	}
 
 	defaultAgent := cfg.Agents.Default
@@ -261,14 +269,16 @@ func createWorkflowRunner(
 		WorktreeMode:       cfg.Git.WorktreeMode,
 		MaxCostPerWorkflow: cfg.Costs.MaxPerWorkflow,
 		MaxCostPerTask:     cfg.Costs.MaxPerTask,
-		Optimizer: workflow.OptimizerConfig{
-			Enabled: cfg.PromptOptimizer.Enabled,
-			Agent:   cfg.PromptOptimizer.Agent,
-			Model:   cfg.PromptOptimizer.Model,
+		Refiner: workflow.RefinerConfig{
+			Enabled: cfg.Phases.Analyze.Refiner.Enabled,
+			Agent:   cfg.Phases.Analyze.Refiner.Agent,
 		},
-		Consolidator: workflow.ConsolidatorConfig{
-			Agent: cfg.AnalysisConsolidator.Agent,
-			Model: cfg.AnalysisConsolidator.Model,
+		Synthesizer: workflow.SynthesizerConfig{
+			Agent: cfg.Phases.Analyze.Synthesizer.Agent,
+		},
+		PlanSynthesizer: workflow.PlanSynthesizerConfig{
+			Enabled: cfg.Phases.Plan.Synthesizer.Enabled,
+			Agent:   cfg.Phases.Plan.Synthesizer.Agent,
 		},
 		Report: report.Config{
 			Enabled:    cfg.Report.Enabled,
@@ -276,15 +286,14 @@ func createWorkflowRunner(
 			UseUTC:     cfg.Report.UseUTC,
 			IncludeRaw: cfg.Report.IncludeRaw,
 		},
-		Arbiter: workflow.ArbiterConfig{
-			Enabled:             cfg.Consensus.Arbiter.Enabled,
-			Agent:               cfg.Consensus.Arbiter.Agent,
-			Model:               cfg.Consensus.Arbiter.Model,
-			Threshold:           cfg.Consensus.Arbiter.Threshold,
-			MinRounds:           cfg.Consensus.Arbiter.MinRounds,
-			MaxRounds:           cfg.Consensus.Arbiter.MaxRounds,
-			AbortThreshold:      cfg.Consensus.Arbiter.AbortThreshold,
-			StagnationThreshold: cfg.Consensus.Arbiter.StagnationThreshold,
+		Moderator: workflow.ModeratorConfig{
+			Enabled:             cfg.Phases.Analyze.Moderator.Enabled,
+			Agent:               cfg.Phases.Analyze.Moderator.Agent,
+			Threshold:           cfg.Phases.Analyze.Moderator.Threshold,
+			MinRounds:           cfg.Phases.Analyze.Moderator.MinRounds,
+			MaxRounds:           cfg.Phases.Analyze.Moderator.MaxRounds,
+			AbortThreshold:      cfg.Phases.Analyze.Moderator.AbortThreshold,
+			StagnationThreshold: cfg.Phases.Analyze.Moderator.StagnationThreshold,
 		},
 		PhaseTimeouts: workflow.PhaseTimeouts{
 			Analyze: analyzeTimeout,
