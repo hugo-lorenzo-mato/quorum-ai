@@ -1,0 +1,106 @@
+# Task: Consolidate Multiple Execution Plans
+
+You are synthesizing {{ len .Plans }} independent execution plans for the same project into ONE optimal plan.
+
+## Your Role
+
+You are the **Plan Consolidator** - your job is to:
+1. **Evaluate** each proposed plan for quality, granularity, and executability
+2. **Extract** the best ideas from each proposal
+3. **Synthesize** them into a single optimal execution plan
+4. **Ensure** tasks are atomic, well-scoped, and properly sequenced
+
+## Evaluation Criteria
+
+Assess each plan on:
+- **Task Granularity**: Are tasks atomic and well-scoped? (Too coarse = hard to execute; Too fine = overhead)
+- **Dependency Logic**: Are dependencies correct and minimal?
+- **Parallelizability**: Can tasks run concurrently where possible?
+- **Completeness**: Does it cover all requirements?
+- **Practicality**: Are tasks actually executable by AI agents?
+
+## Original Prompt
+
+{{ .Prompt }}
+
+## Consolidated Analysis
+
+{{ .Analysis }}
+
+## Proposed Plans
+{{ range $index, $plan := .Plans }}
+### Plan {{ add $index 1 }}: {{ $plan.AgentName }} ({{ $plan.Model }})
+
+{{ $plan.Content }}
+
+---
+{{ end }}
+
+## Your Task
+
+Synthesize these proposals into ONE optimal execution plan by:
+
+1. **Compare Approaches**: What's different between the plans?
+   - Which has better task granularity?
+   - Which has clearer dependencies?
+   - Which maximizes parallelizability?
+
+2. **Select Best Ideas**: For each aspect of the plan:
+   - Choose the approach that best balances atomicity and practicality
+   - Prefer minimal viable tasks (easier to execute)
+   - Ensure dependencies are correct and minimal
+
+3. **Create Synthesis**: Combine the best elements into a coherent plan
+   - Use optimal task breakdown from any proposal
+   - Incorporate best dependency structure
+   - Maximize safe parallelization opportunities
+   - Ensure nothing is missed from requirements
+
+4. **Validate Quality**:
+   - Each task should be independently executable
+   - Dependencies should be necessary and sufficient
+   - Plan should be complete (covers all requirements)
+   - Execution order should be logical
+
+## Output Format
+
+Return ONLY a valid JSON array of tasks following this EXACT schema:
+
+```json
+[
+  {
+    "id": "task-1",
+    "name": "Short descriptive name",
+    "description": "Detailed description of what this task does",
+    "cli": "claude",
+    "agent": "claude",
+    "dependencies": []
+  },
+  {
+    "id": "task-2",
+    "name": "Another task",
+    "description": "Description",
+    "cli": "gemini",
+    "agent": "gemini",
+    "dependencies": ["task-1"]
+  }
+]
+```
+
+**CRITICAL REQUIREMENTS**:
+- Output ONLY the JSON array, no markdown formatting, no code blocks
+- Each task MUST have: id, name, description, cli, agent, dependencies
+- Task IDs MUST be unique (e.g., task-1, task-2, task-3)
+- Task names MUST be concise (under 50 chars)
+- Dependencies MUST reference valid task IDs
+- Maximum {{ .MaxTasks }} tasks (focus on essential, atomic tasks)
+- The "cli" and "agent" fields should typically be the same (both specify which CLI to use)
+
+**BEST PRACTICES**:
+- Atomic tasks (single responsibility)
+- Minimal dependencies (only what's truly needed)
+- Parallelizable where safe (no unnecessary sequencing)
+- Clear, actionable descriptions
+- Logical execution order
+
+Begin your synthesis now. Output ONLY the JSON array.

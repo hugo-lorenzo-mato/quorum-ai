@@ -435,7 +435,7 @@ func TestResolveTaskAgent(t *testing.T) {
 				Logger: logging.NewNop(),
 			}
 
-			got := resolveTaskAgent(wctx, tt.candidate)
+			got := resolveTaskAgent(context.Background(), wctx, tt.candidate)
 			if got != tt.want {
 				t.Errorf("resolveTaskAgent() = %q, want %q", got, tt.want)
 			}
@@ -463,7 +463,7 @@ func TestPlanner_parsePlan(t *testing.T) {
 		{"id": "task-2", "name": "Task 2", "description": "Second", "agent": "gemini", "dependencies": ["task-1"]}
 	]`
 
-	tasks, err := planner.parsePlan(wctx, output)
+	tasks, err := planner.parsePlan(context.Background(), wctx, output)
 	if err != nil {
 		t.Fatalf("parsePlan() error = %v", err)
 	}
@@ -504,7 +504,7 @@ func TestPlanner_parsePlan_EmptyOutput(t *testing.T) {
 		Logger: logging.NewNop(),
 	}
 
-	_, err := planner.parsePlan(wctx, "")
+	_, err := planner.parsePlan(context.Background(), wctx, "")
 	if err == nil {
 		t.Error("parsePlan() should return error for empty output")
 	}
@@ -521,7 +521,7 @@ func TestPlanner_parsePlan_NoTasks(t *testing.T) {
 		Logger: logging.NewNop(),
 	}
 
-	_, err := planner.parsePlan(wctx, "[]")
+	_, err := planner.parsePlan(context.Background(), wctx, "[]")
 	if err == nil {
 		t.Error("parsePlan() should return error for empty tasks array")
 	}
@@ -544,7 +544,7 @@ func TestPlanner_parsePlan_UsesAgentField(t *testing.T) {
 
 	output := `[{"id": "task-1", "name": "Task 1", "description": "First", "agent": "gemini", "dependencies": []}]`
 
-	tasks, err := planner.parsePlan(wctx, output)
+	tasks, err := planner.parsePlan(context.Background(), wctx, output)
 	if err != nil {
 		t.Fatalf("parsePlan() error = %v", err)
 	}
