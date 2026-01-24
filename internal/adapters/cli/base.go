@@ -31,8 +31,8 @@ type AgentConfig struct {
 	WorkDir string
 	// EnableStreaming enables real-time event streaming if supported
 	EnableStreaming bool
-	// Phases controls which workflow phases this agent participates in.
-	// Keys: "refine", "analyze", "plan", "execute"
+	// Phases controls which workflow phases/roles this agent participates in.
+	// Keys: "refine", "analyze", "moderate", "synthesize", "plan", "execute"
 	// If nil, agent is available for all phases.
 	Phases map[string]bool
 	// ReasoningEffort is the default reasoning effort for all phases (Codex-specific).

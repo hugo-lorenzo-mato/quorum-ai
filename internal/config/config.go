@@ -187,9 +187,9 @@ type AgentConfig struct {
 	Path        string            `mapstructure:"path"`
 	Model       string            `mapstructure:"model"`
 	PhaseModels map[string]string `mapstructure:"phase_models"`
-	// Phases controls which workflow phases this agent participates in.
+	// Phases controls which workflow phases/roles this agent participates in.
 	// If nil or empty, agent is available for all phases (backward compatible).
-	// Keys: "refine", "analyze", "plan", "execute"
+	// Keys: "refine", "analyze", "moderate", "synthesize", "plan", "execute"
 	Phases map[string]bool `mapstructure:"phases"`
 	// ReasoningEffort is the default reasoning effort for all phases (Codex-specific).
 	// Valid values: minimal, low, medium, high, xhigh.

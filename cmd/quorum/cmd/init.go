@@ -91,14 +91,14 @@ phases:
     # Prompt refiner - enhances user prompt before analysis
     refiner:
       enabled: true
-      agent: claude
+      agent: codex
     # Analysis synthesizer - consolidates multi-agent analyses
     synthesizer:
       agent: claude
     # Semantic moderator for multi-agent consensus evaluation
     moderator:
       enabled: true
-      agent: claude
+      agent: copilot
       threshold: 0.90
       min_rounds: 2
       max_rounds: 5
@@ -109,9 +109,9 @@ phases:
     timeout: 1h
     # Plan synthesizer - when enabled, all agents with plan phase enabled
     # propose plans in parallel, then synthesizer consolidates them.
-    # When disabled (default), uses single-agent planning with the default agent.
+    # When disabled, uses single-agent planning with the default agent.
     synthesizer:
-      enabled: false
+      enabled: true
       agent: claude
   # Execute phase settings
   execute:
@@ -122,7 +122,7 @@ phases:
 agents:
   default: claude
 
-  # Claude (Anthropic) - Primary agent
+  # Claude (Anthropic) - Primary agent, synthesizer
   claude:
     enabled: true
     path: claude
@@ -136,12 +136,26 @@ agents:
       synthesize: claude-opus-4-5-20251101
       plan: claude-opus-4-5-20251101
       execute: claude-opus-4-5-20251101
+    # Phases/roles this agent participates in
+    # - refine: prompt refinement before analysis
+    # - analyze: multi-agent analysis participation
+    # - moderate: consensus evaluation between agents
+    # - synthesize: consolidate multi-agent outputs
+    # - plan: task planning
+    # - execute: task execution
+    phases:
+      refine: false
+      analyze: true
+      moderate: false
+      synthesize: true   # assigned as synthesizer
+      plan: true
+      execute: true
 
   # Gemini (Google) - Secondary agent
   gemini:
     enabled: true
     path: gemini
-    model: gemini-3-flash-preview
+    model: gemini-3-pro-preview
     phase_models:
       refine: gemini-3-pro-preview
       analyze: gemini-3-pro-preview
@@ -149,8 +163,16 @@ agents:
       synthesize: gemini-3-pro-preview
       plan: gemini-3-pro-preview
       execute: gemini-3-flash-preview
+    # Phases/roles this agent participates in
+    phases:
+      refine: false
+      analyze: true
+      moderate: false
+      synthesize: false
+      plan: false
+      execute: true
 
-  # Codex (OpenAI) - Tertiary agent
+  # Codex (OpenAI) - Tertiary agent, refiner
   codex:
     enabled: true
     path: codex
@@ -169,10 +191,18 @@ agents:
       refine: xhigh
       analyze: xhigh
       plan: xhigh
+    # Phases/roles this agent participates in
+    phases:
+      refine: true       # assigned as refiner
+      analyze: true
+      moderate: false
+      synthesize: false
+      plan: true
+      execute: true
 
-  # Copilot (GitHub) - Quaternary agent
+  # Copilot (GitHub) - Moderator only
   copilot:
-    enabled: false
+    enabled: true
     path: copilot
     model: claude-sonnet-4-5
     phase_models:
@@ -182,6 +212,14 @@ agents:
       synthesize: claude-sonnet-4-5
       plan: claude-sonnet-4-5
       execute: claude-sonnet-4-5
+    # Phases/roles this agent participates in - moderator only
+    phases:
+      refine: false
+      analyze: false
+      moderate: true     # assigned as moderator
+      synthesize: false
+      plan: false
+      execute: false
 
 # State persistence
 state:

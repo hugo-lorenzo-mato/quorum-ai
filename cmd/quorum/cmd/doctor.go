@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -66,7 +67,7 @@ func runDoctor(_ *cobra.Command, _ []string) error {
 
 	fmt.Println()
 
-	// Check agent configurations
+	// Check agent configurations (external config files like ~/.gemini/settings.json)
 	fmt.Println("Checking agent configurations...")
 	fmt.Println()
 
@@ -80,6 +81,25 @@ func runDoctor(_ *cobra.Command, _ []string) error {
 		fmt.Println()
 	} else {
 		fmt.Println("  ✓ All agent configurations valid")
+		fmt.Println()
+	}
+
+	// Validate quorum configuration (fail-fast check for phase consistency)
+	fmt.Println("Validating quorum configuration...")
+	fmt.Println()
+
+	validationIssues := validateQuorumConfig()
+	if len(validationIssues) > 0 {
+		for _, issue := range validationIssues {
+			fmt.Printf("  ✗ %s\n", issue)
+		}
+		fmt.Println()
+		fmt.Println("Configuration errors must be fixed before running workflows.")
+		fmt.Println("Edit .quorum/config.yaml to fix the issues above.")
+		fmt.Println()
+		allOk = false
+	} else {
+		fmt.Println("  ✓ Quorum configuration valid")
 		fmt.Println()
 	}
 
@@ -102,6 +122,33 @@ func runDoctor(_ *cobra.Command, _ []string) error {
 func checkCommand(name string, args []string) bool {
 	cmd := exec.Command(name, args...)
 	return cmd.Run() == nil
+}
+
+// validateQuorumConfig loads and validates the quorum configuration
+func validateQuorumConfig() []string {
+	var issues []string
+
+	// Try to load config using the loader
+	loader := config.NewLoader()
+	cfg, err := loader.Load()
+	if err != nil {
+		issues = append(issues, fmt.Sprintf("Cannot load config: %v", err))
+		return issues
+	}
+
+	// Run full validation
+	if err := config.ValidateConfig(cfg); err != nil {
+		// Parse validation errors
+		if verrs, ok := err.(config.ValidationErrors); ok {
+			for _, verr := range verrs {
+				issues = append(issues, verr.Error())
+			}
+		} else {
+			issues = append(issues, err.Error())
+		}
+	}
+
+	return issues
 }
 
 // checkAgentConfigs validates agent configurations and returns a list of issues

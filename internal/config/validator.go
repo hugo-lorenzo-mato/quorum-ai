@@ -336,6 +336,94 @@ func (v *Validator) validatePhases(cfg *PhasesConfig, agents *AgentsConfig) {
 
 	// Validate execute phase
 	v.validatePhaseTimeout("phases.execute.timeout", cfg.Execute.Timeout)
+
+	// Fail-fast: validate phase participation consistency
+	v.validatePhaseParticipation(cfg, agents)
+}
+
+// validatePhaseParticipation ensures agents are properly configured for their assigned roles.
+// This is a fail-fast check to avoid wasting tokens on invalid configurations.
+func (v *Validator) validatePhaseParticipation(cfg *PhasesConfig, agents *AgentsConfig) {
+	// Build agent config map for easy lookup
+	agentConfigs := map[string]*AgentConfig{
+		"claude":  &agents.Claude,
+		"gemini":  &agents.Gemini,
+		"codex":   &agents.Codex,
+		"copilot": &agents.Copilot,
+	}
+
+	// 1. Validate refiner agent has phases.refine: true
+	if cfg.Analyze.Refiner.Enabled && cfg.Analyze.Refiner.Agent != "" {
+		agent := cfg.Analyze.Refiner.Agent
+		if ac, ok := agentConfigs[agent]; ok && ac.Enabled {
+			if !ac.IsEnabledForPhase("refine") {
+				v.addError("agents."+agent+".phases.refine", false,
+					"agent is assigned as refiner but phases.refine is false")
+			}
+		}
+	}
+
+	// 2. Validate moderator agent has phases.moderate: true
+	if cfg.Analyze.Moderator.Enabled && cfg.Analyze.Moderator.Agent != "" {
+		agent := cfg.Analyze.Moderator.Agent
+		if ac, ok := agentConfigs[agent]; ok && ac.Enabled {
+			if !ac.IsEnabledForPhase("moderate") {
+				v.addError("agents."+agent+".phases.moderate", false,
+					"agent is assigned as moderator but phases.moderate is false")
+			}
+		}
+	}
+
+	// 3. Validate synthesizer agent has phases.synthesize: true
+	if cfg.Analyze.Synthesizer.Agent != "" {
+		agent := cfg.Analyze.Synthesizer.Agent
+		if ac, ok := agentConfigs[agent]; ok && ac.Enabled {
+			if !ac.IsEnabledForPhase("synthesize") {
+				v.addError("agents."+agent+".phases.synthesize", false,
+					"agent is assigned as synthesizer but phases.synthesize is false")
+			}
+		}
+	}
+
+	// 4. Count agents enabled for each phase
+	var analyzeCount, planCount, executeCount int
+	var analyzeAgents, planAgents, executeAgents []string
+
+	for name, ac := range agentConfigs {
+		if !ac.Enabled {
+			continue
+		}
+		if ac.IsEnabledForPhase("analyze") {
+			analyzeCount++
+			analyzeAgents = append(analyzeAgents, name)
+		}
+		if ac.IsEnabledForPhase("plan") {
+			planCount++
+			planAgents = append(planAgents, name)
+		}
+		if ac.IsEnabledForPhase("execute") {
+			executeCount++
+			executeAgents = append(executeAgents, name)
+		}
+	}
+
+	// 5. Validate minimum agents for multi-agent analysis
+	if analyzeCount < 2 {
+		v.addError("agents.*.phases.analyze", analyzeAgents,
+			"at least 2 agents must have phases.analyze: true for multi-agent consensus")
+	}
+
+	// 6. Validate at least 1 agent for plan phase
+	if planCount < 1 {
+		v.addError("agents.*.phases.plan", planAgents,
+			"at least 1 agent must have phases.plan: true")
+	}
+
+	// 7. Validate at least 1 agent for execute phase
+	if executeCount < 1 {
+		v.addError("agents.*.phases.execute", executeAgents,
+			"at least 1 agent must have phases.execute: true")
+	}
 }
 
 func (v *Validator) validatePhaseTimeout(field, value string) {
