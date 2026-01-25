@@ -1,0 +1,56 @@
+# Task Manifest Generation
+
+## Original Request
+{{.Prompt}}
+
+## Consolidated Analysis
+{{.ConsolidatedAnalysis}}
+
+## Instructions
+
+Generate a **lightweight task manifest** with metadata only. The detailed task specifications will be generated separately.
+
+### What to Generate
+
+Create a JSON manifest containing ONLY:
+- Task identifiers
+- Task names (short, descriptive)
+- Dependencies between tasks
+- CLI/agent assignment
+- Complexity estimation
+
+**DO NOT include task descriptions** - those will be generated separately by CLIs.
+
+### Requirements
+
+- Maximum {{.MaxTasks}} tasks
+- Each task should be independently executable
+- Tasks should have clear dependencies
+- Estimate complexity (low/medium/high)
+- Return at least one task
+- If you set agent/cli, it must be a configured agent name (leave empty to use the default)
+- Return **ONLY** the JSON manifest. No markdown, no explanations.
+
+## Response Format
+```json
+{
+  "tasks": [
+    {
+      "id": "task-1",
+      "name": "Short descriptive task name",
+      "dependencies": [],
+      "complexity": "low|medium|high",
+      "cli": "preferred agent name or empty"
+    },
+    {
+      "id": "task-2",
+      "name": "Another task name",
+      "dependencies": ["task-1"],
+      "complexity": "medium",
+      "cli": ""
+    }
+  ]
+}
+```
+
+**CRITICAL**: Return ONLY the JSON. No markdown code blocks, no explanations, no additional text.

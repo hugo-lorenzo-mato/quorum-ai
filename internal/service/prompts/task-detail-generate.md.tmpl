@@ -1,0 +1,195 @@
+# Task Detail Generation
+
+## CRITICAL: Maximum Exhaustiveness Required
+
+**This task specification must be COMPLETELY SELF-CONTAINED.**
+
+The executing agent will ONLY have access to this document. Include EVERYTHING needed.
+
+- There is NO length limit - be as exhaustive as necessary
+- A document that is "too long" is ALWAYS better than one that is incomplete
+- If in doubt whether to include something, INCLUDE IT
+
+## Task Information
+
+- **Task ID**: {{.TaskID}}
+- **Task Name**: {{.TaskName}}
+- **Dependencies**: {{if .Dependencies}}{{range $i, $dep := .Dependencies}}{{if $i}}, {{end}}{{$dep}}{{end}}{{else}}None{{end}}
+- **Output File**: {{.OutputPath}}
+
+## Consolidated Analysis (Complete Reference)
+
+The following is the COMPLETE consolidated analysis. Extract and EXPAND everything relevant to this specific task.
+
+{{.ConsolidatedAnalysis}}
+
+## Instructions
+
+Write the complete task specification to: `{{.OutputPath}}`
+
+### Required Sections (Expand Each Fully)
+
+Your document MUST include ALL of the following sections. Each section should be as detailed as the task requires.
+
+#### 1. Task Header
+```markdown
+# Task: {{.TaskName}}
+
+**Task ID**: {{.TaskID}}
+**Dependencies**: [list with explanations]
+**Assigned CLI**: [from manifest]
+**Complexity**: [from manifest]
+```
+
+#### 2. Contexto Completo
+- Why this task exists (full background from analysis)
+- How it fits in the overall architecture
+- ALL relevant decisions from the analysis with rationale
+- What happens before this task (dependencies explained)
+- What happens after this task (what depends on it)
+- Include relevant diagrams from the analysis
+
+#### 3. Arquitectura y Diseno
+- Component diagrams (ASCII art from analysis or new ones)
+- Data flow diagrams relevant to this task
+- Integration points with existing code
+- Interface definitions that will be used or created
+- Type definitions
+
+#### 4. Implementacion Paso a Paso
+For EACH step include:
+- What to do (specific action)
+- Why we're doing it (rationale)
+- Code example for that step
+- Potential issues and how to handle them
+- Sub-steps where needed
+
+Example format:
+```markdown
+### Step 1: Create the main file
+
+**Action**: Create `internal/web/server.go`
+
+**Rationale**: This file will contain the HTTP server implementation...
+
+**Code**:
+```go
+package web
+
+import (
+    "net/http"
+    // ... all imports
+)
+
+type Server struct {
+    // ... complete struct definition
+}
+
+func NewServer(cfg Config) *Server {
+    // ... complete implementation
+}
+```
+
+**Potential Issues**:
+- If port is already in use, wrap error with context
+- Handle graceful shutdown...
+```
+
+#### 5. Codigo de Referencia Completo
+- ALL patterns from existing codebase (with exact file:line references)
+- COMPLETE function implementations to use as reference (not snippets)
+- Type definitions that will be needed
+- Import statements
+- Do NOT truncate code - include full functions
+
+#### 6. Archivos a Modificar (Lista Exhaustiva)
+Format:
+```markdown
+| File | Action | Lines | Description |
+|------|--------|-------|-------------|
+| `path/to/file.go` | CREATE | - | New file for... |
+| `path/to/existing.go` | MODIFY | 45-67 | Add handler registration |
+| `path/to/old.go` | DELETE | - | No longer needed because... |
+```
+
+For modifications, include before/after snippets where helpful.
+
+#### 7. Codigo a Implementar
+Provide COMPLETE code implementations:
+- Not just structure - actual working code
+- Include comments explaining non-obvious parts
+- Include ALL helper functions needed
+- Include tests if relevant
+
+#### 8. Manejo de Errores
+- Every error case that can occur in this task
+- How to handle each one
+- User-facing error messages
+- Logging strategy (what to log at each level)
+- Recovery strategies
+
+#### 9. Testing Strategy
+- Unit tests needed (with example code)
+- Integration tests needed
+- Manual testing steps
+- Edge cases to verify
+- Commands to run tests
+
+#### 10. Expected Outcome
+Specific, verifiable criteria:
+```markdown
+- [ ] `quorum web` starts HTTP server on configured port
+- [ ] `curl http://localhost:8080/health` returns 200 OK
+- [ ] Static files are served from `/`
+- [ ] API endpoints return 401 without token
+- [ ] All existing tests pass: `go test ./...`
+```
+
+#### 11. Consideraciones de Seguridad
+- Security implications of this task
+- Input validation needed
+- Authentication/authorization concerns
+- Sensitive data handling
+
+#### 12. Notas Adicionales
+- ALL edge cases (list every one you can think of)
+- Performance considerations
+- Backwards compatibility concerns
+- Related documentation links
+- Future improvements (for reference only, not to implement)
+
+#### 13. Context Efficiency Reminders
+Include this section verbatim in the generated document:
+```markdown
+## Execution Guidelines (Context Efficiency)
+
+When executing this task, optimize your context usage:
+
+1. **Don't re-read this document** - You have it. Reference sections by name.
+2. **Search before reading** - Use grep to find exact lines before reading files.
+3. **Targeted reads only** - Read specific line ranges, not entire files.
+4. **One change at a time** - Complete each edit before starting the next.
+5. **Concise responses** - Reference line numbers instead of quoting code.
+6. **No speculative exploration** - Read files only when you have a specific need.
+
+If context runs low: save progress, report partial completion with clear next steps.
+```
+
+## Output Instructions
+
+**CRITICAL - MANDATORY FILE WRITE**:
+
+You MUST write the complete markdown document directly to disk at:
+`{{.OutputPath}}`
+
+**DO NOT** return the document content in your response. Instead:
+
+1. Use your **Write tool** to create the file at the exact path above
+2. The file must contain ALL sections specified above
+3. After writing, confirm the file was created successfully
+
+Your response should only be a brief confirmation like:
+"Task specification written to {{.OutputPath}}"
+
+**IMPORTANT**: The task specification must be WRITTEN TO DISK, not returned as text output.
+This allows for unlimited document length without response size constraints.
