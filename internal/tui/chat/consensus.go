@@ -100,11 +100,11 @@ func (p *ConsensusPanel) Render() string {
 
 	// If no data, show empty state
 	if !p.HasData() {
-		emptyContent := headerStyle.Render("◆ Consensus") + "\n\n" +
-			dimStyle.Render("No consensus data yet.\n\n") +
-			dimStyle.Render("Run /analyze or /run to see consensus results\n") +
+		emptyContent := headerStyle.Render("◆ Quorum") + "\n\n" +
+			dimStyle.Render("No quorum data yet.\n\n") +
+			dimStyle.Render("Run /analyze or /run to see quorum results\n") +
 			dimStyle.Render("between multiple agents.") + "\n\n" +
-			dimStyle.Render("Press Ctrl+K or Esc to close")
+			dimStyle.Render("Press Ctrl+Q or Esc to close")
 		return boxStyle.Render(emptyContent)
 	}
 
@@ -126,7 +126,7 @@ func (p *ConsensusPanel) Render() string {
 	var sb strings.Builder
 
 	// Header
-	sb.WriteString(headerStyle.Render("◆ Consensus"))
+	sb.WriteString(headerStyle.Render("◆ Quorum"))
 	sb.WriteString("\n\n")
 
 	// Progress bar
@@ -170,7 +170,7 @@ func (p *ConsensusPanel) Render() string {
 	}
 
 	sb.WriteString("\n")
-	sb.WriteString(dimStyle.Render("Press Ctrl+K or Esc to close"))
+	sb.WriteString(dimStyle.Render("Press Ctrl+Q or Esc to close"))
 
 	return boxStyle.Render(sb.String())
 }

@@ -26,6 +26,7 @@ type AgentInfo struct {
 	Status    AgentStatus
 	TokensIn  int
 	TokensOut int
+	Model     string
 	Time      string
 	Output    string
 	Error     string
@@ -547,7 +548,7 @@ func UpdateAgentActivity(agents []*AgentInfo, name, icon, activity string) bool 
 
 // StartAgent marks an agent as running and records the start time.
 // If the agent is already running, preserves existing MaxTimeout if new one is 0.
-func StartAgent(agents []*AgentInfo, name, phase string, maxTimeout time.Duration) bool {
+func StartAgent(agents []*AgentInfo, name, phase string, maxTimeout time.Duration, model string) bool {
 	for _, a := range agents {
 		if !strings.EqualFold(a.Name, name) {
 			continue
@@ -576,6 +577,9 @@ func StartAgent(agents []*AgentInfo, name, phase string, maxTimeout time.Duratio
 		// Only update MaxTimeout if new value is provided
 		if maxTimeout > 0 {
 			a.MaxTimeout = maxTimeout
+		}
+		if model != "" {
+			a.Model = model
 		}
 		if phase != "" {
 			a.Phase = phase

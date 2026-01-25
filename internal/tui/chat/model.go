@@ -273,7 +273,7 @@ Quorum AI orchestrates multiple AI agents (Claude, Gemini, etc.) to work in para
 ## Chat Mode Commands (inside quorum chat):
 - /analyze <prompt> - Run multi-agent analysis (V1/V2/V3)
 - /plan [prompt]    - Continue planning or start new workflow
-- /execute          - Execute tasks from active workflow
+- /execute          - Execute issues from active workflow
 - /run <prompt>     - Run complete workflow
 - /workflows        - List available workflows
 - /load [id]        - Load and switch to a workflow
@@ -314,8 +314,10 @@ type WorkflowRunner interface {
 	Run(ctx context.Context, prompt string) error
 	Analyze(ctx context.Context, prompt string) error
 	Plan(ctx context.Context) error
+	Replan(ctx context.Context, additionalContext string) error
 	Resume(ctx context.Context) error
 	GetState(ctx context.Context) (*core.WorkflowState, error)
+	SaveState(ctx context.Context, state *core.WorkflowState) error
 	ListWorkflows(ctx context.Context) ([]core.WorkflowSummary, error)
 	LoadWorkflow(ctx context.Context, workflowID string) (*core.WorkflowState, error)
 }
@@ -373,6 +375,7 @@ type Model struct {
 	workflowStartedAt time.Time // When the current workflow started
 	chatStartedAt     time.Time // When the current chat message was sent
 	chatAgent         string    // Agent handling current chat message
+	chatModel         string    // Model used for current chat message
 	inputFocused      bool
 	darkTheme         bool // Current theme (true=dark, false=light)
 
@@ -391,11 +394,19 @@ type Model struct {
 	showExplorer  bool
 	explorerFocus bool // true when explorer has focus for navigation
 
-	// Panel navigation mode (tmux-style with Ctrl+b prefix)
+	// Token panel (left sidebar)
+	tokenPanel  *TokenPanel
+	showTokens  bool
+	tokensFocus bool
+
+	// Panel navigation mode (tmux-style with Ctrl+n prefix)
 	panelNavMode bool // true when waiting for arrow key to switch panels
+	panelNavSeq  int
+	panelNavTill time.Time
 
 	// NEW: Enhanced UI panels
 	consensusPanel   *ConsensusPanel
+	tasksPanel       *TasksPanel
 	contextPanel     *ContextPreviewPanel
 	diffView         *AgentDiffView
 	historySearch    *HistorySearch
@@ -410,6 +421,9 @@ type Model struct {
 
 	// Markdown renderer
 	mdRenderer *glamour.TermRenderer
+
+	// Message styles (for new chat message rendering)
+	messageStyles *MessageStyles
 
 	// Version info
 	version string
@@ -492,8 +506,12 @@ func NewModel(cp *control.ControlPlane, agents core.AgentRegistry, defaultAgent,
 		explorerPanel: NewExplorerPanel(),
 		showExplorer:  true, // Open by default
 		explorerFocus: false,
+		tokenPanel:    NewTokenPanel(),
+		showTokens:    true, // Open by default
+		tokensFocus:   false,
 		// Initialize new panels
 		consensusPanel:   NewConsensusPanel(80.0), // 80% threshold
+		tasksPanel:       NewTasksPanel(),
 		contextPanel:     NewContextPreviewPanel(),
 		diffView:         NewAgentDiffView(),
 		historySearch:    NewHistorySearch(),
@@ -502,7 +520,8 @@ func NewModel(cp *control.ControlPlane, agents core.AgentRegistry, defaultAgent,
 		fileViewer:       NewFileViewer(),
 		statsWidget:      NewStatsWidget(),
 		machineCollector: NewMachineStatsCollector(),
-		darkTheme:        true, // Default to dark theme
+		darkTheme:        true,                   // Default to dark theme
+		messageStyles:    NewMessageStyles(80),   // Default width, updated on resize
 	}
 }
 
@@ -661,6 +680,7 @@ type (
 	TickMsg               struct{ Time time.Time }
 	ExplorerRefreshMsg    struct{} // File system change detected
 	StatsTickMsg          struct{} // Periodic stats update
+	PanelNavTimeoutMsg    struct{ Seq int }
 	ChatProgressTickMsg   struct{ Elapsed time.Duration }
 	ActiveWorkflowLoadMsg struct{ State *core.WorkflowState } // Auto-load active workflow on startup
 )
@@ -701,6 +721,22 @@ func statsTickCmd() tea.Cmd {
 	})
 }
 
+func (m *Model) updateQuorumPanel(state *core.WorkflowState) {
+	if state == nil || state.Metrics == nil || state.Metrics.ConsensusScore <= 0 {
+		m.consensusPanel.SetScore(0)
+		return
+	}
+	m.consensusPanel.SetScore(state.Metrics.ConsensusScore * 100)
+}
+
+const panelNavWindow = 1500 * time.Millisecond
+
+func panelNavTimeoutCmd(seq int) tea.Cmd {
+	return tea.Tick(panelNavWindow, func(_ time.Time) tea.Msg {
+		return PanelNavTimeoutMsg{Seq: seq}
+	})
+}
+
 // handleKeyMsg handles keyboard input.
 func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 	// PRIORITY: Escape ALWAYS closes autocomplete dropdown first
@@ -714,70 +750,140 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		return m, nil, true
 	}
 
-	// Panel navigation mode (tmux-style: Ctrl+b then arrow keys)
+	// Panel navigation mode (tmux-style: Ctrl+z then arrow keys)
 	if m.panelNavMode {
-		switch msg.Type {
-		case tea.KeyEsc:
-			// Cancel panel nav mode and return focus to chat
-			m.panelNavMode = false
+		refreshPanelNav := func() tea.Cmd {
+			m.panelNavSeq++
+			m.panelNavTill = time.Now().Add(panelNavWindow)
+			return panelNavTimeoutCmd(m.panelNavSeq)
+		}
+
+		focusInput := func() {
 			m.explorerFocus = false
 			m.logsFocus = false
 			m.statsFocus = false
+			m.tokensFocus = false
 			m.inputFocused = true
 			m.textarea.Focus()
 			m.explorerPanel.SetFocused(false)
-			return m, nil, true
-		case tea.KeyEnter, tea.KeySpace:
-			// Return focus to chat input
-			m.panelNavMode = false
-			m.explorerFocus = false
-			m.logsFocus = false
-			m.statsFocus = false
-			m.inputFocused = true
-			m.textarea.Focus()
-			m.explorerPanel.SetFocused(false)
-			m.logsPanel.AddInfo("system", "Chat input focused")
-			return m, nil, true
-		case tea.KeyLeft:
-			// Focus explorer (left panel)
-			m.panelNavMode = false
-			if m.showExplorer {
+		}
+
+		focusLeft := func(prefer string) {
+			if !m.showExplorer && !m.showTokens {
+				return
+			}
+			if !(m.explorerFocus || m.tokensFocus) && prefer == "" {
+				prefer = "explorer"
+			}
+			if prefer == "explorer" && m.showExplorer {
 				m.explorerFocus = true
+				m.tokensFocus = false
+			} else if prefer == "tokens" && m.showTokens {
+				m.tokensFocus = true
+				m.explorerFocus = false
+			} else if m.showExplorer {
+				m.explorerFocus = true
+				m.tokensFocus = false
+			} else {
+				m.tokensFocus = true
+				m.explorerFocus = false
+			}
+			if m.explorerFocus || m.tokensFocus {
 				m.logsFocus = false
 				m.statsFocus = false
 				m.inputFocused = false
 				m.textarea.Blur()
-				m.explorerPanel.SetFocused(true)
-				m.logsPanel.AddInfo("system", "Explorer focused (Esc to return)")
+				m.explorerPanel.SetFocused(m.explorerFocus)
 			}
-			return m, nil, true
-		case tea.KeyRight, tea.KeyUp, tea.KeyDown:
-			// Focus right sidebar (logs only - stats is view-only, no focus needed)
-			m.panelNavMode = false
-			if m.showLogs {
+		}
+
+		focusRight := func(prefer string) {
+			if !m.showLogs && !m.showStats {
+				return
+			}
+			if !(m.logsFocus || m.statsFocus) && prefer == "" {
+				prefer = "logs"
+			}
+			if prefer == "logs" && m.showLogs {
 				m.logsFocus = true
 				m.statsFocus = false
+			} else if prefer == "stats" && m.showStats {
+				m.statsFocus = true
+				m.logsFocus = false
+			} else if m.showLogs {
+				m.logsFocus = true
+				m.statsFocus = false
+			} else {
+				m.statsFocus = true
+				m.logsFocus = false
+			}
+			if m.logsFocus || m.statsFocus {
 				m.explorerFocus = false
+				m.tokensFocus = false
 				m.inputFocused = false
 				m.textarea.Blur()
 				m.explorerPanel.SetFocused(false)
-				m.logsPanel.AddInfo("system", "Logs focused (↑↓ scroll, Esc to return)")
 			}
+		}
+
+		switch msg.Type {
+		case tea.KeyEsc, tea.KeyEnter, tea.KeySpace:
+			// Exit nav mode and return focus to chat
+			m.panelNavMode = false
+			m.panelNavSeq++
+			focusInput()
 			return m, nil, true
+		case tea.KeyLeft:
+			// Move to left sidebar (keep focus if already there)
+			if !(m.explorerFocus || m.tokensFocus) {
+				focusLeft("")
+			}
+			return m, refreshPanelNav(), true
+		case tea.KeyRight:
+			// Move to right sidebar (keep focus if already there)
+			if !(m.logsFocus || m.statsFocus) {
+				focusRight("")
+			}
+			return m, refreshPanelNav(), true
+		case tea.KeyUp:
+			// Move to top panel in the current stack
+			if m.logsFocus || m.statsFocus {
+				focusRight("logs")
+			} else if m.explorerFocus || m.tokensFocus {
+				focusLeft("explorer")
+			} else if m.showLogs || m.showStats {
+				focusRight("logs")
+			} else {
+				focusLeft("explorer")
+			}
+			return m, refreshPanelNav(), true
+		case tea.KeyDown:
+			// Move to bottom panel in the current stack
+			if m.logsFocus || m.statsFocus {
+				focusRight("stats")
+			} else if m.explorerFocus || m.tokensFocus {
+				focusLeft("tokens")
+			} else if m.showLogs || m.showStats {
+				focusRight("stats")
+			} else {
+				focusLeft("tokens")
+			}
+			return m, refreshPanelNav(), true
 		default:
 			// Any other key cancels panel nav mode and returns focus to input
 			m.panelNavMode = false
-			m.inputFocused = true
-			m.textarea.Focus()
+			m.panelNavSeq++
+			focusInput()
 			return m, nil, true
 		}
 	}
 
-	// Ctrl+b enters panel navigation mode (tmux-style)
-	if msg.Type == tea.KeyCtrlB {
+	// Ctrl+z enters panel navigation mode (tmux-style)
+	if msg.Type == tea.KeyCtrlZ {
 		m.panelNavMode = true
-		m.logsPanel.AddInfo("system", "Panel nav: ← explorer, → logs, Enter/Esc=chat")
-		return m, nil, true
+		m.panelNavSeq++
+		m.panelNavTill = time.Now().Add(panelNavWindow)
+		return m, panelNavTimeoutCmd(m.panelNavSeq), true
 	}
 
 	switch msg.Type {
@@ -882,13 +988,9 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 			m.suggestionIndex = 0
 			m.suggestionType = ""
 			return m, nil, true
-		} else if (m.textarea.Value() == "" || m.textarea.Value() == "/") && !m.streaming && !m.workflowRunning {
-			// Show all commands on Tab with empty or just "/" (not during streaming)
-			m.textarea.SetValue("/")
-			m.suggestions = m.commands.Suggest("/")
-			m.suggestionType = "command"
-			m.showSuggestions = len(m.suggestions) > 0
-			m.suggestionIndex = 0
+		} else if !m.logsFocus && !m.tokensFocus && !m.diffView.IsVisible() && !m.historySearch.IsVisible() {
+			// Tab toggles issues panel when not used by other contexts
+			m.tasksPanel.Toggle()
 			return m, nil, true
 		}
 
@@ -968,6 +1070,7 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		if m.showLogs {
 			m.logsFocus = true
 			m.explorerFocus = false
+			m.tokensFocus = false
 			m.inputFocused = false
 			m.textarea.Blur()
 		} else {
@@ -986,6 +1089,7 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		m.showExplorer = !m.showExplorer
 		if m.showExplorer {
 			m.explorerFocus = true
+			m.tokensFocus = false
 			m.inputFocused = false
 			m.textarea.Blur()
 			m.explorerPanel.SetFocused(true)
@@ -1001,9 +1105,44 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		}
 		return m, nil, true
 
-	case tea.KeyCtrlS:
-		// Toggle stats panel (view-only, no focus change)
+	case tea.KeyCtrlR:
+		// Toggle stats panel (resources)
 		m.showStats = !m.showStats
+		if m.showStats {
+			m.statsFocus = true
+			m.logsFocus = false
+			m.tokensFocus = false
+			m.explorerFocus = false
+			m.inputFocused = false
+			m.textarea.Blur()
+			m.explorerPanel.SetFocused(false)
+		} else {
+			m.statsFocus = false
+			m.inputFocused = true
+			m.textarea.Focus()
+		}
+		// Recalculate layout
+		if m.width > 0 && m.height > 0 {
+			m.recalculateLayout()
+		}
+		return m, nil, true
+
+	case tea.KeyCtrlT:
+		// Toggle tokens panel (left sidebar)
+		m.showTokens = !m.showTokens
+		if m.showTokens {
+			m.tokensFocus = true
+			m.explorerFocus = false
+			m.logsFocus = false
+			m.statsFocus = false
+			m.inputFocused = false
+			m.textarea.Blur()
+			m.explorerPanel.SetFocused(false)
+		} else {
+			m.tokensFocus = false
+			m.inputFocused = true
+			m.textarea.Focus()
+		}
 		// Recalculate layout
 		if m.width > 0 && m.height > 0 {
 			m.recalculateLayout()
@@ -1043,10 +1182,13 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 			return m, nil, true
 		}
 
-	case tea.KeyCtrlK:
-		// Toggle consensus panel
+	case tea.KeyCtrlQ, tea.KeyCtrlK:
+		// Toggle quorum panel
 		m.consensusPanel.Toggle()
 		return m, nil, true
+
+	// Note: tea.KeyTab is handled earlier in this switch (line ~913) for suggestions
+	// Additional Tab handling for issues panel moved there.
 
 	case tea.KeyCtrlD:
 		// Toggle diff view
@@ -1055,7 +1197,7 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		}
 		return m, nil, true
 
-	case tea.KeyCtrlR:
+	case tea.KeyCtrlH:
 		// Toggle history search
 		m.historySearch.Toggle()
 		if m.historySearch.IsVisible() {
@@ -1096,6 +1238,14 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		}
 		if m.diffView.IsVisible() {
 			m.diffView.Hide()
+			return m, nil, true
+		}
+		if m.consensusPanel.IsVisible() {
+			m.consensusPanel.Toggle()
+			return m, nil, true
+		}
+		if m.tasksPanel.IsVisible() {
+			m.tasksPanel.Hide()
 			return m, nil, true
 		}
 		// Note: fileViewer uses 'q' to close, not Escape
@@ -1255,7 +1405,6 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 					m.logsPanel.AddError("explorer", "Cannot open: "+err.Error())
 				} else {
 					m.fileViewer.Show()
-					m.logsPanel.AddInfo("explorer", "Viewing: "+filepath.Base(path))
 				}
 			}
 			return m, nil, true
@@ -1277,6 +1426,66 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 			m.inputFocused = true
 			m.textarea.Focus()
 			m.explorerPanel.SetFocused(false)
+			return m, nil, true
+		}
+	}
+
+	// Handle token panel scrolling when it has focus
+	if m.tokensFocus && m.showTokens {
+		switch msg.Type {
+		case tea.KeyUp:
+			m.tokenPanel.ScrollUp()
+			return m, nil, true
+		case tea.KeyDown:
+			m.tokenPanel.ScrollDown()
+			return m, nil, true
+		case tea.KeyPgUp:
+			m.tokenPanel.PageUp()
+			return m, nil, true
+		case tea.KeyPgDown:
+			m.tokenPanel.PageDown()
+			return m, nil, true
+		case tea.KeyHome:
+			m.tokenPanel.GotoTop()
+			return m, nil, true
+		case tea.KeyEnd:
+			m.tokenPanel.GotoBottom()
+			return m, nil, true
+		case tea.KeyTab:
+			// Switch focus back to input
+			m.tokensFocus = false
+			m.inputFocused = true
+			m.textarea.Focus()
+			return m, nil, true
+		}
+	}
+
+	// Handle stats panel scrolling when it has focus
+	if m.statsFocus && m.showStats {
+		switch msg.Type {
+		case tea.KeyUp:
+			m.statsPanel.ScrollUp()
+			return m, nil, true
+		case tea.KeyDown:
+			m.statsPanel.ScrollDown()
+			return m, nil, true
+		case tea.KeyPgUp:
+			m.statsPanel.PageUp()
+			return m, nil, true
+		case tea.KeyPgDown:
+			m.statsPanel.PageDown()
+			return m, nil, true
+		case tea.KeyHome:
+			m.statsPanel.GotoTop()
+			return m, nil, true
+		case tea.KeyEnd:
+			m.statsPanel.GotoBottom()
+			return m, nil, true
+		case tea.KeyTab:
+			// Switch focus back to input
+			m.statsFocus = false
+			m.inputFocused = true
+			m.textarea.Focus()
 			return m, nil, true
 		}
 	}
@@ -1325,104 +1534,179 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 }
 
 // handleMouseClick handles mouse clicks to switch panel focus.
-func (m Model) handleMouseClick(x, _ int) (tea.Model, tea.Cmd, bool) {
+func (m Model) handleMouseClick(x, y int) (tea.Model, tea.Cmd, bool) {
 	// Calculate panel boundaries based on current layout
-	explorerWidth := 0
-	logsWidth := 0
-
-	// Determine how many sidebars are open for dynamic sizing
-	rightSidebarOpen := m.showLogs || m.showStats
-	bothSidebarsOpen := m.showExplorer && rightSidebarOpen
-	oneSidebarOpen := (m.showExplorer || rightSidebarOpen) && !bothSidebarsOpen
+	leftSidebarWidth := 0
+	rightSidebarWidth := 0
+	showLeftSidebar := m.showExplorer || m.showTokens
+	showRightSidebar := m.showLogs || m.showStats
 
 	if m.showExplorer {
-		if oneSidebarOpen {
-			explorerWidth = m.width * 2 / 5
-			if explorerWidth < 35 {
-				explorerWidth = 35
-			}
-			if explorerWidth > 70 {
-				explorerWidth = 70
-			}
-		} else {
-			explorerWidth = m.width / 4
-			if explorerWidth < 30 {
-				explorerWidth = 30
-			}
-			if explorerWidth > 50 {
-				explorerWidth = 50
-			}
-		}
+		leftSidebarWidth = m.explorerPanel.Width()
+	} else if m.showTokens {
+		leftSidebarWidth = m.tokenPanel.Width()
 	}
-
-	// Right sidebar width (logs and/or stats)
-	if m.showLogs || m.showStats {
-		if oneSidebarOpen {
-			logsWidth = m.width * 2 / 5
-			if logsWidth < 40 {
-				logsWidth = 40
-			}
-			if logsWidth > 80 {
-				logsWidth = 80
-			}
-		} else {
-			logsWidth = m.width / 4
-			if logsWidth < 35 {
-				logsWidth = 35
-			}
-			if logsWidth > 60 {
-				logsWidth = 60
-			}
-		}
+	if m.showStats {
+		rightSidebarWidth = m.statsPanel.Width()
+	} else if m.showLogs {
+		rightSidebarWidth = m.logsPanel.Width()
 	}
 
 	// Determine which panel was clicked based on X coordinate
-	mainStart := explorerWidth
-	if m.showExplorer {
+	mainStart := leftSidebarWidth
+	if showLeftSidebar {
 		mainStart += 1 // Account for separator
 	}
-	mainEnd := m.width - logsWidth
-	if m.showLogs {
+	mainEnd := m.width - rightSidebarWidth
+	if showRightSidebar {
 		mainEnd -= 1 // Account for separator
 	}
 
-	// Check if click is in Explorer panel
-	if m.showExplorer && x < explorerWidth {
-		if !m.explorerFocus {
-			m.explorerFocus = true
-			m.inputFocused = false
-			m.textarea.Blur()
-			m.explorerPanel.SetFocused(true)
+	// Check if click is in left sidebar
+	if showLeftSidebar && x < leftSidebarWidth {
+		if m.showExplorer && m.showTokens {
+			explorerHeight := m.explorerPanel.Height()
+			if y < explorerHeight {
+				if !m.explorerFocus {
+					m.explorerFocus = true
+					m.tokensFocus = false
+					m.logsFocus = false
+					m.statsFocus = false
+					m.inputFocused = false
+					m.textarea.Blur()
+					m.explorerPanel.SetFocused(true)
+					return m, nil, true
+				}
+				return m, nil, false
+			}
+			// Token panel area
+			if !m.tokensFocus {
+				m.tokensFocus = true
+				m.explorerFocus = false
+				m.logsFocus = false
+				m.statsFocus = false
+				m.inputFocused = false
+				m.textarea.Blur()
+				m.explorerPanel.SetFocused(false)
+				return m, nil, true
+			}
+			// Already focused on tokens - clicking again returns to main
+			m.tokensFocus = false
+			m.inputFocused = true
+			m.textarea.Focus()
 			return m, nil, true
 		}
-		return m, nil, false // Already focused, let it handle internally
+		if m.showExplorer {
+			if !m.explorerFocus {
+				m.explorerFocus = true
+				m.tokensFocus = false
+				m.logsFocus = false
+				m.statsFocus = false
+				m.inputFocused = false
+				m.textarea.Blur()
+				m.explorerPanel.SetFocused(true)
+				return m, nil, true
+			}
+			return m, nil, false // Already focused, let it handle internally
+		}
+		if m.showTokens {
+			if !m.tokensFocus {
+				m.tokensFocus = true
+				m.explorerFocus = false
+				m.logsFocus = false
+				m.statsFocus = false
+				m.inputFocused = false
+				m.textarea.Blur()
+				m.explorerPanel.SetFocused(false)
+				return m, nil, true
+			}
+			m.tokensFocus = false
+			m.inputFocused = true
+			m.textarea.Focus()
+			return m, nil, true
+		}
 	}
 
-	// Check if click is in right sidebar (logs panel only - stats is view-only)
-	if m.showLogs && x > mainEnd {
-		// Right sidebar (logs) was clicked
-		if !m.logsFocus {
-			m.logsFocus = true
+	// Check if click is in right sidebar (logs/stats)
+	if (m.showLogs || m.showStats) && x > mainEnd {
+		if m.showLogs && m.showStats {
+			logsHeight := m.logsPanel.Height()
+			if y < logsHeight {
+				// Logs area
+				if !m.logsFocus {
+					m.logsFocus = true
+					m.statsFocus = false
+					m.explorerFocus = false
+					m.tokensFocus = false
+					m.inputFocused = false
+					m.textarea.Blur()
+					m.explorerPanel.SetFocused(false)
+					return m, nil, true
+				}
+				m.logsFocus = false
+				m.inputFocused = true
+				m.textarea.Focus()
+				return m, nil, true
+			}
+			// Stats area
+			if !m.statsFocus {
+				m.statsFocus = true
+				m.logsFocus = false
+				m.explorerFocus = false
+				m.tokensFocus = false
+				m.inputFocused = false
+				m.textarea.Blur()
+				m.explorerPanel.SetFocused(false)
+				return m, nil, true
+			}
 			m.statsFocus = false
-			m.explorerFocus = false
-			m.inputFocused = false
-			m.textarea.Blur()
-			m.explorerPanel.SetFocused(false)
+			m.inputFocused = true
+			m.textarea.Focus()
 			return m, nil, true
 		}
-		// Already focused on logs - clicking again should return to main
-		m.logsFocus = false
-		m.inputFocused = true
-		m.textarea.Focus()
-		return m, nil, true
+		if m.showLogs {
+			// Logs only
+			if !m.logsFocus {
+				m.logsFocus = true
+				m.statsFocus = false
+				m.explorerFocus = false
+				m.tokensFocus = false
+				m.inputFocused = false
+				m.textarea.Blur()
+				m.explorerPanel.SetFocused(false)
+				return m, nil, true
+			}
+			m.logsFocus = false
+			m.inputFocused = true
+			m.textarea.Focus()
+			return m, nil, true
+		}
+		if m.showStats {
+			// Stats only
+			if !m.statsFocus {
+				m.statsFocus = true
+				m.logsFocus = false
+				m.explorerFocus = false
+				m.tokensFocus = false
+				m.inputFocused = false
+				m.textarea.Blur()
+				m.explorerPanel.SetFocused(false)
+				return m, nil, true
+			}
+			m.statsFocus = false
+			m.inputFocused = true
+			m.textarea.Focus()
+			return m, nil, true
+		}
 	}
 
 	// Click is in Main content area - return focus to chat input
 	if x >= mainStart && x < mainEnd {
-		if m.explorerFocus || m.logsFocus || m.statsFocus {
+		if m.explorerFocus || m.logsFocus || m.statsFocus || m.tokensFocus {
 			m.explorerFocus = false
 			m.logsFocus = false
 			m.statsFocus = false
+			m.tokensFocus = false
 			m.inputFocused = true
 			m.textarea.Focus()
 			m.explorerPanel.SetFocused(false)
@@ -1796,15 +2080,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, m.listenForExplorerChanges())
 
 	case ChatProgressTickMsg:
-		// Only emit progress log if still streaming
+		// Progress ticks are intentionally silent (avoid log noise)
 		if m.streaming {
-			elapsed := time.Since(m.chatStartedAt)
-			agent := m.chatAgent
-			if agent == "" {
-				agent = "agent"
-			}
-			m.logsPanel.AddInfo(strings.ToLower(agent), fmt.Sprintf("⏳ Waiting for response... (%s)", formatDuration(elapsed)))
-			// Continue ticking while streaming
 			cmds = append(cmds, m.chatProgressTick())
 		}
 
@@ -1815,10 +2092,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Get resource stats
 		stats := m.statsWidget.GetStats()
 		resourceStats := ResourceStats{
-			MemoryMB:   stats.MemoryMB,
-			CPUPercent: stats.CPUPercent,
-			Uptime:     stats.Uptime,
-			Goroutines: stats.Goroutines,
+			MemoryMB:      stats.MemoryMB,
+			CPUPercent:    stats.CPUPercent,
+			CPURawPercent: stats.CPURawPercent,
+			Uptime:        stats.Uptime,
+			Goroutines:    stats.Goroutines,
 		}
 
 		// Pass to LogsPanel footer
@@ -1836,10 +2114,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Pass token stats from agentInfos
 		m.updateLogsPanelTokenStats()
-		m.updateStatsPanelTokenStats()
+		m.updateTokenPanelStats()
 
 		// Continue ticking
 		cmds = append(cmds, statsTickCmd())
+
+	case PanelNavTimeoutMsg:
+		if m.panelNavMode && msg.Seq == m.panelNavSeq {
+			if time.Now().After(m.panelNavTill) {
+				m.panelNavMode = false
+			}
+		}
 
 	case AgentResponseMsg:
 		elapsed := time.Since(m.chatStartedAt)
@@ -1862,6 +2147,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			const maxReasonableTokens = 500_000
 			for _, a := range m.agentInfos {
 				if strings.EqualFold(a.Name, msg.Agent) {
+					if m.chatModel != "" {
+						a.Model = m.chatModel
+					}
 					if msg.TokensIn > 0 && msg.TokensIn <= maxReasonableTokens {
 						a.TokensIn += msg.TokensIn
 					}
@@ -1881,6 +2169,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.updateViewport()
 		m.updateLogsPanelTokenStats()
+		m.updateTokenPanelStats()
 
 	case ShellOutputMsg:
 		// Handle shell command output
@@ -1920,11 +2209,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case WorkflowUpdateMsg:
 		m.workflowState = msg.State
+		m.tasksPanel.SetState(msg.State)
+		m.updateQuorumPanel(msg.State)
 
 	case ActiveWorkflowLoadMsg:
 		// Auto-loaded active workflow on startup
 		if msg.State != nil {
 			m.workflowState = msg.State
+			m.tasksPanel.SetState(msg.State)
+			m.updateQuorumPanel(msg.State)
 			// Show a brief notification
 			prompt := msg.State.Prompt
 			if len(prompt) > 50 {
@@ -1941,6 +2234,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.workflowRunning = true
 		m.workflowStartedAt = time.Now()
 		m.workflowPhase = "running"
+		m.consensusPanel.ClearOutputs()
 		// Reset all agents to idle - actual agent events will set them to running
 		for _, a := range m.agentInfos {
 			if a.Status != AgentStatusDisabled {
@@ -1965,6 +2259,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.workflowRunning = false
 		m.workflowPhase = "done"
 		m.workflowState = msg.State
+		m.updateQuorumPanel(msg.State)
 		// Mark all running agents as done
 		for _, a := range m.agentInfos {
 			if a.Status == AgentStatusRunning {
@@ -2042,6 +2337,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if p, ok := msg.Data["phase"].(string); ok {
 				phase = p
 			}
+			model := ""
+			if m, ok := msg.Data["model"].(string); ok {
+				model = m
+			}
 			// Extract timeout from event data (in seconds or as duration)
 			var maxTimeout time.Duration
 			if t, ok := msg.Data["timeout_seconds"].(float64); ok && t > 0 {
@@ -2050,7 +2349,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				maxTimeout = time.Duration(t) * time.Second
 			}
 			// Update agent to running state with start time
-			StartAgent(m.agentInfos, msg.Agent, phase, maxTimeout)
+			StartAgent(m.agentInfos, msg.Agent, phase, maxTimeout, model)
 
 			// Only log workflow-level started events (those with phase info)
 			// Skip CLI adapter events as they're redundant with progress bars
@@ -2096,6 +2395,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Extract token counts with flexible type handling
 			tokensIn := extractTokenValue(msg.Data, "tokens_in")
 			tokensOut := extractTokenValue(msg.Data, "tokens_out")
+			if model, ok := msg.Data["model"].(string); ok && model != "" {
+				for _, a := range m.agentInfos {
+					if strings.EqualFold(a.Name, msg.Agent) {
+						a.Model = model
+						break
+					}
+				}
+			}
 
 			// Update agent to completed state
 			found, rejectedIn, rejectedOut := CompleteAgent(m.agentInfos, msg.Agent, tokensIn, tokensOut)
@@ -2135,7 +2442,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			// Refresh stats panels after token update
 			m.updateLogsPanelTokenStats()
-			m.updateStatsPanelTokenStats()
+			m.updateTokenPanelStats()
 
 		case "error":
 			// Update agent to error state
@@ -2203,7 +2510,7 @@ func (m Model) handleSubmit() (tea.Model, tea.Cmd) {
 	m.textarea.Reset()
 	m.showSuggestions = false
 
-	// Save to command history for Ctrl+R search
+	// Save to command history for Ctrl+H search
 	if input != "" {
 		m.historySearch.Add(input, m.currentAgent)
 	}
@@ -2269,6 +2576,7 @@ func (m Model) handleSubmit() (tea.Model, tea.Cmd) {
 		if model == "" {
 			model = "default"
 		}
+		m.chatModel = model
 		logMsg := fmt.Sprintf("▶ %s [%s] (%d chars", agent, model, len(input))
 		if historyCount > 1 {
 			logMsg += fmt.Sprintf(", %d ctx msgs", historyCount-1)
@@ -2277,7 +2585,7 @@ func (m Model) handleSubmit() (tea.Model, tea.Cmd) {
 		m.logsPanel.AddInfo(strings.ToLower(agent), logMsg)
 
 		// Start periodic progress tick
-		return m, tea.Batch(m.spinner.Tick, m.sendToAgentWithCtx(ctx, input, agent), m.chatProgressTick())
+		return m, tea.Batch(m.spinner.Tick, m.sendToAgentWithCtx(ctx, input, agent))
 	}
 
 	// No agents configured
@@ -2471,7 +2779,16 @@ func (m Model) handleCommand(cmd *Command, args []string) (tea.Model, tea.Cmd) {
 			m.currentModel = args[0]
 			m.history.Add(NewSystemMessage("Model: " + m.currentModel))
 		} else {
-			m.history.Add(NewSystemMessage("Current model: " + m.currentModel))
+			modelInfo := m.currentModel
+			if modelInfo == "" {
+				// Get the default model for current agent
+				if models, ok := m.agentModels[m.currentAgent]; ok && len(models) > 0 {
+					modelInfo = models[0] + " (default)"
+				} else {
+					modelInfo = "(unknown)"
+				}
+			}
+			m.history.Add(NewSystemMessage("Current model: " + modelInfo))
 		}
 		m.updateViewport()
 
@@ -2642,7 +2959,7 @@ func (m Model) handleCommand(cmd *Command, args []string) (tea.Model, tea.Cmd) {
 			info = append(info, fmt.Sprintf("Consensus: %.0f%%", state.Metrics.ConsensusScore*100))
 		}
 		if len(state.Tasks) > 0 {
-			info = append(info, fmt.Sprintf("Tasks: %d", len(state.Tasks)))
+			info = append(info, fmt.Sprintf("Issues: %d", len(state.Tasks)))
 		}
 		if len(info) > 0 {
 			sb.WriteString(strings.Join(info, "  |  ") + "\n\n")
@@ -2760,6 +3077,47 @@ func (m Model) handleCommand(cmd *Command, args []string) (tea.Model, tea.Cmd) {
 		m.updateViewport()
 		return m, m.runWorkflow(prompt)
 
+	case "replan":
+		if m.runner == nil {
+			m.history.Add(NewSystemMessage("Workflow runner not configured"))
+			m.updateViewport()
+			return m, nil
+		}
+		if m.workflowRunning {
+			m.history.Add(NewSystemMessage("Workflow already running. Use /cancel first."))
+			m.updateViewport()
+			return m, nil
+		}
+
+		// Try to load active workflow state if not in memory
+		if m.workflowState == nil {
+			if state, err := m.runner.GetState(context.Background()); err == nil && state != nil {
+				m.workflowState = state
+			}
+		}
+
+		if m.workflowState == nil {
+			m.history.Add(NewSystemMessage("No active workflow to replan. Use '/analyze' first."))
+			m.updateViewport()
+			return m, nil
+		}
+
+		// Get additional context if provided
+		additionalContext := ""
+		if len(args) > 0 {
+			additionalContext = strings.Join(args, " ")
+		}
+
+		if additionalContext != "" {
+			m.history.Add(NewUserMessage(fmt.Sprintf("/replan %s", additionalContext)))
+			m.history.Add(NewSystemMessage(fmt.Sprintf("Replanning with additional context (%d chars)...", len(additionalContext))))
+		} else {
+			m.history.Add(NewUserMessage("/replan"))
+			m.history.Add(NewSystemMessage("Replanning: clearing existing issues and regenerating..."))
+		}
+		m.updateViewport()
+		return m, m.runReplanPhase(additionalContext)
+
 	case "run":
 		if m.runner == nil {
 			m.history.Add(NewSystemMessage("Workflow runner not configured"))
@@ -2803,19 +3161,46 @@ func (m Model) handleCommand(cmd *Command, args []string) (tea.Model, tea.Cmd) {
 
 		// Check if we can continue to execute phase:
 		// - Already in execute phase, OR
-		// - Plan phase completed (status=completed with plan as current phase)
+		// - Plan phase completed (status=completed with plan as current phase), OR
+		// - Tasks exist (even if plan status is "failed" - tasks may have been created successfully)
 		canContinue := false
+		needsStateRepair := false
 		if m.workflowState != nil {
 			if m.workflowState.CurrentPhase == core.PhaseExecute {
 				canContinue = true
 			} else if m.workflowState.CurrentPhase == core.PhasePlan && m.workflowState.Status == core.WorkflowStatusCompleted {
 				// Plan completed - can advance to execute
 				canContinue = true
+			} else if len(m.workflowState.Tasks) > 0 {
+				// Tasks exist! Even if plan "failed", we can execute the existing tasks.
+				// This handles the case where task files were created but manifest parsing failed.
+				canContinue = true
+				needsStateRepair = true
+				m.history.Add(NewSystemMessage(fmt.Sprintf("Found %d existing tasks. Recovering workflow state...", len(m.workflowState.Tasks))))
 			}
 		}
 
 		if canContinue {
 			m.history.Add(NewUserMessage("/execute"))
+			if needsStateRepair {
+				// Repair the state before executing
+				m.workflowState.Status = core.WorkflowStatusRunning
+				m.workflowState.CurrentPhase = core.PhaseExecute
+				m.workflowState.UpdatedAt = time.Now()
+				// Add a checkpoint to indicate plan is complete
+				m.workflowState.Checkpoints = append(m.workflowState.Checkpoints, core.Checkpoint{
+					ID:        fmt.Sprintf("cp-repair-%d", time.Now().UnixNano()),
+					Type:      "phase_complete",
+					Phase:     core.PhasePlan,
+					Timestamp: time.Now(),
+				})
+				// Save the repaired state
+				if err := m.runner.SaveState(context.Background(), m.workflowState); err != nil {
+					m.history.Add(NewSystemMessage(fmt.Sprintf("Warning: Failed to save repaired state: %v", err)))
+				} else {
+					m.history.Add(NewSystemMessage("Workflow state repaired successfully."))
+				}
+			}
 			m.history.Add(NewSystemMessage("Continuing to execution phase from active workflow..."))
 			m.updateViewport()
 			return m, m.runExecutePhase()
@@ -2857,7 +3242,6 @@ func (m Model) handleCommand(cmd *Command, args []string) (tea.Model, tea.Cmd) {
 	case "clearlogs":
 		// Clear logs
 		m.logsPanel.Clear()
-		m.logsPanel.AddInfo("system", "Logs cleared")
 		m.history.Add(NewSystemMessage("Logs cleared"))
 		m.updateViewport()
 
@@ -2875,7 +3259,6 @@ func (m Model) handleCommand(cmd *Command, args []string) (tea.Model, tea.Cmd) {
 			m.inputFocused = false
 			m.textarea.Blur()
 			m.explorerPanel.SetFocused(true)
-			m.logsPanel.AddInfo("system", "Explorer opened")
 			m.history.Add(NewSystemMessage("File explorer opened (arrows to navigate, Esc to return)"))
 		} else {
 			m.explorerFocus = false
@@ -2908,11 +3291,15 @@ func (m Model) handleCommand(cmd *Command, args []string) (tea.Model, tea.Cmd) {
 			m.darkTheme = true
 			tui.SetColorScheme(tui.DarkScheme)
 			applyDarkTheme()
+			ApplyDarkThemeMessages()
+			m.messageStyles = NewMessageStyles(m.viewport.Width)
 			m.history.Add(NewSystemMessage("Theme: dark"))
 		case "light":
 			m.darkTheme = false
 			tui.SetColorScheme(tui.LightScheme)
 			applyLightTheme()
+			ApplyLightThemeMessages()
+			m.messageStyles = NewMessageStyles(m.viewport.Width)
 			m.history.Add(NewSystemMessage("Theme: light"))
 		default:
 			m.history.Add(NewSystemMessage("Usage: /theme [dark|light]"))
@@ -2955,31 +3342,81 @@ func (m *Model) updateLogsPanelTokenStats() {
 	m.logsPanel.SetTokenStats(tokenStats)
 }
 
-// updateStatsPanelTokenStats updates the stats panel with current token stats
-func (m *Model) updateStatsPanelTokenStats() {
-	var tokenStats []TokenStats
-
-	// Collect from agentInfos
-	for _, agent := range m.agentInfos {
-		if agent.TokensIn > 0 || agent.TokensOut > 0 {
-			tokenStats = append(tokenStats, TokenStats{
-				Model:     agent.Name,
-				TokensIn:  agent.TokensIn,
-				TokensOut: agent.TokensOut,
-			})
-		}
+// updateTokenPanelStats updates the token panel with current token usage.
+func (m *Model) updateTokenPanelStats() {
+	if m.tokenPanel == nil {
+		return
 	}
+	entries := m.collectTokenEntries()
+	m.tokenPanel.SetEntries(entries)
+}
 
-	// Include workflow tokens
-	if m.totalTokensIn > 0 || m.totalTokensOut > 0 {
-		tokenStats = append(tokenStats, TokenStats{
-			Model:     "workflow",
-			TokensIn:  m.totalTokensIn,
-			TokensOut: m.totalTokensOut,
+func (m *Model) collectTokenEntries() []TokenEntry {
+	var entries []TokenEntry
+
+	// Chat-level usage (agent totals)
+	for _, agent := range m.agentInfos {
+		if agent.TokensIn == 0 && agent.TokensOut == 0 {
+			continue
+		}
+		model := agent.Model
+		if model == "" {
+			model = "default"
+		}
+		entries = append(entries, TokenEntry{
+			Scope:     "chat",
+			CLI:       strings.ToLower(agent.Name),
+			Model:     model,
+			Phase:     "chat",
+			TokensIn:  agent.TokensIn,
+			TokensOut: agent.TokensOut,
 		})
 	}
 
-	m.statsPanel.SetTokenStats(tokenStats)
+	// Workflow usage (tasks aggregated by cli/model/phase)
+	if m.workflowState != nil && len(m.workflowState.Tasks) > 0 {
+		type key struct {
+			cli   string
+			model string
+			phase string
+		}
+		agg := map[key]*TokenEntry{}
+		for _, task := range m.workflowState.Tasks {
+			if task.TokensIn == 0 && task.TokensOut == 0 {
+				continue
+			}
+			cli := strings.ToLower(task.CLI)
+			if cli == "" {
+				cli = "unknown"
+			}
+			model := task.Model
+			if model == "" {
+				model = "default"
+			}
+			phase := string(task.Phase)
+			if phase == "" {
+				phase = "workflow"
+			}
+			k := key{cli: cli, model: model, phase: phase}
+			entry, ok := agg[k]
+			if !ok {
+				entry = &TokenEntry{
+					Scope: "workflow",
+					CLI:   cli,
+					Model: model,
+					Phase: phase,
+				}
+				agg[k] = entry
+			}
+			entry.TokensIn += task.TokensIn
+			entry.TokensOut += task.TokensOut
+		}
+		for _, entry := range agg {
+			entries = append(entries, *entry)
+		}
+	}
+
+	return entries
 }
 
 // calculateInputLines calculates how many lines the input textarea needs
@@ -3027,37 +3464,38 @@ func (m *Model) calculateInputLines() int {
 func (m *Model) recalculateLayout() {
 	// === EXACT WIDTH CALCULATIONS (must come first for textarea width) ===
 	// No outer margins - panels fill the entire width when joined with JoinHorizontal
-	explorerWidth := 0
+	leftSidebarWidth := 0
 	rightSidebarWidth := 0 // Shared by stats and logs panels
 	mainWidth := m.width
 
 	// Determine how many sidebars are open for dynamic sizing
+	showLeftSidebar := m.showExplorer || m.showTokens
 	showRightSidebar := m.showStats || m.showLogs
-	bothSidebarsOpen := m.showExplorer && showRightSidebar
-	oneSidebarOpen := (m.showExplorer || showRightSidebar) && !bothSidebarsOpen
+	bothSidebarsOpen := showLeftSidebar && showRightSidebar
+	oneSidebarOpen := (showLeftSidebar || showRightSidebar) && !bothSidebarsOpen
 
-	// Explorer panel (left sidebar)
-	if m.showExplorer {
+	// Left sidebar (explorer and/or tokens)
+	if showLeftSidebar {
 		if oneSidebarOpen {
 			// More space when only one sidebar is open (2/5 of width)
-			explorerWidth = m.width * 2 / 5
-			if explorerWidth < 35 {
-				explorerWidth = 35
+			leftSidebarWidth = m.width * 2 / 5
+			if leftSidebarWidth < 35 {
+				leftSidebarWidth = 35
 			}
-			if explorerWidth > 70 {
-				explorerWidth = 70
+			if leftSidebarWidth > 70 {
+				leftSidebarWidth = 70
 			}
 		} else {
 			// Less space when both sidebars are open (1/4 of width)
-			explorerWidth = m.width / 4
-			if explorerWidth < 30 {
-				explorerWidth = 30
+			leftSidebarWidth = m.width / 4
+			if leftSidebarWidth < 30 {
+				leftSidebarWidth = 30
 			}
-			if explorerWidth > 50 {
-				explorerWidth = 50
+			if leftSidebarWidth > 50 {
+				leftSidebarWidth = 50
 			}
 		}
-		mainWidth -= explorerWidth
+		mainWidth -= leftSidebarWidth
 	}
 
 	// Right sidebar (contains stats and/or logs)
@@ -3142,8 +3580,8 @@ func (m *Model) recalculateLayout() {
 	// === NORMALIZATION OF WIDTHS TO PREVENT OVERFLOW ===
 	// Total must equal m.width exactly (no outer margins)
 	totalUsed := mainWidth
-	if m.showExplorer {
-		totalUsed += explorerWidth
+	if showLeftSidebar {
+		totalUsed += leftSidebarWidth
 	}
 	if showRightSidebar {
 		totalUsed += rightSidebarWidth
@@ -3158,8 +3596,8 @@ func (m *Model) recalculateLayout() {
 		} else {
 			// If not enough, reduce sidebars proportionally
 			reduction := excess / 2
-			if m.showExplorer && explorerWidth-reduction >= 25 {
-				explorerWidth -= reduction
+			if showLeftSidebar && leftSidebarWidth-reduction >= 25 {
+				leftSidebarWidth -= reduction
 				excess -= reduction
 			}
 			if showRightSidebar && rightSidebarWidth-reduction >= 30 {
@@ -3182,21 +3620,21 @@ func (m *Model) recalculateLayout() {
 	// === FINAL OVERFLOW CHECK ===
 	// After applying minimums, recalculate total and force-reduce sidebars if needed
 	finalTotal := mainWidth
-	if m.showExplorer {
-		finalTotal += explorerWidth
+	if showLeftSidebar {
+		finalTotal += leftSidebarWidth
 	}
 	if showRightSidebar {
 		finalTotal += rightSidebarWidth
 	}
 
 	// If still overflowing, aggressively reduce sidebar widths
-	for finalTotal > m.width && (explorerWidth > 20 || rightSidebarWidth > 20) {
+	for finalTotal > m.width && (leftSidebarWidth > 20 || rightSidebarWidth > 20) {
 		if showRightSidebar && rightSidebarWidth > 20 {
 			rightSidebarWidth--
 			finalTotal--
 		}
-		if finalTotal > m.width && m.showExplorer && explorerWidth > 20 {
-			explorerWidth--
+		if finalTotal > m.width && showLeftSidebar && leftSidebarWidth > 20 {
+			leftSidebarWidth--
 			finalTotal--
 		}
 	}
@@ -3220,8 +3658,17 @@ func (m *Model) recalculateLayout() {
 	}
 
 	// Set sidebar sizes
-	if m.showExplorer {
-		m.explorerPanel.SetSize(explorerWidth, sidebarHeight)
+	if showLeftSidebar {
+		if m.showExplorer && m.showTokens {
+			explorerHeight := sidebarHeight / 2
+			tokenHeight := sidebarHeight - explorerHeight
+			m.explorerPanel.SetSize(leftSidebarWidth, explorerHeight)
+			m.tokenPanel.SetSize(leftSidebarWidth, tokenHeight)
+		} else if m.showExplorer {
+			m.explorerPanel.SetSize(leftSidebarWidth, sidebarHeight)
+		} else if m.showTokens {
+			m.tokenPanel.SetSize(leftSidebarWidth, sidebarHeight)
+		}
 	}
 
 	// Stats and Logs share the right sidebar space
@@ -3256,6 +3703,10 @@ func (m *Model) recalculateLayout() {
 	// Update word wrap to match content viewport width
 	contentWidth := mainWidth - 4 // Subtract padding
 	m.updateMarkdownRenderer(contentWidth)
+
+	// === UPDATE MESSAGE STYLES ===
+	// Recreate message styles with current viewport width for proper alignment
+	m.messageStyles = NewMessageStyles(m.viewport.Width)
 }
 
 func (m Model) runWorkflow(prompt string) tea.Cmd {
@@ -3308,6 +3759,24 @@ func (m Model) runPlanPhase() tea.Cmd {
 	)
 }
 
+// runReplanPhase clears existing plan data and re-runs planning.
+// Optionally prepends additional context to the consolidated analysis.
+func (m Model) runReplanPhase(additionalContext string) tea.Cmd {
+	runner := m.runner
+	return tea.Batch(
+		func() tea.Msg { return WorkflowStartedMsg{Prompt: "(replanning)"} },
+		func() tea.Msg {
+			ctx := context.Background()
+			err := runner.Replan(ctx, additionalContext)
+			if err != nil {
+				return WorkflowErrorMsg{Error: err}
+			}
+			state, _ := runner.GetState(ctx)
+			return WorkflowCompletedMsg{State: state}
+		},
+	)
+}
+
 // runExecutePhase continues the workflow from the execute phase.
 func (m Model) runExecutePhase() tea.Cmd {
 	runner := m.runner
@@ -3349,58 +3818,58 @@ func (m Model) renderHistory() string {
 		return sb.String()
 	}
 
-	// Calculate wrap width for user messages (viewport width - padding)
-	wrapWidth := m.viewport.Width - 4
-	if wrapWidth < 20 {
-		wrapWidth = 80
+	// Use new message styles
+	styles := m.messageStyles
+	if styles == nil {
+		styles = NewMessageStyles(m.viewport.Width)
 	}
 
-	// Border styles for message grouping
-	userBorderStyle := lipgloss.NewStyle().
-		BorderLeft(true).
-		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(primaryColor).
-		PaddingLeft(1).
-		MarginBottom(1)
-
-	systemBorderStyle := lipgloss.NewStyle().
-		BorderLeft(true).
-		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(warningColor).
-		PaddingLeft(1).
-		MarginBottom(1)
-
-	agentBorderStyle := lipgloss.NewStyle().
-		BorderLeft(true).
-		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(successColor).
-		PaddingLeft(1).
-		MarginBottom(1)
-
 	for _, msg := range msgs {
+		// Format timestamp
+		timestamp := msg.Timestamp.Format("15:04")
+
 		switch msg.Role {
 		case RoleUser:
-			// User message with colored left border
-			content := userLabelStyle.Render("You") + "\n" + wrapText(msg.Content, wrapWidth-4)
-			sb.WriteString(userBorderStyle.Render(content))
-			sb.WriteString("\n")
+			// User message: right-aligned bubble
+			isCommand := strings.HasPrefix(strings.TrimSpace(msg.Content), "/")
+			rendered := styles.FormatUserMessage(msg.Content, timestamp, isCommand)
+			sb.WriteString(rendered)
+			sb.WriteString("\n\n")
 
 		case RoleAgent:
-			// Agent response with colored left border
+			// Agent/Bot message: left-aligned with thick border
 			content := msg.Content
 			if m.mdRenderer != nil {
 				if rendered, err := m.mdRenderer.Render(msg.Content); err == nil {
 					content = strings.TrimSpace(rendered)
 				}
 			}
-			agentContent := agentLabelStyle.Render("Quorum") + "\n" + content
-			sb.WriteString(agentBorderStyle.Render(agentContent))
-			sb.WriteString("\n")
+
+			// Extract consensus from metadata if available
+			consensus := 0
+			if msg.Metadata != nil {
+				if c, ok := msg.Metadata["consensus"].(int); ok {
+					consensus = c
+				} else if c, ok := msg.Metadata["consensus"].(float64); ok {
+					consensus = int(c)
+				}
+			}
+
+			// Get agent name, default to "Quorum"
+			agentName := msg.Agent
+			if agentName == "" {
+				agentName = "Quorum"
+			}
+
+			rendered := styles.FormatBotMessage(agentName, content, timestamp, consensus, "")
+			sb.WriteString(rendered)
+			sb.WriteString("\n\n")
 
 		case RoleSystem:
-			// System message with colored left border
-			sb.WriteString(systemBorderStyle.Render(msg.Content))
-			sb.WriteString("\n")
+			// System message: subtle styling
+			rendered := styles.FormatSystemMessage(msg.Content)
+			sb.WriteString(rendered)
+			sb.WriteString("\n\n")
 		}
 	}
 
@@ -3441,11 +3910,14 @@ func (m Model) View() string {
 
 	// === CALCULATE PANEL WIDTHS ===
 	// Use actual panel widths (set by recalculateLayout) to ensure consistency
-	explorerWidth := 0
+	leftSidebarWidth := 0
 	rightSidebarWidth := 0 // Shared by stats and logs panels
 
+	showLeftSidebar := m.showExplorer || m.showTokens
 	if m.showExplorer {
-		explorerWidth = m.explorerPanel.Width()
+		leftSidebarWidth = m.explorerPanel.Width()
+	} else if m.showTokens {
+		leftSidebarWidth = m.tokenPanel.Width()
 	}
 
 	// Right sidebar width comes from whichever panel is visible (they share the same width)
@@ -3459,8 +3931,8 @@ func (m Model) View() string {
 	// Calculate mainWidth based on remaining space after sidebars
 	// No outer margins - panels fill entire width when joined with JoinHorizontal
 	mainWidth := w
-	if m.showExplorer {
-		mainWidth -= explorerWidth
+	if showLeftSidebar {
+		mainWidth -= leftSidebarWidth
 	}
 	if showRightSidebar {
 		mainWidth -= rightSidebarWidth
@@ -3474,9 +3946,19 @@ func (m Model) View() string {
 	// === RENDER PANELS ===
 	var panels []string
 
-	// Explorer panel (left)
-	if m.showExplorer {
-		panels = append(panels, m.explorerPanel.Render())
+	// Left sidebar (explorer and/or tokens)
+	if showLeftSidebar {
+		var leftSidebarContent string
+		if m.showExplorer && m.showTokens {
+			explorerPanel := m.explorerPanel.Render()
+			tokenPanel := m.tokenPanel.RenderWithFocus(m.tokensFocus)
+			leftSidebarContent = lipgloss.JoinVertical(lipgloss.Left, explorerPanel, tokenPanel)
+		} else if m.showExplorer {
+			leftSidebarContent = m.explorerPanel.Render()
+		} else {
+			leftSidebarContent = m.tokenPanel.RenderWithFocus(m.tokensFocus)
+		}
+		panels = append(panels, leftSidebarContent)
 	}
 
 	// Main content (center) - wrapped with border like sidebars
@@ -3545,6 +4027,13 @@ func (m Model) View() string {
 		return ensureFullScreen(m.overlayOnBase(baseView, overlay, w, h))
 	}
 
+	// Tasks panel overlay
+	if m.tasksPanel.IsVisible() {
+		m.tasksPanel.SetSize(w-30, h-12)
+		overlay := m.tasksPanel.Render()
+		return ensureFullScreen(m.overlayOnBase(baseView, overlay, w, h))
+	}
+
 	// File viewer overlay
 	if m.fileViewer.IsVisible() {
 		m.fileViewer.SetSize(w-16, h-8)
@@ -3558,7 +4047,7 @@ func (m Model) View() string {
 		// Calculate position: above the footer area
 		// Footer is 1 line, input is ~3 lines, plus extra margin
 		footerOffset := 6
-		baseView = m.overlayAtBottom(baseView, suggestionsOverlay, w, h, explorerWidth, footerOffset)
+		baseView = m.overlayAtBottom(baseView, suggestionsOverlay, w, h, leftSidebarWidth, footerOffset)
 	}
 
 	return ensureFullScreen(baseView)
@@ -4310,9 +4799,8 @@ func (m Model) renderFooter(width int) string {
 			Bold(true)
 		keys = []string{
 			navModeStyle.Render("⎘ PANEL NAV"),
-			keyHintStyle.Render("←") + labelStyle.Render(" explorer"),
-			keyHintStyle.Render("→") + labelStyle.Render(" sidebar"),
-			keyHintStyle.Render("↑↓") + labelStyle.Render(" logs/stats"),
+			keyHintStyle.Render("←→") + labelStyle.Render(" sides"),
+			keyHintStyle.Render("↑↓") + labelStyle.Render(" stack"),
 			keyHintStyle.Render("Esc") + labelStyle.Render(" cancel"),
 		}
 	} else if m.showSuggestions {
@@ -4349,6 +4837,14 @@ func (m Model) renderFooter(width int) string {
 			keyHintStyle.Render("Tab") + labelStyle.Render(" input"),
 			keyHintStyle.Render("Esc") + labelStyle.Render(" close"),
 		}
+	} else if m.tokensFocus {
+		keys = []string{
+			keyHintStyle.Render("↑↓") + labelStyle.Render(" scroll"),
+			keyHintStyle.Render("PgUp/Dn") + labelStyle.Render(" page"),
+			keyHintStyle.Render("Home/End") + labelStyle.Render(" top/btm"),
+			keyHintStyle.Render("Tab") + labelStyle.Render(" input"),
+			keyHintStyle.Render("Esc") + labelStyle.Render(" close"),
+		}
 	} else if m.streaming || m.workflowRunning {
 		keys = []string{
 			keyHintStyle.Render("^X") + labelStyle.Render(" stop"),
@@ -4358,8 +4854,11 @@ func (m Model) renderFooter(width int) string {
 		}
 	} else {
 		keys = []string{
-			keyHintStyle.Render("↵") + labelStyle.Render(" send"),
-			keyHintStyle.Render("^R") + labelStyle.Render(" hist"),
+			keyHintStyle.Render("^Z") + labelStyle.Render(" nav"),
+			keyHintStyle.Render("^Q") + labelStyle.Render(" quorum"),
+			keyHintStyle.Render("^I") + labelStyle.Render(" issues"),
+			keyHintStyle.Render("^H") + labelStyle.Render(" hist"),
+			keyHintStyle.Render("!") + labelStyle.Render(" cmd"),
 			keyHintStyle.Render("?") + labelStyle.Render(" help"),
 		}
 	}
@@ -4464,7 +4963,7 @@ func formatWorkflowStatus(state *core.WorkflowState) string {
 				pending++
 			}
 		}
-		taskStatus := fmt.Sprintf("Tasks: %d total", len(state.Tasks))
+		taskStatus := fmt.Sprintf("Issues: %d total", len(state.Tasks))
 		if completed > 0 {
 			taskStatus += fmt.Sprintf(", %d done", completed)
 		}

@@ -503,6 +503,13 @@ func (p *ExplorerPanel) Width() int {
 	return p.width
 }
 
+// Height returns the current height of the panel
+func (p *ExplorerPanel) Height() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.height
+}
+
 // updateContent refreshes the viewport content (must be called with lock held)
 func (p *ExplorerPanel) updateContent() {
 	if !p.ready {

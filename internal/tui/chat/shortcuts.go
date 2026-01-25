@@ -38,6 +38,7 @@ func NewShortcutsOverlay() *ShortcutsOverlay {
 					{Key: "↑/↓", Description: "Scroll / Navigate"},
 					{Key: "PgUp/PgDn", Description: "Page scroll"},
 					{Key: "Home/End", Description: "Top / Bottom"},
+					{Key: "Ctrl+Z", Description: "Panel navigation mode"},
 				},
 			},
 			{
@@ -45,8 +46,11 @@ func NewShortcutsOverlay() *ShortcutsOverlay {
 				Shortcuts: []Shortcut{
 					{Key: "Ctrl+E", Description: "Toggle explorer"},
 					{Key: "Ctrl+L", Description: "Toggle logs"},
-					{Key: "Ctrl+S", Description: "Toggle stats"},
-					{Key: "Ctrl+K", Description: "Toggle consensus"},
+					{Key: "Ctrl+R", Description: "Toggle resources"},
+					{Key: "Ctrl+T", Description: "Toggle tokens"},
+					{Key: "Ctrl+Q", Description: "Toggle quorum"},
+					{Key: "Ctrl+I", Description: "Toggle issues"},
+					{Key: "Ctrl+H", Description: "Toggle history"},
 				},
 			},
 			{
@@ -62,7 +66,7 @@ func NewShortcutsOverlay() *ShortcutsOverlay {
 				Name: "Tools",
 				Shortcuts: []Shortcut{
 					{Key: "Ctrl+D", Description: "Agent diff view"},
-					{Key: "Ctrl+R", Description: "Search history"},
+					{Key: "Ctrl+H", Description: "Search history"},
 					{Key: "/", Description: "Commands"},
 					{Key: "!", Description: "Shell command"},
 					{Key: "?/F1", Description: "This help"},

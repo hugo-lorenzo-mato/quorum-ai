@@ -84,6 +84,13 @@ func NewCommandRegistry() *CommandRegistry {
 	})
 
 	r.Register(&Command{
+		Name:        "replan",
+		Aliases:     []string{"rp"},
+		Description: "Re-run planning phase (clears existing issues)",
+		Usage:       "/replan [additional context]",
+	})
+
+	r.Register(&Command{
 		Name:        "run",
 		Aliases:     []string{"r"},
 		Description: "Run a complete workflow",
@@ -93,7 +100,7 @@ func NewCommandRegistry() *CommandRegistry {
 	r.Register(&Command{
 		Name:        "execute",
 		Aliases:     []string{"exec"},
-		Description: "Execute tasks from active workflow",
+		Description: "Execute issues from active workflow",
 		Usage:       "/execute",
 	})
 

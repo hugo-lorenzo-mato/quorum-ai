@@ -38,14 +38,30 @@ type TokenStats struct {
 
 // ResourceStats holds system resource usage
 type ResourceStats struct {
-	MemoryMB   float64
-	CPUPercent float64
-	Uptime     time.Duration
-	Goroutines int
+	MemoryMB      float64
+	CPUPercent    float64 // Normalized (0-100%, relative to total system capacity)
+	CPURawPercent float64 // Raw (can exceed 100% on multi-core, like top/htop)
+	Uptime        time.Duration
+	Goroutines    int
+}
+
+// GPUInfo holds GPU usage information (best-effort).
+type GPUInfo struct {
+	Name        string
+	UtilPercent float64
+	UtilValid   bool
+	MemTotalMB  float64
+	MemUsedMB   float64
+	MemValid    bool
+	TempC       float64
+	TempValid   bool
 }
 
 // MachineStats holds machine-wide resource usage
 type MachineStats struct {
+	CPUModel    string
+	CPUCores    int
+	CPUThreads  int
 	MemTotalMB  float64
 	MemUsedMB   float64
 	MemPercent  float64
@@ -56,6 +72,7 @@ type MachineStats struct {
 	LoadAvg1    float64
 	LoadAvg5    float64
 	LoadAvg15   float64
+	GPUInfos    []GPUInfo
 }
 
 // LogsPanel manages the logs display
@@ -85,7 +102,7 @@ func NewLogsPanel(maxLines int) *LogsPanel {
 		entries:      make([]LogEntry, 0, maxLines),
 		maxLines:     maxLines,
 		tokenStats:   make([]TokenStats, 0),
-		showFooter:   false, // Footer disabled - stats now in StatsPanel (^T)
+		showFooter:   false, // Footer disabled - stats now in StatsPanel (^R)
 		footerHeight: 0,
 	}
 }
@@ -182,6 +199,13 @@ func (p *LogsPanel) Width() int {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return p.width
+}
+
+// Height returns the current height of the panel
+func (p *LogsPanel) Height() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.height
 }
 
 func (p *LogsPanel) SetTokenStats(stats []TokenStats) {
@@ -647,10 +671,11 @@ func (p *LogsPanel) renderFooter() string {
 	)
 	lines = append(lines, p.formatTwoColumns(quorumRAM, machineRAM, colWidth))
 
-	// Row 2: CPU
-	quorumCPU := fmt.Sprintf("%s %s %s%d",
+	// Row 2: CPU (normalized / raw)
+	quorumCPU := fmt.Sprintf("%s %s%s %s%d",
 		labelStyle.Render("CPU:"),
-		valueStyle.Render(fmt.Sprintf("%5.1f%%", p.resourceStats.CPUPercent)),
+		valueStyle.Render(fmt.Sprintf("%.1f%%", p.resourceStats.CPUPercent)),
+		dimStyle.Render(fmt.Sprintf("/%.0f%% t/c", p.resourceStats.CPURawPercent)),
 		dimStyle.Render("∴"),
 		p.resourceStats.Goroutines,
 	)
