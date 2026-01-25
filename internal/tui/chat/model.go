@@ -641,6 +641,47 @@ func (m Model) listenForLogEvents() tea.Cmd {
 				}
 			}
 
+			// Handle task started events
+			if taskEvent, ok := event.(events.TaskStartedEvent); ok {
+				return TaskUpdateMsg{
+					TaskID: core.TaskID(taskEvent.TaskID),
+					Status: core.TaskStatusRunning,
+				}
+			}
+
+			// Handle task completed events
+			if taskEvent, ok := event.(events.TaskCompletedEvent); ok {
+				return TaskUpdateMsg{
+					TaskID: core.TaskID(taskEvent.TaskID),
+					Status: core.TaskStatusCompleted,
+				}
+			}
+
+			// Handle task failed events
+			if taskEvent, ok := event.(events.TaskFailedEvent); ok {
+				return TaskUpdateMsg{
+					TaskID: core.TaskID(taskEvent.TaskID),
+					Status: core.TaskStatusFailed,
+					Error:  taskEvent.Error,
+				}
+			}
+
+			// Handle task skipped events
+			if taskEvent, ok := event.(events.TaskSkippedEvent); ok {
+				return TaskUpdateMsg{
+					TaskID: core.TaskID(taskEvent.TaskID),
+					Status: core.TaskStatusSkipped,
+					Error:  taskEvent.Reason,
+				}
+			}
+
+			// Handle phase started events
+			if phaseEvent, ok := event.(events.PhaseStartedEvent); ok {
+				return PhaseUpdateMsg{
+					Phase: core.Phase(phaseEvent.Phase),
+				}
+			}
+
 			// Unknown event type - continue listening instead of returning nil
 			// This prevents the listener from stopping on unknown events
 		}
@@ -683,6 +724,14 @@ type (
 	PanelNavTimeoutMsg    struct{ Seq int }
 	ChatProgressTickMsg   struct{ Elapsed time.Duration }
 	ActiveWorkflowLoadMsg struct{ State *core.WorkflowState } // Auto-load active workflow on startup
+	TaskUpdateMsg         struct {
+		TaskID core.TaskID
+		Status core.TaskStatus
+		Error  string
+	}
+	PhaseUpdateMsg struct {
+		Phase core.Phase
+	}
 )
 
 // chatProgressTick returns a command that sends periodic progress updates during chat execution.
@@ -2211,6 +2260,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.workflowState = msg.State
 		m.tasksPanel.SetState(msg.State)
 		m.updateQuorumPanel(msg.State)
+
+	case TaskUpdateMsg:
+		// Update the task status in the workflow state
+		if m.workflowState != nil && m.workflowState.Tasks != nil {
+			if task, ok := m.workflowState.Tasks[msg.TaskID]; ok {
+				task.Status = msg.Status
+				m.tasksPanel.SetState(m.workflowState)
+				m.updateQuorumPanel(m.workflowState)
+			}
+		}
+
+	case PhaseUpdateMsg:
+		// Update the current phase in the workflow state
+		if m.workflowState != nil {
+			m.workflowState.CurrentPhase = msg.Phase
+			m.tasksPanel.SetState(m.workflowState)
+			m.updateQuorumPanel(m.workflowState)
+		}
 
 	case ActiveWorkflowLoadMsg:
 		// Auto-loaded active workflow on startup

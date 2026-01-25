@@ -389,12 +389,60 @@ type chatOutputNotifier struct {
 	eventBus *events.EventBus
 }
 
-func (n *chatOutputNotifier) PhaseStarted(_ core.Phase)                   {}
-func (n *chatOutputNotifier) TaskStarted(_ *core.Task)                    {}
-func (n *chatOutputNotifier) TaskCompleted(_ *core.Task, _ time.Duration) {}
-func (n *chatOutputNotifier) TaskFailed(_ *core.Task, _ error)            {}
-func (n *chatOutputNotifier) TaskSkipped(_ *core.Task, _ string)          {}
-func (n *chatOutputNotifier) WorkflowStateUpdated(_ *core.WorkflowState)  {}
+func (n *chatOutputNotifier) PhaseStarted(phase core.Phase) {
+	if n.eventBus != nil {
+		n.eventBus.Publish(events.NewPhaseStartedEvent("", string(phase)))
+	}
+}
+
+func (n *chatOutputNotifier) TaskStarted(task *core.Task) {
+	if n.eventBus != nil && task != nil {
+		n.eventBus.Publish(events.NewTaskStartedEvent("", string(task.ID), ""))
+	}
+}
+
+func (n *chatOutputNotifier) TaskCompleted(task *core.Task, duration time.Duration) {
+	if n.eventBus != nil && task != nil {
+		n.eventBus.Publish(events.NewTaskCompletedEvent("", string(task.ID), duration, task.TokensIn, task.TokensOut, task.CostUSD))
+	}
+}
+
+func (n *chatOutputNotifier) TaskFailed(task *core.Task, err error) {
+	if n.eventBus != nil && task != nil {
+		n.eventBus.Publish(events.NewTaskFailedEvent("", string(task.ID), err, task.Retries > 0))
+	}
+}
+
+func (n *chatOutputNotifier) TaskSkipped(task *core.Task, reason string) {
+	if n.eventBus != nil && task != nil {
+		n.eventBus.Publish(events.NewTaskSkippedEvent("", string(task.ID), reason))
+	}
+}
+
+func (n *chatOutputNotifier) WorkflowStateUpdated(state *core.WorkflowState) {
+	if n.eventBus != nil && state != nil {
+		// Calculate task counts
+		var completed, failed, skipped int
+		for _, task := range state.Tasks {
+			switch task.Status {
+			case core.TaskStatusCompleted:
+				completed++
+			case core.TaskStatusFailed:
+				failed++
+			case core.TaskStatusSkipped:
+				skipped++
+			}
+		}
+		n.eventBus.Publish(events.NewWorkflowStateUpdatedEvent(
+			string(state.WorkflowID),
+			string(state.CurrentPhase),
+			len(state.Tasks),
+			completed,
+			failed,
+			skipped,
+		))
+	}
+}
 func (n *chatOutputNotifier) Log(level, source, message string) {
 	if n.eventBus != nil {
 		fullMessage := "[" + source + "] " + message
