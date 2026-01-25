@@ -256,6 +256,11 @@ Not all disagreements are equal:
 
 Configures LLM agent backends. Each agent can define a default model and per-phase model overrides.
 
+> **Agent Names are Aliases:** The key under `agents:` (e.g., `claude`, `copilot`) is just an alias/identifier.
+> You can use any name you want. The actual CLI type is determined by built-in mappings or explicit configuration.
+> This is useful for CLIs like **copilot** that support multiple models - you can define multiple entries
+> using the same CLI but with different models for multi-agent analysis.
+
 ```yaml
 agents:
   default: claude
@@ -271,6 +276,32 @@ agents:
       execute: claude-haiku-4-5-20251001
     max_tokens: 4096
     temperature: 0.7
+```
+
+#### Multiple Agents with Same CLI
+
+You can define multiple agent entries using the same CLI to run multi-agent analysis with different models:
+
+```yaml
+agents:
+  # Copilot with Claude model
+  copilot-claude:
+    enabled: true
+    path: copilot
+    model: claude-sonnet-4-5
+    phases:
+      analyze: true
+      moderate: true
+
+  # Copilot with GPT model
+  copilot-gpt:
+    enabled: true
+    path: copilot
+    model: gpt-5
+    phases:
+      analyze: true
+
+  # Both will participate in analysis, providing different perspectives
 ```
 
 #### Agent Selection
@@ -289,8 +320,50 @@ Each agent configuration supports these fields:
 | `path` | string | agent name | Path to CLI executable |
 | `model` | string | varies | Default model (fallback when phase not specified) |
 | `phase_models` | map | `{}` | Per-phase model overrides |
+| `phases` | map | `{}` | Phase participation control (see below) |
+| `token_discrepancy_threshold` | float | `5.0` | Token reporting validation threshold (see below) |
 | `max_tokens` | int | `4096` | Maximum output tokens |
 | `temperature` | float | `0.7` | Sampling temperature (0.0-2.0) |
+
+#### Phase Participation Control
+
+The `phases` map controls which workflow phases an agent participates in. Keys are phase names, values are boolean.
+
+```yaml
+agents:
+  claude:
+    enabled: true
+    phases:
+      refine: true      # Can refine prompts
+      analyze: true     # Can perform analysis
+      moderate: true    # Can evaluate consensus (fallback moderator)
+      synthesize: true  # Can synthesize results
+      plan: true        # Can generate plans
+      execute: true     # Can execute tasks
+```
+
+If `phases` is empty or not specified, the agent participates in **all phases** (backward compatible).
+
+**Moderator fallback chain:** When the primary moderator fails, agents with `moderate: true` are tried as fallbacks in order.
+
+#### Token Discrepancy Detection
+
+The `token_discrepancy_threshold` validates token counts reported by CLI tools. If reported tokens differ from estimated by more than this factor, the estimated value is used instead.
+
+```yaml
+agents:
+  copilot:
+    enabled: true
+    token_discrepancy_threshold: 5  # Default: 5x
+    # Reported tokens must be within 1/5 to 5x of estimated
+    # Set to 0 to disable validation
+```
+
+| Value | Behavior |
+|-------|----------|
+| `5` (default) | Reported must be between 1/5 and 5x of estimated |
+| `3` | More strict - between 1/3 and 3x |
+| `0` | Disable discrepancy detection |
 
 #### Model Resolution Order
 
