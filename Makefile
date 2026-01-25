@@ -177,3 +177,21 @@ version: ## Show version
 .PHONY: generate
 generate: ## Run go generate
 	go generate ./...
+
+# Frontend targets
+FRONTEND_DIR := frontend
+
+.PHONY: frontend-deps
+frontend-deps: ## Install frontend dependencies
+	cd $(FRONTEND_DIR) && npm install
+
+.PHONY: build-frontend
+build-frontend: frontend-deps ## Build frontend for production
+	cd $(FRONTEND_DIR) && npm run build
+
+.PHONY: dev-frontend
+dev-frontend: ## Run frontend dev server
+	cd $(FRONTEND_DIR) && npm run dev
+
+.PHONY: build-web
+build-web: build-frontend build ## Build frontend and Go binary with embedded assets

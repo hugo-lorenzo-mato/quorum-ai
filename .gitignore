@@ -98,3 +98,9 @@ tasks*/*
 
 # Files related to Claude Code
 .claude*
+
+# Frontend build artifacts (keep .gitkeep)
+internal/web/dist/*
+!internal/web/dist/.gitkeep
+!internal/web/dist/index.html
+frontend/node_modules/
