@@ -325,11 +325,61 @@ func (c *CopilotAdapter) extractUsage(result *CommandResult, execResult *core.Ex
 		}
 	}
 
+	// Estimate tokens from output length for comparison/fallback
+	estimatedTokensOut := c.estimateTokens(execResult.Output)
+
+	// Detect token reporting discrepancy: reported tokens suspiciously different from actual output
+	// This catches cases where CLI reports wrong token counts
+	threshold := c.config.TokenDiscrepancyThreshold
+	if threshold <= 0 {
+		threshold = DefaultTokenDiscrepancyThreshold
+	}
+	if execResult.TokensOut > 0 && estimatedTokensOut > 100 && threshold > 0 {
+		// If reported tokens are less than 1/threshold of estimated (too low)
+		if float64(execResult.TokensOut) < float64(estimatedTokensOut)/threshold {
+			c.emitEvent(core.NewAgentEvent(
+				core.AgentEventProgress,
+				"copilot",
+				fmt.Sprintf("[WARN] Token discrepancy (too low): reported=%d, estimated=%d (threshold=%.1fx). Using estimated.",
+					execResult.TokensOut, estimatedTokensOut, threshold),
+			).WithData(map[string]any{
+				"reported_tokens":  execResult.TokensOut,
+				"estimated_tokens": estimatedTokensOut,
+				"output_length":    len(execResult.Output),
+				"threshold":        threshold,
+				"source":           tokenSource,
+				"action":           "using_estimated",
+				"discrepancy_type": "too_low",
+			}))
+			execResult.TokensOut = estimatedTokensOut
+			tokenSource = "estimated_discrepancy"
+		}
+		// If reported tokens are more than threshold*estimated (too high)
+		if float64(execResult.TokensOut) > float64(estimatedTokensOut)*threshold {
+			c.emitEvent(core.NewAgentEvent(
+				core.AgentEventProgress,
+				"copilot",
+				fmt.Sprintf("[WARN] Token discrepancy (too high): reported=%d, estimated=%d (threshold=%.1fx). Using estimated.",
+					execResult.TokensOut, estimatedTokensOut, threshold),
+			).WithData(map[string]any{
+				"reported_tokens":  execResult.TokensOut,
+				"estimated_tokens": estimatedTokensOut,
+				"output_length":    len(execResult.Output),
+				"threshold":        threshold,
+				"source":           tokenSource,
+				"action":           "using_estimated",
+				"discrepancy_type": "too_high",
+			}))
+			execResult.TokensOut = estimatedTokensOut
+			tokenSource = "estimated_discrepancy"
+		}
+	}
+
 	// Fallback: estimate tokens if not found in output
 	// Copilot CLI doesn't always report tokens, so we estimate based on content
 	if execResult.TokensIn == 0 && execResult.TokensOut == 0 {
 		// Estimate output tokens from response (roughly 4 chars per token)
-		execResult.TokensOut = c.estimateTokens(execResult.Output)
+		execResult.TokensOut = estimatedTokensOut
 		tokenSource = "estimated"
 		// Estimate input tokens as ~30% of output for typical prompts
 		if execResult.TokensOut > 0 {

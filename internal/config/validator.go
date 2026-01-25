@@ -407,10 +407,11 @@ func (v *Validator) validatePhaseParticipation(cfg *PhasesConfig, agents *Agents
 		}
 	}
 
-	// 5. Validate minimum agents for multi-agent analysis
-	if analyzeCount < 2 {
+	// 5. Validate minimum agents for multi-agent analysis (only when moderator enabled)
+	// Single-agent workflows are valid when moderator is disabled
+	if cfg.Analyze.Moderator.Enabled && analyzeCount < 2 {
 		v.addError("agents.*.phases.analyze", analyzeAgents,
-			"at least 2 agents must have phases.analyze: true for multi-agent consensus")
+			"at least 2 agents must have phases.analyze: true for multi-agent consensus (moderator enabled)")
 	}
 
 	// 6. Validate at least 1 agent for plan phase

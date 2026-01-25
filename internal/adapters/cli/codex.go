@@ -179,7 +179,10 @@ func (c *CodexAdapter) extractUsage(result *CommandResult, execResult *core.Exec
 	var tokenSource string
 
 	// OpenAI-style usage patterns
-	promptTokens := regexp.MustCompile(`prompt_tokens?:?\s*(\d+)`)
+	// IMPORTANT: Use word boundaries and require explicit separators to avoid
+	// matching unrelated numbers in the output (like file sizes, line numbers, etc.)
+	// Also limit digits to max 7 (10M tokens) to avoid matching corrupted values
+	promptTokens := regexp.MustCompile(`\b(?:prompt|input)_tokens?\s*[=:]\s*(\d{1,7})\b`)
 	if matches := promptTokens.FindStringSubmatch(combined); len(matches) == 2 {
 		if in, err := strconv.Atoi(matches[1]); err == nil {
 			execResult.TokensIn = in
@@ -187,10 +190,60 @@ func (c *CodexAdapter) extractUsage(result *CommandResult, execResult *core.Exec
 		}
 	}
 
-	completionTokens := regexp.MustCompile(`completion_tokens?:?\s*(\d+)`)
+	completionTokens := regexp.MustCompile(`\b(?:completion|output)_tokens?\s*[=:]\s*(\d{1,7})\b`)
 	if matches := completionTokens.FindStringSubmatch(combined); len(matches) == 2 {
 		if out, err := strconv.Atoi(matches[1]); err == nil {
 			execResult.TokensOut = out
+		}
+	}
+
+	// Estimate tokens from output length for comparison/fallback
+	estimatedTokensOut := c.TokenEstimate(result.Stdout)
+
+	// Detect token reporting discrepancy: reported tokens suspiciously different from actual output
+	// This catches cases where CLI reports wrong token counts
+	threshold := c.config.TokenDiscrepancyThreshold
+	if threshold <= 0 {
+		threshold = DefaultTokenDiscrepancyThreshold
+	}
+	if execResult.TokensOut > 0 && estimatedTokensOut > 100 && threshold > 0 {
+		// If reported tokens are less than 1/threshold of estimated (too low)
+		if float64(execResult.TokensOut) < float64(estimatedTokensOut)/threshold {
+			c.emitEvent(core.NewAgentEvent(
+				core.AgentEventProgress,
+				"codex",
+				fmt.Sprintf("[WARN] Token discrepancy (too low): reported=%d, estimated=%d (threshold=%.1fx). Using estimated.",
+					execResult.TokensOut, estimatedTokensOut, threshold),
+			).WithData(map[string]any{
+				"reported_tokens":  execResult.TokensOut,
+				"estimated_tokens": estimatedTokensOut,
+				"output_length":    len(result.Stdout),
+				"threshold":        threshold,
+				"source":           tokenSource,
+				"action":           "using_estimated",
+				"discrepancy_type": "too_low",
+			}))
+			execResult.TokensOut = estimatedTokensOut
+			tokenSource = "estimated_discrepancy"
+		}
+		// If reported tokens are more than threshold*estimated (too high)
+		if float64(execResult.TokensOut) > float64(estimatedTokensOut)*threshold {
+			c.emitEvent(core.NewAgentEvent(
+				core.AgentEventProgress,
+				"codex",
+				fmt.Sprintf("[WARN] Token discrepancy (too high): reported=%d, estimated=%d (threshold=%.1fx). Using estimated.",
+					execResult.TokensOut, estimatedTokensOut, threshold),
+			).WithData(map[string]any{
+				"reported_tokens":  execResult.TokensOut,
+				"estimated_tokens": estimatedTokensOut,
+				"output_length":    len(result.Stdout),
+				"threshold":        threshold,
+				"source":           tokenSource,
+				"action":           "using_estimated",
+				"discrepancy_type": "too_high",
+			}))
+			execResult.TokensOut = estimatedTokensOut
+			tokenSource = "estimated_discrepancy"
 		}
 	}
 
@@ -199,7 +252,7 @@ func (c *CodexAdapter) extractUsage(result *CommandResult, execResult *core.Exec
 	// Since we only have the output here, we estimate TokensOut from it
 	// and use a heuristic for TokensIn (typically prompts are shorter than responses)
 	if execResult.TokensOut == 0 {
-		execResult.TokensOut = c.TokenEstimate(result.Stdout)
+		execResult.TokensOut = estimatedTokensOut
 		tokenSource = "estimated"
 	}
 	if execResult.TokensIn == 0 && execResult.TokensOut > 0 {

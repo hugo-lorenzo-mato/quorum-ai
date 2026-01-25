@@ -13,6 +13,7 @@ type Config struct {
 	Costs    CostsConfig    `mapstructure:"costs"`
 	Chat     ChatConfig     `mapstructure:"chat"`
 	Report   ReportConfig   `mapstructure:"report"`
+	Server   ServerConfig   `mapstructure:"server"`
 }
 
 // ChatConfig configures chat behavior in the TUI.
@@ -182,6 +183,20 @@ func (c AgentsConfig) ListEnabledForPhase(phase string) []string {
 }
 
 // AgentConfig configures a single AI agent.
+//
+// Agent names (the key in the agents map) are aliases - you can use any name.
+// The actual CLI type is determined by the 'path' field or built-in mappings.
+// This allows defining multiple agent entries using the same CLI but with
+// different models, which is useful for multi-agent analysis with CLIs like
+// copilot that support multiple models:
+//
+//	agents:
+//	  copilot-claude:    # Alias - can be any name
+//	    path: copilot    # Determines the CLI type
+//	    model: claude-sonnet-4-5
+//	  copilot-gpt:       # Another alias using same CLI
+//	    path: copilot
+//	    model: gpt-5
 type AgentConfig struct {
 	Enabled     bool              `mapstructure:"enabled"`
 	Path        string            `mapstructure:"path"`
@@ -197,6 +212,10 @@ type AgentConfig struct {
 	// ReasoningEffortPhases allows per-phase overrides of reasoning effort.
 	// Keys: "refine", "analyze", "moderate", "synthesize", "plan", "execute"
 	ReasoningEffortPhases map[string]string `mapstructure:"reasoning_effort_phases"`
+	// TokenDiscrepancyThreshold is the ratio for detecting token reporting errors.
+	// If reported tokens differ from estimated by more than this factor, use estimated.
+	// Default: 5 (reported must be within 1/5 to 5x of estimated). Set to 0 to disable.
+	TokenDiscrepancyThreshold float64 `mapstructure:"token_discrepancy_threshold"`
 }
 
 // IsEnabledForPhase returns true if the agent is enabled for the given phase.
@@ -283,4 +302,38 @@ type ReportConfig struct {
 	BaseDir    string `mapstructure:"base_dir"`
 	UseUTC     bool   `mapstructure:"use_utc"`
 	IncludeRaw bool   `mapstructure:"include_raw"`
+}
+
+// ServerConfig configures the HTTP server.
+type ServerConfig struct {
+	// Host is the address to listen on (default: "localhost").
+	Host string `mapstructure:"host"`
+	// Port is the port to listen on (default: 8080).
+	Port int `mapstructure:"port"`
+	// ReadTimeout is the maximum duration for reading the request (e.g., "30s").
+	ReadTimeout string `mapstructure:"read_timeout"`
+	// WriteTimeout is the maximum duration before timing out writes of the response (e.g., "30s").
+	WriteTimeout string `mapstructure:"write_timeout"`
+	// IdleTimeout is the maximum duration to wait for the next request (e.g., "120s").
+	IdleTimeout string `mapstructure:"idle_timeout"`
+	// ShutdownTimeout is the maximum duration for graceful shutdown (e.g., "30s").
+	ShutdownTimeout string `mapstructure:"shutdown_timeout"`
+	// CORS configures Cross-Origin Resource Sharing.
+	CORS CORSConfig `mapstructure:"cors"`
+}
+
+// CORSConfig configures CORS settings.
+type CORSConfig struct {
+	// Enabled enables CORS middleware (default: false).
+	Enabled bool `mapstructure:"enabled"`
+	// AllowedOrigins is a list of allowed origins (default: ["*"]).
+	AllowedOrigins []string `mapstructure:"allowed_origins"`
+	// AllowedMethods is a list of allowed HTTP methods.
+	AllowedMethods []string `mapstructure:"allowed_methods"`
+	// AllowedHeaders is a list of allowed headers.
+	AllowedHeaders []string `mapstructure:"allowed_headers"`
+	// AllowCredentials indicates whether credentials are allowed.
+	AllowCredentials bool `mapstructure:"allow_credentials"`
+	// MaxAge is the maximum age for preflight cache in seconds.
+	MaxAge int `mapstructure:"max_age"`
 }

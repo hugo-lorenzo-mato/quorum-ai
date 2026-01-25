@@ -23,6 +23,12 @@ import (
 type LogCallback func(line string)
 
 // AgentConfig holds adapter configuration.
+//
+// Agent names are aliases - the Name field can be any identifier.
+// The actual CLI type is determined by the Path field or the factory used.
+// This allows defining multiple agent entries using the same CLI but with
+// different models, which is useful for multi-agent analysis with CLIs like
+// copilot that support multiple models (e.g., "copilot-claude", "copilot-gpt").
 type AgentConfig struct {
 	Name    string
 	Path    string
@@ -40,7 +46,15 @@ type AgentConfig struct {
 	ReasoningEffort string
 	// ReasoningEffortPhases allows per-phase overrides of reasoning effort.
 	ReasoningEffortPhases map[string]string
+	// TokenDiscrepancyThreshold is the ratio threshold for detecting token reporting errors.
+	// If reported tokens differ from estimated by more than this factor, use estimated.
+	// Default: 5 (meaning reported must be within 1/5 to 5x of estimated).
+	// Set to 0 to disable discrepancy detection.
+	TokenDiscrepancyThreshold float64
 }
+
+// DefaultTokenDiscrepancyThreshold is the default ratio for token discrepancy detection.
+const DefaultTokenDiscrepancyThreshold = 5.0
 
 // IsEnabledForPhase returns true if the agent is enabled for the given phase.
 func (c AgentConfig) IsEnabledForPhase(phase string) bool {
