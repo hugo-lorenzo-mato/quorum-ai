@@ -144,6 +144,67 @@ Your V{{.Round}} must be a **complete, autonomous, and definitive** document:
 
 ---
 
+## CRITICAL: SELF-CONTAINED DOCUMENT REQUIREMENTS
+
+Your V{{.Round}} must be a **COMPLETE, SELF-CONTAINED DOCUMENT** that serves as the **SINGLE SOURCE OF TRUTH**:
+
+### 1. Zero External Dependencies
+- **NEVER** assume the reader has access to V{{.PreviousRound}}, arbiter evaluations, or other agents' work
+- **NEVER** reference previous rounds, other analyses, or external documents
+- **INCLUDE ALL** context necessary to understand each finding
+- Your document must be **FULLY COMPREHENSIBLE** in complete isolation
+
+### 2. Comprehensive Content for Future Phases
+Your analysis will be used directly by **planning** and **execution** phases. Include:
+- **Architecture Overview**: Complete understanding of the system structure
+- **Component Relationships**: How parts interact (with ASCII diagrams)
+- **Data Flows**: How information moves through the system
+- **Extension Points**: Where and how the system can be extended
+- **Constraints and Limitations**: Technical boundaries that must be respected
+- **Risks and Mitigations**: Identified issues with proposed solutions
+
+### 3. Visual Aids (ASCII Diagrams) - MANDATORY
+Include ASCII diagrams to illustrate:
+- System architecture and component relationships
+- Data flow between modules
+- Proposed solutions or changes
+- Decision trees for complex logic
+- Directory structures when relevant
+
+Example:
+```
++------------------+     +------------------+
+|   Component A    |---->|   Component B    |
++------------------+     +------------------+
+        |                        |
+        v                        v
++------------------+     +------------------+
+|   Component C    |<----|   Component D    |
++------------------+     +------------------+
+```
+
+### 4. Step-by-Step Explanations
+For complex findings or recommendations:
+- Provide clear sequential explanations
+- Use numbered steps where appropriate
+- Include decision criteria with rationale
+- Document trade-offs with evidence
+
+### 5. Evidence-Rich Content
+Every claim must include:
+- **File path and line number**: `path/to/file.go:123`
+- **Code snippets**: When they clarify the point
+- **Quantitative data**: Counts, metrics when relevant
+
+### 6. Structured for Downstream Consumption
+Organize your analysis so that:
+- A planner can extract actionable items without ambiguity
+- An executor can understand the technical context completely
+- A reviewer can verify claims against the cited evidence
+- **No follow-up questions should be necessary**
+
+---
+
 ## Output Requirements
 
 Generate your V{{.Round}} analysis in markdown format with these characteristics:
@@ -151,7 +212,9 @@ Generate your V{{.Round}} analysis in markdown format with these characteristics
 1. **Complete document** - Must contain the entire analysis, no references to previous versions
 2. **Clear structure** - Use sections that best communicate the findings
 3. **Specific evidence** - Cite files and lines of code
-4. **Autonomous** - Any reader must understand the analysis without seeing V{{.PreviousRound}}
+4. **Visual diagrams** - Include ASCII diagrams for architecture, flows, and relationships
+5. **Autonomous** - Any reader must understand the analysis without seeing V{{.PreviousRound}} or ANY other document
+6. **Exhaustive** - Do not omit details; a longer, complete document is better than a concise one that loses information
 {{if .OutputFilePath}}
 
 Write your complete V{{.Round}} analysis to the following file:

@@ -44,6 +44,64 @@ Analyze the codebase **exhaustively and in depth**. Your analysis must:
 
 **Do not omit any relevant aspect.** Provide a complete and detailed analysis with specific code evidence. Generate your analysis in markdown format, structuring it with the sections you consider most appropriate to communicate your findings clearly and effectively.
 
+## CRITICAL: SELF-CONTAINED DOCUMENT REQUIREMENTS
+
+Your analysis must be a **COMPLETE, SELF-CONTAINED DOCUMENT** that can be read and understood in isolation:
+
+### 1. Zero External Dependencies
+- **DO NOT** assume the reader has access to any other document
+- **DO NOT** reference external sources, prior conversations, or other analyses
+- **INCLUDE ALL** context necessary to understand each finding
+- Your document must be the **SINGLE SOURCE OF TRUTH** for the reader
+
+### 2. Comprehensive Content for Future Phases
+Your analysis will be used by **planning** and **execution** phases. Include:
+- **Architecture Overview**: Complete understanding of the system structure
+- **Component Relationships**: How parts interact (include ASCII diagrams)
+- **Data Flows**: How information moves through the system
+- **Extension Points**: Where and how the system can be extended
+- **Constraints and Limitations**: Technical boundaries that must be respected
+
+### 3. Visual Aids (ASCII Diagrams)
+Include ASCII diagrams to illustrate:
+- System architecture and component relationships
+- Data flow between modules
+- Decision trees for complex logic
+- State machines if applicable
+- Directory structures when relevant
+
+Example format:
+```
++------------------+     +------------------+
+|   Component A    |---->|   Component B    |
++------------------+     +------------------+
+        |                        |
+        v                        v
++------------------+     +------------------+
+|   Component C    |<----|   Component D    |
++------------------+     +------------------+
+```
+
+### 4. Step-by-Step Guidance
+For complex findings, provide:
+- Clear sequential explanations
+- Numbered steps where appropriate
+- Decision criteria with rationale
+- Trade-off analysis with evidence
+
+### 5. Evidence-Rich Content
+Every claim must include:
+- **File path and line number**: `path/to/file.go:123`
+- **Code snippets**: When they clarify the point (keep them focused)
+- **Quantitative data**: Counts, sizes, complexity metrics when relevant
+
+### 6. Structured for Downstream Consumption
+Organize your analysis so that:
+- A planner can extract actionable items without ambiguity
+- An executor can understand the technical context completely
+- A reviewer can verify claims against the cited evidence
+- **No follow-up questions should be necessary** to understand your analysis
+
 {{if .Constraints}}
 ## Constraints
 {{range .Constraints}}- {{.}}

@@ -80,6 +80,48 @@ Your consolidation must:
 4. **Be exhaustive** - better to err on the side of complete than concise
 5. **Be autonomous** - anyone should understand everything without reading anything else
 
+## MANDATORY: VISUAL AIDS (ASCII DIAGRAMS)
+
+Your consolidated analysis **MUST** include ASCII diagrams to facilitate understanding:
+
+### Required Diagrams
+Include diagrams that illustrate:
+- **System Architecture**: Overall structure with components and their relationships
+- **Data Flow**: How information moves through the system
+- **Component Interactions**: Detailed view of how modules communicate
+- **Proposed Changes**: Visual representation of recommended modifications
+- **Decision Trees**: For complex logical flows
+- **Directory Structures**: When file organization is relevant
+
+### Diagram Format Example
+```
++------------------+     +-----------------+     +------------------+
+|   Entry Point    |---->|   Core Logic    |---->|   Output Layer   |
+|   (cmd/main.go)  |     |  (internal/*)   |     |   (adapters/*)   |
++------------------+     +-----------------+     +------------------+
+        |                       |                        |
+        v                       v                        v
++------------------+     +-----------------+     +------------------+
+|  Configuration   |     |   Event Bus     |     |   State Manager  |
+|  (config/*)      |     |  (events/*)     |     |   (state/*)      |
++------------------+     +-----------------+     +------------------+
+```
+
+### Diagram Guidelines
+- Use `+`, `-`, `|`, `>`, `<`, `v`, `^` for boxes and arrows
+- Include file/module references in diagrams when helpful
+- Create multiple focused diagrams rather than one overwhelming diagram
+- Ensure diagrams are **self-explanatory** with clear labels
+
+## STEP-BY-STEP GUIDANCE
+
+For complex technical findings, provide:
+- **Numbered sequential steps** explaining the logic or flow
+- **Decision criteria** with clear rationale
+- **Trade-off analysis** with evidence for each option
+- **Prerequisites and dependencies** clearly stated
+- **Expected outcomes** for each recommendation
+
 ## FINAL VALIDATION
 
 Before finishing, verify:
@@ -89,6 +131,10 @@ Before finishing, verify:
 - [ ] Have I avoided phrases like "the analyses indicate" or "according to the agents"?
 - [ ] Have I provided EVERYTHING necessary for someone to plan/execute?
 - [ ] Have I NOT included implementation steps, code, or tasks?
+- [ ] Have I included ASCII diagrams for architecture, data flow, and key relationships?
+- [ ] Have I provided step-by-step explanations for complex findings?
+- [ ] Is each section **complete and self-contained**?
+- [ ] Would a reader unfamiliar with the project understand the full context?
 {{if .OutputFilePath}}
 
 ---

@@ -30,14 +30,36 @@
 
 The task description was carefully crafted to be self-contained. Trust it as your single source of truth.
 
-## Context Management
+## Context Management (CRITICAL)
 
-Optimize the use of your context:
+Your context window is finite and expensive. Follow these rules strictly to avoid exhaustion:
 
-- **Locate first**: Use grep to find the exact lines before reading complete files
-- **Scoped reads**: If you need a large file, read only the relevant line range
-- **One change at a time**: Complete and verify each modification before moving to the next
-- **Delegate if necessary**: For large refactors, consider splitting into sub-tasks
+### Reading Files
+- **Search before reading**: Use grep/glob to locate exact files and lines BEFORE reading
+- **Targeted reads**: Read only the specific line ranges you need (use offset/limit)
+- **Never read the same file twice**: Cache the information mentally after first read
+- **Skip large files**: If a file is >500 lines, read only the relevant sections
+
+### Making Changes
+- **One edit at a time**: Complete and verify each modification before starting the next
+- **Minimal diffs**: Change only what's necessary - don't reformat or "clean up" surrounding code
+- **No speculative reads**: Don't read files "just in case" - read only when you have a specific need
+
+### Responses
+- **Be concise**: Explain what you did in 1-2 sentences, not paragraphs
+- **Reference by line**: Say "modified line 45" instead of showing the full code block
+- **No code dumps**: Never include full file contents in your responses
+- **Skip obvious details**: Don't explain standard patterns or boilerplate
+
+### Tool Efficiency
+- **Batch searches**: Combine multiple grep patterns when possible
+- **Parallel reads**: Read related files together if you know you need them
+- **Early termination**: Stop searching once you find what you need
+
+### If Context Gets Low
+- Complete the current sub-task and save progress
+- Report partial completion with clear next steps
+- Do NOT try to rush through remaining work
 
 ## Instructions
 

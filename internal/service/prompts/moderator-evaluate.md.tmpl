@@ -75,43 +75,65 @@ Evaluate the **semantic consensus** among the previous analyses with an **ultra-
 
 ## MANDATORY Response Format
 
-⚠️ **YOUR RESPONSE MUST START WITH THIS EXACT LINE** ⚠️
+⚠️ **YOUR RESPONSE MUST START WITH YAML FRONTMATTER** ⚠️
 
-```
-CONSENSUS_SCORE: XX%
+Your response MUST begin with a YAML frontmatter block containing the consensus metrics:
+
+```yaml
+---
+consensus_score: 78
+high_impact_divergences: 2
+medium_impact_divergences: 3
+low_impact_divergences: 1
+agreements_count: 5
+---
 ```
 
 **CRITICAL PARSING REQUIREMENTS:**
-- This MUST be the **FIRST LINE** of your response
-- Use **EXACTLY** this format: `CONSENSUS_SCORE: XX%`
-- `XX` must be an **INTEGER** from 0 to 100
-- Include the `%` symbol
-- **NO** markdown formatting (no `**`, no `#`, no backticks around the line)
-- **NO** text before this line
-- **NO** spaces before `CONSENSUS_SCORE`
+- The frontmatter MUST be the **FIRST THING** in your response
+- Start with exactly `---` on the first line
+- End the frontmatter with exactly `---` on its own line
+- `consensus_score` is an **INTEGER** from 0 to 100 (no % symbol)
+- All counts are integers
+- **NO** text, spaces, or characters before the opening `---`
 
-**VALID Examples:**
+**VALID Example:**
 ```
-CONSENSUS_SCORE: 78%
-CONSENSUS_SCORE: 45%
-CONSENSUS_SCORE: 92%
+---
+consensus_score: 78
+high_impact_divergences: 1
+medium_impact_divergences: 2
+low_impact_divergences: 0
+agreements_count: 4
+---
+
+## Score Rationale
+The agents show good agreement on...
 ```
 
 **INVALID Examples (will cause parsing failure):**
 ```
-**CONSENSUS_SCORE: 78%**     ❌ (markdown bold)
-# CONSENSUS_SCORE: 78%       ❌ (markdown header)
-The consensus score is 78%   ❌ (text before pattern)
-CONSENSUS_SCORE: 78.5%       ❌ (decimal)
-CONSENSUS_SCORE: 78          ❌ (missing %)
-consensus_score: 78%         ❌ (lowercase)
+Here is my evaluation:          ❌ (text before frontmatter)
+---
+
+---
+consensus_score: 78%            ❌ (% symbol not allowed)
+---
+
+---
+consensus_score: 78.5           ❌ (decimal not allowed)
+---
+
+  ---                           ❌ (spaces before ---)
+consensus_score: 78
+---
 ```
 
-**If the system cannot parse your score, the workflow will fail with 0%.**
+**If the system cannot parse your frontmatter, the workflow will fail with 0%.**
 
 ---
 
-After the score line, use normal markdown formatting:
+After the frontmatter, use normal markdown formatting:
 
 ## Score Rationale
 Brief explanation of the overall score. Explain which divergences were weighted heavily and why.
@@ -171,7 +193,16 @@ Consensus threshold met. No further refinement needed.
 {{end}}
 
 ---
-⚠️ **FINAL REMINDER**: Your response MUST start with `CONSENSUS_SCORE: XX%` on the very first line. Example: `CONSENSUS_SCORE: 78%`
+⚠️ **FINAL REMINDER**: Your response MUST start with YAML frontmatter. Example:
+```
+---
+consensus_score: 78
+high_impact_divergences: 1
+medium_impact_divergences: 2
+low_impact_divergences: 0
+agreements_count: 4
+---
+```
 {{if .OutputFilePath}}
 
 ---
@@ -184,9 +215,9 @@ Write your consensus evaluation to the following file:
 ```
 
 **IMPORTANT - File format:**
-- The file MUST start with `CONSENSUS_SCORE: XX%` on the first line
-- DO NOT add YAML frontmatter (`---` ... `---` blocks at the beginning)
-- DO NOT add metadata, file headers, or system information
+- The file MUST start with YAML frontmatter (`---` on first line)
+- Include all required fields: consensus_score, high/medium/low_impact_divergences, agreements_count
+- DO NOT add any text before the opening `---`
 - DO NOT include markers like `# File:` or file comments
 
 Use your file writing tool to create this markdown document.
