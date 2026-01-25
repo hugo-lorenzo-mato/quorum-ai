@@ -55,6 +55,7 @@ Example:
 var (
 	chatAgent string
 	chatModel string
+	chatTrace string
 )
 
 func init() {
@@ -62,6 +63,7 @@ func init() {
 
 	chatCmd.Flags().StringVar(&chatAgent, "agent", "", "Default agent (claude, gemini, codex, copilot)")
 	chatCmd.Flags().StringVar(&chatModel, "model", "", "Default model override")
+	chatCmd.Flags().StringVar(&chatTrace, "trace", "", "Trace mode override (off, summary, full)")
 }
 
 func runChat(_ *cobra.Command, _ []string) error {
@@ -119,11 +121,18 @@ func runChat(_ *cobra.Command, _ []string) error {
 	// Determine default model
 	defaultModel := chatModel
 
-	// Create workflow runner dependencies
-	runner, err := createWorkflowRunner(ctx, cfg, loader, registry, controlPlane, eventBus, logger)
+	// Determine trace mode (flag overrides config)
+	traceMode := cfg.Trace.Mode
+	if chatTrace != "" {
+		traceMode = chatTrace
+	}
+
+	// Create workflow runner dependencies with optional tracing
+	runner, traceCleanup, err := createWorkflowRunnerWithTracing(ctx, cfg, loader, registry, controlPlane, eventBus, logger, traceMode)
 	if err != nil {
 		return fmt.Errorf("creating workflow runner: %w", err)
 	}
+	defer traceCleanup()
 
 	// Parse chat configuration
 	chatTimeout, _ := time.ParseDuration(cfg.Chat.Timeout)
@@ -394,6 +403,310 @@ func (n *chatOutputNotifier) Log(level, source, message string) {
 }
 
 func (n *chatOutputNotifier) AgentEvent(kind, agent, message string, data map[string]interface{}) {
+	if n.eventBus != nil {
+		n.eventBus.Publish(events.NewAgentStreamEvent("", events.AgentEventType(kind), agent, message).WithData(data))
+	}
+}
+
+// createWorkflowRunnerWithTracing creates a workflow runner with optional tracing support.
+// Returns a cleanup function that should be called when the TUI exits.
+func createWorkflowRunnerWithTracing(
+	ctx context.Context,
+	cfg *config.Config,
+	loader *config.Loader,
+	registry *cli.Registry,
+	controlPlane *control.ControlPlane,
+	eventBus *events.EventBus,
+	logger *logging.Logger,
+	traceMode string,
+) (*workflow.Runner, func(), error) {
+	// If tracing is disabled or off, create runner without tracing
+	if traceMode == "" || traceMode == "off" {
+		runner, err := createWorkflowRunner(ctx, cfg, loader, registry, controlPlane, eventBus, logger)
+		return runner, func() {}, err
+	}
+
+	// Create trace config from app config with mode override
+	traceCfg := service.TraceConfig{
+		Mode:            traceMode,
+		Dir:             cfg.Trace.Dir,
+		SchemaVersion:   cfg.Trace.SchemaVersion,
+		Redact:          cfg.Trace.Redact,
+		RedactPatterns:  cfg.Trace.RedactPatterns,
+		RedactAllowlist: cfg.Trace.RedactAllowlist,
+		MaxBytes:        cfg.Trace.MaxBytes,
+		TotalMaxBytes:   cfg.Trace.TotalMaxBytes,
+		MaxFiles:        cfg.Trace.MaxFiles,
+		IncludePhases:   cfg.Trace.IncludePhases,
+	}
+
+	// Create trace writer
+	traceWriter := service.NewTraceWriter(traceCfg, logger)
+	if !traceWriter.Enabled() {
+		runner, err := createWorkflowRunner(ctx, cfg, loader, registry, controlPlane, eventBus, logger)
+		return runner, func() {}, err
+	}
+
+	// Start trace run
+	traceRunID := fmt.Sprintf("chat-%d", time.Now().UnixNano())
+	if err := traceWriter.StartRun(ctx, service.TraceRunInfo{
+		RunID:      traceRunID,
+		StartedAt:  time.Now(),
+		AppVersion: GetVersion(),
+		Config:     traceCfg,
+	}); err != nil {
+		logger.Warn("failed to start trace run", "error", err)
+		runner, err := createWorkflowRunner(ctx, cfg, loader, registry, controlPlane, eventBus, logger)
+		return runner, func() {}, err
+	}
+
+	logger.Info("trace enabled for chat session",
+		"mode", traceMode,
+		"run_id", traceRunID,
+		"dir", traceWriter.Dir())
+
+	// Create runner with trace-enabled output notifier
+	runner, err := createWorkflowRunnerWithTrace(ctx, cfg, loader, registry, controlPlane, eventBus, logger, traceWriter)
+	if err != nil {
+		return nil, func() {}, err
+	}
+
+	// Create cleanup function
+	cleanup := func() {
+		summary := traceWriter.EndRun(ctx)
+		if summary.TotalEvents > 0 {
+			logger.Info("trace session ended",
+				"events", summary.TotalEvents,
+				"tokens_in", summary.TotalTokensIn,
+				"tokens_out", summary.TotalTokensOut,
+				"cost_usd", summary.TotalCostUSD,
+				"dir", summary.Dir)
+		}
+	}
+
+	return runner, cleanup, nil
+}
+
+// createWorkflowRunnerWithTrace is a variant of createWorkflowRunner that includes tracing.
+func createWorkflowRunnerWithTrace(
+	ctx context.Context,
+	cfg *config.Config,
+	_ *config.Loader,
+	registry *cli.Registry,
+	controlPlane *control.ControlPlane,
+	eventBus *events.EventBus,
+	logger *logging.Logger,
+	traceWriter service.TraceWriter,
+) (*workflow.Runner, error) {
+	// Create state manager
+	statePath := cfg.State.Path
+	if statePath == "" {
+		statePath = ".quorum/state/state.json"
+	}
+	stateManager := state.NewJSONStateManager(statePath)
+
+	// Create prompt renderer
+	promptRenderer, err := service.NewPromptRenderer()
+	if err != nil {
+		return nil, fmt.Errorf("creating prompt renderer: %w", err)
+	}
+
+	// Create runner config
+	timeout, err := parseDurationDefault(cfg.Workflow.Timeout, defaultWorkflowTimeout)
+	if err != nil {
+		return nil, fmt.Errorf("parsing workflow timeout %q: %w", cfg.Workflow.Timeout, err)
+	}
+
+	// Parse phase timeouts
+	analyzeTimeout, err := parseDurationDefault(cfg.Phases.Analyze.Timeout, defaultPhaseTimeout)
+	if err != nil {
+		return nil, fmt.Errorf("parsing analyze phase timeout %q: %w", cfg.Phases.Analyze.Timeout, err)
+	}
+	planTimeout, err := parseDurationDefault(cfg.Phases.Plan.Timeout, defaultPhaseTimeout)
+	if err != nil {
+		return nil, fmt.Errorf("parsing plan phase timeout %q: %w", cfg.Phases.Plan.Timeout, err)
+	}
+	executeTimeout, err := parseDurationDefault(cfg.Phases.Execute.Timeout, defaultPhaseTimeout)
+	if err != nil {
+		return nil, fmt.Errorf("parsing execute phase timeout %q: %w", cfg.Phases.Execute.Timeout, err)
+	}
+
+	defaultAgent := cfg.Agents.Default
+	if defaultAgent == "" {
+		defaultAgent = "claude"
+	}
+
+	runnerConfig := &workflow.RunnerConfig{
+		Timeout:      timeout,
+		MaxRetries:   3,
+		DryRun:       false,
+		Sandbox:      cfg.Workflow.Sandbox,
+		DenyTools:    cfg.Workflow.DenyTools,
+		DefaultAgent: defaultAgent,
+		AgentPhaseModels: map[string]map[string]string{
+			"claude":  cfg.Agents.Claude.PhaseModels,
+			"gemini":  cfg.Agents.Gemini.PhaseModels,
+			"codex":   cfg.Agents.Codex.PhaseModels,
+			"copilot": cfg.Agents.Copilot.PhaseModels,
+		},
+		WorktreeAutoClean:  cfg.Git.AutoClean,
+		WorktreeMode:       cfg.Git.WorktreeMode,
+		MaxCostPerWorkflow: cfg.Costs.MaxPerWorkflow,
+		MaxCostPerTask:     cfg.Costs.MaxPerTask,
+		Refiner: workflow.RefinerConfig{
+			Enabled: cfg.Phases.Analyze.Refiner.Enabled,
+			Agent:   cfg.Phases.Analyze.Refiner.Agent,
+		},
+		Synthesizer: workflow.SynthesizerConfig{
+			Agent: cfg.Phases.Analyze.Synthesizer.Agent,
+		},
+		PlanSynthesizer: workflow.PlanSynthesizerConfig{
+			Enabled: cfg.Phases.Plan.Synthesizer.Enabled,
+			Agent:   cfg.Phases.Plan.Synthesizer.Agent,
+		},
+		Report: report.Config{
+			Enabled:    cfg.Report.Enabled,
+			BaseDir:    cfg.Report.BaseDir,
+			UseUTC:     cfg.Report.UseUTC,
+			IncludeRaw: cfg.Report.IncludeRaw,
+		},
+		Moderator: workflow.ModeratorConfig{
+			Enabled:             cfg.Phases.Analyze.Moderator.Enabled,
+			Agent:               cfg.Phases.Analyze.Moderator.Agent,
+			Threshold:           cfg.Phases.Analyze.Moderator.Threshold,
+			MinRounds:           cfg.Phases.Analyze.Moderator.MinRounds,
+			MaxRounds:           cfg.Phases.Analyze.Moderator.MaxRounds,
+			AbortThreshold:      cfg.Phases.Analyze.Moderator.AbortThreshold,
+			StagnationThreshold: cfg.Phases.Analyze.Moderator.StagnationThreshold,
+		},
+		PhaseTimeouts: workflow.PhaseTimeouts{
+			Analyze: analyzeTimeout,
+			Plan:    planTimeout,
+			Execute: executeTimeout,
+		},
+	}
+
+	// Create service components
+	checkpointManager := service.NewCheckpointManager(stateManager, logger)
+	retryPolicy := service.NewRetryPolicy(service.WithMaxAttempts(3))
+	rateLimiterRegistry := service.NewRateLimiterRegistry()
+	dagBuilder := service.NewDAGBuilder()
+
+	// Create worktree manager
+	cwd, err := os.Getwd()
+	if err != nil {
+		return nil, fmt.Errorf("getting working directory: %w", err)
+	}
+	gitClient, err := git.NewClient(cwd)
+	if err != nil {
+		logger.Warn("failed to create git client, worktree isolation disabled", "error", err)
+	}
+	var worktreeManager workflow.WorktreeManager
+	if gitClient != nil {
+		worktreeManager = git.NewTaskWorktreeManager(gitClient, cfg.Git.WorktreeDir).WithLogger(logger)
+	}
+
+	// Create adapters
+	checkpointAdapter := workflow.NewCheckpointAdapter(checkpointManager, ctx)
+	retryAdapter := workflow.NewRetryAdapter(retryPolicy, ctx)
+	rateLimiterAdapter := workflow.NewRateLimiterRegistryAdapter(rateLimiterRegistry, ctx)
+	promptAdapter := workflow.NewPromptRendererAdapter(promptRenderer)
+	resumeAdapter := workflow.NewResumePointAdapter(checkpointManager)
+	dagAdapter := workflow.NewDAGAdapter(dagBuilder)
+	stateAdapter := &stateManagerAdapter{sm: stateManager}
+
+	// Create trace-enabled output notifier
+	traceNotifier := service.NewTraceOutputNotifier(traceWriter)
+	outputNotifier := &tracingChatOutputNotifier{
+		eventBus: eventBus,
+		tracer:   traceNotifier,
+	}
+
+	// Connect registry to event bus for real-time streaming events from CLI adapters
+	registry.SetEventHandler(func(event core.AgentEvent) {
+		data := make(map[string]interface{})
+		for k, v := range event.Data {
+			data[k] = v
+		}
+		outputNotifier.AgentEvent(string(event.Type), event.Agent, event.Message, data)
+	})
+
+	// Create mode enforcer
+	modeEnforcer := service.NewModeEnforcer(service.ExecutionMode{
+		DryRun:      runnerConfig.DryRun,
+		Sandbox:     runnerConfig.Sandbox,
+		DeniedTools: runnerConfig.DenyTools,
+		MaxCost:     runnerConfig.MaxCostPerWorkflow,
+	})
+	modeEnforcerAdapter := workflow.NewModeEnforcerAdapter(modeEnforcer)
+
+	// Create workflow runner
+	runner := workflow.NewRunner(workflow.RunnerDeps{
+		Config:         runnerConfig,
+		State:          stateAdapter,
+		Agents:         registry,
+		DAG:            dagAdapter,
+		Checkpoint:     checkpointAdapter,
+		ResumeProvider: resumeAdapter,
+		Prompts:        promptAdapter,
+		Retry:          retryAdapter,
+		RateLimits:     rateLimiterAdapter,
+		Worktrees:      worktreeManager,
+		Logger:         logger,
+		Output:         outputNotifier,
+		ModeEnforcer:   modeEnforcerAdapter,
+		Control:        controlPlane,
+	})
+
+	return runner, nil
+}
+
+// tracingChatOutputNotifier extends chatOutputNotifier with tracing support.
+type tracingChatOutputNotifier struct {
+	eventBus *events.EventBus
+	tracer   *service.TraceOutputNotifier
+}
+
+func (n *tracingChatOutputNotifier) PhaseStarted(phase core.Phase) {
+	if n.tracer != nil {
+		n.tracer.PhaseStarted(string(phase))
+	}
+}
+
+func (n *tracingChatOutputNotifier) TaskStarted(task *core.Task) {
+	if n.tracer != nil {
+		n.tracer.TaskStarted(string(task.ID), task.Name, task.CLI)
+	}
+}
+
+func (n *tracingChatOutputNotifier) TaskCompleted(task *core.Task, duration time.Duration) {
+	if n.tracer != nil {
+		n.tracer.TaskCompleted(string(task.ID), task.Name, duration, task.TokensIn, task.TokensOut, task.CostUSD)
+	}
+}
+
+func (n *tracingChatOutputNotifier) TaskFailed(task *core.Task, err error) {
+	if n.tracer != nil {
+		n.tracer.TaskFailed(string(task.ID), task.Name, err)
+	}
+}
+
+func (n *tracingChatOutputNotifier) TaskSkipped(_ *core.Task, _ string) {}
+
+func (n *tracingChatOutputNotifier) WorkflowStateUpdated(state *core.WorkflowState) {
+	if n.tracer != nil {
+		n.tracer.WorkflowStateUpdated(string(state.Status), len(state.Tasks))
+	}
+}
+
+func (n *tracingChatOutputNotifier) Log(level, source, message string) {
+	if n.eventBus != nil {
+		fullMessage := "[" + source + "] " + message
+		n.eventBus.Publish(events.NewLogEvent("", level, fullMessage, nil))
+	}
+}
+
+func (n *tracingChatOutputNotifier) AgentEvent(kind, agent, message string, data map[string]interface{}) {
 	if n.eventBus != nil {
 		n.eventBus.Publish(events.NewAgentStreamEvent("", events.AgentEventType(kind), agent, message).WithData(data))
 	}

@@ -487,56 +487,68 @@ func configureAgentsFromConfig(registry *cli.Registry, cfg *config.Config, _ *co
 	// Configure Claude
 	if cfg.Agents.Claude.Enabled {
 		registry.Configure("claude", cli.AgentConfig{
-			Name:                  "claude",
-			Path:                  cfg.Agents.Claude.Path,
-			Model:                 cfg.Agents.Claude.Model,
-			Timeout:               5 * time.Minute,
-			Phases:                cfg.Agents.Claude.Phases,
-			ReasoningEffort:       cfg.Agents.Claude.ReasoningEffort,
-			ReasoningEffortPhases: cfg.Agents.Claude.ReasoningEffortPhases,
+			Name:                      "claude",
+			Path:                      cfg.Agents.Claude.Path,
+			Model:                     cfg.Agents.Claude.Model,
+			Timeout:                   5 * time.Minute,
+			Phases:                    cfg.Agents.Claude.Phases,
+			ReasoningEffort:           cfg.Agents.Claude.ReasoningEffort,
+			ReasoningEffortPhases:     cfg.Agents.Claude.ReasoningEffortPhases,
+			TokenDiscrepancyThreshold: getTokenDiscrepancyThreshold(cfg.Agents.Claude.TokenDiscrepancyThreshold),
 		})
 	}
 
 	// Configure Gemini
 	if cfg.Agents.Gemini.Enabled {
 		registry.Configure("gemini", cli.AgentConfig{
-			Name:                  "gemini",
-			Path:                  cfg.Agents.Gemini.Path,
-			Model:                 cfg.Agents.Gemini.Model,
-			Timeout:               5 * time.Minute,
-			Phases:                cfg.Agents.Gemini.Phases,
-			ReasoningEffort:       cfg.Agents.Gemini.ReasoningEffort,
-			ReasoningEffortPhases: cfg.Agents.Gemini.ReasoningEffortPhases,
+			Name:                      "gemini",
+			Path:                      cfg.Agents.Gemini.Path,
+			Model:                     cfg.Agents.Gemini.Model,
+			Timeout:                   5 * time.Minute,
+			Phases:                    cfg.Agents.Gemini.Phases,
+			ReasoningEffort:           cfg.Agents.Gemini.ReasoningEffort,
+			ReasoningEffortPhases:     cfg.Agents.Gemini.ReasoningEffortPhases,
+			TokenDiscrepancyThreshold: getTokenDiscrepancyThreshold(cfg.Agents.Gemini.TokenDiscrepancyThreshold),
 		})
 	}
 
 	// Configure Codex
 	if cfg.Agents.Codex.Enabled {
 		registry.Configure("codex", cli.AgentConfig{
-			Name:                  "codex",
-			Path:                  cfg.Agents.Codex.Path,
-			Model:                 cfg.Agents.Codex.Model,
-			Timeout:               5 * time.Minute,
-			Phases:                cfg.Agents.Codex.Phases,
-			ReasoningEffort:       cfg.Agents.Codex.ReasoningEffort,
-			ReasoningEffortPhases: cfg.Agents.Codex.ReasoningEffortPhases,
+			Name:                      "codex",
+			Path:                      cfg.Agents.Codex.Path,
+			Model:                     cfg.Agents.Codex.Model,
+			Timeout:                   5 * time.Minute,
+			Phases:                    cfg.Agents.Codex.Phases,
+			ReasoningEffort:           cfg.Agents.Codex.ReasoningEffort,
+			ReasoningEffortPhases:     cfg.Agents.Codex.ReasoningEffortPhases,
+			TokenDiscrepancyThreshold: getTokenDiscrepancyThreshold(cfg.Agents.Codex.TokenDiscrepancyThreshold),
 		})
 	}
 
 	// Configure Copilot
 	if cfg.Agents.Copilot.Enabled {
 		registry.Configure("copilot", cli.AgentConfig{
-			Name:                  "copilot",
-			Path:                  cfg.Agents.Copilot.Path,
-			Model:                 cfg.Agents.Copilot.Model,
-			Timeout:               5 * time.Minute,
-			Phases:                cfg.Agents.Copilot.Phases,
-			ReasoningEffort:       cfg.Agents.Copilot.ReasoningEffort,
-			ReasoningEffortPhases: cfg.Agents.Copilot.ReasoningEffortPhases,
+			Name:                      "copilot",
+			Path:                      cfg.Agents.Copilot.Path,
+			Model:                     cfg.Agents.Copilot.Model,
+			Timeout:                   5 * time.Minute,
+			Phases:                    cfg.Agents.Copilot.Phases,
+			ReasoningEffort:           cfg.Agents.Copilot.ReasoningEffort,
+			ReasoningEffortPhases:     cfg.Agents.Copilot.ReasoningEffortPhases,
+			TokenDiscrepancyThreshold: getTokenDiscrepancyThreshold(cfg.Agents.Copilot.TokenDiscrepancyThreshold),
 		})
 	}
 
 	return nil
+}
+
+// getTokenDiscrepancyThreshold returns the configured threshold or the default.
+func getTokenDiscrepancyThreshold(configured float64) float64 {
+	if configured > 0 {
+		return configured
+	}
+	return cli.DefaultTokenDiscrepancyThreshold
 }
 
 func getPrompt(args []string, file string) (string, error) {
