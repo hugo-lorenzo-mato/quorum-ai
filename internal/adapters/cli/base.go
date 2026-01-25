@@ -197,10 +197,19 @@ func (b *BaseAdapter) ExecuteCommand(ctx context.Context, args []string, stdin, 
 	// Set environment
 	cmd.Env = os.Environ()
 
-	b.logger.Debug("executing command",
+	// Log command execution start with truncated stdin for debugging
+	stdinPreview := stdin
+	if len(stdinPreview) > 500 {
+		stdinPreview = stdinPreview[:500] + "... [truncated]"
+	}
+	b.logger.Info("cli: executing command",
+		"adapter", b.config.Name,
 		"path", cmdPath,
 		"args", args,
 		"work_dir", cmd.Dir,
+		"stdin_length", len(stdin),
+		"stdin_preview", stdinPreview,
+		"timeout", timeout,
 	)
 
 	startTime := time.Now()
@@ -234,17 +243,61 @@ func (b *BaseAdapter) ExecuteCommand(ctx context.Context, args []string, stdin, 
 		Duration: duration,
 	}
 
+	// Helper to truncate output for logging
+	truncateForLog := func(s string, maxLen int) string {
+		if len(s) > maxLen {
+			return s[:maxLen] + "... [truncated]"
+		}
+		return s
+	}
+
 	if ctx.Err() == context.DeadlineExceeded {
+		b.logger.Error("cli: command timeout",
+			"adapter", b.config.Name,
+			"path", cmdPath,
+			"duration", duration,
+			"timeout", timeout,
+			"stdout_length", len(result.Stdout),
+			"stderr_length", len(result.Stderr),
+			"stderr_preview", truncateForLog(result.Stderr, 1000),
+		)
 		return result, core.ErrTimeout(fmt.Sprintf("command timed out after %v", timeout))
 	}
 
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			result.ExitCode = exitErr.ExitCode()
+			b.logger.Error("cli: command failed",
+				"adapter", b.config.Name,
+				"path", cmdPath,
+				"exit_code", result.ExitCode,
+				"duration", duration,
+				"stdout_length", len(result.Stdout),
+				"stderr_length", len(result.Stderr),
+				"stderr", truncateForLog(result.Stderr, 2000),
+				"stdout_preview", truncateForLog(result.Stdout, 500),
+			)
 			return result, b.classifyError(result)
 		}
+		b.logger.Error("cli: command execution error",
+			"adapter", b.config.Name,
+			"path", cmdPath,
+			"error", err,
+			"duration", duration,
+		)
 		return result, fmt.Errorf("executing command: %w", err)
 	}
+
+	// Log successful completion
+	b.logger.Info("cli: command completed",
+		"adapter", b.config.Name,
+		"path", cmdPath,
+		"exit_code", 0,
+		"duration", duration,
+		"stdout_length", len(result.Stdout),
+		"stderr_length", len(result.Stderr),
+		"stdout_preview", truncateForLog(result.Stdout, 300),
+	)
 
 	result.ExitCode = 0
 	return result, nil

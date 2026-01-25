@@ -277,6 +277,22 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 	model := ResolvePhaseModel(wctx.Config, agentName, core.PhaseExecute, task.Model)
 	execStartTime := time.Now()
 
+	// Log task execution start with detailed context
+	promptPreview := prompt
+	if len(promptPreview) > 500 {
+		promptPreview = promptPreview[:500] + "... [truncated]"
+	}
+	wctx.Logger.Info("executor: starting task execution",
+		"task_id", task.ID,
+		"task_name", task.Name,
+		"agent", agentName,
+		"model", model,
+		"workdir", workDir,
+		"timeout", wctx.Config.PhaseTimeouts.Execute,
+		"prompt_length", len(prompt),
+		"prompt_preview", promptPreview,
+	)
+
 	// Emit agent started event
 	if wctx.Output != nil {
 		wctx.Output.AgentEvent("started", agentName, "Executing task: "+task.Name, map[string]interface{}{
@@ -326,6 +342,18 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 	wctx.Unlock()
 
 	if err != nil {
+		// Log detailed error information
+		wctx.Logger.Error("executor: task execution failed",
+			"task_id", task.ID,
+			"task_name", task.Name,
+			"agent", agentName,
+			"model", model,
+			"retries", retryCount,
+			"duration_ms", durationMS,
+			"error", err,
+			"error_type", fmt.Sprintf("%T", err),
+		)
+
 		if wctx.Output != nil {
 			wctx.Output.AgentEvent("error", agentName, err.Error(), map[string]interface{}{
 				"task_id":     string(task.ID),
@@ -340,6 +368,19 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 		taskErr = err
 		return err
 	}
+
+	// Log successful completion
+	wctx.Logger.Info("executor: task completed successfully",
+		"task_id", task.ID,
+		"task_name", task.Name,
+		"agent", agentName,
+		"model", result.Model,
+		"tokens_in", result.TokensIn,
+		"tokens_out", result.TokensOut,
+		"cost_usd", result.CostUSD,
+		"duration_ms", durationMS,
+		"finish_reason", result.FinishReason,
+	)
 
 	// Emit completed event
 	if wctx.Output != nil {
