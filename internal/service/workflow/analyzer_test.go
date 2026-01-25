@@ -8,6 +8,7 @@ import (
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/logging"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service"
 )
 
 // mockAgentRegistry implements core.AgentRegistry for testing.
@@ -163,6 +164,24 @@ func (m *mockPromptRenderer) RenderVnRefine(_ VnRefineParams) (string, error) {
 	return "vn refine prompt", nil
 }
 
+func (m *mockPromptRenderer) RenderPlanManifest(_ PlanParams) (string, error) {
+	if m.planErr != nil {
+		return "", m.planErr
+	}
+	return "plan manifest prompt", nil
+}
+
+func (m *mockPromptRenderer) RenderTaskDetailGenerate(_ TaskDetailGenerateParams) (string, error) {
+	return "task detail prompt", nil
+}
+
+func (m *mockPromptRenderer) RenderPlanComprehensive(_ ComprehensivePlanParams) (string, error) {
+	if m.planErr != nil {
+		return "", m.planErr
+	}
+	return "comprehensive plan prompt", nil
+}
+
 // mockCheckpointCreator implements CheckpointCreator for testing.
 type mockCheckpointCreator struct {
 	mu          sync.Mutex
@@ -187,6 +206,13 @@ func (m *mockCheckpointCreator) ErrorCheckpoint(_ *core.WorkflowState, _ error) 
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.checkpoints = append(m.checkpoints, "error")
+	return nil
+}
+
+func (m *mockCheckpointCreator) ErrorCheckpointWithContext(_ *core.WorkflowState, _ error, _ service.ErrorCheckpointDetails) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.checkpoints = append(m.checkpoints, "error_with_context")
 	return nil
 }
 

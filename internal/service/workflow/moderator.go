@@ -10,6 +10,7 @@ import (
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service/report"
+	"gopkg.in/yaml.v3"
 )
 
 // ModeratorEvaluationResult contains the result of a semantic moderator evaluation.
@@ -69,14 +70,24 @@ func NewSemanticModerator(config ModeratorConfig) (*SemanticModerator, error) {
 }
 
 // Evaluate runs semantic consensus evaluation on the given analyses.
+// Uses the configured moderator agent.
 func (m *SemanticModerator) Evaluate(ctx context.Context, wctx *Context, round int, outputs []AnalysisOutput) (*ModeratorEvaluationResult, error) {
+	return m.EvaluateWithAgent(ctx, wctx, round, outputs, m.config.Agent)
+}
+
+// EvaluateWithAgent runs semantic consensus evaluation using a specific agent.
+// This allows fallback to alternative agents if the primary moderator fails.
+func (m *SemanticModerator) EvaluateWithAgent(ctx context.Context, wctx *Context, round int, outputs []AnalysisOutput, agentName string) (*ModeratorEvaluationResult, error) {
 	if !m.config.Enabled {
 		return nil, fmt.Errorf("semantic moderator is not enabled. "+
 			"Set 'phases.analyze.moderator.enabled: true' in your config. See: %s#phases-settings", DocsConfigURL)
 	}
 
-	// Get moderator agent
-	moderatorAgentName := m.config.Agent
+	// Use specified agent (allows fallback to alternatives)
+	moderatorAgentName := agentName
+	if moderatorAgentName == "" {
+		moderatorAgentName = m.config.Agent
+	}
 	agent, err := wctx.Agents.Get(moderatorAgentName)
 	if err != nil {
 		return nil, fmt.Errorf("moderator agent '%s' not available: %w. "+
@@ -183,6 +194,37 @@ func (m *SemanticModerator) Evaluate(ctx context.Context, wctx *Context, round i
 	evalResult.CostUSD = result.CostUSD
 	evalResult.DurationMS = durationMS
 
+	// Validate moderator output - detect garbage/empty responses
+	validationErr := m.validateModeratorOutput(evalResult, result.Output)
+	if validationErr != nil {
+		wctx.Logger.Warn("moderator output validation failed",
+			"round", round,
+			"agent", moderatorAgentName,
+			"model", model,
+			"error", validationErr,
+			"tokens_in", result.TokensIn,
+			"tokens_out", result.TokensOut,
+			"output_len", len(result.Output),
+			"raw_output_sample", truncateForLog(result.Output, 500),
+		)
+		if wctx.Output != nil {
+			wctx.Output.AgentEvent("warning", moderatorAgentName,
+				fmt.Sprintf("Moderator output validation issue: %v", validationErr),
+				map[string]interface{}{
+					"phase":       "moderator",
+					"round":       round,
+					"model":       model,
+					"tokens_in":   result.TokensIn,
+					"tokens_out":  result.TokensOut,
+					"output_len":  len(result.Output),
+					"validation":  validationErr.Error(),
+					"duration_ms": durationMS,
+				})
+		}
+		// Return the validation error so caller can retry with fallback
+		return nil, fmt.Errorf("moderator output validation: %w", validationErr)
+	}
+
 	// Emit completed event
 	if wctx.Output != nil {
 		wctx.Output.AgentEvent("completed", moderatorAgentName, fmt.Sprintf("Moderator evaluation completed: %.0f%% consensus", evalResult.Score*100), map[string]interface{}{
@@ -219,6 +261,15 @@ func (m *SemanticModerator) Evaluate(ctx context.Context, wctx *Context, round i
 	return evalResult, nil
 }
 
+// moderatorFrontmatter represents the YAML frontmatter structure for moderator output.
+type moderatorFrontmatter struct {
+	ConsensusScore          int `yaml:"consensus_score"`
+	HighImpactDivergences   int `yaml:"high_impact_divergences"`
+	MediumImpactDivergences int `yaml:"medium_impact_divergences"`
+	LowImpactDivergences    int `yaml:"low_impact_divergences"`
+	AgreementsCount         int `yaml:"agreements_count"`
+}
+
 // parseModeratorResponse parses the moderator's response to extract the consensus score and details.
 func (m *SemanticModerator) parseModeratorResponse(output string) *ModeratorEvaluationResult {
 	result := &ModeratorEvaluationResult{
@@ -226,14 +277,27 @@ func (m *SemanticModerator) parseModeratorResponse(output string) *ModeratorEval
 		Score:     0,
 	}
 
-	// Pattern 1: CONSENSUS_SCORE: XX% (primary, with flexible whitespace and optional markdown)
-	// Handles: "CONSENSUS_SCORE: 78%", "**CONSENSUS_SCORE:** 78%", "CONSENSUS_SCORE:78%"
-	// The pattern handles markdown bold (**), underscores/spaces between words, and colons in any position
-	scorePattern := regexp.MustCompile(`(?im)^\**CONSENSUS[_\s]?SCORE[*:]*\s*(\d+)\s*%`)
-	match := scorePattern.FindStringSubmatch(output)
-	if match != nil && len(match) > 1 {
-		if score, err := strconv.Atoi(match[1]); err == nil {
-			result.Score = float64(score) / 100.0
+	// Primary method: Parse YAML frontmatter
+	// Format: ---\nconsensus_score: XX\n...\n---
+	if frontmatter, body, ok := parseYAMLFrontmatter(output); ok {
+		var fm moderatorFrontmatter
+		if err := yaml.Unmarshal([]byte(frontmatter), &fm); err == nil && fm.ConsensusScore > 0 {
+			result.Score = float64(fm.ConsensusScore) / 100.0
+			// Use body (content after frontmatter) for section extraction
+			output = body
+		}
+	}
+
+	// Fallback patterns for backwards compatibility with older format
+	if result.Score == 0 {
+		// Pattern 1: CONSENSUS_SCORE: XX% (primary, with flexible whitespace and optional markdown)
+		// Handles: "CONSENSUS_SCORE: 78%", "**CONSENSUS_SCORE:** 78%", "CONSENSUS_SCORE:78%"
+		scorePattern := regexp.MustCompile(`(?im)^\**CONSENSUS[_\s]?SCORE[*:]*\s*(\d+)\s*%`)
+		match := scorePattern.FindStringSubmatch(output)
+		if match != nil && len(match) > 1 {
+			if score, err := strconv.Atoi(match[1]); err == nil {
+				result.Score = float64(score) / 100.0
+			}
 		}
 	}
 
@@ -336,6 +400,52 @@ func extractModeratorSection(text, sectionName string) []string {
 	}
 
 	return items
+}
+
+// parseYAMLFrontmatter extracts YAML frontmatter from a markdown document.
+// Returns the frontmatter content, the body (content after frontmatter), and whether parsing succeeded.
+// Frontmatter must start with "---" on the first line and end with "---" on its own line.
+func parseYAMLFrontmatter(text string) (frontmatter, body string, ok bool) {
+	text = strings.TrimSpace(text)
+
+	// Must start with ---
+	if !strings.HasPrefix(text, "---") {
+		return "", text, false
+	}
+
+	// Find the closing ---
+	// Skip the first line (opening ---)
+	afterOpen := text[3:]
+	if len(afterOpen) > 0 && afterOpen[0] == '\n' {
+		afterOpen = afterOpen[1:]
+	} else if len(afterOpen) > 1 && afterOpen[0] == '\r' && afterOpen[1] == '\n' {
+		afterOpen = afterOpen[2:]
+	} else {
+		return "", text, false
+	}
+
+	// Find closing ---
+	closeIdx := strings.Index(afterOpen, "\n---")
+	if closeIdx == -1 {
+		// Try with \r\n
+		closeIdx = strings.Index(afterOpen, "\r\n---")
+		if closeIdx == -1 {
+			return "", text, false
+		}
+	}
+
+	frontmatter = strings.TrimSpace(afterOpen[:closeIdx])
+
+	// Body starts after the closing ---
+	remaining := afterOpen[closeIdx+4:] // skip \n---
+	if len(remaining) > 0 && remaining[0] == '\n' {
+		remaining = remaining[1:]
+	} else if len(remaining) > 1 && remaining[0] == '\r' && remaining[1] == '\n' {
+		remaining = remaining[2:]
+	}
+	body = remaining
+
+	return frontmatter, body, true
 }
 
 // Threshold returns the configured consensus threshold.
@@ -491,4 +601,68 @@ func truncateText(text string, maxChars int) string {
 	}
 
 	return text + notice
+}
+
+// validateModeratorOutput checks if the moderator output is valid and usable.
+// Returns an error describing the validation failure if the output is invalid.
+func (m *SemanticModerator) validateModeratorOutput(result *ModeratorEvaluationResult, rawOutput string) error {
+	// Check 1: Output must not be empty
+	if len(rawOutput) < 100 {
+		return fmt.Errorf("output too short (%d chars, minimum 100)", len(rawOutput))
+	}
+
+	// Check 2: Score must be parseable (non-zero unless explicitly set)
+	// A score of exactly 0.0 with no agreements/divergences is suspicious
+	if result.Score == 0.0 && len(result.Agreements) == 0 && len(result.Divergences) == 0 {
+		// Check if the output actually contains a score pattern
+		if !strings.Contains(strings.ToUpper(rawOutput), "CONSENSUS") {
+			return fmt.Errorf("no consensus score found in output")
+		}
+		// If it contains CONSENSUS but score is 0, the parsing might have failed
+		if !strings.Contains(rawOutput, "0%") && !strings.Contains(rawOutput, ": 0") {
+			return fmt.Errorf("consensus score parsing failed (score=0 but no '0%%' in output)")
+		}
+	}
+
+	// Check 3: Token count sanity check
+	// If reported tokens are suspiciously low but output is long, it's suspicious but not a failure
+	// (the LLM might have written to file, or token counting may be inaccurate)
+	// Note: This is informational only - token discrepancy detection handles correction
+
+	// Check 4: Output should contain expected sections for a valid evaluation
+	hasScore := strings.Contains(strings.ToUpper(rawOutput), "CONSENSUS") ||
+		strings.Contains(strings.ToUpper(rawOutput), "SCORE")
+	hasContent := strings.Contains(rawOutput, "##") || // Markdown headers
+		strings.Contains(rawOutput, "Agreement") ||
+		strings.Contains(rawOutput, "Divergen")
+
+	if !hasScore && !hasContent {
+		return fmt.Errorf("output lacks expected structure (no score or content sections)")
+	}
+
+	return nil
+}
+
+// NOTE: truncateForLog is defined in refiner.go (same package)
+
+// ModeratorValidationError represents a validation failure for moderator output.
+type ModeratorValidationError struct {
+	Reason    string
+	TokensIn  int
+	TokensOut int
+	OutputLen int
+}
+
+func (e *ModeratorValidationError) Error() string {
+	return fmt.Sprintf("moderator validation failed: %s (tokens_in=%d, tokens_out=%d, output_len=%d)",
+		e.Reason, e.TokensIn, e.TokensOut, e.OutputLen)
+}
+
+// IsModeratorValidationError checks if an error is a moderator validation error.
+func IsModeratorValidationError(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(err.Error(), "moderator output validation") ||
+		strings.Contains(err.Error(), "moderator validation failed")
 }

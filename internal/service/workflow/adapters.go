@@ -36,6 +36,11 @@ func (a *CheckpointAdapter) ErrorCheckpoint(state *core.WorkflowState, err error
 	return a.manager.ErrorCheckpoint(a.ctx, state, err)
 }
 
+// ErrorCheckpointWithContext creates a detailed error checkpoint with full context.
+func (a *CheckpointAdapter) ErrorCheckpointWithContext(state *core.WorkflowState, err error, details service.ErrorCheckpointDetails) error {
+	return a.manager.ErrorCheckpointWithContext(a.ctx, state, err, details)
+}
+
 // CreateCheckpoint creates a checkpoint with custom type and metadata.
 func (a *CheckpointAdapter) CreateCheckpoint(state *core.WorkflowState, checkpointType string, metadata map[string]interface{}) error {
 	return a.manager.CreateCheckpoint(a.ctx, state, service.CheckpointType(checkpointType), metadata)
@@ -150,6 +155,48 @@ func (a *PromptRendererAdapter) RenderPlanGenerate(params PlanParams) (string, e
 		Prompt:               params.Prompt,
 		ConsolidatedAnalysis: params.ConsolidatedAnalysis,
 		MaxTasks:             params.MaxTasks,
+	})
+}
+
+// RenderPlanManifest renders the plan manifest prompt.
+func (a *PromptRendererAdapter) RenderPlanManifest(params PlanParams) (string, error) {
+	return a.renderer.RenderPlanManifest(service.PlanParams{
+		Prompt:               params.Prompt,
+		ConsolidatedAnalysis: params.ConsolidatedAnalysis,
+		MaxTasks:             params.MaxTasks,
+	})
+}
+
+// RenderPlanComprehensive renders the comprehensive single-call planning prompt.
+func (a *PromptRendererAdapter) RenderPlanComprehensive(params ComprehensivePlanParams) (string, error) {
+	// Convert AgentInfo to service layer types
+	agents := make([]service.AgentInfo, len(params.AvailableAgents))
+	for i, ag := range params.AvailableAgents {
+		agents[i] = service.AgentInfo{
+			Name:         ag.Name,
+			Model:        ag.Model,
+			Strengths:    ag.Strengths,
+			Capabilities: ag.Capabilities,
+		}
+	}
+
+	return a.renderer.RenderPlanComprehensive(service.ComprehensivePlanParams{
+		Prompt:               params.Prompt,
+		ConsolidatedAnalysis: params.ConsolidatedAnalysis,
+		AvailableAgents:      agents,
+		TasksDir:             params.TasksDir,
+		NamingConvention:     params.NamingConvention,
+	})
+}
+
+// RenderTaskDetailGenerate renders the task detail generation prompt.
+func (a *PromptRendererAdapter) RenderTaskDetailGenerate(params TaskDetailGenerateParams) (string, error) {
+	return a.renderer.RenderTaskDetailGenerate(service.TaskDetailGenerateParams{
+		TaskID:               params.TaskID,
+		TaskName:             params.TaskName,
+		Dependencies:         params.Dependencies,
+		OutputPath:           params.OutputPath,
+		ConsolidatedAnalysis: params.ConsolidatedAnalysis,
 	})
 }
 

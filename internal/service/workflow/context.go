@@ -10,6 +10,7 @@ import (
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/control"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/logging"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service/report"
 )
 
@@ -183,10 +184,22 @@ type PromptRenderer interface {
 	RenderAnalyzeV1(params AnalyzeV1Params) (string, error)
 	RenderSynthesizeAnalysis(params SynthesizeAnalysisParams) (string, error)
 	RenderPlanGenerate(params PlanParams) (string, error)
+	RenderPlanManifest(params PlanParams) (string, error)
+	RenderPlanComprehensive(params ComprehensivePlanParams) (string, error)
 	RenderSynthesizePlans(params SynthesizePlansParams) (string, error)
 	RenderTaskExecute(params TaskExecuteParams) (string, error)
+	RenderTaskDetailGenerate(params TaskDetailGenerateParams) (string, error)
 	RenderModeratorEvaluate(params ModeratorEvaluateParams) (string, error)
 	RenderVnRefine(params VnRefineParams) (string, error)
+}
+
+// TaskDetailGenerateParams holds parameters for CLI-driven task detail generation.
+type TaskDetailGenerateParams struct {
+	TaskID               string
+	TaskName             string
+	Dependencies         []string
+	OutputPath           string
+	ConsolidatedAnalysis string
 }
 
 // SynthesizeAnalysisParams holds parameters for analysis synthesis prompt.
@@ -213,6 +226,24 @@ type PlanParams struct {
 	Prompt               string
 	ConsolidatedAnalysis string
 	MaxTasks             int
+}
+
+// AgentInfo contains information about an available agent for task assignment.
+type AgentInfo struct {
+	Name         string // Agent identifier (e.g., "claude", "codex")
+	Model        string // Model being used
+	Strengths    string // Human-readable description of agent strengths
+	Capabilities string // List of capabilities (e.g., "JSON, streaming, tools")
+}
+
+// ComprehensivePlanParams holds parameters for single-call comprehensive planning.
+// This is used when the CLI generates both the task breakdown AND all task files.
+type ComprehensivePlanParams struct {
+	Prompt               string      // Original user request
+	ConsolidatedAnalysis string      // Complete consolidated analysis
+	AvailableAgents      []AgentInfo // Agents available for task execution
+	TasksDir             string      // Directory where task files should be written
+	NamingConvention     string      // File naming convention (e.g., "{id}-{name}.md")
 }
 
 // TaskExecuteParams holds parameters for task execution prompt.
@@ -267,6 +298,7 @@ type CheckpointCreator interface {
 	PhaseCheckpoint(state *core.WorkflowState, phase core.Phase, completed bool) error
 	TaskCheckpoint(state *core.WorkflowState, task *core.Task, completed bool) error
 	ErrorCheckpoint(state *core.WorkflowState, err error) error
+	ErrorCheckpointWithContext(state *core.WorkflowState, err error, details service.ErrorCheckpointDetails) error
 	CreateCheckpoint(state *core.WorkflowState, checkpointType string, metadata map[string]interface{}) error
 }
 

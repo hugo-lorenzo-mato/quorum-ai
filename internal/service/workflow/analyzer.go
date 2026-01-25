@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service"
 )
 
 // DocsConfigURL is the URL to the configuration documentation.
@@ -104,6 +105,20 @@ func (a *Analyzer) Run(ctx context.Context, wctx *Context) error {
 //   - V3 → Reviews ONLY V2 (if no consensus)
 //   - V(n+1) → Reviews ONLY V(n)
 func (a *Analyzer) runWithModerator(ctx context.Context, wctx *Context) error {
+	// ========== CHECK FOR MODERATOR ROUND CHECKPOINT ==========
+	// If we have a checkpoint from a previous failed run, resume from there
+	// instead of re-running V1 and V2 analyses
+	if savedRound, savedOutputs := getModeratorRoundCheckpoint(wctx.State); savedRound > 0 && len(savedOutputs) > 0 {
+		wctx.Logger.Info("resuming from moderator round checkpoint",
+			"saved_round", savedRound,
+			"saved_agents", len(savedOutputs),
+		)
+		if wctx.Output != nil {
+			wctx.Output.Log("info", "analyzer", fmt.Sprintf("Resuming from round %d checkpoint (skipping V1-V%d)", savedRound, savedRound))
+		}
+		return a.continueFromCheckpoint(ctx, wctx, savedRound, savedOutputs)
+	}
+
 	// ========== PHASE 1: V1 Initial Analysis (Independent) ==========
 	wctx.Logger.Info("starting V1 analysis (initial, no moderator)")
 	if wctx.Output != nil {
@@ -144,16 +159,26 @@ func (a *Analyzer) runWithModerator(ctx context.Context, wctx *Context) error {
 			wctx.Output.Log("info", "analyzer", fmt.Sprintf("Round %d: Running moderator evaluation", round))
 		}
 
-		// Run moderator evaluation
-		evalResult, err := a.moderator.Evaluate(ctx, wctx, round, currentOutputs)
-		if err != nil {
-			return fmt.Errorf("moderator evaluation round %d: %w", round, err)
+		// Run moderator evaluation with retry and fallback support
+		evalResult, evalErr := a.runModeratorWithFallback(ctx, wctx, round, currentOutputs)
+		if evalErr != nil {
+			return fmt.Errorf("moderator evaluation round %d: %w", round, evalErr)
 		}
 
 		// Update consensus score in metrics
 		wctx.UpdateMetrics(func(m *core.StateMetrics) {
 			m.ConsensusScore = evalResult.Score
 		})
+
+		// Save checkpoint after successful moderator evaluation
+		// This allows resuming from this round if a later step fails
+		if cpErr := wctx.Checkpoint.CreateCheckpoint(wctx.State, string(service.CheckpointModeratorRound), map[string]interface{}{
+			"round":           round,
+			"consensus_score": evalResult.Score,
+			"outputs":         serializeAnalysisOutputs(currentOutputs),
+		}); cpErr != nil {
+			wctx.Logger.Warn("failed to create moderator round checkpoint", "round", round, "error", cpErr)
+		}
 
 		wctx.Logger.Info("moderator evaluation complete",
 			"round", round,
@@ -1012,4 +1037,406 @@ func isPhaseCompleted(state *core.WorkflowState, phase core.Phase) bool {
 		}
 	}
 	return false
+}
+
+// continueFromCheckpoint resumes analysis from a saved moderator round checkpoint.
+// This is called when a previous run failed after completing some moderator rounds,
+// allowing the analysis to continue without re-running V1-V(n) analyses.
+func (a *Analyzer) continueFromCheckpoint(ctx context.Context, wctx *Context, savedRound int, savedOutputs []AnalysisOutput) error {
+	// Start from the saved round - the checkpoint was saved AFTER that round's
+	// moderator evaluation completed successfully, so we need to continue with
+	// the next refinement round
+	currentOutputs := savedOutputs
+	round := savedRound
+
+	// Get the previous score from checkpoint metadata for stagnation detection
+	var previousScore float64
+	for i := len(wctx.State.Checkpoints) - 1; i >= 0; i-- {
+		cp := wctx.State.Checkpoints[i]
+		if cp.Type == string(service.CheckpointModeratorRound) {
+			var metadata map[string]interface{}
+			if err := json.Unmarshal(cp.Data, &metadata); err == nil {
+				if score, ok := metadata["consensus_score"].(float64); ok {
+					previousScore = score
+					break
+				}
+			}
+		}
+	}
+
+	wctx.Logger.Info("continuing moderator loop from checkpoint",
+		"round", round,
+		"previous_score", previousScore,
+		"agents", len(currentOutputs),
+	)
+
+	// Check if we've already reached max rounds (shouldn't normally happen)
+	if round >= a.moderator.MaxRounds() {
+		wctx.Logger.Info("resuming at max rounds, proceeding to consolidation")
+		if wctx.Output != nil {
+			wctx.Output.Log("info", "analyzer", "Resuming at max rounds, proceeding to consolidation")
+		}
+		goto consolidation
+	}
+
+	// Need to run the next V(n+1) refinement before the next moderator evaluation
+	// because the checkpoint is saved AFTER successful moderator evaluation
+	round++
+	wctx.Logger.Info("starting refinement round after resume",
+		"round", round,
+		"previous_round", round-1,
+	)
+	if wctx.Output != nil {
+		wctx.Output.Log("info", "analyzer", fmt.Sprintf("Round %d: Refining V%d analyses (post-resume)", round, round-1))
+	}
+
+	// Run V(n+1) refinement with no specific moderator feedback (since we don't have it)
+	{
+		refinedOutputs, err := a.runVnRefinement(ctx, wctx, round, currentOutputs, nil, nil)
+		if err != nil {
+			return fmt.Errorf("V%d refinement (post-resume): %w", round, err)
+		}
+		currentOutputs = refinedOutputs
+	}
+
+	// Continue the moderator evaluation loop
+	for round <= a.moderator.MaxRounds() {
+		wctx.Logger.Info("moderator evaluation starting (resumed)",
+			"round", round,
+			"agents", len(currentOutputs),
+		)
+		if wctx.Output != nil {
+			wctx.Output.Log("info", "analyzer", fmt.Sprintf("Round %d: Running moderator evaluation (resumed)", round))
+		}
+
+		// Run moderator evaluation with retry and fallback support
+		evalResult, evalErr := a.runModeratorWithFallback(ctx, wctx, round, currentOutputs)
+		if evalErr != nil {
+			return fmt.Errorf("moderator evaluation round %d: %w", round, evalErr)
+		}
+
+		// Update consensus score in metrics
+		wctx.UpdateMetrics(func(m *core.StateMetrics) {
+			m.ConsensusScore = evalResult.Score
+		})
+
+		// Save checkpoint after successful moderator evaluation
+		if cpErr := wctx.Checkpoint.CreateCheckpoint(wctx.State, string(service.CheckpointModeratorRound), map[string]interface{}{
+			"round":           round,
+			"consensus_score": evalResult.Score,
+			"outputs":         serializeAnalysisOutputs(currentOutputs),
+		}); cpErr != nil {
+			wctx.Logger.Warn("failed to create moderator round checkpoint", "round", round, "error", cpErr)
+		}
+
+		wctx.Logger.Info("moderator evaluation complete",
+			"round", round,
+			"score", evalResult.Score,
+			"threshold", a.moderator.Threshold(),
+		)
+
+		if wctx.Output != nil {
+			statusIcon := "⚠"
+			level := "warn"
+			if evalResult.Score >= a.moderator.Threshold() {
+				statusIcon = "✓"
+				level = "success"
+			}
+			wctx.Output.Log(level, "analyzer", fmt.Sprintf("%s Round %d: Semantic consensus %.0f%% (threshold: %.0f%%)",
+				statusIcon, round, evalResult.Score*100, a.moderator.Threshold()*100))
+		}
+
+		// Check if consensus threshold is met AND minimum rounds completed
+		if evalResult.Score >= a.moderator.Threshold() && round >= a.moderator.MinRounds() {
+			wctx.Logger.Info("consensus threshold met",
+				"score", evalResult.Score,
+				"threshold", a.moderator.Threshold(),
+				"round", round,
+			)
+			if wctx.Output != nil {
+				wctx.Output.Log("success", "analyzer", fmt.Sprintf("Consensus achieved at %.0f%% after %d round(s)", evalResult.Score*100, round))
+			}
+			break
+		}
+
+		// Check abort threshold
+		if evalResult.Score < a.moderator.AbortThreshold() {
+			return core.ErrHumanReviewRequired(evalResult.Score, a.moderator.AbortThreshold())
+		}
+
+		// Check for stagnation
+		if round > savedRound+1 {
+			improvement := evalResult.Score - previousScore
+			if improvement < a.moderator.StagnationThreshold() {
+				wctx.Logger.Warn("consensus stagnating, proceeding to consolidation")
+				if wctx.Output != nil {
+					wctx.Output.Log("warn", "analyzer", fmt.Sprintf("Consensus stagnating (improvement %.1f%%), proceeding",
+						improvement*100))
+				}
+				break
+			}
+		}
+		previousScore = evalResult.Score
+
+		// Check if we've reached max rounds
+		if round >= a.moderator.MaxRounds() {
+			wctx.Logger.Warn("max rounds reached without consensus", "final_score", evalResult.Score)
+			break
+		}
+
+		// Run V(n+1) refinement
+		round++
+		refinedOutputs, err := a.runVnRefinement(ctx, wctx, round, currentOutputs, evalResult, evalResult.Agreements)
+		if err != nil {
+			return fmt.Errorf("V%d refinement: %w", round, err)
+		}
+		currentOutputs = refinedOutputs
+	}
+
+consolidation:
+	// Final consolidation
+	if wctx.Output != nil {
+		wctx.Output.Log("info", "analyzer", fmt.Sprintf("Consolidating final analysis from V%d outputs", round))
+	}
+	if err := a.consolidateAnalysis(ctx, wctx, currentOutputs); err != nil {
+		return fmt.Errorf("consolidating analysis: %w", err)
+	}
+	if wctx.Output != nil {
+		wctx.Output.Log("success", "analyzer", "Analysis phase completed successfully (resumed)")
+	}
+
+	if err := wctx.Checkpoint.PhaseCheckpoint(wctx.State, core.PhaseAnalyze, true); err != nil {
+		wctx.Logger.Warn("failed to create phase complete checkpoint", "error", err)
+	}
+
+	return nil
+}
+
+// isTransientModeratorError checks if an error is likely transient and worth retrying.
+// This includes streaming errors, timeouts, and network issues.
+func isTransientModeratorError(err error) bool {
+	if err == nil {
+		return false
+	}
+	errStr := err.Error()
+	return strings.Contains(errStr, "Stream completed without") ||
+		strings.Contains(errStr, "stream") ||
+		strings.Contains(errStr, "timeout") ||
+		strings.Contains(errStr, "Timeout") ||
+		strings.Contains(errStr, "connection") ||
+		strings.Contains(errStr, "Connection") ||
+		strings.Contains(errStr, "EOF") ||
+		strings.Contains(errStr, "reset by peer") ||
+		core.IsRetryable(err)
+}
+
+// runModeratorWithFallback runs the moderator evaluation with retry and fallback support.
+// If the primary moderator agent fails, it tries fallback agents configured with moderate phase.
+func (a *Analyzer) runModeratorWithFallback(ctx context.Context, wctx *Context, round int, outputs []AnalysisOutput) (*ModeratorEvaluationResult, error) {
+	// Build list of fallback agents for moderator role
+	fallbackAgents := a.buildModeratorFallbackChain(wctx)
+
+	var lastErr error
+	var triedAgents []string
+	var lastAgent string
+	var lastAttempt int
+
+	for agentIdx, agentName := range fallbackAgents {
+		isPrimary := agentIdx == 0
+		lastAgent = agentName
+
+		// Try up to 2 attempts with each agent
+		for attempt := 1; attempt <= 2; attempt++ {
+			lastAttempt = attempt
+
+			if !isPrimary || attempt > 1 {
+				wctx.Logger.Info("trying moderator evaluation",
+					"round", round,
+					"agent", agentName,
+					"is_fallback", !isPrimary,
+					"attempt", attempt,
+				)
+				if wctx.Output != nil {
+					if isPrimary {
+						wctx.Output.Log("info", "analyzer",
+							fmt.Sprintf("Round %d: Retrying moderator with %s (attempt %d)", round, agentName, attempt))
+					} else {
+						wctx.Output.Log("info", "analyzer",
+							fmt.Sprintf("Round %d: Trying fallback moderator %s", round, agentName))
+					}
+				}
+			}
+
+			// Use EvaluateWithAgent to allow fallback to alternative agents
+			evalResult, evalErr := a.moderator.EvaluateWithAgent(ctx, wctx, round, outputs, agentName)
+			if evalErr == nil {
+				// Success - log if we used a fallback
+				if !isPrimary {
+					wctx.Logger.Info("fallback moderator succeeded",
+						"round", round,
+						"agent", agentName,
+						"previous_failures", triedAgents,
+					)
+					if wctx.Output != nil {
+						wctx.Output.Log("success", "analyzer",
+							fmt.Sprintf("Round %d: Fallback moderator %s succeeded (after trying: %v)", round, agentName, triedAgents))
+					}
+				}
+				return evalResult, nil
+			}
+
+			lastErr = evalErr
+
+			// Log the error with detailed context
+			wctx.Logger.Warn("moderator evaluation failed",
+				"round", round,
+				"agent", agentName,
+				"attempt", attempt,
+				"is_fallback", !isPrimary,
+				"error", evalErr,
+				"is_transient", isTransientModeratorError(evalErr),
+				"is_validation", IsModeratorValidationError(evalErr),
+			)
+
+			// Decide whether to retry same agent or move to fallback
+			if attempt < 2 && isTransientModeratorError(evalErr) {
+				if wctx.Output != nil {
+					wctx.Output.Log("warn", "analyzer",
+						fmt.Sprintf("Round %d: %s failed (%v), retrying in 30s...", round, agentName, evalErr))
+				}
+				time.Sleep(30 * time.Second)
+				continue
+			}
+
+			// If validation error or non-transient, move to next agent
+			break
+		}
+
+		// Track that we tried this agent
+		triedAgents = append(triedAgents, agentName)
+	}
+
+	// All agents failed - create detailed error checkpoint for debugging
+	if wctx.Checkpoint != nil {
+		_ = wctx.Checkpoint.ErrorCheckpointWithContext(wctx.State, lastErr, service.ErrorCheckpointDetails{
+			Agent:             lastAgent,
+			Round:             round,
+			Attempt:           lastAttempt,
+			IsTransient:       isTransientModeratorError(lastErr),
+			IsValidationError: IsModeratorValidationError(lastErr),
+			FallbacksTried:    triedAgents,
+			Extra: map[string]string{
+				"total_agents":  fmt.Sprintf("%d", len(fallbackAgents)),
+				"outputs_count": fmt.Sprintf("%d", len(outputs)),
+			},
+		})
+	}
+
+	// All agents failed
+	return nil, fmt.Errorf("all moderator agents failed (tried %d agents: %v, last error: %w)", len(fallbackAgents), triedAgents, lastErr)
+}
+
+// buildModeratorFallbackChain builds a list of agents to try for moderator evaluation.
+// Primary is the configured moderator agent, fallbacks are other agents with moderate phase enabled.
+func (a *Analyzer) buildModeratorFallbackChain(wctx *Context) []string {
+	primaryAgent := a.moderator.GetConfig().Agent
+	agents := []string{primaryAgent}
+
+	// Get all available agents that have moderate phase enabled
+	// These can serve as fallbacks if the primary fails
+	allAgents := wctx.Agents.List()
+	for _, agentName := range allAgents {
+		if agentName == primaryAgent {
+			continue // Skip primary, already first
+		}
+		// Check if this agent has moderate phase enabled in config
+		// For now, we add all enabled agents as potential fallbacks
+		// The moderator will use its own agent resolution logic
+		agents = append(agents, agentName)
+	}
+
+	// Limit to max 3 fallback agents to avoid infinite retries
+	if len(agents) > 4 {
+		agents = agents[:4]
+	}
+
+	wctx.Logger.Debug("moderator fallback chain built",
+		"primary", primaryAgent,
+		"total_agents", len(agents),
+		"chain", agents,
+	)
+
+	return agents
+}
+
+// compactAnalysisOutput is a compact representation of AnalysisOutput for checkpoint storage.
+type compactAnalysisOutput struct {
+	AgentName string `json:"agent"`
+	Model     string `json:"model"`
+	RawOutput string `json:"output"`
+}
+
+// serializeAnalysisOutputs converts analysis outputs to JSON for checkpoint storage.
+// Only essential fields are stored to reduce checkpoint size.
+func serializeAnalysisOutputs(outputs []AnalysisOutput) string {
+	compact := make([]compactAnalysisOutput, len(outputs))
+	for i, o := range outputs {
+		compact[i] = compactAnalysisOutput{
+			AgentName: o.AgentName,
+			Model:     o.Model,
+			RawOutput: o.RawOutput,
+		}
+	}
+	data, _ := json.Marshal(compact)
+	return string(data)
+}
+
+// deserializeAnalysisOutputs reconstructs analysis outputs from checkpoint JSON.
+func deserializeAnalysisOutputs(data string) ([]AnalysisOutput, error) {
+	var compact []compactAnalysisOutput
+	if err := json.Unmarshal([]byte(data), &compact); err != nil {
+		return nil, fmt.Errorf("unmarshaling analysis outputs: %w", err)
+	}
+
+	outputs := make([]AnalysisOutput, len(compact))
+	for i, c := range compact {
+		outputs[i] = AnalysisOutput{
+			AgentName: c.AgentName,
+			Model:     c.Model,
+			RawOutput: c.RawOutput,
+		}
+	}
+	return outputs, nil
+}
+
+// getModeratorRoundCheckpoint looks for a moderator_round checkpoint to resume from.
+// Returns the round number and outputs if found, or 0 and nil if not found.
+func getModeratorRoundCheckpoint(state *core.WorkflowState) (int, []AnalysisOutput) {
+	// Scan from the end to find the most recent moderator_round checkpoint
+	for i := len(state.Checkpoints) - 1; i >= 0; i-- {
+		cp := state.Checkpoints[i]
+		if cp.Type == string(service.CheckpointModeratorRound) && cp.Phase == core.PhaseAnalyze {
+			var metadata map[string]interface{}
+			if err := json.Unmarshal(cp.Data, &metadata); err != nil {
+				continue
+			}
+
+			round := 0
+			if r, ok := metadata["round"].(float64); ok {
+				round = int(r)
+			}
+
+			var outputs []AnalysisOutput
+			if outputsStr, ok := metadata["outputs"].(string); ok {
+				if parsed, err := deserializeAnalysisOutputs(outputsStr); err == nil {
+					outputs = parsed
+				}
+			}
+
+			if round > 0 && len(outputs) > 0 {
+				return round, outputs
+			}
+		}
+	}
+	return 0, nil
 }

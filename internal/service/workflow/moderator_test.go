@@ -363,6 +363,70 @@ Good agreement.
 			wantAgreements: 1,
 			wantDivs:       0,
 		},
+		{
+			name: "YAML frontmatter format (primary)",
+			output: `---
+consensus_score: 85
+high_impact_divergences: 1
+medium_impact_divergences: 2
+low_impact_divergences: 0
+agreements_count: 3
+---
+
+## Score Rationale
+Good overall consensus with minor implementation differences.
+
+## Agreements
+- Architecture approach agreed
+- Security model aligned
+- API design consistent
+
+## Divergences
+- Minor timing differences`,
+			wantScore:      0.85,
+			wantAgreements: 3,
+			wantDivs:       1,
+		},
+		{
+			name: "YAML frontmatter with 100% consensus",
+			output: `---
+consensus_score: 100
+high_impact_divergences: 0
+medium_impact_divergences: 0
+low_impact_divergences: 0
+agreements_count: 5
+---
+
+## Agreements
+- Full alignment on all points
+
+## Divergences
+(None)`,
+			wantScore:      1.0,
+			wantAgreements: 1,
+			wantDivs:       0,
+		},
+		{
+			name: "YAML frontmatter with low consensus",
+			output: `---
+consensus_score: 25
+high_impact_divergences: 3
+medium_impact_divergences: 2
+low_impact_divergences: 1
+agreements_count: 1
+---
+
+## Agreements
+- Basic structure agreed
+
+## Divergences
+- Major architectural disagreement
+- Different security approaches
+- Conflicting API designs`,
+			wantScore:      0.25,
+			wantAgreements: 1,
+			wantDivs:       3,
+		},
 	}
 
 	moderator, err := NewSemanticModerator(ModeratorConfig{
