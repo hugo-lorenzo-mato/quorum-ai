@@ -103,6 +103,20 @@ func (s *Server) setupRouter() chi.Router {
 
 		// SSE endpoint for real-time updates
 		r.Get("/events", s.handleSSE)
+
+		// File browser endpoints
+		r.Route("/files", func(r chi.Router) {
+			r.Get("/", s.handleListFiles)
+			r.Get("/content", s.handleGetFileContent)
+			r.Get("/tree", s.handleGetFileTree)
+		})
+
+		// Configuration endpoints
+		r.Route("/config", func(r chi.Router) {
+			r.Get("/", s.handleGetConfig)
+			r.Patch("/", s.handleUpdateConfig)
+			r.Get("/agents", s.handleGetAgents)
+		})
 	})
 
 	return r
