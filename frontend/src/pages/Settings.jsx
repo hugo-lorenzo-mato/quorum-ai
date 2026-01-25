@@ -1,38 +1,77 @@
-import { useEffect, useState } from 'react';
-import { configApi } from '../lib/api';
+import { useState } from 'react';
 import { useUIStore } from '../stores';
+import {
+  Settings as SettingsIcon,
+  Sun,
+  Moon,
+  Monitor,
+  Palette,
+  Bell,
+  Shield,
+  Database,
+  Info,
+  Check,
+  ExternalLink,
+} from 'lucide-react';
 
-function SettingsSection({ title, description, children }) {
+function SettingSection({ title, description, children }) {
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6">
-      <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">{title}</h3>
-      {description && (
-        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">{description}</p>
-      )}
+    <div className="p-6 rounded-xl border border-border bg-card">
+      <div className="mb-4">
+        <h3 className="text-lg font-semibold text-foreground">{title}</h3>
+        {description && (
+          <p className="text-sm text-muted-foreground mt-1">{description}</p>
+        )}
+      </div>
       {children}
     </div>
   );
 }
 
-function Toggle({ label, description, checked, onChange, disabled }) {
+function ThemeOption({ value, icon: Icon, label, description, selected, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`relative flex items-start gap-4 p-4 rounded-lg border-2 transition-all text-left ${
+        selected
+          ? 'border-primary bg-primary/5'
+          : 'border-border hover:border-muted-foreground/50'
+      }`}
+    >
+      <div className={`p-2 rounded-lg ${selected ? 'bg-primary/10' : 'bg-muted'}`}>
+        <Icon className={`w-5 h-5 ${selected ? 'text-primary' : 'text-muted-foreground'}`} />
+      </div>
+      <div className="flex-1">
+        <p className="font-medium text-foreground">{label}</p>
+        <p className="text-sm text-muted-foreground">{description}</p>
+      </div>
+      {selected && (
+        <div className="absolute top-3 right-3 p-1 rounded-full bg-primary">
+          <Check className="w-3 h-3 text-primary-foreground" />
+        </div>
+      )}
+    </button>
+  );
+}
+
+function ToggleSetting({ label, description, checked, onChange }) {
   return (
     <div className="flex items-center justify-between py-3">
       <div>
-        <p className="text-sm font-medium text-gray-900 dark:text-white">{label}</p>
+        <p className="text-sm font-medium text-foreground">{label}</p>
         {description && (
-          <p className="text-xs text-gray-500 dark:text-gray-400">{description}</p>
+          <p className="text-xs text-muted-foreground">{description}</p>
         )}
       </div>
       <button
         onClick={() => onChange(!checked)}
-        disabled={disabled}
-        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-          checked ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'
-        } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+        className={`relative w-11 h-6 rounded-full transition-colors ${
+          checked ? 'bg-primary' : 'bg-muted'
+        }`}
       >
         <span
-          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-            checked ? 'translate-x-6' : 'translate-x-1'
+          className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${
+            checked ? 'translate-x-5' : ''
           }`}
         />
       </button>
@@ -40,276 +79,117 @@ function Toggle({ label, description, checked, onChange, disabled }) {
   );
 }
 
-function InputField({ label, description, value, onChange, placeholder, type = 'text', disabled }) {
-  return (
-    <div className="py-3">
-      <label className="block text-sm font-medium text-gray-900 dark:text-white mb-1">{label}</label>
-      {description && (
-        <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">{description}</p>
-      )}
-      <input
-        type={type}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        disabled={disabled}
-        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
-      />
-    </div>
-  );
-}
-
-function SelectField({ label, description, value, onChange, options, disabled }) {
-  return (
-    <div className="py-3">
-      <label className="block text-sm font-medium text-gray-900 dark:text-white mb-1">{label}</label>
-      {description && (
-        <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">{description}</p>
-      )}
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        disabled={disabled}
-        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
-      >
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-    </div>
-  );
-}
-
-function AgentCard({ agent }) {
-  const statusColors = {
-    available: 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-400',
-    unavailable: 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-400',
-    unknown: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300',
-  };
-
-  return (
-    <div className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg">
-      <div className="flex items-center justify-between mb-2">
-        <h4 className="font-medium text-gray-900 dark:text-white">{agent.name}</h4>
-        <span className={`px-2 py-1 text-xs font-medium rounded-full ${statusColors[agent.status] || statusColors.unknown}`}>
-          {agent.status || 'unknown'}
-        </span>
-      </div>
-      <p className="text-sm text-gray-500 dark:text-gray-400">{agent.model}</p>
-      {agent.description && (
-        <p className="mt-2 text-xs text-gray-400 dark:text-gray-500">{agent.description}</p>
-      )}
-    </div>
-  );
-}
-
 export default function Settings() {
   const { theme, setTheme } = useUIStore();
-  const [config, setConfig] = useState(null);
-  const [agents, setAgents] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState(null);
-  const [success, setSuccess] = useState(null);
-  const [localConfig, setLocalConfig] = useState({});
+  const [notifications, setNotifications] = useState(true);
+  const [sounds, setSounds] = useState(false);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const [configData, agentsData] = await Promise.all([
-          configApi.get(),
-          configApi.getAgents(),
-        ]);
-        setConfig(configData);
-        setLocalConfig(configData);
-        setAgents(agentsData.agents || []);
-      } catch (err) {
-        setError(err.message || 'Failed to load settings');
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchData();
-  }, []);
-
-  const handleSave = async () => {
-    setSaving(true);
-    setError(null);
-    setSuccess(null);
-    try {
-      await configApi.update(localConfig);
-      setConfig(localConfig);
-      setSuccess('Settings saved successfully');
-      setTimeout(() => setSuccess(null), 3000);
-    } catch (err) {
-      setError(err.message || 'Failed to save settings');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const updateConfig = (path, value) => {
-    setLocalConfig((prev) => {
-      const newConfig = { ...prev };
-      const keys = path.split('.');
-      let current = newConfig;
-      for (let i = 0; i < keys.length - 1; i++) {
-        if (!current[keys[i]]) current[keys[i]] = {};
-        current = current[keys[i]];
-      }
-      current[keys[keys.length - 1]] = value;
-      return newConfig;
-    });
-  };
-
-  const hasChanges = JSON.stringify(config) !== JSON.stringify(localConfig);
-
-  if (loading) {
-    return (
-      <div className="flex justify-center py-16">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
-      </div>
-    );
-  }
+  const themes = [
+    { value: 'light', icon: Sun, label: 'Light', description: 'Clean and bright interface' },
+    { value: 'dark', icon: Moon, label: 'Dark', description: 'Easy on the eyes' },
+    { value: 'midnight', icon: Palette, label: 'Midnight', description: 'Pure black for OLED displays' },
+    { value: 'system', icon: Monitor, label: 'System', description: 'Follow system preference' },
+  ];
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Settings</h1>
-        <button
-          onClick={handleSave}
-          disabled={!hasChanges || saving}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >
-          {saving ? 'Saving...' : 'Save Changes'}
-        </button>
+    <div className="max-w-3xl mx-auto space-y-6 animate-fade-in">
+      {/* Header */}
+      <div>
+        <h1 className="text-2xl font-semibold text-foreground tracking-tight">Settings</h1>
+        <p className="text-sm text-muted-foreground mt-1">
+          Customize your Quorum AI experience
+        </p>
       </div>
 
-      {error && (
-        <div className="p-4 bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-lg">
-          {error}
-        </div>
-      )}
-
-      {success && (
-        <div className="p-4 bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded-lg">
-          {success}
-        </div>
-      )}
-
       {/* Appearance */}
-      <SettingsSection title="Appearance" description="Customize how the application looks">
-        <SelectField
-          label="Theme"
-          value={theme}
-          onChange={setTheme}
-          options={[
-            { value: 'light', label: 'Light' },
-            { value: 'dark', label: 'Dark' },
-            { value: 'system', label: 'System' },
-          ]}
-        />
-      </SettingsSection>
+      <SettingSection
+        title="Appearance"
+        description="Choose how Quorum AI looks to you"
+      >
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {themes.map((t) => (
+            <ThemeOption
+              key={t.value}
+              value={t.value}
+              icon={t.icon}
+              label={t.label}
+              description={t.description}
+              selected={theme === t.value}
+              onClick={() => setTheme(t.value)}
+            />
+          ))}
+        </div>
+      </SettingSection>
 
-      {/* Workflow Settings */}
-      <SettingsSection title="Workflow Settings" description="Configure default workflow behavior">
-        <InputField
-          label="Default Max Retries"
-          description="Maximum number of retries for failed tasks"
-          value={localConfig.workflow?.max_retries ?? 3}
-          onChange={(v) => updateConfig('workflow.max_retries', parseInt(v) || 0)}
-          type="number"
-        />
-        <InputField
-          label="Default Concurrency"
-          description="Maximum number of concurrent tasks"
-          value={localConfig.workflow?.concurrency ?? 1}
-          onChange={(v) => updateConfig('workflow.concurrency', parseInt(v) || 1)}
-          type="number"
-        />
-        <Toggle
-          label="Enable Parallel Execution"
-          description="Run independent tasks in parallel when possible"
-          checked={localConfig.workflow?.parallel ?? false}
-          onChange={(v) => updateConfig('workflow.parallel', v)}
-        />
-      </SettingsSection>
+      {/* Notifications */}
+      <SettingSection
+        title="Notifications"
+        description="Configure how you receive updates"
+      >
+        <div className="divide-y divide-border">
+          <ToggleSetting
+            label="Push Notifications"
+            description="Receive notifications when workflows complete"
+            checked={notifications}
+            onChange={setNotifications}
+          />
+          <ToggleSetting
+            label="Sound Effects"
+            description="Play sounds for important events"
+            checked={sounds}
+            onChange={setSounds}
+          />
+        </div>
+      </SettingSection>
 
-      {/* Agent Settings */}
-      <SettingsSection title="Agent Settings" description="Configure AI agent defaults">
-        <SelectField
-          label="Default Agent"
-          description="Agent to use when none is specified"
-          value={localConfig.agents?.default ?? 'claude'}
-          onChange={(v) => updateConfig('agents.default', v)}
-          options={[
-            { value: 'claude', label: 'Claude' },
-            { value: 'gemini', label: 'Gemini' },
-            { value: 'codex', label: 'Codex' },
-          ]}
-        />
-        <InputField
-          label="Default Temperature"
-          description="Temperature for agent responses (0.0 - 1.0)"
-          value={localConfig.agents?.temperature ?? 0.7}
-          onChange={(v) => updateConfig('agents.temperature', parseFloat(v) || 0.7)}
-          type="number"
-        />
-      </SettingsSection>
-
-      {/* Available Agents */}
-      <SettingsSection title="Available Agents" description="Status of configured AI agents">
-        {agents.length > 0 ? (
-          <div className="grid gap-4 sm:grid-cols-2">
-            {agents.map((agent) => (
-              <AgentCard key={agent.name} agent={agent} />
-            ))}
+      {/* API Configuration */}
+      <SettingSection
+        title="API Configuration"
+        description="Configure API endpoints and authentication"
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-2">
+              API Endpoint
+            </label>
+            <input
+              type="text"
+              value="http://localhost:8080/api/v1"
+              readOnly
+              className="w-full h-10 px-4 border border-input rounded-lg bg-muted text-muted-foreground"
+            />
           </div>
-        ) : (
-          <p className="text-gray-500 dark:text-gray-400 text-center py-4">
-            No agents configured
-          </p>
-        )}
-      </SettingsSection>
-
-      {/* Storage Settings */}
-      <SettingsSection title="Storage" description="Configure data storage locations">
-        <InputField
-          label="Data Directory"
-          description="Directory for storing workflow data and artifacts"
-          value={localConfig.storage?.data_dir ?? ''}
-          onChange={(v) => updateConfig('storage.data_dir', v)}
-          placeholder="/path/to/data"
-        />
-        <InputField
-          label="Workspace Directory"
-          description="Root directory for workflow workspaces"
-          value={localConfig.storage?.workspace_dir ?? ''}
-          onChange={(v) => updateConfig('storage.workspace_dir', v)}
-          placeholder="/path/to/workspaces"
-        />
-      </SettingsSection>
+          <div className="flex items-center gap-2 p-3 rounded-lg bg-info/10 text-info">
+            <Info className="w-4 h-4 flex-shrink-0" />
+            <p className="text-sm">API configuration is managed by the server</p>
+          </div>
+        </div>
+      </SettingSection>
 
       {/* About */}
-      <SettingsSection title="About">
-        <div className="text-sm text-gray-500 dark:text-gray-400 space-y-1">
-          <p>Quorum AI - Multi-agent AI orchestration platform</p>
-          <p className="text-xs">
+      <SettingSection title="About">
+        <div className="space-y-4">
+          <div className="flex items-center justify-between py-2">
+            <span className="text-sm text-muted-foreground">Version</span>
+            <span className="text-sm font-medium text-foreground">1.0.0</span>
+          </div>
+          <div className="flex items-center justify-between py-2">
+            <span className="text-sm text-muted-foreground">Build</span>
+            <span className="text-sm font-medium text-foreground">2024.01.25</span>
+          </div>
+          <div className="pt-4 border-t border-border">
             <a
-              href="https://github.com/hugolma/quorum-ai"
+              href="https://github.com/hugo-lorenzo-mato/quorum-ai"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-blue-600 dark:text-blue-400 hover:underline"
+              className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
+              <ExternalLink className="w-4 h-4" />
               View on GitHub
             </a>
-          </p>
+          </div>
         </div>
-      </SettingsSection>
+      </SettingSection>
     </div>
   );
 }

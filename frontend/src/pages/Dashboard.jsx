@@ -1,64 +1,169 @@
 import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useWorkflowStore } from '../stores';
+import {
+  GitBranch,
+  CheckCircle2,
+  XCircle,
+  Zap,
+  Clock,
+  ArrowUpRight,
+  Activity,
+  TrendingUp,
+} from 'lucide-react';
 
-function StatCard({ title, value, subtitle, icon, color = 'blue' }) {
-  const colors = {
-    blue: 'bg-blue-50 text-blue-600 dark:bg-blue-900/50 dark:text-blue-400',
-    green: 'bg-green-50 text-green-600 dark:bg-green-900/50 dark:text-green-400',
-    yellow: 'bg-yellow-50 text-yellow-600 dark:bg-yellow-900/50 dark:text-yellow-400',
-    red: 'bg-red-50 text-red-600 dark:bg-red-900/50 dark:text-red-400',
+// Bento Grid Card Component
+function BentoCard({ children, className = '', span = 1 }) {
+  const spanClasses = {
+    1: '',
+    2: 'md:col-span-2',
+    3: 'md:col-span-3',
   };
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm font-medium text-gray-500 dark:text-gray-400">{title}</p>
-          <p className="mt-1 text-3xl font-semibold text-gray-900 dark:text-white">{value}</p>
-          {subtitle && (
-            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{subtitle}</p>
-          )}
-        </div>
-        <div className={`p-3 rounded-lg ${colors[color]}`}>
-          {icon}
-        </div>
-      </div>
+    <div
+      className={`group relative rounded-xl border border-border bg-card p-6 transition-all hover:border-muted-foreground/30 hover:shadow-lg animate-fade-up ${spanClasses[span]} ${className}`}
+    >
+      {children}
     </div>
   );
 }
 
-function WorkflowCard({ workflow }) {
-  const statusColors = {
-    pending: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300',
-    running: 'bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-400',
-    completed: 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-400',
-    failed: 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-400',
+// Stat Card for Bento Grid
+function StatCard({ title, value, subtitle, icon: Icon, trend, color = 'primary' }) {
+  const colorClasses = {
+    primary: 'bg-primary/10 text-primary',
+    success: 'bg-success/10 text-success',
+    warning: 'bg-warning/10 text-warning',
+    error: 'bg-error/10 text-error',
+    info: 'bg-info/10 text-info',
   };
+
+  return (
+    <BentoCard>
+      <div className="flex items-start justify-between">
+        <div className="space-y-2">
+          <p className="text-sm font-medium text-muted-foreground">{title}</p>
+          <p className="text-3xl font-semibold text-foreground tracking-tight">{value}</p>
+          {subtitle && (
+            <p className="text-sm text-muted-foreground">{subtitle}</p>
+          )}
+          {trend && (
+            <div className="flex items-center gap-1 text-sm text-success">
+              <TrendingUp className="w-3 h-3" />
+              <span>{trend}</span>
+            </div>
+          )}
+        </div>
+        <div className={`p-3 rounded-xl ${colorClasses[color]}`}>
+          <Icon className="w-5 h-5" />
+        </div>
+      </div>
+    </BentoCard>
+  );
+}
+
+// Recent Workflow Item
+function WorkflowItem({ workflow }) {
+  const statusConfig = {
+    pending: { color: 'text-muted-foreground', bg: 'bg-muted', icon: Clock },
+    running: { color: 'text-info', bg: 'bg-info/10', icon: Activity },
+    completed: { color: 'text-success', bg: 'bg-success/10', icon: CheckCircle2 },
+    failed: { color: 'text-error', bg: 'bg-error/10', icon: XCircle },
+  };
+
+  const config = statusConfig[workflow.status] || statusConfig.pending;
+  const StatusIcon = config.icon;
 
   return (
     <Link
       to={`/workflows/${workflow.id}`}
-      className="block bg-white dark:bg-gray-800 rounded-xl shadow-sm p-4 hover:shadow-md transition-shadow"
+      className="group flex items-center gap-4 p-3 -mx-3 rounded-lg transition-colors hover:bg-accent"
     >
-      <div className="flex items-start justify-between">
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
-            {workflow.prompt?.substring(0, 60) || 'Untitled workflow'}...
-          </p>
-          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-            {workflow.id}
-          </p>
-        </div>
-        <span className={`ml-2 px-2 py-1 text-xs font-medium rounded-full ${statusColors[workflow.status] || statusColors.pending}`}>
-          {workflow.status || 'pending'}
-        </span>
+      <div className={`p-2 rounded-lg ${config.bg}`}>
+        <StatusIcon className={`w-4 h-4 ${config.color}`} />
       </div>
-      <div className="mt-3 flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
-        <span>Phase: {workflow.current_phase || 'N/A'}</span>
-        <span>Tasks: {workflow.task_count || 0}</span>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-foreground truncate">
+          {workflow.prompt?.substring(0, 50) || 'Untitled workflow'}...
+        </p>
+        <p className="text-xs text-muted-foreground">
+          {workflow.current_phase || 'Pending'} · {workflow.task_count || 0} tasks
+        </p>
       </div>
+      <ArrowUpRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
     </Link>
+  );
+}
+
+// Active Workflow Banner
+function ActiveWorkflowBanner({ workflow }) {
+  if (!workflow) return null;
+
+  return (
+    <BentoCard span={3} className="bg-gradient-to-r from-info/5 to-primary/5 border-info/20">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <div className="relative">
+            <div className="p-3 rounded-xl bg-info/10">
+              <Zap className="w-5 h-5 text-info" />
+            </div>
+            <span className="absolute -top-1 -right-1 w-3 h-3 bg-info rounded-full animate-pulse" />
+          </div>
+          <div>
+            <p className="text-sm font-medium text-muted-foreground">Active Workflow</p>
+            <p className="text-lg font-semibold text-foreground">
+              {workflow.prompt?.substring(0, 60) || workflow.id}...
+            </p>
+            <p className="text-sm text-muted-foreground mt-1">
+              Phase: {workflow.current_phase} · {workflow.task_count || 0} tasks
+            </p>
+          </div>
+        </div>
+        <Link
+          to={`/workflows/${workflow.id}`}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+        >
+          View Details
+          <ArrowUpRight className="w-4 h-4" />
+        </Link>
+      </div>
+    </BentoCard>
+  );
+}
+
+// Empty State
+function EmptyState() {
+  return (
+    <div className="flex flex-col items-center justify-center py-12 text-center">
+      <div className="p-4 rounded-2xl bg-muted mb-4">
+        <GitBranch className="w-8 h-8 text-muted-foreground" />
+      </div>
+      <h3 className="text-lg font-semibold text-foreground mb-2">No workflows yet</h3>
+      <p className="text-sm text-muted-foreground mb-4 max-w-sm">
+        Create your first workflow to start automating tasks with AI agents.
+      </p>
+      <Link
+        to="/workflows/new"
+        className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+      >
+        Create Workflow
+      </Link>
+    </div>
+  );
+}
+
+// Loading Skeleton
+function LoadingSkeleton() {
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {[...Array(6)].map((_, i) => (
+        <div
+          key={i}
+          className="h-32 rounded-xl bg-muted animate-pulse"
+        />
+      ))}
+    </div>
   );
 }
 
@@ -78,108 +183,90 @@ export default function Dashboard() {
     .sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))
     .slice(0, 5);
 
+  if (loading && workflows.length === 0) {
+    return <LoadingSkeleton />;
+  }
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fade-in">
+      {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Dashboard</h1>
+        <div>
+          <h1 className="text-2xl font-semibold text-foreground tracking-tight">Dashboard</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Monitor your AI workflows and tasks
+          </p>
+        </div>
         <Link
           to="/workflows/new"
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
         >
+          <Zap className="w-4 h-4" />
           New Workflow
         </Link>
       </div>
 
-      {/* Stats */}
+      {/* Active Workflow Banner */}
+      {activeWorkflow && <ActiveWorkflowBanner workflow={activeWorkflow} />}
+
+      {/* Bento Grid Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           title="Total Workflows"
           value={workflows.length}
-          icon={
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-            </svg>
-          }
+          subtitle="All time"
+          icon={GitBranch}
+          color="primary"
         />
         <StatCard
           title="Completed"
           value={completedCount}
-          color="green"
-          icon={
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          }
+          subtitle={`${Math.round((completedCount / Math.max(workflows.length, 1)) * 100)}% success rate`}
+          icon={CheckCircle2}
+          color="success"
         />
         <StatCard
           title="Running"
           value={runningCount}
-          color="blue"
-          icon={
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-            </svg>
-          }
+          subtitle="Active now"
+          icon={Activity}
+          color="info"
         />
         <StatCard
           title="Failed"
           value={failedCount}
-          color="red"
-          icon={
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          }
+          subtitle="Needs attention"
+          icon={XCircle}
+          color="error"
         />
       </div>
 
-      {/* Active Workflow */}
-      {activeWorkflow && (
-        <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-4 border border-blue-200 dark:border-blue-800">
-          <div className="flex items-center gap-2 mb-2">
-            <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
-            <span className="text-sm font-medium text-blue-700 dark:text-blue-400">Active Workflow</span>
+      {/* Recent Workflows */}
+      <BentoCard span={3}>
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-lg font-semibold text-foreground">Recent Workflows</h2>
+            <p className="text-sm text-muted-foreground">Your latest workflow activity</p>
           </div>
           <Link
-            to={`/workflows/${activeWorkflow.id}`}
-            className="text-lg font-medium text-blue-900 dark:text-blue-200 hover:underline"
+            to="/workflows"
+            className="text-sm text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
           >
-            {activeWorkflow.prompt?.substring(0, 80) || activeWorkflow.id}...
-          </Link>
-          <p className="mt-1 text-sm text-blue-700 dark:text-blue-400">
-            Phase: {activeWorkflow.current_phase} | Tasks: {activeWorkflow.task_count || 0}
-          </p>
-        </div>
-      )}
-
-      {/* Recent Workflows */}
-      <div>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Recent Workflows</h2>
-          <Link to="/workflows" className="text-sm text-blue-600 dark:text-blue-400 hover:underline">
             View all
+            <ArrowUpRight className="w-4 h-4" />
           </Link>
         </div>
 
-        {loading ? (
-          <div className="flex justify-center py-8">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
-          </div>
-        ) : recentWorkflows.length > 0 ? (
-          <div className="grid gap-4">
+        {recentWorkflows.length > 0 ? (
+          <div className="space-y-1">
             {recentWorkflows.map((workflow) => (
-              <WorkflowCard key={workflow.id} workflow={workflow} />
+              <WorkflowItem key={workflow.id} workflow={workflow} />
             ))}
           </div>
         ) : (
-          <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-            <p>No workflows yet.</p>
-            <Link to="/workflows/new" className="text-blue-600 dark:text-blue-400 hover:underline">
-              Create your first workflow
-            </Link>
-          </div>
+          <EmptyState />
         )}
-      </div>
+      </BentoCard>
     </div>
   );
 }

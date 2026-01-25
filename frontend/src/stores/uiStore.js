@@ -20,16 +20,19 @@ const useUIStore = create(
         set({ sidebarOpen: open });
       },
 
-      // Theme
+      // Theme (supports: light, dark, midnight, system)
       setTheme: (theme) => {
         set({ theme });
-        // Apply theme to document
         const root = document.documentElement;
+        root.classList.remove('dark', 'midnight');
+
         if (theme === 'system') {
           const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-          root.classList.toggle('dark', prefersDark);
-        } else {
-          root.classList.toggle('dark', theme === 'dark');
+          if (prefersDark) root.classList.add('dark');
+        } else if (theme === 'dark') {
+          root.classList.add('dark');
+        } else if (theme === 'midnight') {
+          root.classList.add('midnight');
         }
       },
 

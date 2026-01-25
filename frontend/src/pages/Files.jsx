@@ -1,262 +1,272 @@
 import { useEffect, useState, useCallback } from 'react';
-import { fileApi } from '../lib/api';
+import { useFileStore } from '../stores';
+import {
+  FolderOpen,
+  File,
+  Upload,
+  Download,
+  Trash2,
+  Search,
+  Grid,
+  List,
+  FileText,
+  FileCode,
+  FileImage,
+  Loader2,
+  X,
+} from 'lucide-react';
 
-function FileIcon({ isDir, name }) {
-  if (isDir) {
+function getFileIcon(filename) {
+  const ext = filename.split('.').pop()?.toLowerCase();
+  const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp'];
+  const codeExts = ['js', 'jsx', 'ts', 'tsx', 'py', 'go', 'rs', 'java', 'cpp', 'c', 'h'];
+
+  if (imageExts.includes(ext)) return FileImage;
+  if (codeExts.includes(ext)) return FileCode;
+  return FileText;
+}
+
+function formatFileSize(bytes) {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
+function FileCard({ file, viewMode, onDownload, onDelete }) {
+  const Icon = getFileIcon(file.name);
+
+  if (viewMode === 'grid') {
     return (
-      <svg className="w-5 h-5 text-yellow-500" fill="currentColor" viewBox="0 0 20 20">
-        <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" />
-      </svg>
+      <div className="group p-4 rounded-xl border border-border bg-card hover:border-muted-foreground/30 hover:shadow-md transition-all">
+        <div className="flex items-center justify-center w-12 h-12 mx-auto mb-3 rounded-xl bg-muted">
+          <Icon className="w-6 h-6 text-muted-foreground" />
+        </div>
+        <p className="text-sm font-medium text-foreground text-center truncate">{file.name}</p>
+        <p className="text-xs text-muted-foreground text-center mt-1">{formatFileSize(file.size)}</p>
+        <div className="flex items-center justify-center gap-2 mt-3 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button
+            onClick={() => onDownload(file)}
+            className="p-1.5 rounded-lg hover:bg-accent transition-colors"
+            title="Download"
+          >
+            <Download className="w-4 h-4 text-muted-foreground" />
+          </button>
+          <button
+            onClick={() => onDelete(file)}
+            className="p-1.5 rounded-lg hover:bg-destructive/10 transition-colors"
+            title="Delete"
+          >
+            <Trash2 className="w-4 h-4 text-destructive" />
+          </button>
+        </div>
+      </div>
     );
   }
 
-  const ext = name.split('.').pop()?.toLowerCase();
-  const iconColors = {
-    js: 'text-yellow-400',
-    jsx: 'text-blue-400',
-    ts: 'text-blue-600',
-    tsx: 'text-blue-500',
-    go: 'text-cyan-500',
-    py: 'text-green-500',
-    md: 'text-gray-500',
-    json: 'text-orange-400',
-    yaml: 'text-red-400',
-    yml: 'text-red-400',
-  };
-
   return (
-    <svg className={`w-5 h-5 ${iconColors[ext] || 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-    </svg>
-  );
-}
-
-function FileListItem({ file, onSelect, isSelected }) {
-  const formatSize = (bytes) => {
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
-  };
-
-  return (
-    <button
-      onClick={() => onSelect(file)}
-      className={`w-full text-left px-4 py-2 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${
-        isSelected ? 'bg-blue-50 dark:bg-blue-900/30' : ''
-      }`}
-    >
-      <FileIcon isDir={file.is_dir} name={file.name} />
-      <span className="flex-1 text-sm text-gray-900 dark:text-white truncate">{file.name}</span>
-      {!file.is_dir && (
-        <span className="text-xs text-gray-500 dark:text-gray-400">{formatSize(file.size)}</span>
-      )}
-    </button>
-  );
-}
-
-function Breadcrumb({ path, onNavigate }) {
-  const parts = path.split('/').filter(Boolean);
-
-  return (
-    <div className="flex items-center gap-1 text-sm overflow-x-auto">
-      <button
-        onClick={() => onNavigate('')}
-        className="px-2 py-1 text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400"
-      >
-        ~
-      </button>
-      {parts.map((part, index) => {
-        const fullPath = parts.slice(0, index + 1).join('/');
-        return (
-          <div key={fullPath} className="flex items-center">
-            <span className="text-gray-400">/</span>
-            <button
-              onClick={() => onNavigate(fullPath)}
-              className="px-2 py-1 text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 truncate max-w-[150px]"
-            >
-              {part}
-            </button>
-          </div>
-        );
-      })}
+    <div className="group flex items-center gap-4 p-3 rounded-lg border border-border bg-card hover:border-muted-foreground/30 transition-all">
+      <div className="p-2 rounded-lg bg-muted">
+        <Icon className="w-5 h-5 text-muted-foreground" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-foreground truncate">{file.name}</p>
+        <p className="text-xs text-muted-foreground">
+          {formatFileSize(file.size)} · {new Date(file.updated_at).toLocaleDateString()}
+        </p>
+      </div>
+      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <button
+          onClick={() => onDownload(file)}
+          className="p-2 rounded-lg hover:bg-accent transition-colors"
+          title="Download"
+        >
+          <Download className="w-4 h-4 text-muted-foreground" />
+        </button>
+        <button
+          onClick={() => onDelete(file)}
+          className="p-2 rounded-lg hover:bg-destructive/10 transition-colors"
+          title="Delete"
+        >
+          <Trash2 className="w-4 h-4 text-destructive" />
+        </button>
+      </div>
     </div>
   );
 }
 
-function CodeViewer({ content, language, filename }) {
+function UploadZone({ onUpload, uploading }) {
+  const [dragOver, setDragOver] = useState(false);
+
+  const handleDrop = useCallback((e) => {
+    e.preventDefault();
+    setDragOver(false);
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length > 0) onUpload(files);
+  }, [onUpload]);
+
+  const handleDragOver = useCallback((e) => {
+    e.preventDefault();
+    setDragOver(true);
+  }, []);
+
+  const handleDragLeave = useCallback(() => {
+    setDragOver(false);
+  }, []);
+
+  const handleFileSelect = (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length > 0) onUpload(files);
+  };
+
   return (
-    <div className="h-full flex flex-col">
-      <div className="flex items-center justify-between px-4 py-2 bg-gray-100 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
-        <span className="text-sm font-medium text-gray-900 dark:text-white">{filename}</span>
-        <span className="text-xs px-2 py-1 bg-gray-200 dark:bg-gray-600 rounded text-gray-600 dark:text-gray-300">
-          {language || 'text'}
-        </span>
+    <div
+      onDrop={handleDrop}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      className={`relative p-8 rounded-xl border-2 border-dashed transition-all ${
+        dragOver
+          ? 'border-primary bg-primary/5'
+          : 'border-border hover:border-muted-foreground/50'
+      }`}
+    >
+      <input
+        type="file"
+        multiple
+        onChange={handleFileSelect}
+        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+        disabled={uploading}
+      />
+      <div className="text-center">
+        {uploading ? (
+          <Loader2 className="w-8 h-8 mx-auto mb-3 text-primary animate-spin" />
+        ) : (
+          <Upload className="w-8 h-8 mx-auto mb-3 text-muted-foreground" />
+        )}
+        <p className="text-sm font-medium text-foreground">
+          {uploading ? 'Uploading...' : 'Drop files here or click to upload'}
+        </p>
+        <p className="text-xs text-muted-foreground mt-1">
+          Supports any file type up to 50MB
+        </p>
       </div>
-      <pre className="flex-1 overflow-auto p-4 text-sm font-mono bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-200">
-        {content}
-      </pre>
     </div>
   );
 }
 
 export default function Files() {
-  const [currentPath, setCurrentPath] = useState('');
-  const [files, setFiles] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [fileContent, setFileContent] = useState(null);
-  const [loadingContent, setLoadingContent] = useState(false);
-
-  const fetchFiles = useCallback(async (path) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await fileApi.list(path);
-      setFiles(data.files || []);
-    } catch (err) {
-      setError(err.message || 'Failed to load files');
-      setFiles([]);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  const fetchFileContent = useCallback(async (path) => {
-    setLoadingContent(true);
-    try {
-      const data = await fileApi.getContent(path);
-      setFileContent(data);
-    } catch (err) {
-      setFileContent({ error: err.message || 'Failed to load file content' });
-    } finally {
-      setLoadingContent(false);
-    }
-  }, []);
+  const { files, loading, uploading, fetchFiles, uploadFiles, downloadFile, deleteFile } = useFileStore();
+  const [viewMode, setViewMode] = useState('list');
+  const [search, setSearch] = useState('');
 
   useEffect(() => {
-    fetchFiles(currentPath);
-  }, [currentPath, fetchFiles]);
+    fetchFiles();
+  }, [fetchFiles]);
 
-  const handleSelect = (file) => {
-    if (file.is_dir) {
-      const newPath = currentPath ? `${currentPath}/${file.name}` : file.name;
-      setCurrentPath(newPath);
-      setSelectedFile(null);
-      setFileContent(null);
-    } else {
-      const filePath = currentPath ? `${currentPath}/${file.name}` : file.name;
-      setSelectedFile(file);
-      fetchFileContent(filePath);
+  const filteredFiles = files.filter(f =>
+    f.name.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const handleUpload = async (fileList) => {
+    await uploadFiles(fileList);
+  };
+
+  const handleDelete = async (file) => {
+    if (window.confirm(`Delete "${file.name}"?`)) {
+      await deleteFile(file.id);
     }
-  };
-
-  const handleNavigate = (path) => {
-    setCurrentPath(path);
-    setSelectedFile(null);
-    setFileContent(null);
-  };
-
-  const handleGoUp = () => {
-    const parts = currentPath.split('/').filter(Boolean);
-    parts.pop();
-    setCurrentPath(parts.join('/'));
-    setSelectedFile(null);
-    setFileContent(null);
   };
 
   return (
-    <div className="h-[calc(100vh-8rem)] flex gap-4">
-      {/* File browser */}
-      <div className="w-80 flex-shrink-0 bg-white dark:bg-gray-800 rounded-xl shadow-sm flex flex-col">
-        {/* Breadcrumb */}
-        <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700">
-          <Breadcrumb path={currentPath} onNavigate={handleNavigate} />
+    <div className="space-y-6 animate-fade-in">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold text-foreground tracking-tight">Files</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Manage your uploaded files and documents
+          </p>
         </div>
+      </div>
 
-        {/* File list */}
-        <div className="flex-1 overflow-y-auto">
-          {currentPath && (
+      {/* Upload Zone */}
+      <UploadZone onUpload={handleUpload} uploading={uploading} />
+
+      {/* Toolbar */}
+      <div className="flex items-center justify-between gap-4">
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search files..."
+            className="w-full h-10 pl-10 pr-4 border border-input rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background"
+          />
+          {search && (
             <button
-              onClick={handleGoUp}
-              className="w-full text-left px-4 py-2 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400"
+              onClick={() => setSearch('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-accent rounded"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 17l-5-5m0 0l5-5m-5 5h12" />
-              </svg>
-              <span className="text-sm">..</span>
+              <X className="w-3 h-3 text-muted-foreground" />
             </button>
           )}
-
-          {loading ? (
-            <div className="flex justify-center py-8">
-              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600" />
-            </div>
-          ) : error ? (
-            <div className="px-4 py-8 text-center">
-              <p className="text-red-600 dark:text-red-400 text-sm">{error}</p>
-              <button
-                onClick={() => fetchFiles(currentPath)}
-                className="mt-2 text-blue-600 dark:text-blue-400 text-sm hover:underline"
-              >
-                Retry
-              </button>
-            </div>
-          ) : files.length > 0 ? (
-            files
-              .sort((a, b) => {
-                if (a.is_dir !== b.is_dir) return a.is_dir ? -1 : 1;
-                return a.name.localeCompare(b.name);
-              })
-              .map((file) => (
-                <FileListItem
-                  key={file.name}
-                  file={file}
-                  onSelect={handleSelect}
-                  isSelected={selectedFile?.name === file.name}
-                />
-              ))
-          ) : (
-            <p className="px-4 py-8 text-center text-gray-500 dark:text-gray-400 text-sm">
-              Empty directory
-            </p>
-          )}
+        </div>
+        <div className="flex items-center gap-1 p-1 rounded-lg bg-secondary">
+          <button
+            onClick={() => setViewMode('list')}
+            className={`p-2 rounded-md transition-all ${
+              viewMode === 'list' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+            }`}
+            title="List view"
+          >
+            <List className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => setViewMode('grid')}
+            className={`p-2 rounded-md transition-all ${
+              viewMode === 'grid' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+            }`}
+            title="Grid view"
+          >
+            <Grid className="w-4 h-4" />
+          </button>
         </div>
       </div>
 
-      {/* File content viewer */}
-      <div className="flex-1 bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden">
-        {loadingContent ? (
-          <div className="h-full flex items-center justify-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+      {/* Files */}
+      {loading ? (
+        <div className={viewMode === 'grid' ? 'grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4' : 'space-y-2'}>
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className={`${viewMode === 'grid' ? 'h-32' : 'h-16'} rounded-xl bg-muted animate-pulse`} />
+          ))}
+        </div>
+      ) : filteredFiles.length > 0 ? (
+        <div className={viewMode === 'grid' ? 'grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4' : 'space-y-2'}>
+          {filteredFiles.map((file) => (
+            <FileCard
+              key={file.id}
+              file={file}
+              viewMode={viewMode}
+              onDownload={downloadFile}
+              onDelete={handleDelete}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="text-center py-16">
+          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-muted flex items-center justify-center">
+            <FolderOpen className="w-8 h-8 text-muted-foreground" />
           </div>
-        ) : fileContent?.error ? (
-          <div className="h-full flex items-center justify-center text-red-600 dark:text-red-400">
-            {fileContent.error}
-          </div>
-        ) : fileContent?.content ? (
-          <CodeViewer
-            content={fileContent.content}
-            language={fileContent.language}
-            filename={selectedFile?.name || 'file'}
-          />
-        ) : fileContent?.is_binary ? (
-          <div className="h-full flex items-center justify-center text-gray-500 dark:text-gray-400">
-            Binary file cannot be displayed
-          </div>
-        ) : (
-          <div className="h-full flex items-center justify-center text-gray-500 dark:text-gray-400">
-            <div className="text-center">
-              <svg className="w-12 h-12 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              <p>Select a file to view its contents</p>
-            </div>
-          </div>
-        )}
-      </div>
+          <h3 className="text-lg font-semibold text-foreground mb-2">
+            {search ? 'No files found' : 'No files yet'}
+          </h3>
+          <p className="text-sm text-muted-foreground">
+            {search ? 'Try a different search term' : 'Upload files to get started'}
+          </p>
+        </div>
+      )}
     </div>
   );
 }
