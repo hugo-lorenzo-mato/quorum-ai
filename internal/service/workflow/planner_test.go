@@ -643,37 +643,37 @@ func TestExtractJSON_MarkdownCodeBlock(t *testing.T) {
 		want  string
 	}{
 		{
-			name: "json code block",
+			name:  "json code block",
 			input: "Here is the manifest:\n```json\n{\"tasks\": []}\n```\nDone!",
 			want:  `{"tasks": []}`,
 		},
 		{
-			name: "JSON uppercase code block",
+			name:  "JSON uppercase code block",
 			input: "Result:\n```JSON\n{\"key\": \"value\"}\n```",
 			want:  `{"key": "value"}`,
 		},
 		{
-			name: "plain code block with object",
+			name:  "plain code block with object",
 			input: "Output:\n```\n{\"data\": 123}\n```",
 			want:  `{"data": 123}`,
 		},
 		{
-			name: "plain code block with array",
+			name:  "plain code block with array",
 			input: "List:\n```\n[1, 2, 3]\n```",
 			want:  `[1, 2, 3]`,
 		},
 		{
-			name: "nested JSON in markdown",
+			name:  "nested JSON in markdown",
 			input: "```json\n{\"outer\": {\"inner\": [1, 2]}}\n```",
 			want:  `{"outer": {"inner": [1, 2]}}`,
 		},
 		{
-			name: "multiline JSON in markdown",
+			name:  "multiline JSON in markdown",
 			input: "```json\n{\n  \"tasks\": [\n    {\"id\": \"1\"}\n  ]\n}\n```",
 			want:  "{\n  \"tasks\": [\n    {\"id\": \"1\"}\n  ]\n}",
 		},
 		{
-			name: "json block with CRLF",
+			name:  "json block with CRLF",
 			input: "```json\r\n{\"key\": \"value\"}\r\n```",
 			want:  `{"key": "value"}`,
 		},
@@ -823,7 +823,7 @@ The tasks should be organized by dependency.
 			want: `{"tasks": [{"id": "1", "deps": []}], "execution_levels": [["1"]]}`,
 		},
 		{
-			name: "JSON with unicode",
+			name:  "JSON with unicode",
 			input: `{"message": "Tarea completada ✓", "status": "éxito"}`,
 			want:  `{"message": "Tarea completada ✓", "status": "éxito"}`,
 		},

@@ -18,12 +18,12 @@ import (
 
 // ChatMessage represents a message in a chat conversation.
 type ChatMessage struct {
-	ID        string    `json:"id"`
-	SessionID string    `json:"session_id"`
-	Role      string    `json:"role"` // "user", "agent", "system"
-	Agent     string    `json:"agent,omitempty"`
-	Content   string    `json:"content"`
-	Timestamp time.Time `json:"timestamp"`
+	ID        string     `json:"id"`
+	SessionID string     `json:"session_id"`
+	Role      string     `json:"role"` // "user", "agent", "system"
+	Agent     string     `json:"agent,omitempty"`
+	Content   string     `json:"content"`
+	Timestamp time.Time  `json:"timestamp"`
 	Tokens    *TokenInfo `json:"tokens,omitempty"`
 }
 
@@ -166,7 +166,7 @@ func (h *ChatHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 }
 
 // ListSessions lists all chat sessions.
-func (h *ChatHandler) ListSessions(w http.ResponseWriter, r *http.Request) {
+func (h *ChatHandler) ListSessions(w http.ResponseWriter, _ *http.Request) {
 	h.mu.RLock()
 	sessions := make([]ChatSession, 0, len(h.sessions))
 	for _, state := range h.sessions {

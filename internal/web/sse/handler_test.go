@@ -265,11 +265,20 @@ func TestHandler_Shutdown(t *testing.T) {
 
 	// Connect some clients
 	clients := make([]*http.Response, 3)
+	// Ensure all response bodies are closed on function exit
+	defer func() {
+		for _, resp := range clients {
+			if resp != nil {
+				resp.Body.Close()
+			}
+		}
+	}()
+
 	for i := 0; i < 3; i++ {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 		req, _ := http.NewRequestWithContext(ctx, "GET", ts.URL, nil)
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := http.DefaultClient.Do(req) //nolint:bodyclose // closed in deferred cleanup above
 		if err != nil {
 			t.Fatalf("failed to connect client %d: %v", i, err)
 		}
@@ -292,11 +301,6 @@ func TestHandler_Shutdown(t *testing.T) {
 
 	if h.ClientCount() != 0 {
 		t.Errorf("expected 0 clients after shutdown, got %d", h.ClientCount())
-	}
-
-	// Clean up responses
-	for _, resp := range clients {
-		resp.Body.Close()
 	}
 }
 

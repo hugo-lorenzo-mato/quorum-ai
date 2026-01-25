@@ -35,7 +35,7 @@ func NewMessageStyles(width int) *MessageStyles {
 }
 
 // FormatUserMessage formats a user message with bubble style (same as bot)
-func (s *MessageStyles) FormatUserMessage(content string, timestamp string, isCommand bool) string {
+func (s *MessageStyles) FormatUserMessage(content, timestamp string, isCommand bool) string {
 	// Container width: 85% of viewport
 	containerWidth := s.width * 85 / 100
 	if containerWidth < 40 {
@@ -74,7 +74,7 @@ func (s *MessageStyles) FormatUserMessage(content string, timestamp string, isCo
 }
 
 // FormatBotMessage formats an agent message with bubble style
-func (s *MessageStyles) FormatBotMessage(agentName, content, timestamp string, consensus int, tokens string) string {
+func (s *MessageStyles) FormatBotMessage(agentName, content, timestamp string, _ int, _ string) string {
 	// Get agent color from agents.go for consistency with header bar
 	agentColor := GetAgentColor(agentName)
 

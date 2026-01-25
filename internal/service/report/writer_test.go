@@ -117,11 +117,11 @@ func TestSanitizeFilename(t *testing.T) {
 		{"with\\backslash", "withbackslash"}, // backslash is dropped
 		{"with:colon", "with-colon"},
 		{"UPPERCASE", "uppercase"},
-		{"multiple   spaces", "multiple-spaces"},   // consecutive spaces collapse to single dash
-		{"--leading-dashes", "-leading-dashes"},    // consecutive dashes collapse
-		{"trailing-dashes--", "trailing-dashes-"},  // consecutive dashes collapse
-		{"file.name.txt", "file.name.txt"},         // dots are preserved
-		{"under_score", "under_score"},             // underscores are preserved
+		{"multiple   spaces", "multiple-spaces"},  // consecutive spaces collapse to single dash
+		{"--leading-dashes", "-leading-dashes"},   // consecutive dashes collapse
+		{"trailing-dashes--", "trailing-dashes-"}, // consecutive dashes collapse
+		{"file.name.txt", "file.name.txt"},        // dots are preserved
+		{"under_score", "under_score"},            // underscores are preserved
 	}
 
 	for _, tt := range tests {

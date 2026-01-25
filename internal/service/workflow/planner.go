@@ -12,6 +12,13 @@ import (
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service/report"
 )
 
+// Compile-time assertions for methods reserved for future multi-agent planning.
+// These are intentionally unused now but will be wired in when multi-agent mode is enabled.
+var (
+	_ = (*Planner).runSingleAgentPlanning
+	_ = (*Planner).writeTaskReports
+)
+
 // DAGBuilder builds and validates task dependency graphs.
 type DAGBuilder interface {
 	AddTask(task *core.Task) error
@@ -539,10 +546,10 @@ func extractJSONFromMarkdown(output string) string {
 		{"```JSON\n", "\n```"},
 		{"```json", "```"},
 		{"```JSON", "```"},
-		{"```\n{", "}\n```"},   // Plain code block with object
-		{"```\n[", "]\n```"},   // Plain code block with array
-		{"```{", "}```"},       // Compact code block with object
-		{"```[", "]```"},       // Compact code block with array
+		{"```\n{", "}\n```"}, // Plain code block with object
+		{"```\n[", "]\n```"}, // Plain code block with array
+		{"```{", "}```"},     // Compact code block with object
+		{"```[", "]```"},     // Compact code block with array
 	}
 
 	for _, p := range patterns {

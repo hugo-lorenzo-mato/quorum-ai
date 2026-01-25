@@ -59,7 +59,9 @@ type StatsWidget struct {
 
 // NewStatsWidget creates a new stats widget
 func NewStatsWidget() *StatsWidget {
-	proc, _ := process.NewProcess(int32(os.Getpid()))
+	pid := os.Getpid()
+	// #nosec G115 - PID is guaranteed to fit in int32 on all supported platforms
+	proc, _ := process.NewProcess(int32(pid))
 	cpuCount, err := cpu.Counts(true)
 	if err != nil || cpuCount <= 0 {
 		cpuCount = runtime.NumCPU()
@@ -722,9 +724,6 @@ func queryRocmSMI() []GPUInfo {
 	reMemSingle := regexp.MustCompile(`(?i)VRAM\s*(Total|Used).*?:\s*([0-9.]+)\\s*([A-Za-z]+)`)
 	reTemp := regexp.MustCompile(`(?i)Temperature.*?:\s*([0-9.]+)`)
 
-	type slot struct {
-		info GPUInfo
-	}
 	byIdx := map[int]*GPUInfo{}
 
 	for _, line := range lines {

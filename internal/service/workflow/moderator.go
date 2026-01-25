@@ -416,7 +416,7 @@ func parseYAMLFrontmatter(text string) (frontmatter, body string, ok bool) {
 	// Find the closing ---
 	// Skip the first line (opening ---)
 	afterOpen := text[3:]
-	if len(afterOpen) > 0 && afterOpen[0] == '\n' {
+	if afterOpen != "" && afterOpen[0] == '\n' {
 		afterOpen = afterOpen[1:]
 	} else if len(afterOpen) > 1 && afterOpen[0] == '\r' && afterOpen[1] == '\n' {
 		afterOpen = afterOpen[2:]
@@ -438,7 +438,7 @@ func parseYAMLFrontmatter(text string) (frontmatter, body string, ok bool) {
 
 	// Body starts after the closing ---
 	remaining := afterOpen[closeIdx+4:] // skip \n---
-	if len(remaining) > 0 && remaining[0] == '\n' {
+	if remaining != "" && remaining[0] == '\n' {
 		remaining = remaining[1:]
 	} else if len(remaining) > 1 && remaining[0] == '\r' && remaining[1] == '\n' {
 		remaining = remaining[2:]

@@ -24,7 +24,7 @@ type ComprehensiveTaskManifest struct {
 type TaskManifestItem struct {
 	ID           string   `json:"id"`
 	Name         string   `json:"name"`
-	File         string   `json:"file"`         // Path to the task specification file
+	File         string   `json:"file"` // Path to the task specification file
 	Dependencies []string `json:"dependencies"`
 	Complexity   string   `json:"complexity"`
 	CLI          string   `json:"cli"`
@@ -321,13 +321,13 @@ func (p *Planner) executeComprehensivePlanning(
 
 	if wctx.Output != nil {
 		wctx.Output.AgentEvent("started", agentName, "Comprehensive task planning (single call)", map[string]interface{}{
-			"phase":              "plan",
-			"model":              model,
-			"timeout_seconds":    int(wctx.Config.PhaseTimeouts.Plan.Seconds()),
-			"analysis_size":      len(params.ConsolidatedAnalysis),
-			"available_agents":   len(params.AvailableAgents),
-			"tasks_dir":          params.TasksDir,
-			"naming_convention":  params.NamingConvention,
+			"phase":             "plan",
+			"model":             model,
+			"timeout_seconds":   int(wctx.Config.PhaseTimeouts.Plan.Seconds()),
+			"analysis_size":     len(params.ConsolidatedAnalysis),
+			"available_agents":  len(params.AvailableAgents),
+			"tasks_dir":         params.TasksDir,
+			"naming_convention": params.NamingConvention,
 		})
 	}
 
@@ -433,4 +433,3 @@ func (p *Planner) createTasksFromManifest(ctx context.Context, wctx *Context, ma
 
 	return tasks
 }
-

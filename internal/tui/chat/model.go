@@ -103,28 +103,6 @@ func refreshStyles() {
 	tabSeparatorStyle = lipgloss.NewStyle().
 		Foreground(borderColor)
 
-	// Message styles
-	userLabelStyle = lipgloss.NewStyle().
-		Foreground(successColor).
-		Bold(true)
-
-	userMsgStyle = lipgloss.NewStyle().
-		Foreground(textColor).
-		PaddingLeft(2)
-
-	agentLabelStyle = lipgloss.NewStyle().
-		Foreground(primaryColor).
-		Bold(true)
-
-	agentMsgStyle = lipgloss.NewStyle().
-		Foreground(textColor).
-		PaddingLeft(2)
-
-	systemMsgStyle = lipgloss.NewStyle().
-		Foreground(warningColor).
-		Italic(true).
-		PaddingLeft(2)
-
 	// Input styles
 	inputContainerStyle = lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
@@ -202,28 +180,6 @@ var (
 
 	tabSeparatorStyle = lipgloss.NewStyle().
 				Foreground(borderColor)
-
-	// Message styles
-	userLabelStyle = lipgloss.NewStyle().
-			Foreground(successColor).
-			Bold(true)
-
-	userMsgStyle = lipgloss.NewStyle().
-			Foreground(textColor).
-			PaddingLeft(2)
-
-	agentLabelStyle = lipgloss.NewStyle().
-			Foreground(primaryColor).
-			Bold(true)
-
-	agentMsgStyle = lipgloss.NewStyle().
-			Foreground(textColor).
-			PaddingLeft(2)
-
-	systemMsgStyle = lipgloss.NewStyle().
-			Foreground(warningColor).
-			Italic(true).
-			PaddingLeft(2)
 
 	// Input styles
 	inputContainerStyle = lipgloss.NewStyle().
@@ -520,8 +476,8 @@ func NewModel(cp *control.ControlPlane, agents core.AgentRegistry, defaultAgent,
 		fileViewer:       NewFileViewer(),
 		statsWidget:      NewStatsWidget(),
 		machineCollector: NewMachineStatsCollector(),
-		darkTheme:        true,                   // Default to dark theme
-		messageStyles:    NewMessageStyles(80),   // Default width, updated on resize
+		darkTheme:        true,                 // Default to dark theme
+		messageStyles:    NewMessageStyles(80), // Default width, updated on resize
 	}
 }
 
@@ -2113,20 +2069,21 @@ func (m *Model) suggestThemes(partial string) []string {
 // getWorkflowDescription returns the description for a workflow ID (for suggestions display).
 func (m *Model) getWorkflowDescription(workflowID string) string {
 	for _, wf := range m.workflowCache {
-		if string(wf.WorkflowID) == workflowID {
-			// Format: [STATUS/PHASE] truncated prompt
-			prompt := wf.Prompt
-			maxLen := 55
-			if len(prompt) > maxLen {
-				prompt = prompt[:maxLen-3] + "..."
-			}
-			status := strings.ToUpper(string(wf.Status))
-			phase := string(wf.CurrentPhase)
-			if wf.IsActive {
-				return fmt.Sprintf("* %s @%s: %s", status, phase, prompt)
-			}
-			return fmt.Sprintf("%s @%s: %s", status, phase, prompt)
+		if string(wf.WorkflowID) != workflowID {
+			continue
 		}
+		// Format: [STATUS/PHASE] truncated prompt
+		prompt := wf.Prompt
+		maxLen := 55
+		if len(prompt) > maxLen {
+			prompt = prompt[:maxLen-3] + "..."
+		}
+		status := strings.ToUpper(string(wf.Status))
+		phase := string(wf.CurrentPhase)
+		if wf.IsActive {
+			return fmt.Sprintf("* %s @%s: %s", status, phase, prompt)
+		}
+		return fmt.Sprintf("%s @%s: %s", status, phase, prompt)
 	}
 	return ""
 }
@@ -2355,7 +2312,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if len(prompt) > 50 {
 				prompt = prompt[:47] + "..."
 			}
-			m.history.Add(NewSystemMessage(fmt.Sprintf("Session restored: %s @%s\n\"%s\"",
+			m.history.Add(NewSystemMessage(fmt.Sprintf("Session restored: %s @%s\n%q",
 				strings.ToUpper(string(msg.State.Status)),
 				msg.State.CurrentPhase,
 				prompt)))
@@ -2994,7 +2951,7 @@ func (m Model) handleCommand(cmd *Command, args []string) (tea.Model, tea.Cmd) {
 			}
 			status := strings.ToUpper(string(wf.Status))
 			sb.WriteString(fmt.Sprintf("%s#%d  %-11s @%-8s  %s\n", marker, i+1, status, wf.CurrentPhase, wf.WorkflowID))
-			sb.WriteString(fmt.Sprintf("    \"%s\"\n\n", prompt))
+			sb.WriteString(fmt.Sprintf("    %q\n\n", prompt))
 		}
 		sb.WriteString("> = active  |  /load <ID> to switch")
 		m.history.Add(NewSystemMessage(sb.String()))
@@ -3040,7 +2997,7 @@ func (m Model) handleCommand(cmd *Command, args []string) (tea.Model, tea.Cmd) {
 				}
 				status := strings.ToUpper(string(wf.Status))
 				sb.WriteString(fmt.Sprintf("%s#%d  %-11s @%-8s  %s\n", marker, i+1, status, wf.CurrentPhase, wf.WorkflowID))
-				sb.WriteString(fmt.Sprintf("    \"%s\"\n\n", prompt))
+				sb.WriteString(fmt.Sprintf("    %q\n\n", prompt))
 			}
 			sb.WriteString("> = active  |  /load <ID> to switch")
 			m.history.Add(NewSystemMessage(sb.String()))
@@ -3082,7 +3039,7 @@ func (m Model) handleCommand(cmd *Command, args []string) (tea.Model, tea.Cmd) {
 			if len(prompt) > 70 {
 				prompt = prompt[:67] + "..."
 			}
-			sb.WriteString(fmt.Sprintf("\"%s\"\n\n", prompt))
+			sb.WriteString(fmt.Sprintf("%q\n\n", prompt))
 		}
 
 		// Metrics inline
@@ -3980,9 +3937,10 @@ func (m Model) renderHistory() string {
 			// Extract consensus from metadata if available
 			consensus := 0
 			if msg.Metadata != nil {
-				if c, ok := msg.Metadata["consensus"].(int); ok {
+				switch c := msg.Metadata["consensus"].(type) {
+				case int:
 					consensus = c
-				} else if c, ok := msg.Metadata["consensus"].(float64); ok {
+				case float64:
 					consensus = int(c)
 				}
 			}
@@ -4379,69 +4337,6 @@ func truncateWithAnsi(s string, maxWidth int) string {
 	for visibleWidth < maxWidth {
 		result.WriteRune(' ')
 		visibleWidth++
-	}
-
-	return result.String()
-}
-
-// wrapText wraps text to fit within maxWidth, breaking on word boundaries
-func wrapText(text string, maxWidth int) string {
-	if maxWidth <= 0 {
-		maxWidth = 80
-	}
-
-	var result strings.Builder
-	lines := strings.Split(text, "\n")
-
-	for i, line := range lines {
-		if i > 0 {
-			result.WriteString("\n")
-		}
-
-		// If line fits, add it directly
-		if lipgloss.Width(line) <= maxWidth {
-			result.WriteString(line)
-			continue
-		}
-
-		// Wrap long lines
-		words := strings.Fields(line)
-		currentLine := ""
-		for _, word := range words {
-			testLine := currentLine
-			if testLine != "" {
-				testLine += " "
-			}
-			testLine += word
-
-			if lipgloss.Width(testLine) <= maxWidth {
-				currentLine = testLine
-			} else {
-				// Write current line and start new one
-				if currentLine != "" {
-					result.WriteString(currentLine)
-					result.WriteString("\n")
-				}
-				// Handle very long words that exceed maxWidth
-				if lipgloss.Width(word) > maxWidth {
-					// Break the word
-					for _, r := range word {
-						if lipgloss.Width(currentLine+string(r)) > maxWidth {
-							result.WriteString(currentLine)
-							result.WriteString("\n")
-							currentLine = string(r)
-						} else {
-							currentLine += string(r)
-						}
-					}
-				} else {
-					currentLine = word
-				}
-			}
-		}
-		if currentLine != "" {
-			result.WriteString(currentLine)
-		}
 	}
 
 	return result.String()
@@ -5058,7 +4953,7 @@ func formatWorkflowStatus(state *core.WorkflowState) string {
 		if len(prompt) > 80 {
 			prompt = prompt[:77] + "..."
 		}
-		sb.WriteString(fmt.Sprintf("Prompt:\n  \"%s\"\n\n", prompt))
+		sb.WriteString(fmt.Sprintf("Prompt:\n  %q\n\n", prompt))
 	}
 
 	// Metrics in a compact format

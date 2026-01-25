@@ -249,7 +249,7 @@ func (s *Server) handleUpdateWorkflow(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleDeleteWorkflow deletes a workflow.
-func (s *Server) handleDeleteWorkflow(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleDeleteWorkflow(w http.ResponseWriter, _ *http.Request) {
 	// Note: StateManager interface doesn't have a Delete method yet
 	// For now, return not implemented
 	respondError(w, http.StatusNotImplemented, "delete not implemented")

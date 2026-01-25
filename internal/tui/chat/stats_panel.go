@@ -101,7 +101,7 @@ func (p *StatsPanel) PageUp() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.ready {
-		p.viewport.HalfViewUp()
+		p.viewport.HalfPageUp()
 	}
 }
 
@@ -110,7 +110,7 @@ func (p *StatsPanel) PageDown() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.ready {
-		p.viewport.HalfViewDown()
+		p.viewport.HalfPageDown()
 	}
 }
 

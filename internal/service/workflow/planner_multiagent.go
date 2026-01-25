@@ -12,6 +12,15 @@ import (
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service/report"
 )
 
+// Compile-time assertions for methods reserved for future multi-agent planning.
+// These are intentionally unused now but will be wired in when multi-agent mode is enabled.
+var (
+	_ = (*Planner).runMultiAgentPlanning
+	_ = (*Planner).runV1Planning
+	_ = (*Planner).runPlanningWithAgent
+	_ = (*Planner).consolidatePlans
+)
+
 // PlanOutput represents output from a planning agent.
 type PlanOutput struct {
 	AgentName  string

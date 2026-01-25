@@ -452,13 +452,13 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 	// This enables fine-grained recovery if the workflow is interrupted
 	if e.stateSaver != nil {
 		if saveErr := e.stateSaver.Save(ctx, wctx.State); saveErr != nil {
-			wctx.Logger.Warn("failed to save state after task completion",
+			wctx.Logger.Error("failed to save state after task completion",
 				"task_id", task.ID,
 				"error", saveErr,
 			)
-		} else {
-			wctx.Logger.Debug("state saved after task completion", "task_id", task.ID)
+			return fmt.Errorf("failed to save state after task %s: %w", task.ID, saveErr)
 		}
+		wctx.Logger.Debug("state saved after task completion", "task_id", task.ID)
 	}
 
 	// Notify UI of state update so task panel refreshes

@@ -176,7 +176,7 @@ func (h *Handler) Broadcast(eventType string, data interface{}) {
 }
 
 // Shutdown gracefully disconnects all clients.
-func (h *Handler) Shutdown(ctx context.Context) error {
+func (h *Handler) Shutdown(_ context.Context) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 

@@ -15,9 +15,9 @@ type TasksPanel struct {
 	width        int
 	height       int
 	visible      bool
-	scrollY      int // Scroll offset for long task lists
-	maxTasks     int // Maximum visible tasks before scrolling
-	dirty        bool // Indicates state has changed since last render
+	scrollY      int    // Scroll offset for long task lists
+	maxTasks     int    // Maximum visible tasks before scrolling
+	dirty        bool   // Indicates state has changed since last render
 	lastTaskHash string // Hash of task states for change detection
 }
 
@@ -128,12 +128,24 @@ func (p *TasksPanel) HasTasks() bool {
 	return p.getTaskCount() > 0
 }
 
+// taskStatsResult holds task statistics
+type taskStatsResult struct {
+	completed int
+	running   int
+	pending   int
+	failed    int
+	skipped   int
+	total     int
+}
+
 // taskStats calculates task statistics
-func (p *TasksPanel) taskStats() (completed, running, pending, failed, skipped, total int) {
+func (p *TasksPanel) taskStats() taskStatsResult {
 	if p.state == nil {
-		return
+		return taskStatsResult{}
 	}
-	total = len(p.state.TaskOrder)
+	stats := taskStatsResult{
+		total: len(p.state.TaskOrder),
+	}
 	for _, taskID := range p.state.TaskOrder {
 		task, ok := p.state.Tasks[taskID]
 		if !ok {
@@ -141,18 +153,18 @@ func (p *TasksPanel) taskStats() (completed, running, pending, failed, skipped, 
 		}
 		switch task.Status {
 		case core.TaskStatusCompleted:
-			completed++
+			stats.completed++
 		case core.TaskStatusRunning:
-			running++
+			stats.running++
 		case core.TaskStatusPending:
-			pending++
+			stats.pending++
 		case core.TaskStatusFailed:
-			failed++
+			stats.failed++
 		case core.TaskStatusSkipped:
-			skipped++
+			stats.skipped++
 		}
 	}
-	return
+	return stats
 }
 
 // Render renders the tasks panel
@@ -199,14 +211,14 @@ func (p *TasksPanel) Render() string {
 		Width(p.width - 2)
 
 	// Calculate stats
-	completed, running, pending, failed, skipped, total := p.taskStats()
+	stats := p.taskStats()
 
 	var sb strings.Builder
 
 	// Header with stats
-	statsStr := fmt.Sprintf("(%d/%d)", completed, total)
-	if running > 0 {
-		statsStr = fmt.Sprintf("(%d/%d, %d running)", completed, total, running)
+	statsStr := fmt.Sprintf("(%d/%d)", stats.completed, stats.total)
+	if stats.running > 0 {
+		statsStr = fmt.Sprintf("(%d/%d, %d running)", stats.completed, stats.total, stats.running)
 	}
 	sb.WriteString(headerStyle.Render("◆ Issues " + statsStr))
 	sb.WriteString("\n\n")
@@ -307,8 +319,8 @@ func (p *TasksPanel) Render() string {
 	// Overall progress bar
 	barWidth := 30
 	progress := 0.0
-	if total > 0 {
-		progress = float64(completed) / float64(total) * 100
+	if stats.total > 0 {
+		progress = float64(stats.completed) / float64(stats.total) * 100
 	}
 	filled := int(float64(barWidth) * progress / 100)
 	if filled > barWidth {
@@ -321,20 +333,20 @@ func (p *TasksPanel) Render() string {
 
 	// Status summary
 	var statusParts []string
-	if completed > 0 {
-		statusParts = append(statusParts, completedStyle.Render(fmt.Sprintf("%d done", completed)))
+	if stats.completed > 0 {
+		statusParts = append(statusParts, completedStyle.Render(fmt.Sprintf("%d done", stats.completed)))
 	}
-	if running > 0 {
-		statusParts = append(statusParts, runningStyle.Render(fmt.Sprintf("%d running", running)))
+	if stats.running > 0 {
+		statusParts = append(statusParts, runningStyle.Render(fmt.Sprintf("%d running", stats.running)))
 	}
-	if pending > 0 {
-		statusParts = append(statusParts, pendingStyle.Render(fmt.Sprintf("%d pending", pending)))
+	if stats.pending > 0 {
+		statusParts = append(statusParts, pendingStyle.Render(fmt.Sprintf("%d pending", stats.pending)))
 	}
-	if failed > 0 {
-		statusParts = append(statusParts, failedStyle.Render(fmt.Sprintf("%d failed", failed)))
+	if stats.failed > 0 {
+		statusParts = append(statusParts, failedStyle.Render(fmt.Sprintf("%d failed", stats.failed)))
 	}
-	if skipped > 0 {
-		statusParts = append(statusParts, skippedStyle.Render(fmt.Sprintf("%d skipped", skipped)))
+	if stats.skipped > 0 {
+		statusParts = append(statusParts, skippedStyle.Render(fmt.Sprintf("%d skipped", stats.skipped)))
 	}
 
 	if len(statusParts) > 0 {
@@ -355,15 +367,15 @@ func (p *TasksPanel) CompactRender() string {
 		return ""
 	}
 
-	completed, running, _, failed, _, total := p.taskStats()
+	stats := p.taskStats()
 
 	// Determine color based on status
 	var color lipgloss.Color
-	if failed > 0 {
+	if stats.failed > 0 {
 		color = lipgloss.Color("#ef4444") // Red
-	} else if running > 0 {
+	} else if stats.running > 0 {
 		color = lipgloss.Color("#eab308") // Yellow
-	} else if completed == total {
+	} else if stats.completed == stats.total {
 		color = lipgloss.Color("#22c55e") // Green
 	} else {
 		color = lipgloss.Color("#6B7280") // Gray
@@ -374,13 +386,13 @@ func (p *TasksPanel) CompactRender() string {
 
 	// Mini progress indicator
 	icon := "○"
-	if completed == total && total > 0 {
+	if stats.completed == stats.total && stats.total > 0 {
 		icon = "✓"
-	} else if running > 0 {
+	} else if stats.running > 0 {
 		icon = "●"
-	} else if failed > 0 {
+	} else if stats.failed > 0 {
 		icon = "✗"
 	}
 
-	return fmt.Sprintf("%s %s", style.Render(icon), dimStyle.Render(fmt.Sprintf("%d/%d", completed, total)))
+	return fmt.Sprintf("%s %s", style.Render(icon), dimStyle.Render(fmt.Sprintf("%d/%d", stats.completed, stats.total)))
 }

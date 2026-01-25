@@ -455,7 +455,7 @@ func (w *WorkflowReportWriter) WritePlan(data PlanData) error {
 }
 
 // WritePlanPath returns the path where a V1 plan should be written
-func (w *WorkflowReportWriter) WritePlanPath(agentName, model string) string {
+func (w *WorkflowReportWriter) WritePlanPath(agentName, _ string) string {
 	filename := fmt.Sprintf("%s-plan.md", agentName)
 	return filepath.Join(w.PlanPhasePath(), "v1", filename)
 }

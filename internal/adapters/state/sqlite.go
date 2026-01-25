@@ -123,7 +123,7 @@ func (m *SQLiteStateManager) Save(ctx context.Context, state *core.WorkflowState
 	if err != nil {
 		return fmt.Errorf("beginning transaction: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	// Serialize JSON fields
 	taskOrderJSON, err := json.Marshal(state.TaskOrder)
@@ -585,8 +585,8 @@ func (m *SQLiteStateManager) ReleaseLock(ctx context.Context) error {
 
 	_, err := m.db.ExecContext(ctx, "COMMIT")
 	if err != nil {
-		// Try rollback if commit fails
-		m.db.ExecContext(ctx, "ROLLBACK")
+		// Try rollback if commit fails (ignore rollback error)
+		_, _ = m.db.ExecContext(ctx, "ROLLBACK")
 	}
 
 	m.lockHeld = false

@@ -56,24 +56,24 @@ func TestTasksPanel_SetState(t *testing.T) {
 		t.Error("Panel should have tasks after SetState")
 	}
 
-	completed, running, pending, failed, skipped, total := panel.taskStats()
-	if total != 3 {
-		t.Errorf("Expected 3 total tasks, got %d", total)
+	stats := panel.taskStats()
+	if stats.total != 3 {
+		t.Errorf("Expected 3 total tasks, got %d", stats.total)
 	}
-	if completed != 1 {
-		t.Errorf("Expected 1 completed task, got %d", completed)
+	if stats.completed != 1 {
+		t.Errorf("Expected 1 completed task, got %d", stats.completed)
 	}
-	if running != 1 {
-		t.Errorf("Expected 1 running task, got %d", running)
+	if stats.running != 1 {
+		t.Errorf("Expected 1 running task, got %d", stats.running)
 	}
-	if pending != 1 {
-		t.Errorf("Expected 1 pending task, got %d", pending)
+	if stats.pending != 1 {
+		t.Errorf("Expected 1 pending task, got %d", stats.pending)
 	}
-	if failed != 0 {
-		t.Errorf("Expected 0 failed tasks, got %d", failed)
+	if stats.failed != 0 {
+		t.Errorf("Expected 0 failed tasks, got %d", stats.failed)
 	}
-	if skipped != 0 {
-		t.Errorf("Expected 0 skipped tasks, got %d", skipped)
+	if stats.skipped != 0 {
+		t.Errorf("Expected 0 skipped tasks, got %d", stats.skipped)
 	}
 }
 
