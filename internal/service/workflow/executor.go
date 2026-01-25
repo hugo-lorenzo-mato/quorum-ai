@@ -122,16 +122,8 @@ func (e *Executor) Run(ctx context.Context, wctx *Context) error {
 				completed[task.ID] = true
 			}
 		}
-
-		// Save state after each batch
-		if err := e.stateSaver.Save(ctx, wctx.State); err != nil {
-			return fmt.Errorf("saving state: %w", err)
-		}
-
-		// Notify UI of state update so task counters refresh
-		if wctx.Output != nil {
-			wctx.Output.WorkflowStateUpdated(wctx.State)
-		}
+		// Note: Per-task state save now happens in executeTask() immediately after each task completes
+		// This eliminates the need for batch-level saves and enables finer-grained recovery
 	}
 
 	if err := wctx.Checkpoint.PhaseCheckpoint(wctx.State, core.PhaseExecute, true); err != nil {
@@ -456,7 +448,22 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 		wctx.Logger.Warn("failed to create task complete checkpoint", "error", err)
 	}
 
+	// Save state immediately after each task completion (not waiting for batch)
+	// This enables fine-grained recovery if the workflow is interrupted
+	if e.stateSaver != nil {
+		if saveErr := e.stateSaver.Save(ctx, wctx.State); saveErr != nil {
+			wctx.Logger.Warn("failed to save state after task completion",
+				"task_id", task.ID,
+				"error", saveErr,
+			)
+		} else {
+			wctx.Logger.Debug("state saved after task completion", "task_id", task.ID)
+		}
+	}
+
+	// Notify UI of state update so task panel refreshes
 	if wctx.Output != nil {
+		wctx.Output.WorkflowStateUpdated(wctx.State)
 		wctx.Output.Log("success", "executor", fmt.Sprintf("Task completed: %s ($%.4f)", task.Name, result.CostUSD))
 	}
 
@@ -666,6 +673,18 @@ func (e *Executor) finalizeTask(ctx context.Context, wctx *Context, task *core.T
 		return nil
 	}
 
+	// Get modified files before commit for recovery metadata
+	var modifiedFiles []string
+	if status, statusErr := gitClient.Status(ctx); statusErr == nil {
+		for _, f := range status.Staged {
+			modifiedFiles = append(modifiedFiles, f.Path)
+		}
+		for _, f := range status.Unstaged {
+			modifiedFiles = append(modifiedFiles, f.Path)
+		}
+		modifiedFiles = append(modifiedFiles, status.Untracked...)
+	}
+
 	// Create and run finalizer
 	finalizer := NewTaskFinalizer(gitClient, wctx.GitHub, cfg)
 	result, err := finalizer.Finalize(ctx, task, gitPath, branch)
@@ -673,11 +692,27 @@ func (e *Executor) finalizeTask(ctx context.Context, wctx *Context, task *core.T
 		return err
 	}
 
+	// Store recovery metadata in taskState for resume capability
+	wctx.Lock()
+	if result.CommitSHA != "" {
+		taskState.LastCommit = result.CommitSHA
+	}
+	if branch != "" {
+		taskState.Branch = branch
+	}
+	if len(modifiedFiles) > 0 {
+		taskState.FilesModified = modifiedFiles
+	}
+	// Mark task as resumable if it has a commit
+	taskState.Resumable = result.CommitSHA != ""
+	wctx.Unlock()
+
 	// Log finalization results
 	if result.CommitSHA != "" {
 		wctx.Logger.Info("task committed",
 			"task_id", task.ID,
 			"commit", result.CommitSHA,
+			"files_modified", len(modifiedFiles),
 		)
 	}
 	if result.Pushed {

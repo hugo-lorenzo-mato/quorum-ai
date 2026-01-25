@@ -96,8 +96,8 @@ func runChat(_ *cobra.Command, _ []string) error {
 		Output: os.Stderr,
 	})
 
-	// Create event bus
-	eventBus := events.New(100)
+	// Create event bus with larger buffer to reduce event drops during high activity
+	eventBus := events.New(500)
 	defer eventBus.Close()
 
 	// Create control plane

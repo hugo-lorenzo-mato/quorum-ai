@@ -11,12 +11,14 @@ import (
 
 // TasksPanel displays workflow tasks with progress tracking
 type TasksPanel struct {
-	state    *core.WorkflowState
-	width    int
-	height   int
-	visible  bool
-	scrollY  int // Scroll offset for long task lists
-	maxTasks int // Maximum visible tasks before scrolling
+	state        *core.WorkflowState
+	width        int
+	height       int
+	visible      bool
+	scrollY      int // Scroll offset for long task lists
+	maxTasks     int // Maximum visible tasks before scrolling
+	dirty        bool // Indicates state has changed since last render
+	lastTaskHash string // Hash of task states for change detection
 }
 
 // NewTasksPanel creates a new tasks panel
@@ -27,9 +29,39 @@ func NewTasksPanel() *TasksPanel {
 	}
 }
 
-// SetState updates the workflow state
+// SetState updates the workflow state with change detection
 func (p *TasksPanel) SetState(state *core.WorkflowState) {
 	p.state = state
+	// Calculate hash of current task states for change detection
+	newHash := p.computeTaskHash()
+	if newHash != p.lastTaskHash {
+		p.dirty = true
+		p.lastTaskHash = newHash
+	}
+}
+
+// computeTaskHash creates a simple hash of task statuses for change detection
+func (p *TasksPanel) computeTaskHash() string {
+	if p.state == nil || len(p.state.TaskOrder) == 0 {
+		return ""
+	}
+	var sb strings.Builder
+	for _, taskID := range p.state.TaskOrder {
+		if task, ok := p.state.Tasks[taskID]; ok {
+			sb.WriteString(string(task.Status))
+		}
+	}
+	return sb.String()
+}
+
+// IsDirty returns true if state has changed since last render
+func (p *TasksPanel) IsDirty() bool {
+	return p.dirty
+}
+
+// ClearDirty clears the dirty flag after rendering
+func (p *TasksPanel) ClearDirty() {
+	p.dirty = false
 }
 
 // Toggle toggles panel visibility

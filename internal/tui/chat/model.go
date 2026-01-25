@@ -611,81 +611,125 @@ func (m Model) loadActiveWorkflow() tea.Cmd {
 }
 
 // listenForLogEvents creates a command that listens for log events from the workflow.
+// Uses batching with debounce to collect multiple events within a 100ms window,
+// reducing the number of UI updates and improving responsiveness.
 func (m Model) listenForLogEvents() tea.Cmd {
 	if m.logEventsCh == nil {
 		return nil
 	}
 	return func() tea.Msg {
-		for {
-			event, ok := <-m.logEventsCh
-			if !ok {
-				return nil // Channel closed
-			}
+		const (
+			debounceWindow = 100 * time.Millisecond
+			maxBatchSize   = 50
+		)
 
-			// Handle log events
-			if logEvent, ok := event.(events.LogEvent); ok {
-				return WorkflowLogMsg{
-					Level:   logEvent.Level,
-					Source:  "workflow",
-					Message: logEvent.Message,
+		var batch []tea.Msg
+
+		// Wait for first event (blocking)
+		event, ok := <-m.logEventsCh
+		if !ok {
+			return nil // Channel closed
+		}
+
+		// Convert first event to message
+		if msg := m.eventToMsg(event); msg != nil {
+			batch = append(batch, msg)
+		}
+
+		// Collect additional events within debounce window
+		timer := time.NewTimer(debounceWindow)
+		defer timer.Stop()
+
+	collectLoop:
+		for len(batch) < maxBatchSize {
+			select {
+			case event, ok := <-m.logEventsCh:
+				if !ok {
+					break collectLoop // Channel closed
 				}
-			}
-
-			// Handle agent stream events
-			if agentEvent, ok := event.(events.AgentStreamEvent); ok {
-				return AgentStreamMsg{
-					Kind:    string(agentEvent.EventKind),
-					Agent:   agentEvent.Agent,
-					Message: agentEvent.Message,
-					Data:    agentEvent.Data,
+				if msg := m.eventToMsg(event); msg != nil {
+					batch = append(batch, msg)
 				}
+			case <-timer.C:
+				break collectLoop // Debounce window expired
 			}
+		}
 
-			// Handle task started events
-			if taskEvent, ok := event.(events.TaskStartedEvent); ok {
-				return TaskUpdateMsg{
-					TaskID: core.TaskID(taskEvent.TaskID),
-					Status: core.TaskStatusRunning,
-				}
-			}
+		// Return batched events if multiple, single event otherwise
+		if len(batch) == 0 {
+			return nil
+		}
+		if len(batch) == 1 {
+			return batch[0]
+		}
+		return BatchedEventsMsg{Events: batch}
+	}
+}
 
-			// Handle task completed events
-			if taskEvent, ok := event.(events.TaskCompletedEvent); ok {
-				return TaskUpdateMsg{
-					TaskID: core.TaskID(taskEvent.TaskID),
-					Status: core.TaskStatusCompleted,
-				}
-			}
-
-			// Handle task failed events
-			if taskEvent, ok := event.(events.TaskFailedEvent); ok {
-				return TaskUpdateMsg{
-					TaskID: core.TaskID(taskEvent.TaskID),
-					Status: core.TaskStatusFailed,
-					Error:  taskEvent.Error,
-				}
-			}
-
-			// Handle task skipped events
-			if taskEvent, ok := event.(events.TaskSkippedEvent); ok {
-				return TaskUpdateMsg{
-					TaskID: core.TaskID(taskEvent.TaskID),
-					Status: core.TaskStatusSkipped,
-					Error:  taskEvent.Reason,
-				}
-			}
-
-			// Handle phase started events
-			if phaseEvent, ok := event.(events.PhaseStartedEvent); ok {
-				return PhaseUpdateMsg{
-					Phase: core.Phase(phaseEvent.Phase),
-				}
-			}
-
-			// Unknown event type - continue listening instead of returning nil
-			// This prevents the listener from stopping on unknown events
+// eventToMsg converts a workflow event to a tea.Msg
+func (m Model) eventToMsg(event interface{}) tea.Msg {
+	// Handle log events
+	if logEvent, ok := event.(events.LogEvent); ok {
+		return WorkflowLogMsg{
+			Level:   logEvent.Level,
+			Source:  "workflow",
+			Message: logEvent.Message,
 		}
 	}
+
+	// Handle agent stream events
+	if agentEvent, ok := event.(events.AgentStreamEvent); ok {
+		return AgentStreamMsg{
+			Kind:    string(agentEvent.EventKind),
+			Agent:   agentEvent.Agent,
+			Message: agentEvent.Message,
+			Data:    agentEvent.Data,
+		}
+	}
+
+	// Handle task started events
+	if taskEvent, ok := event.(events.TaskStartedEvent); ok {
+		return TaskUpdateMsg{
+			TaskID: core.TaskID(taskEvent.TaskID),
+			Status: core.TaskStatusRunning,
+		}
+	}
+
+	// Handle task completed events
+	if taskEvent, ok := event.(events.TaskCompletedEvent); ok {
+		return TaskUpdateMsg{
+			TaskID: core.TaskID(taskEvent.TaskID),
+			Status: core.TaskStatusCompleted,
+		}
+	}
+
+	// Handle task failed events
+	if taskEvent, ok := event.(events.TaskFailedEvent); ok {
+		return TaskUpdateMsg{
+			TaskID: core.TaskID(taskEvent.TaskID),
+			Status: core.TaskStatusFailed,
+			Error:  taskEvent.Error,
+		}
+	}
+
+	// Handle task skipped events
+	if taskEvent, ok := event.(events.TaskSkippedEvent); ok {
+		return TaskUpdateMsg{
+			TaskID: core.TaskID(taskEvent.TaskID),
+			Status: core.TaskStatusSkipped,
+			Error:  taskEvent.Reason,
+		}
+	}
+
+	// Handle phase started events
+	if phaseEvent, ok := event.(events.PhaseStartedEvent); ok {
+		return PhaseUpdateMsg{
+			Phase: core.Phase(phaseEvent.Phase),
+		}
+	}
+
+	// Unknown event type - return nil
+	return nil
 }
 
 // Message types
@@ -731,6 +775,10 @@ type (
 	}
 	PhaseUpdateMsg struct {
 		Phase core.Phase
+	}
+	// BatchedEventsMsg contains multiple events collected within a debounce window
+	BatchedEventsMsg struct {
+		Events []tea.Msg
 	}
 )
 
@@ -2268,6 +2316,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				task.Status = msg.Status
 				m.tasksPanel.SetState(m.workflowState)
 				m.updateQuorumPanel(m.workflowState)
+				m.updateViewport() // Force re-render to show task status change
 			}
 		}
 
@@ -2277,7 +2326,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.workflowState.CurrentPhase = msg.Phase
 			m.tasksPanel.SetState(m.workflowState)
 			m.updateQuorumPanel(m.workflowState)
+			m.updateViewport() // Force re-render to show phase change
 		}
+
+	case BatchedEventsMsg:
+		// Process multiple events collected within debounce window
+		for _, evt := range msg.Events {
+			// Recursively process each event through Update
+			// This ensures all event types are handled correctly
+			var innerCmd tea.Cmd
+			newModel, innerCmd := m.Update(evt)
+			m = newModel.(Model)
+			if innerCmd != nil {
+				cmds = append(cmds, innerCmd)
+			}
+		}
+		// Force a single viewport update after processing all batched events
+		m.updateViewport()
 
 	case ActiveWorkflowLoadMsg:
 		// Auto-loaded active workflow on startup

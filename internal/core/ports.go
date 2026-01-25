@@ -222,6 +222,13 @@ type TaskState struct {
 	ModelUsed    string     `json:"model_used,omitempty"`    // Actual model used
 	FinishReason string     `json:"finish_reason,omitempty"` // Why agent stopped
 	ToolCalls    []ToolCall `json:"tool_calls,omitempty"`    // Tools invoked
+
+	// Recovery metadata - enables resume from partial execution
+	LastCommit    string   `json:"last_commit,omitempty"`    // Git commit SHA after task completion
+	FilesModified []string `json:"files_modified,omitempty"` // Files modified by this task
+	Branch        string   `json:"branch,omitempty"`         // Git branch used for this task
+	Resumable     bool     `json:"resumable,omitempty"`      // Whether task can be resumed
+	ResumeHint    string   `json:"resume_hint,omitempty"`    // Hint for resuming execution
 }
 
 // MaxInlineOutputSize is the maximum size of output to store inline.
