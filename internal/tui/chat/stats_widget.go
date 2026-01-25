@@ -1,14 +1,26 @@
 package chat
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
+	"regexp"
 	"runtime"
+	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/jaypipes/ghw"
+	"github.com/shirou/gopsutil/v3/cpu"
+	"github.com/shirou/gopsutil/v3/disk"
+	"github.com/shirou/gopsutil/v3/load"
+	"github.com/shirou/gopsutil/v3/mem"
+	"github.com/shirou/gopsutil/v3/process"
 )
 
 // Icons for stats widget (unique, not used elsewhere)
@@ -20,11 +32,12 @@ const (
 
 // ProcessStats holds current process statistics
 type ProcessStats struct {
-	MemoryMB    float64
-	MemoryAlloc uint64
-	CPUPercent  float64
-	Goroutines  int
-	Uptime      time.Duration
+	MemoryMB      float64
+	MemoryAlloc   uint64
+	CPUPercent    float64 // Normalized (0-100%, relative to total system capacity)
+	CPURawPercent float64 // Raw (can exceed 100% on multi-core, like top/htop)
+	Goroutines    int
+	Uptime        time.Duration
 }
 
 // StatsWidget displays process statistics
@@ -37,16 +50,26 @@ type StatsWidget struct {
 	height    int
 
 	// CPU calculation
-	lastCPUTime  uint64
+	lastCPUTime  float64
 	lastWallTime time.Time
+
+	proc     *process.Process
+	cpuCount int
 }
 
 // NewStatsWidget creates a new stats widget
 func NewStatsWidget() *StatsWidget {
+	proc, _ := process.NewProcess(int32(os.Getpid()))
+	cpuCount, err := cpu.Counts(true)
+	if err != nil || cpuCount <= 0 {
+		cpuCount = runtime.NumCPU()
+	}
 	w := &StatsWidget{
 		startTime:    time.Now(),
 		visible:      false, // Hidden by default, toggle with Ctrl+5
 		lastWallTime: time.Now(),
+		proc:         proc,
+		cpuCount:     cpuCount,
 	}
 	w.Update() // Initial stats
 	return w
@@ -62,7 +85,15 @@ func (w *StatsWidget) Update() {
 	runtime.ReadMemStats(&memStats)
 
 	w.stats.MemoryAlloc = memStats.Alloc
-	w.stats.MemoryMB = float64(memStats.Alloc) / 1024 / 1024
+	if w.proc != nil {
+		if memInfo, err := w.proc.MemoryInfo(); err == nil {
+			w.stats.MemoryMB = float64(memInfo.RSS) / 1024 / 1024
+		} else {
+			w.stats.MemoryMB = float64(memStats.Alloc) / 1024 / 1024
+		}
+	} else {
+		w.stats.MemoryMB = float64(memStats.Alloc) / 1024 / 1024
+	}
 
 	// Goroutines
 	w.stats.Goroutines = runtime.NumGoroutine()
@@ -70,40 +101,41 @@ func (w *StatsWidget) Update() {
 	// Uptime
 	w.stats.Uptime = time.Since(w.startTime)
 
-	// CPU percentage (Linux-specific, falls back to 0 on other OS)
-	w.stats.CPUPercent = w.calculateCPUPercent()
+	// CPU percentage (process-level, cross-platform)
+	rawCPU := w.calculateCPURaw()
+	w.stats.CPURawPercent = rawCPU
+	denom := float64(w.cpuCount)
+	if denom <= 0 {
+		denom = float64(runtime.NumCPU())
+	}
+	if denom <= 0 {
+		denom = 1
+	}
+	w.stats.CPUPercent = rawCPU / denom // Normalized to system capacity
 }
 
-// calculateCPUPercent calculates CPU usage for the current process
-func (w *StatsWidget) calculateCPUPercent() float64 {
-	// Read /proc/self/stat for process CPU time
-	data, err := os.ReadFile("/proc/self/stat")
+// calculateCPURaw calculates raw CPU usage for the current process (can exceed 100% on multi-core)
+func (w *StatsWidget) calculateCPURaw() float64 {
+	if w.proc == nil {
+		return 0
+	}
+
+	// Process CPU time in seconds
+	times, err := w.proc.Times()
 	if err != nil {
 		return 0
 	}
 
-	// Parse utime and stime (fields 14 and 15, 1-indexed)
-	fields := strings.Fields(string(data))
-	if len(fields) < 15 {
-		return 0
-	}
-
-	var utime, stime uint64
-	_, _ = fmt.Sscanf(fields[13], "%d", &utime)
-	_, _ = fmt.Sscanf(fields[14], "%d", &stime)
-
-	currentCPUTime := utime + stime
+	currentCPUTime := times.User + times.System
 	currentWallTime := time.Now()
 
 	// Calculate CPU percentage
 	if w.lastCPUTime > 0 {
-		cpuDelta := float64(currentCPUTime - w.lastCPUTime)
+		cpuDelta := currentCPUTime - w.lastCPUTime
 		wallDelta := currentWallTime.Sub(w.lastWallTime).Seconds()
 
 		if wallDelta > 0 {
-			// CPU time is in clock ticks (usually 100 per second)
-			clkTck := float64(100) // sysconf(_SC_CLK_TCK) is typically 100
-			cpuPercent := (cpuDelta / clkTck / wallDelta) * 100
+			cpuPercent := (cpuDelta / wallDelta) * 100
 
 			w.lastCPUTime = currentCPUTime
 			w.lastWallTime = currentWallTime
@@ -210,11 +242,14 @@ func (w *StatsWidget) Render() string {
 	sb.WriteString(memIcon + memLabel + memBar + " " + memValue)
 	sb.WriteString("\n")
 
-	// CPU line
+	// CPU line (normalized % / raw %)
 	cpuIcon := iconStyle.Render(iconCPU)
 	cpuLabel := labelStyle.Render(" CPU ")
-	cpuValue := valueStyle.Render(fmt.Sprintf("%5.1f%%", w.stats.CPUPercent))
-	sb.WriteString(cpuIcon + cpuLabel + cpuBar + " " + cpuValue)
+	// Show both: normalized (for bar) and raw (actual cores usage)
+	cpuValue := valueStyle.Render(fmt.Sprintf("%4.1f%%", w.stats.CPUPercent))
+	cpuRaw := labelStyle.Render(fmt.Sprintf("/%3.0f%%", w.stats.CPURawPercent))
+	cpuHint := labelStyle.Render(" t/c")
+	sb.WriteString(cpuIcon + cpuLabel + cpuBar + " " + cpuValue + cpuRaw + cpuHint)
 	sb.WriteString("\n")
 
 	// Goroutines (small detail)
@@ -276,8 +311,16 @@ func (w *StatsWidget) formatUptime(d time.Duration) string {
 // MachineStatsCollector collects system-wide statistics
 type MachineStatsCollector struct {
 	mu           sync.Mutex
-	lastCPUTotal uint64
-	lastCPUIdle  uint64
+	lastCPUTotal float64
+	lastCPUIdle  float64
+
+	infoCollected bool
+	cpuModel      string
+	cpuCores      int
+	cpuThreads    int
+
+	lastGPUUpdate time.Time
+	gpuCache      []GPUInfo
 }
 
 // NewMachineStatsCollector creates a new machine stats collector
@@ -292,6 +335,9 @@ func (c *MachineStatsCollector) Collect() MachineStats {
 
 	stats := MachineStats{}
 
+	// Hardware info (cached)
+	c.collectHardwareInfo(&stats)
+
 	// Memory info
 	c.collectMemoryInfo(&stats)
 
@@ -304,214 +350,657 @@ func (c *MachineStatsCollector) Collect() MachineStats {
 	// Load average
 	c.collectLoadAvg(&stats)
 
+	// GPU info (best-effort, cached)
+	c.collectGPUInfo(&stats)
+
 	return stats
 }
 
-// collectMemoryInfo reads memory information from /proc/meminfo
+// collectMemoryInfo reads system memory information.
 func (c *MachineStatsCollector) collectMemoryInfo(stats *MachineStats) {
-	data, err := os.ReadFile("/proc/meminfo")
+	vm, err := mem.VirtualMemory()
 	if err != nil {
 		return
 	}
 
-	var memTotal, memAvailable uint64
-	lines := strings.Split(string(data), "\n")
-	for _, line := range lines {
-		fields := strings.Fields(line)
-		if len(fields) < 2 {
-			continue
-		}
-		var value uint64
-		_, _ = fmt.Sscanf(fields[1], "%d", &value)
-
-		switch {
-		case strings.HasPrefix(line, "MemTotal:"):
-			memTotal = value
-		case strings.HasPrefix(line, "MemAvailable:"):
-			memAvailable = value
-		}
-	}
-
-	if memTotal > 0 {
-		stats.MemTotalMB = float64(memTotal) / 1024 // KB to MB
-		memUsed := memTotal - memAvailable
-		stats.MemUsedMB = float64(memUsed) / 1024
-		stats.MemPercent = float64(memUsed) / float64(memTotal) * 100
-	}
+	stats.MemTotalMB = float64(vm.Total) / 1024 / 1024
+	stats.MemUsedMB = float64(vm.Used) / 1024 / 1024
+	stats.MemPercent = vm.UsedPercent
 }
 
-// collectCPUInfo reads CPU usage from /proc/stat
+// collectCPUInfo reads system CPU usage.
 func (c *MachineStatsCollector) collectCPUInfo(stats *MachineStats) {
-	data, err := os.ReadFile("/proc/stat")
-	if err != nil {
+	times, err := cpu.Times(false)
+	if err != nil || len(times) == 0 {
 		return
 	}
 
-	lines := strings.Split(string(data), "\n")
-	for _, line := range lines {
-		if !strings.HasPrefix(line, "cpu ") {
-			continue
+	t := times[0]
+	total := t.User + t.Nice + t.System + t.Idle + t.Iowait + t.Irq + t.Softirq + t.Steal
+	idleTime := t.Idle + t.Iowait
+
+	if c.lastCPUTotal > 0 {
+		totalDelta := total - c.lastCPUTotal
+		idleDelta := idleTime - c.lastCPUIdle
+		if totalDelta > 0 {
+			stats.CPUPercent = (1 - idleDelta/totalDelta) * 100
 		}
-
-		fields := strings.Fields(line)
-		if len(fields) < 8 {
-			return
-		}
-
-		var user, nice, system, idle, iowait, irq, softirq uint64
-		_, _ = fmt.Sscanf(fields[1], "%d", &user)
-		_, _ = fmt.Sscanf(fields[2], "%d", &nice)
-		_, _ = fmt.Sscanf(fields[3], "%d", &system)
-		_, _ = fmt.Sscanf(fields[4], "%d", &idle)
-		_, _ = fmt.Sscanf(fields[5], "%d", &iowait)
-		_, _ = fmt.Sscanf(fields[6], "%d", &irq)
-		_, _ = fmt.Sscanf(fields[7], "%d", &softirq)
-
-		total := user + nice + system + idle + iowait + irq + softirq
-		idleTime := idle + iowait
-
-		if c.lastCPUTotal > 0 {
-			totalDelta := float64(total - c.lastCPUTotal)
-			idleDelta := float64(idleTime - c.lastCPUIdle)
-
-			if totalDelta > 0 {
-				stats.CPUPercent = (1 - idleDelta/totalDelta) * 100
-			}
-		}
-
-		c.lastCPUTotal = total
-		c.lastCPUIdle = idleTime
-		break
 	}
+
+	c.lastCPUTotal = total
+	c.lastCPUIdle = idleTime
 }
 
-// collectDiskInfo reads disk usage for the root filesystem
+// collectDiskInfo reads disk usage for the root filesystem.
 func (c *MachineStatsCollector) collectDiskInfo(stats *MachineStats) {
-	// Try to get disk stats using df-style approach
-	// Read from /proc/mounts to find root filesystem, then use statfs
-	data, err := os.ReadFile("/proc/mounts")
+	path := rootDiskPath()
+	usage, err := disk.Usage(path)
 	if err != nil {
 		return
 	}
+	stats.DiskTotalGB = float64(usage.Total) / 1024 / 1024 / 1024
+	stats.DiskUsedGB = float64(usage.Used) / 1024 / 1024 / 1024
+	stats.DiskPercent = usage.UsedPercent
+}
 
-	// Find root filesystem mount point
-	lines := strings.Split(string(data), "\n")
+// collectLoadAvg reads system load averages.
+func (c *MachineStatsCollector) collectLoadAvg(stats *MachineStats) {
+	avg, err := load.Avg()
+	if err != nil {
+		return
+	}
+	stats.LoadAvg1 = avg.Load1
+	stats.LoadAvg5 = avg.Load5
+	stats.LoadAvg15 = avg.Load15
+}
+
+func (c *MachineStatsCollector) collectHardwareInfo(stats *MachineStats) {
+	if !c.infoCollected {
+		if infos, err := cpu.Info(); err == nil && len(infos) > 0 {
+			c.cpuModel = strings.TrimSpace(infos[0].ModelName)
+		}
+		if cores, err := cpu.Counts(false); err == nil && cores > 0 {
+			c.cpuCores = cores
+		}
+		if threads, err := cpu.Counts(true); err == nil && threads > 0 {
+			c.cpuThreads = threads
+		}
+		c.infoCollected = true
+	}
+	stats.CPUModel = c.cpuModel
+	stats.CPUCores = c.cpuCores
+	stats.CPUThreads = c.cpuThreads
+}
+
+func (c *MachineStatsCollector) collectGPUInfo(stats *MachineStats) {
+	now := time.Now()
+	if now.Sub(c.lastGPUUpdate) < 5*time.Second && c.gpuCache != nil {
+		stats.GPUInfos = append([]GPUInfo(nil), c.gpuCache...)
+		return
+	}
+	gpus := queryGPUInfo()
+	c.gpuCache = gpus
+	c.lastGPUUpdate = now
+	stats.GPUInfos = append([]GPUInfo(nil), gpus...)
+}
+
+func queryGPUInfo() []GPUInfo {
+	if gpus := queryNvidiaSMI(); len(gpus) > 0 {
+		return gpus
+	}
+	if gpus := queryAmdSMI(); len(gpus) > 0 {
+		return gpus
+	}
+	switch runtime.GOOS {
+	case "linux":
+		if gpus := queryRocmSMI(); len(gpus) > 0 {
+			return gpus
+		}
+	case "darwin":
+		if gpus := querySystemProfiler(); len(gpus) > 0 {
+			return gpus
+		}
+	case "windows":
+		if gpus := queryWindowsGPU(); len(gpus) > 0 {
+			return gpus
+		}
+	}
+	if gpus := queryGhwGPU(); len(gpus) > 0 {
+		return gpus
+	}
+	return nil
+}
+
+func queryNvidiaSMI() []GPUInfo {
+	path, err := exec.LookPath("nvidia-smi")
+	if err != nil {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, path, "--query-gpu=name,utilization.gpu,memory.total,memory.used,temperature.gpu", "--format=csv,noheader,nounits")
+	out, err := cmd.Output()
+	if err != nil {
+		return nil
+	}
+
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	gpus := make([]GPUInfo, 0, len(lines))
 	for _, line := range lines {
-		fields := strings.Fields(line)
-		if len(fields) >= 2 && fields[1] == "/" {
-			// Found root mount, get stats using statvfs via reading /proc/self/mountinfo
-			c.getDiskStatsForPath("/", stats)
-			return
-		}
-	}
-}
-
-// getDiskStatsForPath gets disk usage for a specific path
-func (c *MachineStatsCollector) getDiskStatsForPath(_ string, stats *MachineStats) {
-	// Use df command output as a simple approach
-	// In production, you'd use syscall.Statfs
-	data, err := os.ReadFile("/proc/self/mountstats")
-	if err != nil {
-		// Fallback: read from /sys/block or use estimates
-		// For now, try to get info from statvfs-like data
-		c.getDiskStatsFromDF(stats)
-		return
-	}
-	_ = data
-	c.getDiskStatsFromDF(stats)
-}
-
-// getDiskStatsFromDF gets disk stats using a simple file-based approach
-func (c *MachineStatsCollector) getDiskStatsFromDF(stats *MachineStats) {
-	// Read /proc/1/mountinfo for disk info (works in most Linux systems)
-	// Alternative: parse output of statfs syscall
-	// For simplicity, we'll read from /sys/fs
-
-	// Try to read from a common approach - /proc/diskstats + /sys/block
-	// For a quick implementation, we estimate based on common paths
-
-	// Use syscall.Statfs equivalent by reading /proc/self/fd/0 directory stats
-	// This is a simplified approach - in production use golang.org/x/sys/unix.Statfs
-
-	// Read /etc/mtab to find filesystems and their sizes
-	data, err := os.ReadFile("/etc/mtab")
-	if err != nil {
-		data, err = os.ReadFile("/proc/mounts")
-		if err != nil {
-			return
-		}
-	}
-
-	lines := strings.Split(string(data), "\n")
-	for _, line := range lines {
-		fields := strings.Fields(line)
-		if len(fields) >= 2 && fields[1] == "/" && !strings.HasPrefix(fields[0], "overlay") {
-			// For actual disk stats, we need statvfs
-			// Use a simpler heuristic for now
-			stats.DiskTotalGB = 500 // Default placeholder
-			stats.DiskUsedGB = 250
-			stats.DiskPercent = 50
-
-			// Try to get real stats from cgroups or other sources
-			c.readDiskStatsFromSys(stats)
-			return
-		}
-	}
-}
-
-// readDiskStatsFromSys attempts to read disk stats from /sys
-func (c *MachineStatsCollector) readDiskStatsFromSys(stats *MachineStats) {
-	// This requires syscall.Statfs which we'll implement simply
-	// For now, provide a working estimate based on typical Linux systems
-
-	// Check if we can access block device info
-	entries, err := os.ReadDir("/sys/block")
-	if err != nil {
-		return
-	}
-
-	for _, entry := range entries {
-		name := entry.Name()
-		// Skip loop devices and ram disks
-		if strings.HasPrefix(name, "loop") || strings.HasPrefix(name, "ram") {
+		if strings.TrimSpace(line) == "" {
 			continue
 		}
-
-		// Try to read size (in 512-byte sectors)
-		sizePath := fmt.Sprintf("/sys/block/%s/size", name)
-		sizeData, err := os.ReadFile(sizePath)
-		if err != nil {
+		fields := strings.Split(line, ",")
+		if len(fields) < 5 {
 			continue
 		}
+		name := strings.TrimSpace(fields[0])
+		util, utilOK := parseFloatField(fields[1])
+		memTotal, totalOK := parseFloatField(fields[2])
+		memUsed, usedOK := parseFloatField(fields[3])
+		temp, tempOK := parseFloatField(fields[4])
 
-		var sectors uint64
-		_, _ = fmt.Sscanf(strings.TrimSpace(string(sizeData)), "%d", &sectors)
+		gpus = append(gpus, GPUInfo{
+			Name:        name,
+			UtilPercent: util,
+			UtilValid:   utilOK,
+			MemTotalMB:  memTotal,
+			MemUsedMB:   memUsed,
+			MemValid:    totalOK && usedOK,
+			TempC:       temp,
+			TempValid:   tempOK,
+		})
+	}
+	return gpus
+}
 
-		if sectors > 0 {
-			// Convert sectors to GB (sector = 512 bytes)
-			totalGB := float64(sectors) * 512 / 1024 / 1024 / 1024
-			if totalGB > stats.DiskTotalGB {
-				stats.DiskTotalGB = totalGB
-				// Estimate used (we can't easily get this without statfs)
-				// A more accurate implementation would use syscall.Statfs
-				stats.DiskUsedGB = totalGB * 0.5 // Placeholder
-				stats.DiskPercent = 50
+func queryAmdSMI() []GPUInfo {
+	path, err := exec.LookPath("amd-smi")
+	if err != nil {
+		return nil
+	}
+
+	staticData := amdSmiJSON(path, []string{"static", "--json"})
+	metricData := amdSmiJSON(path, []string{"metric", "--json"})
+	if metricData == nil {
+		metricData = amdSmiJSON(path, []string{"metric", "--json", "-u", "-m", "-t"})
+	}
+	listData := amdSmiJSON(path, []string{"list", "--json"})
+
+	info := map[int]*GPUInfo{}
+	mergeAMDJSON(info, staticData)
+	mergeAMDJSON(info, metricData)
+	mergeAMDJSON(info, listData)
+
+	if len(info) == 0 {
+		return nil
+	}
+
+	idxs := make([]int, 0, len(info))
+	for idx := range info {
+		idxs = append(idxs, idx)
+	}
+	sort.Ints(idxs)
+
+	gpus := make([]GPUInfo, 0, len(idxs))
+	for _, idx := range idxs {
+		gpu := *info[idx]
+		if gpu.Name == "" {
+			gpu.Name = fmt.Sprintf("AMD GPU %d", idx)
+		}
+		gpus = append(gpus, gpu)
+	}
+	return gpus
+}
+
+func amdSmiJSON(path string, args []string) any {
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, path, args...)
+	out, err := cmd.Output()
+	if err != nil {
+		return nil
+	}
+
+	var payload any
+	if err := json.Unmarshal(out, &payload); err != nil {
+		return nil
+	}
+	return payload
+}
+
+func mergeAMDJSON(info map[int]*GPUInfo, payload any) {
+	if payload == nil {
+		return
+	}
+	switch v := payload.(type) {
+	case []any:
+		for _, item := range v {
+			mergeAMDJSON(info, item)
+		}
+	case map[string]any:
+		idx, hasIdx := findAMDIndex(v)
+		if hasIdx {
+			entry, ok := info[idx]
+			if !ok {
+				entry = &GPUInfo{}
+				info[idx] = entry
+			}
+			extractAMDFields(entry, v)
+		}
+		for _, child := range v {
+			mergeAMDJSON(info, child)
+		}
+	}
+}
+
+func findAMDIndex(m map[string]any) (int, bool) {
+	keys := []string{"gpu", "gpu_id", "gpu_index", "device", "device_id", "index"}
+	for _, k := range keys {
+		if v, ok := m[k]; ok {
+			if idx, ok := toInt(v); ok {
+				return idx, true
+			}
+		}
+	}
+	for k, v := range m {
+		kl := strings.ToLower(k)
+		if strings.Contains(kl, "gpu") && strings.Contains(kl, "index") {
+			if idx, ok := toInt(v); ok {
+				return idx, true
+			}
+		}
+	}
+	return 0, false
+}
+
+func extractAMDFields(info *GPUInfo, m map[string]any) {
+	if info.Name == "" {
+		if name := firstString(m, "card_name", "product_name", "name", "model", "gpu_name"); name != "" {
+			info.Name = name
+		}
+	}
+
+	// Scan fields for utilization, memory and temperature
+	for k, v := range m {
+		kl := strings.ToLower(k)
+		if isTempKey(kl) {
+			if val, ok := toFloat(v); ok {
+				info.TempC = val
+				info.TempValid = true
+			}
+		}
+		if isUtilKey(kl) {
+			if val, ok := toFloat(v); ok {
+				info.UtilPercent = val
+				info.UtilValid = true
+			}
+		}
+		if strings.Contains(kl, "vram") || strings.Contains(kl, "memory") || strings.Contains(kl, "mem") {
+			if strings.Contains(kl, "total") {
+				if val, ok := toFloat(v); ok {
+					info.MemTotalMB = val
+					info.MemValid = true
+				}
+			} else if strings.Contains(kl, "used") {
+				if val, ok := toFloat(v); ok {
+					info.MemUsedMB = val
+					info.MemValid = true
+				}
 			}
 		}
 	}
 }
 
-// collectLoadAvg reads load average from /proc/loadavg
-func (c *MachineStatsCollector) collectLoadAvg(stats *MachineStats) {
-	data, err := os.ReadFile("/proc/loadavg")
+func isUtilKey(k string) bool {
+	return strings.Contains(k, "util") || strings.Contains(k, "usage") || strings.Contains(k, "busy")
+}
+
+func isTempKey(k string) bool {
+	return strings.Contains(k, "temp")
+}
+
+func toInt(v any) (int, bool) {
+	switch val := v.(type) {
+	case int:
+		return val, true
+	case int64:
+		return int(val), true
+	case float64:
+		return int(val), true
+	case float32:
+		return int(val), true
+	case string:
+		if n, err := strconv.Atoi(strings.TrimSpace(val)); err == nil {
+			return n, true
+		}
+	}
+	return 0, false
+}
+
+func toFloat(v any) (float64, bool) {
+	switch val := v.(type) {
+	case float64:
+		return val, true
+	case float32:
+		return float64(val), true
+	case int:
+		return float64(val), true
+	case int64:
+		return float64(val), true
+	case string:
+		return parseFloatField(val)
+	}
+	return 0, false
+}
+
+func queryRocmSMI() []GPUInfo {
+	path, err := exec.LookPath("rocm-smi")
 	if err != nil {
-		return
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, path, "--showproductname", "--showuse", "--showmemuse", "--showtemp")
+	out, err := cmd.Output()
+	if err != nil {
+		return nil
 	}
 
-	fields := strings.Fields(string(data))
-	if len(fields) >= 3 {
-		_, _ = fmt.Sscanf(fields[0], "%f", &stats.LoadAvg1)
-		_, _ = fmt.Sscanf(fields[1], "%f", &stats.LoadAvg5)
-		_, _ = fmt.Sscanf(fields[2], "%f", &stats.LoadAvg15)
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	if len(lines) == 0 {
+		return nil
 	}
+
+	reIdx := regexp.MustCompile(`GPU\[(\d+)\]`)
+	reName := regexp.MustCompile(`(?i)(Card series|GPU name|Product Name)\s*:\s*(.+)$`)
+	reUse := regexp.MustCompile(`(?i)GPU\s*use.*?:\s*([0-9.]+)`)
+	reMemPair := regexp.MustCompile(`(?i)VRAM\s*Total.*?:\s*([0-9.]+)\\s*([A-Za-z]+).*VRAM\s*Used.*?:\s*([0-9.]+)\\s*([A-Za-z]+)`)
+	reMemSingle := regexp.MustCompile(`(?i)VRAM\s*(Total|Used).*?:\s*([0-9.]+)\\s*([A-Za-z]+)`)
+	reTemp := regexp.MustCompile(`(?i)Temperature.*?:\s*([0-9.]+)`)
+
+	type slot struct {
+		info GPUInfo
+	}
+	byIdx := map[int]*GPUInfo{}
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		m := reIdx.FindStringSubmatch(line)
+		if len(m) < 2 {
+			continue
+		}
+		idx, err := strconv.Atoi(m[1])
+		if err != nil {
+			continue
+		}
+		info, ok := byIdx[idx]
+		if !ok {
+			info = &GPUInfo{}
+			byIdx[idx] = info
+		}
+
+		if m := reName.FindStringSubmatch(line); len(m) == 3 {
+			info.Name = strings.TrimSpace(m[2])
+		}
+		if m := reUse.FindStringSubmatch(line); len(m) == 2 {
+			if v, ok := parseFloatField(m[1]); ok {
+				info.UtilPercent = v
+				info.UtilValid = true
+			}
+		}
+		if m := reMemPair.FindStringSubmatch(line); len(m) == 5 {
+			if total, ok := parseSizeToMB(m[1], m[2]); ok {
+				info.MemTotalMB = total
+			}
+			if used, ok := parseSizeToMB(m[3], m[4]); ok {
+				info.MemUsedMB = used
+			}
+			if info.MemTotalMB > 0 || info.MemUsedMB > 0 {
+				info.MemValid = true
+			}
+		} else if m := reMemSingle.FindStringSubmatch(line); len(m) == 4 {
+			if v, ok := parseSizeToMB(m[2], m[3]); ok {
+				if strings.EqualFold(m[1], "total") {
+					info.MemTotalMB = v
+				} else {
+					info.MemUsedMB = v
+				}
+				info.MemValid = true
+			}
+		}
+		if m := reTemp.FindStringSubmatch(line); len(m) == 2 {
+			if v, ok := parseFloatField(m[1]); ok {
+				info.TempC = v
+				info.TempValid = true
+			}
+		}
+	}
+
+	if len(byIdx) == 0 {
+		return nil
+	}
+	idxs := make([]int, 0, len(byIdx))
+	for idx := range byIdx {
+		idxs = append(idxs, idx)
+	}
+	sort.Ints(idxs)
+	gpus := make([]GPUInfo, 0, len(idxs))
+	for _, idx := range idxs {
+		gpus = append(gpus, *byIdx[idx])
+	}
+	return gpus
+}
+
+func queryGhwGPU() []GPUInfo {
+	info, err := ghw.GPU()
+	if err != nil || info == nil || len(info.GraphicsCards) == 0 {
+		return nil
+	}
+
+	gpus := make([]GPUInfo, 0, len(info.GraphicsCards))
+	for _, card := range info.GraphicsCards {
+		name := ""
+		if card.DeviceInfo != nil {
+			if card.DeviceInfo.Vendor != nil && card.DeviceInfo.Product != nil {
+				name = strings.TrimSpace(card.DeviceInfo.Vendor.Name + " " + card.DeviceInfo.Product.Name)
+			} else if card.DeviceInfo.Product != nil {
+				name = strings.TrimSpace(card.DeviceInfo.Product.Name)
+			} else if card.DeviceInfo.Vendor != nil {
+				name = strings.TrimSpace(card.DeviceInfo.Vendor.Name)
+			}
+		}
+		if name == "" {
+			name = fmt.Sprintf("GPU %d", card.Index)
+		}
+		gpus = append(gpus, GPUInfo{Name: name})
+	}
+	return gpus
+}
+
+func querySystemProfiler() []GPUInfo {
+	path, err := exec.LookPath("system_profiler")
+	if err != nil {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, path, "-json", "SPDisplaysDataType")
+	out, err := cmd.Output()
+	if err != nil {
+		return nil
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(out, &payload); err != nil {
+		return nil
+	}
+	raw, ok := payload["SPDisplaysDataType"]
+	if !ok {
+		return nil
+	}
+	items, ok := raw.([]any)
+	if !ok {
+		return nil
+	}
+
+	var gpus []GPUInfo
+	for _, item := range items {
+		obj, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		name := firstString(obj, "_name", "sppci_model", "spdisplays_vendor", "spdisplays_device-id")
+		if name == "" {
+			continue
+		}
+		vramStr := firstString(obj, "_spdisplays_vram", "spdisplays_vram", "spdisplays_vram_shared")
+		memMB, memOK := parseSizeStringToMB(vramStr)
+		gpus = append(gpus, GPUInfo{
+			Name:       name,
+			MemTotalMB: memMB,
+			MemValid:   memOK,
+		})
+	}
+	return gpus
+}
+
+func queryWindowsGPU() []GPUInfo {
+	path, err := exec.LookPath("powershell")
+	if err != nil {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, path, "-NoProfile", "-Command", "Get-CimInstance Win32_VideoController | Select-Object Name, AdapterRAM | ConvertTo-Json")
+	out, err := cmd.Output()
+	if err != nil {
+		return nil
+	}
+
+	var raw any
+	if err := json.Unmarshal(out, &raw); err != nil {
+		return nil
+	}
+
+	var gpus []GPUInfo
+	switch v := raw.(type) {
+	case []any:
+		for _, item := range v {
+			if obj, ok := item.(map[string]any); ok {
+				gpus = append(gpus, parseWindowsGPUObj(obj))
+			}
+		}
+	case map[string]any:
+		gpus = append(gpus, parseWindowsGPUObj(v))
+	}
+
+	filtered := gpus[:0]
+	for _, gpu := range gpus {
+		if gpu.Name != "" {
+			filtered = append(filtered, gpu)
+		}
+	}
+	return filtered
+}
+
+func parseWindowsGPUObj(obj map[string]any) GPUInfo {
+	name := firstString(obj, "Name")
+	var memMB float64
+	var memOK bool
+	if v, ok := obj["AdapterRAM"]; ok {
+		switch val := v.(type) {
+		case float64:
+			if val > 0 {
+				memMB = val / 1024 / 1024
+				memOK = true
+			}
+		case int64:
+			if val > 0 {
+				memMB = float64(val) / 1024 / 1024
+				memOK = true
+			}
+		case string:
+			if parsed, ok := parseFloatField(val); ok && parsed > 0 {
+				memMB = parsed / 1024 / 1024
+				memOK = true
+			}
+		}
+	}
+	return GPUInfo{
+		Name:       name,
+		MemTotalMB: memMB,
+		MemValid:   memOK,
+	}
+}
+
+func firstString(m map[string]any, keys ...string) string {
+	for _, k := range keys {
+		if v, ok := m[k]; ok {
+			if s, ok := v.(string); ok {
+				return strings.TrimSpace(s)
+			}
+		}
+	}
+	return ""
+}
+
+func parseSizeToMB(value, unit string) (float64, bool) {
+	v, ok := parseFloatField(value)
+	if !ok {
+		return 0, false
+	}
+	switch strings.ToLower(strings.TrimSpace(unit)) {
+	case "b":
+		return v / 1024 / 1024, true
+	case "kb", "kib":
+		return v / 1024, true
+	case "mb", "mib":
+		return v, true
+	case "gb", "gib":
+		return v * 1024, true
+	default:
+		return v, true
+	}
+}
+
+func parseSizeStringToMB(s string) (float64, bool) {
+	if s == "" {
+		return 0, false
+	}
+	re := regexp.MustCompile(`(?i)([0-9.]+)\\s*(GB|MB|KB|B)`)
+	if m := re.FindStringSubmatch(s); len(m) == 3 {
+		return parseSizeToMB(m[1], m[2])
+	}
+	if v, ok := parseFloatField(s); ok {
+		return v, true
+	}
+	return 0, false
+}
+
+func parseFloatField(s string) (float64, bool) {
+	v, err := strconv.ParseFloat(strings.TrimSpace(s), 64)
+	if err != nil {
+		return 0, false
+	}
+	return v, true
+}
+
+func rootDiskPath() string {
+	if runtime.GOOS == "windows" {
+		drive := os.Getenv("SystemDrive")
+		if drive == "" {
+			drive = "C:"
+		}
+		return drive + "\\"
+	}
+	return "/"
 }

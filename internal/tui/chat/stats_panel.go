@@ -19,16 +19,13 @@ type StatsPanel struct {
 	ready    bool
 
 	// Stats data
-	tokenStats    []TokenStats
 	resourceStats ResourceStats
 	machineStats  MachineStats
 }
 
 // NewStatsPanel creates a new stats panel
 func NewStatsPanel() *StatsPanel {
-	return &StatsPanel{
-		tokenStats: make([]TokenStats, 0),
-	}
+	return &StatsPanel{}
 }
 
 // SetSize updates the panel dimensions
@@ -52,14 +49,6 @@ func (p *StatsPanel) SetSize(width, height int) {
 		p.viewport.Width = width - 4
 		p.viewport.Height = viewportHeight
 	}
-	p.updateContent()
-}
-
-// SetTokenStats updates token statistics
-func (p *StatsPanel) SetTokenStats(stats []TokenStats) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.tokenStats = stats
 	p.updateContent()
 }
 
@@ -150,6 +139,13 @@ func (p *StatsPanel) Width() int {
 	return p.width
 }
 
+// Height returns panel height
+func (p *StatsPanel) Height() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.height
+}
+
 // updateContent refreshes the viewport content
 func (p *StatsPanel) updateContent() {
 	if !p.ready {
@@ -163,7 +159,6 @@ func (p *StatsPanel) updateContent() {
 // Nerd Font icons
 const (
 	statsIcon   = "" // nf-md-chart_box
-	tokenIcon   = "" // nf-md-currency_sign
 	quorumIcon  = "" // nf-md-application
 	machineIcon = "" // nf-md-server
 )
@@ -182,12 +177,6 @@ func (p *StatsPanel) renderContent() string {
 		Foreground(lipgloss.Color("#f0fdf4")).
 		Bold(true)
 
-	inStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#22d3ee")) // Cyan for input
-
-	outStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#a78bfa")) // Purple for output
-
 	dimStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#6b7280"))
 
@@ -203,55 +192,10 @@ func (p *StatsPanel) renderContent() string {
 
 	var sb strings.Builder
 
-	// === SECTION 1: Tokens ===
-	sb.WriteString(sectionStyle.Render(tokenIcon+" Tokens") + " " + dimStyle.Render("(↑out ↓in)"))
-	sb.WriteString("\n")
-
-	// Calculate totals
-	totalIn := 0
-	totalOut := 0
-	for _, ts := range p.tokenStats {
-		totalIn += ts.TokensIn
-		totalOut += ts.TokensOut
-	}
-
-	// Show all models
-	if len(p.tokenStats) == 0 {
-		sb.WriteString(dimStyle.Render("  No token data yet"))
-		sb.WriteString("\n")
-	} else {
-		for _, ts := range p.tokenStats {
-			modelName := ts.Model
-			if len(modelName) > 10 {
-				modelName = modelName[:9] + "…"
-			}
-			line := fmt.Sprintf("  %s  ↑%s  ↓%s",
-				labelStyle.Render(fmt.Sprintf("%-10s", modelName)),
-				inStyle.Render(fmt.Sprintf("%6s", formatTokenCount(ts.TokensIn))),
-				outStyle.Render(fmt.Sprintf("%6s", formatTokenCount(ts.TokensOut))),
-			)
-			sb.WriteString(line)
-			sb.WriteString("\n")
-		}
-
-		// Separator line
-		sb.WriteString(dimStyle.Render("  " + strings.Repeat("─", p.width-8)))
-		sb.WriteString("\n")
-
-		// Total line
-		totalLine := fmt.Sprintf("  %s  ↑%s  ↓%s",
-			labelStyle.Render(fmt.Sprintf("%-10s", "Total")),
-			inStyle.Render(fmt.Sprintf("%6s", formatTokenCount(totalIn))),
-			outStyle.Render(fmt.Sprintf("%6s", formatTokenCount(totalOut))),
-		)
-		sb.WriteString(totalLine)
-		sb.WriteString("\n")
-	}
-
-	sb.WriteString("\n")
-
-	// === SECTION 2: Quorum Process ===
+	// === SECTION 1: Quorum Process ===
 	sb.WriteString(resourceStyle.Render(quorumIcon + " Quorum Process"))
+	sb.WriteString("\n")
+	sb.WriteString(dimStyle.Render("  CPU proc: total/core"))
 	sb.WriteString("\n\n")
 
 	// Label width for alignment (longest is "Goroutines:" but we use shorter labels)
@@ -270,16 +214,19 @@ func (p *StatsPanel) renderContent() string {
 	))
 	sb.WriteString("\n")
 
-	// CPU with bar
+	// CPU with bar (show normalized / raw)
 	cpuPercent := p.resourceStats.CPUPercent
 	if cpuPercent > 100 {
 		cpuPercent = 100
 	}
 	cpuBar := p.renderBar(cpuPercent, barWidth, "#f97316")
+	// Show both: normalized (0-100%) / raw (can exceed 100% on multi-core)
+	cpuValue := valueStyle.Render(fmt.Sprintf("%.1f%%", p.resourceStats.CPUPercent))
+	cpuRaw := dimStyle.Render(fmt.Sprintf("/%.0f%%", p.resourceStats.CPURawPercent))
 	sb.WriteString(fmt.Sprintf("  %s %s %s",
 		labelStyle.Render(fmt.Sprintf("%-*s", labelWidth, "CPU:")),
 		cpuBar,
-		valueStyle.Render(fmt.Sprintf("%.1f%%", p.resourceStats.CPUPercent)),
+		cpuValue+cpuRaw,
 	))
 	sb.WriteString("\n")
 
@@ -341,6 +288,69 @@ func (p *StatsPanel) renderContent() string {
 		p.machineStats.LoadAvg15,
 	))
 	sb.WriteString("\n")
+
+	// Hardware info
+	sb.WriteString("\n")
+	sb.WriteString(sectionStyle.Render("Hardware"))
+	sb.WriteString("\n\n")
+
+	cpuInfo := p.machineStats.CPUModel
+	if cpuInfo == "" {
+		cpuInfo = "n/a"
+	}
+	if p.machineStats.CPUCores > 0 || p.machineStats.CPUThreads > 0 {
+		cpuInfo = fmt.Sprintf("%s (%dC/%dT)", cpuInfo, p.machineStats.CPUCores, p.machineStats.CPUThreads)
+	}
+	cpuInfo = truncateToWidth(cpuInfo, p.width-10)
+	sb.WriteString(fmt.Sprintf("  %s %s",
+		labelStyle.Render(fmt.Sprintf("%-*s", labelWidth, "CPU:")),
+		dimStyle.Render(cpuInfo),
+	))
+	sb.WriteString("\n")
+
+	if p.machineStats.MemTotalMB > 0 {
+		sb.WriteString(fmt.Sprintf("  %s %s",
+			labelStyle.Render(fmt.Sprintf("%-*s", labelWidth, "RAM:")),
+			dimStyle.Render(fmt.Sprintf("%.1f GB", p.machineStats.MemTotalMB/1024)),
+		))
+	} else {
+		sb.WriteString(fmt.Sprintf("  %s %s",
+			labelStyle.Render(fmt.Sprintf("%-*s", labelWidth, "RAM:")),
+			dimStyle.Render("n/a"),
+		))
+	}
+	sb.WriteString("\n")
+
+	if len(p.machineStats.GPUInfos) == 0 {
+		sb.WriteString(fmt.Sprintf("  %s %s",
+			labelStyle.Render(fmt.Sprintf("%-*s", labelWidth, "GPU:")),
+			dimStyle.Render("n/a"),
+		))
+		sb.WriteString("\n")
+	} else {
+		for i, gpu := range p.machineStats.GPUInfos {
+			label := "GPU:"
+			if i > 0 {
+				label = fmt.Sprintf("GPU%d:", i+1)
+			}
+			info := gpu.Name
+			if gpu.UtilValid {
+				info += fmt.Sprintf(" %.0f%%", gpu.UtilPercent)
+			}
+			if gpu.MemValid {
+				info += fmt.Sprintf(" %.1f/%.1f GB", gpu.MemUsedMB/1024, gpu.MemTotalMB/1024)
+			}
+			if gpu.TempValid {
+				info += fmt.Sprintf(" %.0f°C", gpu.TempC)
+			}
+			info = truncateToWidth(info, p.width-10)
+			sb.WriteString(fmt.Sprintf("  %s %s",
+				labelStyle.Render(fmt.Sprintf("%-*s", labelWidth, label)),
+				dimStyle.Render(info),
+			))
+			sb.WriteString("\n")
+		}
+	}
 
 	// Separator
 	sb.WriteString("\n")
@@ -404,7 +414,7 @@ func (p *StatsPanel) RenderWithFocus(focused bool) string {
 	helpStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#6B7280")).
 		Italic(true)
-	help := helpStyle.Render("^S")
+	help := helpStyle.Render("^R")
 
 	// Header line
 	headerWidth := p.width - 4
