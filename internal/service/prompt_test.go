@@ -5,7 +5,33 @@ import (
 	"testing"
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
+	"gopkg.in/yaml.v3"
 )
+
+func parseConsensusSchemaExample(t *testing.T, content string) map[string]any {
+	t.Helper()
+
+	const marker = "```yaml"
+	start := strings.Index(content, marker)
+	if start == -1 {
+		t.Fatalf("yaml example block not found")
+	}
+	rest := content[start+len(marker):]
+	rest = strings.TrimPrefix(rest, "\r\n")
+	rest = strings.TrimPrefix(rest, "\n")
+
+	end := strings.Index(rest, "```")
+	if end == -1 {
+		t.Fatalf("yaml example block not closed")
+	}
+
+	block := strings.TrimSpace(rest[:end])
+	var data map[string]any
+	if err := yaml.Unmarshal([]byte(block), &data); err != nil {
+		t.Fatalf("yaml example parse failed: %v", err)
+	}
+	return data
+}
 
 func TestPromptRenderer_Load(t *testing.T) {
 	renderer, err := NewPromptRenderer()
@@ -25,6 +51,7 @@ func TestPromptRenderer_Load(t *testing.T) {
 		"analyze-v1",
 		"plan-generate",
 		"task-execute",
+		"task-detail-generate",
 		"moderator-evaluate",
 		"vn-refine",
 		"synthesize-analysis",
@@ -131,6 +158,73 @@ func TestPromptRenderer_RenderTaskExecute(t *testing.T) {
 	}
 }
 
+func TestPromptRenderer_RenderTaskDetailGenerate(t *testing.T) {
+	renderer, err := NewPromptRenderer()
+	if err != nil {
+		t.Fatalf("NewPromptRenderer() error = %v", err)
+	}
+
+	params := TaskDetailGenerateParams{
+		TaskID:               "task-1",
+		TaskName:             "Create web server",
+		Dependencies:         []string{"task-0"},
+		OutputPath:           "/output/tasks/task-1-create-web-server.md",
+		ConsolidatedAnalysis: "This is the consolidated analysis with architecture details",
+	}
+
+	result, err := renderer.RenderTaskDetailGenerate(params)
+	if err != nil {
+		t.Fatalf("RenderTaskDetailGenerate() error = %v", err)
+	}
+
+	// Check content includes expected elements
+	if !strings.Contains(result, "task-1") {
+		t.Error("result should contain task ID")
+	}
+	if !strings.Contains(result, "Create web server") {
+		t.Error("result should contain task name")
+	}
+	if !strings.Contains(result, "task-0") {
+		t.Error("result should contain dependencies")
+	}
+	if !strings.Contains(result, "/output/tasks/task-1-create-web-server.md") {
+		t.Error("result should contain output path")
+	}
+	if !strings.Contains(result, "consolidated analysis") {
+		t.Error("result should contain consolidated analysis")
+	}
+	if !strings.Contains(result, "SELF-CONTAINED") {
+		t.Error("result should emphasize self-contained requirement")
+	}
+	if !strings.Contains(result, "Exhaustive") && !strings.Contains(result, "exhaustive") {
+		t.Error("result should mention exhaustiveness")
+	}
+}
+
+func TestPromptRenderer_RenderTaskDetailGenerate_NoDependencies(t *testing.T) {
+	renderer, err := NewPromptRenderer()
+	if err != nil {
+		t.Fatalf("NewPromptRenderer() error = %v", err)
+	}
+
+	params := TaskDetailGenerateParams{
+		TaskID:               "task-1",
+		TaskName:             "Initial setup",
+		Dependencies:         nil, // No dependencies
+		OutputPath:           "/output/tasks/task-1-initial-setup.md",
+		ConsolidatedAnalysis: "Analysis content",
+	}
+
+	result, err := renderer.RenderTaskDetailGenerate(params)
+	if err != nil {
+		t.Fatalf("RenderTaskDetailGenerate() error = %v", err)
+	}
+
+	if !strings.Contains(result, "None") {
+		t.Error("result should show 'None' for empty dependencies")
+	}
+}
+
 func TestPromptRenderer_MissingTemplate(t *testing.T) {
 	renderer, err := NewPromptRenderer()
 	if err != nil {
@@ -232,8 +326,19 @@ func TestPromptRenderer_RenderModeratorEvaluate(t *testing.T) {
 	if !strings.Contains(result, "claude") {
 		t.Error("result should contain agent name")
 	}
-	if !strings.Contains(result, "CONSENSUS_SCORE") {
-		t.Error("result should contain consensus score instruction")
+
+	fm := parseConsensusSchemaExample(t, result)
+	requiredKeys := []string{
+		"consensus_score",
+		"high_impact_divergences",
+		"medium_impact_divergences",
+		"low_impact_divergences",
+		"agreements_count",
+	}
+	for _, key := range requiredKeys {
+		if _, ok := fm[key]; !ok {
+			t.Errorf("frontmatter missing required key: %s", key)
+		}
 	}
 }
 

@@ -148,6 +148,38 @@ func (r *PromptRenderer) RenderPlanGenerate(params PlanParams) (string, error) {
 	return r.render("plan-generate", params)
 }
 
+// RenderPlanManifest renders the lightweight plan manifest prompt.
+// This generates only task metadata (IDs, names, dependencies, CLI assignment),
+// not detailed descriptions. Used when CLIGeneratedTasks is enabled.
+func (r *PromptRenderer) RenderPlanManifest(params PlanParams) (string, error) {
+	return r.render("plan-manifest", params)
+}
+
+// AgentInfo contains information about an available agent for task assignment.
+type AgentInfo struct {
+	Name         string // Agent identifier (e.g., "claude", "codex")
+	Model        string // Model being used
+	Strengths    string // Human-readable description of agent strengths
+	Capabilities string // List of capabilities (e.g., "JSON, streaming, tools")
+}
+
+// ComprehensivePlanParams contains parameters for single-call comprehensive planning.
+// The CLI receives all context and generates both the task breakdown AND all task files.
+type ComprehensivePlanParams struct {
+	Prompt               string      // Original user request
+	ConsolidatedAnalysis string      // Complete consolidated analysis
+	AvailableAgents      []AgentInfo // Agents available for task execution
+	TasksDir             string      // Directory where task files should be written
+	NamingConvention     string      // File naming convention (e.g., "{id}-{name}.md")
+}
+
+// RenderPlanComprehensive renders the comprehensive single-call planning prompt.
+// This prompt instructs the CLI to analyze the work, create task files directly,
+// and return only a manifest of what was created.
+func (r *PromptRenderer) RenderPlanComprehensive(params ComprehensivePlanParams) (string, error) {
+	return r.render("plan-comprehensive", params)
+}
+
 // PlanProposal represents a plan proposal from an agent.
 type PlanProposal struct {
 	AgentName string
@@ -179,6 +211,22 @@ type TaskExecuteParams struct {
 // RenderTaskExecute renders the task execution prompt.
 func (r *PromptRenderer) RenderTaskExecute(params TaskExecuteParams) (string, error) {
 	return r.render("task-execute", params)
+}
+
+// TaskDetailGenerateParams contains parameters for generating detailed task specifications.
+// This is used when CLIs generate task documentation directly.
+type TaskDetailGenerateParams struct {
+	TaskID               string   // Task identifier (e.g., "task-1")
+	TaskName             string   // Human-readable task name
+	Dependencies         []string // List of task IDs this depends on
+	OutputPath           string   // Path where CLI should write the task MD
+	ConsolidatedAnalysis string   // Full consolidated analysis for context
+}
+
+// RenderTaskDetailGenerate renders the task detail generation prompt.
+// This prompt instructs CLIs to generate exhaustive, self-contained task documentation.
+func (r *PromptRenderer) RenderTaskDetailGenerate(params TaskDetailGenerateParams) (string, error) {
+	return r.render("task-detail-generate", params)
 }
 
 // Render renders a template by name with the given data.

@@ -28,12 +28,14 @@ func NewCheckpointManager(state core.StateManager, logger *logging.Logger) *Chec
 type CheckpointType string
 
 const (
-	CheckpointPhaseStart    CheckpointType = "phase_start"
-	CheckpointPhaseComplete CheckpointType = "phase_complete"
-	CheckpointTaskStart     CheckpointType = "task_start"
-	CheckpointTaskComplete  CheckpointType = "task_complete"
-	CheckpointConsensus     CheckpointType = "consensus"
-	CheckpointError         CheckpointType = "error"
+	CheckpointPhaseStart     CheckpointType = "phase_start"
+	CheckpointPhaseComplete  CheckpointType = "phase_complete"
+	CheckpointTaskStart      CheckpointType = "task_start"
+	CheckpointTaskComplete   CheckpointType = "task_complete"
+	CheckpointConsensus      CheckpointType = "consensus"
+	CheckpointError          CheckpointType = "error"
+	CheckpointModeratorRound CheckpointType = "moderator_round" // Checkpoint after each moderator evaluation
+	CheckpointAnalysisRound  CheckpointType = "analysis_round"  // Checkpoint after each V(n) refinement
 )
 
 // CreateCheckpoint saves a checkpoint at the current state.
@@ -104,6 +106,81 @@ func (m *CheckpointManager) ErrorCheckpoint(ctx context.Context, state *core.Wor
 	})
 }
 
+// ErrorCheckpointWithContext creates a detailed error checkpoint with full context.
+// This includes agent name, phase, round number, and any additional context
+// that will help with debugging and recovery.
+func (m *CheckpointManager) ErrorCheckpointWithContext(ctx context.Context, state *core.WorkflowState, err error, details ErrorCheckpointDetails) error {
+	metadata := map[string]interface{}{
+		"error":       err.Error(),
+		"error_type":  fmt.Sprintf("%T", err),
+		"phase":       string(state.CurrentPhase),
+		"occurred_at": time.Now().Format(time.RFC3339),
+	}
+
+	// Add optional context fields
+	if details.Agent != "" {
+		metadata["agent"] = details.Agent
+	}
+	if details.Model != "" {
+		metadata["model"] = details.Model
+	}
+	if details.Round > 0 {
+		metadata["round"] = details.Round
+	}
+	if details.Attempt > 0 {
+		metadata["attempt"] = details.Attempt
+	}
+	if details.DurationMS > 0 {
+		metadata["duration_ms"] = details.DurationMS
+	}
+	if details.TokensIn > 0 {
+		metadata["tokens_in"] = details.TokensIn
+	}
+	if details.TokensOut > 0 {
+		metadata["tokens_out"] = details.TokensOut
+	}
+	if details.OutputSample != "" {
+		// Truncate to avoid huge checkpoints
+		sample := details.OutputSample
+		if len(sample) > 500 {
+			sample = sample[:500] + "...[truncated]"
+		}
+		metadata["output_sample"] = sample
+	}
+	if details.IsTransient {
+		metadata["is_transient"] = true
+	}
+	if details.IsValidationError {
+		metadata["is_validation_error"] = true
+	}
+	if len(details.FallbacksTried) > 0 {
+		metadata["fallbacks_tried"] = details.FallbacksTried
+	}
+	if details.Extra != nil {
+		for k, v := range details.Extra {
+			metadata[k] = v
+		}
+	}
+
+	return m.CreateCheckpoint(ctx, state, CheckpointError, metadata)
+}
+
+// ErrorCheckpointDetails contains detailed information about an error for checkpointing.
+type ErrorCheckpointDetails struct {
+	Agent             string            // Agent that failed
+	Model             string            // Model being used
+	Round             int               // Round number (for moderator/analysis)
+	Attempt           int               // Retry attempt number
+	DurationMS        int64             // How long the operation ran before failing
+	TokensIn          int               // Input tokens (if known)
+	TokensOut         int               // Output tokens (if known)
+	OutputSample      string            // Sample of output before failure (for debugging)
+	IsTransient       bool              // Whether error appears transient
+	IsValidationError bool              // Whether error is validation-related
+	FallbacksTried    []string          // List of fallback agents already tried
+	Extra             map[string]string // Additional context-specific fields
+}
+
 // GetLastCheckpoint returns the most recent checkpoint.
 func (m *CheckpointManager) GetLastCheckpoint(state *core.WorkflowState) *core.Checkpoint {
 	if len(state.Checkpoints) == 0 {
@@ -124,13 +201,16 @@ func (m *CheckpointManager) GetLastCheckpointOfType(state *core.WorkflowState, c
 
 // ResumePoint describes where and how to resume a workflow.
 type ResumePoint struct {
-	Phase        core.Phase
-	TaskID       core.TaskID
-	CheckpointID string
-	FromStart    bool
-	RestartPhase bool
-	RestartTask  bool
-	AfterError   bool
+	Phase          core.Phase
+	TaskID         core.TaskID
+	CheckpointID   string
+	FromStart      bool
+	RestartPhase   bool
+	RestartTask    bool
+	AfterError     bool
+	ModeratorRound int                    // Round number from moderator checkpoint (for resuming analysis)
+	SavedOutputs   string                 // Serialized agent outputs from checkpoint
+	Metadata       map[string]interface{} // Full checkpoint metadata
 }
 
 // GetResumePoint determines where to resume from.
@@ -164,6 +244,9 @@ func (m *CheckpointManager) GetResumePoint(state *core.WorkflowState) (*ResumePo
 		}
 	}
 
+	// Store metadata for later use
+	resumePoint.Metadata = metadata
+
 	// Determine restart behavior based on checkpoint type
 	switch CheckpointType(lastCP.Type) {
 	case CheckpointPhaseStart:
@@ -176,6 +259,25 @@ func (m *CheckpointManager) GetResumePoint(state *core.WorkflowState) (*ResumePo
 		resumePoint.RestartTask = true
 	case CheckpointError:
 		resumePoint.AfterError = true
+	case CheckpointModeratorRound:
+		// Resume from moderator round checkpoint - extract round info
+		if round, ok := metadata["round"].(float64); ok {
+			resumePoint.ModeratorRound = int(round)
+		}
+		if outputs, ok := metadata["outputs"].(string); ok {
+			resumePoint.SavedOutputs = outputs
+		}
+		// Don't restart the phase, continue from saved state
+		resumePoint.RestartPhase = false
+	case CheckpointAnalysisRound:
+		// Similar to moderator round but for V(n) analysis outputs
+		if round, ok := metadata["round"].(float64); ok {
+			resumePoint.ModeratorRound = int(round)
+		}
+		if outputs, ok := metadata["outputs"].(string); ok {
+			resumePoint.SavedOutputs = outputs
+		}
+		resumePoint.RestartPhase = false
 	}
 
 	return resumePoint, nil
