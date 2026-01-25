@@ -216,34 +216,19 @@ Each task file MUST be **ULTRAEXHAUSTIVE** and contain:
 [Future improvements (for reference only)]
 ```
 
-### Step 4: Return the Manifest
+### Step 4: Confirm Completion
 
-After writing ALL task files, return ONLY a JSON manifest with this EXACT structure:
+After writing ALL task files, confirm what was created. The system will automatically scan and parse your task files from the filesystem.
 
-```json
-{
-  "tasks": [
-    {
-      "id": "task-1",
-      "name": "Short task name",
-      "file": "full/path/to/task-1-name.md",
-      "dependencies": [],
-      "complexity": "medium",
-      "cli": "claude"
-    }
-  ],
-  "execution_levels": [
-    ["task-1", "task-2"],
-    ["task-3"],
-    ["task-4", "task-5"]
-  ]
-}
+You may optionally return a summary like:
+```
+Task files created:
+- task-1: [name]
+- task-2: [name]
+...
 ```
 
-The `execution_levels` array shows which tasks can run in parallel:
-- Level 0: Tasks with no dependencies (can all run simultaneously)
-- Level 1: Tasks that depend on Level 0 tasks
-- Level N: Tasks that depend on Level N-1 tasks
+**NOTE**: The system extracts task metadata directly from the markdown headers in your task files. Ensure each file has the correct header format shown in Step 3.
 
 ---
 
@@ -255,17 +240,22 @@ The `execution_levels` array shows which tasks can run in parallel:
 
 3. **WRITE FILES DIRECTLY**: Use your Write tool to create each task file. Do NOT return the content in your response.
 
-4. **OPTIMAL AGENT ASSIGNMENT**: Choose the best agent for each task based on:
+4. **CORRECT HEADERS**: Each task file MUST have these headers at the top:
+   - `# Task: [Name]`
+   - `**Task ID**: task-N`
+   - `**Assigned Agent**: [agent-name]`
+   - `**Complexity**: [low|medium|high]`
+   - `**Dependencies**: [task-ids or None]`
+
+5. **OPTIMAL AGENT ASSIGNMENT**: Choose the best agent for each task based on:
    - Task complexity
    - Agent strengths
    - Required capabilities
 
-5. **PARALLELIZATION**: Design tasks to maximize parallel execution. Only add dependencies when truly necessary.
-
-6. **RESPONSE FORMAT**: Your response should ONLY contain the JSON manifest. No explanations, no markdown, no additional text.
+6. **PARALLELIZATION**: Design tasks to maximize parallel execution. Only add dependencies when truly necessary.
 
 ---
 
 ## BEGIN
 
-Analyze the consolidated analysis, create the task files, and return the manifest.
+Analyze the consolidated analysis and create the task files.

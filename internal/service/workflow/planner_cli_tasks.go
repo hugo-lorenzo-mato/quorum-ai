@@ -377,14 +377,30 @@ func (p *Planner) executeComprehensivePlanning(
 		m.TotalCostUSD += result.CostUSD
 	})
 
-	// Parse manifest from response
-	manifest, err := parseComprehensiveManifest(result.Output)
+	// Generate manifest from filesystem (robust approach)
+	// The agent writes task files to disk; we scan them instead of parsing JSON output
+	manifest, err := generateManifestFromFilesystem(params.TasksDir)
 	if err != nil {
-		wctx.Logger.Error("failed to parse manifest",
-			"output_preview", truncateForLog(result.Output, 500),
+		wctx.Logger.Warn("filesystem manifest generation failed, trying output parse",
+			"tasks_dir", params.TasksDir,
 			"error", err,
 		)
-		return nil, fmt.Errorf("parsing comprehensive manifest: %w", err)
+		// Fallback: try parsing agent output (backward compatibility)
+		manifest, err = parseComprehensiveManifest(result.Output)
+		if err != nil {
+			wctx.Logger.Error("failed to generate manifest from both filesystem and output",
+				"tasks_dir", params.TasksDir,
+				"output_preview", truncateForLog(result.Output, 500),
+				"error", err,
+			)
+			return nil, fmt.Errorf("manifest generation failed: filesystem scan and output parse both failed")
+		}
+		wctx.Logger.Info("manifest generated from output parse (fallback)")
+	} else {
+		wctx.Logger.Info("manifest generated from filesystem",
+			"tasks_count", len(manifest.Tasks),
+			"levels_count", len(manifest.ExecutionLevels),
+		)
 	}
 
 	return manifest, nil
