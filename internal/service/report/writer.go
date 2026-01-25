@@ -554,6 +554,37 @@ func (w *WorkflowReportWriter) WriteTaskPlan(data TaskPlanData) error {
 	return w.writeFile(path, fm, content)
 }
 
+// TaskPlanPath returns the path where a task plan should be written.
+// This is used when CLIs generate task documentation directly.
+// The actual writing is delegated to the assigned CLI, not to this writer.
+func (w *WorkflowReportWriter) TaskPlanPath(taskID, taskName string) string {
+	filename := fmt.Sprintf("%s-%s.md", taskID, sanitizeFilename(taskName))
+	return filepath.Join(w.PlanPhasePath(), "tasks", filename)
+}
+
+// EnsureTasksDir creates the tasks directory if it doesn't exist.
+// This should be called before CLIs attempt to write task files.
+func (w *WorkflowReportWriter) EnsureTasksDir() error {
+	if !w.config.Enabled {
+		return nil
+	}
+	if err := w.Initialize(); err != nil {
+		return err
+	}
+
+	tasksDir := filepath.Join(w.PlanPhasePath(), "tasks")
+	return os.MkdirAll(tasksDir, 0o755)
+}
+
+// TasksDir returns the path to the tasks directory.
+// This is where CLI-generated task specification files are written.
+func (w *WorkflowReportWriter) TasksDir() string {
+	if !w.config.Enabled {
+		return ""
+	}
+	return filepath.Join(w.PlanPhasePath(), "tasks")
+}
+
 // ExecutionGraphData contains data for the execution graph visualization
 type ExecutionGraphData struct {
 	Batches      []ExecutionBatch

@@ -19,11 +19,17 @@ func countWords(s string) int {
 // sanitizeFilename removes or replaces characters unsuitable for filenames
 func sanitizeFilename(s string) string {
 	var result strings.Builder
+	lastWasDash := false
 	for _, r := range s {
-		if unicode.IsLetter(r) || unicode.IsDigit(r) || r == '-' || r == '_' || r == '.' {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' || r == '.' {
 			result.WriteRune(r)
-		} else if r == ' ' || r == '/' || r == ':' {
-			result.WriteRune('-')
+			lastWasDash = false
+		} else if r == '-' || r == ' ' || r == '/' || r == ':' {
+			// Collapse consecutive dashes
+			if !lastWasDash {
+				result.WriteRune('-')
+				lastWasDash = true
+			}
 		}
 	}
 	return strings.ToLower(result.String())
