@@ -631,3 +631,240 @@ func TestTaskPlanItem_Fields(t *testing.T) {
 		t.Errorf("len(Dependencies) = %d, want 1", len(item.Dependencies))
 	}
 }
+
+// =============================================================================
+// Tests for improved extractJSON with markdown support
+// =============================================================================
+
+func TestExtractJSON_MarkdownCodeBlock(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name: "json code block",
+			input: "Here is the manifest:\n```json\n{\"tasks\": []}\n```\nDone!",
+			want:  `{"tasks": []}`,
+		},
+		{
+			name: "JSON uppercase code block",
+			input: "Result:\n```JSON\n{\"key\": \"value\"}\n```",
+			want:  `{"key": "value"}`,
+		},
+		{
+			name: "plain code block with object",
+			input: "Output:\n```\n{\"data\": 123}\n```",
+			want:  `{"data": 123}`,
+		},
+		{
+			name: "plain code block with array",
+			input: "List:\n```\n[1, 2, 3]\n```",
+			want:  `[1, 2, 3]`,
+		},
+		{
+			name: "nested JSON in markdown",
+			input: "```json\n{\"outer\": {\"inner\": [1, 2]}}\n```",
+			want:  `{"outer": {"inner": [1, 2]}}`,
+		},
+		{
+			name: "multiline JSON in markdown",
+			input: "```json\n{\n  \"tasks\": [\n    {\"id\": \"1\"}\n  ]\n}\n```",
+			want:  "{\n  \"tasks\": [\n    {\"id\": \"1\"}\n  ]\n}",
+		},
+		{
+			name: "json block with CRLF",
+			input: "```json\r\n{\"key\": \"value\"}\r\n```",
+			want:  `{"key": "value"}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := extractJSON(tt.input)
+			if got != tt.want {
+				t.Errorf("extractJSON() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestExtractJSON_MixedContent(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "text before and after JSON",
+			input: "I have completed the task. Here is the result:\n\n{\"status\": \"done\"}\n\nLet me know if you need anything else.",
+			want:  `{"status": "done"}`,
+		},
+		{
+			name:  "multiple JSON objects - returns first valid",
+			input: "First: {\"a\": 1}\nSecond: {\"b\": 2}",
+			want:  `{"a": 1}`,
+		},
+		{
+			name:  "JSON after markdown explanation",
+			input: "## Summary\n\nI created all the files.\n\n{\"files\": [\"a.go\", \"b.go\"]}",
+			want:  `{"files": ["a.go", "b.go"]}`,
+		},
+		{
+			name:  "JSON with special characters in strings",
+			input: `{"path": "C:\\Users\\test", "url": "https://example.com?a=1&b=2"}`,
+			want:  `{"path": "C:\\Users\\test", "url": "https://example.com?a=1&b=2"}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := extractJSON(tt.input)
+			if got != tt.want {
+				t.Errorf("extractJSON() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestExtractJSON_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "empty string",
+			input: "",
+			want:  "",
+		},
+		{
+			name:  "only whitespace",
+			input: "   \n\t  ",
+			want:  "",
+		},
+		{
+			name:  "incomplete JSON",
+			input: "{\"key\": \"value\"",
+			want:  "",
+		},
+		{
+			name:  "markdown code block without JSON",
+			input: "```\nsome code\n```",
+			want:  "",
+		},
+		{
+			name:  "empty markdown block",
+			input: "```json\n```",
+			want:  "",
+		},
+		{
+			name:  "JSON-like text that's not JSON",
+			input: "This has { braces } but isn't JSON",
+			want:  "",
+		},
+		{
+			name:  "minimal valid object",
+			input: "{}",
+			want:  "{}",
+		},
+		{
+			name:  "minimal valid array",
+			input: "[]",
+			want:  "[]",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := extractJSON(tt.input)
+			if got != tt.want {
+				t.Errorf("extractJSON() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestExtractJSON_RealWorldCases(t *testing.T) {
+	// Simulates real CLI output patterns
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name: "Claude-style response with explanation",
+			input: `I have analyzed the codebase and created the task files. Here is the manifest:
+
+` + "```json" + `
+{
+  "tasks": [
+    {"id": "task-1", "name": "Setup", "file": "/path/task-1.md"}
+  ],
+  "execution_levels": [["task-1"]]
+}
+` + "```" + `
+
+All task files have been written to the specified directory.`,
+			want: `{
+  "tasks": [
+    {"id": "task-1", "name": "Setup", "file": "/path/task-1.md"}
+  ],
+  "execution_levels": [["task-1"]]
+}`,
+		},
+		{
+			name: "Response with thinking before JSON",
+			input: `Let me think about how to structure this...
+
+The tasks should be organized by dependency.
+
+{"tasks": [{"id": "1", "deps": []}], "execution_levels": [["1"]]}`,
+			want: `{"tasks": [{"id": "1", "deps": []}], "execution_levels": [["1"]]}`,
+		},
+		{
+			name: "JSON with unicode",
+			input: `{"message": "Tarea completada ✓", "status": "éxito"}`,
+			want:  `{"message": "Tarea completada ✓", "status": "éxito"}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := extractJSON(tt.input)
+			if got != tt.want {
+				t.Errorf("extractJSON() =\n%s\nwant:\n%s", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestIsValidJSONStructure(t *testing.T) {
+	tests := []struct {
+		input string
+		want  bool
+	}{
+		{"{}", true},
+		{"[]", true},
+		{`{"key": "value"}`, true},
+		{`[1, 2, 3]`, true},
+		{"", false},
+		{"{", false},
+		{"}", false},
+		{"[", false},
+		{"]", false},
+		{"{]", false},
+		{"[}", false},
+		{"hello", false},
+		{"  {}  ", true}, // has whitespace but isValidJSONStructure trims
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := isValidJSONStructure(tt.input)
+			if got != tt.want {
+				t.Errorf("isValidJSONStructure(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
+	}
+}

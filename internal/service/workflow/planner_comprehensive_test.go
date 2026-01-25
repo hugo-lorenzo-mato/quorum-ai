@@ -10,14 +10,53 @@ import (
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/logging"
 )
 
+// mockAgentWithCallback is a mock agent that uses a callback to determine results.
+type mockAgentWithCallback struct {
+	callback func(opts core.ExecuteOptions) *core.ExecuteResult
+}
+
+func (m *mockAgentWithCallback) Name() string {
+	return "mock-callback"
+}
+
+func (m *mockAgentWithCallback) Execute(_ context.Context, opts core.ExecuteOptions) (*core.ExecuteResult, error) {
+	if m.callback != nil {
+		return m.callback(opts), nil
+	}
+	return &core.ExecuteResult{Output: "default"}, nil
+}
+
+func (m *mockAgentWithCallback) Ping(_ context.Context) error {
+	return nil
+}
+
+func (m *mockAgentWithCallback) Capabilities() core.Capabilities {
+	return core.Capabilities{
+		SupportsJSON:      true,
+		SupportsStreaming: false,
+	}
+}
+
 func TestPlanner_Run_Success(t *testing.T) {
 	dag := &mockDAGBuilder{}
 	saver := &mockStateSaver{}
 	planner := NewPlanner(dag, saver)
 
-	agent := &mockAgent{
-		result: &core.ExecuteResult{
-			Output: `[{"id": "task-1", "name": "Task 1", "description": "First task", "cli": "claude", "dependencies": []}]`,
+	// Agent returns manifest on first call, then task detail generation on subsequent calls
+	callCount := 0
+	agent := &mockAgentWithCallback{
+		callback: func(_ core.ExecuteOptions) *core.ExecuteResult {
+			callCount++
+			if callCount == 1 {
+				// First call: return task manifest
+				return &core.ExecuteResult{
+					Output: `{"tasks": [{"id": "task-1", "name": "Task 1", "dependencies": [], "complexity": "low", "cli": "claude"}]}`,
+				}
+			}
+			// Subsequent calls: task detail generation (just return success)
+			return &core.ExecuteResult{
+				Output: "Task details generated successfully",
+			}
 		},
 	}
 	registry := &mockAgentRegistry{}
@@ -370,9 +409,16 @@ func TestPlanner_Run_WithOutput(t *testing.T) {
 	saver := &mockStateSaver{}
 	planner := NewPlanner(dag, saver)
 
-	agent := &mockAgent{
-		result: &core.ExecuteResult{
-			Output: `[{"id": "task-1", "name": "Task 1", "description": "First task", "cli": "claude", "dependencies": []}]`,
+	callCount := 0
+	agent := &mockAgentWithCallback{
+		callback: func(_ core.ExecuteOptions) *core.ExecuteResult {
+			callCount++
+			if callCount == 1 {
+				return &core.ExecuteResult{
+					Output: `{"tasks": [{"id": "task-1", "name": "Task 1", "dependencies": [], "complexity": "low", "cli": "claude"}]}`,
+				}
+			}
+			return &core.ExecuteResult{Output: "Task details generated"}
 		},
 	}
 	registry := &mockAgentRegistry{}
@@ -426,12 +472,19 @@ func TestPlanner_Run_WithDependencies(t *testing.T) {
 	saver := &mockStateSaver{}
 	planner := NewPlanner(dag, saver)
 
-	agent := &mockAgent{
-		result: &core.ExecuteResult{
-			Output: `[
-				{"id": "task-1", "name": "Task 1", "description": "First task", "cli": "claude", "dependencies": []},
-				{"id": "task-2", "name": "Task 2", "description": "Second task", "cli": "claude", "dependencies": ["task-1"]}
-			]`,
+	callCount := 0
+	agent := &mockAgentWithCallback{
+		callback: func(_ core.ExecuteOptions) *core.ExecuteResult {
+			callCount++
+			if callCount == 1 {
+				return &core.ExecuteResult{
+					Output: `{"tasks": [
+						{"id": "task-1", "name": "Task 1", "dependencies": [], "complexity": "low", "cli": "claude"},
+						{"id": "task-2", "name": "Task 2", "dependencies": ["task-1"], "complexity": "medium", "cli": "claude"}
+					]}`,
+				}
+			}
+			return &core.ExecuteResult{Output: "Task details generated"}
 		},
 	}
 	registry := &mockAgentRegistry{}
@@ -484,9 +537,16 @@ func TestPlanner_Run_SaveStateFails(t *testing.T) {
 	saver := &mockStateSaver{err: errors.New("save failed")}
 	planner := NewPlanner(dag, saver)
 
-	agent := &mockAgent{
-		result: &core.ExecuteResult{
-			Output: `[{"id": "task-1", "name": "Task 1", "description": "First task", "cli": "claude", "dependencies": []}]`,
+	callCount := 0
+	agent := &mockAgentWithCallback{
+		callback: func(_ core.ExecuteOptions) *core.ExecuteResult {
+			callCount++
+			if callCount == 1 {
+				return &core.ExecuteResult{
+					Output: `{"tasks": [{"id": "task-1", "name": "Task 1", "dependencies": [], "complexity": "low", "cli": "claude"}]}`,
+				}
+			}
+			return &core.ExecuteResult{Output: "Task details generated"}
 		},
 	}
 	registry := &mockAgentRegistry{}
