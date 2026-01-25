@@ -38,8 +38,55 @@ func NewPlanner(dag DAGBuilder, stateSaver StateSaver) *Planner {
 	}
 }
 
+// RebuildDAGFromState rebuilds the DAG from existing tasks in the workflow state.
+// This is needed when resuming directly to execute phase without running the planner.
+func (p *Planner) RebuildDAGFromState(state *core.WorkflowState) error {
+	if len(state.Tasks) == 0 {
+		return fmt.Errorf("no tasks in state to rebuild DAG")
+	}
+
+	// Add all tasks to DAG (convert TaskState to Task)
+	for _, taskState := range state.Tasks {
+		task := &core.Task{
+			ID:           taskState.ID,
+			Phase:        taskState.Phase,
+			Name:         taskState.Name,
+			Status:       taskState.Status,
+			CLI:          taskState.CLI,
+			Model:        taskState.Model,
+			Dependencies: taskState.Dependencies,
+			TokensIn:     taskState.TokensIn,
+			TokensOut:    taskState.TokensOut,
+			CostUSD:      taskState.CostUSD,
+			Retries:      taskState.Retries,
+			StartedAt:    taskState.StartedAt,
+			CompletedAt:  taskState.CompletedAt,
+			Error:        taskState.Error,
+		}
+		if err := p.dag.AddTask(task); err != nil {
+			return fmt.Errorf("adding task %s to DAG: %w", task.ID, err)
+		}
+	}
+
+	// Add dependencies
+	for _, taskState := range state.Tasks {
+		for _, depID := range taskState.Dependencies {
+			if err := p.dag.AddDependency(taskState.ID, depID); err != nil {
+				return fmt.Errorf("adding dependency %s -> %s: %w", taskState.ID, depID, err)
+			}
+		}
+	}
+
+	// Build and validate the DAG
+	if _, err := p.dag.Build(); err != nil {
+		return fmt.Errorf("validating DAG: %w", err)
+	}
+
+	return nil
+}
+
 // Run executes the plan phase.
-// Chooses between single-agent and multi-agent planning based on configuration.
+// Uses CLI-driven planning where CLIs generate exhaustive task documentation directly.
 func (p *Planner) Run(ctx context.Context, wctx *Context) error {
 	wctx.Logger.Info("starting plan phase", "workflow_id", wctx.State.WorkflowID)
 
@@ -56,14 +103,8 @@ func (p *Planner) Run(ctx context.Context, wctx *Context) error {
 
 	wctx.State.CurrentPhase = core.PhasePlan
 
-	// Choose between single-agent and multi-agent planning
-	if wctx.Config.PlanSynthesizerEnabled {
-		wctx.Logger.Info("using multi-agent planning")
-		return p.runMultiAgentPlanning(ctx, wctx)
-	}
-
-	wctx.Logger.Info("using single-agent planning")
-	return p.runSingleAgentPlanning(ctx, wctx)
+	// Always use CLI-driven task planning - CLIs generate exhaustive task docs directly
+	return p.runCLIGeneratedTaskPlanning(ctx, wctx)
 }
 
 // runSingleAgentPlanning executes the traditional single-agent planning flow.
@@ -457,8 +498,175 @@ func rawToText(raw json.RawMessage) string {
 	return ""
 }
 
+// extractJSON extracts JSON from output that may contain markdown, text, or other content.
+// It tries multiple strategies in order of specificity:
+// 1. Extract from markdown code blocks (```json, ```, etc.)
+// 2. Find balanced JSON starting from first { or [
+// 3. Try to find JSON between common delimiters
 func extractJSON(output string) string {
-	start := strings.IndexAny(output, "{[")
+	if output == "" {
+		return ""
+	}
+
+	// Strategy 1: Try to extract from markdown code blocks
+	if extracted := extractJSONFromMarkdown(output); extracted != "" {
+		return extracted
+	}
+
+	// Strategy 2: Try to find balanced JSON object/array
+	if extracted := extractBalancedJSON(output); extracted != "" {
+		return extracted
+	}
+
+	// Strategy 3: Try aggressive extraction - find any JSON-like structure
+	if extracted := extractJSONAggressive(output); extracted != "" {
+		return extracted
+	}
+
+	return ""
+}
+
+// extractJSONFromMarkdown extracts JSON from markdown code blocks.
+// Handles: ```json, ```JSON, ``` (plain), and fenced blocks with language hints.
+func extractJSONFromMarkdown(output string) string {
+	// Patterns to try, in order of specificity
+	patterns := []struct {
+		start string
+		end   string
+	}{
+		{"```json\n", "\n```"},
+		{"```json\r\n", "\r\n```"},
+		{"```JSON\n", "\n```"},
+		{"```json", "```"},
+		{"```JSON", "```"},
+		{"```\n{", "}\n```"},   // Plain code block with object
+		{"```\n[", "]\n```"},   // Plain code block with array
+		{"```{", "}```"},       // Compact code block with object
+		{"```[", "]```"},       // Compact code block with array
+	}
+
+	for _, p := range patterns {
+		startIdx := strings.Index(output, p.start)
+		if startIdx == -1 {
+			continue
+		}
+
+		// Calculate where content starts
+		contentStart := startIdx + len(p.start)
+
+		// For patterns that include the JSON opener, adjust
+		if strings.HasSuffix(p.start, "{") || strings.HasSuffix(p.start, "[") {
+			contentStart-- // Include the { or [
+		}
+
+		// Find the end
+		endIdx := strings.Index(output[contentStart:], p.end)
+		if endIdx == -1 {
+			continue
+		}
+
+		// Calculate actual end position
+		actualEnd := contentStart + endIdx
+
+		// For patterns that include the JSON closer, adjust
+		if strings.HasPrefix(p.end, "}") || strings.HasPrefix(p.end, "]") {
+			actualEnd++ // Include the } or ]
+		}
+
+		candidate := strings.TrimSpace(output[contentStart:actualEnd])
+		if candidate != "" && isValidJSONStructure(candidate) {
+			return candidate
+		}
+	}
+
+	// Try a more flexible approach: find ``` blocks and check if content is JSON
+	return extractFromGenericCodeBlock(output)
+}
+
+// extractFromGenericCodeBlock finds any ``` block and checks if its content is JSON.
+func extractFromGenericCodeBlock(output string) string {
+	// Find all ``` positions
+	var blockStarts []int
+	searchStart := 0
+	for {
+		idx := strings.Index(output[searchStart:], "```")
+		if idx == -1 {
+			break
+		}
+		blockStarts = append(blockStarts, searchStart+idx)
+		searchStart += idx + 3
+	}
+
+	// Need at least 2 markers for a complete block
+	if len(blockStarts) < 2 {
+		return ""
+	}
+
+	// Try each pair of markers
+	for i := 0; i < len(blockStarts)-1; i++ {
+		start := blockStarts[i]
+		end := blockStarts[i+1]
+
+		// Find where the content actually starts (after ``` and optional language tag)
+		contentStart := start + 3
+		// Skip language identifier (e.g., "json", "JSON", etc.)
+		for contentStart < end && output[contentStart] != '\n' && output[contentStart] != '\r' {
+			contentStart++
+		}
+		// Skip the newline
+		for contentStart < end && (output[contentStart] == '\n' || output[contentStart] == '\r') {
+			contentStart++
+		}
+
+		if contentStart >= end {
+			continue
+		}
+
+		content := strings.TrimSpace(output[contentStart:end])
+		if content != "" && isValidJSONStructure(content) {
+			return content
+		}
+	}
+
+	return ""
+}
+
+// extractBalancedJSON finds a balanced JSON structure starting from the first { or [.
+func extractBalancedJSON(output string) string {
+	// Find which comes first: { or [
+	objIdx := strings.IndexByte(output, '{')
+	arrIdx := strings.IndexByte(output, '[')
+
+	// Determine which to try first based on position
+	if objIdx == -1 && arrIdx == -1 {
+		return ""
+	}
+
+	// Try the one that appears first
+	if objIdx != -1 && (arrIdx == -1 || objIdx < arrIdx) {
+		if result := findBalancedJSON(output, '{', '}'); result != "" {
+			return result
+		}
+		// If object extraction fails, try array
+		if arrIdx != -1 {
+			return findBalancedJSON(output, '[', ']')
+		}
+	} else {
+		if result := findBalancedJSON(output, '[', ']'); result != "" {
+			return result
+		}
+		// If array extraction fails, try object
+		if objIdx != -1 {
+			return findBalancedJSON(output, '{', '}')
+		}
+	}
+
+	return ""
+}
+
+// findBalancedJSON finds a balanced JSON structure with given open/close chars.
+func findBalancedJSON(output string, openChar, closeChar byte) string {
+	start := strings.IndexByte(output, openChar)
 	if start == -1 {
 		return ""
 	}
@@ -466,11 +674,6 @@ func extractJSON(output string) string {
 	depth := 0
 	inString := false
 	escaped := false
-	openChar := output[start]
-	closeChar := byte('}')
-	if openChar == '[' {
-		closeChar = ']'
-	}
 
 	for i := start; i < len(output); i++ {
 		c := output[i]
@@ -499,12 +702,94 @@ func extractJSON(output string) string {
 		} else if c == closeChar {
 			depth--
 			if depth == 0 {
-				return output[start : i+1]
+				candidate := output[start : i+1]
+				if isValidJSONStructure(candidate) {
+					return candidate
+				}
+				// If not valid, try finding another starting point
+				if i+1 < len(output) {
+					remaining := output[i+1:]
+					if next := findBalancedJSON(remaining, openChar, closeChar); next != "" {
+						return next
+					}
+				}
+				return ""
 			}
 		}
 	}
 
 	return ""
+}
+
+// extractJSONAggressive tries more aggressive extraction methods.
+// Used as a fallback when other methods fail.
+func extractJSONAggressive(output string) string {
+	// Try to find JSON between common text patterns
+	// Sometimes CLIs output: "Here is the manifest:\n{...}\n\nDone!"
+
+	lines := strings.Split(output, "\n")
+	var jsonLines []string
+	inJSON := false
+	braceCount := 0
+	bracketCount := 0
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+
+		// Start collecting when we see a line starting with { or [
+		if !inJSON && (strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[")) {
+			inJSON = true
+		}
+
+		if inJSON {
+			jsonLines = append(jsonLines, line)
+			braceCount += strings.Count(line, "{") - strings.Count(line, "}")
+			bracketCount += strings.Count(line, "[") - strings.Count(line, "]")
+
+			// Stop when balanced (rough check, doesn't account for strings)
+			if braceCount == 0 && bracketCount == 0 && len(jsonLines) > 0 {
+				candidate := strings.Join(jsonLines, "\n")
+				if isValidJSONStructure(candidate) {
+					return candidate
+				}
+				// Reset and try again from next potential start
+				jsonLines = nil
+				inJSON = false
+				braceCount = 0
+				bracketCount = 0
+			}
+		}
+	}
+
+	// If we collected lines but didn't balance, try what we have
+	if len(jsonLines) > 0 {
+		candidate := strings.Join(jsonLines, "\n")
+		if isValidJSONStructure(candidate) {
+			return candidate
+		}
+	}
+
+	return ""
+}
+
+// isValidJSONStructure validates that the string is valid JSON.
+// Uses json.Valid for accurate validation.
+func isValidJSONStructure(s string) bool {
+	s = strings.TrimSpace(s)
+	if len(s) < 2 {
+		return false
+	}
+
+	// Must start with { or [ and end with } or ]
+	first := s[0]
+	last := s[len(s)-1]
+
+	if !((first == '{' && last == '}') || (first == '[' && last == ']')) {
+		return false
+	}
+
+	// Use json.Valid for accurate validation
+	return json.Valid([]byte(s))
 }
 
 // writeTaskReports writes individual task plan files

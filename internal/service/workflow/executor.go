@@ -127,6 +127,11 @@ func (e *Executor) Run(ctx context.Context, wctx *Context) error {
 		if err := e.stateSaver.Save(ctx, wctx.State); err != nil {
 			return fmt.Errorf("saving state: %w", err)
 		}
+
+		// Notify UI of state update so task counters refresh
+		if wctx.Output != nil {
+			wctx.Output.WorkflowStateUpdated(wctx.State)
+		}
 	}
 
 	if err := wctx.Checkpoint.PhaseCheckpoint(wctx.State, core.PhaseExecute, true); err != nil {

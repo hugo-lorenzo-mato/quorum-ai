@@ -5,6 +5,7 @@ package workflow
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"sync/atomic"
@@ -355,6 +356,17 @@ func (r *Runner) Resume(ctx context.Context) error {
 		}
 		fallthrough
 	case core.PhaseExecute:
+		// When resuming directly to execute, rebuild DAG from existing tasks
+		if len(workflowState.Tasks) > 0 {
+			r.logger.Info("rebuilding DAG from existing tasks",
+				"task_count", len(workflowState.Tasks))
+			if r.output != nil {
+				r.output.Log("info", "workflow", fmt.Sprintf("Rebuilding task DAG from %d existing tasks", len(workflowState.Tasks)))
+			}
+			if err := r.planner.RebuildDAGFromState(workflowState); err != nil {
+				return r.handleError(ctx, workflowState, fmt.Errorf("rebuilding DAG: %w", err))
+			}
+		}
 		if err := r.executor.Run(ctx, wctx); err != nil {
 			return r.handleError(ctx, workflowState, err)
 		}
@@ -746,9 +758,148 @@ func (r *Runner) Plan(ctx context.Context) error {
 	return r.state.Save(ctx, workflowState)
 }
 
+// Replan clears existing plan data and re-executes the planning phase.
+// This is useful when you want to regenerate tasks with the same consolidated analysis.
+// Optionally prepends additional context to the consolidated analysis.
+func (r *Runner) Replan(ctx context.Context, additionalContext string) error {
+	// Apply timeout
+	ctx, cancel := context.WithTimeout(ctx, r.config.Timeout)
+	defer cancel()
+
+	// Acquire lock
+	if err := r.state.AcquireLock(ctx); err != nil {
+		return fmt.Errorf("acquiring lock: %w", err)
+	}
+	defer func() { _ = r.state.ReleaseLock(ctx) }()
+
+	// Load existing state
+	workflowState, err := r.state.Load(ctx)
+	if err != nil {
+		return fmt.Errorf("loading state: %w", err)
+	}
+
+	if workflowState == nil {
+		return core.ErrState("NO_STATE", "no workflow state found to replan")
+	}
+
+	// Verify analyze phase completed
+	analysis := GetConsolidatedAnalysis(workflowState)
+	if analysis == "" {
+		return core.ErrState("MISSING_ANALYSIS", "no consolidated analysis found; run analyze phase first")
+	}
+
+	// If additional context provided, prepend it to the analysis
+	if additionalContext != "" {
+		if err := PrependToConsolidatedAnalysis(workflowState, additionalContext); err != nil {
+			return fmt.Errorf("updating analysis context: %w", err)
+		}
+		r.logger.Info("prepended additional context to analysis",
+			"context_length", len(additionalContext))
+	}
+
+	// Clear plan phase data
+	r.clearPlanPhaseData(workflowState)
+
+	r.logger.Info("starting replan workflow",
+		"workflow_id", workflowState.WorkflowID,
+		"previous_tasks", len(workflowState.Tasks),
+	)
+	if r.output != nil {
+		r.output.Log("info", "workflow", "Replanning: clearing previous plan and regenerating tasks...")
+	}
+
+	// Create workflow context for phase runners
+	wctx := r.createContext(workflowState)
+
+	// Run planner
+	if err := r.planner.Run(ctx, wctx); err != nil {
+		return r.handleError(ctx, workflowState, err)
+	}
+
+	// Finalize metrics
+	r.finalizeMetrics(workflowState)
+
+	// Mark as completed (plan phase done, ready for execute)
+	workflowState.Status = core.WorkflowStatusCompleted
+	workflowState.CurrentPhase = core.PhaseExecute
+	workflowState.UpdatedAt = time.Now()
+
+	r.logger.Info("replan completed",
+		"workflow_id", workflowState.WorkflowID,
+		"task_count", len(workflowState.Tasks),
+	)
+	if r.output != nil {
+		r.output.Log("success", "workflow", fmt.Sprintf("Replanning completed: %d tasks created",
+			len(workflowState.Tasks)))
+	}
+
+	return r.state.Save(ctx, workflowState)
+}
+
+// clearPlanPhaseData removes all plan-related checkpoints and tasks from state.
+func (r *Runner) clearPlanPhaseData(state *core.WorkflowState) {
+	// Remove plan phase checkpoints
+	var filteredCheckpoints []core.Checkpoint
+	for _, cp := range state.Checkpoints {
+		// Keep checkpoints that are NOT plan-related
+		if cp.Phase != core.PhasePlan && cp.Type != "phase_complete" {
+			filteredCheckpoints = append(filteredCheckpoints, cp)
+		} else if cp.Type == "phase_complete" && cp.Phase != core.PhasePlan {
+			filteredCheckpoints = append(filteredCheckpoints, cp)
+		}
+		// Discard plan checkpoints and plan phase_complete checkpoints
+	}
+	state.Checkpoints = filteredCheckpoints
+
+	// Clear tasks
+	state.Tasks = make(map[core.TaskID]*core.TaskState)
+	state.TaskOrder = nil
+
+	// Reset phase to plan
+	state.CurrentPhase = core.PhasePlan
+	state.Status = core.WorkflowStatusRunning
+
+	r.logger.Info("cleared plan phase data",
+		"remaining_checkpoints", len(state.Checkpoints))
+}
+
+// PrependToConsolidatedAnalysis adds context to the beginning of the consolidated analysis.
+func PrependToConsolidatedAnalysis(state *core.WorkflowState, context string) error {
+	// Find the consolidated analysis checkpoint
+	for i := len(state.Checkpoints) - 1; i >= 0; i-- {
+		cp := &state.Checkpoints[i]
+		if cp.Type == "consolidated_analysis" && len(cp.Data) > 0 {
+			var metadata map[string]interface{}
+			if err := json.Unmarshal(cp.Data, &metadata); err != nil {
+				return fmt.Errorf("parsing analysis checkpoint: %w", err)
+			}
+
+			if content, ok := metadata["content"].(string); ok {
+				// Prepend context
+				newContent := context + "\n\n---\n\n" + content
+				metadata["content"] = newContent
+
+				// Re-serialize
+				newData, err := json.Marshal(metadata)
+				if err != nil {
+					return fmt.Errorf("serializing updated analysis: %w", err)
+				}
+				cp.Data = newData
+				return nil
+			}
+		}
+	}
+	return fmt.Errorf("no consolidated analysis checkpoint found")
+}
+
 // GetState returns the current workflow state.
 func (r *Runner) GetState(ctx context.Context) (*core.WorkflowState, error) {
 	return r.state.Load(ctx)
+}
+
+// SaveState saves the workflow state.
+func (r *Runner) SaveState(ctx context.Context, state *core.WorkflowState) error {
+	return r.state.Save(ctx, state)
 }
 
 // ListWorkflows returns summaries of all available workflows.
