@@ -167,8 +167,20 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
 
   // Agent activity
   const [activityExpanded, setActivityExpanded] = useState(true);
-  const agentActivity = useAgentStore((s) => s.getActivityLog(workflow?.id));
-  const activeAgents = useAgentStore((s) => s.getActiveAgents(workflow?.id));
+  const agentActivityMap = useAgentStore((s) => s.agentActivity);
+  const currentAgentsMap = useAgentStore((s) => s.currentAgents);
+
+  const agentActivity = useMemo(
+    () => agentActivityMap[workflow?.id] || [],
+    [agentActivityMap, workflow?.id]
+  );
+
+  const activeAgents = useMemo(() => {
+    const agents = currentAgentsMap[workflow?.id] || {};
+    return Object.entries(agents)
+      .filter(([, info]) => ['started', 'thinking', 'tool_use', 'progress'].includes(info.status))
+      .map(([name, info]) => ({ name, ...info }));
+  }, [currentAgentsMap, workflow?.id]);
 
   const cacheRef = useRef(new Map());
   const [artifactsLoading, setArtifactsLoading] = useState(false);
