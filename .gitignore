@@ -99,6 +99,9 @@ tasks*/*
 # Files related to Claude Code
 .claude*
 
+# Playwright MCP artifacts
+.playwright-mcp/
+
 # Frontend build artifacts (keep .gitkeep)
 internal/web/dist/*
 !internal/web/dist/.gitkeep
