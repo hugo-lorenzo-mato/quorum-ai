@@ -59,6 +59,19 @@ func NewSystemMessage(content string) Message {
 	}
 }
 
+// NewSystemBubbleMessage creates a system message that should render like a bubble.
+func NewSystemBubbleMessage(content string) Message {
+	return Message{
+		ID:        uuid.New().String(),
+		Role:      RoleSystem,
+		Content:   content,
+		Timestamp: time.Now(),
+		Metadata: map[string]interface{}{
+			"bubble": true,
+		},
+	}
+}
+
 // ConversationHistory manages a thread-safe conversation history.
 type ConversationHistory struct {
 	mu       sync.RWMutex

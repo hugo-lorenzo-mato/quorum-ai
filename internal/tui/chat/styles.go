@@ -116,6 +116,39 @@ func (s *MessageStyles) FormatBotMessage(agentName, content, timestamp string, _
 	return header + "\n" + messageBox
 }
 
+// FormatSystemBubbleMessage formats a system message with bubble style
+func (s *MessageStyles) FormatSystemBubbleMessage(content, timestamp string) string {
+	// Container width: 85% of viewport
+	containerWidth := s.width * 85 / 100
+	if containerWidth < 40 {
+		containerWidth = 40
+	}
+
+	// === HEADER: "System 02:36" ===
+	headerStyle := lipgloss.NewStyle().
+		Foreground(systemMsgColor).
+		Bold(true)
+	tsStyle := lipgloss.NewStyle().
+		Foreground(timestampMsgColor)
+
+	header := headerStyle.Render("System")
+	if timestamp != "" {
+		header += " " + tsStyle.Render(timestamp)
+	}
+
+	// === BUBBLE CONTAINER with rounded border ===
+	containerStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(systemMsgColor).
+		Foreground(msgTextColor).
+		Padding(0, 1).
+		Width(containerWidth)
+
+	messageBox := containerStyle.Render(content)
+
+	return header + "\n" + messageBox
+}
+
 // FormatSystemMessage formats a system message
 func (s *MessageStyles) FormatSystemMessage(content string) string {
 	style := lipgloss.NewStyle().

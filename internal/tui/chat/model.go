@@ -2313,7 +2313,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if len(prompt) > 50 {
 				prompt = prompt[:47] + "..."
 			}
-			m.history.Add(NewSystemMessage(fmt.Sprintf("Session restored: %s @%s\n%q",
+			m.history.Add(NewSystemBubbleMessage(fmt.Sprintf("Session restored: %s @%s\n%q",
 				strings.ToUpper(string(msg.State.Status)),
 				msg.State.CurrentPhase,
 				prompt)))
@@ -2331,7 +2331,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.Status = AgentStatusIdle
 			}
 		}
-		m.history.Add(NewSystemMessage("Starting workflow..."))
+		m.history.Add(NewSystemBubbleMessage("Starting workflow..."))
 		m.logsPanel.AddInfo("workflow", "Workflow started: "+msg.Prompt)
 		// Auto-show logs panel when workflow starts so user can see progress
 		if !m.showLogs {
@@ -2373,9 +2373,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		m.logsPanel.AddSuccess("workflow", strings.Join(summaryParts, " | "))
-		m.history.Add(NewSystemMessage(strings.Join(summaryParts, "\n")))
+		m.history.Add(NewSystemBubbleMessage(strings.Join(summaryParts, "\n")))
 		if msg.State != nil {
-			m.history.Add(NewSystemMessage(formatWorkflowStatus(msg.State)))
+			status := strings.TrimPrefix(formatWorkflowStatus(msg.State), "/status\n\n")
+			m.history.Add(NewSystemBubbleMessage(status))
 		}
 		m.updateViewport()
 
@@ -2393,7 +2394,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		m.logsPanel.AddError("workflow", fmt.Sprintf("Workflow failed after %s: %s", formatDuration(elapsed), msg.Error.Error()))
-		m.history.Add(NewSystemMessage(fmt.Sprintf("Workflow failed after %s: %v", formatDuration(elapsed), msg.Error)))
+		m.history.Add(NewSystemBubbleMessage(fmt.Sprintf("Workflow failed after %s: %v", formatDuration(elapsed), msg.Error)))
 		m.updateViewport()
 
 	case WorkflowLogMsg:
@@ -2633,6 +2634,8 @@ func (m Model) handleSubmit() (tea.Model, tea.Cmd) {
 	// Check for command
 	cmd, args, isCmd := m.commands.Parse(input)
 	if isCmd {
+		m.history.Add(NewUserMessage(input))
+		m.updateViewport()
 		return m.handleCommand(cmd, args)
 	}
 
@@ -2844,6 +2847,10 @@ func (m Model) sendToAgentWithCtx(ctx context.Context, input, agentName string) 
 }
 
 func (m Model) handleCommand(cmd *Command, args []string) (tea.Model, tea.Cmd) {
+	addSystem := func(content string) {
+		m.history.Add(NewSystemBubbleMessage(content))
+	}
+
 	switch cmd.Name {
 	case "help":
 		var helpText string
@@ -2852,7 +2859,7 @@ func (m Model) handleCommand(cmd *Command, args []string) (tea.Model, tea.Cmd) {
 		} else {
 			helpText = m.commands.Help("")
 		}
-		m.history.Add(NewSystemMessage(helpText))
+		addSystem(helpText)
 		m.updateViewport()
 
 	case "clear":
@@ -2867,7 +2874,7 @@ func (m Model) handleCommand(cmd *Command, args []string) (tea.Model, tea.Cmd) {
 	case "model":
 		if len(args) > 0 {
 			m.currentModel = args[0]
-			m.history.Add(NewSystemMessage("Model: " + m.currentModel))
+			addSystem("Model: " + m.currentModel)
 		} else {
 			modelInfo := m.currentModel
 			if modelInfo == "" {
@@ -2878,7 +2885,7 @@ func (m Model) handleCommand(cmd *Command, args []string) (tea.Model, tea.Cmd) {
 					modelInfo = "(unknown)"
 				}
 			}
-			m.history.Add(NewSystemMessage("Current model: " + modelInfo))
+			addSystem("Current model: " + modelInfo)
 		}
 		m.updateViewport()
 
@@ -2887,20 +2894,20 @@ func (m Model) handleCommand(cmd *Command, args []string) (tea.Model, tea.Cmd) {
 			m.currentAgent = args[0]
 			// Reset model to empty so the agent uses its configured default
 			m.currentModel = ""
-			m.history.Add(NewSystemMessage("Agent: " + m.currentAgent + " (using default model)"))
+			addSystem("Agent: " + m.currentAgent + " (using default model)")
 		} else {
 			modelInfo := m.currentModel
 			if modelInfo == "" {
 				modelInfo = "default"
 			}
-			m.history.Add(NewSystemMessage(fmt.Sprintf("Current agent: %s (model: %s)", m.currentAgent, modelInfo)))
+			addSystem(fmt.Sprintf("Current agent: %s (model: %s)", m.currentAgent, modelInfo))
 		}
 		m.updateViewport()
 
 	case "status":
 		if m.workflowState != nil {
-			status := formatWorkflowStatus(m.workflowState)
-			m.history.Add(NewSystemMessage(status))
+			status := strings.TrimPrefix(formatWorkflowStatus(m.workflowState), "/status\n\n")
+			addSystem(status)
 		} else {
 			// Check if there's an active workflow in state that could be loaded
 			var hint string
@@ -2915,14 +2922,14 @@ func (m Model) handleCommand(cmd *Command, args []string) (tea.Model, tea.Cmd) {
 					}
 				}
 			}
-			m.history.Add(NewSystemMessage("/status\n\nNo workflow loaded in this session." + hint))
+			addSystem("No workflow loaded in this session." + hint)
 		}
 		m.updateViewport()
 		return m, nil
 
 	case "workflows":
 		if m.runner == nil {
-			m.history.Add(NewSystemMessage("Workflow runner not configured"))
+			addSystem("Workflow runner not configured")
 			m.updateViewport()
 			return m, nil
 		}
@@ -2930,17 +2937,16 @@ func (m Model) handleCommand(cmd *Command, args []string) (tea.Model, tea.Cmd) {
 		ctx := context.Background()
 		workflows, err := m.runner.ListWorkflows(ctx)
 		if err != nil {
-			m.history.Add(NewSystemMessage(fmt.Sprintf("Error listing workflows: %v", err)))
+			addSystem(fmt.Sprintf("Error listing workflows: %v", err))
 			m.updateViewport()
 			return m, nil
 		}
 		if len(workflows) == 0 {
-			m.history.Add(NewSystemMessage("No workflows found. Use '/analyze <prompt>' to start one."))
+			addSystem("No workflows found. Use '/analyze <prompt>' to start one.")
 			m.updateViewport()
 			return m, nil
 		}
 		var sb strings.Builder
-		sb.WriteString("/workflows\n\n")
 		for i, wf := range workflows {
 			marker := "  "
 			if wf.IsActive {
@@ -2955,17 +2961,17 @@ func (m Model) handleCommand(cmd *Command, args []string) (tea.Model, tea.Cmd) {
 			sb.WriteString(fmt.Sprintf("    %q\n\n", prompt))
 		}
 		sb.WriteString("> = active  |  /load <ID> to switch")
-		m.history.Add(NewSystemMessage(sb.String()))
+		addSystem(sb.String())
 		m.updateViewport()
 
 	case "load":
 		if m.runner == nil {
-			m.history.Add(NewSystemMessage("Workflow runner not configured"))
+			addSystem("Workflow runner not configured")
 			m.updateViewport()
 			return m, nil
 		}
 		if m.workflowRunning {
-			m.history.Add(NewSystemMessage("Workflow already running. Use /cancel first."))
+			addSystem("Workflow already running. Use /cancel first.")
 			m.updateViewport()
 			return m, nil
 		}
@@ -2976,17 +2982,16 @@ func (m Model) handleCommand(cmd *Command, args []string) (tea.Model, tea.Cmd) {
 		if len(args) == 0 {
 			workflows, err := m.runner.ListWorkflows(ctx)
 			if err != nil {
-				m.history.Add(NewSystemMessage(fmt.Sprintf("Error listing workflows: %v", err)))
+				addSystem(fmt.Sprintf("Error listing workflows: %v", err))
 				m.updateViewport()
 				return m, nil
 			}
 			if len(workflows) == 0 {
-				m.history.Add(NewSystemMessage("No workflows found. Use '/analyze <prompt>' to start one."))
+				addSystem("No workflows found. Use '/analyze <prompt>' to start one.")
 				m.updateViewport()
 				return m, nil
 			}
 			var sb strings.Builder
-			sb.WriteString("/load\n\n")
 			for i, wf := range workflows {
 				marker := "  "
 				if wf.IsActive {
@@ -3001,7 +3006,7 @@ func (m Model) handleCommand(cmd *Command, args []string) (tea.Model, tea.Cmd) {
 				sb.WriteString(fmt.Sprintf("    %q\n\n", prompt))
 			}
 			sb.WriteString("> = active  |  /load <ID> to switch")
-			m.history.Add(NewSystemMessage(sb.String()))
+			addSystem(sb.String())
 			m.updateViewport()
 			return m, nil
 		}
@@ -3010,7 +3015,7 @@ func (m Model) handleCommand(cmd *Command, args []string) (tea.Model, tea.Cmd) {
 		workflowID := args[0]
 		state, err := m.runner.LoadWorkflow(ctx, workflowID)
 		if err != nil {
-			m.history.Add(NewSystemMessage(fmt.Sprintf("Error loading workflow: %v", err)))
+			addSystem(fmt.Sprintf("Error loading workflow: %v", err))
 			m.updateViewport()
 			return m, nil
 		}
@@ -3022,7 +3027,6 @@ func (m Model) handleCommand(cmd *Command, args []string) (tea.Model, tea.Cmd) {
 
 		// Show success message with workflow details
 		var sb strings.Builder
-		sb.WriteString(fmt.Sprintf("/load %s\n\n", workflowID))
 
 		// Status with icon
 		statusIcon := "○"
@@ -3082,7 +3086,7 @@ func (m Model) handleCommand(cmd *Command, args []string) (tea.Model, tea.Cmd) {
 			sb.WriteString("/analyze <prompt>")
 		}
 		sb.WriteString("  |  /status for details")
-		m.history.Add(NewSystemMessage(sb.String()))
+		addSystem(sb.String())
 		m.updateViewport()
 		return m, nil // Important: return modified m with workflowState set
 
@@ -3090,42 +3094,41 @@ func (m Model) handleCommand(cmd *Command, args []string) (tea.Model, tea.Cmd) {
 		if m.controlPlane != nil && m.workflowRunning {
 			m.controlPlane.Cancel()
 			m.workflowRunning = false
-			m.history.Add(NewSystemMessage("Workflow cancelled"))
+			addSystem("Workflow cancelled")
 		} else {
-			m.history.Add(NewSystemMessage("No active workflow"))
+			addSystem("No active workflow")
 		}
 		m.updateViewport()
 
 	case "analyze":
 		if m.runner == nil {
-			m.history.Add(NewSystemMessage("Workflow runner not configured"))
+			addSystem("Workflow runner not configured")
 			m.updateViewport()
 			return m, nil
 		}
 		if m.workflowRunning {
-			m.history.Add(NewSystemMessage("Workflow already running. Use /cancel first."))
+			addSystem("Workflow already running. Use /cancel first.")
 			m.updateViewport()
 			return m, nil
 		}
 		if len(args) == 0 {
-			m.history.Add(NewSystemMessage("Usage: /analyze <prompt>"))
+			addSystem("Usage: /analyze <prompt>")
 			m.updateViewport()
 			return m, nil
 		}
 
 		prompt := strings.Join(args, " ")
-		m.history.Add(NewUserMessage(fmt.Sprintf("/analyze %s", prompt)))
 		m.updateViewport()
 		return m, m.runAnalyze(prompt)
 
 	case "plan":
 		if m.runner == nil {
-			m.history.Add(NewSystemMessage("Workflow runner not configured"))
+			addSystem("Workflow runner not configured")
 			m.updateViewport()
 			return m, nil
 		}
 		if m.workflowRunning {
-			m.history.Add(NewSystemMessage("Workflow already running. Use /cancel first."))
+			addSystem("Workflow already running. Use /cancel first.")
 			m.updateViewport()
 			return m, nil
 		}
@@ -3155,30 +3158,28 @@ func (m Model) handleCommand(cmd *Command, args []string) (tea.Model, tea.Cmd) {
 			}
 
 			if canContinue {
-				m.history.Add(NewUserMessage("/plan"))
-				m.history.Add(NewSystemMessage("Continuing to planning phase from active workflow..."))
+				addSystem("Continuing to planning phase from active workflow...")
 				m.updateViewport()
 				return m, m.runPlanPhase()
 			}
-			m.history.Add(NewSystemMessage("No active workflow to continue. Use '/plan <prompt>' to start new or '/analyze' first."))
+			addSystem("No active workflow to continue. Use '/plan <prompt>' to start new or '/analyze' first.")
 			m.updateViewport()
 			return m, nil
 		}
 
 		// With args, start new workflow
 		prompt := strings.Join(args, " ")
-		m.history.Add(NewUserMessage(fmt.Sprintf("/plan %s", prompt)))
 		m.updateViewport()
 		return m, m.runWorkflow(prompt)
 
 	case "replan":
 		if m.runner == nil {
-			m.history.Add(NewSystemMessage("Workflow runner not configured"))
+			addSystem("Workflow runner not configured")
 			m.updateViewport()
 			return m, nil
 		}
 		if m.workflowRunning {
-			m.history.Add(NewSystemMessage("Workflow already running. Use /cancel first."))
+			addSystem("Workflow already running. Use /cancel first.")
 			m.updateViewport()
 			return m, nil
 		}
@@ -3193,7 +3194,7 @@ func (m Model) handleCommand(cmd *Command, args []string) (tea.Model, tea.Cmd) {
 		}
 
 		if m.workflowState == nil {
-			m.history.Add(NewSystemMessage("No active workflow to replan. Use '/analyze' first."))
+			addSystem("No active workflow to replan. Use '/analyze' first.")
 			m.updateViewport()
 			return m, nil
 		}
@@ -3205,23 +3206,21 @@ func (m Model) handleCommand(cmd *Command, args []string) (tea.Model, tea.Cmd) {
 		}
 
 		if additionalContext != "" {
-			m.history.Add(NewUserMessage(fmt.Sprintf("/replan %s", additionalContext)))
-			m.history.Add(NewSystemMessage(fmt.Sprintf("Replanning with additional context (%d chars)...", len(additionalContext))))
+			addSystem(fmt.Sprintf("Replanning with additional context (%d chars)...", len(additionalContext)))
 		} else {
-			m.history.Add(NewUserMessage("/replan"))
-			m.history.Add(NewSystemMessage("Replanning: clearing existing issues and regenerating..."))
+			addSystem("Replanning: clearing existing issues and regenerating...")
 		}
 		m.updateViewport()
 		return m, m.runReplanPhase(additionalContext)
 
 	case "useplan", "up", "useplans":
 		if m.runner == nil {
-			m.history.Add(NewSystemMessage("Workflow runner not configured"))
+			addSystem("Workflow runner not configured")
 			m.updateViewport()
 			return m, nil
 		}
 		if m.workflowRunning {
-			m.history.Add(NewSystemMessage("Workflow already running. Use /cancel first."))
+			addSystem("Workflow already running. Use /cancel first.")
 			m.updateViewport()
 			return m, nil
 		}
@@ -3236,46 +3235,44 @@ func (m Model) handleCommand(cmd *Command, args []string) (tea.Model, tea.Cmd) {
 		}
 
 		if m.workflowState == nil {
-			m.history.Add(NewSystemMessage("No active workflow found. Use '/analyze' first."))
+			addSystem("No active workflow found. Use '/analyze' first.")
 			m.updateViewport()
 			return m, nil
 		}
 
-		m.history.Add(NewUserMessage("/useplan"))
-		m.history.Add(NewSystemMessage("Loading existing task files from filesystem (skipping agent call)..."))
+		addSystem("Loading existing task files from filesystem (skipping agent call)...")
 		m.updateViewport()
 		return m, m.runUsePlanPhase()
 
 	case "run":
 		if m.runner == nil {
-			m.history.Add(NewSystemMessage("Workflow runner not configured"))
+			addSystem("Workflow runner not configured")
 			m.updateViewport()
 			return m, nil
 		}
 		if m.workflowRunning {
-			m.history.Add(NewSystemMessage("Workflow already running. Use /cancel first."))
+			addSystem("Workflow already running. Use /cancel first.")
 			m.updateViewport()
 			return m, nil
 		}
 		if len(args) == 0 {
-			m.history.Add(NewSystemMessage("Usage: /run <prompt>"))
+			addSystem("Usage: /run <prompt>")
 			m.updateViewport()
 			return m, nil
 		}
 
 		prompt := strings.Join(args, " ")
-		m.history.Add(NewUserMessage(fmt.Sprintf("/run %s", prompt)))
 		m.updateViewport()
 		return m, m.runWorkflow(prompt)
 
 	case "execute":
 		if m.runner == nil {
-			m.history.Add(NewSystemMessage("Workflow runner not configured"))
+			addSystem("Workflow runner not configured")
 			m.updateViewport()
 			return m, nil
 		}
 		if m.workflowRunning {
-			m.history.Add(NewSystemMessage("Workflow already running. Use /cancel first."))
+			addSystem("Workflow already running. Use /cancel first.")
 			m.updateViewport()
 			return m, nil
 		}
@@ -3306,12 +3303,11 @@ func (m Model) handleCommand(cmd *Command, args []string) (tea.Model, tea.Cmd) {
 				// This handles the case where task files were created but manifest parsing failed.
 				canContinue = true
 				needsStateRepair = true
-				m.history.Add(NewSystemMessage(fmt.Sprintf("Found %d existing tasks. Recovering workflow state...", len(m.workflowState.Tasks))))
+				addSystem(fmt.Sprintf("Found %d existing tasks. Recovering workflow state...", len(m.workflowState.Tasks)))
 			}
 		}
 
 		if canContinue {
-			m.history.Add(NewUserMessage("/execute"))
 			if needsStateRepair {
 				// Repair the state before executing
 				m.workflowState.Status = core.WorkflowStatusRunning
@@ -3326,28 +3322,28 @@ func (m Model) handleCommand(cmd *Command, args []string) (tea.Model, tea.Cmd) {
 				})
 				// Save the repaired state
 				if err := m.runner.SaveState(context.Background(), m.workflowState); err != nil {
-					m.history.Add(NewSystemMessage(fmt.Sprintf("Warning: Failed to save repaired state: %v", err)))
+					addSystem(fmt.Sprintf("Warning: Failed to save repaired state: %v", err))
 				} else {
-					m.history.Add(NewSystemMessage("Workflow state repaired successfully."))
+					addSystem("Workflow state repaired successfully.")
 				}
 			}
-			m.history.Add(NewSystemMessage("Continuing to execution phase from active workflow..."))
+			addSystem("Continuing to execution phase from active workflow...")
 			m.updateViewport()
 			return m, m.runExecutePhase()
 		}
-		m.history.Add(NewSystemMessage("No active workflow to execute. Use '/plan' first."))
+		addSystem("No active workflow to execute. Use '/plan' first.")
 
 	case "retry":
 		if m.controlPlane == nil {
-			m.history.Add(NewSystemMessage("No control plane"))
+			addSystem("No control plane")
 			m.updateViewport()
 			return m, nil
 		}
 		if len(args) > 0 {
 			m.controlPlane.RetryTask(core.TaskID(args[0]))
-			m.history.Add(NewSystemMessage(fmt.Sprintf("Retrying: %s", args[0])))
+			addSystem(fmt.Sprintf("Retrying: %s", args[0]))
 		} else {
-			m.history.Add(NewSystemMessage("Usage: /retry <task_id>"))
+			addSystem("Usage: /retry <task_id>")
 		}
 		m.updateViewport()
 
@@ -3372,7 +3368,7 @@ func (m Model) handleCommand(cmd *Command, args []string) (tea.Model, tea.Cmd) {
 	case "clearlogs":
 		// Clear logs
 		m.logsPanel.Clear()
-		m.history.Add(NewSystemMessage("Logs cleared"))
+		addSystem("Logs cleared")
 		m.updateViewport()
 
 	case "copylogs":
@@ -3389,13 +3385,13 @@ func (m Model) handleCommand(cmd *Command, args []string) (tea.Model, tea.Cmd) {
 			m.inputFocused = false
 			m.textarea.Blur()
 			m.explorerPanel.SetFocused(true)
-			m.history.Add(NewSystemMessage("File explorer opened (arrows to navigate, Esc to return)"))
+			addSystem("File explorer opened (arrows to navigate, Esc to return)")
 		} else {
 			m.explorerFocus = false
 			m.inputFocused = true
 			m.textarea.Focus()
 			m.explorerPanel.SetFocused(false)
-			m.history.Add(NewSystemMessage("File explorer closed"))
+			addSystem("File explorer closed")
 		}
 		if m.width > 0 && m.height > 0 {
 			m.recalculateLayout()
@@ -3423,16 +3419,16 @@ func (m Model) handleCommand(cmd *Command, args []string) (tea.Model, tea.Cmd) {
 			applyDarkTheme()
 			ApplyDarkThemeMessages()
 			m.messageStyles = NewMessageStyles(m.viewport.Width)
-			m.history.Add(NewSystemMessage("Theme: dark"))
+			addSystem("Theme: dark")
 		case "light":
 			m.darkTheme = false
 			tui.SetColorScheme(tui.LightScheme)
 			applyLightTheme()
 			ApplyLightThemeMessages()
 			m.messageStyles = NewMessageStyles(m.viewport.Width)
-			m.history.Add(NewSystemMessage("Theme: light"))
+			addSystem("Theme: light")
 		default:
-			m.history.Add(NewSystemMessage("Usage: /theme [dark|light]"))
+			addSystem("Usage: /theme [dark|light]")
 		}
 		m.updateViewport()
 	}
@@ -4014,8 +4010,16 @@ func (m Model) renderHistory() string {
 			sb.WriteString("\n\n")
 
 		case RoleSystem:
-			// System message: subtle styling
-			rendered := styles.FormatSystemMessage(msg.Content)
+			// System message: subtle styling (or bubble if requested)
+			rendered := ""
+			if msg.Metadata != nil {
+				if bubble, ok := msg.Metadata["bubble"].(bool); ok && bubble {
+					rendered = styles.FormatSystemBubbleMessage(msg.Content, timestamp)
+				}
+			}
+			if rendered == "" {
+				rendered = styles.FormatSystemMessage(msg.Content)
+			}
 			sb.WriteString(rendered)
 			sb.WriteString("\n\n")
 		}
