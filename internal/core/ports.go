@@ -117,6 +117,9 @@ type AgentRegistry interface {
 	// List returns all registered agent names.
 	List() []string
 
+	// ListEnabled returns names of configured and enabled agents.
+	ListEnabled() []string
+
 	// Available returns agents that pass Ping.
 	Available(ctx context.Context) []string
 

@@ -49,7 +49,7 @@ func NewAnalyzer(moderatorConfig ModeratorConfig) (*Analyzer, error) {
 	}, nil
 }
 
-// Run executes the complete analysis phase using semantic moderator consensus.
+// Run executes the complete analysis phase using either single-agent or multi-agent consensus.
 func (a *Analyzer) Run(ctx context.Context, wctx *Context) error {
 	wctx.Logger.Info("starting analyze phase", "workflow_id", wctx.State.WorkflowID)
 
@@ -69,16 +69,28 @@ func (a *Analyzer) Run(ctx context.Context, wctx *Context) error {
 	wctx.State.CurrentPhase = core.PhaseAnalyze
 	if wctx.Output != nil {
 		wctx.Output.PhaseStarted(core.PhaseAnalyze)
-		wctx.Output.Log("info", "analyzer", "Starting multi-agent analysis phase")
 	}
 	if err := wctx.Checkpoint.PhaseCheckpoint(wctx.State, core.PhaseAnalyze, false); err != nil {
 		wctx.Logger.Warn("failed to create phase checkpoint", "error", err)
 	}
 
-	// Verify moderator is configured
+	// Check for single-agent mode first
+	if wctx.Config != nil && wctx.Config.SingleAgent.Enabled {
+		if wctx.Output != nil {
+			wctx.Output.Log("info", "analyzer", fmt.Sprintf("Starting single-agent analysis with %s", wctx.Config.SingleAgent.Agent))
+		}
+		return a.runSingleAgentAnalysis(ctx, wctx)
+	}
+
+	// Multi-agent consensus mode - verify moderator is configured
+	if wctx.Output != nil {
+		wctx.Output.Log("info", "analyzer", "Starting multi-agent analysis phase")
+	}
+
 	if a.moderator == nil || !a.moderator.IsEnabled() {
 		return fmt.Errorf("semantic moderator is required but not configured. "+
 			"Enable it in your config file under 'phases.analyze.moderator.enabled: true' with agent specified. "+
+			"Alternatively, enable single-agent mode with 'phases.analyze.single_agent.enabled: true'. "+
 			"See: %s#phases-settings", DocsConfigURL)
 	}
 
@@ -93,6 +105,157 @@ func (a *Analyzer) Run(ctx context.Context, wctx *Context) error {
 	}
 
 	return a.runWithModerator(ctx, wctx)
+}
+
+// runSingleAgentAnalysis executes analysis with a single specified agent, bypassing multi-agent consensus.
+// This mode is useful for simpler tasks or when consensus overhead is not needed.
+func (a *Analyzer) runSingleAgentAnalysis(ctx context.Context, wctx *Context) error {
+	agentName := wctx.Config.SingleAgent.Agent
+	if agentName == "" {
+		return fmt.Errorf("single_agent.agent must be specified when single_agent.enabled is true")
+	}
+
+	wctx.Logger.Info("running single-agent analysis",
+		"agent", agentName,
+		"model_override", wctx.Config.SingleAgent.Model,
+	)
+
+	// Get the agent from registry
+	agent, err := wctx.Agents.Get(agentName)
+	if err != nil {
+		return fmt.Errorf("getting agent %s: %w", agentName, err)
+	}
+
+	// Acquire rate limit
+	limiter := wctx.RateLimits.Get(agentName)
+	if err := limiter.Acquire(); err != nil {
+		return fmt.Errorf("rate limit: %w", err)
+	}
+
+	// Resolve model - use override if provided, otherwise fall back to phase model
+	model := wctx.Config.SingleAgent.Model
+	if model == "" {
+		model = ResolvePhaseModel(wctx.Config, agentName, core.PhaseAnalyze, "")
+	}
+
+	// Get output file path for LLM to write directly
+	var outputFilePath string
+	if wctx.Report != nil && wctx.Report.IsEnabled() {
+		outputFilePath = wctx.Report.SingleAgentAnalysisPath(agentName, model)
+	}
+
+	// Render analysis prompt
+	prompt, err := wctx.Prompts.RenderAnalyzeV1(AnalyzeV1Params{
+		Prompt:         GetEffectivePrompt(wctx.State),
+		Context:        BuildContextString(wctx.State),
+		OutputFilePath: outputFilePath,
+	})
+	if err != nil {
+		return fmt.Errorf("rendering prompt: %w", err)
+	}
+
+	// Track start time
+	startTime := time.Now()
+
+	// Emit started event
+	if wctx.Output != nil {
+		wctx.Output.AgentEvent("started", agentName, "Running single-agent analysis", map[string]interface{}{
+			"phase":           "analyze_single",
+			"model":           model,
+			"mode":            "single_agent",
+			"timeout_seconds": int(wctx.Config.PhaseTimeouts.Analyze.Seconds()),
+		})
+	}
+
+	// Execute with retry
+	var result *core.ExecuteResult
+	err = wctx.Retry.Execute(func() error {
+		var execErr error
+		result, execErr = agent.Execute(ctx, core.ExecuteOptions{
+			Prompt:  prompt,
+			Format:  core.OutputFormatText,
+			Model:   model,
+			Timeout: wctx.Config.PhaseTimeouts.Analyze,
+			Sandbox: wctx.Config.Sandbox,
+			Phase:   core.PhaseAnalyze,
+		})
+		return execErr
+	})
+
+	durationMS := time.Since(startTime).Milliseconds()
+
+	if err != nil {
+		if wctx.Output != nil {
+			wctx.Output.AgentEvent("error", agentName, err.Error(), map[string]interface{}{
+				"phase":       "analyze_single",
+				"model":       model,
+				"mode":        "single_agent",
+				"duration_ms": durationMS,
+				"error_type":  fmt.Sprintf("%T", err),
+			})
+		}
+		return fmt.Errorf("single-agent analysis failed: %w", err)
+	}
+
+	// Emit completed event
+	if wctx.Output != nil {
+		wctx.Output.AgentEvent("completed", agentName, "Single-agent analysis completed", map[string]interface{}{
+			"phase":       "analyze_single",
+			"model":       result.Model,
+			"mode":        "single_agent",
+			"tokens_in":   result.TokensIn,
+			"tokens_out":  result.TokensOut,
+			"cost_usd":    result.CostUSD,
+			"duration_ms": durationMS,
+		})
+	}
+
+	wctx.Logger.Info("single-agent analysis completed",
+		"agent", agentName,
+		"model", result.Model,
+		"tokens_in", result.TokensIn,
+		"tokens_out", result.TokensOut,
+		"cost_usd", result.CostUSD,
+		"duration_ms", durationMS,
+	)
+
+	// Update metrics
+	wctx.UpdateMetrics(func(m *core.StateMetrics) {
+		m.TotalTokensIn += result.TokensIn
+		m.TotalTokensOut += result.TokensOut
+		m.TotalCostUSD += result.CostUSD
+		// No consensus score in single-agent mode
+		m.ConsensusScore = 0
+	})
+
+	// Create consolidated_analysis checkpoint directly (bypasses synthesis)
+	// The checkpoint format is compatible with downstream phases (Planner, Executor)
+	// which only need the "content" field
+	if err := wctx.Checkpoint.CreateCheckpoint(wctx.State, "consolidated_analysis", map[string]interface{}{
+		"content":     result.Output,
+		"agent_count": 1,
+		"synthesized": false,
+		"mode":        "single_agent",
+		"agent":       agentName,
+		"model":       result.Model,
+		"tokens_in":   result.TokensIn,
+		"tokens_out":  result.TokensOut,
+		"cost_usd":    result.CostUSD,
+		"duration_ms": durationMS,
+	}); err != nil {
+		return fmt.Errorf("creating consolidated_analysis checkpoint: %w", err)
+	}
+
+	if wctx.Output != nil {
+		wctx.Output.Log("success", "analyzer", fmt.Sprintf("Single-agent analysis completed with %s", agentName))
+	}
+
+	// Create phase complete checkpoint
+	if err := wctx.Checkpoint.PhaseCheckpoint(wctx.State, core.PhaseAnalyze, true); err != nil {
+		wctx.Logger.Warn("failed to create phase complete checkpoint", "error", err)
+	}
+
+	return nil
 }
 
 // runWithModerator executes the iterative V(n) analysis with semantic moderator consensus.

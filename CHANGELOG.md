@@ -13,6 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Service layer orchestration
 - CLI and TUI foundations
 - State persistence and git worktree support
+- **Single-Agent Execution Mode** for analyze phase:
+  - New `--single-agent <agent>` CLI flag to bypass multi-agent consensus
+  - New `--single-agent-model <model>` CLI flag for optional model override
+  - Configuration via `phases.analyze.single_agent.enabled/agent/model`
+  - Produces compatible `consolidated_analysis` checkpoint for downstream phases
+  - Lower cost and latency for simpler, well-defined tasks
 
 ### Changed
 - None
@@ -24,7 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - None
 
 ### Fixed
-- None
+- `ValidateModeratorConfig` now correctly counts enabled agents using `ListEnabled()` instead of all registered agent factories
 
 ### Security
 - None

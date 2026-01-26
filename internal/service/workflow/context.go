@@ -130,6 +130,8 @@ type Config struct {
 	PhaseTimeouts PhaseTimeouts
 	// Moderator configures semantic consensus evaluation via a moderator LLM.
 	Moderator ModeratorConfig
+	// SingleAgent configures single-agent execution mode (bypasses multi-agent consensus).
+	SingleAgent SingleAgentConfig
 	// Finalization configures post-task git operations.
 	Finalization FinalizationConfig
 }
@@ -151,6 +153,18 @@ type ModeratorConfig struct {
 	AbortThreshold float64
 	// StagnationThreshold triggers early exit if score improvement is below this (default: 0.02).
 	StagnationThreshold float64
+}
+
+// SingleAgentConfig configures single-agent execution mode for the analyze phase.
+// When Enabled is true, the Analyzer bypasses multi-agent consensus.
+type SingleAgentConfig struct {
+	// Enabled activates single-agent mode, bypassing multi-agent consensus.
+	Enabled bool
+	// Agent is the name of the agent to use for single-agent analysis.
+	Agent string
+	// Model is an optional override for the agent's default model.
+	// If empty, the agent's configured default model is used.
+	Model string
 }
 
 // PhaseTimeouts holds timeout durations for each workflow phase.

@@ -175,6 +175,9 @@ phases:
 | `moderator.max_rounds` | int | `5` | Maximum refinement rounds before aborting |
 | `moderator.abort_threshold` | float | `0.30` | Score below this aborts workflow |
 | `moderator.stagnation_threshold` | float | `0.02` | Minimum improvement required between rounds |
+| `single_agent.enabled` | bool | `false` | Enable single-agent mode (bypasses multi-agent consensus) |
+| `single_agent.agent` | string | - | Agent to use for single-agent analysis |
+| `single_agent.model` | string | - | Optional model override (uses `phase_models.analyze` if not set) |
 
 #### Plan Phase
 
@@ -249,6 +252,32 @@ Not all disagreements are equal:
 | **High** | Major reduction | Architectural decisions, core logic, security, breaking changes |
 | **Medium** | Moderate reduction | Implementation details, edge cases, performance |
 | **Low** | Minimal reduction | Naming conventions, code style, documentation, cosmetic choices |
+
+#### Single-Agent Mode
+
+Single-agent mode bypasses multi-agent consensus for simpler tasks or when you want to use a specific agent without the overhead of consensus evaluation.
+
+**When to use:**
+
+- Simple, well-defined tasks
+- Rapid prototyping or experimentation
+- When a specific agent excels at the task type
+- Cost optimization (fewer LLM calls)
+
+**Configuration:**
+
+```yaml
+phases:
+  analyze:
+    single_agent:
+      enabled: true
+      agent: claude
+      model: claude-opus-4  # Optional: override the agent's default model
+    moderator:
+      enabled: false  # Must be disabled when single_agent is enabled
+```
+
+**Important:** `single_agent.enabled` and `moderator.enabled` are mutually exclusive. Single-agent mode produces a `consolidated_analysis` checkpoint directly (with `mode: "single_agent"` metadata), compatible with downstream plan and execute phases.
 
 ---
 

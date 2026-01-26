@@ -175,6 +175,23 @@ func InitPhaseRunner(ctx context.Context, phase core.Phase, maxRetries int, dryR
 			Enabled: false,
 			Agent:   cfg.Phases.Analyze.Refiner.Agent,
 		},
+		Synthesizer: workflow.SynthesizerConfig{
+			Agent: cfg.Phases.Analyze.Synthesizer.Agent,
+		},
+		Moderator: workflow.ModeratorConfig{
+			Enabled:             cfg.Phases.Analyze.Moderator.Enabled,
+			Agent:               cfg.Phases.Analyze.Moderator.Agent,
+			Threshold:           cfg.Phases.Analyze.Moderator.Threshold,
+			MinRounds:           cfg.Phases.Analyze.Moderator.MinRounds,
+			MaxRounds:           cfg.Phases.Analyze.Moderator.MaxRounds,
+			AbortThreshold:      cfg.Phases.Analyze.Moderator.AbortThreshold,
+			StagnationThreshold: cfg.Phases.Analyze.Moderator.StagnationThreshold,
+		},
+		SingleAgent: workflow.SingleAgentConfig{
+			Enabled: cfg.Phases.Analyze.SingleAgent.Enabled,
+			Agent:   cfg.Phases.Analyze.SingleAgent.Agent,
+			Model:   cfg.Phases.Analyze.SingleAgent.Model,
+		},
 		PhaseTimeouts: workflow.PhaseTimeouts{
 			Analyze: analyzeTimeout,
 			Plan:    planTimeout,

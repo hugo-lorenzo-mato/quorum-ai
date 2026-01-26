@@ -157,6 +157,12 @@ func (w *WorkflowReportWriter) VnAnalysisPath(agentName, model string, round int
 	return filepath.Join(w.AnalyzePhasePath(), fmt.Sprintf("v%d", round), filename)
 }
 
+// SingleAgentAnalysisPath returns the path where the LLM should write a single-agent analysis
+func (w *WorkflowReportWriter) SingleAgentAnalysisPath(agentName, model string) string {
+	filename := fmt.Sprintf("%s-%s.md", agentName, sanitizeFilename(model))
+	return filepath.Join(w.AnalyzePhasePath(), "single-agent", filename)
+}
+
 // ConsolidatedAnalysisPath returns the path where the LLM should write the consolidated analysis
 func (w *WorkflowReportWriter) ConsolidatedAnalysisPath() string {
 	return filepath.Join(w.AnalyzePhasePath(), "consolidated.md")

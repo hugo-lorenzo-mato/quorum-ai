@@ -336,6 +336,7 @@ func (v *Validator) validatePhases(cfg *PhasesConfig, agents *AgentsConfig) {
 	v.validatePhaseTimeout("phases.analyze.timeout", cfg.Analyze.Timeout)
 	v.validateRefiner(&cfg.Analyze.Refiner, agents)
 	v.validateModerator(&cfg.Analyze.Moderator, agents)
+	v.validateSingleAgent(&cfg.Analyze.SingleAgent, &cfg.Analyze.Moderator, agents)
 	v.validateSynthesizer("phases.analyze.synthesizer", cfg.Analyze.Synthesizer.Agent, agents)
 
 	// Validate plan phase
@@ -417,9 +418,9 @@ func (v *Validator) validatePhaseParticipation(cfg *PhasesConfig, agents *Agents
 		}
 	}
 
-	// 5. Validate minimum agents for multi-agent analysis (only when moderator enabled)
-	// Single-agent workflows are valid when moderator is disabled
-	if cfg.Analyze.Moderator.Enabled && analyzeCount < 2 {
+	// 5. Validate minimum agents for multi-agent analysis (only when moderator enabled AND single_agent disabled)
+	// Single-agent workflows are valid when single_agent.enabled=true or moderator is disabled
+	if cfg.Analyze.Moderator.Enabled && !cfg.Analyze.SingleAgent.Enabled && analyzeCount < 2 {
 		v.addError("agents.*.phases.analyze", analyzeAgents,
 			"at least 2 agents must have phases.analyze: true for multi-agent consensus (moderator enabled)")
 	}
@@ -509,6 +510,37 @@ func (v *Validator) validateModerator(cfg *ModeratorConfig, agents *AgentsConfig
 	}
 	if cfg.MaxRounds < cfg.MinRounds {
 		v.addError("phases.analyze.moderator.max_rounds", cfg.MaxRounds, "must be >= min_rounds")
+	}
+}
+
+func (v *Validator) validateSingleAgent(cfg *SingleAgentConfig, moderator *ModeratorConfig, agents *AgentsConfig) {
+	// Mutual exclusivity check
+	if cfg.Enabled && moderator.Enabled {
+		v.addError("phases.analyze.single_agent.enabled", cfg.Enabled,
+			"cannot be true when moderator.enabled is also true; single-agent mode bypasses consensus")
+	}
+
+	if !cfg.Enabled {
+		return
+	}
+
+	validAgents := map[string]bool{
+		"claude": true, "gemini": true, "codex": true, "copilot": true,
+	}
+	if !validAgents[cfg.Agent] {
+		v.addError("phases.analyze.single_agent.agent", cfg.Agent, "unknown agent")
+		return
+	}
+
+	// Validate that the specified agent is enabled
+	agentEnabled := map[string]bool{
+		"claude":  agents.Claude.Enabled,
+		"gemini":  agents.Gemini.Enabled,
+		"codex":   agents.Codex.Enabled,
+		"copilot": agents.Copilot.Enabled,
+	}
+	if !agentEnabled[cfg.Agent] {
+		v.addError("phases.analyze.single_agent.agent", cfg.Agent, "specified agent must be enabled")
 	}
 }
 

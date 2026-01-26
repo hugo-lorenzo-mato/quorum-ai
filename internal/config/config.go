@@ -113,6 +113,7 @@ type PhasesConfig struct {
 
 // AnalyzePhaseConfig configures the analysis phase.
 // Flow: refiner → multi-agent analysis → moderator (consensus) → synthesizer
+// When SingleAgent.Enabled=true, flow becomes: refiner → single-agent analysis → synthesizer
 type AnalyzePhaseConfig struct {
 	// Timeout for the entire analysis phase (e.g., "2h").
 	Timeout string `mapstructure:"timeout"`
@@ -122,6 +123,8 @@ type AnalyzePhaseConfig struct {
 	Moderator ModeratorConfig `mapstructure:"moderator"`
 	// Synthesizer combines all analyses into a unified report.
 	Synthesizer SynthesizerConfig `mapstructure:"synthesizer"`
+	// SingleAgent configures single-agent execution mode (bypasses multi-agent consensus).
+	SingleAgent SingleAgentConfig `mapstructure:"single_agent"`
 }
 
 // PlanPhaseConfig configures the planning phase.
@@ -177,6 +180,30 @@ type SynthesizerConfig struct {
 	// Model overrides the agent's default model for synthesis.
 	// If empty, uses agents.<agent>.phase_models.analyze or agents.<agent>.model.
 	Model string `mapstructure:"model"`
+}
+
+// SingleAgentConfig configures single-agent execution mode for the analyze phase.
+// When enabled, the analysis phase runs with a single agent, bypassing the
+// multi-agent consensus mechanism. This is useful for simpler tasks that don't
+// require multiple perspectives.
+type SingleAgentConfig struct {
+	// Enabled activates single-agent mode. When true, the moderator is ignored
+	// and only the specified agent is used for analysis.
+	Enabled bool `mapstructure:"enabled"`
+	// Agent is the name of the agent to use for single-agent analysis.
+	// Required when Enabled is true.
+	Agent string `mapstructure:"agent"`
+	// Model is an optional override for the agent's default model.
+	Model string `mapstructure:"model"`
+}
+
+// IsValid returns true if the SingleAgentConfig is properly configured.
+// A valid config either has Enabled=false, or has Enabled=true with a non-empty Agent.
+func (c SingleAgentConfig) IsValid() bool {
+	if !c.Enabled {
+		return true
+	}
+	return strings.TrimSpace(c.Agent) != ""
 }
 
 // PlanSynthesizerConfig configures multi-agent plan synthesis.

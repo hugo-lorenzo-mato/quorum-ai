@@ -513,3 +513,131 @@ func TestStateConfig_EffectiveBackend(t *testing.T) {
 		})
 	}
 }
+
+func TestValidator_SingleAgentValidConfig(t *testing.T) {
+	cfg := validConfig()
+	// Enable single-agent mode with valid agent
+	cfg.Phases.Analyze.SingleAgent.Enabled = true
+	cfg.Phases.Analyze.SingleAgent.Agent = "claude"
+	// Disable moderator to avoid mutual exclusivity error
+	cfg.Phases.Analyze.Moderator.Enabled = false
+
+	v := NewValidator()
+	err := v.Validate(cfg)
+	if err != nil {
+		t.Errorf("Validate() error = %v, want nil", err)
+	}
+}
+
+func TestValidator_SingleAgentMissingAgent(t *testing.T) {
+	cfg := validConfig()
+	// Enable single-agent mode without specifying agent
+	cfg.Phases.Analyze.SingleAgent.Enabled = true
+	cfg.Phases.Analyze.SingleAgent.Agent = "" // Missing agent
+	cfg.Phases.Analyze.Moderator.Enabled = false
+
+	v := NewValidator()
+	err := v.Validate(cfg)
+	if err == nil {
+		t.Error("Validate() error = nil, want error for missing single_agent.agent")
+	}
+
+	if !strings.Contains(err.Error(), "single_agent.agent") {
+		t.Errorf("error = %v, should mention single_agent.agent", err)
+	}
+}
+
+func TestValidator_SingleAgentUnknownAgent(t *testing.T) {
+	cfg := validConfig()
+	// Enable single-agent mode with unknown agent
+	cfg.Phases.Analyze.SingleAgent.Enabled = true
+	cfg.Phases.Analyze.SingleAgent.Agent = "nonexistent"
+	cfg.Phases.Analyze.Moderator.Enabled = false
+
+	v := NewValidator()
+	err := v.Validate(cfg)
+	if err == nil {
+		t.Error("Validate() error = nil, want error for unknown agent")
+	}
+
+	if !strings.Contains(err.Error(), "single_agent.agent") {
+		t.Errorf("error = %v, should mention single_agent.agent", err)
+	}
+}
+
+func TestValidator_SingleAgentWithDisabledAgent(t *testing.T) {
+	cfg := validConfig()
+	// Enable single-agent mode with a disabled agent
+	cfg.Phases.Analyze.SingleAgent.Enabled = true
+	cfg.Phases.Analyze.SingleAgent.Agent = "gemini"
+	cfg.Phases.Analyze.Moderator.Enabled = false
+	cfg.Agents.Gemini.Enabled = false // Agent is disabled
+
+	v := NewValidator()
+	err := v.Validate(cfg)
+	if err == nil {
+		t.Error("Validate() error = nil, want error for disabled agent in single_agent mode")
+	}
+
+	if !strings.Contains(err.Error(), "single_agent.agent") {
+		t.Errorf("error = %v, should mention single_agent.agent", err)
+	}
+}
+
+func TestValidator_SingleAgentAndModeratorMutualExclusion(t *testing.T) {
+	cfg := validConfig()
+	// Enable both single-agent and moderator - should be mutually exclusive
+	cfg.Phases.Analyze.SingleAgent.Enabled = true
+	cfg.Phases.Analyze.SingleAgent.Agent = "claude"
+	cfg.Phases.Analyze.Moderator.Enabled = true
+	cfg.Phases.Analyze.Moderator.Agent = "claude"
+
+	v := NewValidator()
+	err := v.Validate(cfg)
+	if err == nil {
+		t.Error("Validate() error = nil, want error for mutual exclusion violation")
+	}
+
+	if !strings.Contains(err.Error(), "single_agent.enabled") {
+		t.Errorf("error = %v, should mention single_agent.enabled", err)
+	}
+}
+
+func TestValidator_SingleAgentDisabledIsValid(t *testing.T) {
+	cfg := validConfig()
+	// When single-agent is disabled, missing agent is OK
+	cfg.Phases.Analyze.SingleAgent.Enabled = false
+	cfg.Phases.Analyze.SingleAgent.Agent = "" // Empty is fine when disabled
+
+	v := NewValidator()
+	err := v.Validate(cfg)
+	if err != nil {
+		// Error might be from other fields, check it's not from single_agent
+		if strings.Contains(err.Error(), "single_agent") {
+			t.Errorf("Validate() error = %v, should not error on single_agent when disabled", err)
+		}
+	}
+}
+
+func TestSingleAgentConfig_IsValid(t *testing.T) {
+	tests := []struct {
+		name   string
+		config SingleAgentConfig
+		want   bool
+	}{
+		{"disabled with no agent is valid", SingleAgentConfig{Enabled: false, Agent: ""}, true},
+		{"disabled with agent is valid", SingleAgentConfig{Enabled: false, Agent: "claude"}, true},
+		{"enabled with agent is valid", SingleAgentConfig{Enabled: true, Agent: "claude"}, true},
+		{"enabled with model override is valid", SingleAgentConfig{Enabled: true, Agent: "claude", Model: "opus"}, true},
+		{"enabled with no agent is invalid", SingleAgentConfig{Enabled: true, Agent: ""}, false},
+		{"enabled with whitespace agent is invalid", SingleAgentConfig{Enabled: true, Agent: "   "}, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.config.IsValid(); got != tt.want {
+				t.Errorf("IsValid() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

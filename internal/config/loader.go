@@ -142,6 +142,10 @@ func (l *Loader) setDefaults() {
 	l.v.SetDefault("phases.analyze.moderator.abort_threshold", 0.30)
 	l.v.SetDefault("phases.analyze.moderator.stagnation_threshold", 0.02)
 	l.v.SetDefault("phases.analyze.synthesizer.agent", "")
+	// Single-agent mode defaults (bypasses multi-agent consensus)
+	l.v.SetDefault("phases.analyze.single_agent.enabled", false)
+	l.v.SetDefault("phases.analyze.single_agent.agent", "")
+	l.v.SetDefault("phases.analyze.single_agent.model", "")
 
 	// Plan phase
 	l.v.SetDefault("phases.plan.timeout", "1h")
@@ -308,6 +312,29 @@ func Validate(cfg *Config) error {
 		}
 		if agent.GetModelForPhase("analyze") == "" {
 			return fmt.Errorf("phases.analyze.moderator.agent %q has no model configured for analyze phase", cfg.Phases.Analyze.Moderator.Agent)
+		}
+	}
+
+	// Validate mutual exclusivity: single_agent and moderator cannot both be enabled
+	if cfg.Phases.Analyze.SingleAgent.Enabled && cfg.Phases.Analyze.Moderator.Enabled {
+		return fmt.Errorf("phases.analyze.single_agent.enabled and phases.analyze.moderator.enabled cannot both be true; " +
+			"single-agent mode bypasses consensus, disable moderator when using single_agent")
+	}
+
+	// Validate phases.analyze.single_agent if enabled
+	if cfg.Phases.Analyze.SingleAgent.Enabled {
+		if cfg.Phases.Analyze.SingleAgent.Agent == "" {
+			return fmt.Errorf("phases.analyze.single_agent.agent is required when single_agent is enabled")
+		}
+		agent := cfg.Agents.GetAgentConfig(cfg.Phases.Analyze.SingleAgent.Agent)
+		if agent == nil {
+			return fmt.Errorf("phases.analyze.single_agent.agent references unknown agent %q", cfg.Phases.Analyze.SingleAgent.Agent)
+		}
+		if !agent.Enabled {
+			return fmt.Errorf("phases.analyze.single_agent.agent references disabled agent %q", cfg.Phases.Analyze.SingleAgent.Agent)
+		}
+		if agent.GetModelForPhase("analyze") == "" {
+			return fmt.Errorf("phases.analyze.single_agent.agent %q has no model configured for analyze phase", cfg.Phases.Analyze.SingleAgent.Agent)
 		}
 	}
 

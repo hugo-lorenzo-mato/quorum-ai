@@ -48,6 +48,11 @@ func (m *mockAgentRegistry) AvailableForPhase(_ context.Context, _ string) []str
 	return m.List()
 }
 
+func (m *mockAgentRegistry) ListEnabled() []string {
+	// Mock returns all agents as enabled (can be extended for more specific tests)
+	return m.List()
+}
+
 // mockAgent implements core.Agent for testing.
 type mockAgent struct {
 	name   string
@@ -672,4 +677,270 @@ func TestIsPhaseCompleted(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestAnalyzer_Run_SingleAgentMode(t *testing.T) {
+	// When single_agent.enabled is true, the analyzer should bypass multi-agent consensus
+	// and run with just the specified agent
+	config := ModeratorConfig{
+		Enabled: false, // Moderator not needed in single-agent mode
+	}
+	analyzer, err := NewAnalyzer(config)
+	if err != nil {
+		t.Fatalf("NewAnalyzer() error = %v", err)
+	}
+
+	registry := &mockAgentRegistry{}
+	agent := &mockAgent{
+		name: "claude",
+		result: &core.ExecuteResult{
+			Output:    `{"claims":["claim1"],"risks":["risk1"],"recommendations":["rec1"]}`,
+			TokensIn:  100,
+			TokensOut: 50,
+			Model:     "claude-3-sonnet",
+			CostUSD:   0.01,
+		},
+	}
+	registry.Register("claude", agent)
+
+	checkpoint := &mockCheckpointCreator{}
+
+	wctx := &Context{
+		State: &core.WorkflowState{
+			WorkflowID:   "wf-test",
+			CurrentPhase: core.PhaseRefine, // Starts from refine
+			Prompt:       "test prompt",
+			Tasks:        make(map[core.TaskID]*core.TaskState),
+			TaskOrder:    []core.TaskID{},
+			Checkpoints:  []core.Checkpoint{},
+			Metrics:      &core.StateMetrics{},
+		},
+		Agents:     registry,
+		Prompts:    &mockPromptRenderer{},
+		Checkpoint: checkpoint,
+		Retry:      &mockRetryExecutor{},
+		RateLimits: &mockRateLimiterGetter{},
+		Logger:     logging.NewNop(),
+		Config: &Config{
+			DryRun:       false,
+			Sandbox:      true,
+			DefaultAgent: "claude",
+			SingleAgent: SingleAgentConfig{
+				Enabled: true,
+				Agent:   "claude",
+				Model:   "", // Use default model
+			},
+		},
+	}
+
+	err = analyzer.Run(context.Background(), wctx)
+	if err != nil {
+		t.Fatalf("Analyzer.Run() error = %v", err)
+	}
+
+	// Verify checkpoints were created
+	checkpoint.mu.Lock()
+	checkpointTypes := checkpoint.checkpoints
+	checkpoint.mu.Unlock()
+
+	// Should have: analyze (phase start), consolidated_analysis, analyze (phase complete)
+	hasConsolidatedAnalysis := false
+	hasPhaseComplete := false
+	for _, cpType := range checkpointTypes {
+		if cpType == "consolidated_analysis" {
+			hasConsolidatedAnalysis = true
+		}
+		if cpType == string(core.PhaseAnalyze) {
+			hasPhaseComplete = true
+		}
+	}
+
+	if !hasConsolidatedAnalysis {
+		t.Error("single-agent mode should create consolidated_analysis checkpoint")
+	}
+	if !hasPhaseComplete {
+		t.Error("single-agent mode should create phase complete checkpoint")
+	}
+}
+
+func TestAnalyzer_Run_SingleAgentMode_NoAgentSpecified(t *testing.T) {
+	// When single_agent.enabled is true but agent is empty, should return error
+	config := ModeratorConfig{
+		Enabled: false,
+	}
+	analyzer, err := NewAnalyzer(config)
+	if err != nil {
+		t.Fatalf("NewAnalyzer() error = %v", err)
+	}
+
+	registry := &mockAgentRegistry{}
+	agent := &mockAgent{
+		result: &core.ExecuteResult{
+			Output: `{"claims":["claim1"]}`,
+		},
+	}
+	registry.Register("claude", agent)
+
+	wctx := &Context{
+		State: &core.WorkflowState{
+			WorkflowID:  "wf-test",
+			Prompt:      "test prompt",
+			Tasks:       make(map[core.TaskID]*core.TaskState),
+			TaskOrder:   []core.TaskID{},
+			Checkpoints: []core.Checkpoint{},
+			Metrics:     &core.StateMetrics{},
+		},
+		Agents:     registry,
+		Prompts:    &mockPromptRenderer{},
+		Checkpoint: &mockCheckpointCreator{},
+		Retry:      &mockRetryExecutor{},
+		RateLimits: &mockRateLimiterGetter{},
+		Logger:     logging.NewNop(),
+		Config: &Config{
+			SingleAgent: SingleAgentConfig{
+				Enabled: true,
+				Agent:   "", // No agent specified - should error
+			},
+		},
+	}
+
+	err = analyzer.Run(context.Background(), wctx)
+	if err == nil {
+		t.Fatal("Analyzer.Run() should return error when single_agent.agent is empty")
+	}
+	if !strings.Contains(err.Error(), "single_agent.agent must be specified") {
+		t.Errorf("error message should mention agent must be specified, got: %v", err)
+	}
+}
+
+func TestAnalyzer_Run_SingleAgentMode_AgentNotFound(t *testing.T) {
+	// When single_agent.agent references a non-existent agent, should return error
+	config := ModeratorConfig{
+		Enabled: false,
+	}
+	analyzer, err := NewAnalyzer(config)
+	if err != nil {
+		t.Fatalf("NewAnalyzer() error = %v", err)
+	}
+
+	registry := &mockAgentRegistry{} // Empty registry - agent won't be found
+
+	wctx := &Context{
+		State: &core.WorkflowState{
+			WorkflowID:  "wf-test",
+			Prompt:      "test prompt",
+			Tasks:       make(map[core.TaskID]*core.TaskState),
+			TaskOrder:   []core.TaskID{},
+			Checkpoints: []core.Checkpoint{},
+			Metrics:     &core.StateMetrics{},
+		},
+		Agents:     registry,
+		Prompts:    &mockPromptRenderer{},
+		Checkpoint: &mockCheckpointCreator{},
+		Retry:      &mockRetryExecutor{},
+		RateLimits: &mockRateLimiterGetter{},
+		Logger:     logging.NewNop(),
+		Config: &Config{
+			SingleAgent: SingleAgentConfig{
+				Enabled: true,
+				Agent:   "nonexistent",
+			},
+		},
+	}
+
+	err = analyzer.Run(context.Background(), wctx)
+	if err == nil {
+		t.Fatal("Analyzer.Run() should return error when single_agent.agent is not found")
+	}
+	if !strings.Contains(err.Error(), "getting agent") {
+		t.Errorf("error message should mention getting agent, got: %v", err)
+	}
+}
+
+func TestAnalyzer_Run_SingleAgentMode_WithModelOverride(t *testing.T) {
+	// When single_agent.model is specified, it should be used instead of the default
+	config := ModeratorConfig{
+		Enabled: false,
+	}
+	analyzer, err := NewAnalyzer(config)
+	if err != nil {
+		t.Fatalf("NewAnalyzer() error = %v", err)
+	}
+
+	// Track which model was used
+	var capturedModel string
+	registry := &mockAgentRegistry{}
+	agent := &mockAgent{
+		name: "claude",
+		result: &core.ExecuteResult{
+			Output:    `{"claims":["claim1"],"risks":["risk1"],"recommendations":["rec1"]}`,
+			TokensIn:  100,
+			TokensOut: 50,
+			Model:     "claude-opus-4", // Will be returned in result
+			CostUSD:   0.05,
+		},
+	}
+	// Wrap to capture the model
+	wrappedAgent := &modelCapturingAgent{
+		agent:         agent,
+		capturedModel: &capturedModel,
+	}
+	registry.Register("claude", wrappedAgent)
+
+	wctx := &Context{
+		State: &core.WorkflowState{
+			WorkflowID:  "wf-test",
+			Prompt:      "test prompt",
+			Tasks:       make(map[core.TaskID]*core.TaskState),
+			TaskOrder:   []core.TaskID{},
+			Checkpoints: []core.Checkpoint{},
+			Metrics:     &core.StateMetrics{},
+		},
+		Agents:     registry,
+		Prompts:    &mockPromptRenderer{},
+		Checkpoint: &mockCheckpointCreator{},
+		Retry:      &mockRetryExecutor{},
+		RateLimits: &mockRateLimiterGetter{},
+		Logger:     logging.NewNop(),
+		Config: &Config{
+			SingleAgent: SingleAgentConfig{
+				Enabled: true,
+				Agent:   "claude",
+				Model:   "claude-opus-4", // Override model
+			},
+		},
+	}
+
+	err = analyzer.Run(context.Background(), wctx)
+	if err != nil {
+		t.Fatalf("Analyzer.Run() error = %v", err)
+	}
+
+	// Verify the model override was used
+	if capturedModel != "claude-opus-4" {
+		t.Errorf("model override not used: got %q, want %q", capturedModel, "claude-opus-4")
+	}
+}
+
+// modelCapturingAgent wraps an agent to capture the model used in Execute
+type modelCapturingAgent struct {
+	agent         core.Agent
+	capturedModel *string
+}
+
+func (m *modelCapturingAgent) Name() string {
+	return m.agent.Name()
+}
+
+func (m *modelCapturingAgent) Capabilities() core.Capabilities {
+	return m.agent.Capabilities()
+}
+
+func (m *modelCapturingAgent) Ping(ctx context.Context) error {
+	return m.agent.Ping(ctx)
+}
+
+func (m *modelCapturingAgent) Execute(ctx context.Context, opts core.ExecuteOptions) (*core.ExecuteResult, error) {
+	*m.capturedModel = opts.Model
+	return m.agent.Execute(ctx, opts)
 }

@@ -130,12 +130,15 @@ Core responsibilities:
 3. For each phase (Optimize -> Analyze -> Plan -> Execute):
    a. Optimize: Enhance user prompt for LLM effectiveness
    b. Analyze: Run V(n) iterative refinement with semantic moderator
+      - OR single-agent analysis (if single_agent.enabled=true)
    c. Plan: Build DAG and task dependencies
    d. Execute: Run tasks in parallel worktrees
    e. Save checkpoint after each phase
 4. Release lock
 5. Generate report
 ```
+
+**Single-Agent Mode:** When `single_agent.enabled=true`, the analyze phase bypasses multi-agent consensus and runs a single agent directly, producing a `consolidated_analysis` checkpoint compatible with downstream phases.
 
 **Independent Phase Execution:**
 
@@ -263,9 +266,14 @@ User Input (prompt)
 +------+-------+
 | ANALYZE      |
 | Phase        |
+| single_agent?|  <- Check mode
+|  NO:         |
 |  - V1: All   |  <- Parallel agent execution
 |  - V(n) Loop |  <- Iterative refinement
 |  - Moderator |  <- Semantic consensus eval
+|  YES:        |
+|  - 1 agent   |  <- Single agent analysis
+|  - Direct    |  <- No consensus loop
 +------+-------+
        |
        v

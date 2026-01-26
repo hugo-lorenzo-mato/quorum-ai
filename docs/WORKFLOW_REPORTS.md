@@ -28,6 +28,8 @@ Quorum AI genera automáticamente reportes Markdown estructurados para cada ejec
 
 ## Estructura de Directorios
 
+### Modo Multi-Agente (por defecto)
+
 ```
 .quorum-output/
 └── {timestamp}-{workflow-id}/           # Ej: 20240115-143052-wf-1705329052-1
@@ -70,6 +72,39 @@ Quorum AI genera automáticamente reportes Markdown estructurados para cada ejec
         │   └── ...
         └── execution-summary.md
 ```
+
+### Modo Single-Agent
+
+Cuando se activa el modo single-agent (`--single-agent` o `single_agent.enabled: true`), la estructura se simplifica:
+
+```
+.quorum-output/
+└── {timestamp}-{workflow-id}/
+    ├── metadata.md
+    ├── workflow-summary.md
+    │
+    ├── analyze-phase/
+    │   ├── 00-original-prompt.md
+    │   ├── 01-optimized-prompt.md
+    │   │
+    │   ├── single-agent/                # Análisis de un solo agente
+    │   │   └── {agent}-{model}.md       # Ej: claude-claude-opus-4-5.md
+    │   │
+    │   └── consolidated.md              # Igual formato, metadata indica mode: "single_agent"
+    │
+    ├── plan-phase/
+    │   └── ...
+    │
+    └── execute-phase/
+        └── ...
+```
+
+**Diferencias clave en modo single-agent:**
+
+- No hay subdirectorios `v1/`, `v2/`, `v3/` (no hay refinamiento iterativo)
+- No hay subdirectorio `consensus/` (no hay evaluación del moderador)
+- El análisis se guarda en `single-agent/{agent}-{model}.md`
+- El `consolidated.md` tiene metadata `mode: "single_agent"` en lugar de métricas de consenso
 
 ## Fases del Análisis
 

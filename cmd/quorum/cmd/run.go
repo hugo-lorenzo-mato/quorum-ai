@@ -270,6 +270,11 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 			AbortThreshold:      cfg.Phases.Analyze.Moderator.AbortThreshold,
 			StagnationThreshold: cfg.Phases.Analyze.Moderator.StagnationThreshold,
 		},
+		SingleAgent: workflow.SingleAgentConfig{
+			Enabled: cfg.Phases.Analyze.SingleAgent.Enabled,
+			Agent:   cfg.Phases.Analyze.SingleAgent.Agent,
+			Model:   cfg.Phases.Analyze.SingleAgent.Model,
+		},
 		PhaseTimeouts: workflow.PhaseTimeouts{
 			Analyze: analyzeTimeout,
 			Plan:    planTimeout,

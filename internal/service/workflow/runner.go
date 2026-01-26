@@ -77,6 +77,8 @@ type RunnerConfig struct {
 	PhaseTimeouts PhaseTimeouts
 	// Moderator configures the semantic moderator for consensus evaluation.
 	Moderator ModeratorConfig
+	// SingleAgent configures single-agent execution mode (bypasses multi-agent consensus).
+	SingleAgent SingleAgentConfig
 	// Finalization configures post-task git operations (commit, push, PR).
 	Finalization FinalizationConfig
 }
@@ -464,6 +466,7 @@ func (r *Runner) createContext(state *core.WorkflowState) *Context {
 			PlanSynthesizerAgent:   r.config.PlanSynthesizer.Agent,
 			PhaseTimeouts:          r.config.PhaseTimeouts,
 			Moderator:              r.config.Moderator,
+			SingleAgent:            r.config.SingleAgent,
 			Finalization:           r.config.Finalization,
 		},
 	}
@@ -566,9 +569,9 @@ func (r *Runner) ValidateAgentAvailability(ctx context.Context) error {
 
 // ValidateModeratorConfig checks if moderator is properly configured for multi-agent analysis.
 // This should be called BEFORE starting the analyze phase to fail fast with a clear error.
-// Returns nil if validation passes or if moderator is not needed (single agent).
+// Returns nil if validation passes or if moderator is not needed (single agent mode or only one enabled agent).
 func (r *Runner) ValidateModeratorConfig() error {
-	agents := r.agents.List()
+	agents := r.agents.ListEnabled()
 	enabledAgents := len(agents)
 
 	// Single agent doesn't need moderator

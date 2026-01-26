@@ -17,6 +17,7 @@ Currently supports Claude Code, Gemini CLI, Codex, and GitHub Copilot, with more
 
 - **Local CLI Orchestration**: Coordinates existing CLI tools without requiring API keys or credentials
 - **Multi-Agent Execution**: Run Claude, Gemini, Codex, and Copilot agents in parallel
+- **Single-Agent Mode**: Bypass multi-agent consensus for simpler tasks with `--single-agent`
 - **Semantic Moderator Consensus**: AI-powered moderator evaluates semantic agreement across agent outputs
 - **Iterative Refinement**: V(n) rounds with moderator evaluation until consensus threshold is reached
 - **Git Worktree Isolation**: Each task executes in isolated worktrees to prevent conflicts
@@ -216,6 +217,10 @@ quorum run "Implement user authentication with JWT tokens"
 # Skip prompt refinement (use original prompt directly)
 quorum run --skip-refine "Implement user authentication with JWT tokens"
 
+# Single-agent mode (bypass multi-agent consensus)
+quorum run --single-agent claude "Add error handling to the API"
+quorum run --single-agent codex --single-agent-model gpt-5.2-codex "Refactor utils.go"
+
 # Check workflow status
 quorum status
 
@@ -374,6 +379,20 @@ Gemini Agent ──┘                 └────────────�
 ```
 
 The semantic moderator evaluates agreement after each refinement round until the consensus threshold is reached or max rounds exceeded.
+
+#### Single-Agent Mode
+
+For simpler tasks that don't require multiple perspectives, enable single-agent mode:
+
+```
+User Prompt ──► Single Agent ──► Analysis ──► Checkpoint ──► Plan Phase
+                    │
+                    └── No consensus loop
+                    └── Direct analysis output
+                    └── Lower cost and latency
+```
+
+Enable via CLI (`--single-agent`) or configuration (`phases.analyze.single_agent.enabled: true`).
 
 ### 3. Plan Phase
 

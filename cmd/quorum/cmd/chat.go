@@ -361,6 +361,11 @@ func createWorkflowRunner(
 			AbortThreshold:      cfg.Phases.Analyze.Moderator.AbortThreshold,
 			StagnationThreshold: cfg.Phases.Analyze.Moderator.StagnationThreshold,
 		},
+		SingleAgent: workflow.SingleAgentConfig{
+			Enabled: cfg.Phases.Analyze.SingleAgent.Enabled,
+			Agent:   cfg.Phases.Analyze.SingleAgent.Agent,
+			Model:   cfg.Phases.Analyze.SingleAgent.Model,
+		},
 		PhaseTimeouts: workflow.PhaseTimeouts{
 			Analyze: analyzeTimeout,
 			Plan:    planTimeout,
@@ -687,6 +692,11 @@ func createWorkflowRunnerWithTrace(
 			MaxRounds:           cfg.Phases.Analyze.Moderator.MaxRounds,
 			AbortThreshold:      cfg.Phases.Analyze.Moderator.AbortThreshold,
 			StagnationThreshold: cfg.Phases.Analyze.Moderator.StagnationThreshold,
+		},
+		SingleAgent: workflow.SingleAgentConfig{
+			Enabled: cfg.Phases.Analyze.SingleAgent.Enabled,
+			Agent:   cfg.Phases.Analyze.SingleAgent.Agent,
+			Model:   cfg.Phases.Analyze.SingleAgent.Model,
 		},
 		PhaseTimeouts: workflow.PhaseTimeouts{
 			Analyze: analyzeTimeout,

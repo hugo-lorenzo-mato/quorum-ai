@@ -368,6 +368,12 @@ func (r *MockRegistry) List() []string {
 	return names
 }
 
+// ListEnabled returns names of configured and enabled agents.
+// In the mock, this returns the same as List (all registered agents are considered enabled).
+func (r *MockRegistry) ListEnabled() []string {
+	return r.List()
+}
+
 // Available returns agents that pass Ping.
 func (r *MockRegistry) Available(ctx context.Context) []string {
 	r.mu.RLock()
