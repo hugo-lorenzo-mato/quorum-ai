@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -19,6 +20,7 @@ import (
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/config"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/control"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/diagnostics"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/events"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/logging"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service"
@@ -108,6 +110,57 @@ func runChat(_ *cobra.Command, _ []string) error {
 	registry := cli.NewRegistry()
 	if err := configureAgentsFromConfig(registry, cfg, loader); err != nil {
 		return fmt.Errorf("configuring agents: %w", err)
+	}
+
+	// Initialize diagnostics if enabled
+	var resourceMonitor *diagnostics.ResourceMonitor
+	var crashDumpWriter *diagnostics.CrashDumpWriter
+	var safeExecutor *diagnostics.SafeExecutor
+
+	if cfg.Diagnostics.Enabled {
+		// Create a silent slog logger for diagnostics (TUI mode)
+		diagLogger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+		// Parse monitoring interval
+		monitorInterval, err := time.ParseDuration(cfg.Diagnostics.ResourceMonitoring.Interval)
+		if err != nil {
+			monitorInterval = 30 * time.Second
+		}
+
+		// Create resource monitor
+		resourceMonitor = diagnostics.NewResourceMonitor(
+			monitorInterval,
+			cfg.Diagnostics.ResourceMonitoring.FDThresholdPercent,
+			cfg.Diagnostics.ResourceMonitoring.GoroutineThreshold,
+			cfg.Diagnostics.ResourceMonitoring.MemoryThresholdMB,
+			cfg.Diagnostics.ResourceMonitoring.HistorySize,
+			diagLogger,
+		)
+		resourceMonitor.Start(ctx)
+		defer resourceMonitor.Stop()
+
+		// Create crash dump writer
+		crashDumpWriter = diagnostics.NewCrashDumpWriter(
+			cfg.Diagnostics.CrashDump.Dir,
+			cfg.Diagnostics.CrashDump.MaxFiles,
+			cfg.Diagnostics.CrashDump.IncludeStack,
+			cfg.Diagnostics.CrashDump.IncludeEnv,
+			diagLogger,
+			resourceMonitor,
+		)
+
+		// Create safe executor
+		safeExecutor = diagnostics.NewSafeExecutor(
+			resourceMonitor,
+			crashDumpWriter,
+			diagLogger,
+			cfg.Diagnostics.PreflightChecks.Enabled,
+			cfg.Diagnostics.PreflightChecks.MinFreeFDPercent,
+			cfg.Diagnostics.PreflightChecks.MinFreeMemoryMB,
+		)
+
+		// Inject diagnostics into all adapters
+		registry.SetDiagnostics(safeExecutor, crashDumpWriter)
 	}
 
 	// Determine default agent

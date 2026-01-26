@@ -12,16 +12,21 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/rs/cors"
 
+	webadapters "github.com/hugo-lorenzo-mato/quorum-ai/internal/adapters/web"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/diagnostics"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/events"
 )
 
 // Server provides HTTP REST API endpoints for workflow management.
 type Server struct {
-	router       chi.Router
-	stateManager core.StateManager
-	eventBus     *events.EventBus
-	logger       *slog.Logger
+	router          chi.Router
+	stateManager    core.StateManager
+	eventBus        *events.EventBus
+	agentRegistry   core.AgentRegistry
+	logger          *slog.Logger
+	chatHandler     *webadapters.ChatHandler
+	resourceMonitor *diagnostics.ResourceMonitor
 }
 
 // ServerOption configures the server.
@@ -31,6 +36,20 @@ type ServerOption func(*Server)
 func WithLogger(logger *slog.Logger) ServerOption {
 	return func(s *Server) {
 		s.logger = logger
+	}
+}
+
+// WithAgentRegistry sets the agent registry for chat and workflow execution.
+func WithAgentRegistry(registry core.AgentRegistry) ServerOption {
+	return func(s *Server) {
+		s.agentRegistry = registry
+	}
+}
+
+// WithResourceMonitor sets the resource monitor for deep health checks.
+func WithResourceMonitor(monitor *diagnostics.ResourceMonitor) ServerOption {
+	return func(s *Server) {
+		s.resourceMonitor = monitor
 	}
 }
 
@@ -45,6 +64,9 @@ func NewServer(stateManager core.StateManager, eventBus *events.EventBus, opts .
 	for _, opt := range opts {
 		opt(s)
 	}
+
+	// Create chat handler with agent registry (may be nil)
+	s.chatHandler = webadapters.NewChatHandler(s.agentRegistry, eventBus)
 
 	s.router = s.setupRouter()
 	return s
@@ -78,6 +100,7 @@ func (s *Server) setupRouter() chi.Router {
 
 	// Health check
 	r.Get("/health", s.handleHealth)
+	r.Get("/health/deep", s.handleDeepHealth)
 
 	// API v1 routes
 	r.Route("/api/v1", func(r chi.Router) {
@@ -103,6 +126,22 @@ func (s *Server) setupRouter() chi.Router {
 
 		// SSE endpoint for real-time updates
 		r.Get("/events", s.handleSSE)
+		// Also expose at /sse/events for frontend compatibility
+		r.Route("/sse", func(r chi.Router) {
+			r.Get("/events", s.handleSSE)
+		})
+
+		// Chat endpoints
+		r.Route("/chat", func(r chi.Router) {
+			r.Post("/sessions", s.chatHandler.CreateSession)
+			r.Get("/sessions", s.chatHandler.ListSessions)
+			r.Get("/sessions/{sessionID}", s.chatHandler.GetSession)
+			r.Delete("/sessions/{sessionID}", s.chatHandler.DeleteSession)
+			r.Get("/sessions/{sessionID}/messages", s.chatHandler.GetMessages)
+			r.Post("/sessions/{sessionID}/messages", s.chatHandler.SendMessage)
+			r.Put("/sessions/{sessionID}/agent", s.chatHandler.SetAgent)
+			r.Put("/sessions/{sessionID}/model", s.chatHandler.SetModel)
+		})
 
 		// File browser endpoints
 		r.Route("/files", func(r chi.Router) {
@@ -164,6 +203,52 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 		"status": "healthy",
 		"time":   time.Now().UTC().Format(time.RFC3339),
 	})
+}
+
+// DeepHealthResponse contains detailed health information.
+type DeepHealthResponse struct {
+	Status    string                        `json:"status"`
+	Time      string                        `json:"time"`
+	Resources *diagnostics.ResourceSnapshot `json:"resources,omitempty"`
+	Trend     *diagnostics.ResourceTrend    `json:"trend,omitempty"`
+	Warnings  []diagnostics.HealthWarning   `json:"warnings,omitempty"`
+}
+
+// handleDeepHealth returns detailed system health including resource metrics.
+func (s *Server) handleDeepHealth(w http.ResponseWriter, _ *http.Request) {
+	response := DeepHealthResponse{
+		Status: "healthy",
+		Time:   time.Now().UTC().Format(time.RFC3339),
+	}
+
+	if s.resourceMonitor != nil {
+		// Get current resource snapshot
+		snapshot := s.resourceMonitor.TakeSnapshot()
+		response.Resources = &snapshot
+
+		// Get resource trends
+		trend := s.resourceMonitor.GetTrend()
+		response.Trend = &trend
+
+		// Check for warnings
+		warnings := s.resourceMonitor.CheckHealth()
+		response.Warnings = warnings
+
+		// Determine overall status
+		if !trend.IsHealthy {
+			response.Status = "degraded"
+		}
+		for _, warn := range warnings {
+			if warn.Level == "critical" {
+				response.Status = "critical"
+				break
+			} else if warn.Level == "warning" && response.Status == "healthy" {
+				response.Status = "degraded"
+			}
+		}
+	}
+
+	respondJSON(w, http.StatusOK, response)
 }
 
 // ListenAndServe starts the HTTP server.

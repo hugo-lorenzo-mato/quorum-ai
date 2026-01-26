@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/diagnostics"
 )
 
 // AgentFactory creates an agent from configuration.
@@ -14,11 +15,13 @@ type AgentFactory func(cfg AgentConfig) (core.Agent, error)
 
 // Registry manages available CLI agents.
 type Registry struct {
-	factories    map[string]AgentFactory
-	agents       map[string]core.Agent
-	configs      map[string]AgentConfig
-	eventHandler core.AgentEventHandler // shared event handler for all agents
-	mu           sync.RWMutex
+	factories       map[string]AgentFactory
+	agents          map[string]core.Agent
+	configs         map[string]AgentConfig
+	eventHandler    core.AgentEventHandler       // shared event handler for all agents
+	safeExec        *diagnostics.SafeExecutor    // shared safe executor for all adapters
+	crashDumpWriter *diagnostics.CrashDumpWriter // shared crash dump writer for all adapters
+	mu              sync.RWMutex
 }
 
 // NewRegistry creates a new agent registry.
@@ -99,6 +102,13 @@ func (r *Registry) Get(name string) (core.Agent, error) {
 	if r.eventHandler != nil {
 		if sc, ok := agent.(core.StreamingCapable); ok {
 			sc.SetEventHandler(r.eventHandler)
+		}
+	}
+
+	// Configure diagnostics if set
+	if r.safeExec != nil || r.crashDumpWriter != nil {
+		if dc, ok := agent.(DiagnosticsCapable); ok {
+			dc.WithDiagnostics(r.safeExec, r.crashDumpWriter)
 		}
 	}
 
@@ -346,4 +356,27 @@ func (r *Registry) SetEventHandlerForAgent(name string, handler core.AgentEventH
 		sc.SetEventHandler(handler)
 	}
 	return nil
+}
+
+// DiagnosticsCapable is implemented by agents that support diagnostics injection.
+type DiagnosticsCapable interface {
+	WithDiagnostics(safeExec *diagnostics.SafeExecutor, dumpWriter *diagnostics.CrashDumpWriter)
+}
+
+// SetDiagnostics sets the diagnostics components on all adapters.
+// New agents created after this call will also receive the diagnostics.
+func (r *Registry) SetDiagnostics(safeExec *diagnostics.SafeExecutor, dumpWriter *diagnostics.CrashDumpWriter) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	// Store for future agents
+	r.safeExec = safeExec
+	r.crashDumpWriter = dumpWriter
+
+	// Apply to existing agents
+	for _, agent := range r.agents {
+		if dc, ok := agent.(DiagnosticsCapable); ok {
+			dc.WithDiagnostics(safeExec, dumpWriter)
+		}
+	}
 }

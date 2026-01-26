@@ -136,7 +136,7 @@ func (l *Loader) setDefaults() {
 	l.v.SetDefault("phases.analyze.refiner.agent", "")
 	l.v.SetDefault("phases.analyze.moderator.enabled", false)
 	l.v.SetDefault("phases.analyze.moderator.agent", "")
-	l.v.SetDefault("phases.analyze.moderator.threshold", 0.90)
+	l.v.SetDefault("phases.analyze.moderator.threshold", 0.80)
 	l.v.SetDefault("phases.analyze.moderator.min_rounds", 2)
 	l.v.SetDefault("phases.analyze.moderator.max_rounds", 5)
 	l.v.SetDefault("phases.analyze.moderator.abort_threshold", 0.30)
@@ -205,6 +205,21 @@ func (l *Loader) setDefaults() {
 	l.v.SetDefault("report.base_dir", ".quorum/output")
 	l.v.SetDefault("report.use_utc", true)
 	l.v.SetDefault("report.include_raw", true)
+
+	// Diagnostics defaults (system monitoring and crash recovery)
+	l.v.SetDefault("diagnostics.enabled", true)
+	l.v.SetDefault("diagnostics.resource_monitoring.interval", "30s")
+	l.v.SetDefault("diagnostics.resource_monitoring.fd_threshold_percent", 80)
+	l.v.SetDefault("diagnostics.resource_monitoring.goroutine_threshold", 10000)
+	l.v.SetDefault("diagnostics.resource_monitoring.memory_threshold_mb", 4096)
+	l.v.SetDefault("diagnostics.resource_monitoring.history_size", 120) // 1 hour at 30s intervals
+	l.v.SetDefault("diagnostics.crash_dump.dir", ".quorum/crashdumps")
+	l.v.SetDefault("diagnostics.crash_dump.max_files", 10)
+	l.v.SetDefault("diagnostics.crash_dump.include_stack", true)
+	l.v.SetDefault("diagnostics.crash_dump.include_env", false)
+	l.v.SetDefault("diagnostics.preflight_checks.enabled", true)
+	l.v.SetDefault("diagnostics.preflight_checks.min_free_fd_percent", 20)
+	l.v.SetDefault("diagnostics.preflight_checks.min_free_memory_mb", 256)
 }
 
 // ConfigFile returns the config file path if one was used.

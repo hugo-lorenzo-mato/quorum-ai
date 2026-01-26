@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/diagnostics"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/logging"
 )
 
@@ -89,6 +90,10 @@ type BaseAdapter struct {
 	logCallback  LogCallback
 	eventHandler core.AgentEventHandler
 	aggregator   *EventAggregator
+
+	// Diagnostics integration for resource monitoring and crash recovery
+	safeExec   *diagnostics.SafeExecutor
+	dumpWriter *diagnostics.CrashDumpWriter
 }
 
 // SetLogCallback sets a callback that receives stderr lines in real-time.
@@ -102,6 +107,14 @@ func (b *BaseAdapter) SetEventHandler(handler core.AgentEventHandler) {
 	if handler != nil && b.aggregator == nil {
 		b.aggregator = NewEventAggregator()
 	}
+}
+
+// WithDiagnostics configures the adapter with diagnostics support.
+// When configured, the adapter will perform preflight checks before command execution
+// and write crash dumps if panics occur.
+func (b *BaseAdapter) WithDiagnostics(exec *diagnostics.SafeExecutor, dump *diagnostics.CrashDumpWriter) {
+	b.safeExec = exec
+	b.dumpWriter = dump
 }
 
 // emitEvent sends an event to the handler if one is configured.
@@ -148,6 +161,21 @@ func (b *BaseAdapter) ExecuteCommand(ctx context.Context, args []string, stdin, 
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
+
+	// Preflight check: verify system has sufficient resources
+	if b.safeExec != nil {
+		preflight := b.safeExec.RunPreflight()
+		if !preflight.OK {
+			return nil, core.ErrExecution("PREFLIGHT_FAILED",
+				fmt.Sprintf("preflight check failed: %v", preflight.Errors))
+		}
+		for _, w := range preflight.Warnings {
+			b.logger.Warn("preflight warning before command execution",
+				"warning", w,
+				"adapter", b.config.Name,
+			)
+		}
+	}
 
 	// Build command
 	cmdPath := b.config.Path
@@ -217,6 +245,10 @@ func (b *BaseAdapter) ExecuteCommand(ctx context.Context, args []string, stdin, 
 
 	// Start the command
 	if err := cmd.Start(); err != nil {
+		// CRITICAL: Close pipe if Start() fails to prevent FD leak
+		if stderrPipe != nil {
+			stderrPipe.Close()
+		}
 		return nil, fmt.Errorf("starting command: %w", err)
 	}
 
@@ -436,6 +468,21 @@ func (b *BaseAdapter) executeWithJSONStreaming(
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
+	// Preflight check: verify system has sufficient resources
+	if b.safeExec != nil {
+		preflight := b.safeExec.RunPreflight()
+		if !preflight.OK {
+			return nil, core.ErrExecution("PREFLIGHT_FAILED",
+				fmt.Sprintf("preflight check failed: %v", preflight.Errors))
+		}
+		for _, w := range preflight.Warnings {
+			b.logger.Warn("preflight warning before streaming execution",
+				"warning", w,
+				"adapter", adapterName,
+			)
+		}
+	}
+
 	// Build command
 	cmdPath := b.config.Path
 	if cmdPath == "" {
@@ -473,6 +520,8 @@ func (b *BaseAdapter) executeWithJSONStreaming(
 
 	stderrPipe, err := cmd.StderrPipe()
 	if err != nil {
+		// CRITICAL: Close stdout pipe if stderr pipe creation fails
+		stdoutPipe.Close()
 		return nil, fmt.Errorf("creating stderr pipe: %w", err)
 	}
 
@@ -486,6 +535,9 @@ func (b *BaseAdapter) executeWithJSONStreaming(
 	startTime := time.Now()
 
 	if err := cmd.Start(); err != nil {
+		// CRITICAL: Close both pipes if Start() fails to prevent FD leak
+		stdoutPipe.Close()
+		stderrPipe.Close()
 		return nil, fmt.Errorf("starting command: %w", err)
 	}
 

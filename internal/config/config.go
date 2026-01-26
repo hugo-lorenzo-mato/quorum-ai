@@ -4,18 +4,19 @@ import "strings"
 
 // Config holds all application configuration.
 type Config struct {
-	Log      LogConfig      `mapstructure:"log"`
-	Trace    TraceConfig    `mapstructure:"trace"`
-	Workflow WorkflowConfig `mapstructure:"workflow"`
-	Phases   PhasesConfig   `mapstructure:"phases"`
-	Agents   AgentsConfig   `mapstructure:"agents"`
-	State    StateConfig    `mapstructure:"state"`
-	Git      GitConfig      `mapstructure:"git"`
-	GitHub   GitHubConfig   `mapstructure:"github"`
-	Costs    CostsConfig    `mapstructure:"costs"`
-	Chat     ChatConfig     `mapstructure:"chat"`
-	Report   ReportConfig   `mapstructure:"report"`
-	Server   ServerConfig   `mapstructure:"server"`
+	Log         LogConfig         `mapstructure:"log"`
+	Trace       TraceConfig       `mapstructure:"trace"`
+	Diagnostics DiagnosticsConfig `mapstructure:"diagnostics"`
+	Workflow    WorkflowConfig    `mapstructure:"workflow"`
+	Phases      PhasesConfig      `mapstructure:"phases"`
+	Agents      AgentsConfig      `mapstructure:"agents"`
+	State       StateConfig       `mapstructure:"state"`
+	Git         GitConfig         `mapstructure:"git"`
+	GitHub      GitHubConfig      `mapstructure:"github"`
+	Costs       CostsConfig       `mapstructure:"costs"`
+	Chat        ChatConfig        `mapstructure:"chat"`
+	Report      ReportConfig      `mapstructure:"report"`
+	Server      ServerConfig      `mapstructure:"server"`
 }
 
 // ChatConfig configures chat behavior in the TUI.
@@ -44,6 +45,54 @@ type TraceConfig struct {
 	TotalMaxBytes   int64    `mapstructure:"total_max_bytes"`
 	MaxFiles        int      `mapstructure:"max_files"`
 	IncludePhases   []string `mapstructure:"include_phases"`
+}
+
+// DiagnosticsConfig configures system diagnostics and crash recovery.
+type DiagnosticsConfig struct {
+	// Enabled activates the diagnostics subsystem.
+	Enabled bool `mapstructure:"enabled"`
+	// ResourceMonitoring configures periodic resource tracking.
+	ResourceMonitoring ResourceMonitoringConfig `mapstructure:"resource_monitoring"`
+	// CrashDump configures crash dump generation on panic.
+	CrashDump CrashDumpConfig `mapstructure:"crash_dump"`
+	// PreflightChecks configures pre-execution health checks.
+	PreflightChecks PreflightConfig `mapstructure:"preflight_checks"`
+}
+
+// ResourceMonitoringConfig configures resource usage monitoring.
+type ResourceMonitoringConfig struct {
+	// Interval between resource snapshots (e.g., "30s", "1m").
+	Interval string `mapstructure:"interval"`
+	// FDThresholdPercent triggers warning when FD usage exceeds this percentage (0-100).
+	FDThresholdPercent int `mapstructure:"fd_threshold_percent"`
+	// GoroutineThreshold triggers warning when goroutine count exceeds this.
+	GoroutineThreshold int `mapstructure:"goroutine_threshold"`
+	// MemoryThresholdMB triggers warning when heap memory exceeds this (in MB).
+	MemoryThresholdMB int `mapstructure:"memory_threshold_mb"`
+	// HistorySize is the number of snapshots to retain for trend analysis.
+	HistorySize int `mapstructure:"history_size"`
+}
+
+// CrashDumpConfig configures crash dump generation.
+type CrashDumpConfig struct {
+	// Dir is the directory for crash dump files.
+	Dir string `mapstructure:"dir"`
+	// MaxFiles is the maximum number of crash dumps to retain.
+	MaxFiles int `mapstructure:"max_files"`
+	// IncludeStack includes full goroutine stack traces in crash dumps.
+	IncludeStack bool `mapstructure:"include_stack"`
+	// IncludeEnv includes environment variables (redacted) in crash dumps.
+	IncludeEnv bool `mapstructure:"include_env"`
+}
+
+// PreflightConfig configures pre-execution health checks.
+type PreflightConfig struct {
+	// Enabled activates preflight checks before command execution.
+	Enabled bool `mapstructure:"enabled"`
+	// MinFreeFDPercent aborts execution if free FD percentage is below this.
+	MinFreeFDPercent int `mapstructure:"min_free_fd_percent"`
+	// MinFreeMemoryMB aborts execution if estimated free memory is below this (in MB).
+	MinFreeMemoryMB int `mapstructure:"min_free_memory_mb"`
 }
 
 // WorkflowConfig configures workflow execution.
@@ -109,7 +158,7 @@ type ModeratorConfig struct {
 	// Model overrides the agent's default model for moderation.
 	// If empty, uses agents.<agent>.phase_models.analyze or agents.<agent>.model.
 	Model string `mapstructure:"model"`
-	// Threshold is the consensus score required to pass (0.0-1.0, default: 0.90).
+	// Threshold is the consensus score required to pass (0.0-1.0, default: 0.80).
 	Threshold float64 `mapstructure:"threshold"`
 	// MinRounds is the minimum refinement rounds before accepting consensus (default: 2).
 	MinRounds int `mapstructure:"min_rounds"`

@@ -177,10 +177,8 @@ func (h *ChatHandler) ListSessions(w http.ResponseWriter, _ *http.Request) {
 	}
 	h.mu.RUnlock()
 
-	writeJSON(w, http.StatusOK, ListSessionsResponse{
-		Sessions: sessions,
-		Total:    len(sessions),
-	})
+	// Return array directly for frontend compatibility
+	writeJSON(w, http.StatusOK, sessions)
 }
 
 // GetSession returns a specific chat session.
@@ -238,10 +236,8 @@ func (h *ChatHandler) GetMessages(w http.ResponseWriter, r *http.Request) {
 	copy(messages, state.messages)
 	h.mu.RUnlock()
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"messages": messages,
-		"total":    len(messages),
-	})
+	// Return array directly for frontend compatibility
+	writeJSON(w, http.StatusOK, messages)
 }
 
 // SendMessage sends a message in a chat session and gets an agent response.
@@ -321,10 +317,9 @@ func (h *ChatHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 	state.session.UpdatedAt = agentMsg.Timestamp
 	h.mu.Unlock()
 
-	writeJSON(w, http.StatusOK, SendMessageResponse{
-		UserMessage:  userMsg,
-		AgentMessage: agentMsg,
-	})
+	// Return agent message directly for frontend compatibility
+	// Frontend expects {id, content, timestamp} at top level
+	writeJSON(w, http.StatusOK, agentMsg)
 }
 
 // executeAgent runs the message through the agent and returns the response.

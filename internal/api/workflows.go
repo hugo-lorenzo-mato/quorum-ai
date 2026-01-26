@@ -48,6 +48,12 @@ type WorkflowConfig struct {
 
 // handleListWorkflows returns all workflows.
 func (s *Server) handleListWorkflows(w http.ResponseWriter, r *http.Request) {
+	// Return empty list if state manager is not configured
+	if s.stateManager == nil {
+		respondJSON(w, http.StatusOK, []WorkflowResponse{})
+		return
+	}
+
 	ctx := r.Context()
 
 	workflows, err := s.stateManager.ListWorkflows(ctx)
@@ -75,6 +81,11 @@ func (s *Server) handleListWorkflows(w http.ResponseWriter, r *http.Request) {
 
 // handleGetWorkflow returns a specific workflow by ID.
 func (s *Server) handleGetWorkflow(w http.ResponseWriter, r *http.Request) {
+	if s.stateManager == nil {
+		respondError(w, http.StatusNotFound, "workflow not found")
+		return
+	}
+
 	ctx := r.Context()
 	workflowID := chi.URLParam(r, "workflowID")
 
@@ -103,6 +114,12 @@ func (s *Server) handleGetWorkflow(w http.ResponseWriter, r *http.Request) {
 
 // handleGetActiveWorkflow returns the currently active workflow.
 func (s *Server) handleGetActiveWorkflow(w http.ResponseWriter, r *http.Request) {
+	// Return 404 if state manager is not configured
+	if s.stateManager == nil {
+		respondError(w, http.StatusNotFound, "no active workflow")
+		return
+	}
+
 	ctx := r.Context()
 
 	activeID, err := s.stateManager.GetActiveWorkflowID(ctx)
@@ -135,6 +152,11 @@ func (s *Server) handleGetActiveWorkflow(w http.ResponseWriter, r *http.Request)
 
 // handleCreateWorkflow creates a new workflow.
 func (s *Server) handleCreateWorkflow(w http.ResponseWriter, r *http.Request) {
+	if s.stateManager == nil {
+		respondError(w, http.StatusServiceUnavailable, "workflow management not available")
+		return
+	}
+
 	ctx := r.Context()
 
 	var req CreateWorkflowRequest
@@ -200,6 +222,11 @@ func (s *Server) handleCreateWorkflow(w http.ResponseWriter, r *http.Request) {
 
 // handleUpdateWorkflow updates an existing workflow.
 func (s *Server) handleUpdateWorkflow(w http.ResponseWriter, r *http.Request) {
+	if s.stateManager == nil {
+		respondError(w, http.StatusNotFound, "workflow not found")
+		return
+	}
+
 	ctx := r.Context()
 	workflowID := chi.URLParam(r, "workflowID")
 
@@ -257,6 +284,11 @@ func (s *Server) handleDeleteWorkflow(w http.ResponseWriter, _ *http.Request) {
 
 // handleActivateWorkflow sets a workflow as active.
 func (s *Server) handleActivateWorkflow(w http.ResponseWriter, r *http.Request) {
+	if s.stateManager == nil {
+		respondError(w, http.StatusNotFound, "workflow not found")
+		return
+	}
+
 	ctx := r.Context()
 	workflowID := chi.URLParam(r, "workflowID")
 

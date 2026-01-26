@@ -31,6 +31,11 @@ type TaskResponse struct {
 
 // handleListTasks returns all tasks for a workflow.
 func (s *Server) handleListTasks(w http.ResponseWriter, r *http.Request) {
+	if s.stateManager == nil {
+		respondError(w, http.StatusNotFound, "workflow not found")
+		return
+	}
+
 	ctx := r.Context()
 	workflowID := chi.URLParam(r, "workflowID")
 
@@ -66,6 +71,11 @@ func (s *Server) handleListTasks(w http.ResponseWriter, r *http.Request) {
 
 // handleGetTask returns a specific task from a workflow.
 func (s *Server) handleGetTask(w http.ResponseWriter, r *http.Request) {
+	if s.stateManager == nil {
+		respondError(w, http.StatusNotFound, "workflow not found")
+		return
+	}
+
 	ctx := r.Context()
 	workflowID := chi.URLParam(r, "workflowID")
 	taskID := chi.URLParam(r, "taskID")

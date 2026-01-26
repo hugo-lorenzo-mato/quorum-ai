@@ -53,8 +53,8 @@ func TestLoader_Defaults(t *testing.T) {
 	}
 
 	// Verify moderator defaults
-	if cfg.Phases.Analyze.Moderator.Threshold != 0.90 {
-		t.Errorf("Phases.Analyze.Moderator.Threshold = %f, want %f", cfg.Phases.Analyze.Moderator.Threshold, 0.90)
+	if cfg.Phases.Analyze.Moderator.Threshold != 0.80 {
+		t.Errorf("Phases.Analyze.Moderator.Threshold = %f, want %f", cfg.Phases.Analyze.Moderator.Threshold, 0.80)
 	}
 }
 
@@ -318,8 +318,8 @@ func TestLoader_DefaultConfigFile(t *testing.T) {
 	if cfg.Agents.Default != "claude" {
 		t.Errorf("Agents.Default = %q, want %q", cfg.Agents.Default, "claude")
 	}
-	if cfg.Phases.Analyze.Moderator.Threshold != 0.90 {
-		t.Errorf("Phases.Analyze.Moderator.Threshold = %f, want %f", cfg.Phases.Analyze.Moderator.Threshold, 0.90)
+	if cfg.Phases.Analyze.Moderator.Threshold != 0.80 {
+		t.Errorf("Phases.Analyze.Moderator.Threshold = %f, want %f", cfg.Phases.Analyze.Moderator.Threshold, 0.80)
 	}
 	if cfg.Costs.MaxPerWorkflow != 10.0 {
 		t.Errorf("Costs.MaxPerWorkflow = %f, want %f", cfg.Costs.MaxPerWorkflow, 10.0)
@@ -356,8 +356,8 @@ func TestLoader_ModeratorDefaults(t *testing.T) {
 		t.Errorf("Phases.Analyze.Moderator.Agent = %q, want empty (no default)", cfg.Phases.Analyze.Moderator.Agent)
 	}
 	// Numeric thresholds have sensible defaults
-	if cfg.Phases.Analyze.Moderator.Threshold != 0.90 {
-		t.Errorf("Phases.Analyze.Moderator.Threshold = %f, want %f", cfg.Phases.Analyze.Moderator.Threshold, 0.90)
+	if cfg.Phases.Analyze.Moderator.Threshold != 0.80 {
+		t.Errorf("Phases.Analyze.Moderator.Threshold = %f, want %f", cfg.Phases.Analyze.Moderator.Threshold, 0.80)
 	}
 	if cfg.Phases.Analyze.Moderator.MinRounds != 2 {
 		t.Errorf("Phases.Analyze.Moderator.MinRounds = %d, want %d", cfg.Phases.Analyze.Moderator.MinRounds, 2)

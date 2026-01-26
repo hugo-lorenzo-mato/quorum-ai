@@ -14,19 +14,21 @@ import (
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/api"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/diagnostics"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/events"
 )
 
 // Server represents the HTTP server for the Quorum web interface.
 type Server struct {
-	router        chi.Router
-	httpServer    *http.Server
-	config        Config
-	logger        *slog.Logger
-	eventBus      *events.EventBus
-	agentRegistry core.AgentRegistry
-	stateManager  core.StateManager
-	apiServer     *api.Server
+	router          chi.Router
+	httpServer      *http.Server
+	config          Config
+	logger          *slog.Logger
+	eventBus        *events.EventBus
+	agentRegistry   core.AgentRegistry
+	stateManager    core.StateManager
+	resourceMonitor *diagnostics.ResourceMonitor
+	apiServer       *api.Server
 }
 
 // Config holds the server configuration.
@@ -81,6 +83,13 @@ func WithStateManager(stateManager core.StateManager) ServerOption {
 	}
 }
 
+// WithResourceMonitor sets the resource monitor for deep health checks.
+func WithResourceMonitor(monitor *diagnostics.ResourceMonitor) ServerOption {
+	return func(s *Server) {
+		s.resourceMonitor = monitor
+	}
+}
+
 // New creates a new Server instance with the given configuration.
 func New(cfg Config, logger *slog.Logger, opts ...ServerOption) *Server {
 	if logger == nil {
@@ -99,7 +108,11 @@ func New(cfg Config, logger *slog.Logger, opts ...ServerOption) *Server {
 
 	// Create API server if we have an event bus
 	if s.eventBus != nil {
-		s.apiServer = api.NewServer(s.stateManager, s.eventBus, api.WithLogger(logger), api.WithAgentRegistry(s.agentRegistry))
+		apiOpts := []api.ServerOption{api.WithLogger(logger), api.WithAgentRegistry(s.agentRegistry)}
+		if s.resourceMonitor != nil {
+			apiOpts = append(apiOpts, api.WithResourceMonitor(s.resourceMonitor))
+		}
+		s.apiServer = api.NewServer(s.stateManager, s.eventBus, apiOpts...)
 		if s.agentRegistry != nil && s.stateManager != nil {
 			s.logger.Info("API server initialized with event bus, agent registry, and state manager")
 		} else if s.agentRegistry != nil {

@@ -180,13 +180,13 @@ func TestListSessions(t *testing.T) {
 		t.Errorf("got status %d, want %d", w.Code, http.StatusOK)
 	}
 
-	var resp ListSessionsResponse
-	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+	var sessions []ChatSession
+	if err := json.NewDecoder(w.Body).Decode(&sessions); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
 
-	if resp.Total != 2 {
-		t.Errorf("got total %d, want 2", resp.Total)
+	if len(sessions) != 2 {
+		t.Errorf("got %d sessions, want 2", len(sessions))
 	}
 }
 
@@ -296,16 +296,13 @@ func TestGetMessages(t *testing.T) {
 		t.Errorf("got status %d, want %d", w.Code, http.StatusOK)
 	}
 
-	var resp struct {
-		Messages []ChatMessage `json:"messages"`
-		Total    int           `json:"total"`
-	}
-	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+	var messages []ChatMessage
+	if err := json.NewDecoder(w.Body).Decode(&messages); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
 
-	if resp.Total != 2 {
-		t.Errorf("got total %d, want 2", resp.Total)
+	if len(messages) != 2 {
+		t.Errorf("got %d messages, want 2", len(messages))
 	}
 }
 
@@ -369,18 +366,15 @@ func TestSendMessage(t *testing.T) {
 			}
 
 			if tt.wantStatus == http.StatusOK {
-				var resp SendMessageResponse
+				var resp ChatMessage
 				if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
 					t.Fatalf("failed to decode response: %v", err)
 				}
-				if resp.UserMessage.Content == "" {
-					t.Error("user message content should not be empty")
+				if resp.Content == "" {
+					t.Error("response content should not be empty")
 				}
-				if resp.AgentMessage.Content == "" {
-					t.Error("agent message content should not be empty")
-				}
-				if resp.AgentMessage.Tokens == nil {
-					t.Error("agent message should have token info")
+				if resp.Tokens == nil {
+					t.Error("response should have token info")
 				}
 			}
 		})

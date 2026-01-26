@@ -74,7 +74,7 @@ phases:
       # Model override (optional, defaults to agent's phase_models.analyze)
       # model: claude-opus-4-5-20251101
       # Minimum consensus score to accept (0.0-1.0)
-      threshold: 0.90
+      threshold: 0.80
       # Minimum refinement rounds before accepting consensus
       min_rounds: 2
       # Maximum refinement rounds before giving up
@@ -224,3 +224,42 @@ report:
   use_utc: true
   # Include raw agent outputs in reports
   include_raw: true
+
+# Diagnostics configuration for process resilience
+# Provides resource monitoring, crash dumps, and preflight checks
+diagnostics:
+  # Enable/disable diagnostics (recommended: true for long-running sessions)
+  enabled: true
+
+  # Resource monitoring configuration
+  resource_monitoring:
+    # How often to take resource snapshots
+    interval: "30s"
+    # FD usage percentage threshold for warnings (0-100)
+    fd_threshold_percent: 80
+    # Goroutine count threshold for warnings
+    goroutine_threshold: 10000
+    # Heap memory threshold in MB for warnings
+    memory_threshold_mb: 4096
+    # Number of snapshots to keep in history (for trend analysis)
+    history_size: 120
+
+  # Crash dump configuration
+  crash_dump:
+    # Directory for crash dump files
+    dir: ".quorum/crashdumps"
+    # Maximum number of crash dumps to keep
+    max_files: 10
+    # Include stack trace in crash dumps
+    include_stack: true
+    # Include environment variables (redacted) in crash dumps
+    include_env: false
+
+  # Preflight checks before command execution
+  preflight_checks:
+    # Enable preflight checks
+    enabled: true
+    # Minimum free FD percentage required to proceed
+    min_free_fd_percent: 20
+    # Minimum free memory in MB required to proceed
+    min_free_memory_mb: 256

@@ -7,12 +7,20 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+// ConsensusRound represents a single consensus evaluation round
+type ConsensusRound struct {
+	Round int
+	Score float64 // 0-100
+}
+
 // ConsensusPanel displays the consensus level between agents
 type ConsensusPanel struct {
 	score        float64            // Overall consensus score (0-100)
 	threshold    float64            // Configured threshold (e.g., 80)
 	pairScores   map[string]float64 // Scores between agent pairs
 	agentOutputs map[string]string  // Raw outputs for diff
+	history      []ConsensusRound   // Previous consensus rounds
+	analysisPath string             // Path to analysis reports
 	width        int
 	height       int
 	visible      bool
@@ -28,6 +36,7 @@ func NewConsensusPanel(threshold float64) *ConsensusPanel {
 		threshold:    threshold,
 		pairScores:   make(map[string]float64),
 		agentOutputs: make(map[string]string),
+		history:      make([]ConsensusRound, 0),
 		visible:      false,
 		expanded:     true,
 	}
@@ -53,7 +62,24 @@ func (p *ConsensusPanel) SetAgentOutput(agent, output string) {
 func (p *ConsensusPanel) ClearOutputs() {
 	p.agentOutputs = make(map[string]string)
 	p.pairScores = make(map[string]float64)
+	p.history = make([]ConsensusRound, 0)
+	p.analysisPath = ""
 	p.score = 0
+}
+
+// SetHistory sets the consensus round history
+func (p *ConsensusPanel) SetHistory(history []ConsensusRound) {
+	p.history = history
+}
+
+// AddRound adds a consensus round to history
+func (p *ConsensusPanel) AddRound(round int, score float64) {
+	p.history = append(p.history, ConsensusRound{Round: round, Score: score})
+}
+
+// SetAnalysisPath sets the path to the analysis reports directory
+func (p *ConsensusPanel) SetAnalysisPath(path string) {
+	p.analysisPath = path
 }
 
 // Toggle toggles panel visibility
@@ -74,7 +100,7 @@ func (p *ConsensusPanel) SetSize(width, height int) {
 
 // HasData returns true if there's consensus data to display
 func (p *ConsensusPanel) HasData() bool {
-	return len(p.pairScores) > 0 || p.score > 0
+	return len(p.pairScores) > 0 || p.score > 0 || len(p.history) > 0
 }
 
 // Render renders the consensus panel
@@ -167,9 +193,41 @@ func (p *ConsensusPanel) Render() string {
 			pairStyle := lipgloss.NewStyle().Foreground(pairColor)
 			sb.WriteString(fmt.Sprintf("  %s: %s\n", pair, pairStyle.Render(fmt.Sprintf("%.0f%%", score))))
 		}
+		sb.WriteString("\n")
 	}
 
-	sb.WriteString("\n")
+	// Consensus history (previous rounds)
+	if len(p.history) > 0 {
+		sb.WriteString(dimStyle.Render("Round history:"))
+		sb.WriteString("\n")
+		for _, round := range p.history {
+			var roundColor lipgloss.Color
+			switch {
+			case round.Score >= p.threshold:
+				roundColor = lipgloss.Color("#22c55e")
+			case round.Score >= 60:
+				roundColor = lipgloss.Color("#eab308")
+			default:
+				roundColor = lipgloss.Color("#ef4444")
+			}
+			roundStyle := lipgloss.NewStyle().Foreground(roundColor)
+			icon := "○"
+			if round.Score >= p.threshold {
+				icon = "●"
+			}
+			sb.WriteString(fmt.Sprintf("  %s V%d: %s\n", icon, round.Round, roundStyle.Render(fmt.Sprintf("%.0f%%", round.Score))))
+		}
+		sb.WriteString("\n")
+	}
+
+	// Analysis path
+	if p.analysisPath != "" {
+		sb.WriteString(dimStyle.Render("Analysis: "))
+		pathStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#60a5fa"))
+		sb.WriteString(pathStyle.Render(p.analysisPath))
+		sb.WriteString("\n\n")
+	}
+
 	sb.WriteString(dimStyle.Render("Press Ctrl+Q or Esc to close"))
 
 	return boxStyle.Render(sb.String())

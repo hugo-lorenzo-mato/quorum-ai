@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -15,6 +16,7 @@ import (
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/adapters/state"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/config"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/diagnostics"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/events"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/logging"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/web"
@@ -123,10 +125,67 @@ func runServe(_ *cobra.Command, _ []string) error {
 	eventBus := events.New(100)
 	defer eventBus.Close()
 
+	// Initialize diagnostics if enabled
+	var resourceMonitor *diagnostics.ResourceMonitor
+	ctx := context.Background()
+
+	if quorumCfg != nil && quorumCfg.Diagnostics.Enabled {
+		// Parse monitoring interval
+		monitorInterval, err := time.ParseDuration(quorumCfg.Diagnostics.ResourceMonitoring.Interval)
+		if err != nil {
+			monitorInterval = 30 * time.Second
+		}
+
+		// Create resource monitor
+		resourceMonitor = diagnostics.NewResourceMonitor(
+			monitorInterval,
+			quorumCfg.Diagnostics.ResourceMonitoring.FDThresholdPercent,
+			quorumCfg.Diagnostics.ResourceMonitoring.GoroutineThreshold,
+			quorumCfg.Diagnostics.ResourceMonitoring.MemoryThresholdMB,
+			quorumCfg.Diagnostics.ResourceMonitoring.HistorySize,
+			logger.Logger,
+		)
+		resourceMonitor.Start(ctx)
+		defer resourceMonitor.Stop()
+
+		// Create crash dump writer
+		crashDumpWriter := diagnostics.NewCrashDumpWriter(
+			quorumCfg.Diagnostics.CrashDump.Dir,
+			quorumCfg.Diagnostics.CrashDump.MaxFiles,
+			quorumCfg.Diagnostics.CrashDump.IncludeStack,
+			quorumCfg.Diagnostics.CrashDump.IncludeEnv,
+			logger.Logger,
+			resourceMonitor,
+		)
+
+		// Create safe executor
+		safeExecutor := diagnostics.NewSafeExecutor(
+			resourceMonitor,
+			crashDumpWriter,
+			logger.Logger,
+			quorumCfg.Diagnostics.PreflightChecks.Enabled,
+			quorumCfg.Diagnostics.PreflightChecks.MinFreeFDPercent,
+			quorumCfg.Diagnostics.PreflightChecks.MinFreeMemoryMB,
+		)
+
+		// Inject diagnostics into agent registry if available
+		if registry != nil {
+			registry.SetDiagnostics(safeExecutor, crashDumpWriter)
+		}
+
+		logger.Info("diagnostics enabled",
+			slog.String("interval", monitorInterval.String()),
+			slog.Int("fd_threshold", quorumCfg.Diagnostics.ResourceMonitoring.FDThresholdPercent),
+		)
+	}
+
 	// Create server options
 	serverOpts := []web.ServerOption{web.WithEventBus(eventBus)}
 	if registry != nil {
 		serverOpts = append(serverOpts, web.WithAgentRegistry(registry))
+	}
+	if resourceMonitor != nil {
+		serverOpts = append(serverOpts, web.WithResourceMonitor(resourceMonitor))
 	}
 	if stateManager != nil {
 		serverOpts = append(serverOpts, web.WithStateManager(stateManager))
@@ -152,8 +211,8 @@ func runServe(_ *cobra.Command, _ []string) error {
 	logger.Info("shutting down server...")
 
 	// Graceful shutdown
-	ctx := context.Background()
-	if err := server.Shutdown(ctx); err != nil {
+	shutdownCtx := context.Background()
+	if err := server.Shutdown(shutdownCtx); err != nil {
 		return fmt.Errorf("server shutdown: %w", err)
 	}
 

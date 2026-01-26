@@ -3,6 +3,7 @@ package chat
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -779,11 +780,42 @@ func statsTickCmd() tea.Cmd {
 }
 
 func (m *Model) updateQuorumPanel(state *core.WorkflowState) {
-	if state == nil || state.Metrics == nil || state.Metrics.ConsensusScore <= 0 {
+	if state == nil {
 		m.consensusPanel.SetScore(0)
 		return
 	}
-	m.consensusPanel.SetScore(state.Metrics.ConsensusScore * 100)
+
+	// Set current consensus score
+	if state.Metrics != nil && state.Metrics.ConsensusScore > 0 {
+		m.consensusPanel.SetScore(state.Metrics.ConsensusScore * 100)
+	}
+
+	// Extract consensus history from checkpoints
+	var history []ConsensusRound
+	for _, cp := range state.Checkpoints {
+		if cp.Type == "moderator_round" && len(cp.Data) > 0 {
+			var cpData map[string]interface{}
+			if err := json.Unmarshal(cp.Data, &cpData); err == nil {
+				round, hasRound := cpData["round"].(float64)
+				score, hasScore := cpData["consensus_score"].(float64)
+				if hasRound && hasScore {
+					history = append(history, ConsensusRound{
+						Round: int(round),
+						Score: score * 100, // Convert 0-1 to 0-100
+					})
+				}
+			}
+		}
+	}
+	if len(history) > 0 {
+		m.consensusPanel.SetHistory(history)
+	}
+
+	// Set analysis path from report path
+	if state.ReportPath != "" {
+		analysisPath := filepath.Join(state.ReportPath, "analyze")
+		m.consensusPanel.SetAnalysisPath(analysisPath)
+	}
 }
 
 const panelNavWindow = 1500 * time.Millisecond
