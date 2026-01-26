@@ -2,13 +2,40 @@
 
 package diagnostics
 
-// CountFDs returns the number of open file descriptors and the maximum allowed.
-// On Windows, this information is not easily accessible via the same mechanisms
-// as Linux/macOS. This stub returns 0, 0 to indicate unavailable data.
-// Future enhancement: use NtQuerySystemInformation or GetProcessHandleCount.
+import (
+	"syscall"
+	"unsafe"
+)
+
+var (
+	kernel32                = syscall.NewLazyDLL("kernel32.dll")
+	procGetProcessHandleCount = kernel32.NewProc("GetProcessHandleCount")
+)
+
+// CountFDs returns the number of open handles and a soft limit.
+// On Windows, handles include files, threads, events, mutexes, etc.
+// This is broader than POSIX file descriptors but serves as a useful
+// resource leak indicator.
 func CountFDs() (open, limit int) {
-	// Windows doesn't have /proc/self/fd or /dev/fd equivalents.
-	// GetProcessHandleCount could be used but requires additional Windows API calls.
-	// For now, return 0 to indicate FD monitoring is not available on Windows.
-	return 0, 0
+	handle, err := syscall.GetCurrentProcess()
+	if err != nil {
+		return 0, 0
+	}
+
+	var count uint32
+	ret, _, _ := procGetProcessHandleCount.Call(
+		uintptr(handle),
+		uintptr(unsafe.Pointer(&count)),
+	)
+	if ret == 0 {
+		return 0, 0
+	}
+
+	// Windows has no rlimit equivalent for handles.
+	// Theoretical max is ~16 million, but we use 10000 as a practical
+	// soft limit for percentage calculations and threshold warnings.
+	const softLimit = 10000
+
+	// #nosec G115 -- handle count is always within int range
+	return int(count), softLimit
 }
