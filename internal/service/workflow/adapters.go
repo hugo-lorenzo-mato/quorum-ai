@@ -235,7 +235,7 @@ func (a *PromptRendererAdapter) RenderModeratorEvaluate(params ModeratorEvaluate
 	for i, analysis := range params.Analyses {
 		serviceAnalyses[i] = service.ModeratorAnalysisSummary{
 			AgentName: analysis.AgentName,
-			Output:    analysis.Output,
+			FilePath:  analysis.FilePath,
 		}
 	}
 	return a.renderer.RenderModeratorEvaluate(service.ModeratorEvaluateParams{
@@ -323,6 +323,11 @@ func (a *DAGAdapter) AddDependency(from, to core.TaskID) error {
 // Build validates the DAG and returns the state.
 func (a *DAGAdapter) Build() (interface{}, error) {
 	return a.dag.Build()
+}
+
+// Clear removes all tasks from the DAG.
+func (a *DAGAdapter) Clear() {
+	a.dag.Clear()
 }
 
 // GetReadyTasks returns tasks ready for execution.

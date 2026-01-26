@@ -35,6 +35,11 @@ func (m *mockDAGBuilder) Build() (interface{}, error) {
 	return m, nil
 }
 
+func (m *mockDAGBuilder) Clear() {
+	m.tasks = make(map[core.TaskID]*core.Task)
+	m.deps = make(map[core.TaskID][]core.TaskID)
+}
+
 func (m *mockDAGBuilder) GetReadyTasks(completed map[core.TaskID]bool) []*core.Task {
 	var ready []*core.Task
 	for id, task := range m.tasks {

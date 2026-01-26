@@ -999,6 +999,13 @@ func (r *Runner) UsePlan(ctx context.Context) error {
 	workflowState.CurrentPhase = core.PhaseExecute
 	workflowState.UpdatedAt = time.Now()
 
+	// Create phase_complete checkpoint for plan phase
+	// This is critical: without it, Resume() will think plan hasn't completed
+	// and will try to run the planner again, causing duplicate task errors
+	if err := r.checkpoint.PhaseCheckpoint(workflowState, core.PhasePlan, true); err != nil {
+		r.logger.Warn("failed to create phase complete checkpoint", "error", err)
+	}
+
 	// Notify output
 	if r.output != nil {
 		r.output.WorkflowStateUpdated(workflowState)

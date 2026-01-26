@@ -293,6 +293,16 @@ func (d *DAGBuilder) TaskCount() int {
 	return len(d.tasks)
 }
 
+// Clear removes all tasks and edges from the DAG.
+// This is used when rebuilding the DAG from persisted state.
+func (d *DAGBuilder) Clear() {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.tasks = make(map[core.TaskID]*core.Task)
+	d.edges = make(map[core.TaskID][]core.TaskID)
+	d.reverse = make(map[core.TaskID][]core.TaskID)
+}
+
 func (d *DAGBuilder) copyEdges() map[core.TaskID][]core.TaskID {
 	result := make(map[core.TaskID][]core.TaskID)
 	for k, v := range d.edges {

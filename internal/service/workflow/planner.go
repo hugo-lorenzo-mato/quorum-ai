@@ -24,6 +24,7 @@ type DAGBuilder interface {
 	AddTask(task *core.Task) error
 	AddDependency(from, to core.TaskID) error
 	Build() (interface{}, error)
+	Clear() // Clear removes all tasks for rebuilding from persisted state
 }
 
 // StateSaver persists workflow state.
@@ -51,6 +52,10 @@ func (p *Planner) RebuildDAGFromState(state *core.WorkflowState) error {
 	if len(state.Tasks) == 0 {
 		return fmt.Errorf("no tasks in state to rebuild DAG")
 	}
+
+	// Clear any existing tasks in the DAG before rebuilding
+	// This prevents "task already exists" errors when resuming workflows
+	p.dag.Clear()
 
 	// Add all tasks to DAG (convert TaskState to Task)
 	for _, taskState := range state.Tasks {
