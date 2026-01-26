@@ -11,14 +11,21 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/rs/cors"
+
+	webadapters "github.com/hugo-lorenzo-mato/quorum-ai/internal/adapters/web"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/events"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/web/sse"
 )
 
 // Server represents the HTTP server for the Quorum web interface.
 type Server struct {
-	router     chi.Router
-	httpServer *http.Server
-	config     Config
-	logger     *slog.Logger
+	router      chi.Router
+	httpServer  *http.Server
+	config      Config
+	logger      *slog.Logger
+	eventBus    *events.EventBus
+	sseHandler  *sse.Handler
+	chatHandler *webadapters.ChatHandler
 }
 
 // Config holds the server configuration.
@@ -49,8 +56,18 @@ func DefaultConfig() Config {
 	}
 }
 
+// ServerOption configures the server.
+type ServerOption func(*Server)
+
+// WithEventBus sets the event bus for SSE streaming.
+func WithEventBus(bus *events.EventBus) ServerOption {
+	return func(s *Server) {
+		s.eventBus = bus
+	}
+}
+
 // New creates a new Server instance with the given configuration.
-func New(cfg Config, logger *slog.Logger) *Server {
+func New(cfg Config, logger *slog.Logger, opts ...ServerOption) *Server {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -58,6 +75,11 @@ func New(cfg Config, logger *slog.Logger) *Server {
 	s := &Server{
 		config: cfg,
 		logger: logger,
+	}
+
+	// Apply options
+	for _, opt := range opts {
+		opt(s)
 	}
 
 	s.router = s.setupRouter()
@@ -100,9 +122,21 @@ func (s *Server) setupRouter() chi.Router {
 
 	// API routes
 	r.Route("/api/v1", func(r chi.Router) {
-		// Placeholder for future API routes
 		r.Get("/", s.handleAPIRoot)
+
+		// SSE routes for real-time events
+		if s.eventBus != nil {
+			r.Route("/sse", func(r chi.Router) {
+				s.sseHandler = sse.RegisterRoutes(r, s.eventBus)
+				s.logger.Info("SSE endpoint registered at /api/v1/sse/events")
+			})
+		}
 	})
+
+	// Chat routes (nil AgentRegistry means chat features are limited)
+	s.chatHandler = webadapters.NewChatHandler(nil, s.eventBus)
+	s.chatHandler.RegisterRoutes(r)
+	s.logger.Info("Chat routes registered at /chat/*")
 
 	// Serve embedded frontend static files
 	if s.config.ServeStatic {

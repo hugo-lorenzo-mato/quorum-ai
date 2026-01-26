@@ -10,11 +10,11 @@ func TestValidateTaskOutput_SuspiciouslyLowTokens(t *testing.T) {
 	executor := &Executor{}
 
 	tests := []struct {
-		name       string
-		result     *core.ExecuteResult
-		task       *core.Task
-		wantValid  bool
-		wantWarn   bool
+		name      string
+		result    *core.ExecuteResult
+		task      *core.Task
+		wantValid bool
+		wantWarn  bool
 	}{
 		{
 			name: "very low tokens should fail",
@@ -56,11 +56,11 @@ func TestValidateTaskOutput_ImplementationTaskNoToolCalls(t *testing.T) {
 	executor := &Executor{}
 
 	tests := []struct {
-		name       string
-		result     *core.ExecuteResult
-		task       *core.Task
-		wantValid  bool
-		wantWarn   bool
+		name      string
+		result    *core.ExecuteResult
+		task      *core.Task
+		wantValid bool
+		wantWarn  bool
 	}{
 		{
 			name: "implement task with no tool calls and low tokens should fail",
@@ -124,11 +124,11 @@ func TestValidateTaskOutput_SubstantialCodeTasks(t *testing.T) {
 	executor := &Executor{}
 
 	tests := []struct {
-		name       string
-		result     *core.ExecuteResult
-		task       *core.Task
-		wantValid  bool
-		wantWarn   bool
+		name      string
+		result    *core.ExecuteResult
+		task      *core.Task
+		wantValid bool
+		wantWarn  bool
 	}{
 		{
 			name: "page task with low tokens and no file ops should fail",
@@ -227,10 +227,10 @@ func TestValidateTaskOutput_NonImplementationTasks(t *testing.T) {
 
 	// Non-implementation tasks should have more lenient validation
 	tests := []struct {
-		name       string
-		result     *core.ExecuteResult
-		task       *core.Task
-		wantValid  bool
+		name      string
+		result    *core.ExecuteResult
+		task      *core.Task
+		wantValid bool
 	}{
 		{
 			name: "analyze task with moderate tokens should pass",

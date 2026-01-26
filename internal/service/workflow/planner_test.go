@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"encoding/json"
+	"sync"
 	"testing"
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
@@ -63,11 +64,14 @@ func (m *mockDAGBuilder) GetReadyTasks(completed map[core.TaskID]bool) []*core.T
 
 // mockStateSaver is a test state saver for planner tests.
 type mockStateSaver struct {
+	mu    sync.Mutex
 	state *core.WorkflowState
 	err   error
 }
 
 func (m *mockStateSaver) Save(_ context.Context, state *core.WorkflowState) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if m.err != nil {
 		return m.err
 	}

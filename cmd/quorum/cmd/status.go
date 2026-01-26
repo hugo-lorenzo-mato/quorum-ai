@@ -38,7 +38,11 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return fmt.Errorf("creating state manager: %w", err)
 	}
-	defer state.CloseStateManager(stateManager)
+	defer func() {
+		if closeErr := state.CloseStateManager(stateManager); closeErr != nil {
+			fmt.Fprintf(os.Stderr, "warning: closing state manager: %v\n", closeErr)
+		}
+	}()
 
 	if !stateManager.Exists() {
 		fmt.Println("No active workflow")

@@ -98,7 +98,7 @@ func TestExecutor_Run_AllTasksCompleted(t *testing.T) {
 		result: &core.ExecuteResult{
 			Output:    "success",
 			TokensIn:  100,
-			TokensOut: 50,
+			TokensOut: 200,
 		},
 	}
 	registry := &mockAgentRegistry{}
@@ -297,7 +297,7 @@ func TestExecutor_Run_WithWorktrees(t *testing.T) {
 		result: &core.ExecuteResult{
 			Output:    "success",
 			TokensIn:  100,
-			TokensOut: 50,
+			TokensOut: 200,
 		},
 	}
 	registry := &mockAgentRegistry{}
@@ -356,7 +356,7 @@ func TestExecutor_Run_WorktreeCreateFails(t *testing.T) {
 		result: &core.ExecuteResult{
 			Output:    "success",
 			TokensIn:  100,
-			TokensOut: 50,
+			TokensOut: 200,
 		},
 	}
 	registry := &mockAgentRegistry{}
@@ -411,7 +411,7 @@ func TestExecutor_Run_TaskBudgetExceeded(t *testing.T) {
 		result: &core.ExecuteResult{
 			Output:    "success",
 			TokensIn:  100,
-			TokensOut: 50,
+			TokensOut: 200,
 			CostUSD:   15.0, // Exceeds limit
 		},
 	}
@@ -462,7 +462,7 @@ func TestExecutor_Run_WorkflowBudgetExceeded(t *testing.T) {
 		result: &core.ExecuteResult{
 			Output:    "success",
 			TokensIn:  100,
-			TokensOut: 50,
+			TokensOut: 200,
 			CostUSD:   5.0,
 		},
 	}
@@ -648,7 +648,7 @@ func TestExecutor_Run_ParallelTasks(t *testing.T) {
 		result: &core.ExecuteResult{
 			Output:    "success",
 			TokensIn:  100,
-			TokensOut: 50,
+			TokensOut: 200,
 		},
 	}
 	registry := &mockAgentRegistry{}
@@ -746,7 +746,7 @@ func TestExecutor_Run_UsesDefaultAgentWhenNoCLI(t *testing.T) {
 	dag.Build()
 
 	agent := &mockAgent{
-		result: &core.ExecuteResult{Output: "success"},
+		result: &core.ExecuteResult{Output: "success", TokensOut: 200},
 	}
 	registry := &mockAgentRegistry{}
 	registry.Register("gemini", agent)
@@ -794,7 +794,7 @@ func TestExecutor_Run_UpdatesMetrics(t *testing.T) {
 		result: &core.ExecuteResult{
 			Output:    "success",
 			TokensIn:  100,
-			TokensOut: 50,
+			TokensOut: 200,
 			CostUSD:   1.5,
 		},
 	}
@@ -833,8 +833,8 @@ func TestExecutor_Run_UpdatesMetrics(t *testing.T) {
 	if wctx.State.Metrics.TotalTokensIn != 100 {
 		t.Errorf("TotalTokensIn = %d, want 100", wctx.State.Metrics.TotalTokensIn)
 	}
-	if wctx.State.Metrics.TotalTokensOut != 50 {
-		t.Errorf("TotalTokensOut = %d, want 50", wctx.State.Metrics.TotalTokensOut)
+	if wctx.State.Metrics.TotalTokensOut != 200 {
+		t.Errorf("TotalTokensOut = %d, want 200", wctx.State.Metrics.TotalTokensOut)
 	}
 	if wctx.State.Metrics.TotalCostUSD != 1.5 {
 		t.Errorf("TotalCostUSD = %v, want 1.5", wctx.State.Metrics.TotalCostUSD)
@@ -845,8 +845,8 @@ func TestExecutor_Run_UpdatesMetrics(t *testing.T) {
 	if taskState.TokensIn != 100 {
 		t.Errorf("task TokensIn = %d, want 100", taskState.TokensIn)
 	}
-	if taskState.TokensOut != 50 {
-		t.Errorf("task TokensOut = %d, want 50", taskState.TokensOut)
+	if taskState.TokensOut != 200 {
+		t.Errorf("task TokensOut = %d, want 200", taskState.TokensOut)
 	}
 	if taskState.CostUSD != 1.5 {
 		t.Errorf("task CostUSD = %v, want 1.5", taskState.CostUSD)
@@ -863,7 +863,7 @@ func TestExecutor_Run_SaveStateFails(t *testing.T) {
 	dag.Build()
 
 	agent := &mockAgent{
-		result: &core.ExecuteResult{Output: "success"},
+		result: &core.ExecuteResult{Output: "success", TokensOut: 200},
 	}
 	registry := &mockAgentRegistry{}
 	registry.Register("claude", agent)

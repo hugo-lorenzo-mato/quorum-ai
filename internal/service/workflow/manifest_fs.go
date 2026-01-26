@@ -166,7 +166,7 @@ func extractTaskNameFromFilename(filename string) string {
 		// Convert kebab-case to title case
 		words := strings.Split(parts[2], "-")
 		for i, word := range words {
-			if len(word) > 0 {
+			if word != "" {
 				words[i] = strings.ToUpper(word[:1]) + word[1:]
 			}
 		}

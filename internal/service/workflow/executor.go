@@ -36,26 +36,26 @@ const (
 
 // TaskOutputValidationResult contains the outcome of task output validation.
 type TaskOutputValidationResult struct {
-	Valid       bool
-	Warning     string
-	ToolCalls   int
-	TokensOut   int
-	HasFileOps  bool
+	Valid      bool
+	Warning    string
+	ToolCalls  int
+	TokensOut  int
+	HasFileOps bool
 }
 
 // fileWriteToolNames contains tool names that indicate file write operations.
 var fileWriteToolNames = map[string]bool{
-	"write_file":        true,
-	"write":             true,
-	"create_file":       true,
-	"edit_file":         true,
-	"edit":              true,
-	"str_replace":       true,
+	"write_file":         true,
+	"write":              true,
+	"create_file":        true,
+	"edit_file":          true,
+	"edit":               true,
+	"str_replace":        true,
 	"str_replace_editor": true,
-	"bash":              true, // May write files via shell
-	"shell":             true,
-	"execute":           true,
-	"run":               true,
+	"bash":               true, // May write files via shell
+	"shell":              true,
+	"execute":            true,
+	"run":                true,
 }
 
 // GitClientFactory creates git clients for specific paths.
@@ -184,15 +184,8 @@ func (e *Executor) Run(ctx context.Context, wctx *Context) error {
 
 // executeTask executes a single task.
 func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Task, useWorktrees bool) error {
-	// Check for cancellation
-	if wctx.Control != nil {
-		if err := wctx.Control.CheckCancelled(); err != nil {
-			return err
-		}
-		// Wait if paused
-		if err := wctx.Control.WaitIfPaused(ctx); err != nil {
-			return err
-		}
+	if err := e.checkControl(ctx, wctx); err != nil {
+		return err
 	}
 
 	wctx.Logger.Info("executing task",
@@ -203,80 +196,39 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 		wctx.Output.Log("info", "executor", fmt.Sprintf("Task started: %s", task.Name))
 	}
 
-	// Enforce mode restrictions before execution
-	if wctx.ModeEnforcer != nil {
-		op := ModeOperation{
-			Name:           task.Name,
-			Type:           "llm",
-			Tool:           task.CLI,
-			HasSideEffects: !wctx.Config.DryRun,
-			InWorkspace:    true,
-			// In sandbox mode, LLM operations are allowed but shell commands aren't
-			AllowedInSandbox: true,
-		}
-
-		if err := wctx.ModeEnforcer.CanExecute(ctx, op); err != nil {
-			wctx.Logger.Warn("task blocked by mode enforcer",
-				"task_id", task.ID,
-				"error", err,
-			)
-			return fmt.Errorf("mode enforcer blocked task: %w", err)
-		}
+	if err := e.enforceMode(ctx, wctx, task); err != nil {
+		return err
 	}
 
-	// Update task state (with lock for concurrent access)
-	wctx.Lock()
-	taskState := wctx.State.Tasks[task.ID]
-	if taskState == nil {
-		wctx.Unlock()
-		return fmt.Errorf("task state not found: %s", task.ID)
+	taskState, startTime, err := e.startTask(wctx, task)
+	if err != nil {
+		return err
 	}
 
-	startTime := time.Now()
-	taskState.Status = core.TaskStatusRunning
-	taskState.StartedAt = &startTime
-	wctx.Unlock()
+	e.notifyTaskStarted(wctx, task)
 
-	// Notify output that task has started
-	if wctx.Output != nil {
-		wctx.Output.TaskStarted(task)
-	}
-
-	// Notify output when task completes (success or failure)
 	var taskErr error
 	defer func() {
-		if wctx.Output != nil {
-			duration := time.Since(startTime)
-			if taskState.Status == core.TaskStatusCompleted {
-				wctx.Output.TaskCompleted(task, duration)
-			} else if taskState.Status == core.TaskStatusFailed {
-				wctx.Output.TaskFailed(task, taskErr)
-			}
-		}
+		e.notifyTaskCompletion(wctx, task, taskState, startTime, taskErr)
 	}()
 
-	// Create task checkpoint
 	if err := wctx.Checkpoint.TaskCheckpoint(wctx.State, task, false); err != nil {
 		wctx.Logger.Warn("failed to create task checkpoint", "error", err)
 	}
 
-	// Skip in dry-run mode
 	if wctx.Config.DryRun {
-		wctx.Lock()
-		taskState.Status = core.TaskStatusCompleted
-		completedAt := time.Now()
-		taskState.CompletedAt = &completedAt
-		wctx.Unlock()
-		return nil
+		return e.completeDryRun(wctx, taskState)
 	}
 
-	// Create worktree for task isolation
 	workDir, worktreeCreated := e.setupWorktree(ctx, wctx, task, taskState, useWorktrees)
-
-	// Cleanup worktree when done (if auto_clean is enabled)
 	defer e.cleanupWorktree(ctx, wctx, task, worktreeCreated)
 
-	// Get agent
+	fail := func(err error) error {
+		e.setTaskFailed(wctx, taskState, err)
+		taskErr = err
+		return err
+	}
+
 	agentName := task.CLI
 	if agentName == "" {
 		agentName = wctx.Config.DefaultAgent
@@ -284,37 +236,133 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 
 	agent, err := wctx.Agents.Get(agentName)
 	if err != nil {
-		e.setTaskFailed(wctx, taskState, err)
-		taskErr = err
-		return err
+		return fail(err)
 	}
 
-	// Acquire rate limit
-	limiter := wctx.RateLimits.Get(agentName)
-	if err := limiter.Acquire(); err != nil {
-		e.setTaskFailed(wctx, taskState, err)
-		taskErr = err
-		return fmt.Errorf("rate limit: %w", err)
+	if err := e.acquireRateLimit(wctx, agentName); err != nil {
+		return fail(fmt.Errorf("rate limit: %w", err))
 	}
 
-	// Render task prompt
 	prompt, err := wctx.Prompts.RenderTaskExecute(TaskExecuteParams{
 		Task:    task,
 		Context: wctx.GetContextString(),
 	})
 	if err != nil {
-		e.setTaskFailed(wctx, taskState, err)
-		taskErr = err
-		return err
+		return fail(err)
 	}
 
-	// Execute with retry
-	var result *core.ExecuteResult
-	var retryCount int
 	model := ResolvePhaseModel(wctx.Config, agentName, core.PhaseExecute, task.Model)
 	execStartTime := time.Now()
 
-	// Log task execution start with detailed context
+	e.logTaskExecutionStart(wctx, task, agentName, model, workDir, prompt)
+	e.notifyAgentStarted(wctx, agentName, task, model, workDir)
+
+	result, retryCount, durationMS, execErr := e.executeWithRetry(ctx, wctx, agent, agentName, task, prompt, model, workDir, execStartTime)
+
+	wctx.Lock()
+	taskState.Retries = retryCount
+	wctx.Unlock()
+
+	if execErr != nil {
+		taskErr = execErr
+		return e.handleExecutionFailure(wctx, task, taskState, agentName, model, retryCount, durationMS, execErr)
+	}
+
+	if err := e.handleExecutionSuccess(ctx, wctx, task, taskState, agentName, result, workDir, durationMS); err != nil {
+		taskErr = err
+		return err
+	}
+	return nil
+}
+
+func (e *Executor) checkControl(ctx context.Context, wctx *Context) error {
+	if wctx.Control == nil {
+		return nil
+	}
+	if err := wctx.Control.CheckCancelled(); err != nil {
+		return err
+	}
+	return wctx.Control.WaitIfPaused(ctx)
+}
+
+func (e *Executor) enforceMode(ctx context.Context, wctx *Context, task *core.Task) error {
+	if wctx.ModeEnforcer == nil {
+		return nil
+	}
+
+	op := ModeOperation{
+		Name:           task.Name,
+		Type:           "llm",
+		Tool:           task.CLI,
+		HasSideEffects: !wctx.Config.DryRun,
+		InWorkspace:    true,
+		// In sandbox mode, LLM operations are allowed but shell commands aren't
+		AllowedInSandbox: true,
+	}
+
+	if err := wctx.ModeEnforcer.CanExecute(ctx, op); err != nil {
+		wctx.Logger.Warn("task blocked by mode enforcer",
+			"task_id", task.ID,
+			"error", err,
+		)
+		return fmt.Errorf("mode enforcer blocked task: %w", err)
+	}
+	return nil
+}
+
+func (e *Executor) startTask(wctx *Context, task *core.Task) (*core.TaskState, time.Time, error) {
+	wctx.Lock()
+	defer wctx.Unlock()
+
+	taskState := wctx.State.Tasks[task.ID]
+	if taskState == nil {
+		return nil, time.Time{}, fmt.Errorf("task state not found: %s", task.ID)
+	}
+
+	startTime := time.Now()
+	taskState.Status = core.TaskStatusRunning
+	taskState.StartedAt = &startTime
+	return taskState, startTime, nil
+}
+
+func (e *Executor) notifyTaskStarted(wctx *Context, task *core.Task) {
+	if wctx.Output != nil {
+		wctx.Output.TaskStarted(task)
+	}
+}
+
+func (e *Executor) notifyTaskCompletion(wctx *Context, task *core.Task, taskState *core.TaskState, startTime time.Time, taskErr error) {
+	if wctx.Output == nil {
+		return
+	}
+	duration := time.Since(startTime)
+	if taskState.Status == core.TaskStatusCompleted {
+		wctx.Output.TaskCompleted(task, duration)
+		return
+	}
+	if taskState.Status == core.TaskStatusFailed {
+		if taskErr == nil {
+			taskErr = fmt.Errorf("task failed")
+		}
+		wctx.Output.TaskFailed(task, taskErr)
+	}
+}
+
+func (e *Executor) completeDryRun(wctx *Context, taskState *core.TaskState) error {
+	wctx.Lock()
+	taskState.Status = core.TaskStatusCompleted
+	completedAt := time.Now()
+	taskState.CompletedAt = &completedAt
+	wctx.Unlock()
+	return nil
+}
+
+func (e *Executor) acquireRateLimit(wctx *Context, agentName string) error {
+	limiter := wctx.RateLimits.Get(agentName)
+	return limiter.Acquire()
+}
+
+func (e *Executor) logTaskExecutionStart(wctx *Context, task *core.Task, agentName, model, workDir, prompt string) {
 	promptPreview := prompt
 	if len(promptPreview) > 500 {
 		promptPreview = promptPreview[:500] + "... [truncated]"
@@ -329,19 +377,23 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 		"prompt_length", len(prompt),
 		"prompt_preview", promptPreview,
 	)
+}
 
-	// Emit agent started event
-	if wctx.Output != nil {
-		wctx.Output.AgentEvent("started", agentName, "Executing task: "+task.Name, map[string]interface{}{
-			"task_id":         string(task.ID),
-			"task_name":       task.Name,
-			"phase":           "execute",
-			"model":           model,
-			"workdir":         workDir,
-			"timeout_seconds": int(wctx.Config.PhaseTimeouts.Execute.Seconds()),
-		})
+func (e *Executor) notifyAgentStarted(wctx *Context, agentName string, task *core.Task, model, workDir string) {
+	if wctx.Output == nil {
+		return
 	}
+	wctx.Output.AgentEvent("started", agentName, "Executing task: "+task.Name, map[string]interface{}{
+		"task_id":         string(task.ID),
+		"task_name":       task.Name,
+		"phase":           "execute",
+		"model":           model,
+		"workdir":         workDir,
+		"timeout_seconds": int(wctx.Config.PhaseTimeouts.Execute.Seconds()),
+	})
+}
 
+func (e *Executor) executeWithRetry(ctx context.Context, wctx *Context, agent core.Agent, agentName string, task *core.Task, prompt, model, workDir string, execStartTime time.Time) (result *core.ExecuteResult, retryCount int, durationMS int64, err error) {
 	err = wctx.Retry.ExecuteWithNotify(func() error {
 		var execErr error
 		result, execErr = agent.Execute(ctx, core.ExecuteOptions{
@@ -372,42 +424,37 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 		retryCount = attempt
 	})
 
-	durationMS := time.Since(execStartTime).Milliseconds()
+	durationMS = time.Since(execStartTime).Milliseconds()
+	return result, retryCount, durationMS, err
+}
 
-	wctx.Lock()
-	taskState.Retries = retryCount
-	wctx.Unlock()
+func (e *Executor) handleExecutionFailure(wctx *Context, task *core.Task, taskState *core.TaskState, agentName, model string, retryCount int, durationMS int64, err error) error {
+	wctx.Logger.Error("executor: task execution failed",
+		"task_id", task.ID,
+		"task_name", task.Name,
+		"agent", agentName,
+		"model", model,
+		"retries", retryCount,
+		"duration_ms", durationMS,
+		"error", err,
+		"error_type", fmt.Sprintf("%T", err),
+	)
 
-	if err != nil {
-		// Log detailed error information
-		wctx.Logger.Error("executor: task execution failed",
-			"task_id", task.ID,
-			"task_name", task.Name,
-			"agent", agentName,
-			"model", model,
-			"retries", retryCount,
-			"duration_ms", durationMS,
-			"error", err,
-			"error_type", fmt.Sprintf("%T", err),
-		)
-
-		if wctx.Output != nil {
-			wctx.Output.AgentEvent("error", agentName, err.Error(), map[string]interface{}{
-				"task_id":     string(task.ID),
-				"task_name":   task.Name,
-				"model":       model,
-				"retries":     retryCount,
-				"duration_ms": durationMS,
-				"error_type":  fmt.Sprintf("%T", err),
-			})
-		}
-		e.setTaskFailed(wctx, taskState, err)
-		taskErr = err
-		return err
+	if wctx.Output != nil {
+		wctx.Output.AgentEvent("error", agentName, err.Error(), map[string]interface{}{
+			"task_id":     string(task.ID),
+			"task_name":   task.Name,
+			"model":       model,
+			"retries":     retryCount,
+			"duration_ms": durationMS,
+			"error_type":  fmt.Sprintf("%T", err),
+		})
 	}
+	e.setTaskFailed(wctx, taskState, err)
+	return err
+}
 
-	// Validate task output before marking as completed
-	// This catches cases where agents complete without error but produce no meaningful output
+func (e *Executor) handleExecutionSuccess(ctx context.Context, wctx *Context, task *core.Task, taskState *core.TaskState, agentName string, result *core.ExecuteResult, workDir string, durationMS int64) error {
 	validation := e.validateTaskOutput(result, task)
 	if !validation.Valid {
 		validationErr := fmt.Errorf("task output validation failed: %s", validation.Warning)
@@ -431,11 +478,9 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 			})
 		}
 		e.setTaskFailed(wctx, taskState, validationErr)
-		taskErr = validationErr
 		return validationErr
 	}
 
-	// Log warning if validation passed but with concerns
 	if validation.Warning != "" {
 		wctx.Logger.Warn("executor: task output validation warning",
 			"task_id", task.ID,
@@ -464,7 +509,6 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 		"has_file_ops", validation.HasFileOps,
 	)
 
-	// Emit completed event
 	if wctx.Output != nil {
 		wctx.Output.AgentEvent("completed", agentName, task.Name, map[string]interface{}{
 			"task_id":       string(task.ID),
@@ -480,7 +524,6 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 		})
 	}
 
-	// Update task metrics
 	wctx.Lock()
 	taskState.TokensIn = result.TokensIn
 	taskState.TokensOut = result.TokensOut
@@ -492,20 +535,16 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 	taskState.FinishReason = result.FinishReason
 	taskState.ToolCalls = result.ToolCalls
 
-	// Save output (truncate if too large)
 	if len(result.Output) <= core.MaxInlineOutputSize {
 		taskState.Output = result.Output
 	} else {
-		// Store truncated version inline
 		taskState.Output = result.Output[:core.MaxInlineOutputSize] + "\n... [truncated, see output_file]"
-		// Save full output to file
 		outputPath := e.saveTaskOutput(task.ID, result.Output)
 		if outputPath != "" {
 			taskState.OutputFile = outputPath
 		}
 	}
 
-	// Update aggregate metrics
 	if wctx.State.Metrics != nil {
 		wctx.State.Metrics.TotalTokensIn += result.TokensIn
 		wctx.State.Metrics.TotalTokensOut += result.TokensOut
@@ -513,18 +552,14 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 	}
 	wctx.Unlock()
 
-	// Record cost with ModeEnforcer
 	if wctx.ModeEnforcer != nil {
 		wctx.ModeEnforcer.RecordCost(result.CostUSD)
 	}
 
-	// Check cost limits
 	if costErr := e.checkCostLimits(wctx, task, taskState, result.CostUSD); costErr != nil {
-		taskErr = costErr
 		return costErr
 	}
 
-	// Finalize task (commit, push, PR) if configured
 	if finalizeErr := e.finalizeTask(ctx, wctx, task, taskState, workDir); finalizeErr != nil {
 		wctx.Logger.Warn("task finalization failed",
 			"task_id", task.ID,
@@ -539,8 +574,6 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 		wctx.Logger.Warn("failed to create task complete checkpoint", "error", err)
 	}
 
-	// Save state immediately after each task completion (not waiting for batch)
-	// This enables fine-grained recovery if the workflow is interrupted
 	if e.stateSaver != nil {
 		if saveErr := e.stateSaver.Save(ctx, wctx.State); saveErr != nil {
 			wctx.Logger.Error("failed to save state after task completion",
@@ -552,7 +585,6 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 		wctx.Logger.Debug("state saved after task completion", "task_id", task.ID)
 	}
 
-	// Notify UI of state update so task panel refreshes
 	if wctx.Output != nil {
 		wctx.Output.WorkflowStateUpdated(wctx.State)
 		wctx.Output.Log("success", "executor", fmt.Sprintf("Task completed: %s ($%.4f)", task.Name, result.CostUSD))

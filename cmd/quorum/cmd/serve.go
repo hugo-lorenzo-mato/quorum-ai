@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/events"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/logging"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/web"
 )
@@ -65,9 +66,12 @@ func runServe(_ *cobra.Command, _ []string) error {
 	cfg.Port = servePort
 	cfg.EnableCORS = !serveNoCORS
 
-	// Create and start server
-	// Pass the embedded slog.Logger to the web server
-	server := web.New(cfg, logger.Logger)
+	// Create event bus for SSE streaming
+	eventBus := events.New(100)
+	defer eventBus.Close()
+
+	// Create and start server with event bus
+	server := web.New(cfg, logger.Logger, web.WithEventBus(eventBus))
 
 	if err := server.Start(); err != nil {
 		return fmt.Errorf("starting server: %w", err)

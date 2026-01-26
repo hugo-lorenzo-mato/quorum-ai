@@ -261,7 +261,7 @@ func (c AgentConfig) GetReasoningEffortForPhase(phase string) string {
 
 // StateConfig configures state persistence.
 type StateConfig struct {
-	Backend    string `mapstructure:"backend"`     // Backend type: "json" (default) or "sqlite"
+	Backend    string `mapstructure:"backend"` // Backend type: "json" (default) or "sqlite"
 	Path       string `mapstructure:"path"`
 	BackupPath string `mapstructure:"backup_path"`
 	LockTTL    string `mapstructure:"lock_ttl"`

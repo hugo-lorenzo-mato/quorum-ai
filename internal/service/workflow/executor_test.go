@@ -117,8 +117,9 @@ func TestExecutor_SavesTaskOutput(t *testing.T) {
 		agents: map[string]core.Agent{
 			"mock": &mockAgent{
 				result: &core.ExecuteResult{
-					Output:   "Task completed successfully\nFiles modified: 3",
-					TokensIn: 100,
+					Output:    "Task completed successfully\nFiles modified: 3",
+					TokensIn:  100,
+					TokensOut: 200,
 				},
 			},
 		},

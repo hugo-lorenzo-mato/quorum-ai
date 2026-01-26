@@ -105,9 +105,28 @@ func (a *Analyzer) Run(ctx context.Context, wctx *Context) error {
 //   - V3 → Reviews ONLY V2 (if no consensus)
 //   - V(n+1) → Reviews ONLY V(n)
 func (a *Analyzer) runWithModerator(ctx context.Context, wctx *Context) error {
-	// ========== CHECK FOR MODERATOR ROUND CHECKPOINT ==========
-	// If we have a checkpoint from a previous failed run, resume from there
-	// instead of re-running V1 and V2 analyses
+	resumed, err := a.resumeFromModeratorCheckpoint(ctx, wctx)
+	if err != nil {
+		return err
+	}
+	if resumed {
+		return nil
+	}
+
+	currentOutputs, round, err := a.runInitialAnalyses(ctx, wctx)
+	if err != nil {
+		return err
+	}
+
+	finalOutputs, finalRound, err := a.runModeratorLoop(ctx, wctx, currentOutputs, round)
+	if err != nil {
+		return err
+	}
+
+	return a.finalizeModeratorAnalysis(ctx, wctx, finalOutputs, finalRound)
+}
+
+func (a *Analyzer) resumeFromModeratorCheckpoint(ctx context.Context, wctx *Context) (bool, error) {
 	if savedRound, savedOutputs := getModeratorRoundCheckpoint(wctx.State); savedRound > 0 && len(savedOutputs) > 0 {
 		wctx.Logger.Info("resuming from moderator round checkpoint",
 			"saved_round", savedRound,
@@ -116,10 +135,12 @@ func (a *Analyzer) runWithModerator(ctx context.Context, wctx *Context) error {
 		if wctx.Output != nil {
 			wctx.Output.Log("info", "analyzer", fmt.Sprintf("Resuming from round %d checkpoint (skipping V1-V%d)", savedRound, savedRound))
 		}
-		return a.continueFromCheckpoint(ctx, wctx, savedRound, savedOutputs)
+		return true, a.continueFromCheckpoint(ctx, wctx, savedRound, savedOutputs)
 	}
+	return false, nil
+}
 
-	// ========== PHASE 1: V1 Initial Analysis (Independent) ==========
+func (a *Analyzer) runInitialAnalyses(ctx context.Context, wctx *Context) ([]AnalysisOutput, int, error) {
 	wctx.Logger.Info("starting V1 analysis (initial, no moderator)")
 	if wctx.Output != nil {
 		wctx.Output.Log("info", "analyzer", "V1: Running initial independent analysis")
@@ -127,181 +148,207 @@ func (a *Analyzer) runWithModerator(ctx context.Context, wctx *Context) error {
 
 	v1Outputs, err := a.runV1Analysis(ctx, wctx)
 	if err != nil {
-		return fmt.Errorf("V1 analysis: %w", err)
+		return nil, 0, fmt.Errorf("V1 analysis: %w", err)
 	}
 
-	// ========== PHASE 2: V2 First Ultracritical Review of V1 ==========
 	wctx.Logger.Info("starting V2 refinement (ultracritical review of V1)")
 	if wctx.Output != nil {
 		wctx.Output.Log("info", "analyzer", "V2: Running ultracritical review of V1 analyses")
 	}
 
-	// V2 refines V1 with no prior arbiter evaluation (first refinement)
 	v2Outputs, err := a.runVnRefinement(ctx, wctx, 2, v1Outputs, nil, nil)
 	if err != nil {
-		return fmt.Errorf("V2 refinement: %w", err)
+		return nil, 0, fmt.Errorf("V2 refinement: %w", err)
 	}
 
-	// Track outputs for iteration - start with V2
-	currentOutputs := v2Outputs
-	round := 2
+	return v2Outputs, 2, nil
+}
 
-	// Track previous score for stagnation detection
+func (a *Analyzer) runModeratorLoop(ctx context.Context, wctx *Context, currentOutputs []AnalysisOutput, round int) ([]AnalysisOutput, int, error) {
 	var previousScore float64
-
-	// ========== PHASE 3: Moderator Evaluation Loop (V2+) ==========
 	for round <= a.moderator.MaxRounds() {
-		wctx.Logger.Info("moderator evaluation starting",
-			"round", round,
-			"agents", len(currentOutputs),
-		)
-		if wctx.Output != nil {
-			wctx.Output.Log("info", "analyzer", fmt.Sprintf("Round %d: Running moderator evaluation", round))
+		evalResult, err := a.runModeratorRound(ctx, wctx, round, currentOutputs)
+		if err != nil {
+			return nil, round, err
 		}
 
-		// Run moderator evaluation with retry and fallback support
-		evalResult, evalErr := a.runModeratorWithFallback(ctx, wctx, round, currentOutputs)
-		if evalErr != nil {
-			return fmt.Errorf("moderator evaluation round %d: %w", round, evalErr)
+		if a.shouldStopForConsensus(wctx, round, evalResult) {
+			return currentOutputs, round, nil
 		}
 
-		// Update consensus score in metrics
-		wctx.UpdateMetrics(func(m *core.StateMetrics) {
-			m.ConsensusScore = evalResult.Score
-		})
+		a.logLowConsensusWarning(wctx, round, evalResult)
 
-		// Save checkpoint after successful moderator evaluation
-		// This allows resuming from this round if a later step fails
-		if cpErr := wctx.Checkpoint.CreateCheckpoint(wctx.State, string(service.CheckpointModeratorRound), map[string]interface{}{
-			"round":           round,
-			"consensus_score": evalResult.Score,
-			"outputs":         serializeAnalysisOutputs(currentOutputs),
-		}); cpErr != nil {
-			wctx.Logger.Warn("failed to create moderator round checkpoint", "round", round, "error", cpErr)
-		}
-
-		wctx.Logger.Info("moderator evaluation complete",
-			"round", round,
-			"score", evalResult.Score,
-			"threshold", a.moderator.Threshold(),
-			"agreements", len(evalResult.Agreements),
-			"divergences", len(evalResult.Divergences),
-		)
-
-		if wctx.Output != nil {
-			statusIcon := "⚠"
-			level := "warn"
-			if evalResult.Score >= a.moderator.Threshold() {
-				statusIcon = "✓"
-				level = "success"
-			}
-			wctx.Output.Log(level, "analyzer", fmt.Sprintf("%s Round %d: Semantic consensus %.0f%% (threshold: %.0f%%)",
-				statusIcon, round, evalResult.Score*100, a.moderator.Threshold()*100))
-		}
-
-		// Check if consensus threshold is met AND minimum rounds completed
-		if evalResult.Score >= a.moderator.Threshold() {
-			if round >= a.moderator.MinRounds() {
-				wctx.Logger.Info("consensus threshold met",
-					"score", evalResult.Score,
-					"threshold", a.moderator.Threshold(),
-					"round", round,
-				)
-				if wctx.Output != nil {
-					wctx.Output.Log("success", "analyzer", fmt.Sprintf("Consensus achieved at %.0f%% after %d round(s)", evalResult.Score*100, round))
-				}
-				break
-			}
-			// Threshold met but minimum rounds not reached - continue refinement
-			wctx.Logger.Info("consensus threshold met but minimum rounds not reached",
-				"score", evalResult.Score,
-				"threshold", a.moderator.Threshold(),
-				"round", round,
-				"min_rounds", a.moderator.MinRounds(),
-			)
-			if wctx.Output != nil {
-				wctx.Output.Log("info", "analyzer", fmt.Sprintf("Threshold met (%.0f%%) but continuing to min rounds (%d/%d)",
-					evalResult.Score*100, round, a.moderator.MinRounds()))
-			}
-		}
-
-		// Log warning if consensus is very low, but continue iterating
-		// Low consensus indicates divergence - we should keep refining rather than abort
-		if evalResult.Score < a.moderator.AbortThreshold() {
-			wctx.Logger.Warn("consensus score is low, continuing refinement",
-				"score", evalResult.Score,
-				"warning_threshold", a.moderator.AbortThreshold(),
-				"round", round,
-				"max_rounds", a.moderator.MaxRounds(),
-			)
-			if wctx.Output != nil {
-				wctx.Output.Log("warn", "analyzer", fmt.Sprintf("Low consensus %.0f%% (below %.0f%%), continuing refinement to improve agreement",
-					evalResult.Score*100, a.moderator.AbortThreshold()*100))
-			}
-			// Continue to next round instead of aborting
-		}
-
-		// Check for stagnation (score not improving) - only after first moderator eval (round > 2)
-		if round > 2 {
-			improvement := evalResult.Score - previousScore
-			if improvement < a.moderator.StagnationThreshold() {
-				wctx.Logger.Warn("consensus stagnating, exiting refinement loop",
-					"improvement", improvement,
-					"stagnation_threshold", a.moderator.StagnationThreshold(),
-				)
-				if wctx.Output != nil {
-					wctx.Output.Log("warn", "analyzer", fmt.Sprintf("Consensus stagnating (improvement %.1f%% < %.1f%%), proceeding with current score",
-						improvement*100, a.moderator.StagnationThreshold()*100))
-				}
-				break
-			}
+		if a.shouldStopForStagnation(wctx, round, previousScore, evalResult) {
+			return currentOutputs, round, nil
 		}
 		previousScore = evalResult.Score
 
-		// Check if we've reached max rounds
-		if round >= a.moderator.MaxRounds() {
-			wctx.Logger.Warn("max rounds reached without consensus",
-				"round", round,
-				"max_rounds", a.moderator.MaxRounds(),
-				"final_score", evalResult.Score,
-			)
-			if wctx.Output != nil {
-				wctx.Output.Log("warn", "analyzer", fmt.Sprintf("Max rounds (%d) reached. Final consensus: %.0f%%",
-					a.moderator.MaxRounds(), evalResult.Score*100))
-			}
-			break
+		if a.shouldStopForMaxRounds(wctx, round, evalResult) {
+			return currentOutputs, round, nil
 		}
 
-		// ========== Run V(n+1) refinement ==========
-		// CRITICAL: V(n+1) reviews ONLY V(n), NOT previous versions
 		round++
-		wctx.Logger.Info("starting refinement round",
-			"round", round,
-			"previous_round", round-1,
-			"agreements_to_preserve", len(evalResult.Agreements),
-			"divergences_to_resolve", len(evalResult.Divergences),
-		)
-		if wctx.Output != nil {
-			wctx.Output.Log("info", "analyzer", fmt.Sprintf("Round %d: Refining V%d analyses (preserving %d agreements, resolving %d divergences)",
-				round, round-1, len(evalResult.Agreements), len(evalResult.Divergences)))
-		}
-
-		// V(n+1) takes ONLY V(n) outputs - this ensures no cross-version references
-		refinedOutputs, err := a.runVnRefinement(ctx, wctx, round, currentOutputs, evalResult, evalResult.Agreements)
+		refinedOutputs, err := a.runRefinementRound(ctx, wctx, round, currentOutputs, evalResult)
 		if err != nil {
-			return fmt.Errorf("V%d refinement: %w", round, err)
+			return nil, round, err
 		}
-
-		// Update currentOutputs for next iteration
 		currentOutputs = refinedOutputs
 	}
+	return currentOutputs, round, nil
+}
 
-	// ========== PHASE 4: Final Consolidation ==========
-	// Consolidation uses ONLY the latest V(n) outputs, never V1 directly
+func (a *Analyzer) runModeratorRound(ctx context.Context, wctx *Context, round int, currentOutputs []AnalysisOutput) (*ModeratorEvaluationResult, error) {
+	wctx.Logger.Info("moderator evaluation starting",
+		"round", round,
+		"agents", len(currentOutputs),
+	)
+	if wctx.Output != nil {
+		wctx.Output.Log("info", "analyzer", fmt.Sprintf("Round %d: Running moderator evaluation", round))
+	}
+
+	evalResult, evalErr := a.runModeratorWithFallback(ctx, wctx, round, currentOutputs)
+	if evalErr != nil {
+		return nil, fmt.Errorf("moderator evaluation round %d: %w", round, evalErr)
+	}
+
+	wctx.UpdateMetrics(func(m *core.StateMetrics) {
+		m.ConsensusScore = evalResult.Score
+	})
+
+	if cpErr := wctx.Checkpoint.CreateCheckpoint(wctx.State, string(service.CheckpointModeratorRound), map[string]interface{}{
+		"round":           round,
+		"consensus_score": evalResult.Score,
+		"outputs":         serializeAnalysisOutputs(currentOutputs),
+	}); cpErr != nil {
+		wctx.Logger.Warn("failed to create moderator round checkpoint", "round", round, "error", cpErr)
+	}
+
+	wctx.Logger.Info("moderator evaluation complete",
+		"round", round,
+		"score", evalResult.Score,
+		"threshold", a.moderator.Threshold(),
+		"agreements", len(evalResult.Agreements),
+		"divergences", len(evalResult.Divergences),
+	)
+
+	if wctx.Output != nil {
+		statusIcon := "⚠"
+		level := "warn"
+		if evalResult.Score >= a.moderator.Threshold() {
+			statusIcon = "✓"
+			level = "success"
+		}
+		wctx.Output.Log(level, "analyzer", fmt.Sprintf("%s Round %d: Semantic consensus %.0f%% (threshold: %.0f%%)",
+			statusIcon, round, evalResult.Score*100, a.moderator.Threshold()*100))
+	}
+
+	return evalResult, nil
+}
+
+func (a *Analyzer) shouldStopForConsensus(wctx *Context, round int, evalResult *ModeratorEvaluationResult) bool {
+	if evalResult.Score < a.moderator.Threshold() {
+		return false
+	}
+	if round >= a.moderator.MinRounds() {
+		wctx.Logger.Info("consensus threshold met",
+			"score", evalResult.Score,
+			"threshold", a.moderator.Threshold(),
+			"round", round,
+		)
+		if wctx.Output != nil {
+			wctx.Output.Log("success", "analyzer", fmt.Sprintf("Consensus achieved at %.0f%% after %d round(s)", evalResult.Score*100, round))
+		}
+		return true
+	}
+
+	wctx.Logger.Info("consensus threshold met but minimum rounds not reached",
+		"score", evalResult.Score,
+		"threshold", a.moderator.Threshold(),
+		"round", round,
+		"min_rounds", a.moderator.MinRounds(),
+	)
+	if wctx.Output != nil {
+		wctx.Output.Log("info", "analyzer", fmt.Sprintf("Threshold met (%.0f%%) but continuing to min rounds (%d/%d)",
+			evalResult.Score*100, round, a.moderator.MinRounds()))
+	}
+	return false
+}
+
+func (a *Analyzer) logLowConsensusWarning(wctx *Context, round int, evalResult *ModeratorEvaluationResult) {
+	if evalResult.Score >= a.moderator.AbortThreshold() {
+		return
+	}
+	wctx.Logger.Warn("consensus score is low, continuing refinement",
+		"score", evalResult.Score,
+		"warning_threshold", a.moderator.AbortThreshold(),
+		"round", round,
+		"max_rounds", a.moderator.MaxRounds(),
+	)
+	if wctx.Output != nil {
+		wctx.Output.Log("warn", "analyzer", fmt.Sprintf("Low consensus %.0f%% (below %.0f%%), continuing refinement to improve agreement",
+			evalResult.Score*100, a.moderator.AbortThreshold()*100))
+	}
+}
+
+func (a *Analyzer) shouldStopForStagnation(wctx *Context, round int, previousScore float64, evalResult *ModeratorEvaluationResult) bool {
+	if round <= 2 {
+		return false
+	}
+	improvement := evalResult.Score - previousScore
+	if improvement >= a.moderator.StagnationThreshold() {
+		return false
+	}
+	wctx.Logger.Warn("consensus stagnating, exiting refinement loop",
+		"improvement", improvement,
+		"stagnation_threshold", a.moderator.StagnationThreshold(),
+	)
+	if wctx.Output != nil {
+		wctx.Output.Log("warn", "analyzer", fmt.Sprintf("Consensus stagnating (improvement %.1f%% < %.1f%%), proceeding with current score",
+			improvement*100, a.moderator.StagnationThreshold()*100))
+	}
+	return true
+}
+
+func (a *Analyzer) shouldStopForMaxRounds(wctx *Context, round int, evalResult *ModeratorEvaluationResult) bool {
+	if round < a.moderator.MaxRounds() {
+		return false
+	}
+	wctx.Logger.Warn("max rounds reached without consensus",
+		"round", round,
+		"max_rounds", a.moderator.MaxRounds(),
+		"final_score", evalResult.Score,
+	)
+	if wctx.Output != nil {
+		wctx.Output.Log("warn", "analyzer", fmt.Sprintf("Max rounds (%d) reached. Final consensus: %.0f%%",
+			a.moderator.MaxRounds(), evalResult.Score*100))
+	}
+	return true
+}
+
+func (a *Analyzer) runRefinementRound(ctx context.Context, wctx *Context, round int, currentOutputs []AnalysisOutput, evalResult *ModeratorEvaluationResult) ([]AnalysisOutput, error) {
+	wctx.Logger.Info("starting refinement round",
+		"round", round,
+		"previous_round", round-1,
+		"agreements_to_preserve", len(evalResult.Agreements),
+		"divergences_to_resolve", len(evalResult.Divergences),
+	)
+	if wctx.Output != nil {
+		wctx.Output.Log("info", "analyzer", fmt.Sprintf("Round %d: Refining V%d analyses (preserving %d agreements, resolving %d divergences)",
+			round, round-1, len(evalResult.Agreements), len(evalResult.Divergences)))
+	}
+
+	refinedOutputs, err := a.runVnRefinement(ctx, wctx, round, currentOutputs, evalResult, evalResult.Agreements)
+	if err != nil {
+		return nil, fmt.Errorf("V%d refinement: %w", round, err)
+	}
+	return refinedOutputs, nil
+}
+
+func (a *Analyzer) finalizeModeratorAnalysis(ctx context.Context, wctx *Context, outputs []AnalysisOutput, round int) error {
 	if wctx.Output != nil {
 		wctx.Output.Log("info", "analyzer", fmt.Sprintf("Consolidating final analysis from V%d outputs", round))
 	}
-	if err := a.consolidateAnalysis(ctx, wctx, currentOutputs); err != nil {
+	if err := a.consolidateAnalysis(ctx, wctx, outputs); err != nil {
 		return fmt.Errorf("consolidating analysis: %w", err)
 	}
 	if wctx.Output != nil {
@@ -311,7 +358,6 @@ func (a *Analyzer) runWithModerator(ctx context.Context, wctx *Context) error {
 	if err := wctx.Checkpoint.PhaseCheckpoint(wctx.State, core.PhaseAnalyze, true); err != nil {
 		wctx.Logger.Warn("failed to create phase complete checkpoint", "error", err)
 	}
-
 	return nil
 }
 

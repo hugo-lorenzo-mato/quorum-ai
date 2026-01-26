@@ -183,7 +183,11 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("creating state manager: %w", err)
 	}
-	defer state.CloseStateManager(stateManager)
+	defer func() {
+		if closeErr := state.CloseStateManager(stateManager); closeErr != nil {
+			logger.Warn("closing state manager", "error", closeErr)
+		}
+	}()
 
 	// Create agent registry and configure from unified config
 	registry := cli.NewRegistry()
@@ -573,4 +577,3 @@ func getPrompt(args []string, file string) (string, error) {
 
 	return "", fmt.Errorf("prompt required: provide as argument or use --file")
 }
-
