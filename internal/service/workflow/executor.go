@@ -17,6 +17,47 @@ type TaskDAG interface {
 	GetReadyTasks(completed map[core.TaskID]bool) []*core.Task
 }
 
+// Task output validation constants.
+// These thresholds help detect when agents complete without producing meaningful output.
+const (
+	// MinExpectedTokensForCodeGen is the minimum output tokens expected for code generation tasks.
+	// A minimal code change (e.g., a simple function) typically requires 200+ tokens.
+	// Tasks with fewer tokens are flagged as suspicious.
+	MinExpectedTokensForCodeGen = 200
+
+	// MinExpectedTokensForImplementation is the minimum for larger implementation tasks.
+	// Zustand stores, API handlers, and pages typically require 500+ tokens each.
+	MinExpectedTokensForImplementation = 300
+
+	// SuspiciouslyLowTokenThreshold is the absolute minimum that indicates likely no work done.
+	// 100-170 tokens is approximately 2-3 sentences of natural language, not code.
+	SuspiciouslyLowTokenThreshold = 150
+)
+
+// TaskOutputValidationResult contains the outcome of task output validation.
+type TaskOutputValidationResult struct {
+	Valid       bool
+	Warning     string
+	ToolCalls   int
+	TokensOut   int
+	HasFileOps  bool
+}
+
+// fileWriteToolNames contains tool names that indicate file write operations.
+var fileWriteToolNames = map[string]bool{
+	"write_file":        true,
+	"write":             true,
+	"create_file":       true,
+	"edit_file":         true,
+	"edit":              true,
+	"str_replace":       true,
+	"str_replace_editor": true,
+	"bash":              true, // May write files via shell
+	"shell":             true,
+	"execute":           true,
+	"run":               true,
+}
+
 // GitClientFactory creates git clients for specific paths.
 type GitClientFactory interface {
 	NewClient(repoPath string) (core.GitClient, error)
@@ -365,6 +406,49 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 		return err
 	}
 
+	// Validate task output before marking as completed
+	// This catches cases where agents complete without error but produce no meaningful output
+	validation := e.validateTaskOutput(result, task)
+	if !validation.Valid {
+		validationErr := fmt.Errorf("task output validation failed: %s", validation.Warning)
+		wctx.Logger.Error("executor: task output validation failed",
+			"task_id", task.ID,
+			"task_name", task.Name,
+			"agent", agentName,
+			"tokens_out", result.TokensOut,
+			"tool_calls", len(result.ToolCalls),
+			"has_file_ops", validation.HasFileOps,
+			"warning", validation.Warning,
+		)
+		if wctx.Output != nil {
+			wctx.Output.AgentEvent("error", agentName, validation.Warning, map[string]interface{}{
+				"task_id":      string(task.ID),
+				"task_name":    task.Name,
+				"tokens_out":   result.TokensOut,
+				"tool_calls":   len(result.ToolCalls),
+				"has_file_ops": validation.HasFileOps,
+				"duration_ms":  durationMS,
+			})
+		}
+		e.setTaskFailed(wctx, taskState, validationErr)
+		taskErr = validationErr
+		return validationErr
+	}
+
+	// Log warning if validation passed but with concerns
+	if validation.Warning != "" {
+		wctx.Logger.Warn("executor: task output validation warning",
+			"task_id", task.ID,
+			"task_name", task.Name,
+			"warning", validation.Warning,
+			"tokens_out", result.TokensOut,
+			"tool_calls", len(result.ToolCalls),
+		)
+		if wctx.Output != nil {
+			wctx.Output.Log("warn", "executor", fmt.Sprintf("Task %s: %s", task.Name, validation.Warning))
+		}
+	}
+
 	// Log successful completion
 	wctx.Logger.Info("executor: task completed successfully",
 		"task_id", task.ID,
@@ -376,6 +460,8 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 		"cost_usd", result.CostUSD,
 		"duration_ms", durationMS,
 		"finish_reason", result.FinishReason,
+		"tool_calls", len(result.ToolCalls),
+		"has_file_ops", validation.HasFileOps,
 	)
 
 	// Emit completed event
@@ -389,6 +475,7 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 			"cost_usd":      result.CostUSD,
 			"duration_ms":   durationMS,
 			"tool_calls":    len(result.ToolCalls),
+			"has_file_ops":  validation.HasFileOps,
 			"finish_reason": result.FinishReason,
 		})
 	}
@@ -881,4 +968,100 @@ func GetFullOutput(state *core.TaskState) (string, error) {
 	}
 
 	return string(data), nil
+}
+
+// validateTaskOutput checks if the task execution produced meaningful output.
+// This addresses the issue where agents may complete without error but produce no files.
+// Returns validation result with details about tool calls and token counts.
+func (e *Executor) validateTaskOutput(result *core.ExecuteResult, task *core.Task) TaskOutputValidationResult {
+	validation := TaskOutputValidationResult{
+		Valid:     true,
+		ToolCalls: len(result.ToolCalls),
+		TokensOut: result.TokensOut,
+	}
+
+	// Check for file write operations in tool calls
+	for _, tc := range result.ToolCalls {
+		toolNameLower := strings.ToLower(tc.Name)
+		if fileWriteToolNames[toolNameLower] {
+			validation.HasFileOps = true
+			break
+		}
+	}
+
+	// Validation 1: Check for suspiciously low token output
+	// Tasks with very low output tokens likely didn't produce code
+	if result.TokensOut < SuspiciouslyLowTokenThreshold {
+		validation.Valid = false
+		validation.Warning = fmt.Sprintf(
+			"task output suspiciously short: %d tokens (expected >=%d for code generation). "+
+				"Agent may have responded with intent description instead of implementation.",
+			result.TokensOut,
+			SuspiciouslyLowTokenThreshold,
+		)
+		return validation
+	}
+
+	// Validation 2: Check for missing tool calls in implementation tasks
+	// If task name suggests implementation but no tools were called, it's suspicious
+	taskNameLower := strings.ToLower(task.Name)
+	isImplementationTask := strings.Contains(taskNameLower, "implement") ||
+		strings.Contains(taskNameLower, "create") ||
+		strings.Contains(taskNameLower, "add") ||
+		strings.Contains(taskNameLower, "build") ||
+		strings.Contains(taskNameLower, "write") ||
+		strings.Contains(taskNameLower, "develop")
+
+	if isImplementationTask && len(result.ToolCalls) == 0 {
+		// Implementation task with no tool calls and low-ish tokens is suspicious
+		if result.TokensOut < MinExpectedTokensForImplementation {
+			validation.Valid = false
+			validation.Warning = fmt.Sprintf(
+				"implementation task completed without tool calls and with low output (%d tokens). "+
+					"Agent may not have executed file writes. Tool calls: %d",
+				result.TokensOut,
+				len(result.ToolCalls),
+			)
+			return validation
+		}
+		// Has some tokens but no tool calls - warn but don't fail
+		validation.Warning = fmt.Sprintf(
+			"implementation task completed without tool calls (tokens_out=%d). "+
+				"Verify that expected files were created.",
+			result.TokensOut,
+		)
+	}
+
+	// Validation 3: Check token count for tasks that require substantial code
+	// Frontend components, stores, handlers typically need 300+ tokens
+	requiresSubstantialCode := strings.Contains(taskNameLower, "component") ||
+		strings.Contains(taskNameLower, "page") ||
+		strings.Contains(taskNameLower, "store") ||
+		strings.Contains(taskNameLower, "handler") ||
+		strings.Contains(taskNameLower, "frontend") ||
+		strings.Contains(taskNameLower, "backend") ||
+		strings.Contains(taskNameLower, "api")
+
+	if requiresSubstantialCode && result.TokensOut < MinExpectedTokensForImplementation {
+		if !validation.HasFileOps {
+			validation.Valid = false
+			validation.Warning = fmt.Sprintf(
+				"task requiring substantial code completed with only %d tokens and no file operations. "+
+					"Expected >=%d tokens for this type of task.",
+				result.TokensOut,
+				MinExpectedTokensForImplementation,
+			)
+			return validation
+		}
+		// Has file ops but low tokens - just warn
+		if validation.Warning == "" {
+			validation.Warning = fmt.Sprintf(
+				"task output lower than expected: %d tokens (typically need %d+ for this task type)",
+				result.TokensOut,
+				MinExpectedTokensForImplementation,
+			)
+		}
+	}
+
+	return validation
 }
