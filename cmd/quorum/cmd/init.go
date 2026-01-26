@@ -135,20 +135,19 @@ agents:
       synthesize: claude-opus-4-5-20251101
       plan: claude-opus-4-5-20251101
       execute: claude-opus-4-5-20251101
-    # Phases/roles this agent participates in
-    # - refine: prompt refinement before analysis
-    # - analyze: multi-agent analysis participation
-    # - moderate: consensus evaluation between agents
-    # - synthesize: consolidate multi-agent outputs
-    # - plan: task planning
-    # - execute: task execution
+    # Phases/roles this agent participates in (opt-out model).
+    # Omitted phases default to true (enabled). Only specify false to disable.
+    # Available phases:
+    #   refine     - prompt refinement before analysis
+    #   analyze    - multi-agent analysis participation
+    #   moderate   - consensus evaluation between agents
+    #   synthesize - consolidate multi-agent outputs
+    #   plan       - task planning
+    #   execute    - task execution
     phases:
       refine: false
-      analyze: true
       moderate: false
       synthesize: true   # assigned as synthesizer
-      plan: true
-      execute: true
 
   # Gemini (Google) - Secondary agent
   gemini:
@@ -162,14 +161,12 @@ agents:
       synthesize: gemini-3-pro-preview
       plan: gemini-3-pro-preview
       execute: gemini-3-flash-preview
-    # Phases/roles this agent participates in
+    # Phases this agent participates in (omitted = true)
     phases:
       refine: false
-      analyze: true
       moderate: false
       synthesize: false
       plan: false
-      execute: true
 
   # Codex (OpenAI) - Tertiary agent, refiner
   codex:
@@ -190,14 +187,11 @@ agents:
       refine: xhigh
       analyze: xhigh
       plan: xhigh
-    # Phases/roles this agent participates in
+    # Phases this agent participates in (omitted = true)
     phases:
       refine: true       # assigned as refiner
-      analyze: true
       moderate: false
       synthesize: false
-      plan: true
-      execute: true
 
   # Copilot (GitHub) - Moderator only
   copilot:
@@ -211,7 +205,8 @@ agents:
       synthesize: claude-sonnet-4-5
       plan: claude-sonnet-4-5
       execute: claude-sonnet-4-5
-    # Phases/roles this agent participates in - moderator only
+    # Copilot only participates as moderator
+    # All phases omitted = true, so we must explicitly disable them
     phases:
       refine: false
       analyze: false

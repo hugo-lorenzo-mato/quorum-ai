@@ -93,6 +93,20 @@ phases:
 
 # Agent configuration
 # Note: temperature and max_tokens are omitted - let each CLI use its optimized defaults
+#
+# Each agent can have a "phases" map to control participation in workflow phases.
+# This uses an OPT-OUT model: omitted phases default to true (enabled).
+# Only specify phases you want to DISABLE (set to false).
+# Available phases: refine, analyze, moderate, synthesize, plan, execute
+#
+# Example - agent only for execution:
+#   phases:
+#     refine: false
+#     analyze: false
+#     moderate: false
+#     synthesize: false
+#     plan: false
+#     # execute is omitted, so it defaults to true
 agents:
   # Default agent for analysis tasks
   default: claude
@@ -112,6 +126,7 @@ agents:
       synthesize: claude-opus-4-5-20251101
       plan: claude-opus-4-5-20251101
       execute: claude-opus-4-5-20251101
+    # No phases specified = enabled for all phases
 
   # Gemini CLI configuration
   gemini:
@@ -125,6 +140,7 @@ agents:
       synthesize: gemini-3-pro-preview
       plan: gemini-3-pro-preview
       execute: gemini-3-flash-preview
+    # No phases specified = enabled for all phases
 
   # OpenAI Codex CLI configuration
   codex:
@@ -145,6 +161,7 @@ agents:
       refine: xhigh
       analyze: xhigh
       plan: xhigh
+    # No phases specified = enabled for all phases
 
   # GitHub Copilot CLI configuration (optional)
   # Uses the standalone `copilot` CLI (npm install -g @github/copilot)
@@ -161,6 +178,7 @@ agents:
       synthesize: claude-sonnet-4-5
       plan: claude-sonnet-4-5
       execute: claude-sonnet-4-5
+    # No phases specified = enabled for all phases (when enabled: true)
 
 # State persistence configuration
 state:

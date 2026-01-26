@@ -357,24 +357,56 @@ Each agent configuration supports these fields:
 
 #### Phase Participation Control
 
-The `phases` map controls which workflow phases an agent participates in. Keys are phase names, values are boolean.
+The `phases` map controls which workflow phases an agent participates in. This uses an **opt-out model**:
+
+- **Omitted phases default to `true` (enabled)**
+- Only specify phases you want to **disable** (set to `false`)
+- If `phases` is empty or not specified, the agent participates in all phases
+
+Available phases:
+
+| Phase | Description |
+|-------|-------------|
+| `refine` | Prompt refinement before analysis |
+| `analyze` | Multi-agent analysis participation |
+| `moderate` | Consensus evaluation between agents |
+| `synthesize` | Consolidate multi-agent outputs |
+| `plan` | Task planning |
+| `execute` | Task execution |
+
+**Example - agent only as moderator:**
 
 ```yaml
 agents:
-  claude:
+  copilot:
     enabled: true
+    path: copilot
+    model: claude-sonnet-4-5
+    # Disable all phases except moderate
     phases:
-      refine: true      # Can refine prompts
-      analyze: true     # Can perform analysis
-      moderate: true    # Can evaluate consensus (fallback moderator)
-      synthesize: true  # Can synthesize results
-      plan: true        # Can generate plans
-      execute: true     # Can execute tasks
+      refine: false
+      analyze: false
+      synthesize: false
+      plan: false
+      execute: false
+      # moderate is omitted, so it defaults to true
 ```
 
-If `phases` is empty or not specified, the agent participates in **all phases** (backward compatible).
+**Example - agent for analysis and execution only:**
 
-**Moderator fallback chain:** When the primary moderator fails, agents with `moderate: true` are tried as fallbacks in order.
+```yaml
+agents:
+  gemini:
+    enabled: true
+    phases:
+      refine: false
+      moderate: false
+      synthesize: false
+      plan: false
+      # analyze and execute are omitted, so they default to true
+```
+
+**Moderator fallback chain:** When the primary moderator fails, agents with `moderate: true` (or omitted) are tried as fallbacks in order.
 
 #### Token Discrepancy Detection
 
