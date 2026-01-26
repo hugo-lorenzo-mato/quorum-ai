@@ -2,6 +2,8 @@ package state
 
 import (
 	"context"
+	"encoding/json"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -633,6 +635,75 @@ func TestSQLiteStateManager_DeactivateWorkflow(t *testing.T) {
 	}
 }
 
+func TestSQLiteStateManager_Save_IsDurableWithoutReleaseLock(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "state.db")
+
+	manager, err := NewSQLiteStateManager(dbPath, WithSQLiteLockTTL(5*time.Second))
+	if err != nil {
+		t.Fatalf("NewSQLiteStateManager() error = %v", err)
+	}
+
+	ctx := context.Background()
+
+	if err := manager.AcquireLock(ctx); err != nil {
+		t.Fatalf("AcquireLock() error = %v", err)
+	}
+
+	state := newTestStateSQLite()
+	if err := manager.Save(ctx, state); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	// Simulate abrupt termination: close without ReleaseLock() commit semantics.
+	// Save() must still be durable.
+	if err := manager.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+
+	manager2, err := NewSQLiteStateManager(dbPath, WithSQLiteLockTTL(5*time.Second))
+	if err != nil {
+		t.Fatalf("NewSQLiteStateManager() (second) error = %v", err)
+	}
+	defer manager2.Close()
+
+	loaded, err := manager2.LoadByID(ctx, state.WorkflowID)
+	if err != nil {
+		t.Fatalf("LoadByID() error = %v", err)
+	}
+	if loaded == nil {
+		t.Fatalf("expected workflow state to be durable even without ReleaseLock()")
+	}
+
+	// Lock should still be present and block acquisition while "fresh".
+	if err := manager2.AcquireLock(ctx); err == nil {
+		_ = manager2.ReleaseLock(ctx)
+		t.Fatalf("AcquireLock() should fail while lock is fresh")
+	}
+
+	// Force the lock to become stale and ensure we can recover.
+	lockPath := dbPath + ".lock"
+	stale := lockInfo{
+		PID:        os.Getpid(),
+		Hostname:   "test",
+		AcquiredAt: time.Now().Add(-10 * time.Second),
+	}
+	b, err := json.Marshal(stale)
+	if err != nil {
+		t.Fatalf("json.Marshal(lockInfo) error = %v", err)
+	}
+	if err := os.WriteFile(lockPath, b, 0o600); err != nil {
+		t.Fatalf("os.WriteFile(%s) error = %v", lockPath, err)
+	}
+
+	if err := manager2.AcquireLock(ctx); err != nil {
+		t.Fatalf("AcquireLock() error after stale lock: %v", err)
+	}
+	if err := manager2.ReleaseLock(ctx); err != nil {
+		t.Fatalf("ReleaseLock() error = %v", err)
+	}
+}
+
 func TestSQLiteStateManager_ArchiveWorkflows(t *testing.T) {
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "state.db")
@@ -666,13 +737,30 @@ func TestSQLiteStateManager_ArchiveWorkflows(t *testing.T) {
 		t.Errorf("Expected 1 archived workflow, got %d", archived)
 	}
 
-	// Workflow should be deleted (in SQLite, archive means delete)
+	// Workflow should no longer exist in DB
 	loaded, err := manager.LoadByID(ctx, state.WorkflowID)
 	if err != nil {
 		t.Fatalf("LoadByID() error = %v", err)
 	}
 	if loaded != nil {
-		t.Error("Workflow should have been deleted (archived)")
+		t.Error("Workflow should have been removed from the DB after archiving")
+	}
+
+	// But it should be preserved on disk in the archive directory
+	archivePath := filepath.Join(tmpDir, "archive", string(state.WorkflowID)+".json")
+	data, err := os.ReadFile(archivePath)
+	if err != nil {
+		t.Fatalf("os.ReadFile(%s) error = %v", archivePath, err)
+	}
+	var env stateEnvelope
+	if err := json.Unmarshal(data, &env); err != nil {
+		t.Fatalf("failed to decode archive envelope: %v", err)
+	}
+	if env.State == nil {
+		t.Fatalf("expected archived workflow state at %s", archivePath)
+	}
+	if env.State.WorkflowID != state.WorkflowID {
+		t.Errorf("archived WorkflowID = %s, want %s", env.State.WorkflowID, state.WorkflowID)
 	}
 }
 

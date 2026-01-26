@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/fsutil"
 	_ "modernc.org/sqlite"
 )
 
@@ -29,12 +30,11 @@ var migrationV2 string
 type SQLiteStateManager struct {
 	dbPath     string
 	backupPath string
+	lockPath   string
+	lockTTL    time.Duration
 	db         *sql.DB // Write connection
 	readDB     *sql.DB // Read-only connection for non-blocking reads
 	mu         sync.RWMutex
-	lockHeld   bool
-	lockPID    int
-	activeTx   *sql.Tx // Transaction created by AcquireLock, reused by Save
 
 	// Retry configuration
 	maxRetries    int
@@ -49,6 +49,8 @@ func NewSQLiteStateManager(dbPath string, opts ...SQLiteStateManagerOption) (*SQ
 	m := &SQLiteStateManager{
 		dbPath:        dbPath,
 		backupPath:    dbPath + ".bak",
+		lockPath:      dbPath + ".lock",
+		lockTTL:       time.Hour,
 		maxRetries:    5,
 		baseRetryWait: 100 * time.Millisecond,
 	}
@@ -103,6 +105,13 @@ func NewSQLiteStateManager(dbPath string, opts ...SQLiteStateManagerOption) (*SQ
 func WithSQLiteBackupPath(path string) SQLiteStateManagerOption {
 	return func(m *SQLiteStateManager) {
 		m.backupPath = path
+	}
+}
+
+// WithSQLiteLockTTL sets the lock TTL used to break stale locks.
+func WithSQLiteLockTTL(ttl time.Duration) SQLiteStateManagerOption {
+	return func(m *SQLiteStateManager) {
+		m.lockTTL = ttl
 	}
 }
 
@@ -206,24 +215,13 @@ func (m *SQLiteStateManager) Save(ctx context.Context, state *core.WorkflowState
 	hash := sha256.Sum256(stateBytes)
 	checksum := hex.EncodeToString(hash[:])
 
-	// Use active transaction if available (from AcquireLock), otherwise create a new one
-	var tx *sql.Tx
-	ownTx := false // Whether we own this transaction and should commit/rollback it
-	if m.activeTx != nil {
-		tx = m.activeTx
-	} else {
-		var txErr error
-		tx, txErr = m.db.BeginTx(ctx, nil)
-		if txErr != nil {
-			return fmt.Errorf("beginning transaction: %w", txErr)
-		}
-		ownTx = true
-		defer func() {
-			if ownTx {
-				_ = tx.Rollback()
-			}
-		}()
+	// Persist each Save() atomically. AcquireLock() provides external mutual exclusion,
+	// but we always commit per call so state is durable even if the process terminates.
+	tx, txErr := m.db.BeginTx(ctx, nil)
+	if txErr != nil {
+		return fmt.Errorf("beginning transaction: %w", txErr)
 	}
+	defer func() { _ = tx.Rollback() }()
 
 	// Serialize JSON fields
 	taskOrderJSON, err := json.Marshal(state.TaskOrder)
@@ -312,14 +310,9 @@ func (m *SQLiteStateManager) Save(ctx context.Context, state *core.WorkflowState
 		return fmt.Errorf("setting active workflow: %w", err)
 	}
 
-	// Only commit if we own the transaction (not using AcquireLock's transaction)
-	// When using AcquireLock's transaction, ReleaseLock will commit it
-	if ownTx {
-		if err := tx.Commit(); err != nil {
-			return fmt.Errorf("committing transaction: %w", err)
-		}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("committing transaction: %w", err)
 	}
-
 	return nil
 }
 
@@ -704,21 +697,68 @@ func (m *SQLiteStateManager) AcquireLock(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if m.lockHeld {
-		return fmt.Errorf("lock already held by this process")
+	if err := m.ensureWithinStateDir(m.lockPath); err != nil {
+		return err
 	}
 
-	// SQLite handles file-level locking automatically with WAL mode
-	// We use an exclusive transaction to ensure atomicity
-	// Use BeginTx so we can reuse this transaction in Save()
-	tx, err := m.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
+	// Ensure directory exists
+	dir := filepath.Dir(m.lockPath)
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		return fmt.Errorf("creating lock directory: %w", err)
+	}
+
+	// Check for existing lock
+	if data, err := fsutil.ReadFileScoped(m.lockPath); err == nil {
+		var info lockInfo
+		if err := json.Unmarshal(data, &info); err == nil {
+			// Check if lock is stale
+			if time.Since(info.AcquiredAt) < m.lockTTL {
+				// Check if process is still alive
+				if processExists(info.PID) {
+					return core.ErrState("LOCK_ACQUIRE_FAILED",
+						fmt.Sprintf("lock held by PID %d since %s", info.PID, info.AcquiredAt))
+				}
+			}
+			// Stale lock, remove it
+			if err := os.Remove(m.lockPath); err != nil && !os.IsNotExist(err) {
+				return fmt.Errorf("removing stale lock: %w", err)
+			}
+		}
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("reading lock file: %w", err)
+	}
+
+	// Create lock file
+	hostname, _ := os.Hostname()
+	info := lockInfo{
+		PID:        os.Getpid(),
+		Hostname:   hostname,
+		AcquiredAt: time.Now(),
+	}
+
+	data, err := json.Marshal(info)
 	if err != nil {
-		return fmt.Errorf("acquiring exclusive lock: %w", err)
+		return fmt.Errorf("marshaling lock info: %w", err)
 	}
 
-	m.activeTx = tx
-	m.lockHeld = true
-	m.lockPID = os.Getpid()
+	// Write lock file exclusively
+	// #nosec G304 -- lockPath validated to be within state directory
+	f, err := os.OpenFile(m.lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	if err != nil {
+		if os.IsExist(err) {
+			return core.ErrState("LOCK_ACQUIRE_FAILED", "lock file created by another process")
+		}
+		return fmt.Errorf("creating lock file: %w", err)
+	}
+	defer f.Close()
+
+	if _, err := f.Write(data); err != nil {
+		if rmErr := os.Remove(m.lockPath); rmErr != nil && !os.IsNotExist(rmErr) {
+			return fmt.Errorf("writing lock file: %w (cleanup failed: %v)", err, rmErr)
+		}
+		return fmt.Errorf("writing lock file: %w", err)
+	}
+
 	return nil
 }
 
@@ -727,20 +767,33 @@ func (m *SQLiteStateManager) ReleaseLock(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if !m.lockHeld || m.activeTx == nil {
-		return nil // No lock to release
+	if err := m.ensureWithinStateDir(m.lockPath); err != nil {
+		return err
 	}
 
-	err := m.activeTx.Commit()
+	// Verify we own the lock
+	data, err := fsutil.ReadFileScoped(m.lockPath)
 	if err != nil {
-		// Try rollback if commit fails (ignore rollback error)
-		_ = m.activeTx.Rollback()
+		if os.IsNotExist(err) {
+			return nil // Already released
+		}
+		return fmt.Errorf("reading lock file: %w", err)
 	}
 
-	m.activeTx = nil
-	m.lockHeld = false
-	m.lockPID = 0
-	return err
+	var info lockInfo
+	if err := json.Unmarshal(data, &info); err != nil {
+		return fmt.Errorf("parsing lock info: %w", err)
+	}
+
+	if info.PID != os.Getpid() {
+		return core.ErrState("LOCK_RELEASE_FAILED", "lock owned by different process")
+	}
+
+	if err := os.Remove(m.lockPath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("removing lock file: %w", err)
+	}
+
+	return nil
 }
 
 // Exists checks if the database file exists and has data.
@@ -890,8 +943,12 @@ func (m *SQLiteStateManager) DeactivateWorkflow(ctx context.Context) error {
 	})
 }
 
-// ArchiveWorkflows moves completed workflows to an archived state.
-// For SQLite, we use a status flag since we can't move rows to another database easily.
+// ArchiveWorkflows preserves completed/failed workflows by exporting them to a JSON archive
+// and then removing them from the SQLite database (so they no longer appear in lists).
+//
+// This mirrors the JSON backend semantics: "archive" is non-destructive (data is retained),
+// while PurgeAllWorkflows() is the destructive operation.
+//
 // Returns the number of workflows archived.
 func (m *SQLiteStateManager) ArchiveWorkflows(ctx context.Context) (int, error) {
 	m.mu.Lock()
@@ -901,85 +958,102 @@ func (m *SQLiteStateManager) ArchiveWorkflows(ctx context.Context) (int, error) 
 	var activeID sql.NullString
 	_ = m.db.QueryRowContext(ctx, "SELECT workflow_id FROM active_workflow WHERE id = 1").Scan(&activeID)
 
-	// Count workflows that will be archived
-	var count int
-	query := `
-		SELECT COUNT(*) FROM workflows
-		WHERE (status = 'completed' OR status = 'failed')
-	`
+	// Determine which workflows will be archived.
+	query := `SELECT id FROM workflows WHERE (status = 'completed' OR status = 'failed')`
 	args := []interface{}{}
-
 	if activeID.Valid {
 		query += " AND id != ?"
 		args = append(args, activeID.String)
 	}
 
-	err := m.db.QueryRowContext(ctx, query, args...).Scan(&count)
+	rows, err := m.readDB.QueryContext(ctx, query, args...)
 	if err != nil {
-		return 0, fmt.Errorf("counting workflows to archive: %w", err)
+		return 0, fmt.Errorf("listing workflows to archive: %w", err)
 	}
+	defer rows.Close()
 
-	if count == 0 {
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return 0, fmt.Errorf("scanning workflow id: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return 0, fmt.Errorf("iterating workflows to archive: %w", err)
+	}
+	if len(ids) == 0 {
 		return 0, nil
 	}
 
-	// Delete archived workflows and their related data
-	// First delete tasks and checkpoints
-	deleteQuery := `
-		DELETE FROM tasks WHERE workflow_id IN (
-			SELECT id FROM workflows
-			WHERE (status = 'completed' OR status = 'failed')
-	`
-	if activeID.Valid {
-		deleteQuery += " AND id != ?"
+	// Ensure archive directory exists (next to the DB, same as JSON backend).
+	archiveDir := filepath.Join(filepath.Dir(m.dbPath), "archive")
+	if err := os.MkdirAll(archiveDir, 0o750); err != nil {
+		return 0, fmt.Errorf("creating archive directory: %w", err)
 	}
-	deleteQuery += ")"
 
-	if activeID.Valid {
-		_, err = m.db.ExecContext(ctx, deleteQuery, activeID.String)
-	} else {
-		_, err = m.db.ExecContext(ctx, deleteQuery)
+	// Export workflows to JSON files first. Only delete from DB if all exports succeed.
+	for _, id := range ids {
+		state, err := m.loadWorkflowByID(ctx, core.WorkflowID(id))
+		if err != nil {
+			return 0, fmt.Errorf("loading workflow %s for archive: %w", id, err)
+		}
+		if state == nil {
+			continue
+		}
+
+		// Clear checksum for checksum computation and consistent envelope.
+		state.Checksum = ""
+		stateBytes, err := json.Marshal(state)
+		if err != nil {
+			return 0, fmt.Errorf("marshaling workflow %s for archive checksum: %w", id, err)
+		}
+		hash := sha256.Sum256(stateBytes)
+		checksum := hex.EncodeToString(hash[:])
+
+		envelope := stateEnvelope{
+			Version:   1,
+			Checksum:  checksum,
+			UpdatedAt: time.Now(),
+			State:     state,
+		}
+
+		data, err := json.MarshalIndent(envelope, "", "  ")
+		if err != nil {
+			return 0, fmt.Errorf("marshaling workflow %s archive envelope: %w", id, err)
+		}
+
+		archivePath := filepath.Join(archiveDir, id+".json")
+		if err := atomicWriteFile(archivePath, data, 0o600); err != nil {
+			return 0, fmt.Errorf("writing workflow %s archive file: %w", id, err)
+		}
 	}
+
+	// Delete archived workflows and their related data from the DB.
+	tx, err := m.db.BeginTx(ctx, nil)
 	if err != nil {
-		return 0, fmt.Errorf("deleting archived tasks: %w", err)
+		return 0, fmt.Errorf("beginning archive delete transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	for _, id := range ids {
+		if _, err := tx.ExecContext(ctx, "DELETE FROM tasks WHERE workflow_id = ?", id); err != nil {
+			return 0, fmt.Errorf("deleting archived tasks for workflow %s: %w", id, err)
+		}
+		if _, err := tx.ExecContext(ctx, "DELETE FROM checkpoints WHERE workflow_id = ?", id); err != nil {
+			return 0, fmt.Errorf("deleting archived checkpoints for workflow %s: %w", id, err)
+		}
+		if _, err := tx.ExecContext(ctx, "DELETE FROM workflows WHERE id = ?", id); err != nil {
+			return 0, fmt.Errorf("deleting archived workflow %s: %w", id, err)
+		}
 	}
 
-	// Delete checkpoints
-	checkpointsQuery := `
-		DELETE FROM checkpoints WHERE workflow_id IN (
-			SELECT id FROM workflows
-			WHERE (status = 'completed' OR status = 'failed')
-	`
-	if activeID.Valid {
-		checkpointsQuery += " AND id != ?"
-	}
-	checkpointsQuery += ")"
-
-	if activeID.Valid {
-		_, err = m.db.ExecContext(ctx, checkpointsQuery, activeID.String)
-	} else {
-		_, err = m.db.ExecContext(ctx, checkpointsQuery)
-	}
-	if err != nil {
-		return 0, fmt.Errorf("deleting archived checkpoints: %w", err)
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("committing archive delete transaction: %w", err)
 	}
 
-	// Delete workflows
-	workflowsQuery := `
-		DELETE FROM workflows
-		WHERE (status = 'completed' OR status = 'failed')
-	`
-	if activeID.Valid {
-		workflowsQuery += " AND id != ?"
-		_, err = m.db.ExecContext(ctx, workflowsQuery, activeID.String)
-	} else {
-		_, err = m.db.ExecContext(ctx, workflowsQuery)
-	}
-	if err != nil {
-		return 0, fmt.Errorf("deleting archived workflows: %w", err)
-	}
-
-	return count, nil
+	return len(ids), nil
 }
 
 // PurgeAllWorkflows deletes all workflow data permanently.
