@@ -1054,10 +1054,7 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		}
 
 	case tea.KeyTab:
-		// Skip general Tab handling when explorer has focus (handled in explorer section)
-		if m.explorerFocus {
-			break
-		}
+		// Tab/Ctrl+I always toggles issues panel, closing other overlays if needed
 		if m.showSuggestions && len(m.suggestions) > 0 {
 			// Complete with selected suggestion based on type
 			switch m.suggestionType {
@@ -1077,11 +1074,28 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 			m.suggestionIndex = 0
 			m.suggestionType = ""
 			return m, nil, true
-		} else if !m.logsFocus && !m.tokensFocus && !m.diffView.IsVisible() && !m.historySearch.IsVisible() {
-			// Tab toggles issues panel when not used by other contexts
-			m.tasksPanel.Toggle()
-			return m, nil, true
 		}
+		// Close other overlays/focus states before toggling issues panel
+		if m.explorerFocus {
+			m.explorerFocus = false
+			m.explorerPanel.SetFocused(false)
+		}
+		if m.logsFocus {
+			m.logsFocus = false
+		}
+		if m.tokensFocus {
+			m.tokensFocus = false
+		}
+		if m.diffView.IsVisible() {
+			m.diffView.Hide()
+		}
+		if m.historySearch.IsVisible() {
+			m.historySearch.Hide()
+		}
+		m.inputFocused = true
+		m.textarea.Focus()
+		m.tasksPanel.Toggle()
+		return m, nil, true
 
 	case tea.KeyUp:
 		if m.showSuggestions && len(m.suggestions) > 0 {
