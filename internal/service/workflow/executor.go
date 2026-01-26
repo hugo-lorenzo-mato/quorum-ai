@@ -52,6 +52,10 @@ func (e *Executor) Run(ctx context.Context, wctx *Context) error {
 		"tasks", len(wctx.State.Tasks),
 	)
 
+	// Clean up orphaned worktrees from previous failed executions.
+	// This handles cases where the process crashed/panicked and defers didn't run.
+	e.cleanupOrphanedWorktrees(ctx, wctx)
+
 	// Defensive validation: ensure tasks exist before executing
 	// This catches edge cases like corrupted checkpoints or skipped planning
 	if len(wctx.State.Tasks) == 0 {
@@ -108,7 +112,7 @@ func (e *Executor) Run(ctx context.Context, wctx *Context) error {
 		for _, task := range ready {
 			task := task
 			g.Go(func() error {
-				return e.executeTask(taskCtx, wctx, task, useWorktrees)
+				return e.executeTaskSafe(taskCtx, wctx, task, useWorktrees)
 			})
 		}
 
@@ -618,6 +622,99 @@ func (e *Executor) cleanupWorktree(ctx context.Context, wctx *Context, task *cor
 		)
 	} else {
 		wctx.Logger.Info("cleaned up worktree", "task_id", task.ID)
+	}
+}
+
+// executeTaskSafe wraps executeTask with panic recovery.
+// This ensures that if a task panics, the error is captured and the worktree
+// cleanup in the defer still has a chance to run properly.
+func (e *Executor) executeTaskSafe(ctx context.Context, wctx *Context, task *core.Task, useWorktrees bool) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			// Convert panic to error
+			err = fmt.Errorf("task %s panicked: %v", task.ID, r)
+			wctx.Logger.Error("task execution panicked",
+				"task_id", task.ID,
+				"panic", r,
+			)
+
+			// Mark task as failed
+			wctx.Lock()
+			if taskState := wctx.State.Tasks[task.ID]; taskState != nil {
+				taskState.Status = core.TaskStatusFailed
+				taskState.Error = err.Error()
+			}
+			wctx.Unlock()
+
+			if wctx.Output != nil {
+				wctx.Output.Log("error", "executor", fmt.Sprintf("Task panicked: %s - %v", task.ID, r))
+			}
+		}
+	}()
+
+	return e.executeTask(ctx, wctx, task, useWorktrees)
+}
+
+// cleanupOrphanedWorktrees removes worktrees from previous failed executions.
+// This handles cases where the process crashed/panicked and defers didn't run,
+// or when a task was interrupted and left in a running state.
+func (e *Executor) cleanupOrphanedWorktrees(ctx context.Context, wctx *Context) {
+	if wctx.Worktrees == nil {
+		return
+	}
+
+	managed, err := wctx.Worktrees.List(ctx)
+	if err != nil {
+		wctx.Logger.Warn("failed to list worktrees for cleanup", "error", err)
+		return
+	}
+
+	if len(managed) == 0 {
+		return
+	}
+
+	wctx.Logger.Info("checking for orphaned worktrees", "count", len(managed))
+
+	cleaned := 0
+	for _, wt := range managed {
+		// Check if this worktree belongs to a task that is NOT currently running
+		taskState := wctx.State.Tasks[wt.TaskID]
+
+		// Remove worktree if:
+		// - Task doesn't exist in current workflow state
+		// - Task is not in "running" status (pending, completed, failed are all orphaned)
+		shouldRemove := taskState == nil || taskState.Status != core.TaskStatusRunning
+
+		if shouldRemove {
+			wctx.Logger.Info("removing orphaned worktree",
+				"task_id", wt.TaskID,
+				"path", wt.Path,
+				"task_exists", taskState != nil,
+			)
+
+			// Create a minimal task struct for the Remove call
+			orphanTask := &core.Task{
+				ID:          wt.TaskID,
+				Name:        string(wt.TaskID), // Use ID as name for worktree naming
+				Description: string(wt.TaskID),
+			}
+
+			if rmErr := wctx.Worktrees.Remove(ctx, orphanTask); rmErr != nil {
+				wctx.Logger.Warn("failed to remove orphaned worktree",
+					"task_id", wt.TaskID,
+					"error", rmErr,
+				)
+			} else {
+				cleaned++
+			}
+		}
+	}
+
+	if cleaned > 0 {
+		wctx.Logger.Info("cleaned up orphaned worktrees", "count", cleaned)
+		if wctx.Output != nil {
+			wctx.Output.Log("info", "executor", fmt.Sprintf("Cleaned up %d orphaned worktrees from previous runs", cleaned))
+		}
 	}
 }
 

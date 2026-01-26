@@ -43,6 +43,10 @@ func (m *mockWorktreeManager) CleanupStale(_ context.Context) error {
 	return nil
 }
 
+func (m *mockWorktreeManager) List(_ context.Context) ([]*core.WorktreeInfo, error) {
+	return nil, nil
+}
+
 // mockOutputNotifier tracks calls to output methods.
 type mockOutputNotifier struct {
 	phaseStarted  []core.Phase

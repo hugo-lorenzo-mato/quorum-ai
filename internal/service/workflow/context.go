@@ -255,7 +255,7 @@ type TaskExecuteParams struct {
 // ModeratorAnalysisSummary represents an analysis for moderator evaluation.
 type ModeratorAnalysisSummary struct {
 	AgentName string
-	Output    string
+	FilePath  string // Path to the analysis file for the moderator to read
 }
 
 // ModeratorEvaluateParams holds parameters for moderator semantic evaluation prompt.
@@ -331,6 +331,8 @@ type WorktreeManager interface {
 	Remove(ctx context.Context, task *core.Task) error
 	// CleanupStale removes worktrees for completed/failed tasks.
 	CleanupStale(ctx context.Context) error
+	// List returns all managed worktrees.
+	List(ctx context.Context) ([]*core.WorktreeInfo, error)
 }
 
 // BuildContextString constructs a context string from workflow state.
