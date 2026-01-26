@@ -46,6 +46,8 @@ export const workflowApi = {
   getTasks: (workflowId) => request(`/workflows/${workflowId}/tasks/`),
 
   getTask: (workflowId, taskId) => request(`/workflows/${workflowId}/tasks/${taskId}`),
+
+  run: (id) => request(`/workflows/${id}/run`, { method: 'POST' }),
 };
 
 // Chat API

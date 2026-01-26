@@ -21,6 +21,60 @@ import {
   RefreshCw,
 } from 'lucide-react';
 
+function normalizeWhitespace(s) {
+  return String(s || '').replace(/\s+/g, ' ').trim();
+}
+
+function stripCodeFences(s) {
+  return String(s || '').replace(/```[\s\S]*?```/g, '');
+}
+
+function deriveTitleFromPrompt(prompt) {
+  const cleaned = stripCodeFences(prompt);
+  const lines = cleaned
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+  if (lines.length === 0) return '';
+
+  const genericPrefixes = [
+    /^analiza\b/i,
+    /^analyze\b/i,
+    /^implementa\b/i,
+    /^implement\b/i,
+    /^crea\b/i,
+    /^create\b/i,
+    /^eres\b/i,
+    /^you are\b/i,
+  ];
+  const isGeneric = (line) => genericPrefixes.some((re) => re.test(line));
+
+  const bestLine = lines.find((l) => !isGeneric(l)) || lines[0];
+  const title = normalizeWhitespace(bestLine);
+
+  const maxLen = 110;
+  if (title.length <= maxLen) return title;
+
+  const snippet = title.slice(0, maxLen);
+  const lastSentence = Math.max(snippet.lastIndexOf('.'), snippet.lastIndexOf('!'), snippet.lastIndexOf('?'));
+  if (lastSentence > 50) return snippet.slice(0, lastSentence + 1).trim();
+  return snippet.trim();
+}
+
+function deriveWorkflowTitle(workflow, tasks = []) {
+  const namedTasks = (tasks || []).filter((t) => t?.name && String(t.name).trim().length > 0);
+  if (namedTasks.length > 0) {
+    const first = String(namedTasks[0].name).trim();
+    const extra = Math.max(0, (tasks || []).length - 1);
+    return extra > 0 ? `${first} +${extra}` : first;
+  }
+
+  const promptTitle = deriveTitleFromPrompt(workflow?.prompt);
+  if (promptTitle) return promptTitle;
+
+  return workflow?.id || 'Untitled workflow';
+}
+
 function StatusBadge({ status }) {
   const config = {
     pending: { color: 'bg-muted text-muted-foreground', icon: Clock },
@@ -48,8 +102,8 @@ function WorkflowCard({ workflow, onClick }) {
     >
       <div className="flex items-start justify-between mb-3">
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-foreground truncate">
-            {workflow.prompt?.substring(0, 60) || 'Untitled workflow'}...
+          <p className="text-sm font-medium text-foreground line-clamp-2">
+            {deriveWorkflowTitle(workflow)}
           </p>
           <p className="text-xs text-muted-foreground mt-1">{workflow.id}</p>
         </div>
@@ -108,6 +162,7 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
   const { startWorkflow, pauseWorkflow, stopWorkflow, error, clearError } = useWorkflowStore();
   const notifyInfo = useUIStore((s) => s.notifyInfo);
   const notifyError = useUIStore((s) => s.notifyError);
+  const workflowTitle = useMemo(() => deriveWorkflowTitle(workflow, tasks), [workflow, tasks]);
 
   const cacheRef = useRef(new Map());
   const [artifactsLoading, setArtifactsLoading] = useState(false);
@@ -465,7 +520,7 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
           <ArrowLeft className="w-5 h-5 text-muted-foreground" />
         </button>
         <div className="flex-1">
-          <h1 className="text-xl font-semibold text-foreground">Workflow Details</h1>
+          <h1 className="text-xl font-semibold text-foreground line-clamp-2">{workflowTitle}</h1>
           <p className="text-sm text-muted-foreground">{workflow.id}</p>
         </div>
         <div className="flex items-center gap-2">
@@ -513,9 +568,13 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
       <div className="p-6 rounded-xl border border-border bg-card">
         <div className="flex items-start justify-between mb-4">
           <div>
-            <h2 className="text-lg font-semibold text-foreground mb-2">
-              {workflow.prompt?.substring(0, 100) || 'Untitled workflow'}
-            </h2>
+            {workflow.prompt ? (
+              <p className="text-sm text-muted-foreground mb-2 line-clamp-3">
+                {normalizeWhitespace(workflow.prompt)}
+              </p>
+            ) : (
+              <p className="text-sm text-muted-foreground mb-2">No prompt</p>
+            )}
             <StatusBadge status={workflow.status} />
           </div>
         </div>

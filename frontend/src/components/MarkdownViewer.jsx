@@ -1,7 +1,41 @@
 import { useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { PrismLight as SyntaxHighlighter } from 'react-syntax-highlighter';
+import bash from 'react-syntax-highlighter/dist/esm/languages/prism/bash';
+import diff from 'react-syntax-highlighter/dist/esm/languages/prism/diff';
+import go from 'react-syntax-highlighter/dist/esm/languages/prism/go';
+import javascript from 'react-syntax-highlighter/dist/esm/languages/prism/javascript';
+import json from 'react-syntax-highlighter/dist/esm/languages/prism/json';
+import jsx from 'react-syntax-highlighter/dist/esm/languages/prism/jsx';
+import markdown from 'react-syntax-highlighter/dist/esm/languages/prism/markdown';
+import python from 'react-syntax-highlighter/dist/esm/languages/prism/python';
+import sql from 'react-syntax-highlighter/dist/esm/languages/prism/sql';
+import tsx from 'react-syntax-highlighter/dist/esm/languages/prism/tsx';
+import typescript from 'react-syntax-highlighter/dist/esm/languages/prism/typescript';
+import yaml from 'react-syntax-highlighter/dist/esm/languages/prism/yaml';
+import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { ChevronDown, ChevronRight } from 'lucide-react';
+import { useUIStore } from '../stores';
+
+SyntaxHighlighter.registerLanguage('bash', bash);
+SyntaxHighlighter.registerLanguage('sh', bash);
+SyntaxHighlighter.registerLanguage('diff', diff);
+SyntaxHighlighter.registerLanguage('go', go);
+SyntaxHighlighter.registerLanguage('javascript', javascript);
+SyntaxHighlighter.registerLanguage('js', javascript);
+SyntaxHighlighter.registerLanguage('json', json);
+SyntaxHighlighter.registerLanguage('jsx', jsx);
+SyntaxHighlighter.registerLanguage('markdown', markdown);
+SyntaxHighlighter.registerLanguage('md', markdown);
+SyntaxHighlighter.registerLanguage('python', python);
+SyntaxHighlighter.registerLanguage('py', python);
+SyntaxHighlighter.registerLanguage('sql', sql);
+SyntaxHighlighter.registerLanguage('tsx', tsx);
+SyntaxHighlighter.registerLanguage('typescript', typescript);
+SyntaxHighlighter.registerLanguage('ts', typescript);
+SyntaxHighlighter.registerLanguage('yaml', yaml);
+SyntaxHighlighter.registerLanguage('yml', yaml);
 
 function splitFrontmatter(markdown) {
   const normalized = (markdown || '').replace(/\r\n/g, '\n');
@@ -27,6 +61,13 @@ function splitFrontmatter(markdown) {
 export default function MarkdownViewer({ markdown }) {
   const { frontmatter, body } = useMemo(() => splitFrontmatter(markdown), [markdown]);
   const [showFrontmatter, setShowFrontmatter] = useState(false);
+  const theme = useUIStore((s) => s.theme);
+  const isDark = useMemo(() => {
+    if (theme === 'dark' || theme === 'midnight') return true;
+    if (theme === 'light') return false;
+    if (typeof window === 'undefined') return false;
+    return window.matchMedia?.('(prefers-color-scheme: dark)')?.matches ?? false;
+  }, [theme]);
 
   return (
     <div className="space-y-4">
@@ -108,15 +149,33 @@ export default function MarkdownViewer({ markdown }) {
               </blockquote>
             ),
             hr: (props) => <hr className="my-6 border-border" {...props} />,
-            code: ({ children, className, ...props }) => {
-              const isBlock = className?.includes('language-');
-              if (isBlock) {
+            code: ({ children, className, inline, ...props }) => {
+              const match = /language-([a-zA-Z0-9_-]+)/.exec(className || '');
+              const content = String(children || '').replace(/\n$/, '');
+
+              if (!inline && match) {
                 return (
-                  <code className="font-mono text-xs" {...props}>
-                    {children}
+                  <SyntaxHighlighter
+                    language={match[1]}
+                    style={isDark ? oneDark : oneLight}
+                    PreTag="div"
+                    customStyle={{ margin: 0, background: 'transparent' }}
+                    codeTagProps={{ style: { background: 'transparent' } }}
+                    {...props}
+                  >
+                    {content}
+                  </SyntaxHighlighter>
+                );
+              }
+
+              if (!inline) {
+                return (
+                  <code className="block whitespace-pre font-mono text-xs" {...props}>
+                    {content}
                   </code>
                 );
               }
+
               return (
                 <code className="px-1 py-0.5 rounded bg-muted text-xs font-mono" {...props}>
                   {children}
@@ -124,9 +183,9 @@ export default function MarkdownViewer({ markdown }) {
               );
             },
             pre: ({ children, ...props }) => (
-              <pre className="my-4 p-4 rounded-lg bg-muted overflow-x-auto border border-border" {...props}>
+              <div className="my-4 p-4 rounded-lg bg-muted overflow-x-auto border border-border text-xs" {...props}>
                 {children}
-              </pre>
+              </div>
             ),
             table: ({ children, ...props }) => (
               <div className="my-4 overflow-x-auto border border-border rounded-lg">
@@ -158,4 +217,3 @@ export default function MarkdownViewer({ markdown }) {
     </div>
   );
 }
-

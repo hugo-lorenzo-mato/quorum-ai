@@ -79,12 +79,19 @@ const useWorkflowStore = create((set, get) => ({
     }
   },
 
-  // Workflow control actions - these are stubs until backend support is added
-  // Workflow execution is currently done via CLI: quorum run, quorum analyze, etc.
+  // Workflow control actions
   startWorkflow: async (id) => {
-    console.warn('startWorkflow not yet implemented - use CLI: quorum run --workflow', id);
-    set({ error: 'Workflow execution via web UI is not yet implemented. Use CLI: quorum run --workflow ' + id });
-    return null;
+    set({ loading: true, error: null });
+    try {
+      const result = await workflowApi.run(id);
+      // The backend starts the workflow asynchronously.
+      // Real-time updates will come via SSE events (workflow_started, task_progress, etc.)
+      set({ loading: false });
+      return result;
+    } catch (error) {
+      set({ error: error.message, loading: false });
+      return null;
+    }
   },
 
   pauseWorkflow: async (id) => {
