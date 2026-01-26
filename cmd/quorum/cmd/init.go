@@ -64,7 +64,7 @@ phases:
     # Prompt refiner - enhances user prompt before analysis
     refiner:
       enabled: true
-      agent: codex
+      agent: claude
     # Analysis synthesizer - consolidates multi-agent analyses
     synthesizer:
       agent: claude
