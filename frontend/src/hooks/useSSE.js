@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import useWorkflowStore from '../stores/workflowStore';
 import useTaskStore from '../stores/taskStore';
 import useUIStore from '../stores/uiStore';
+import useAgentStore from '../stores/agentStore';
 
 const SSE_URL = '/api/v1/sse/events';
 const RECONNECT_DELAY = 3000;
@@ -31,6 +32,9 @@ export default function useSSE() {
   const handleTaskFailed = useTaskStore(state => state.handleTaskFailed);
   const handleTaskSkipped = useTaskStore(state => state.handleTaskSkipped);
   const handleTaskRetry = useTaskStore(state => state.handleTaskRetry);
+
+  // Agent event handler
+  const handleAgentEvent = useAgentStore(state => state.handleAgentEvent);
 
   const handleEvent = useCallback((eventType, data) => {
     switch (eventType) {
@@ -79,6 +83,11 @@ export default function useSSE() {
         handleTaskRetry(data);
         break;
 
+      // Agent events
+      case 'agent_event':
+        handleAgentEvent(data);
+        break;
+
       // Connection events
       case 'connected':
         setSSEConnected(true);
@@ -100,6 +109,7 @@ export default function useSSE() {
     handleTaskFailed,
     handleTaskSkipped,
     handleTaskRetry,
+    handleAgentEvent,
     setSSEConnected,
     notifyInfo,
     notifyError,
@@ -161,6 +171,7 @@ export default function useSSE() {
       'task_failed',
       'task_skipped',
       'task_retry',
+      'agent_event',
     ];
 
     eventTypes.forEach(eventType => {

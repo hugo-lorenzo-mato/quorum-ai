@@ -200,6 +200,17 @@ func (s *Server) sendEventToClient(w http.ResponseWriter, flusher http.Flusher, 
 			"timestamp":    e.Timestamp(),
 		}
 
+	case events.AgentStreamEvent:
+		payload = map[string]interface{}{
+			"workflow_id": e.WorkflowID(),
+			"event_kind":  string(e.EventKind),
+			"agent":       e.Agent,
+			"message":     e.Message,
+			"data":        e.Data,
+			"event_time":  e.EventTime,
+			"timestamp":   e.Timestamp(),
+		}
+
 	default:
 		// Generic event handling
 		payload = map[string]interface{}{

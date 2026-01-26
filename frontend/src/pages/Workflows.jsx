@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { useWorkflowStore, useTaskStore, useUIStore } from '../stores';
+import { useWorkflowStore, useTaskStore, useUIStore, useAgentStore } from '../stores';
 import { fileApi, workflowApi } from '../lib/api';
 import MarkdownViewer from '../components/MarkdownViewer';
+import AgentActivity, { AgentActivityCompact } from '../components/AgentActivity';
 import {
   GitBranch,
   Plus,
@@ -163,6 +164,11 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
   const notifyInfo = useUIStore((s) => s.notifyInfo);
   const notifyError = useUIStore((s) => s.notifyError);
   const workflowTitle = useMemo(() => deriveWorkflowTitle(workflow, tasks), [workflow, tasks]);
+
+  // Agent activity
+  const [activityExpanded, setActivityExpanded] = useState(true);
+  const agentActivity = useAgentStore((s) => s.getActivityLog(workflow?.id));
+  const activeAgents = useAgentStore((s) => s.getActiveAgents(workflow?.id));
 
   const cacheRef = useRef(new Map());
   const [artifactsLoading, setArtifactsLoading] = useState(false);
@@ -523,7 +529,10 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
           <h1 className="text-xl font-semibold text-foreground line-clamp-2">{workflowTitle}</h1>
           <p className="text-sm text-muted-foreground">{workflow.id}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
+          {workflow.status === 'running' && (
+            <AgentActivityCompact activeAgents={activeAgents} />
+          )}
           {workflow.status === 'pending' && (
             <button
               onClick={() => startWorkflow(workflow.id)}
@@ -601,6 +610,17 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
           </div>
         </div>
       </div>
+
+      {/* Agent Activity Panel */}
+      {workflow.status === 'running' && (agentActivity.length > 0 || activeAgents.length > 0) && (
+        <AgentActivity
+          workflowId={workflow.id}
+          activity={agentActivity}
+          activeAgents={activeAgents}
+          expanded={activityExpanded}
+          onToggle={() => setActivityExpanded(!activityExpanded)}
+        />
+      )}
 
       {/* Inspector */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
