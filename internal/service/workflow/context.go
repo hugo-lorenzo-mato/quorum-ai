@@ -81,8 +81,6 @@ type Context struct {
 type ModeEnforcerInterface interface {
 	// CanExecute checks if an operation can be executed.
 	CanExecute(ctx context.Context, op ModeOperation) error
-	// RecordCost records cost for an operation.
-	RecordCost(cost float64)
 	// IsSandboxed returns whether sandbox mode is enabled.
 	IsSandboxed() bool
 	// IsDryRun returns whether dry-run mode is enabled.
@@ -96,7 +94,6 @@ type ModeOperation struct {
 	Tool                 string
 	HasSideEffects       bool
 	RequiresConfirmation bool
-	EstimatedCost        float64
 	InWorkspace          bool
 	AllowedInSandbox     bool
 	IsDestructive        bool
@@ -114,10 +111,6 @@ type Config struct {
 	WorktreeAutoClean bool
 	// WorktreeMode controls when worktrees are created for tasks.
 	WorktreeMode string
-	// MaxCostPerWorkflow is the maximum total cost for the workflow in USD (0 = unlimited).
-	MaxCostPerWorkflow float64
-	// MaxCostPerTask is the maximum cost per task in USD (0 = unlimited).
-	MaxCostPerTask float64
 	// SynthesizerAgent specifies which agent to use for analysis synthesis.
 	// The model is resolved from AgentPhaseModels[agent][analyze].
 	SynthesizerAgent string

@@ -88,7 +88,17 @@ func InitPhaseRunner(ctx context.Context, phase core.Phase, maxRetries int, dryR
 		}
 	}
 
-	stateManager, err := state.NewStateManager(backend, statePath)
+	// Parse lock TTL from config
+	stateOpts := state.StateManagerOptions{}
+	if cfg.State.LockTTL != "" {
+		if lockTTL, err := time.ParseDuration(cfg.State.LockTTL); err == nil {
+			stateOpts.LockTTL = lockTTL
+		} else {
+			logger.Warn("invalid state.lock_ttl, using default", "value", cfg.State.LockTTL, "error", err)
+		}
+	}
+
+	stateManager, err := state.NewStateManagerWithOptions(backend, statePath, stateOpts)
 	if err != nil {
 		return nil, fmt.Errorf("creating state manager: %w", err)
 	}
@@ -147,9 +157,12 @@ func InitPhaseRunner(ctx context.Context, phase core.Phase, maxRetries int, dryR
 		defaultAgent = "claude"
 	}
 
-	// Use provided values or fall back to config
+	// Use provided values or fall back to config, then default
 	if maxRetries == 0 {
-		maxRetries = 3
+		maxRetries = cfg.Workflow.MaxRetries
+		if maxRetries == 0 {
+			maxRetries = 3
+		}
 	}
 
 	runnerConfig := &workflow.RunnerConfig{
@@ -165,10 +178,8 @@ func InitPhaseRunner(ctx context.Context, phase core.Phase, maxRetries int, dryR
 			"codex":   cfg.Agents.Codex.PhaseModels,
 			"copilot": cfg.Agents.Copilot.PhaseModels,
 		},
-		WorktreeAutoClean:  cfg.Git.AutoClean,
-		WorktreeMode:       cfg.Git.WorktreeMode,
-		MaxCostPerWorkflow: cfg.Costs.MaxPerWorkflow,
-		MaxCostPerTask:     cfg.Costs.MaxPerTask,
+		WorktreeAutoClean: cfg.Git.AutoClean,
+		WorktreeMode:      cfg.Git.WorktreeMode,
 		// Refiner disabled by default for independent phase runners
 		// (only enabled when running full workflow via `run` command)
 		Refiner: workflow.RefinerConfig{
@@ -268,11 +279,9 @@ func CreateWorkflowContext(deps *PhaseRunnerDeps, state *core.WorkflowState) *wo
 			DenyTools:          deps.RunnerConfig.DenyTools,
 			DefaultAgent:       deps.RunnerConfig.DefaultAgent,
 			AgentPhaseModels:   deps.RunnerConfig.AgentPhaseModels,
-			WorktreeAutoClean:  deps.RunnerConfig.WorktreeAutoClean,
-			WorktreeMode:       deps.RunnerConfig.WorktreeMode,
-			MaxCostPerWorkflow: deps.RunnerConfig.MaxCostPerWorkflow,
-			MaxCostPerTask:     deps.RunnerConfig.MaxCostPerTask,
-			PhaseTimeouts:      deps.RunnerConfig.PhaseTimeouts,
+			WorktreeAutoClean: deps.RunnerConfig.WorktreeAutoClean,
+			WorktreeMode:      deps.RunnerConfig.WorktreeMode,
+			PhaseTimeouts:     deps.RunnerConfig.PhaseTimeouts,
 			Moderator:          deps.ModeratorConfig,
 		},
 	}

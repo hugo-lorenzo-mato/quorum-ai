@@ -246,10 +246,8 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 			"codex":   cfg.Agents.Codex.PhaseModels,
 			"copilot": cfg.Agents.Copilot.PhaseModels,
 		},
-		WorktreeAutoClean:  cfg.Git.AutoClean,
-		WorktreeMode:       cfg.Git.WorktreeMode,
-		MaxCostPerWorkflow: cfg.Costs.MaxPerWorkflow,
-		MaxCostPerTask:     cfg.Costs.MaxPerTask,
+		WorktreeAutoClean: cfg.Git.AutoClean,
+		WorktreeMode:      cfg.Git.WorktreeMode,
 		Refiner: workflow.RefinerConfig{
 			Enabled: refinerEnabled,
 			Agent:   cfg.Phases.Analyze.Refiner.Agent,
@@ -366,7 +364,6 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 		DryRun:      runnerConfig.DryRun,
 		Sandbox:     runnerConfig.Sandbox,
 		DeniedTools: runnerConfig.DenyTools,
-		MaxCost:     runnerConfig.MaxCostPerWorkflow,
 	})
 	modeEnforcerAdapter := workflow.NewModeEnforcerAdapter(modeEnforcer)
 

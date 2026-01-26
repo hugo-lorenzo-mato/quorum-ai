@@ -321,9 +321,6 @@ func TestLoader_DefaultConfigFile(t *testing.T) {
 	if cfg.Phases.Analyze.Moderator.Threshold != 0.80 {
 		t.Errorf("Phases.Analyze.Moderator.Threshold = %f, want %f", cfg.Phases.Analyze.Moderator.Threshold, 0.80)
 	}
-	if cfg.Costs.MaxPerWorkflow != 10.0 {
-		t.Errorf("Costs.MaxPerWorkflow = %f, want %f", cfg.Costs.MaxPerWorkflow, 10.0)
-	}
 }
 
 func TestDefaultConfig_SandboxEnabled(t *testing.T) {

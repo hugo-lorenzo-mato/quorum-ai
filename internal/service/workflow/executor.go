@@ -552,14 +552,6 @@ func (e *Executor) handleExecutionSuccess(ctx context.Context, wctx *Context, ta
 	}
 	wctx.Unlock()
 
-	if wctx.ModeEnforcer != nil {
-		wctx.ModeEnforcer.RecordCost(result.CostUSD)
-	}
-
-	if costErr := e.checkCostLimits(wctx, task, taskState, result.CostUSD); costErr != nil {
-		return costErr
-	}
-
 	if finalizeErr := e.finalizeTask(ctx, wctx, task, taskState, workDir); finalizeErr != nil {
 		wctx.Logger.Warn("task finalization failed",
 			"task_id", task.ID,
@@ -602,42 +594,6 @@ func (e *Executor) setTaskFailed(wctx *Context, taskState *core.TaskState, err e
 	if wctx.Output != nil {
 		wctx.Output.Log("error", "executor", fmt.Sprintf("Task failed: %s", err.Error()))
 	}
-}
-
-// checkCostLimits verifies task and workflow cost limits.
-func (e *Executor) checkCostLimits(wctx *Context, task *core.Task, taskState *core.TaskState, cost float64) error {
-	if wctx.Config == nil {
-		return nil
-	}
-
-	// Check task cost limit
-	if wctx.Config.MaxCostPerTask > 0 && cost > wctx.Config.MaxCostPerTask {
-		e.setTaskFailed(wctx, taskState, fmt.Errorf("task budget exceeded"))
-		wctx.Logger.Error("task budget exceeded",
-			"task_id", task.ID,
-			"cost", cost,
-			"limit", wctx.Config.MaxCostPerTask,
-		)
-		return core.ErrTaskBudgetExceeded(string(task.ID), cost, wctx.Config.MaxCostPerTask)
-	}
-
-	// Check workflow cost limit
-	wctx.RLock()
-	totalCost := float64(0)
-	if wctx.State.Metrics != nil {
-		totalCost = wctx.State.Metrics.TotalCostUSD
-	}
-	wctx.RUnlock()
-
-	if wctx.Config.MaxCostPerWorkflow > 0 && totalCost > wctx.Config.MaxCostPerWorkflow {
-		wctx.Logger.Error("workflow budget exceeded",
-			"total_cost", totalCost,
-			"limit", wctx.Config.MaxCostPerWorkflow,
-		)
-		return core.ErrWorkflowBudgetExceeded(totalCost, wctx.Config.MaxCostPerWorkflow)
-	}
-
-	return nil
 }
 
 // setupWorktree creates a worktree for task isolation if enabled.

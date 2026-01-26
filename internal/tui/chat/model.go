@@ -371,7 +371,6 @@ type Model struct {
 	contextPanel     *ContextPreviewPanel
 	diffView         *AgentDiffView
 	historySearch    *HistorySearch
-	costPanel        *CostPanel
 	shortcutsOverlay *ShortcutsOverlay
 	fileViewer       *FileViewer
 	statsWidget      *StatsWidget
@@ -476,7 +475,6 @@ func NewModel(cp *control.ControlPlane, agents core.AgentRegistry, defaultAgent,
 		contextPanel:     NewContextPreviewPanel(),
 		diffView:         NewAgentDiffView(),
 		historySearch:    NewHistorySearch(),
-		costPanel:        NewCostPanel(1.0), // $1 default budget
 		shortcutsOverlay: NewShortcutsOverlay(),
 		fileViewer:       NewFileViewer(),
 		statsWidget:      NewStatsWidget(),

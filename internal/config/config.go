@@ -13,10 +13,8 @@ type Config struct {
 	State       StateConfig       `mapstructure:"state"`
 	Git         GitConfig         `mapstructure:"git"`
 	GitHub      GitHubConfig      `mapstructure:"github"`
-	Costs       CostsConfig       `mapstructure:"costs"`
 	Chat        ChatConfig        `mapstructure:"chat"`
 	Report      ReportConfig      `mapstructure:"report"`
-	Server      ServerConfig      `mapstructure:"server"`
 }
 
 // ChatConfig configures chat behavior in the TUI.
@@ -30,7 +28,6 @@ type ChatConfig struct {
 type LogConfig struct {
 	Level  string `mapstructure:"level"`
 	Format string `mapstructure:"format"`
-	File   string `mapstructure:"file"`
 }
 
 // TraceConfig configures trace mode output.
@@ -146,10 +143,8 @@ type RefinerConfig struct {
 	// Enabled enables/disables prompt refinement.
 	Enabled bool `mapstructure:"enabled"`
 	// Agent specifies which agent to use for refinement.
+	// Model is resolved from agents.<agent>.phase_models.refine or agents.<agent>.model.
 	Agent string `mapstructure:"agent"`
-	// Model overrides the agent's default model for refinement.
-	// If empty, uses agents.<agent>.phase_models.refine or agents.<agent>.model.
-	Model string `mapstructure:"model"`
 }
 
 // ModeratorConfig configures consensus moderation between agents.
@@ -157,10 +152,8 @@ type ModeratorConfig struct {
 	// Enabled activates consensus moderation via an LLM.
 	Enabled bool `mapstructure:"enabled"`
 	// Agent specifies which agent to use as moderator.
+	// Model is resolved from agents.<agent>.phase_models.analyze or agents.<agent>.model.
 	Agent string `mapstructure:"agent"`
-	// Model overrides the agent's default model for moderation.
-	// If empty, uses agents.<agent>.phase_models.analyze or agents.<agent>.model.
-	Model string `mapstructure:"model"`
 	// Threshold is the consensus score required to pass (0.0-1.0, default: 0.80).
 	Threshold float64 `mapstructure:"threshold"`
 	// MinRounds is the minimum refinement rounds before accepting consensus (default: 2).
@@ -176,10 +169,8 @@ type ModeratorConfig struct {
 // SynthesizerConfig configures analysis synthesis.
 type SynthesizerConfig struct {
 	// Agent specifies which agent to use for synthesis.
+	// Model is resolved from agents.<agent>.phase_models.analyze or agents.<agent>.model.
 	Agent string `mapstructure:"agent"`
-	// Model overrides the agent's default model for synthesis.
-	// If empty, uses agents.<agent>.phase_models.analyze or agents.<agent>.model.
-	Model string `mapstructure:"model"`
 }
 
 // SingleAgentConfig configures single-agent execution mode for the analyze phase.
@@ -212,10 +203,8 @@ type PlanSynthesizerConfig struct {
 	// When false (default), uses single-agent planning.
 	Enabled bool `mapstructure:"enabled"`
 	// Agent specifies which agent to use for plan synthesis.
+	// Model is resolved from agents.<agent>.phase_models.plan or agents.<agent>.model.
 	Agent string `mapstructure:"agent"`
-	// Model overrides the agent's default model for plan synthesis.
-	// If empty, uses agents.<agent>.phase_models.plan or agents.<agent>.model.
-	Model string `mapstructure:"model"`
 }
 
 // AgentsConfig configures available AI agents.
@@ -373,16 +362,9 @@ type GitConfig struct {
 }
 
 // GitHubConfig configures GitHub integration.
+// Note: GitHub token should be provided via GITHUB_TOKEN or GH_TOKEN environment variable.
 type GitHubConfig struct {
-	Token  string `mapstructure:"token"`
 	Remote string `mapstructure:"remote"`
-}
-
-// CostsConfig configures cost limits and alerts.
-type CostsConfig struct {
-	MaxPerWorkflow float64 `mapstructure:"max_per_workflow"`
-	MaxPerTask     float64 `mapstructure:"max_per_task"`
-	AlertThreshold float64 `mapstructure:"alert_threshold"`
 }
 
 // ReportConfig configures markdown report generation.
@@ -391,38 +373,4 @@ type ReportConfig struct {
 	BaseDir    string `mapstructure:"base_dir"`
 	UseUTC     bool   `mapstructure:"use_utc"`
 	IncludeRaw bool   `mapstructure:"include_raw"`
-}
-
-// ServerConfig configures the HTTP server.
-type ServerConfig struct {
-	// Host is the address to listen on (default: "localhost").
-	Host string `mapstructure:"host"`
-	// Port is the port to listen on (default: 8080).
-	Port int `mapstructure:"port"`
-	// ReadTimeout is the maximum duration for reading the request (e.g., "30s").
-	ReadTimeout string `mapstructure:"read_timeout"`
-	// WriteTimeout is the maximum duration before timing out writes of the response (e.g., "30s").
-	WriteTimeout string `mapstructure:"write_timeout"`
-	// IdleTimeout is the maximum duration to wait for the next request (e.g., "120s").
-	IdleTimeout string `mapstructure:"idle_timeout"`
-	// ShutdownTimeout is the maximum duration for graceful shutdown (e.g., "30s").
-	ShutdownTimeout string `mapstructure:"shutdown_timeout"`
-	// CORS configures Cross-Origin Resource Sharing.
-	CORS CORSConfig `mapstructure:"cors"`
-}
-
-// CORSConfig configures CORS settings.
-type CORSConfig struct {
-	// Enabled enables CORS middleware (default: false).
-	Enabled bool `mapstructure:"enabled"`
-	// AllowedOrigins is a list of allowed origins (default: ["*"]).
-	AllowedOrigins []string `mapstructure:"allowed_origins"`
-	// AllowedMethods is a list of allowed HTTP methods.
-	AllowedMethods []string `mapstructure:"allowed_methods"`
-	// AllowedHeaders is a list of allowed headers.
-	AllowedHeaders []string `mapstructure:"allowed_headers"`
-	// AllowCredentials indicates whether credentials are allowed.
-	AllowCredentials bool `mapstructure:"allow_credentials"`
-	// MaxAge is the maximum age for preflight cache in seconds.
-	MaxAge int `mapstructure:"max_age"`
 }

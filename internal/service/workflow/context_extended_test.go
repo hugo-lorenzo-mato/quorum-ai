@@ -131,10 +131,8 @@ func TestConfig_AllFields(t *testing.T) {
 			"claude": {"analyze": "opus", "plan": "sonnet"},
 			"gemini": {"analyze": "pro"},
 		},
-		WorktreeAutoClean:  true,
-		WorktreeMode:       "parallel",
-		MaxCostPerWorkflow: 50.0,
-		MaxCostPerTask:     5.0,
+		WorktreeAutoClean: true,
+		WorktreeMode:      "parallel",
 		Moderator: ModeratorConfig{
 			Enabled:   true,
 			Agent:     "claude",
@@ -167,12 +165,6 @@ func TestConfig_AllFields(t *testing.T) {
 	}
 	if cfg.WorktreeMode != "parallel" {
 		t.Errorf("WorktreeMode = %q, want parallel", cfg.WorktreeMode)
-	}
-	if cfg.MaxCostPerWorkflow != 50.0 {
-		t.Errorf("MaxCostPerWorkflow = %v, want 50.0", cfg.MaxCostPerWorkflow)
-	}
-	if cfg.MaxCostPerTask != 5.0 {
-		t.Errorf("MaxCostPerTask = %v, want 5.0", cfg.MaxCostPerTask)
 	}
 	if !cfg.Moderator.Enabled {
 		t.Error("Moderator.Enabled should be true")

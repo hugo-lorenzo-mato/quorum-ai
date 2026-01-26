@@ -60,9 +60,8 @@ func runInit(_ *cobra.Command, _ []string) error {
 log:
   level: info
   format: auto
-  file: ""
 
-# Trace configuration
+# Trace configuration (for debugging workflows)
 trace:
   mode: off
   dir: .quorum/traces
@@ -248,9 +247,15 @@ git:
   merge_strategy: squash
 
 # GitHub integration
+# Note: GitHub token should be provided via GITHUB_TOKEN or GH_TOKEN environment variable
 github:
-  token: ""
   remote: origin
+
+# Chat/TUI settings
+chat:
+  timeout: 3m
+  progress_interval: 15s
+  editor: vim
 
 # Report configuration (Markdown output)
 report:

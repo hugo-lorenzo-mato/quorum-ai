@@ -76,11 +76,6 @@ func validConfig() *Config {
 				Timeout: "2h",
 			},
 		},
-		Costs: CostsConfig{
-			MaxPerWorkflow: 10.0,
-			MaxPerTask:     2.0,
-			AlertThreshold: 0.80,
-		},
 	}
 }
 
@@ -382,71 +377,6 @@ func TestValidateConfig_Convenience(t *testing.T) {
 	err := ValidateConfig(cfg)
 	if err != nil {
 		t.Errorf("ValidateConfig() error = %v, want nil", err)
-	}
-}
-
-func TestValidator_NegativeMaxPerWorkflow(t *testing.T) {
-	cfg := validConfig()
-	cfg.Costs.MaxPerWorkflow = -1.0
-
-	v := NewValidator()
-	err := v.Validate(cfg)
-	if err == nil {
-		t.Error("Validate() error = nil, want error for negative max_per_workflow")
-	}
-
-	if !strings.Contains(err.Error(), "costs.max_per_workflow") {
-		t.Errorf("error = %v, should mention costs.max_per_workflow", err)
-	}
-}
-
-func TestValidator_NegativeMaxPerTask(t *testing.T) {
-	cfg := validConfig()
-	cfg.Costs.MaxPerTask = -1.0
-
-	v := NewValidator()
-	err := v.Validate(cfg)
-	if err == nil {
-		t.Error("Validate() error = nil, want error for negative max_per_task")
-	}
-
-	if !strings.Contains(err.Error(), "costs.max_per_task") {
-		t.Errorf("error = %v, should mention costs.max_per_task", err)
-	}
-}
-
-func TestValidator_AlertThresholdOutOfRange(t *testing.T) {
-	tests := []struct {
-		name  string
-		value float64
-	}{
-		{"negative", -0.1},
-		{"too high", 1.5},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cfg := validConfig()
-			cfg.Costs.AlertThreshold = tt.value
-
-			v := NewValidator()
-			err := v.Validate(cfg)
-			if err == nil {
-				t.Error("Validate() error = nil, want error for invalid alert_threshold")
-			}
-		})
-	}
-}
-
-func TestValidator_ZeroCostsAreValid(t *testing.T) {
-	cfg := validConfig()
-	cfg.Costs.MaxPerWorkflow = 0
-	cfg.Costs.MaxPerTask = 0
-
-	v := NewValidator()
-	err := v.Validate(cfg)
-	if err != nil {
-		t.Errorf("Validate() error = %v, want nil (zero costs should be valid for unlimited)", err)
 	}
 }
 

@@ -1,5 +1,5 @@
 # quorum-ai Default Configuration
-# Copy this file to .quorum.yaml in your project root
+# Copy this file to .quorum/config.yaml in your project root
 
 # Logging configuration
 log:
@@ -7,8 +7,6 @@ log:
   level: info
   # Output format: auto (detect TTY), text, json
   format: auto
-  # Optional log file path (empty = stdout only)
-  file: ""
 
 # Trace configuration
 trace:
@@ -56,23 +54,17 @@ phases:
     # Prompt refiner (optional) - enhances user prompt before analysis
     refiner:
       enabled: true
-      # Agent to use for refinement
+      # Agent to use for refinement (model from agent's phase_models.refine)
       agent: claude
-      # Model override (optional, defaults to agent's phase_models.refine)
-      # model: claude-opus-4-5-20251101
     # Analysis synthesizer - consolidates multi-agent analyses
     synthesizer:
-      # Agent to use for synthesis
+      # Agent to use for synthesis (model from agent's phase_models.analyze)
       agent: claude
-      # Model override (optional, defaults to agent's phase_models.analyze)
-      # model: claude-opus-4-5-20251101
     # Semantic moderator for multi-agent consensus evaluation
     moderator:
       enabled: true
-      # Agent to use for moderation
+      # Agent to use for moderation (model from agent's phase_models.analyze)
       agent: claude
-      # Model override (optional, defaults to agent's phase_models.analyze)
-      # model: claude-opus-4-5-20251101
       # Minimum consensus score to accept (0.0-1.0)
       threshold: 0.80
       # Minimum refinement rounds before accepting consensus
@@ -92,10 +84,8 @@ phases:
     # When disabled (default), uses single-agent planning with the default agent.
     synthesizer:
       enabled: false
-      # Agent to use for plan synthesis
+      # Agent to use for plan synthesis (model from agent's phase_models.plan)
       agent: claude
-      # Model override (optional, defaults to agent's phase_models.plan)
-      # model: claude-opus-4-5-20251101
   # Execute phase settings
   execute:
     # Maximum duration for execute phase
@@ -208,9 +198,8 @@ git:
   merge_strategy: squash
 
 # GitHub integration
+# Note: GitHub token should be provided via GITHUB_TOKEN or GH_TOKEN environment variable
 github:
-  # GitHub token (prefer GITHUB_TOKEN env var)
-  token: ""
   # Remote name
   remote: origin
 

@@ -61,10 +61,6 @@ type RunnerConfig struct {
 	WorktreeAutoClean bool
 	// WorktreeMode controls when worktrees are created for tasks.
 	WorktreeMode string
-	// MaxCostPerWorkflow is the maximum total cost for the workflow in USD (0 = unlimited).
-	MaxCostPerWorkflow float64
-	// MaxCostPerTask is the maximum cost per task in USD (0 = unlimited).
-	MaxCostPerTask float64
 	// Refiner configures the prompt refinement phase.
 	Refiner RefinerConfig
 	// Synthesizer configures the analysis synthesis phase.
@@ -459,8 +455,6 @@ func (r *Runner) createContext(state *core.WorkflowState) *Context {
 			AgentPhaseModels:       r.config.AgentPhaseModels,
 			WorktreeAutoClean:      r.config.WorktreeAutoClean,
 			WorktreeMode:           r.config.WorktreeMode,
-			MaxCostPerWorkflow:     r.config.MaxCostPerWorkflow,
-			MaxCostPerTask:         r.config.MaxCostPerTask,
 			SynthesizerAgent:       r.config.Synthesizer.Agent,
 			PlanSynthesizerEnabled: r.config.PlanSynthesizer.Enabled,
 			PlanSynthesizerAgent:   r.config.PlanSynthesizer.Agent,

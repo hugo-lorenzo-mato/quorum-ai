@@ -194,11 +194,6 @@ func (l *Loader) setDefaults() {
 	// GitHub defaults
 	l.v.SetDefault("github.remote", "origin")
 
-	// Costs defaults
-	l.v.SetDefault("costs.max_per_workflow", 10.0)
-	l.v.SetDefault("costs.max_per_task", 2.0)
-	l.v.SetDefault("costs.alert_threshold", 0.80)
-
 	// Chat defaults (TUI interactive chat)
 	l.v.SetDefault("chat.timeout", "3m")
 	l.v.SetDefault("chat.progress_interval", "15s")

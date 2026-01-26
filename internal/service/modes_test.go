@@ -29,13 +29,6 @@ func TestExecutionMode_Validate(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "negative max cost",
-			mode: service.ExecutionMode{
-				MaxCost: -1,
-			},
-			wantErr: true,
-		},
-		{
 			name: "dry-run with yolo (allowed)",
 			mode: service.ExecutionMode{
 				DryRun: true,
@@ -96,30 +89,6 @@ func TestModeEnforcer_DeniedTools(t *testing.T) {
 	}
 
 	err := enforcer.CanExecute(context.Background(), op)
-	testutil.AssertError(t, err)
-}
-
-func TestModeEnforcer_CostLimit(t *testing.T) {
-	mode := service.ExecutionMode{MaxCost: 1.0}
-	enforcer := service.NewModeEnforcer(mode)
-
-	// First operation under limit
-	op1 := service.Operation{
-		Name:          "op1",
-		Type:          service.OpTypeLLM,
-		EstimatedCost: 0.5,
-	}
-	err := enforcer.CanExecute(context.Background(), op1)
-	testutil.AssertNoError(t, err)
-	enforcer.RecordCost(0.5)
-
-	// Second operation would exceed limit
-	op2 := service.Operation{
-		Name:          "op2",
-		Type:          service.OpTypeLLM,
-		EstimatedCost: 0.6,
-	}
-	err = enforcer.CanExecute(context.Background(), op2)
 	testutil.AssertError(t, err)
 }
 
@@ -263,32 +232,16 @@ func TestIsSafeCommand(t *testing.T) {
 	}
 }
 
-func TestModeEnforcer_TotalCost(t *testing.T) {
-	mode := service.DefaultMode()
-	enforcer := service.NewModeEnforcer(mode)
-
-	// Initially total cost should be 0
-	testutil.AssertEqual(t, enforcer.TotalCost(), 0.0)
-
-	// Record some costs
-	enforcer.RecordCost(0.5)
-	testutil.AssertEqual(t, enforcer.TotalCost(), 0.5)
-
-	enforcer.RecordCost(0.3)
-	testutil.AssertEqual(t, enforcer.TotalCost(), 0.8)
-}
-
 func TestModeEnforcer_Mode(t *testing.T) {
 	mode := service.ExecutionMode{
 		DryRun:  true,
 		Sandbox: false,
-		MaxCost: 5.0,
 	}
 	enforcer := service.NewModeEnforcer(mode)
 
 	result := enforcer.Mode()
 	testutil.AssertTrue(t, result.DryRun, "DryRun should be true")
-	testutil.AssertEqual(t, result.MaxCost, 5.0)
+	testutil.AssertFalse(t, result.Sandbox, "Sandbox should be false")
 }
 
 func TestErrDryRunBlocked_Error(t *testing.T) {

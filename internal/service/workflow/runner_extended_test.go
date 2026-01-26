@@ -282,15 +282,13 @@ func TestRunnerConfig_Fields(t *testing.T) {
 	cfg := &RunnerConfig{
 		Timeout:            2 * time.Hour,
 		MaxRetries:         5,
-		DryRun:             true,
-		Sandbox:            false,
-		DenyTools:          []string{"rm", "sudo", "mkfs"},
-		DefaultAgent:       "gemini",
-		AgentPhaseModels:   map[string]map[string]string{"claude": {"analyze": "opus"}},
-		WorktreeAutoClean:  true,
-		WorktreeMode:       "parallel",
-		MaxCostPerWorkflow: 100.0,
-		MaxCostPerTask:     10.0,
+		DryRun:            true,
+		Sandbox:           false,
+		DenyTools:         []string{"rm", "sudo", "mkfs"},
+		DefaultAgent:      "gemini",
+		AgentPhaseModels:  map[string]map[string]string{"claude": {"analyze": "opus"}},
+		WorktreeAutoClean: true,
+		WorktreeMode:      "parallel",
 	}
 
 	if cfg.Timeout != 2*time.Hour {
@@ -316,11 +314,5 @@ func TestRunnerConfig_Fields(t *testing.T) {
 	}
 	if cfg.WorktreeMode != "parallel" {
 		t.Errorf("WorktreeMode = %q, want %q", cfg.WorktreeMode, "parallel")
-	}
-	if cfg.MaxCostPerWorkflow != 100.0 {
-		t.Errorf("MaxCostPerWorkflow = %v, want 100.0", cfg.MaxCostPerWorkflow)
-	}
-	if cfg.MaxCostPerTask != 10.0 {
-		t.Errorf("MaxCostPerTask = %v, want 10.0", cfg.MaxCostPerTask)
 	}
 }

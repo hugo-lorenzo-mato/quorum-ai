@@ -1,6 +1,6 @@
 # Configuration Reference
 
-This document describes all configuration options available in quorum-ai. Configuration files use YAML format and are loaded from `.quorum.yaml` in the project root.
+This document describes all configuration options available in quorum-ai. Configuration files use YAML format and are loaded from `.quorum/config.yaml` in the project root.
 
 ## Table of Contents
 
@@ -15,7 +15,6 @@ This document describes all configuration options available in quorum-ai. Config
   - [state](#state)
   - [git](#git)
   - [github](#github)
-  - [costs](#costs)
 
 ---
 
@@ -25,9 +24,10 @@ quorum-ai uses a layered configuration system:
 
 1. **Built-in defaults** - Sensible defaults for all options
 2. **Global config** - `~/.config/quorum/config.yaml` (user-level)
-3. **Project config** - `.quorum.yaml` in project root (project-level)
-4. **Environment variables** - `QUORUM_*` prefix overrides
-5. **CLI flags** - Highest priority overrides
+3. **Project config** - `.quorum/config.yaml` in project root (project-level)
+4. **Legacy project config** - `.quorum.yaml` (for backwards compatibility)
+5. **Environment variables** - `QUORUM_*` prefix overrides
+6. **CLI flags** - Highest priority overrides
 
 Later sources override earlier ones. Generate a starter configuration with:
 
@@ -42,7 +42,8 @@ quorum init
 | Location | Purpose |
 |----------|---------|
 | `~/.config/quorum/config.yaml` | User-level defaults |
-| `.quorum.yaml` | Project-specific settings |
+| `.quorum/config.yaml` | Project-specific settings (recommended) |
+| `.quorum.yaml` | Legacy project settings (backwards compatible) |
 | `configs/default.yaml` | Reference template (do not edit) |
 
 ---
@@ -57,14 +58,14 @@ Controls logging output format and verbosity.
 log:
   level: info
   format: auto
-  file: ""
 ```
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `level` | string | `info` | Log verbosity: `debug`, `info`, `warn`, `error` |
 | `format` | string | `auto` | Output format: `auto` (detect TTY), `text`, `json` |
-| `file` | string | `""` | Optional log file path. Empty writes to stdout only |
+
+> **Debugging:** For detailed execution logs, use the [trace](#trace) system with `mode: full`. Traces capture all prompts, responses, and timing information.
 
 ---
 
@@ -662,35 +663,14 @@ Configures GitHub integration for PR creation and issue tracking.
 
 ```yaml
 github:
-  token: ""
   remote: origin
 ```
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `token` | string | `""` | GitHub token (prefer `GITHUB_TOKEN` env var) |
 | `remote` | string | `origin` | Git remote name for GitHub operations |
 
-> **Security:** Never commit tokens in configuration files. Use environment variables or credential helpers.
-
----
-
-### costs
-
-Configures cost tracking and limits.
-
-```yaml
-costs:
-  max_per_workflow: 10.0
-  max_per_task: 2.0
-  alert_threshold: 0.80
-```
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `max_per_workflow` | float | `10.0` | Maximum USD per workflow (0 = unlimited) |
-| `max_per_task` | float | `2.0` | Maximum USD per task (0 = unlimited) |
-| `alert_threshold` | float | `0.80` | Warn when cost reaches this fraction of limit |
+> **Authentication:** GitHub token should be provided via `GITHUB_TOKEN` or `GH_TOKEN` environment variable. Never commit tokens in configuration files.
 
 ---
 
@@ -773,12 +753,11 @@ phases:
       threshold: 0.95
       min_rounds: 2
       max_rounds: 5
-
-costs:
-  max_per_workflow: 25.0
 ```
 
-### Cost-Conscious Configuration
+### Lightweight Configuration
+
+Uses lighter models and reduced refinement rounds for faster execution.
 
 ```yaml
 agents:
@@ -792,7 +771,6 @@ agents:
       analyze: gemini-2.5-flash
       plan: gemini-2.5-flash
 
-# Disable refinement to reduce costs
 phases:
   analyze:
     refiner:
@@ -804,10 +782,6 @@ phases:
       agent: gemini
       threshold: 0.85
       max_rounds: 3
-
-costs:
-  max_per_workflow: 5.0
-  max_per_task: 1.0
 ```
 
 ### Development/Debug Configuration

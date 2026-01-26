@@ -14,7 +14,6 @@ type ExecutionMode struct {
 	Yolo        bool
 	Sandbox     bool
 	DeniedTools []string
-	MaxCost     float64
 	Interactive bool
 }
 
@@ -25,7 +24,6 @@ func DefaultMode() ExecutionMode {
 		Yolo:        false,
 		Sandbox:     true, // Security: sandbox enabled by default
 		DeniedTools: nil,
-		MaxCost:     0, // No limit
 		Interactive: true,
 	}
 }
@@ -36,17 +34,12 @@ func (m ExecutionMode) Validate() error {
 		return fmt.Errorf("cannot use yolo mode in sandbox")
 	}
 
-	if m.MaxCost < 0 {
-		return fmt.Errorf("max cost cannot be negative")
-	}
-
 	return nil
 }
 
 // ModeEnforcer enforces execution mode constraints.
 type ModeEnforcer struct {
 	mode         ExecutionMode
-	totalCost    float64
 	operationLog []string
 }
 
@@ -81,25 +74,8 @@ func (e *ModeEnforcer) CanExecute(_ context.Context, op Operation) error {
 		}
 	}
 
-	// Check cost limit
-	if e.mode.MaxCost > 0 && e.totalCost+op.EstimatedCost > e.mode.MaxCost {
-		return core.ErrValidation("COST_LIMIT",
-			fmt.Sprintf("operation would exceed cost limit (current: $%.4f, limit: $%.4f)",
-				e.totalCost, e.mode.MaxCost))
-	}
-
 	e.logOperation("ALLOWED", op)
 	return nil
-}
-
-// RecordCost records cost for an operation.
-func (e *ModeEnforcer) RecordCost(cost float64) {
-	e.totalCost += cost
-}
-
-// TotalCost returns the total cost incurred.
-func (e *ModeEnforcer) TotalCost() float64 {
-	return e.totalCost
 }
 
 // RequiresConfirmation checks if an operation needs user confirmation.
@@ -174,7 +150,6 @@ type Operation struct {
 	Tool                 string
 	HasSideEffects       bool
 	RequiresConfirmation bool
-	EstimatedCost        float64
 	InWorkspace          bool
 	AllowedInSandbox     bool
 	IsDestructive        bool

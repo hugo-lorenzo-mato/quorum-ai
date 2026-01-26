@@ -57,7 +57,6 @@ func (v *Validator) Validate(cfg *Config) error {
 	v.validateState(&cfg.State)
 	v.validateGit(&cfg.Git)
 	v.validateGitHub(&cfg.GitHub)
-	v.validateCosts(&cfg.Costs)
 
 	if len(v.errors) > 0 {
 		return v.errors
@@ -91,10 +90,6 @@ func (v *Validator) validateLog(cfg *LogConfig) {
 	}
 	if !validFormats[cfg.Format] {
 		v.addError("log.format", cfg.Format, "must be one of: auto, text, json")
-	}
-
-	if cfg.File != "" && !isValidPath(cfg.File) {
-		v.addError("log.file", cfg.File, "invalid file path")
 	}
 }
 
@@ -567,20 +562,6 @@ func (v *Validator) validateSynthesizer(prefix, agent string, agents *AgentsConf
 	}
 	if !agentEnabled[agent] {
 		v.addError(prefix+".agent", agent, "specified agent must be enabled")
-	}
-}
-
-func (v *Validator) validateCosts(cfg *CostsConfig) {
-	if cfg.MaxPerWorkflow < 0 {
-		v.addError("costs.max_per_workflow", cfg.MaxPerWorkflow, "must be non-negative")
-	}
-
-	if cfg.MaxPerTask < 0 {
-		v.addError("costs.max_per_task", cfg.MaxPerTask, "must be non-negative")
-	}
-
-	if cfg.AlertThreshold < 0 || cfg.AlertThreshold > 1 {
-		v.addError("costs.alert_threshold", cfg.AlertThreshold, "must be between 0 and 1")
 	}
 }
 

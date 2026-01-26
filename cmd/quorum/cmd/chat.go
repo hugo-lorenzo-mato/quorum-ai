@@ -331,10 +331,8 @@ func createWorkflowRunner(
 			"codex":   cfg.Agents.Codex.PhaseModels,
 			"copilot": cfg.Agents.Copilot.PhaseModels,
 		},
-		WorktreeAutoClean:  cfg.Git.AutoClean,
-		WorktreeMode:       cfg.Git.WorktreeMode,
-		MaxCostPerWorkflow: cfg.Costs.MaxPerWorkflow,
-		MaxCostPerTask:     cfg.Costs.MaxPerTask,
+		WorktreeAutoClean: cfg.Git.AutoClean,
+		WorktreeMode:      cfg.Git.WorktreeMode,
 		Refiner: workflow.RefinerConfig{
 			Enabled: cfg.Phases.Analyze.Refiner.Enabled,
 			Agent:   cfg.Phases.Analyze.Refiner.Agent,
@@ -421,7 +419,6 @@ func createWorkflowRunner(
 		DryRun:      runnerConfig.DryRun,
 		Sandbox:     runnerConfig.Sandbox,
 		DeniedTools: runnerConfig.DenyTools,
-		MaxCost:     runnerConfig.MaxCostPerWorkflow,
 	})
 	modeEnforcerAdapter := workflow.NewModeEnforcerAdapter(modeEnforcer)
 
@@ -663,10 +660,8 @@ func createWorkflowRunnerWithTrace(
 			"codex":   cfg.Agents.Codex.PhaseModels,
 			"copilot": cfg.Agents.Copilot.PhaseModels,
 		},
-		WorktreeAutoClean:  cfg.Git.AutoClean,
-		WorktreeMode:       cfg.Git.WorktreeMode,
-		MaxCostPerWorkflow: cfg.Costs.MaxPerWorkflow,
-		MaxCostPerTask:     cfg.Costs.MaxPerTask,
+		WorktreeAutoClean: cfg.Git.AutoClean,
+		WorktreeMode:      cfg.Git.WorktreeMode,
 		Refiner: workflow.RefinerConfig{
 			Enabled: cfg.Phases.Analyze.Refiner.Enabled,
 			Agent:   cfg.Phases.Analyze.Refiner.Agent,
@@ -756,7 +751,6 @@ func createWorkflowRunnerWithTrace(
 		DryRun:      runnerConfig.DryRun,
 		Sandbox:     runnerConfig.Sandbox,
 		DeniedTools: runnerConfig.DenyTools,
-		MaxCost:     runnerConfig.MaxCostPerWorkflow,
 	})
 	modeEnforcerAdapter := workflow.NewModeEnforcerAdapter(modeEnforcer)
 
