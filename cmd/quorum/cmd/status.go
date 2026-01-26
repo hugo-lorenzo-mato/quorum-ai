@@ -33,7 +33,12 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 	if statePath == "" {
 		statePath = ".quorum/state/state.json"
 	}
-	stateManager := state.NewJSONStateManager(statePath)
+	backend := viper.GetString("state.backend")
+	stateManager, err := state.NewStateManager(backend, statePath)
+	if err != nil {
+		return fmt.Errorf("creating state manager: %w", err)
+	}
+	defer state.CloseStateManager(stateManager)
 
 	if !stateManager.Exists() {
 		fmt.Println("No active workflow")

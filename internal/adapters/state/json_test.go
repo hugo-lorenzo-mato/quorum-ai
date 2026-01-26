@@ -667,6 +667,158 @@ func TestJSONStateManager_AcquireLockHeldByActiveProcess(t *testing.T) {
 	os.Remove(lockPath)
 }
 
+func TestJSONStateManager_DeactivateWorkflow(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath := filepath.Join(tmpDir, "state.json")
+	manager := NewJSONStateManager(statePath)
+	ctx := context.Background()
+
+	// Save a workflow (this also activates it)
+	state := newTestState()
+	if err := manager.Save(ctx, state); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	// Verify workflow is active
+	activeID, _ := manager.GetActiveWorkflowID(ctx)
+	if activeID != state.WorkflowID {
+		t.Errorf("Expected active workflow %s, got %s", state.WorkflowID, activeID)
+	}
+
+	// Deactivate
+	if err := manager.DeactivateWorkflow(ctx); err != nil {
+		t.Fatalf("DeactivateWorkflow() error = %v", err)
+	}
+
+	// Verify no active workflow
+	activeID, _ = manager.GetActiveWorkflowID(ctx)
+	if activeID != "" {
+		t.Errorf("Expected no active workflow, got %s", activeID)
+	}
+
+	// Workflow data should still exist
+	loaded, err := manager.LoadByID(ctx, state.WorkflowID)
+	if err != nil {
+		t.Fatalf("LoadByID() error = %v", err)
+	}
+	if loaded == nil {
+		t.Error("Workflow data should still exist after deactivation")
+	}
+}
+
+func TestJSONStateManager_ArchiveWorkflows(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath := filepath.Join(tmpDir, "state.json")
+	manager := NewJSONStateManager(statePath)
+	ctx := context.Background()
+
+	// Save a completed workflow
+	state := newTestState()
+	state.Status = core.WorkflowStatusCompleted
+	if err := manager.Save(ctx, state); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	// Deactivate so it can be archived
+	if err := manager.DeactivateWorkflow(ctx); err != nil {
+		t.Fatalf("DeactivateWorkflow() error = %v", err)
+	}
+
+	// Archive
+	archived, err := manager.ArchiveWorkflows(ctx)
+	if err != nil {
+		t.Fatalf("ArchiveWorkflows() error = %v", err)
+	}
+	if archived != 1 {
+		t.Errorf("Expected 1 archived workflow, got %d", archived)
+	}
+
+	// Check archive directory exists
+	archiveDir := filepath.Join(tmpDir, "archive")
+	if _, err := os.Stat(archiveDir); os.IsNotExist(err) {
+		t.Error("Archive directory should exist")
+	}
+
+	// Original workflow file should be gone from workflows dir
+	entries, _ := os.ReadDir(manager.WorkflowsDir())
+	for _, e := range entries {
+		if !e.IsDir() && isJSONFile(e.Name()) && !isBackupFile(e.Name()) {
+			t.Errorf("Workflow file %s should have been archived", e.Name())
+		}
+	}
+}
+
+func TestJSONStateManager_ArchiveWorkflows_SkipsRunning(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath := filepath.Join(tmpDir, "state.json")
+	manager := NewJSONStateManager(statePath)
+	ctx := context.Background()
+
+	// Save a running workflow
+	state := newTestState()
+	state.Status = core.WorkflowStatusRunning
+	if err := manager.Save(ctx, state); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	// Deactivate
+	if err := manager.DeactivateWorkflow(ctx); err != nil {
+		t.Fatalf("DeactivateWorkflow() error = %v", err)
+	}
+
+	// Archive - should not archive running workflows
+	archived, err := manager.ArchiveWorkflows(ctx)
+	if err != nil {
+		t.Fatalf("ArchiveWorkflows() error = %v", err)
+	}
+	if archived != 0 {
+		t.Errorf("Expected 0 archived workflows (running should be skipped), got %d", archived)
+	}
+}
+
+func TestJSONStateManager_PurgeAllWorkflows(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath := filepath.Join(tmpDir, "state.json")
+	manager := NewJSONStateManager(statePath)
+	ctx := context.Background()
+
+	// Save two workflows
+	state1 := newTestState()
+	state1.WorkflowID = "wf-1"
+	if err := manager.Save(ctx, state1); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	state2 := newTestState()
+	state2.WorkflowID = "wf-2"
+	if err := manager.Save(ctx, state2); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	// Purge all
+	deleted, err := manager.PurgeAllWorkflows(ctx)
+	if err != nil {
+		t.Fatalf("PurgeAllWorkflows() error = %v", err)
+	}
+	if deleted != 2 {
+		t.Errorf("Expected 2 deleted workflows, got %d", deleted)
+	}
+
+	// No active workflow
+	activeID, _ := manager.GetActiveWorkflowID(ctx)
+	if activeID != "" {
+		t.Errorf("Expected no active workflow, got %s", activeID)
+	}
+
+	// No workflow files
+	entries, _ := os.ReadDir(manager.WorkflowsDir())
+	for _, e := range entries {
+		if !e.IsDir() {
+			t.Errorf("Unexpected file after purge: %s", e.Name())
+		}
+	}
+}
+
 type testLogger struct {
 	messages []string
 }

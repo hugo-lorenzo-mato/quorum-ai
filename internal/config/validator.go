@@ -273,6 +273,16 @@ func (v *Validator) validateReasoningEffortPhases(prefix string, phases map[stri
 }
 
 func (v *Validator) validateState(cfg *StateConfig) {
+	// Validate backend (empty string is valid - means use default "json")
+	if cfg.Backend != "" {
+		switch strings.ToLower(strings.TrimSpace(cfg.Backend)) {
+		case "json", "sqlite":
+			// Valid backends
+		default:
+			v.addError("state.backend", cfg.Backend, "must be 'json' or 'sqlite'")
+		}
+	}
+
 	if cfg.Path == "" {
 		v.addError("state.path", cfg.Path, "path required")
 	}

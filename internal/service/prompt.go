@@ -275,7 +275,7 @@ func (r *PromptRenderer) HasTemplate(name string) bool {
 // ModeratorAnalysisSummary represents an analysis for moderator evaluation.
 type ModeratorAnalysisSummary struct {
 	AgentName string
-	Output    string
+	FilePath  string // Path to the analysis file for the moderator to read
 }
 
 // ModeratorEvaluateParams contains parameters for moderator evaluation template.

@@ -100,26 +100,38 @@ func (m *SemanticModerator) EvaluateWithAgent(ctx context.Context, wctx *Context
 		return nil, fmt.Errorf("rate limit for moderator: %w", err)
 	}
 
-	// Build analysis summaries for the prompt
-	// Strategy: Use structured summaries (claims, risks, recommendations) when available
-	// to reduce context usage while preserving key information.
-	// Fall back to full output with generous limit (80k chars) as safety net.
-	const maxCharsPerAnalysis = 80000 // Generous limit for safety
+	// Build analysis file paths for the moderator to read
+	// The moderator will use its file reading tools to access the full analysis content
 	analyses := make([]ModeratorAnalysisSummary, len(outputs))
 	for i, out := range outputs {
-		// Try to build a structured summary from extracted data
-		output := buildAnalysisSummary(out, maxCharsPerAnalysis)
-		if len(output) != len(out.RawOutput) {
-			wctx.Logger.Debug("using structured summary for moderator",
-				"agent", out.AgentName,
-				"original_len", len(out.RawOutput),
-				"summary_len", len(output),
-			)
+		// Extract the base agent name (remove vN- prefix if present)
+		baseAgentName := out.AgentName
+		if strings.HasPrefix(out.AgentName, "v") && len(out.AgentName) > 3 {
+			// Handle formats like "v2-claude" -> "claude"
+			if idx := strings.Index(out.AgentName, "-"); idx > 0 && idx < 4 {
+				baseAgentName = out.AgentName[idx+1:]
+			}
 		}
+
+		// Get the file path for this analysis
+		var filePath string
+		if wctx.Report != nil && wctx.Report.IsEnabled() {
+			if round == 1 {
+				filePath = wctx.Report.V1AnalysisPath(baseAgentName, out.Model)
+			} else {
+				filePath = wctx.Report.VnAnalysisPath(baseAgentName, out.Model, round)
+			}
+		}
+
 		analyses[i] = ModeratorAnalysisSummary{
 			AgentName: out.AgentName,
-			Output:    output,
+			FilePath:  filePath,
 		}
+
+		wctx.Logger.Debug("moderator will read analysis file",
+			"agent", out.AgentName,
+			"file_path", filePath,
+		)
 	}
 
 	// Get output file path for LLM to write directly

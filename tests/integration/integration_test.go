@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/adapters/state"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/config"
@@ -19,7 +20,10 @@ func TestIntegration_StateManager(t *testing.T) {
 	dir := testutil.TempDir(t)
 	statePath := filepath.Join(dir, ".quorum", "state", "workflow.json")
 
-	sm := state.NewJSONStateManager(statePath)
+	sm, err := state.NewStateManager("json", statePath)
+	if err != nil {
+		t.Fatalf("create state manager: %v", err)
+	}
 	ctx := context.Background()
 
 	// Create and save state
@@ -207,4 +211,417 @@ func TestIntegration_WorkflowCreation(t *testing.T) {
 	if len(ready) != 1 || ready[0].ID != "analyze" {
 		t.Errorf("expected analyze task to be ready, got %v", ready)
 	}
+}
+
+// TestIntegration_BackendSelection tests the factory function creates correct backend types.
+func TestIntegration_BackendSelection(t *testing.T) {
+	tests := []struct {
+		name        string
+		backend     string
+		wantJSON    bool
+		wantSQLite  bool
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name:     "empty defaults to json",
+			backend:  "",
+			wantJSON: true,
+		},
+		{
+			name:     "explicit json backend",
+			backend:  "json",
+			wantJSON: true,
+		},
+		{
+			name:       "sqlite backend",
+			backend:    "sqlite",
+			wantSQLite: true,
+		},
+		{
+			name:       "SQLite backend (mixed case)",
+			backend:    "SQLite",
+			wantSQLite: true,
+		},
+		{
+			name:        "unsupported backend fails",
+			backend:     "postgres",
+			wantErr:     true,
+			errContains: "unsupported state backend",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := testutil.TempDir(t)
+			statePath := filepath.Join(dir, "state.json")
+
+			sm, err := state.NewStateManager(tt.backend, statePath)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Error("expected error, got nil")
+				} else if tt.errContains != "" {
+					testutil.AssertContains(t, err.Error(), tt.errContains)
+				}
+				return
+			}
+
+			testutil.AssertNoError(t, err)
+			defer state.CloseStateManager(sm)
+
+			// Verify the manager works by saving and loading
+			ctx := context.Background()
+			ws := &core.WorkflowState{
+				WorkflowID:   "test-wf",
+				CurrentPhase: core.PhaseAnalyze,
+				Status:       core.WorkflowStatusRunning,
+				Tasks:        make(map[core.TaskID]*core.TaskState),
+			}
+
+			testutil.AssertNoError(t, sm.Save(ctx, ws))
+			loaded, err := sm.Load(ctx)
+			testutil.AssertNoError(t, err)
+			testutil.AssertEqual(t, loaded.WorkflowID, "test-wf")
+		})
+	}
+}
+
+// TestIntegration_SQLiteStateManager_CRUD tests SQLite-specific CRUD operations.
+func TestIntegration_SQLiteStateManager_CRUD(t *testing.T) {
+	dir := testutil.TempDir(t)
+	dbPath := filepath.Join(dir, "workflow.db")
+
+	sm, err := state.NewStateManager("sqlite", dbPath)
+	testutil.AssertNoError(t, err)
+	defer state.CloseStateManager(sm)
+
+	ctx := context.Background()
+
+	// Test 1: Create and save workflow with tasks
+	now := time.Now().Truncate(time.Second)
+	ws := &core.WorkflowState{
+		Version:      1,
+		WorkflowID:   "wf-integration-test",
+		Status:       core.WorkflowStatusRunning,
+		CurrentPhase: core.PhaseAnalyze,
+		Prompt:       "Integration test prompt",
+		Tasks: map[core.TaskID]*core.TaskState{
+			"task-1": {
+				ID:           "task-1",
+				Phase:        core.PhaseAnalyze,
+				Name:         "Analyze Task",
+				Status:       core.TaskStatusCompleted,
+				CLI:          "claude",
+				Model:        "opus",
+				Dependencies: []core.TaskID{},
+				TokensIn:     500,
+				TokensOut:    200,
+				CostUSD:      float64(0.05),
+				Output:       "Analysis complete",
+			},
+			"task-2": {
+				ID:           "task-2",
+				Phase:        core.PhasePlan,
+				Name:         "Plan Task",
+				Status:       core.TaskStatusPending,
+				Dependencies: []core.TaskID{"task-1"},
+			},
+		},
+		TaskOrder: []core.TaskID{"task-1", "task-2"},
+		Config: &core.WorkflowConfig{
+			ConsensusThreshold: 0.8,
+			MaxRetries:         3,
+			Timeout:            time.Hour,
+		},
+		Metrics: &core.StateMetrics{
+			TotalCostUSD:   0.05,
+			TotalTokensIn:  500,
+			TotalTokensOut: 200,
+		},
+		Checkpoints: []core.Checkpoint{
+			{
+				ID:        "cp-1",
+				Type:      "task_complete",
+				Phase:     core.PhaseAnalyze,
+				TaskID:    "task-1",
+				Timestamp: now,
+				Message:   "Task completed",
+			},
+		},
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+
+	err = sm.Save(ctx, ws)
+	testutil.AssertNoError(t, err)
+	testutil.AssertTrue(t, sm.Exists(), "state should exist after save")
+
+	// Test 2: Load and verify all fields
+	loaded, err := sm.Load(ctx)
+	testutil.AssertNoError(t, err)
+
+	testutil.AssertEqual(t, loaded.WorkflowID, ws.WorkflowID)
+	testutil.AssertEqual(t, loaded.Status, ws.Status)
+	testutil.AssertEqual(t, loaded.CurrentPhase, ws.CurrentPhase)
+	testutil.AssertEqual(t, loaded.Prompt, ws.Prompt)
+	if len(loaded.Tasks) != 2 {
+		t.Fatalf("expected 2 tasks, got %d", len(loaded.Tasks))
+	}
+	testutil.AssertLen(t, loaded.TaskOrder, 2)
+
+	// Verify task details
+	task1 := loaded.Tasks["task-1"]
+	testutil.AssertEqual(t, task1.Status, core.TaskStatusCompleted)
+	testutil.AssertEqual(t, task1.Output, "Analysis complete")
+	testutil.AssertEqual(t, task1.TokensIn, 500)
+	testutil.AssertEqual(t, task1.CostUSD, 0.05)
+
+	task2 := loaded.Tasks["task-2"]
+	testutil.AssertLen(t, task2.Dependencies, 1)
+	testutil.AssertEqual(t, task2.Dependencies[0], core.TaskID("task-1"))
+
+	// Verify config
+	testutil.AssertEqual(t, loaded.Config.ConsensusThreshold, 0.8)
+	testutil.AssertEqual(t, loaded.Config.MaxRetries, 3)
+
+	// Verify metrics
+	testutil.AssertEqual(t, loaded.Metrics.TotalCostUSD, 0.05)
+
+	// Verify checkpoints
+	testutil.AssertLen(t, loaded.Checkpoints, 1)
+	testutil.AssertEqual(t, loaded.Checkpoints[0].ID, "cp-1")
+
+	// Test 3: Update workflow
+	ws.Status = core.WorkflowStatusCompleted
+	ws.CurrentPhase = core.PhaseExecute
+	ws.Tasks["task-2"].Status = core.TaskStatusCompleted
+	completedAt := time.Now().Truncate(time.Second)
+	ws.Tasks["task-2"].CompletedAt = &completedAt
+
+	err = sm.Save(ctx, ws)
+	testutil.AssertNoError(t, err)
+
+	loaded, err = sm.Load(ctx)
+	testutil.AssertNoError(t, err)
+	testutil.AssertEqual(t, loaded.Status, core.WorkflowStatusCompleted)
+	testutil.AssertEqual(t, loaded.Tasks["task-2"].Status, core.TaskStatusCompleted)
+}
+
+// TestIntegration_SQLiteMultipleWorkflows tests managing multiple workflows in SQLite.
+func TestIntegration_SQLiteMultipleWorkflows(t *testing.T) {
+	dir := testutil.TempDir(t)
+	dbPath := filepath.Join(dir, "multi-workflow.db")
+
+	sm, err := state.NewStateManager("sqlite", dbPath)
+	testutil.AssertNoError(t, err)
+	defer state.CloseStateManager(sm)
+
+	ctx := context.Background()
+
+	// Create first workflow
+	ws1 := &core.WorkflowState{
+		WorkflowID:   "wf-1",
+		Status:       core.WorkflowStatusCompleted,
+		CurrentPhase: core.PhaseExecute,
+		Prompt:       "First workflow",
+		Tasks:        make(map[core.TaskID]*core.TaskState),
+	}
+	testutil.AssertNoError(t, sm.Save(ctx, ws1))
+
+	// Create second workflow
+	ws2 := &core.WorkflowState{
+		WorkflowID:   "wf-2",
+		Status:       core.WorkflowStatusRunning,
+		CurrentPhase: core.PhaseAnalyze,
+		Prompt:       "Second workflow",
+		Tasks:        make(map[core.TaskID]*core.TaskState),
+	}
+	testutil.AssertNoError(t, sm.Save(ctx, ws2))
+
+	// SQLite-specific: cast to access ListWorkflows and LoadByID
+	sqliteSM, ok := sm.(*state.SQLiteStateManager)
+	if !ok {
+		t.Fatal("expected SQLiteStateManager type")
+	}
+
+	// List workflows should return both
+	summaries, err := sqliteSM.ListWorkflows(ctx)
+	testutil.AssertNoError(t, err)
+	testutil.AssertLen(t, summaries, 2)
+
+	// Last saved should be active
+	activeID, err := sqliteSM.GetActiveWorkflowID(ctx)
+	testutil.AssertNoError(t, err)
+	testutil.AssertEqual(t, activeID, "wf-2")
+
+	// Load specific workflow by ID
+	loaded1, err := sqliteSM.LoadByID(ctx, "wf-1")
+	testutil.AssertNoError(t, err)
+	testutil.AssertEqual(t, loaded1.Prompt, "First workflow")
+
+	// Set active workflow
+	testutil.AssertNoError(t, sqliteSM.SetActiveWorkflowID(ctx, "wf-1"))
+	activeID, err = sqliteSM.GetActiveWorkflowID(ctx)
+	testutil.AssertNoError(t, err)
+	testutil.AssertEqual(t, activeID, "wf-1")
+}
+
+// TestIntegration_BackendFromConfig tests creating state manager from config.
+func TestIntegration_BackendFromConfig(t *testing.T) {
+	tests := []struct {
+		name     string
+		config   string
+		validate func(t *testing.T, sm core.StateManager)
+	}{
+		{
+			name: "json backend from config",
+			config: `state:
+  backend: json
+`,
+			validate: func(t *testing.T, sm core.StateManager) {
+				ctx := context.Background()
+				ws := &core.WorkflowState{
+					WorkflowID: "cfg-test-json",
+					Status:     core.WorkflowStatusPending,
+					Tasks:      make(map[core.TaskID]*core.TaskState),
+				}
+				testutil.AssertNoError(t, sm.Save(ctx, ws))
+				loaded, err := sm.Load(ctx)
+				testutil.AssertNoError(t, err)
+				testutil.AssertEqual(t, loaded.WorkflowID, "cfg-test-json")
+			},
+		},
+		{
+			name: "sqlite backend from config",
+			config: `state:
+  backend: sqlite
+`,
+			validate: func(t *testing.T, sm core.StateManager) {
+				ctx := context.Background()
+				ws := &core.WorkflowState{
+					WorkflowID: "cfg-test-sqlite",
+					Status:     core.WorkflowStatusPending,
+					Tasks:      make(map[core.TaskID]*core.TaskState),
+				}
+				testutil.AssertNoError(t, sm.Save(ctx, ws))
+				loaded, err := sm.Load(ctx)
+				testutil.AssertNoError(t, err)
+				testutil.AssertEqual(t, loaded.WorkflowID, "cfg-test-sqlite")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := testutil.TempDir(t)
+
+			// Write config file
+			configPath := filepath.Join(dir, ".quorum.yaml")
+			testutil.AssertNoError(t, os.WriteFile(configPath, []byte(tt.config), 0o644))
+
+			// Load config
+			loader := config.NewLoader().WithConfigFile(configPath)
+			cfg, err := loader.Load()
+			testutil.AssertNoError(t, err)
+
+			// Create state manager from config
+			backend := cfg.State.EffectiveBackend()
+			statePath := filepath.Join(dir, ".quorum", "state", "workflow.json")
+
+			sm, err := state.NewStateManager(backend, statePath)
+			testutil.AssertNoError(t, err)
+			defer state.CloseStateManager(sm)
+
+			tt.validate(t, sm)
+		})
+	}
+}
+
+// TestIntegration_SQLiteBackupRestore tests SQLite backup and restore functionality.
+func TestIntegration_SQLiteBackupRestore(t *testing.T) {
+	dir := testutil.TempDir(t)
+	dbPath := filepath.Join(dir, "backup-test.db")
+
+	sm, err := state.NewStateManager("sqlite", dbPath)
+	testutil.AssertNoError(t, err)
+	defer state.CloseStateManager(sm)
+
+	sqliteSM := sm.(*state.SQLiteStateManager)
+	ctx := context.Background()
+
+	// Create initial state
+	ws := &core.WorkflowState{
+		WorkflowID:   "wf-backup",
+		Status:       core.WorkflowStatusRunning,
+		CurrentPhase: core.PhaseAnalyze,
+		Prompt:       "Original state",
+		Tasks:        make(map[core.TaskID]*core.TaskState),
+	}
+	testutil.AssertNoError(t, sqliteSM.Save(ctx, ws))
+
+	// Create backup
+	testutil.AssertNoError(t, sqliteSM.Backup(ctx))
+
+	// Modify state
+	ws.Prompt = "Modified state"
+	ws.Status = core.WorkflowStatusCompleted
+	testutil.AssertNoError(t, sqliteSM.Save(ctx, ws))
+
+	// Verify modification
+	loaded, err := sqliteSM.Load(ctx)
+	testutil.AssertNoError(t, err)
+	testutil.AssertEqual(t, loaded.Prompt, "Modified state")
+
+	// Restore from backup
+	restored, err := sqliteSM.Restore(ctx)
+	testutil.AssertNoError(t, err)
+	testutil.AssertEqual(t, restored.Prompt, "Original state")
+	testutil.AssertEqual(t, restored.Status, core.WorkflowStatusRunning)
+}
+
+// TestIntegration_StateManagerLifecycle tests proper cleanup of state managers.
+func TestIntegration_StateManagerLifecycle(t *testing.T) {
+	dir := testutil.TempDir(t)
+
+	t.Run("json manager cleanup", func(t *testing.T) {
+		path := filepath.Join(dir, "lifecycle-json.json")
+		sm, err := state.NewStateManager("json", path)
+		testutil.AssertNoError(t, err)
+
+		// Save something
+		ctx := context.Background()
+		ws := &core.WorkflowState{
+			WorkflowID: "lifecycle-test",
+			Status:     core.WorkflowStatusPending,
+			Tasks:      make(map[core.TaskID]*core.TaskState),
+		}
+		testutil.AssertNoError(t, sm.Save(ctx, ws))
+
+		// Close should not error for JSON
+		testutil.AssertNoError(t, state.CloseStateManager(sm))
+	})
+
+	t.Run("sqlite manager cleanup", func(t *testing.T) {
+		path := filepath.Join(dir, "lifecycle-sqlite.db")
+		sm, err := state.NewStateManager("sqlite", path)
+		testutil.AssertNoError(t, err)
+
+		// Save something
+		ctx := context.Background()
+		ws := &core.WorkflowState{
+			WorkflowID: "lifecycle-test",
+			Status:     core.WorkflowStatusPending,
+			Tasks:      make(map[core.TaskID]*core.TaskState),
+		}
+		testutil.AssertNoError(t, sm.Save(ctx, ws))
+
+		// Close should properly close SQLite connection
+		testutil.AssertNoError(t, state.CloseStateManager(sm))
+	})
+
+	t.Run("nil manager cleanup", func(t *testing.T) {
+		// Should not panic or error
+		testutil.AssertNoError(t, state.CloseStateManager(nil))
+	})
 }

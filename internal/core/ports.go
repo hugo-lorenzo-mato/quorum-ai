@@ -168,6 +168,18 @@ type StateManager interface {
 
 	// Restore restores from the most recent backup.
 	Restore(ctx context.Context) (*WorkflowState, error)
+
+	// DeactivateWorkflow clears the active workflow without deleting any data.
+	// After this call, GetActiveWorkflowID returns empty and Load returns nil.
+	DeactivateWorkflow(ctx context.Context) error
+
+	// ArchiveWorkflows moves completed workflows to an archive location.
+	// Returns the number of workflows archived.
+	ArchiveWorkflows(ctx context.Context) (int, error)
+
+	// PurgeAllWorkflows deletes all workflow data permanently.
+	// Returns the number of workflows deleted.
+	PurgeAllWorkflows(ctx context.Context) (int, error)
 }
 
 // WorkflowSummary provides a lightweight summary of a workflow for listing.
@@ -197,6 +209,7 @@ type WorkflowState struct {
 	CreatedAt       time.Time             `json:"created_at"`
 	UpdatedAt       time.Time             `json:"updated_at"`
 	Checksum        string                `json:"checksum,omitempty"`
+	ReportPath      string                `json:"report_path,omitempty"` // Persisted report directory for resume
 }
 
 // TaskState represents persisted task state.

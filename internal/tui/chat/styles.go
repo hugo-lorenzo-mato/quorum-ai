@@ -9,13 +9,13 @@ import (
 // Message colors
 var (
 	// User message - rose/coral (unique, not used by any CLI)
-	userBorderColor = lipgloss.Color("#f43f5e") // Rose
+	userBorderColor = lipgloss.Color("#7a5660") // Muted rose (dark)
 
 	// Message text color
 	msgTextColor = lipgloss.Color("#c9d1d9") // Light text
 
 	// System message
-	systemMsgColor = lipgloss.Color("#F59E0B") // Amber
+	systemMsgColor = lipgloss.Color("#8c6b34") // Muted amber (dark)
 
 	// Timestamp
 	timestampMsgColor = lipgloss.Color("#6b7280") // Gray muted
@@ -77,6 +77,7 @@ func (s *MessageStyles) FormatUserMessage(content, timestamp string, isCommand b
 func (s *MessageStyles) FormatBotMessage(agentName, content, timestamp string, _ int, _ string) string {
 	// Get agent color from agents.go for consistency with header bar
 	agentColor := GetAgentColor(agentName)
+	borderColor := GetAgentBorderColor(agentName)
 
 	// Container width: 85% of viewport
 	containerWidth := s.width * 85 / 100
@@ -106,7 +107,7 @@ func (s *MessageStyles) FormatBotMessage(agentName, content, timestamp string, _
 	// === BUBBLE CONTAINER with rounded border ===
 	containerStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(agentColor).
+		BorderForeground(borderColor).
 		Foreground(msgTextColor).
 		Padding(0, 1).
 		Width(containerWidth)
@@ -161,16 +162,18 @@ func (s *MessageStyles) FormatSystemMessage(content string) string {
 
 // ApplyDarkThemeMessages sets dark theme colors
 func ApplyDarkThemeMessages() {
-	userBorderColor = lipgloss.Color("#f43f5e") // Rose
+	userBorderColor = lipgloss.Color("#7a5660") // Muted rose (dark)
 	msgTextColor = lipgloss.Color("#c9d1d9")
-	systemMsgColor = lipgloss.Color("#F59E0B")
+	systemMsgColor = lipgloss.Color("#8c6b34")
 	timestampMsgColor = lipgloss.Color("#6b7280")
+	ApplyDarkThemeAgentBorders()
 }
 
 // ApplyLightThemeMessages sets light theme colors
 func ApplyLightThemeMessages() {
-	userBorderColor = lipgloss.Color("#e11d48") // Rose darker for light theme
+	userBorderColor = lipgloss.Color("#c9a3ad") // Muted rose (light)
 	msgTextColor = lipgloss.Color("#1f2937")
-	systemMsgColor = lipgloss.Color("#d97706")
+	systemMsgColor = lipgloss.Color("#c7a16b")
 	timestampMsgColor = lipgloss.Color("#9ca3af")
+	ApplyLightThemeAgentBorders()
 }

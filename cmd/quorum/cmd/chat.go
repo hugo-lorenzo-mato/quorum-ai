@@ -229,7 +229,10 @@ func createWorkflowRunner(
 	if statePath == "" {
 		statePath = ".quorum/state/state.json"
 	}
-	stateManager := state.NewJSONStateManager(statePath)
+	stateManager, err := state.NewStateManager(cfg.State.EffectiveBackend(), statePath)
+	if err != nil {
+		return nil, fmt.Errorf("creating state manager: %w", err)
+	}
 
 	// Create prompt renderer
 	promptRenderer, err := service.NewPromptRenderer()
@@ -339,7 +342,8 @@ func createWorkflowRunner(
 	promptAdapter := workflow.NewPromptRendererAdapter(promptRenderer)
 	resumeAdapter := workflow.NewResumePointAdapter(checkpointManager)
 	dagAdapter := workflow.NewDAGAdapter(dagBuilder)
-	stateAdapter := &stateManagerAdapter{sm: stateManager}
+	// core.StateManager satisfies workflow.StateManager interface
+	stateAdapter := stateManager
 
 	// Create output notifier for chat (minimal output)
 	outputNotifier := &chatOutputNotifier{eventBus: eventBus}
@@ -552,7 +556,10 @@ func createWorkflowRunnerWithTrace(
 	if statePath == "" {
 		statePath = ".quorum/state/state.json"
 	}
-	stateManager := state.NewJSONStateManager(statePath)
+	stateManager, err := state.NewStateManager(cfg.State.EffectiveBackend(), statePath)
+	if err != nil {
+		return nil, fmt.Errorf("creating state manager: %w", err)
+	}
 
 	// Create prompt renderer
 	promptRenderer, err := service.NewPromptRenderer()
@@ -662,7 +669,8 @@ func createWorkflowRunnerWithTrace(
 	promptAdapter := workflow.NewPromptRendererAdapter(promptRenderer)
 	resumeAdapter := workflow.NewResumePointAdapter(checkpointManager)
 	dagAdapter := workflow.NewDAGAdapter(dagBuilder)
-	stateAdapter := &stateManagerAdapter{sm: stateManager}
+	// core.StateManager satisfies workflow.StateManager interface
+	stateAdapter := stateManager
 
 	// Create trace-enabled output notifier
 	traceNotifier := service.NewTraceOutputNotifier(traceWriter)

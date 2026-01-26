@@ -21,6 +21,9 @@ import (
 //go:embed migrations/001_initial_schema.sql
 var migrationV1 string
 
+//go:embed migrations/002_add_recovery_columns.sql
+var migrationV2 string
+
 // SQLiteStateManager implements StateManager with SQLite storage.
 type SQLiteStateManager struct {
 	dbPath     string
@@ -98,6 +101,12 @@ func (m *SQLiteStateManager) migrate() error {
 		}
 	}
 
+	if version < 2 {
+		if _, err := m.db.Exec(migrationV2); err != nil {
+			return fmt.Errorf("applying migration v2: %w", err)
+		}
+	}
+
 	return nil
 }
 
@@ -149,8 +158,8 @@ func (m *SQLiteStateManager) Save(ctx context.Context, state *core.WorkflowState
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO workflows (
 			id, version, status, current_phase, prompt, optimized_prompt,
-			task_order, config, metrics, checksum, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			task_order, config, metrics, checksum, created_at, updated_at, report_path
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			version = excluded.version,
 			status = excluded.status,
@@ -161,12 +170,14 @@ func (m *SQLiteStateManager) Save(ctx context.Context, state *core.WorkflowState
 			config = excluded.config,
 			metrics = excluded.metrics,
 			checksum = excluded.checksum,
-			updated_at = excluded.updated_at
+			updated_at = excluded.updated_at,
+			report_path = excluded.report_path
 	`,
 		state.WorkflowID, state.Version, state.Status, state.CurrentPhase,
 		state.Prompt, state.OptimizedPrompt, string(taskOrderJSON),
 		nullableString(configJSON), nullableString(metricsJSON),
 		checksum, state.CreatedAt, state.UpdatedAt,
+		nullableString([]byte(state.ReportPath)),
 	)
 	if err != nil {
 		return fmt.Errorf("upserting workflow: %w", err)
@@ -232,13 +243,28 @@ func (m *SQLiteStateManager) insertTask(ctx context.Context, tx *sql.Tx, workflo
 		}
 	}
 
+	var filesModifiedJSON []byte
+	if len(task.FilesModified) > 0 {
+		filesModifiedJSON, err = json.Marshal(task.FilesModified)
+		if err != nil {
+			return fmt.Errorf("marshaling files modified: %w", err)
+		}
+	}
+
+	// Convert bool to SQLite integer (0/1)
+	resumableInt := 0
+	if task.Resumable {
+		resumableInt = 1
+	}
+
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO tasks (
 			id, workflow_id, phase, name, status, cli, model,
 			dependencies, tokens_in, tokens_out, cost_usd, retries,
 			error, worktree_path, started_at, completed_at,
-			output, output_file, model_used, finish_reason, tool_calls
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			output, output_file, model_used, finish_reason, tool_calls,
+			last_commit, files_modified, branch, resumable, resume_hint
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
 		task.ID, workflowID, task.Phase, task.Name, task.Status,
 		task.CLI, task.Model, string(depsJSON),
@@ -248,6 +274,8 @@ func (m *SQLiteStateManager) insertTask(ctx context.Context, tx *sql.Tx, workflo
 		nullableString([]byte(task.Output)), nullableString([]byte(task.OutputFile)),
 		nullableString([]byte(task.ModelUsed)), nullableString([]byte(task.FinishReason)),
 		nullableString(toolCallsJSON),
+		nullableString([]byte(task.LastCommit)), nullableString(filesModifiedJSON),
+		nullableString([]byte(task.Branch)), resumableInt, nullableString([]byte(task.ResumeHint)),
 	)
 	return err
 }
@@ -296,15 +324,16 @@ func (m *SQLiteStateManager) loadWorkflowByID(ctx context.Context, id core.Workf
 	var taskOrderJSON, configJSON, metricsJSON sql.NullString
 	var optimizedPrompt sql.NullString
 	var checksum sql.NullString
+	var reportPath sql.NullString
 
 	err := m.db.QueryRowContext(ctx, `
 		SELECT id, version, status, current_phase, prompt, optimized_prompt,
-		       task_order, config, metrics, checksum, created_at, updated_at
+		       task_order, config, metrics, checksum, created_at, updated_at, report_path
 		FROM workflows WHERE id = ?
 	`, id).Scan(
 		&state.WorkflowID, &state.Version, &state.Status, &state.CurrentPhase,
 		&state.Prompt, &optimizedPrompt, &taskOrderJSON, &configJSON, &metricsJSON,
-		&checksum, &state.CreatedAt, &state.UpdatedAt,
+		&checksum, &state.CreatedAt, &state.UpdatedAt, &reportPath,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil // Workflow doesn't exist
@@ -318,6 +347,9 @@ func (m *SQLiteStateManager) loadWorkflowByID(ctx context.Context, id core.Workf
 	}
 	if checksum.Valid {
 		state.Checksum = checksum.String
+	}
+	if reportPath.Valid {
+		state.ReportPath = reportPath.String
 	}
 
 	// Parse JSON fields
@@ -345,7 +377,8 @@ func (m *SQLiteStateManager) loadWorkflowByID(ctx context.Context, id core.Workf
 		SELECT id, phase, name, status, cli, model, dependencies,
 		       tokens_in, tokens_out, cost_usd, retries, error,
 		       worktree_path, started_at, completed_at, output,
-		       output_file, model_used, finish_reason, tool_calls
+		       output_file, model_used, finish_reason, tool_calls,
+		       last_commit, files_modified, branch, resumable, resume_hint
 		FROM tasks WHERE workflow_id = ?
 	`, id)
 	if err != nil {
@@ -394,6 +427,8 @@ func (m *SQLiteStateManager) scanTask(rows *sql.Rows) (*core.TaskState, error) {
 	var cli, model, errorStr, worktreePath sql.NullString
 	var startedAt, completedAt sql.NullTime
 	var output, outputFile, modelUsed, finishReason sql.NullString
+	var lastCommit, filesModifiedJSON, branch, resumeHint sql.NullString
+	var resumable int
 
 	err := rows.Scan(
 		&task.ID, &task.Phase, &task.Name, &task.Status,
@@ -401,6 +436,7 @@ func (m *SQLiteStateManager) scanTask(rows *sql.Rows) (*core.TaskState, error) {
 		&task.TokensIn, &task.TokensOut, &task.CostUSD, &task.Retries,
 		&errorStr, &worktreePath, &startedAt, &completedAt,
 		&output, &outputFile, &modelUsed, &finishReason, &toolCallsJSON,
+		&lastCommit, &filesModifiedJSON, &branch, &resumable, &resumeHint,
 	)
 	if err != nil {
 		return nil, err
@@ -436,6 +472,16 @@ func (m *SQLiteStateManager) scanTask(rows *sql.Rows) (*core.TaskState, error) {
 	if finishReason.Valid {
 		task.FinishReason = finishReason.String
 	}
+	if lastCommit.Valid {
+		task.LastCommit = lastCommit.String
+	}
+	if branch.Valid {
+		task.Branch = branch.String
+	}
+	if resumeHint.Valid {
+		task.ResumeHint = resumeHint.String
+	}
+	task.Resumable = resumable != 0
 
 	if depsJSON.Valid && depsJSON.String != "" {
 		if err := json.Unmarshal([]byte(depsJSON.String), &task.Dependencies); err != nil {
@@ -445,6 +491,11 @@ func (m *SQLiteStateManager) scanTask(rows *sql.Rows) (*core.TaskState, error) {
 	if toolCallsJSON.Valid && toolCallsJSON.String != "" {
 		if err := json.Unmarshal([]byte(toolCallsJSON.String), &task.ToolCalls); err != nil {
 			return nil, fmt.Errorf("unmarshaling tool calls: %w", err)
+		}
+	}
+	if filesModifiedJSON.Valid && filesModifiedJSON.String != "" {
+		if err := json.Unmarshal([]byte(filesModifiedJSON.String), &task.FilesModified); err != nil {
+			return nil, fmt.Errorf("unmarshaling files modified: %w", err)
 		}
 	}
 
@@ -685,3 +736,140 @@ func nullableTime(t *time.Time) sql.NullTime {
 	}
 	return sql.NullTime{Time: *t, Valid: true}
 }
+
+// DeactivateWorkflow clears the active workflow without deleting any data.
+func (m *SQLiteStateManager) DeactivateWorkflow(ctx context.Context) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	_, err := m.db.ExecContext(ctx, "DELETE FROM active_workflow WHERE id = 1")
+	if err != nil {
+		return fmt.Errorf("deactivating workflow: %w", err)
+	}
+	return nil
+}
+
+// ArchiveWorkflows moves completed workflows to an archived state.
+// For SQLite, we use a status flag since we can't move rows to another database easily.
+// Returns the number of workflows archived.
+func (m *SQLiteStateManager) ArchiveWorkflows(ctx context.Context) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	// Get active workflow ID to avoid archiving it
+	var activeID sql.NullString
+	_ = m.db.QueryRowContext(ctx, "SELECT workflow_id FROM active_workflow WHERE id = 1").Scan(&activeID)
+
+	// Count workflows that will be archived
+	var count int
+	query := `
+		SELECT COUNT(*) FROM workflows
+		WHERE (status = 'completed' OR status = 'failed')
+	`
+	args := []interface{}{}
+
+	if activeID.Valid {
+		query += " AND id != ?"
+		args = append(args, activeID.String)
+	}
+
+	err := m.db.QueryRowContext(ctx, query, args...).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("counting workflows to archive: %w", err)
+	}
+
+	if count == 0 {
+		return 0, nil
+	}
+
+	// Delete archived workflows and their related data
+	// First delete tasks and checkpoints
+	deleteQuery := `
+		DELETE FROM tasks WHERE workflow_id IN (
+			SELECT id FROM workflows
+			WHERE (status = 'completed' OR status = 'failed')
+	`
+	if activeID.Valid {
+		deleteQuery += " AND id != ?"
+	}
+	deleteQuery += ")"
+
+	if activeID.Valid {
+		_, err = m.db.ExecContext(ctx, deleteQuery, activeID.String)
+	} else {
+		_, err = m.db.ExecContext(ctx, deleteQuery)
+	}
+	if err != nil {
+		return 0, fmt.Errorf("deleting archived tasks: %w", err)
+	}
+
+	// Delete checkpoints
+	checkpointsQuery := `
+		DELETE FROM checkpoints WHERE workflow_id IN (
+			SELECT id FROM workflows
+			WHERE (status = 'completed' OR status = 'failed')
+	`
+	if activeID.Valid {
+		checkpointsQuery += " AND id != ?"
+	}
+	checkpointsQuery += ")"
+
+	if activeID.Valid {
+		_, err = m.db.ExecContext(ctx, checkpointsQuery, activeID.String)
+	} else {
+		_, err = m.db.ExecContext(ctx, checkpointsQuery)
+	}
+	if err != nil {
+		return 0, fmt.Errorf("deleting archived checkpoints: %w", err)
+	}
+
+	// Delete workflows
+	workflowsQuery := `
+		DELETE FROM workflows
+		WHERE (status = 'completed' OR status = 'failed')
+	`
+	if activeID.Valid {
+		workflowsQuery += " AND id != ?"
+		_, err = m.db.ExecContext(ctx, workflowsQuery, activeID.String)
+	} else {
+		_, err = m.db.ExecContext(ctx, workflowsQuery)
+	}
+	if err != nil {
+		return 0, fmt.Errorf("deleting archived workflows: %w", err)
+	}
+
+	return count, nil
+}
+
+// PurgeAllWorkflows deletes all workflow data permanently.
+// Returns the number of workflows deleted.
+func (m *SQLiteStateManager) PurgeAllWorkflows(ctx context.Context) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	// Count workflows before deletion
+	var count int
+	err := m.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM workflows").Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("counting workflows: %w", err)
+	}
+
+	// Delete in order due to foreign keys
+	if _, err := m.db.ExecContext(ctx, "DELETE FROM checkpoints"); err != nil {
+		return 0, fmt.Errorf("deleting checkpoints: %w", err)
+	}
+	if _, err := m.db.ExecContext(ctx, "DELETE FROM tasks"); err != nil {
+		return 0, fmt.Errorf("deleting tasks: %w", err)
+	}
+	if _, err := m.db.ExecContext(ctx, "DELETE FROM workflows"); err != nil {
+		return 0, fmt.Errorf("deleting workflows: %w", err)
+	}
+	if _, err := m.db.ExecContext(ctx, "DELETE FROM active_workflow"); err != nil {
+		return 0, fmt.Errorf("deleting active workflow: %w", err)
+	}
+
+	return count, nil
+}
+
+// Verify that SQLiteStateManager implements core.StateManager.
+var _ core.StateManager = (*SQLiteStateManager)(nil)

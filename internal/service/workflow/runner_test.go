@@ -270,6 +270,22 @@ func (m *mockStateManager) LoadByID(_ context.Context, id core.WorkflowID) (*cor
 	return nil, nil
 }
 
+func (m *mockStateManager) DeactivateWorkflow(_ context.Context) error {
+	return nil
+}
+
+func (m *mockStateManager) ArchiveWorkflows(_ context.Context) (int, error) {
+	return 0, nil
+}
+
+func (m *mockStateManager) PurgeAllWorkflows(_ context.Context) (int, error) {
+	if m.state != nil {
+		m.state = nil
+		return 1, nil
+	}
+	return 0, nil
+}
+
 func TestRunner_SetDryRun(t *testing.T) {
 	runner := &Runner{
 		config: DefaultRunnerConfig(),

@@ -50,12 +50,53 @@ var agentColors = map[string]lipgloss.Color{
 	"gpt":     lipgloss.Color("#10b981"), // emerald
 }
 
+// Muted agent colors for subtle UI accents (bubble borders)
+var agentBorderColorsDark = map[string]lipgloss.Color{
+	"claude":  lipgloss.Color("#6b5a86"),
+	"gemini":  lipgloss.Color("#4f6f8f"),
+	"codex":   lipgloss.Color("#4f7f63"),
+	"copilot": lipgloss.Color("#4b7a80"),
+	"llama":   lipgloss.Color("#9b6b35"),
+	"mistral": lipgloss.Color("#9b6077"),
+	"gpt":     lipgloss.Color("#4f7f6d"),
+}
+
+var agentBorderColorsLight = map[string]lipgloss.Color{
+	"claude":  lipgloss.Color("#c4b2d6"),
+	"gemini":  lipgloss.Color("#b7c4d8"),
+	"codex":   lipgloss.Color("#b7d1c4"),
+	"copilot": lipgloss.Color("#b5ccd1"),
+	"llama":   lipgloss.Color("#d0b990"),
+	"mistral": lipgloss.Color("#d1b3c1"),
+	"gpt":     lipgloss.Color("#b7d1c8"),
+}
+
+var agentBorderColors = agentBorderColorsDark
+
 // GetAgentColor returns the color for an agent name
 func GetAgentColor(name string) lipgloss.Color {
 	if color, ok := agentColors[strings.ToLower(name)]; ok {
 		return color
 	}
 	return lipgloss.Color("#71717a") // default gray
+}
+
+// GetAgentBorderColor returns a muted color for agent bubble borders.
+func GetAgentBorderColor(name string) lipgloss.Color {
+	if color, ok := agentBorderColors[strings.ToLower(name)]; ok {
+		return color
+	}
+	return lipgloss.Color("#52525b") // muted gray
+}
+
+// ApplyDarkThemeAgentBorders sets muted border colors for dark theme.
+func ApplyDarkThemeAgentBorders() {
+	agentBorderColors = agentBorderColorsDark
+}
+
+// ApplyLightThemeAgentBorders sets muted border colors for light theme.
+func ApplyLightThemeAgentBorders() {
+	agentBorderColors = agentBorderColorsLight
 }
 
 // Compact bar styles

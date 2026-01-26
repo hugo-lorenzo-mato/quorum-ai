@@ -32,7 +32,7 @@ const (
 type PhaseRunnerDeps struct {
 	Config            *config.Config
 	Logger            *logging.Logger
-	StateManager      *state.JSONStateManager
+	StateManager      core.StateManager
 	StateAdapter      workflow.StateManager
 	Registry          *cli.Registry
 	ModeratorConfig   workflow.ModeratorConfig
@@ -78,14 +78,20 @@ func InitPhaseRunner(ctx context.Context, phase core.Phase, maxRetries int, dryR
 		statePath = ".quorum/state/state.json"
 	}
 
-	// Migrate state from legacy paths if needed
-	if migrated, err := state.MigrateState(statePath, logger); err != nil {
-		logger.Warn("state migration failed", "error", err)
-	} else if migrated {
-		logger.Info("migrated state from legacy path to", "path", statePath)
+	// Migrate state from legacy paths if needed (only for JSON backend)
+	backend := cfg.State.EffectiveBackend()
+	if backend == "json" {
+		if migrated, err := state.MigrateState(statePath, logger); err != nil {
+			logger.Warn("state migration failed", "error", err)
+		} else if migrated {
+			logger.Info("migrated state from legacy path to", "path", statePath)
+		}
 	}
 
-	stateManager := state.NewJSONStateManager(statePath)
+	stateManager, err := state.NewStateManager(backend, statePath)
+	if err != nil {
+		return nil, fmt.Errorf("creating state manager: %w", err)
+	}
 
 	// Create agent registry and configure from unified config
 	registry := cli.NewRegistry()
@@ -206,8 +212,8 @@ func InitPhaseRunner(ctx context.Context, phase core.Phase, maxRetries int, dryR
 	resumeAdapter := workflow.NewResumePointAdapter(checkpointManager)
 	dagAdapter := workflow.NewDAGAdapter(dagBuilder)
 
-	// Create state manager adapter
-	stateAdapter := &stateManagerAdapter{sm: stateManager}
+	// core.StateManager satisfies workflow.StateManager interface
+	stateAdapter := stateManager
 
 	return &PhaseRunnerDeps{
 		Config:            cfg,

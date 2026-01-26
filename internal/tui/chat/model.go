@@ -277,6 +277,9 @@ type WorkflowRunner interface {
 	SaveState(ctx context.Context, state *core.WorkflowState) error
 	ListWorkflows(ctx context.Context) ([]core.WorkflowSummary, error)
 	LoadWorkflow(ctx context.Context, workflowID string) (*core.WorkflowState, error)
+	DeactivateWorkflow(ctx context.Context) error
+	ArchiveWorkflows(ctx context.Context) (int, error)
+	PurgeAllWorkflows(ctx context.Context) (int, error)
 }
 
 // Model is the Bubble Tea model for the chat interface.
@@ -3089,6 +3092,86 @@ func (m Model) handleCommand(cmd *Command, args []string) (tea.Model, tea.Cmd) {
 		addSystem(sb.String())
 		m.updateViewport()
 		return m, nil // Important: return modified m with workflowState set
+
+	case "new":
+		if m.runner == nil {
+			addSystem("Workflow runner not configured")
+			m.updateViewport()
+			return m, nil
+		}
+		if m.workflowRunning {
+			addSystem("Workflow is running. Use /cancel first.")
+			m.updateViewport()
+			return m, nil
+		}
+
+		ctx := context.Background()
+
+		// Parse flags from args
+		archive := false
+		purge := false
+		for _, arg := range args {
+			switch arg {
+			case "--archive", "-a":
+				archive = true
+			case "--purge", "-p":
+				purge = true
+			}
+		}
+
+		// Handle purge (most destructive)
+		if purge {
+			deleted, err := m.runner.PurgeAllWorkflows(ctx)
+			if err != nil {
+				addSystem(fmt.Sprintf("Error purging workflows: %v", err))
+				m.updateViewport()
+				return m, nil
+			}
+			m.workflowState = nil
+			m.tasksPanel.SetState(nil)
+			m.updateQuorumPanel(nil)
+			addSystem(fmt.Sprintf("Purged %d workflow(s). All state deleted.\nUse '/analyze <prompt>' to start fresh.", deleted))
+			m.updateViewport()
+			return m, nil
+		}
+
+		// Handle archive
+		if archive {
+			archived, err := m.runner.ArchiveWorkflows(ctx)
+			if err != nil {
+				addSystem(fmt.Sprintf("Error archiving workflows: %v", err))
+				m.updateViewport()
+				return m, nil
+			}
+			if err := m.runner.DeactivateWorkflow(ctx); err != nil {
+				addSystem(fmt.Sprintf("Error deactivating workflow: %v", err))
+				m.updateViewport()
+				return m, nil
+			}
+			m.workflowState = nil
+			m.tasksPanel.SetState(nil)
+			m.updateQuorumPanel(nil)
+			msg := "Ready for new task."
+			if archived > 0 {
+				msg = fmt.Sprintf("Archived %d completed workflow(s). %s", archived, msg)
+			}
+			addSystem(msg + "\nUse '/analyze <prompt>' to start a new workflow.")
+			m.updateViewport()
+			return m, nil
+		}
+
+		// Default: just deactivate
+		if err := m.runner.DeactivateWorkflow(ctx); err != nil {
+			addSystem(fmt.Sprintf("Error deactivating workflow: %v", err))
+			m.updateViewport()
+			return m, nil
+		}
+		m.workflowState = nil
+		m.tasksPanel.SetState(nil)
+		m.updateQuorumPanel(nil)
+		addSystem("Workflow deactivated. Ready for new task.\nUse '/analyze <prompt>' to start a new workflow.\nPrevious workflows available via '/workflows'.")
+		m.updateViewport()
+		return m, nil
 
 	case "cancel":
 		if m.controlPlane != nil && m.workflowRunning {

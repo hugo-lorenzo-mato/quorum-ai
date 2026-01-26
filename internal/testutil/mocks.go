@@ -271,6 +271,37 @@ func (m *MockStateManager) SetActiveWorkflowID(ctx context.Context, id core.Work
 	return nil
 }
 
+// DeactivateWorkflow mocks deactivating the workflow.
+func (m *MockStateManager) DeactivateWorkflow(ctx context.Context) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	// Clear active state but keep the workflow data
+	return nil
+}
+
+// ArchiveWorkflows mocks archiving workflows.
+func (m *MockStateManager) ArchiveWorkflows(ctx context.Context) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.state != nil && (m.state.Status == core.WorkflowStatusCompleted || m.state.Status == core.WorkflowStatusFailed) {
+		m.state = nil
+		return 1, nil
+	}
+	return 0, nil
+}
+
+// PurgeAllWorkflows mocks purging all workflows.
+func (m *MockStateManager) PurgeAllWorkflows(ctx context.Context) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	count := 0
+	if m.state != nil {
+		count = 1
+	}
+	m.state = nil
+	return count, nil
+}
+
 // SetState sets the mock state.
 func (m *MockStateManager) SetState(state *core.WorkflowState) {
 	m.mu.Lock()

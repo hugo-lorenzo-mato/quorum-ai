@@ -223,6 +223,8 @@ agents:
 
 # State persistence
 state:
+  # Storage backend: "json" (default) or "sqlite"
+  backend: json
   path: .quorum/state/state.json
   backup_path: .quorum/state/state.json.bak
   lock_ttl: 1h

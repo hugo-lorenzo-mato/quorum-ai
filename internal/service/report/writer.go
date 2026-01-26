@@ -56,6 +56,27 @@ func NewWorkflowReportWriter(cfg Config, workflowID string) *WorkflowReportWrite
 	}
 }
 
+// ResumeWorkflowReportWriter creates a writer for resuming an existing workflow execution.
+// It reuses the original report directory path instead of creating a new one.
+func ResumeWorkflowReportWriter(cfg Config, workflowID, existingReportPath string) *WorkflowReportWriter {
+	// Extract just the execution directory name from the full path
+	// existingReportPath is like ".quorum/output/20260125-194123-wf-xxx"
+	executionDir := filepath.Base(existingReportPath)
+
+	return &WorkflowReportWriter{
+		config:       cfg,
+		executionDir: executionDir,
+		workflowID:   workflowID,
+		startTime:    time.Now(),
+		initialized:  true, // Already initialized since we're resuming
+	}
+}
+
+// ExecutionDir returns the execution directory name (for persisting in state)
+func (w *WorkflowReportWriter) ExecutionDir() string {
+	return w.executionDir
+}
+
 // Initialize creates the base directory structure (called lazily on first write)
 // Versioned directories (v1, v2, v3, etc.) are created on demand when writing files
 func (w *WorkflowReportWriter) Initialize() error {

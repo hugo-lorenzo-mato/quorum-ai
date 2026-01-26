@@ -105,6 +105,31 @@ func (m *mockStateManager) Restore(_ context.Context) (*core.WorkflowState, erro
 	return nil, nil
 }
 
+func (m *mockStateManager) DeactivateWorkflow(_ context.Context) error {
+	m.activeID = ""
+	return nil
+}
+
+func (m *mockStateManager) ArchiveWorkflows(_ context.Context) (int, error) {
+	count := 0
+	for id, wf := range m.workflows {
+		if wf.Status == core.WorkflowStatusCompleted || wf.Status == core.WorkflowStatusFailed {
+			if id != m.activeID {
+				delete(m.workflows, id)
+				count++
+			}
+		}
+	}
+	return count, nil
+}
+
+func (m *mockStateManager) PurgeAllWorkflows(_ context.Context) (int, error) {
+	count := len(m.workflows)
+	m.workflows = make(map[core.WorkflowID]*core.WorkflowState)
+	m.activeID = ""
+	return count, nil
+}
+
 func TestHealthEndpoint(t *testing.T) {
 	sm := newMockStateManager()
 	eb := events.New(100)

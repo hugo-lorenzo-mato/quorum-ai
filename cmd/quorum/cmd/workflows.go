@@ -56,11 +56,12 @@ func runWorkflows(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("loading config: %w", err)
 	}
 
-	// Create state manager
-	stateManager := state.NewJSONStateManager(
-		cfg.State.Path,
-		state.WithBackupPath(cfg.State.BackupPath),
-	)
+	// Create state manager using factory
+	stateManager, err := state.NewStateManager(cfg.State.EffectiveBackend(), cfg.State.Path)
+	if err != nil {
+		return fmt.Errorf("creating state manager: %w", err)
+	}
+	defer state.CloseStateManager(stateManager)
 
 	// List workflows
 	workflows, err := stateManager.ListWorkflows(ctx)

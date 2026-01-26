@@ -225,17 +225,20 @@ func (a *Analyzer) runWithModerator(ctx context.Context, wctx *Context) error {
 			}
 		}
 
-		// Check abort threshold
+		// Log warning if consensus is very low, but continue iterating
+		// Low consensus indicates divergence - we should keep refining rather than abort
 		if evalResult.Score < a.moderator.AbortThreshold() {
-			wctx.Logger.Error("consensus score below abort threshold",
+			wctx.Logger.Warn("consensus score is low, continuing refinement",
 				"score", evalResult.Score,
-				"abort_threshold", a.moderator.AbortThreshold(),
+				"warning_threshold", a.moderator.AbortThreshold(),
+				"round", round,
+				"max_rounds", a.moderator.MaxRounds(),
 			)
 			if wctx.Output != nil {
-				wctx.Output.Log("error", "analyzer", fmt.Sprintf("Human review required: consensus %.0f%% below abort threshold %.0f%%",
+				wctx.Output.Log("warn", "analyzer", fmt.Sprintf("Low consensus %.0f%% (below %.0f%%), continuing refinement to improve agreement",
 					evalResult.Score*100, a.moderator.AbortThreshold()*100))
 			}
-			return core.ErrHumanReviewRequired(evalResult.Score, a.moderator.AbortThreshold())
+			// Continue to next round instead of aborting
 		}
 
 		// Check for stagnation (score not improving) - only after first moderator eval (round > 2)
@@ -1159,9 +1162,20 @@ func (a *Analyzer) continueFromCheckpoint(ctx context.Context, wctx *Context, sa
 			break
 		}
 
-		// Check abort threshold
+		// Log warning if consensus is very low, but continue iterating
+		// Low consensus indicates divergence - we should keep refining rather than abort
 		if evalResult.Score < a.moderator.AbortThreshold() {
-			return core.ErrHumanReviewRequired(evalResult.Score, a.moderator.AbortThreshold())
+			wctx.Logger.Warn("consensus score is low (resumed), continuing refinement",
+				"score", evalResult.Score,
+				"warning_threshold", a.moderator.AbortThreshold(),
+				"round", round,
+				"max_rounds", a.moderator.MaxRounds(),
+			)
+			if wctx.Output != nil {
+				wctx.Output.Log("warn", "analyzer", fmt.Sprintf("Low consensus %.0f%% (below %.0f%%), continuing refinement to improve agreement",
+					evalResult.Score*100, a.moderator.AbortThreshold()*100))
+			}
+			// Continue to next round instead of aborting
 		}
 
 		// Check for stagnation

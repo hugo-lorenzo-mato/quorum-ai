@@ -607,5 +607,147 @@ func migrateStateFile(src, dst string, logger interface {
 	return nil
 }
 
+// DeactivateWorkflow clears the active workflow without deleting any data.
+func (m *JSONStateManager) DeactivateWorkflow(_ context.Context) error {
+	// Remove the active workflow file
+	if err := os.Remove(m.activePath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("removing active workflow file: %w", err)
+	}
+	return nil
+}
+
+// ArchiveWorkflows moves completed workflows to an archive location.
+// Returns the number of workflows archived.
+func (m *JSONStateManager) ArchiveWorkflows(ctx context.Context) (int, error) {
+	archiveDir := filepath.Join(m.baseDir, "archive")
+	if err := os.MkdirAll(archiveDir, 0o750); err != nil {
+		return 0, fmt.Errorf("creating archive directory: %w", err)
+	}
+
+	// Get active workflow ID to avoid archiving it
+	activeID, _ := m.GetActiveWorkflowID(ctx)
+
+	// Check if workflows directory exists
+	if _, err := os.Stat(m.workflowsDir); os.IsNotExist(err) {
+		return 0, nil
+	}
+
+	entries, err := os.ReadDir(m.workflowsDir)
+	if err != nil {
+		return 0, fmt.Errorf("reading workflows directory: %w", err)
+	}
+
+	archived := 0
+	for _, entry := range entries {
+		if entry.IsDir() || !isJSONFile(entry.Name()) || isBackupFile(entry.Name()) {
+			continue
+		}
+
+		workflowPath := filepath.Join(m.workflowsDir, entry.Name())
+		state, loadErr := m.loadFromPath(workflowPath)
+		if loadErr != nil {
+			continue // Skip corrupted files
+		}
+
+		// Skip active workflow
+		if state.WorkflowID == activeID {
+			continue
+		}
+
+		// Only archive completed or failed workflows
+		if state.Status != core.WorkflowStatusCompleted && state.Status != core.WorkflowStatusFailed {
+			continue
+		}
+
+		// Move to archive
+		archivePath := filepath.Join(archiveDir, entry.Name())
+		if err := os.Rename(workflowPath, archivePath); err != nil {
+			return archived, fmt.Errorf("moving workflow %s to archive: %w", state.WorkflowID, err)
+		}
+
+		// Also move backup if exists
+		backupPath := workflowPath + ".bak"
+		if _, err := os.Stat(backupPath); err == nil {
+			archiveBackupPath := archivePath + ".bak"
+			_ = os.Rename(backupPath, archiveBackupPath)
+		}
+
+		archived++
+	}
+
+	// Archive legacy state if completed
+	if _, err := os.Stat(m.legacyPath); err == nil {
+		state, loadErr := m.loadFromPath(m.legacyPath)
+		if loadErr == nil && (state.Status == core.WorkflowStatusCompleted || state.Status == core.WorkflowStatusFailed) {
+			legacyArchive := filepath.Join(archiveDir, filepath.Base(m.legacyPath))
+			if err := os.Rename(m.legacyPath, legacyArchive); err == nil {
+				archived++
+				// Also move legacy backup
+				if _, statErr := os.Stat(m.legacyBackupPath); statErr == nil {
+					_ = os.Rename(m.legacyBackupPath, legacyArchive+".bak")
+				}
+			}
+		}
+	}
+
+	return archived, nil
+}
+
+// PurgeAllWorkflows deletes all workflow data permanently.
+// Returns the number of workflows deleted.
+func (m *JSONStateManager) PurgeAllWorkflows(_ context.Context) (int, error) {
+	deleted := 0
+
+	// Remove active workflow file
+	if err := os.Remove(m.activePath); err != nil && !os.IsNotExist(err) {
+		return 0, fmt.Errorf("removing active workflow file: %w", err)
+	}
+
+	// Count and remove workflow files
+	if _, err := os.Stat(m.workflowsDir); err == nil {
+		entries, err := os.ReadDir(m.workflowsDir)
+		if err != nil {
+			return 0, fmt.Errorf("reading workflows directory: %w", err)
+		}
+
+		for _, entry := range entries {
+			if entry.IsDir() {
+				continue
+			}
+			if isJSONFile(entry.Name()) && !isBackupFile(entry.Name()) {
+				deleted++
+			}
+			// Remove all files (including backups)
+			filePath := filepath.Join(m.workflowsDir, entry.Name())
+			if err := os.Remove(filePath); err != nil && !os.IsNotExist(err) {
+				return deleted, fmt.Errorf("removing workflow file %s: %w", entry.Name(), err)
+			}
+		}
+	}
+
+	// Remove legacy state files
+	if _, err := os.Stat(m.legacyPath); err == nil {
+		if err := os.Remove(m.legacyPath); err == nil {
+			deleted++
+		}
+	}
+	if _, err := os.Stat(m.legacyBackupPath); err == nil {
+		_ = os.Remove(m.legacyBackupPath)
+	}
+
+	// Remove archive directory if exists
+	archiveDir := filepath.Join(m.baseDir, "archive")
+	if _, err := os.Stat(archiveDir); err == nil {
+		entries, _ := os.ReadDir(archiveDir)
+		for _, entry := range entries {
+			filePath := filepath.Join(archiveDir, entry.Name())
+			_ = os.Remove(filePath)
+		}
+		_ = os.Remove(archiveDir)
+	}
+
+	return deleted, nil
+}
+
 // Verify that JSONStateManager implements core.StateManager.
 var _ core.StateManager = (*JSONStateManager)(nil)

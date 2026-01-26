@@ -587,3 +587,175 @@ func TestSQLiteStateManager_ConfigAndMetrics(t *testing.T) {
 		t.Errorf("ConsensusScore = %f, want 0.95", loaded.Metrics.ConsensusScore)
 	}
 }
+
+func TestSQLiteStateManager_DeactivateWorkflow(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "state.db")
+
+	manager, err := NewSQLiteStateManager(dbPath)
+	if err != nil {
+		t.Fatalf("NewSQLiteStateManager() error = %v", err)
+	}
+	defer manager.Close()
+
+	ctx := context.Background()
+
+	// Save a workflow (this also activates it)
+	state := newTestStateSQLite()
+	if err := manager.Save(ctx, state); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	// Verify workflow is active
+	activeID, _ := manager.GetActiveWorkflowID(ctx)
+	if activeID != state.WorkflowID {
+		t.Errorf("Expected active workflow %s, got %s", state.WorkflowID, activeID)
+	}
+
+	// Deactivate
+	if err := manager.DeactivateWorkflow(ctx); err != nil {
+		t.Fatalf("DeactivateWorkflow() error = %v", err)
+	}
+
+	// Verify no active workflow
+	activeID, _ = manager.GetActiveWorkflowID(ctx)
+	if activeID != "" {
+		t.Errorf("Expected no active workflow, got %s", activeID)
+	}
+
+	// Workflow data should still exist
+	loaded, err := manager.LoadByID(ctx, state.WorkflowID)
+	if err != nil {
+		t.Fatalf("LoadByID() error = %v", err)
+	}
+	if loaded == nil {
+		t.Error("Workflow data should still exist after deactivation")
+	}
+}
+
+func TestSQLiteStateManager_ArchiveWorkflows(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "state.db")
+
+	manager, err := NewSQLiteStateManager(dbPath)
+	if err != nil {
+		t.Fatalf("NewSQLiteStateManager() error = %v", err)
+	}
+	defer manager.Close()
+
+	ctx := context.Background()
+
+	// Save a completed workflow
+	state := newTestStateSQLite()
+	state.Status = core.WorkflowStatusCompleted
+	if err := manager.Save(ctx, state); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	// Deactivate so it can be archived
+	if err := manager.DeactivateWorkflow(ctx); err != nil {
+		t.Fatalf("DeactivateWorkflow() error = %v", err)
+	}
+
+	// Archive
+	archived, err := manager.ArchiveWorkflows(ctx)
+	if err != nil {
+		t.Fatalf("ArchiveWorkflows() error = %v", err)
+	}
+	if archived != 1 {
+		t.Errorf("Expected 1 archived workflow, got %d", archived)
+	}
+
+	// Workflow should be deleted (in SQLite, archive means delete)
+	loaded, err := manager.LoadByID(ctx, state.WorkflowID)
+	if err != nil {
+		t.Fatalf("LoadByID() error = %v", err)
+	}
+	if loaded != nil {
+		t.Error("Workflow should have been deleted (archived)")
+	}
+}
+
+func TestSQLiteStateManager_ArchiveWorkflows_SkipsRunning(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "state.db")
+
+	manager, err := NewSQLiteStateManager(dbPath)
+	if err != nil {
+		t.Fatalf("NewSQLiteStateManager() error = %v", err)
+	}
+	defer manager.Close()
+
+	ctx := context.Background()
+
+	// Save a running workflow
+	state := newTestStateSQLite()
+	state.Status = core.WorkflowStatusRunning
+	if err := manager.Save(ctx, state); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	// Deactivate
+	if err := manager.DeactivateWorkflow(ctx); err != nil {
+		t.Fatalf("DeactivateWorkflow() error = %v", err)
+	}
+
+	// Archive - should not archive running workflows
+	archived, err := manager.ArchiveWorkflows(ctx)
+	if err != nil {
+		t.Fatalf("ArchiveWorkflows() error = %v", err)
+	}
+	if archived != 0 {
+		t.Errorf("Expected 0 archived workflows (running should be skipped), got %d", archived)
+	}
+}
+
+func TestSQLiteStateManager_PurgeAllWorkflows(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "state.db")
+
+	manager, err := NewSQLiteStateManager(dbPath)
+	if err != nil {
+		t.Fatalf("NewSQLiteStateManager() error = %v", err)
+	}
+	defer manager.Close()
+
+	ctx := context.Background()
+
+	// Save two workflows
+	state1 := newTestStateSQLite()
+	state1.WorkflowID = "wf-1"
+	if err := manager.Save(ctx, state1); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	state2 := newTestStateSQLite()
+	state2.WorkflowID = "wf-2"
+	if err := manager.Save(ctx, state2); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	// Purge all
+	deleted, err := manager.PurgeAllWorkflows(ctx)
+	if err != nil {
+		t.Fatalf("PurgeAllWorkflows() error = %v", err)
+	}
+	if deleted != 2 {
+		t.Errorf("Expected 2 deleted workflows, got %d", deleted)
+	}
+
+	// No active workflow
+	activeID, _ := manager.GetActiveWorkflowID(ctx)
+	if activeID != "" {
+		t.Errorf("Expected no active workflow, got %s", activeID)
+	}
+
+	// List should be empty
+	workflows, err := manager.ListWorkflows(ctx)
+	if err != nil {
+		t.Fatalf("ListWorkflows() error = %v", err)
+	}
+	if len(workflows) != 0 {
+		t.Errorf("Expected 0 workflows, got %d", len(workflows))
+	}
+}

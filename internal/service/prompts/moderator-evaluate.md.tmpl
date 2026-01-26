@@ -18,12 +18,16 @@ You are an **ultra-critical** arbiter evaluating semantic consensus among multip
 
 ## Analyses to Evaluate (Round {{.Round}})
 
+**IMPORTANT**: You must read each analysis file using your file reading tools. Do NOT skip any file.
+
 {{range .Analyses}}
 ### Analysis by {{.AgentName}}
-{{.Output}}
+**File to read**: `{{.FilePath}}`
 
 ---
 {{end}}
+
+**ACTION REQUIRED**: Before proceeding with evaluation, read ALL the analysis files listed above using your file reading tools. Each file contains the complete V{{.Round}} analysis from that agent.
 
 ## Context Management
 

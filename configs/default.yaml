@@ -174,7 +174,9 @@ agents:
 
 # State persistence configuration
 state:
-  # Path to state file (relative to project root)
+  # Storage backend: "json" (default, file-based) or "sqlite" (database)
+  backend: json
+  # Path to state file (for json: .json file, for sqlite: .db file)
   path: .quorum/state/state.json
   # Path to backup file
   backup_path: .quorum/state/state.json.bak

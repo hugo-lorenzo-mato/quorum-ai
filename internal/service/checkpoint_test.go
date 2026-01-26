@@ -69,6 +69,22 @@ func (m *mockStateManager) SetActiveWorkflowID(ctx context.Context, id core.Work
 	return nil
 }
 
+func (m *mockStateManager) DeactivateWorkflow(ctx context.Context) error {
+	return nil
+}
+
+func (m *mockStateManager) ArchiveWorkflows(ctx context.Context) (int, error) {
+	return 0, nil
+}
+
+func (m *mockStateManager) PurgeAllWorkflows(ctx context.Context) (int, error) {
+	if m.state != nil {
+		m.state = nil
+		return 1, nil
+	}
+	return 0, nil
+}
+
 func newTestWorkflowState() *core.WorkflowState {
 	return &core.WorkflowState{
 		Version:      1,

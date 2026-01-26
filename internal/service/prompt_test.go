@@ -309,8 +309,8 @@ func TestPromptRenderer_RenderModeratorEvaluate(t *testing.T) {
 		Round:     2,
 		NextRound: 3,
 		Analyses: []ModeratorAnalysisSummary{
-			{AgentName: "claude", Output: "Analysis from Claude"},
-			{AgentName: "gemini", Output: "Analysis from Gemini"},
+			{AgentName: "claude", FilePath: "/path/to/v2/claude-analysis.md"},
+			{AgentName: "gemini", FilePath: "/path/to/v2/gemini-analysis.md"},
 		},
 		BelowThreshold: true,
 	}

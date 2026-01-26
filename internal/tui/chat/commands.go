@@ -44,6 +44,7 @@ type CommandContext struct {
 	OnCancel  func() error
 	OnModel   func(model string) error
 	OnAgent   func(agent string) error
+	OnNew     func(archive, purge bool) error
 }
 
 // CommandRegistry manages slash commands.
@@ -123,6 +124,13 @@ func NewCommandRegistry() *CommandRegistry {
 		Aliases:     []string{"switch", "select"},
 		Description: "Load and activate a workflow",
 		Usage:       "/load [workflow-id]",
+	})
+
+	r.Register(&Command{
+		Name:        "new",
+		Aliases:     []string{"reset", "fresh"},
+		Description: "Reset workflow state and start fresh",
+		Usage:       "/new [--archive|--purge]",
 	})
 
 	r.Register(&Command{

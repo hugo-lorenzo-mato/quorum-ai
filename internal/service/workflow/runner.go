@@ -30,6 +30,9 @@ type StateManager interface {
 	LoadByID(ctx context.Context, id core.WorkflowID) (*core.WorkflowState, error)
 	AcquireLock(ctx context.Context) error
 	ReleaseLock(ctx context.Context) error
+	DeactivateWorkflow(ctx context.Context) error
+	ArchiveWorkflows(ctx context.Context) (int, error)
+	PurgeAllWorkflows(ctx context.Context) (int, error)
 }
 
 // ResumePointProvider determines where to resume a workflow.
@@ -1148,4 +1151,21 @@ func (r *Runner) finalizeMetrics(state *core.WorkflowState) {
 
 	// Note: ConsensusScore is set by analyzer during analyze phase
 	// See analyzer.go for where this is updated
+}
+
+// DeactivateWorkflow clears the active workflow without deleting any data.
+func (r *Runner) DeactivateWorkflow(ctx context.Context) error {
+	return r.state.DeactivateWorkflow(ctx)
+}
+
+// ArchiveWorkflows moves completed workflows to an archive location.
+// Returns the number of workflows archived.
+func (r *Runner) ArchiveWorkflows(ctx context.Context) (int, error) {
+	return r.state.ArchiveWorkflows(ctx)
+}
+
+// PurgeAllWorkflows deletes all workflow data permanently.
+// Returns the number of workflows deleted.
+func (r *Runner) PurgeAllWorkflows(ctx context.Context) (int, error) {
+	return r.state.PurgeAllWorkflows(ctx)
 }
