@@ -271,6 +271,7 @@ type WorkflowRunner interface {
 	Analyze(ctx context.Context, prompt string) error
 	Plan(ctx context.Context) error
 	Replan(ctx context.Context, additionalContext string) error
+	UsePlan(ctx context.Context) error
 	Resume(ctx context.Context) error
 	GetState(ctx context.Context) (*core.WorkflowState, error)
 	SaveState(ctx context.Context, state *core.WorkflowState) error
@@ -3207,6 +3208,36 @@ func (m Model) handleCommand(cmd *Command, args []string) (tea.Model, tea.Cmd) {
 		m.updateViewport()
 		return m, m.runReplanPhase(additionalContext)
 
+	case "useplan", "up", "useplans":
+		if m.runner == nil {
+			m.history.Add(NewSystemMessage("Workflow runner not configured"))
+			m.updateViewport()
+			return m, nil
+		}
+		if m.workflowRunning {
+			m.history.Add(NewSystemMessage("Workflow already running. Use /cancel first."))
+			m.updateViewport()
+			return m, nil
+		}
+
+		// Try to load active workflow state if not in memory
+		if m.workflowState == nil {
+			if state, err := m.runner.GetState(context.Background()); err == nil && state != nil {
+				m.workflowState = state
+			}
+		}
+
+		if m.workflowState == nil {
+			m.history.Add(NewSystemMessage("No active workflow found. Use '/analyze' first."))
+			m.updateViewport()
+			return m, nil
+		}
+
+		m.history.Add(NewUserMessage("/useplan"))
+		m.history.Add(NewSystemMessage("Loading existing task files from filesystem (skipping agent call)..."))
+		m.updateViewport()
+		return m, m.runUsePlanPhase()
+
 	case "run":
 		if m.runner == nil {
 			m.history.Add(NewSystemMessage("Workflow runner not configured"))
@@ -3857,6 +3888,23 @@ func (m Model) runReplanPhase(additionalContext string) tea.Cmd {
 		func() tea.Msg {
 			ctx := context.Background()
 			err := runner.Replan(ctx, additionalContext)
+			if err != nil {
+				return WorkflowErrorMsg{Error: err}
+			}
+			state, _ := runner.GetState(ctx)
+			return WorkflowCompletedMsg{State: state}
+		},
+	)
+}
+
+// runUsePlanPhase loads existing task files from filesystem without re-running the agent.
+func (m Model) runUsePlanPhase() tea.Cmd {
+	runner := m.runner
+	return tea.Batch(
+		func() tea.Msg { return WorkflowStartedMsg{Prompt: "(using existing task files)"} },
+		func() tea.Msg {
+			ctx := context.Background()
+			err := runner.UsePlan(ctx)
 			if err != nil {
 				return WorkflowErrorMsg{Error: err}
 			}

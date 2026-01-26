@@ -91,6 +91,13 @@ func NewCommandRegistry() *CommandRegistry {
 	})
 
 	r.Register(&Command{
+		Name:        "useplan",
+		Aliases:     []string{"up", "useplans"},
+		Description: "Use existing task files from filesystem (skip agent call)",
+		Usage:       "/useplan",
+	})
+
+	r.Register(&Command{
 		Name:        "run",
 		Aliases:     []string{"r"},
 		Description: "Run a complete workflow",

@@ -7,6 +7,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -411,8 +414,24 @@ func (r *Runner) initializeState(prompt string) *core.WorkflowState {
 
 // createContext creates a workflow context for phase runners.
 func (r *Runner) createContext(state *core.WorkflowState) *Context {
-	// Create report writer for this workflow execution
-	reportWriter := report.NewWorkflowReportWriter(r.config.Report, string(state.WorkflowID))
+	var reportWriter *report.WorkflowReportWriter
+
+	// Check if we're resuming with an existing report path
+	if state.ReportPath != "" {
+		// Resume: reuse the original report directory
+		if r.logger != nil {
+			r.logger.Debug("resuming with existing report path", "path", state.ReportPath)
+		}
+		reportWriter = report.ResumeWorkflowReportWriter(r.config.Report, string(state.WorkflowID), state.ReportPath)
+	} else {
+		// New workflow: create a new report directory
+		reportWriter = report.NewWorkflowReportWriter(r.config.Report, string(state.WorkflowID))
+		// Save the report path to state for future resumes
+		state.ReportPath = reportWriter.ExecutionPath()
+		if r.logger != nil {
+			r.logger.Debug("created new report path", "path", state.ReportPath)
+		}
+	}
 
 	return &Context{
 		State:        state,
@@ -890,6 +909,152 @@ func PrependToConsolidatedAnalysis(state *core.WorkflowState, context string) er
 		}
 	}
 	return fmt.Errorf("no consolidated analysis checkpoint found")
+}
+
+// UsePlan generates a manifest from existing task files in the filesystem
+// without re-running the planning agent. This is useful when task files
+// were generated but the manifest parsing failed.
+func (r *Runner) UsePlan(ctx context.Context) error {
+	// Apply timeout
+	ctx, cancel := context.WithTimeout(ctx, r.config.Timeout)
+	defer cancel()
+
+	// Acquire lock
+	if err := r.state.AcquireLock(ctx); err != nil {
+		return fmt.Errorf("acquiring lock: %w", err)
+	}
+	defer func() { _ = r.state.ReleaseLock(ctx) }()
+
+	// Load existing state
+	workflowState, err := r.state.Load(ctx)
+	if err != nil {
+		return fmt.Errorf("loading state: %w", err)
+	}
+
+	if workflowState == nil {
+		return core.ErrState("NO_STATE", "no workflow state found")
+	}
+
+	// Find the tasks directory
+	tasksDir, err := r.findTasksDirectory(workflowState.WorkflowID)
+	if err != nil {
+		return fmt.Errorf("finding tasks directory: %w", err)
+	}
+
+	r.logger.Info("using existing task files",
+		"workflow_id", workflowState.WorkflowID,
+		"tasks_dir", tasksDir,
+	)
+	if r.output != nil {
+		r.output.Log("info", "workflow", fmt.Sprintf("Using existing task files from: %s", tasksDir))
+	}
+
+	// Generate manifest from filesystem
+	manifest, err := generateManifestFromFilesystem(tasksDir)
+	if err != nil {
+		return fmt.Errorf("generating manifest from filesystem: %w", err)
+	}
+
+	r.logger.Info("manifest generated from filesystem",
+		"tasks_count", len(manifest.Tasks),
+		"levels_count", len(manifest.ExecutionLevels),
+	)
+	if r.output != nil {
+		r.output.Log("info", "workflow", fmt.Sprintf("Found %d task files, %d execution levels",
+			len(manifest.Tasks), len(manifest.ExecutionLevels)))
+	}
+
+	// Clear existing plan data
+	r.clearPlanPhaseData(workflowState)
+
+	// Create tasks from manifest and add to state
+	for _, item := range manifest.Tasks {
+		cli := item.CLI
+		if cli == "" {
+			cli = r.config.DefaultAgent
+		}
+
+		taskID := core.TaskID(item.ID)
+		workflowState.Tasks[taskID] = &core.TaskState{
+			ID:           taskID,
+			Phase:        core.PhaseExecute,
+			Name:         item.Name,
+			Status:       core.TaskStatusPending,
+			CLI:          cli,
+			Dependencies: make([]core.TaskID, 0, len(item.Dependencies)),
+		}
+
+		for _, dep := range item.Dependencies {
+			workflowState.Tasks[taskID].Dependencies = append(
+				workflowState.Tasks[taskID].Dependencies,
+				core.TaskID(dep),
+			)
+		}
+
+		workflowState.TaskOrder = append(workflowState.TaskOrder, taskID)
+	}
+
+	// Mark as completed (plan phase done, ready for execute)
+	workflowState.Status = core.WorkflowStatusCompleted
+	workflowState.CurrentPhase = core.PhaseExecute
+	workflowState.UpdatedAt = time.Now()
+
+	// Notify output
+	if r.output != nil {
+		r.output.WorkflowStateUpdated(workflowState)
+		r.output.Log("success", "workflow", fmt.Sprintf("Plan loaded: %d tasks ready for execution",
+			len(workflowState.Tasks)))
+	}
+
+	r.logger.Info("useplan completed",
+		"workflow_id", workflowState.WorkflowID,
+		"task_count", len(workflowState.Tasks),
+	)
+
+	return r.state.Save(ctx, workflowState)
+}
+
+// findTasksDirectory searches for the tasks directory for a given workflow.
+// It looks in .quorum/output/ for directories matching the workflow ID pattern.
+func (r *Runner) findTasksDirectory(workflowID core.WorkflowID) (string, error) {
+	outputDir := ".quorum/output"
+
+	// Make absolute
+	cwd, _ := os.Getwd()
+	outputDir = filepath.Join(cwd, outputDir)
+
+	// List directories in output
+	entries, err := os.ReadDir(outputDir)
+	if err != nil {
+		return "", fmt.Errorf("reading output directory: %w", err)
+	}
+
+	// Find directories that contain the workflow ID
+	var candidates []string
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		if strings.Contains(entry.Name(), string(workflowID)) {
+			tasksDir := filepath.Join(outputDir, entry.Name(), "plan-phase", "tasks")
+			if _, err := os.Stat(tasksDir); err == nil {
+				candidates = append(candidates, tasksDir)
+			}
+		}
+	}
+
+	if len(candidates) == 0 {
+		// Try fallback: .quorum/tasks
+		fallback := filepath.Join(cwd, ".quorum", "tasks")
+		if _, err := os.Stat(fallback); err == nil {
+			return fallback, nil
+		}
+		return "", fmt.Errorf("no tasks directory found for workflow %s", workflowID)
+	}
+
+	// Sort by name (which includes timestamp) and return the most recent
+	sort.Strings(candidates)
+	return candidates[len(candidates)-1], nil
 }
 
 // GetState returns the current workflow state.
