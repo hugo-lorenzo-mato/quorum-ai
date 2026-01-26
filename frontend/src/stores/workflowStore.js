@@ -79,6 +79,26 @@ const useWorkflowStore = create((set, get) => ({
     }
   },
 
+  // Workflow control actions - these are stubs until backend support is added
+  // Workflow execution is currently done via CLI: quorum run, quorum analyze, etc.
+  startWorkflow: async (id) => {
+    console.warn('startWorkflow not yet implemented - use CLI: quorum run --workflow', id);
+    set({ error: 'Workflow execution via web UI is not yet implemented. Use CLI: quorum run --workflow ' + id });
+    return null;
+  },
+
+  pauseWorkflow: async (id) => {
+    console.warn('pauseWorkflow not yet implemented', id);
+    set({ error: 'Pause workflow is not yet implemented.' });
+    return null;
+  },
+
+  stopWorkflow: async (id) => {
+    console.warn('stopWorkflow not yet implemented', id);
+    set({ error: 'Stop workflow is not yet implemented.' });
+    return null;
+  },
+
   selectWorkflow: (id) => {
     set({ selectedWorkflowId: id });
   },

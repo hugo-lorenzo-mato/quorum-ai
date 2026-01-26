@@ -9,7 +9,12 @@ import (
 	"syscall"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/adapters/cli"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/adapters/state"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/config"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/events"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/logging"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/web"
@@ -60,18 +65,75 @@ func runServe(_ *cobra.Command, _ []string) error {
 		Output: os.Stdout,
 	})
 
+	// Load quorum configuration
+	loader := config.NewLoaderWithViper(viper.GetViper())
+	if cfgFile != "" {
+		loader.WithConfigFile(cfgFile)
+	}
+	quorumCfg, err := loader.Load()
+	if err != nil {
+		logger.Warn("failed to load quorum config, agents will not be available", slog.String("error", err.Error()))
+	}
+
+	// Create agent registry
+	var registry *cli.Registry
+	if quorumCfg != nil {
+		registry = cli.NewRegistry()
+		if err := configureAgentsFromConfig(registry, quorumCfg, loader); err != nil {
+			logger.Warn("failed to configure agents", slog.String("error", err.Error()))
+			registry = nil
+		} else {
+			logger.Info("agents configured", slog.Any("available", registry.List()))
+		}
+	}
+
+	// Create state manager for workflow persistence
+	var stateManager core.StateManager
+	if quorumCfg != nil {
+		statePath := quorumCfg.State.Path
+		if statePath == "" {
+			statePath = ".quorum/state/state.json"
+		}
+		backend := quorumCfg.State.EffectiveBackend()
+		sm, err := state.NewStateManager(backend, statePath)
+		if err != nil {
+			logger.Warn("failed to create state manager", slog.String("error", err.Error()))
+		} else {
+			stateManager = sm
+			logger.Info("state manager initialized", slog.String("backend", backend), slog.String("path", statePath))
+		}
+	}
+
 	// Create server configuration
 	cfg := web.DefaultConfig()
 	cfg.Host = serveHost
 	cfg.Port = servePort
 	cfg.EnableCORS = !serveNoCORS
 
+	// Ensure state manager is closed on exit
+	if stateManager != nil {
+		defer func() {
+			if closeErr := state.CloseStateManager(stateManager); closeErr != nil {
+				logger.Warn("failed to close state manager", slog.String("error", closeErr.Error()))
+			}
+		}()
+	}
+
 	// Create event bus for SSE streaming
 	eventBus := events.New(100)
 	defer eventBus.Close()
 
-	// Create and start server with event bus
-	server := web.New(cfg, logger.Logger, web.WithEventBus(eventBus))
+	// Create server options
+	serverOpts := []web.ServerOption{web.WithEventBus(eventBus)}
+	if registry != nil {
+		serverOpts = append(serverOpts, web.WithAgentRegistry(registry))
+	}
+	if stateManager != nil {
+		serverOpts = append(serverOpts, web.WithStateManager(stateManager))
+	}
+
+	// Create and start server with event bus and agent registry
+	server := web.New(cfg, logger.Logger, serverOpts...)
 
 	if err := server.Start(); err != nil {
 		return fmt.Errorf("starting server: %w", err)

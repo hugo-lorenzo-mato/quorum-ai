@@ -93,7 +93,7 @@ function TaskItem({ task }) {
 }
 
 function WorkflowDetail({ workflow, tasks, onBack }) {
-  const { startWorkflow, pauseWorkflow, stopWorkflow } = useWorkflowStore();
+  const { startWorkflow, pauseWorkflow, stopWorkflow, error, clearError } = useWorkflowStore();
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -139,6 +139,16 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
           )}
         </div>
       </div>
+
+      {/* Error Banner */}
+      {error && (
+        <div className="p-4 rounded-lg bg-warning/10 border border-warning/20 flex items-start justify-between">
+          <p className="text-sm text-warning">{error}</p>
+          <button onClick={clearError} className="text-warning hover:text-warning/80 text-sm">
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {/* Info Card */}
       <div className="p-6 rounded-xl border border-border bg-card">
@@ -243,21 +253,32 @@ export default function Workflows() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { workflows, loading, fetchWorkflows, createWorkflow } = useWorkflowStore();
-  const { tasks, fetchTasks } = useTaskStore();
+  const { getTasksForWorkflow, setTasks } = useTaskStore();
   const [showNewForm, setShowNewForm] = useState(false);
 
   useEffect(() => {
     fetchWorkflows();
   }, [fetchWorkflows]);
 
+  // Fetch tasks for the selected workflow
+  const fetchTasks = async (workflowId) => {
+    try {
+      const { workflowApi } = await import('../lib/api');
+      const taskList = await workflowApi.getTasks(workflowId);
+      setTasks(workflowId, taskList);
+    } catch (error) {
+      console.error('Failed to fetch tasks:', error);
+    }
+  };
+
   useEffect(() => {
     if (id && id !== 'new') {
       fetchTasks(id);
     }
-  }, [id, fetchTasks]);
+  }, [id]);
 
   const selectedWorkflow = workflows.find(w => w.id === id);
-  const workflowTasks = id ? tasks.filter(t => t.workflow_id === id) : [];
+  const workflowTasks = id ? getTasksForWorkflow(id) : [];
 
   const handleCreate = async (prompt) => {
     const workflow = await createWorkflow(prompt);

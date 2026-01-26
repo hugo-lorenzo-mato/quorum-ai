@@ -29,11 +29,16 @@ var migrationV2 string
 type SQLiteStateManager struct {
 	dbPath     string
 	backupPath string
-	db         *sql.DB
+	db         *sql.DB // Write connection
+	readDB     *sql.DB // Read-only connection for non-blocking reads
 	mu         sync.RWMutex
 	lockHeld   bool
 	lockPID    int
 	activeTx   *sql.Tx // Transaction created by AcquireLock, reused by Save
+
+	// Retry configuration
+	maxRetries    int
+	baseRetryWait time.Duration
 }
 
 // SQLiteStateManagerOption configures the manager.
@@ -42,8 +47,10 @@ type SQLiteStateManagerOption func(*SQLiteStateManager)
 // NewSQLiteStateManager creates a new SQLite state manager.
 func NewSQLiteStateManager(dbPath string, opts ...SQLiteStateManagerOption) (*SQLiteStateManager, error) {
 	m := &SQLiteStateManager{
-		dbPath:     dbPath,
-		backupPath: dbPath + ".bak",
+		dbPath:        dbPath,
+		backupPath:    dbPath + ".bak",
+		maxRetries:    5,
+		baseRetryWait: 100 * time.Millisecond,
 	}
 	for _, opt := range opts {
 		opt(m)
@@ -55,18 +62,37 @@ func NewSQLiteStateManager(dbPath string, opts ...SQLiteStateManagerOption) (*SQ
 		return nil, fmt.Errorf("creating state directory: %w", err)
 	}
 
-	// Open database with WAL mode for better concurrency
-	db, err := sql.Open("sqlite", dbPath+"?_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)")
+	// Open write connection with WAL mode for better concurrency
+	// busy_timeout=5000 means wait up to 5 seconds for locks before returning SQLITE_BUSY
+	db, err := sql.Open("sqlite", dbPath+"?_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)")
 	if err != nil {
-		return nil, fmt.Errorf("opening database: %w", err)
+		return nil, fmt.Errorf("opening write database: %w", err)
 	}
+
+	// Configure write connection pool - SQLite only supports one writer at a time
+	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1)
+	db.SetConnMaxLifetime(0) // Don't close idle connections
 	m.db = db
 
-	// Run migrations
+	// Open read-only connection for non-blocking reads
+	// mode=ro ensures this connection cannot write, avoiding lock contention
+	readDB, err := sql.Open("sqlite", dbPath+"?_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)&mode=ro&_pragma=busy_timeout(1000)")
+	if err != nil {
+		db.Close()
+		return nil, fmt.Errorf("opening read database: %w", err)
+	}
+
+	// Configure read connection pool - can have multiple readers
+	readDB.SetMaxOpenConns(10)
+	readDB.SetMaxIdleConns(5)
+	readDB.SetConnMaxLifetime(5 * time.Minute)
+	m.readDB = readDB
+
+	// Run migrations (uses write connection)
 	if err := m.migrate(); err != nil {
-		if closeErr := db.Close(); closeErr != nil {
-			return nil, fmt.Errorf("running migrations: %w (close error: %v)", err, closeErr)
-		}
+		db.Close()
+		readDB.Close()
 		return nil, fmt.Errorf("running migrations: %w", err)
 	}
 
@@ -80,12 +106,61 @@ func WithSQLiteBackupPath(path string) SQLiteStateManagerOption {
 	}
 }
 
-// Close closes the database connection.
+// Close closes both database connections.
 func (m *SQLiteStateManager) Close() error {
+	var errs []error
+	if m.readDB != nil {
+		if err := m.readDB.Close(); err != nil {
+			errs = append(errs, fmt.Errorf("closing read connection: %w", err))
+		}
+	}
 	if m.db != nil {
-		return m.db.Close()
+		if err := m.db.Close(); err != nil {
+			errs = append(errs, fmt.Errorf("closing write connection: %w", err))
+		}
+	}
+	if len(errs) > 0 {
+		return errs[0] // Return first error
 	}
 	return nil
+}
+
+// retryWrite executes a write operation with exponential backoff retry.
+// It specifically handles SQLITE_BUSY errors by retrying.
+func (m *SQLiteStateManager) retryWrite(ctx context.Context, operation string, fn func() error) error {
+	var lastErr error
+	for attempt := 0; attempt <= m.maxRetries; attempt++ {
+		if err := fn(); err != nil {
+			// Check if it's a busy/locked error
+			if isSQLiteBusy(err) {
+				lastErr = err
+				if attempt < m.maxRetries {
+					// Exponential backoff: 100ms, 200ms, 400ms, 800ms, 1600ms
+					wait := m.baseRetryWait * time.Duration(1<<attempt)
+					select {
+					case <-ctx.Done():
+						return fmt.Errorf("%s: %w (last error: %v)", operation, ctx.Err(), lastErr)
+					case <-time.After(wait):
+						continue
+					}
+				}
+			}
+			return err
+		}
+		return nil
+	}
+	return fmt.Errorf("%s: max retries exceeded: %w", operation, lastErr)
+}
+
+// isSQLiteBusy checks if an error is a SQLite busy/locked error.
+func isSQLiteBusy(err error) bool {
+	if err == nil {
+		return false
+	}
+	errStr := err.Error()
+	return strings.Contains(errStr, "database is locked") ||
+		strings.Contains(errStr, "SQLITE_BUSY") ||
+		strings.Contains(errStr, "SQLITE_LOCKED")
 }
 
 // migrate runs pending migrations.
@@ -316,9 +391,9 @@ func (m *SQLiteStateManager) Load(ctx context.Context) (*core.WorkflowState, err
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	// Get active workflow ID
+	// Get active workflow ID using read connection
 	var activeID string
-	err := m.db.QueryRowContext(ctx, "SELECT workflow_id FROM active_workflow WHERE id = 1").Scan(&activeID)
+	err := m.readDB.QueryRowContext(ctx, "SELECT workflow_id FROM active_workflow WHERE id = 1").Scan(&activeID)
 	if err == sql.ErrNoRows {
 		return nil, nil // No active workflow
 	}
@@ -338,14 +413,14 @@ func (m *SQLiteStateManager) LoadByID(ctx context.Context, id core.WorkflowID) (
 }
 
 func (m *SQLiteStateManager) loadWorkflowByID(ctx context.Context, id core.WorkflowID) (*core.WorkflowState, error) {
-	// Load workflow
+	// Load workflow using read connection
 	var state core.WorkflowState
 	var taskOrderJSON, configJSON, metricsJSON sql.NullString
 	var optimizedPrompt sql.NullString
 	var checksum sql.NullString
 	var reportPath sql.NullString
 
-	err := m.db.QueryRowContext(ctx, `
+	err := m.readDB.QueryRowContext(ctx, `
 		SELECT id, version, status, current_phase, prompt, optimized_prompt,
 		       task_order, config, metrics, checksum, created_at, updated_at, report_path
 		FROM workflows WHERE id = ?
@@ -390,9 +465,9 @@ func (m *SQLiteStateManager) loadWorkflowByID(ctx context.Context, id core.Workf
 		}
 	}
 
-	// Load tasks
+	// Load tasks using read connection
 	state.Tasks = make(map[core.TaskID]*core.TaskState)
-	rows, err := m.db.QueryContext(ctx, `
+	rows, err := m.readDB.QueryContext(ctx, `
 		SELECT id, phase, name, status, cli, model, dependencies,
 		       tokens_in, tokens_out, cost_usd, retries, error,
 		       worktree_path, started_at, completed_at, output,
@@ -416,8 +491,8 @@ func (m *SQLiteStateManager) loadWorkflowByID(ctx context.Context, id core.Workf
 		return nil, fmt.Errorf("iterating tasks: %w", err)
 	}
 
-	// Load checkpoints
-	cpRows, err := m.db.QueryContext(ctx, `
+	// Load checkpoints using read connection
+	cpRows, err := m.readDB.QueryContext(ctx, `
 		SELECT id, type, phase, task_id, timestamp, message, data
 		FROM checkpoints WHERE workflow_id = ?
 	`, id)
@@ -547,11 +622,11 @@ func (m *SQLiteStateManager) ListWorkflows(ctx context.Context) ([]core.Workflow
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	// Get active workflow ID
+	// Get active workflow ID using read connection
 	var activeID sql.NullString
-	_ = m.db.QueryRowContext(ctx, "SELECT workflow_id FROM active_workflow WHERE id = 1").Scan(&activeID)
+	_ = m.readDB.QueryRowContext(ctx, "SELECT workflow_id FROM active_workflow WHERE id = 1").Scan(&activeID)
 
-	rows, err := m.db.QueryContext(ctx, `
+	rows, err := m.readDB.QueryContext(ctx, `
 		SELECT id, status, current_phase, prompt, created_at, updated_at
 		FROM workflows
 		ORDER BY updated_at DESC
@@ -593,8 +668,9 @@ func (m *SQLiteStateManager) GetActiveWorkflowID(ctx context.Context) (core.Work
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
+	// Use read connection for non-blocking reads
 	var id string
-	err := m.db.QueryRowContext(ctx, "SELECT workflow_id FROM active_workflow WHERE id = 1").Scan(&id)
+	err := m.readDB.QueryRowContext(ctx, "SELECT workflow_id FROM active_workflow WHERE id = 1").Scan(&id)
 	if err == sql.ErrNoRows {
 		return "", nil
 	}
@@ -609,17 +685,16 @@ func (m *SQLiteStateManager) SetActiveWorkflowID(ctx context.Context, id core.Wo
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	_, err := m.db.ExecContext(ctx, `
-		INSERT INTO active_workflow (id, workflow_id, updated_at)
-		VALUES (1, ?, ?)
-		ON CONFLICT(id) DO UPDATE SET
-			workflow_id = excluded.workflow_id,
-			updated_at = excluded.updated_at
-	`, id, time.Now())
-	if err != nil {
-		return fmt.Errorf("setting active workflow ID: %w", err)
-	}
-	return nil
+	return m.retryWrite(ctx, "setting active workflow ID", func() error {
+		_, err := m.db.ExecContext(ctx, `
+			INSERT INTO active_workflow (id, workflow_id, updated_at)
+			VALUES (1, ?, ?)
+			ON CONFLICT(id) DO UPDATE SET
+				workflow_id = excluded.workflow_id,
+				updated_at = excluded.updated_at
+		`, id, time.Now())
+		return err
+	})
 }
 
 // AcquireLock obtains an exclusive lock on the state.
@@ -746,7 +821,12 @@ func (m *SQLiteStateManager) Restore(ctx context.Context) (*core.WorkflowState, 
 		return nil, fmt.Errorf("no backup file found at %s", m.backupPath)
 	}
 
-	// Close current database
+	// Close current database connections
+	if m.readDB != nil {
+		if err := m.readDB.Close(); err != nil {
+			return nil, fmt.Errorf("closing read database: %w", err)
+		}
+	}
 	if err := m.db.Close(); err != nil {
 		return nil, fmt.Errorf("closing database: %w", err)
 	}
@@ -756,12 +836,26 @@ func (m *SQLiteStateManager) Restore(ctx context.Context) (*core.WorkflowState, 
 		return nil, fmt.Errorf("restoring backup: %w", err)
 	}
 
-	// Reopen database
-	db, err := sql.Open("sqlite", m.dbPath+"?_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)")
+	// Reopen write connection with same settings
+	db, err := sql.Open("sqlite", m.dbPath+"?_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)")
 	if err != nil {
-		return nil, fmt.Errorf("reopening database: %w", err)
+		return nil, fmt.Errorf("reopening write database: %w", err)
 	}
+	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1)
+	db.SetConnMaxLifetime(0)
 	m.db = db
+
+	// Reopen read connection
+	readDB, err := sql.Open("sqlite", m.dbPath+"?_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)&mode=ro&_pragma=busy_timeout(1000)")
+	if err != nil {
+		db.Close()
+		return nil, fmt.Errorf("reopening read database: %w", err)
+	}
+	readDB.SetMaxOpenConns(10)
+	readDB.SetMaxIdleConns(5)
+	readDB.SetConnMaxLifetime(5 * time.Minute)
+	m.readDB = readDB
 
 	// Load active workflow
 	m.mu.Unlock() // Temporarily unlock for Load
@@ -790,11 +884,10 @@ func (m *SQLiteStateManager) DeactivateWorkflow(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	_, err := m.db.ExecContext(ctx, "DELETE FROM active_workflow WHERE id = 1")
-	if err != nil {
-		return fmt.Errorf("deactivating workflow: %w", err)
-	}
-	return nil
+	return m.retryWrite(ctx, "deactivating workflow", func() error {
+		_, err := m.db.ExecContext(ctx, "DELETE FROM active_workflow WHERE id = 1")
+		return err
+	})
 }
 
 // ArchiveWorkflows moves completed workflows to an archived state.

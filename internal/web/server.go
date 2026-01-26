@@ -12,20 +12,21 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/rs/cors"
 
-	webadapters "github.com/hugo-lorenzo-mato/quorum-ai/internal/adapters/web"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/api"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/events"
-	"github.com/hugo-lorenzo-mato/quorum-ai/internal/web/sse"
 )
 
 // Server represents the HTTP server for the Quorum web interface.
 type Server struct {
-	router      chi.Router
-	httpServer  *http.Server
-	config      Config
-	logger      *slog.Logger
-	eventBus    *events.EventBus
-	sseHandler  *sse.Handler
-	chatHandler *webadapters.ChatHandler
+	router        chi.Router
+	httpServer    *http.Server
+	config        Config
+	logger        *slog.Logger
+	eventBus      *events.EventBus
+	agentRegistry core.AgentRegistry
+	stateManager  core.StateManager
+	apiServer     *api.Server
 }
 
 // Config holds the server configuration.
@@ -66,6 +67,20 @@ func WithEventBus(bus *events.EventBus) ServerOption {
 	}
 }
 
+// WithAgentRegistry sets the agent registry for chat and workflow execution.
+func WithAgentRegistry(registry core.AgentRegistry) ServerOption {
+	return func(s *Server) {
+		s.agentRegistry = registry
+	}
+}
+
+// WithStateManager sets the state manager for workflow persistence.
+func WithStateManager(stateManager core.StateManager) ServerOption {
+	return func(s *Server) {
+		s.stateManager = stateManager
+	}
+}
+
 // New creates a new Server instance with the given configuration.
 func New(cfg Config, logger *slog.Logger, opts ...ServerOption) *Server {
 	if logger == nil {
@@ -80,6 +95,20 @@ func New(cfg Config, logger *slog.Logger, opts ...ServerOption) *Server {
 	// Apply options
 	for _, opt := range opts {
 		opt(s)
+	}
+
+	// Create API server if we have an event bus
+	if s.eventBus != nil {
+		s.apiServer = api.NewServer(s.stateManager, s.eventBus, api.WithLogger(logger), api.WithAgentRegistry(s.agentRegistry))
+		if s.agentRegistry != nil && s.stateManager != nil {
+			s.logger.Info("API server initialized with event bus, agent registry, and state manager")
+		} else if s.agentRegistry != nil {
+			s.logger.Info("API server initialized with event bus and agent registry")
+		} else if s.stateManager != nil {
+			s.logger.Info("API server initialized with event bus and state manager")
+		} else {
+			s.logger.Info("API server initialized with event bus only")
+		}
 	}
 
 	s.router = s.setupRouter()
@@ -120,23 +149,17 @@ func (s *Server) setupRouter() chi.Router {
 	// Health check endpoint
 	r.Get("/health", s.handleHealth)
 
-	// API routes
-	r.Route("/api/v1", func(r chi.Router) {
-		r.Get("/", s.handleAPIRoot)
-
-		// SSE routes for real-time events
-		if s.eventBus != nil {
-			r.Route("/sse", func(r chi.Router) {
-				s.sseHandler = sse.RegisterRoutes(r, s.eventBus)
-				s.logger.Info("SSE endpoint registered at /api/v1/sse/events")
-			})
-		}
-	})
-
-	// Chat routes (nil AgentRegistry means chat features are limited)
-	s.chatHandler = webadapters.NewChatHandler(nil, s.eventBus)
-	s.chatHandler.RegisterRoutes(r)
-	s.logger.Info("Chat routes registered at /chat/*")
+	// Mount API server if available (provides /api/v1/*)
+	if s.apiServer != nil {
+		// The API server handler includes all /api/v1/* routes
+		r.Mount("/", s.apiServer.Handler())
+		s.logger.Info("API routes mounted (workflows, files, config, events)")
+	} else {
+		// Fallback: basic API root endpoint only
+		r.Route("/api/v1", func(r chi.Router) {
+			r.Get("/", s.handleAPIRoot)
+		})
+	}
 
 	// Serve embedded frontend static files
 	if s.config.ServeStatic {
