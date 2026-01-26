@@ -92,7 +92,9 @@ agents:
     path: claude
     model: claude-opus-4-5-20251101
     phases:
+      refine: true
       analyze: true
+      moderate: true
       synthesize: true
       plan: true
       execute: true
@@ -120,6 +122,8 @@ agents:
     phases:
       refine: true
       analyze: true
+      moderate: true
+      synthesize: true
       plan: true
       execute: true
 
