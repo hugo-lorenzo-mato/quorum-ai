@@ -175,14 +175,17 @@ state:
 
 # Git configuration
 git:
-  # Directory for git worktrees
+  # Directory for git worktrees (isolated directories for parallel task execution)
   worktree_dir: .worktrees
-  # Auto-cleanup completed worktrees
+  # Auto-cleanup worktrees after task completion
   auto_clean: true
-  # When to create worktrees: always, parallel, disabled
+  # When to create worktrees: always | parallel | disabled
+  #   always:   create worktree for every task
+  #   parallel: only when multiple tasks can run concurrently (recommended)
+  #   disabled: never create worktrees, all tasks share working directory
   worktree_mode: parallel
   # Task finalization: commit, push, and PR creation
-  # Each task runs in its own branch. After completion:
+  # Each task runs in its own branch (quorum/<task-id>). After completion:
   # Commit changes after each task completes
   auto_commit: true
   # Push the task branch to remote after commit
