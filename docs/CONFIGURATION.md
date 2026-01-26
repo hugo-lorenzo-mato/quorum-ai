@@ -531,8 +531,8 @@ state:
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `backend` | string | `json` | Storage backend: `json` (file-based) or `sqlite` (database) |
-| `path` | string | `.quorum/state/state.json` | Base state directory (workflows stored in `workflows/` subdirectory) |
-| `backup_path` | string | `.quorum/state/state.json.bak` | Legacy backup path (per-workflow backups in `workflows/<id>.json.bak`) |
+| `path` | string | `.quorum/state/state.json` | Path to state file (relative or absolute) |
+| `backup_path` | string | `.quorum/state/state.json.bak` | Path to backup file |
 | `lock_ttl` | duration | `1h` | Lock file TTL before considered stale |
 
 **Backend options:**
@@ -542,7 +542,44 @@ state:
 | `json` | File-based storage, human-readable | Default, simple setups, debugging |
 | `sqlite` | Database storage with WAL mode | Large workflows, concurrent access, better performance |
 
-> **Note:** When using SQLite, the path extension is automatically changed to `.db`. For example, `.quorum/state/state.json` becomes `.quorum/state/state.db`.
+#### Project-Local vs Global State
+
+By default, state is stored **locally within each project** using a relative path (`.quorum/state/...`). This means:
+
+- Each project has its own independent workflow history
+- Running `quorum` in `/project-a/` creates state in `/project-a/.quorum/state/`
+- Running `quorum` in `/project-b/` creates separate state in `/project-b/.quorum/state/`
+- Workflows reference files relative to their project, so project-local storage is the recommended approach
+
+**For global state** (shared across all projects), configure an absolute path:
+
+```yaml
+state:
+  backend: sqlite
+  path: ~/.quorum/global/state.db
+  backup_path: ~/.quorum/global/state.db.bak
+```
+
+> **Warning:** Global state is not recommended because workflows contain project-specific paths (worktrees, file references) that won't resolve correctly across different projects.
+
+#### Automatic Path Extension Handling
+
+When switching backends, you don't need to change the `path` configuration. The extension is **automatically adjusted**:
+
+| Configured Path | Backend | Actual Path Used |
+|-----------------|---------|------------------|
+| `.quorum/state/state.json` | `json` | `.quorum/state/state.json` |
+| `.quorum/state/state.json` | `sqlite` | `.quorum/state/state.db` |
+| `.quorum/state/state.db` | `sqlite` | `.quorum/state/state.db` |
+| `.quorum/state/state.db` | `json` | `.quorum/state/state.json` |
+
+This allows easy backend switching without config changes:
+
+```bash
+# Switch from JSON to SQLite - no path change needed
+export QUORUM_STATE_BACKEND=sqlite
+quorum run "your prompt"
+```
 
 **Multi-workflow storage:**
 
