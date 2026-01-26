@@ -45,8 +45,21 @@ func NewFileViewer() *FileViewer {
 
 // SetFile loads a file for viewing
 func (f *FileViewer) SetFile(path string) error {
-	f.filePath = path
-	f.fileName = filepath.Base(path)
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		f.error = fmt.Sprintf("Cannot resolve path: %v", err)
+		return err
+	}
+	if root, err := os.Getwd(); err == nil {
+		rel, relErr := filepath.Rel(root, absPath)
+		if relErr != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+			f.error = "Cannot open file outside project root"
+			return fmt.Errorf("path outside project root")
+		}
+	}
+
+	f.filePath = absPath
+	f.fileName = filepath.Base(absPath)
 	f.error = ""
 	f.isBinary = false
 	f.content = ""
@@ -55,7 +68,7 @@ func (f *FileViewer) SetFile(path string) error {
 	f.maxLineWidth = 0
 
 	// Check file info
-	info, err := os.Stat(path)
+	info, err := os.Stat(absPath)
 	if err != nil {
 		f.error = fmt.Sprintf("Cannot access file: %v", err)
 		return err
@@ -75,7 +88,8 @@ func (f *FileViewer) SetFile(path string) error {
 	}
 
 	// Read file
-	data, err := os.ReadFile(path)
+	// #nosec G304 -- absPath is validated to be within the project root
+	data, err := os.ReadFile(absPath)
 	if err != nil {
 		f.error = fmt.Sprintf("Cannot read file: %v", err)
 		return err

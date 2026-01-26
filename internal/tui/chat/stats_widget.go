@@ -474,14 +474,13 @@ func queryGPUInfo() []GPUInfo {
 }
 
 func queryNvidiaSMI() []GPUInfo {
-	path, err := exec.LookPath("nvidia-smi")
-	if err != nil {
+	if _, err := exec.LookPath("nvidia-smi"); err != nil {
 		return nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, path, "--query-gpu=name,utilization.gpu,memory.total,memory.used,temperature.gpu", "--format=csv,noheader,nounits")
+	cmd := exec.CommandContext(ctx, "nvidia-smi", "--query-gpu=name,utilization.gpu,memory.total,memory.used,temperature.gpu", "--format=csv,noheader,nounits")
 	out, err := cmd.Output()
 	if err != nil {
 		return nil
@@ -699,14 +698,13 @@ func toFloat(v any) (float64, bool) {
 }
 
 func queryRocmSMI() []GPUInfo {
-	path, err := exec.LookPath("rocm-smi")
-	if err != nil {
+	if _, err := exec.LookPath("rocm-smi"); err != nil {
 		return nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, path, "--showproductname", "--showuse", "--showmemuse", "--showtemp")
+	cmd := exec.CommandContext(ctx, "rocm-smi", "--showproductname", "--showuse", "--showmemuse", "--showtemp")
 	out, err := cmd.Output()
 	if err != nil {
 		return nil
@@ -824,14 +822,13 @@ func queryGhwGPU() []GPUInfo {
 }
 
 func querySystemProfiler() []GPUInfo {
-	path, err := exec.LookPath("system_profiler")
-	if err != nil {
+	if _, err := exec.LookPath("system_profiler"); err != nil {
 		return nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, path, "-json", "SPDisplaysDataType")
+	cmd := exec.CommandContext(ctx, "system_profiler", "-json", "SPDisplaysDataType")
 	out, err := cmd.Output()
 	if err != nil {
 		return nil
@@ -872,14 +869,13 @@ func querySystemProfiler() []GPUInfo {
 }
 
 func queryWindowsGPU() []GPUInfo {
-	path, err := exec.LookPath("powershell")
-	if err != nil {
+	if _, err := exec.LookPath("powershell"); err != nil {
 		return nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, path, "-NoProfile", "-Command", "Get-CimInstance Win32_VideoController | Select-Object Name, AdapterRAM | ConvertTo-Json")
+	cmd := exec.CommandContext(ctx, "powershell", "-NoProfile", "-Command", "Get-CimInstance Win32_VideoController | Select-Object Name, AdapterRAM | ConvertTo-Json")
 	out, err := cmd.Output()
 	if err != nil {
 		return nil

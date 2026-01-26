@@ -1348,8 +1348,14 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 				if editor == "" {
 					editor = "vi" // fallback
 				}
+				editorPath, err := exec.LookPath(editor)
+				if err != nil {
+					m.logsPanel.AddError("editor", fmt.Sprintf("Editor not found: %s", editor))
+					return m, nil, true
+				}
 				m.fileViewer.Hide()
-				cmd := exec.Command(editor, filePath)
+				// #nosec G204 -- editor is user-configured and resolved via LookPath
+				cmd := exec.Command(editorPath, filePath)
 				return m, tea.ExecProcess(cmd, func(err error) tea.Msg {
 					return editorFinishedMsg{filePath: filePath, err: err}
 				}), true

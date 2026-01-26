@@ -111,7 +111,7 @@ func (h *HistorySearch) Load() error {
 func (h *HistorySearch) Save() error {
 	// Ensure directory exists
 	dir := filepath.Dir(h.historyFile)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return err
 	}
 

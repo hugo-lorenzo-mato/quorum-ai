@@ -153,6 +153,7 @@ func (s *Server) handleGetFileContent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Read file content
+	// #nosec G304 -- absPath is validated to be within the project root
 	content, err := os.ReadFile(absPath)
 	if err != nil {
 		s.logger.Error("failed to read file", "path", absPath, "error", err)
@@ -270,10 +271,14 @@ func (s *Server) resolvePath(requestedPath string) (string, error) {
 
 	// Clean and resolve the path
 	cleanPath := filepath.Clean(requestedPath)
-	absPath := filepath.Join(wd, cleanPath)
+	absPath, err := filepath.Abs(filepath.Join(wd, cleanPath))
+	if err != nil {
+		return "", err
+	}
 
 	// Ensure the resolved path is within the working directory
-	if !strings.HasPrefix(absPath, wd) {
+	rel, err := filepath.Rel(wd, absPath)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
 		return "", os.ErrPermission
 	}
 

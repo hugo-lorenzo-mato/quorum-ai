@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -448,7 +449,12 @@ func (b *BaseAdapter) executeWithJSONStreaming(
 		streamArgs = append(cmdParts[1:], streamArgs...)
 	}
 
-	cmd := exec.CommandContext(ctx, cmdPath, streamArgs...)
+	resolvedPath, err := exec.LookPath(cmdPath)
+	if err != nil {
+		return nil, fmt.Errorf("locating command: %w", err)
+	}
+	// #nosec G204 -- command path is resolved from config and validated via LookPath
+	cmd := exec.CommandContext(ctx, resolvedPath, streamArgs...)
 	if workDir != "" {
 		cmd.Dir = workDir
 	} else if b.config.WorkDir != "" {
@@ -676,7 +682,12 @@ func (b *BaseAdapter) executeWithLogFileStreaming(
 		logArgs = append(cmdParts[1:], logArgs...)
 	}
 
-	cmd := exec.CommandContext(ctx, cmdPath, logArgs...)
+	resolvedPath, err := exec.LookPath(cmdPath)
+	if err != nil {
+		return nil, fmt.Errorf("locating command: %w", err)
+	}
+	// #nosec G204 -- command path is resolved from config and validated via LookPath
+	cmd := exec.CommandContext(ctx, resolvedPath, logArgs...)
 	if workDir != "" {
 		cmd.Dir = workDir
 	} else if b.config.WorkDir != "" {
@@ -781,14 +792,17 @@ func (b *BaseAdapter) tailLogFiles(ctx context.Context, logDir, adapterName stri
 				}
 
 				filePath := logDir + "/" + name
-				b.readNewLogContent(filePath, seenFiles, adapterName, parser)
+				b.readNewLogContent(logDir, filePath, seenFiles, adapterName, parser)
 			}
 		}
 	}
 }
 
 // readNewLogContent reads new content from a log file since last read.
-func (b *BaseAdapter) readNewLogContent(filePath string, seenFiles map[string]int64, _ string, parser StreamParser) {
+func (b *BaseAdapter) readNewLogContent(logDir, filePath string, seenFiles map[string]int64, _ string, parser StreamParser) {
+	if !pathWithin(logDir, filePath) {
+		return
+	}
 	info, err := os.Stat(filePath)
 	if err != nil {
 		return
@@ -801,6 +815,7 @@ func (b *BaseAdapter) readNewLogContent(filePath string, seenFiles map[string]in
 		return // No new content
 	}
 
+	// #nosec G304 -- filePath is validated to be within logDir
 	file, err := os.Open(filePath)
 	if err != nil {
 		return
@@ -824,6 +839,26 @@ func (b *BaseAdapter) readNewLogContent(filePath string, seenFiles map[string]in
 	}
 
 	seenFiles[filePath] = currentSize
+}
+
+func pathWithin(baseDir, target string) bool {
+	baseAbs, err := filepath.Abs(baseDir)
+	if err != nil {
+		return false
+	}
+	targetAbs, err := filepath.Abs(target)
+	if err != nil {
+		return false
+	}
+	rel, err := filepath.Rel(baseAbs, targetAbs)
+	if err != nil {
+		return false
+	}
+	if rel == "." {
+		return true
+	}
+	sep := string(os.PathSeparator)
+	return !strings.HasPrefix(rel, ".."+sep) && rel != ".."
 }
 
 // addStreamingArgs adds the necessary flags for streaming output.

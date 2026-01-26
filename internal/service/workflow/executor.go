@@ -974,7 +974,7 @@ func shouldUseWorktrees(mode string, readyCount int) bool {
 func (e *Executor) saveTaskOutput(taskID core.TaskID, output string) string {
 	// Create outputs directory
 	outputDir := ".quorum/outputs"
-	if err := os.MkdirAll(outputDir, 0o755); err != nil {
+	if err := os.MkdirAll(outputDir, 0o750); err != nil {
 		return ""
 	}
 

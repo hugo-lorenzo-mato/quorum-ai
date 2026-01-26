@@ -21,6 +21,11 @@ var (
 // generateManifestFromFilesystem scans a directory for task files and builds
 // a ComprehensiveTaskManifest by parsing markdown headers.
 func generateManifestFromFilesystem(tasksDir string) (*ComprehensiveTaskManifest, error) {
+	absTasksDir, err := filepath.Abs(tasksDir)
+	if err != nil {
+		return nil, fmt.Errorf("resolving tasks dir: %w", err)
+	}
+
 	pattern := filepath.Join(tasksDir, "task-*.md")
 	files, err := filepath.Glob(pattern)
 	if err != nil {
@@ -38,7 +43,13 @@ func generateManifestFromFilesystem(tasksDir string) (*ComprehensiveTaskManifest
 	var parseErrors []string
 
 	for _, file := range files {
-		item, err := parseTaskFile(file)
+		absFile, err := filepath.Abs(file)
+		if err != nil || !pathWithinDir(absTasksDir, absFile) {
+			parseErrors = append(parseErrors, fmt.Sprintf("%s: invalid path", filepath.Base(file)))
+			continue
+		}
+
+		item, err := parseTaskFile(absFile)
 		if err != nil {
 			parseErrors = append(parseErrors, fmt.Sprintf("%s: %v", filepath.Base(file), err))
 			continue
@@ -64,6 +75,7 @@ func generateManifestFromFilesystem(tasksDir string) (*ComprehensiveTaskManifest
 
 // parseTaskFile reads a task markdown file and extracts metadata from headers.
 func parseTaskFile(filePath string) (*TaskManifestItem, error) {
+	// #nosec G304 -- filePath validated to be within tasksDir by caller
 	file, err := os.Open(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("opening task file: %w", err)
@@ -249,4 +261,16 @@ func computeExecutionLevels(tasks []TaskManifestItem) ([][]string, error) {
 	}
 
 	return levels, nil
+}
+
+func pathWithinDir(baseDir, target string) bool {
+	rel, err := filepath.Rel(baseDir, target)
+	if err != nil {
+		return false
+	}
+	if rel == "." {
+		return true
+	}
+	sep := string(os.PathSeparator)
+	return !strings.HasPrefix(rel, ".."+sep) && rel != ".."
 }

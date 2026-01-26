@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -62,7 +63,9 @@ func NewSQLiteStateManager(dbPath string, opts ...SQLiteStateManagerOption) (*SQ
 
 	// Run migrations
 	if err := m.migrate(); err != nil {
-		db.Close()
+		if closeErr := db.Close(); closeErr != nil {
+			return nil, fmt.Errorf("running migrations: %w (close error: %v)", err, closeErr)
+		}
 		return nil, fmt.Errorf("running migrations: %w", err)
 	}
 
@@ -669,12 +672,20 @@ func (m *SQLiteStateManager) Backup(ctx context.Context) error {
 }
 
 func (m *SQLiteStateManager) copyFile(src, dst string) error {
+	if err := m.ensureWithinStateDir(src); err != nil {
+		return err
+	}
+	if err := m.ensureWithinStateDir(dst); err != nil {
+		return err
+	}
+	// #nosec G304 -- src path validated to be within state directory
 	srcFile, err := os.Open(src)
 	if err != nil {
 		return fmt.Errorf("opening source file: %w", err)
 	}
 	defer srcFile.Close()
 
+	// #nosec G304 -- dst path validated to be within state directory
 	dstFile, err := os.Create(dst)
 	if err != nil {
 		return fmt.Errorf("creating destination file: %w", err)
@@ -686,6 +697,23 @@ func (m *SQLiteStateManager) copyFile(src, dst string) error {
 	}
 
 	return dstFile.Sync()
+}
+
+func (m *SQLiteStateManager) ensureWithinStateDir(path string) error {
+	baseDir := filepath.Dir(m.dbPath)
+	baseAbs, err := filepath.Abs(baseDir)
+	if err != nil {
+		return fmt.Errorf("resolving state directory: %w", err)
+	}
+	pathAbs, err := filepath.Abs(path)
+	if err != nil {
+		return fmt.Errorf("resolving path: %w", err)
+	}
+	rel, err := filepath.Rel(baseAbs, pathAbs)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+		return fmt.Errorf("path escapes state directory")
+	}
+	return nil
 }
 
 // Restore restores from the most recent backup.

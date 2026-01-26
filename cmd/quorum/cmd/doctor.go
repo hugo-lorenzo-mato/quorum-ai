@@ -164,6 +164,7 @@ func checkAgentConfigs() []string {
 	// Check Gemini configuration
 	geminiConfigPath := filepath.Join(homeDir, ".gemini", "settings.json")
 	if _, err := os.Stat(geminiConfigPath); err == nil {
+		// #nosec G304 -- config path is within user home directory
 		configBytes, err := os.ReadFile(geminiConfigPath)
 		if err != nil {
 			issues = append(issues, "Gemini config exists but cannot be read")

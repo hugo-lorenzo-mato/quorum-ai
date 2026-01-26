@@ -167,6 +167,7 @@ func (s *Server) handleGetAgents(w http.ResponseWriter, _ *http.Request) {
 func (s *Server) loadConfig() (map[string]interface{}, error) {
 	configPath := s.getConfigPath()
 
+	// #nosec G304 -- config path is within application-controlled directory
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -188,7 +189,7 @@ func (s *Server) saveConfig(config map[string]interface{}) error {
 	configPath := s.getConfigPath()
 
 	// Ensure directory exists
-	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o750); err != nil {
 		return err
 	}
 

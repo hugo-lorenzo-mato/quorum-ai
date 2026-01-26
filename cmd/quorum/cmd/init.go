@@ -337,6 +337,7 @@ func initializeAgentConfigs() error {
 		}
 	} else if err == nil {
 		// Config exists, check if it has the problematic "disabled": true
+		// #nosec G304 -- config path is within user home directory
 		configBytes, err := os.ReadFile(geminiConfigPath)
 		if err != nil {
 			return fmt.Errorf("reading existing gemini config: %w", err)

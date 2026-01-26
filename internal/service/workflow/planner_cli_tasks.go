@@ -66,7 +66,7 @@ func (p *Planner) runCLIGeneratedTaskPlanning(ctx context.Context, wctx *Context
 		tasksDir = wctx.Report.TasksDir()
 	} else {
 		tasksDir = ".quorum/tasks"
-		if err := os.MkdirAll(tasksDir, 0o755); err != nil {
+		if err := os.MkdirAll(tasksDir, 0o750); err != nil {
 			return fmt.Errorf("creating tasks directory: %w", err)
 		}
 	}

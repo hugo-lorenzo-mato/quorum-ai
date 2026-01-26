@@ -174,7 +174,9 @@ func (p *ExplorerPanel) OnChange() <-chan struct{} {
 func (p *ExplorerPanel) Close() {
 	close(p.stopWatcher)
 	if p.watcher != nil {
-		p.watcher.Close()
+		if err := p.watcher.Close(); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: closing explorer watcher: %v\n", err)
+		}
 	}
 	if p.debounceTimer != nil {
 		p.debounceTimer.Stop()

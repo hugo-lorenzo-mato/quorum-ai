@@ -572,7 +572,9 @@ func (a *EventAggregator) BufferChunk(agent, text string) (string, bool) {
 	if a.chunkBuffer[agent] == nil {
 		a.chunkBuffer[agent] = &strings.Builder{}
 	}
-	a.chunkBuffer[agent].WriteString(text)
+	if _, err := a.chunkBuffer[agent].WriteString(text); err != nil {
+		return "", false
+	}
 
 	last, ok := a.lastEvent[key]
 	if !ok || time.Since(last) >= a.chunkInterval {

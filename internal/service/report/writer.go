@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -99,7 +100,7 @@ func (w *WorkflowReportWriter) Initialize() error {
 	}
 
 	for _, dir := range dirs {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
+		if err := os.MkdirAll(dir, 0o750); err != nil {
 			return fmt.Errorf("creating directory %s: %w", dir, err)
 		}
 	}
@@ -250,7 +251,7 @@ func (w *WorkflowReportWriter) WriteV1Analysis(data AnalysisData) error {
 
 	// Create v1 directory if needed (lazy creation)
 	v1Dir := filepath.Join(w.AnalyzePhasePath(), "v1")
-	if err := os.MkdirAll(v1Dir, 0o755); err != nil {
+	if err := os.MkdirAll(v1Dir, 0o750); err != nil {
 		return fmt.Errorf("creating v1 directory: %w", err)
 	}
 
@@ -350,7 +351,7 @@ func (w *WorkflowReportWriter) WriteModeratorReport(data ModeratorData) error {
 
 	// Create moderator directory if needed
 	moderatorDir := filepath.Join(w.AnalyzePhasePath(), "moderator")
-	if err := os.MkdirAll(moderatorDir, 0o755); err != nil {
+	if err := os.MkdirAll(moderatorDir, 0o750); err != nil {
 		return fmt.Errorf("creating moderator directory: %w", err)
 	}
 
@@ -400,7 +401,7 @@ func (w *WorkflowReportWriter) WriteVnAnalysis(data VnAnalysisData) error {
 
 	// Create vn directory for this round if needed
 	vnDir := filepath.Join(w.AnalyzePhasePath(), fmt.Sprintf("v%d", data.Round))
-	if err := os.MkdirAll(vnDir, 0o755); err != nil {
+	if err := os.MkdirAll(vnDir, 0o750); err != nil {
 		return fmt.Errorf("creating v%d directory: %w", data.Round, err)
 	}
 
@@ -452,7 +453,7 @@ func (w *WorkflowReportWriter) WritePlan(data PlanData) error {
 
 	// Create v1 directory if needed (lazy creation)
 	v1Dir := filepath.Join(w.PlanPhasePath(), "v1")
-	if err := os.MkdirAll(v1Dir, 0o755); err != nil {
+	if err := os.MkdirAll(v1Dir, 0o750); err != nil {
 		return fmt.Errorf("creating plan v1 directory: %w", err)
 	}
 
@@ -552,7 +553,7 @@ func (w *WorkflowReportWriter) WriteTaskPlan(data TaskPlanData) error {
 
 	// Create tasks directory
 	tasksDir := filepath.Join(w.PlanPhasePath(), "tasks")
-	if err := os.MkdirAll(tasksDir, 0o755); err != nil {
+	if err := os.MkdirAll(tasksDir, 0o750); err != nil {
 		return fmt.Errorf("creating tasks directory: %w", err)
 	}
 
@@ -594,7 +595,7 @@ func (w *WorkflowReportWriter) EnsureTasksDir() error {
 	}
 
 	tasksDir := filepath.Join(w.PlanPhasePath(), "tasks")
-	return os.MkdirAll(tasksDir, 0o755)
+	return os.MkdirAll(tasksDir, 0o750)
 }
 
 // TasksDir returns the path to the tasks directory.
@@ -819,6 +820,11 @@ func (w *WorkflowReportWriter) writeFile(path string, fm *Frontmatter, content s
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
+	if err := w.ensureWithinExecutionDir(path); err != nil {
+		return err
+	}
+
+	// #nosec G304 -- path validated to be within execution directory
 	file, err := os.Create(path)
 	if err != nil {
 		return fmt.Errorf("creating file %s: %w", path, err)
@@ -843,6 +849,11 @@ func (w *WorkflowReportWriter) writeFileRaw(path, content string) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
+	if err := w.ensureWithinExecutionDir(path); err != nil {
+		return err
+	}
+
+	// #nosec G304 -- path validated to be within execution directory
 	file, err := os.Create(path)
 	if err != nil {
 		return fmt.Errorf("creating file %s: %w", path, err)
@@ -853,5 +864,21 @@ func (w *WorkflowReportWriter) writeFileRaw(path, content string) error {
 		return fmt.Errorf("writing content: %w", err)
 	}
 
+	return nil
+}
+
+func (w *WorkflowReportWriter) ensureWithinExecutionDir(path string) error {
+	baseAbs, err := filepath.Abs(w.ExecutionPath())
+	if err != nil {
+		return fmt.Errorf("resolving execution path: %w", err)
+	}
+	targetAbs, err := filepath.Abs(path)
+	if err != nil {
+		return fmt.Errorf("resolving report path: %w", err)
+	}
+	rel, err := filepath.Rel(baseAbs, targetAbs)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+		return fmt.Errorf("report path escapes execution directory")
+	}
 	return nil
 }
