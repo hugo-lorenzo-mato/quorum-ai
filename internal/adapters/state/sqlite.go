@@ -33,6 +33,7 @@ type SQLiteStateManager struct {
 	mu         sync.RWMutex
 	lockHeld   bool
 	lockPID    int
+	activeTx   *sql.Tx // Transaction created by AcquireLock, reused by Save
 }
 
 // SQLiteStateManagerOption configures the manager.
@@ -130,12 +131,24 @@ func (m *SQLiteStateManager) Save(ctx context.Context, state *core.WorkflowState
 	hash := sha256.Sum256(stateBytes)
 	checksum := hex.EncodeToString(hash[:])
 
-	// Begin transaction
-	tx, err := m.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("beginning transaction: %w", err)
+	// Use active transaction if available (from AcquireLock), otherwise create a new one
+	var tx *sql.Tx
+	ownTx := false // Whether we own this transaction and should commit/rollback it
+	if m.activeTx != nil {
+		tx = m.activeTx
+	} else {
+		var txErr error
+		tx, txErr = m.db.BeginTx(ctx, nil)
+		if txErr != nil {
+			return fmt.Errorf("beginning transaction: %w", txErr)
+		}
+		ownTx = true
+		defer func() {
+			if ownTx {
+				_ = tx.Rollback()
+			}
+		}()
 	}
-	defer func() { _ = tx.Rollback() }()
 
 	// Serialize JSON fields
 	taskOrderJSON, err := json.Marshal(state.TaskOrder)
@@ -224,9 +237,12 @@ func (m *SQLiteStateManager) Save(ctx context.Context, state *core.WorkflowState
 		return fmt.Errorf("setting active workflow: %w", err)
 	}
 
-	// Commit transaction
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("committing transaction: %w", err)
+	// Only commit if we own the transaction (not using AcquireLock's transaction)
+	// When using AcquireLock's transaction, ReleaseLock will commit it
+	if ownTx {
+		if err := tx.Commit(); err != nil {
+			return fmt.Errorf("committing transaction: %w", err)
+		}
 	}
 
 	return nil
@@ -608,6 +624,7 @@ func (m *SQLiteStateManager) SetActiveWorkflowID(ctx context.Context, id core.Wo
 
 // AcquireLock obtains an exclusive lock on the state.
 // Uses SQLite's built-in locking with a mutex for in-process coordination.
+// The transaction is stored and reused by Save() to avoid nested transactions.
 func (m *SQLiteStateManager) AcquireLock(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -618,11 +635,13 @@ func (m *SQLiteStateManager) AcquireLock(ctx context.Context) error {
 
 	// SQLite handles file-level locking automatically with WAL mode
 	// We use an exclusive transaction to ensure atomicity
-	_, err := m.db.ExecContext(ctx, "BEGIN EXCLUSIVE")
+	// Use BeginTx so we can reuse this transaction in Save()
+	tx, err := m.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
 	if err != nil {
 		return fmt.Errorf("acquiring exclusive lock: %w", err)
 	}
 
+	m.activeTx = tx
 	m.lockHeld = true
 	m.lockPID = os.Getpid()
 	return nil
@@ -633,16 +652,17 @@ func (m *SQLiteStateManager) ReleaseLock(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if !m.lockHeld {
+	if !m.lockHeld || m.activeTx == nil {
 		return nil // No lock to release
 	}
 
-	_, err := m.db.ExecContext(ctx, "COMMIT")
+	err := m.activeTx.Commit()
 	if err != nil {
 		// Try rollback if commit fails (ignore rollback error)
-		_, _ = m.db.ExecContext(ctx, "ROLLBACK")
+		_ = m.activeTx.Rollback()
 	}
 
+	m.activeTx = nil
 	m.lockHeld = false
 	m.lockPID = 0
 	return err
