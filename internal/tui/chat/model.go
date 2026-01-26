@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/atotto/clipboard"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -20,6 +19,7 @@ import (
 	"github.com/charmbracelet/glamour/styles"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/clip"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/control"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/events"
@@ -1788,12 +1788,18 @@ func (m Model) copyLastResponse() (tea.Model, tea.Cmd, bool) {
 	// Find last agent message
 	for i := len(msgs) - 1; i >= 0; i-- {
 		if msgs[i].Role == RoleAgent {
-			err := clipboard.WriteAll(msgs[i].Content)
+			res, err := clip.WriteAll(msgs[i].Content)
 			if err != nil {
 				m.logsPanel.AddError("system", "Failed to copy: "+err.Error())
-			} else {
-				// Show brief confirmation
-				agent := msgs[i].Agent
+				return m, nil, true
+			}
+			agent := msgs[i].Agent
+			switch res.Method {
+			case clip.MethodFile:
+				m.logsPanel.AddWarn("system", fmt.Sprintf("Clipboard unavailable; wrote %s response to %s (%d chars)", agent, res.FilePath, len(msgs[i].Content)))
+			case clip.MethodOSC52:
+				m.logsPanel.AddSuccess("system", fmt.Sprintf("Copied %s response to clipboard via OSC52 (%d chars)", agent, len(msgs[i].Content)))
+			default:
 				m.logsPanel.AddSuccess("system", fmt.Sprintf("Copied %s response to clipboard (%d chars)", agent, len(msgs[i].Content)))
 			}
 			return m, nil, true
@@ -1829,11 +1835,19 @@ func (m Model) copyConversation() (tea.Model, tea.Cmd, bool) {
 		}
 	}
 
-	err := clipboard.WriteAll(sb.String())
+	text := sb.String()
+	res, err := clip.WriteAll(text)
 	if err != nil {
 		m.logsPanel.AddError("system", "Failed to copy conversation: "+err.Error())
 	} else {
-		m.logsPanel.AddSuccess("system", fmt.Sprintf("Copied entire conversation to clipboard (%d messages)", len(msgs)))
+		switch res.Method {
+		case clip.MethodFile:
+			m.logsPanel.AddWarn("system", fmt.Sprintf("Clipboard unavailable; wrote entire conversation to %s (%d messages)", res.FilePath, len(msgs)))
+		case clip.MethodOSC52:
+			m.logsPanel.AddSuccess("system", fmt.Sprintf("Copied entire conversation to clipboard via OSC52 (%d messages)", len(msgs)))
+		default:
+			m.logsPanel.AddSuccess("system", fmt.Sprintf("Copied entire conversation to clipboard (%d messages)", len(msgs)))
+		}
 	}
 	return m, nil, true
 }
@@ -1846,11 +1860,18 @@ func (m Model) copyLogsToClipboard() (tea.Model, tea.Cmd, bool) {
 		return m, nil, true
 	}
 
-	err := clipboard.WriteAll(logsText)
+	res, err := clip.WriteAll(logsText)
 	if err != nil {
 		m.logsPanel.AddError("system", "Failed to copy logs: "+err.Error())
 	} else {
-		m.logsPanel.AddSuccess("system", fmt.Sprintf("Copied %d logs to clipboard", m.logsPanel.Count()))
+		switch res.Method {
+		case clip.MethodFile:
+			m.logsPanel.AddWarn("system", fmt.Sprintf("Clipboard unavailable; wrote %d logs to %s", m.logsPanel.Count(), res.FilePath))
+		case clip.MethodOSC52:
+			m.logsPanel.AddSuccess("system", fmt.Sprintf("Copied %d logs to clipboard via OSC52", m.logsPanel.Count()))
+		default:
+			m.logsPanel.AddSuccess("system", fmt.Sprintf("Copied %d logs to clipboard", m.logsPanel.Count()))
+		}
 	}
 	return m, nil, true
 }

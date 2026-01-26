@@ -510,7 +510,7 @@ func (a *Analyzer) runVnRefinementWithAgent(ctx context.Context, wctx *Context, 
 	startTime := time.Now()
 
 	if wctx.Output != nil {
-		wctx.Output.AgentEvent("started", agentName, fmt.Sprintf("Running V%d refinement", round), map[string]interface{}{
+		wctx.Output.AgentEvent("started", agentName, fmt.Sprintf("Running V%d analysis refinement", round), map[string]interface{}{
 			"phase":           fmt.Sprintf("analyze_v%d", round),
 			"model":           model,
 			"round":           round,
@@ -547,7 +547,7 @@ func (a *Analyzer) runVnRefinementWithAgent(ctx context.Context, wctx *Context, 
 	durationMS := time.Since(startTime).Milliseconds()
 
 	if wctx.Output != nil {
-		wctx.Output.AgentEvent("completed", agentName, fmt.Sprintf("V%d refinement completed", round), map[string]interface{}{
+		wctx.Output.AgentEvent("completed", agentName, fmt.Sprintf("V%d analysis refinement completed", round), map[string]interface{}{
 			"phase":       fmt.Sprintf("analyze_v%d", round),
 			"model":       result.Model,
 			"round":       round,
