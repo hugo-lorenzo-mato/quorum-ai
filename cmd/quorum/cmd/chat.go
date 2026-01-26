@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"syscall"
@@ -89,11 +90,11 @@ func runChat(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("loading config: %w", err)
 	}
 
-	// Create logger (quiet for chat mode)
+	// Create logger (discard in TUI mode to prevent corrupting the display)
 	logger := logging.New(logging.Config{
-		Level:  "warn",
+		Level:  "error",
 		Format: "text",
-		Output: os.Stderr,
+		Output: io.Discard,
 	})
 
 	// Create event bus with larger buffer to reduce event drops during high activity

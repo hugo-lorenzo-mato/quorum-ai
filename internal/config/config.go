@@ -1,5 +1,7 @@
 package config
 
+import "strings"
+
 // Config holds all application configuration.
 type Config struct {
 	Log      LogConfig      `mapstructure:"log"`
@@ -259,9 +261,20 @@ func (c AgentConfig) GetReasoningEffortForPhase(phase string) string {
 
 // StateConfig configures state persistence.
 type StateConfig struct {
+	Backend    string `mapstructure:"backend"`     // Backend type: "json" (default) or "sqlite"
 	Path       string `mapstructure:"path"`
 	BackupPath string `mapstructure:"backup_path"`
 	LockTTL    string `mapstructure:"lock_ttl"`
+}
+
+// EffectiveBackend returns the normalized backend value.
+// Returns "json" if Backend is empty or unset.
+func (s *StateConfig) EffectiveBackend() string {
+	backend := strings.ToLower(strings.TrimSpace(s.Backend))
+	if backend == "" {
+		return "json"
+	}
+	return backend
 }
 
 // GitConfig configures git operations.
