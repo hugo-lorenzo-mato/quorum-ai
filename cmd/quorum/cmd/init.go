@@ -229,27 +229,33 @@ state:
   lock_ttl: 1h
 
 # Git configuration
+# Quorum executes tasks in isolated git worktrees, each on its own branch.
+# After task completion, changes can be automatically committed, pushed, and PRs created.
 git:
-  # Directory for git worktrees (isolated directories for parallel task execution)
+  # Directory where worktrees are created
   worktree_dir: .worktrees
-  # Auto-cleanup worktrees after task completion
+  # Remove worktrees after task completion
   auto_clean: true
   # When to create worktrees: always | parallel | disabled
-  #   always:   create worktree for every task
-  #   parallel: only when multiple tasks can run concurrently (recommended)
-  #   disabled: never create worktrees, all tasks share working directory
+  #   always:   every task gets its own worktree
+  #   parallel: only when 2+ tasks can run concurrently (recommended)
+  #   disabled: all tasks run in the main working directory (no isolation)
   worktree_mode: parallel
-  # Task finalization: commit, push, and PR creation
-  # Each task runs in its own branch (quorum/<task-id>). After completion:
-  auto_commit: true
-  auto_push: true
-  auto_pr: true
-  # IMPORTANT: auto_merge is disabled by default for safety.
-  # Enable only if you want PRs merged automatically without review.
-  auto_merge: false
-  # Target branch for PRs (empty = repository default branch)
+
+  # Post-task finalization (commit, push, PR)
+  # Each task runs on branch: quorum/<task-id>
+  auto_commit: true   # Commit changes after task completes
+  auto_push: true     # Push task branch to remote
+  auto_pr: true       # Create pull request for task branch
+
+  # PR target branch. Empty string uses repository default (main/master).
+  # Example: "develop" to target all PRs against develop branch.
   pr_base_branch: ""
-  # Merge strategy: merge, squash, rebase
+
+  # Auto-merge: disabled by default for safety (requires human review).
+  # When enabled, PRs are merged immediately after creation.
+  auto_merge: false
+  # Merge method when auto_merge is enabled: merge | squash | rebase
   merge_strategy: squash
 
 # GitHub integration

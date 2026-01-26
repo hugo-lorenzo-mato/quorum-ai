@@ -634,26 +634,59 @@ Example TUI workflow:
 
 ### git
 
-Configures git integration and worktree isolation.
+Configures git integration, worktree isolation, and post-task finalization.
+
+Quorum executes tasks in isolated git worktrees, each on its own branch (`quorum/<task-id>`). After task completion, changes can be automatically committed, pushed, and PRs created.
 
 ```yaml
 git:
   worktree_dir: .worktrees
   auto_clean: true
   worktree_mode: parallel
+  auto_commit: true
+  auto_push: true
+  auto_pr: true
+  pr_base_branch: ""
+  auto_merge: false
+  merge_strategy: squash
 ```
+
+#### Worktree Settings
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `worktree_dir` | string | `.worktrees` | Directory for git worktrees |
-| `auto_clean` | bool | `true` | Auto-cleanup completed worktrees |
-| `worktree_mode` | string | `parallel` | Worktree creation: `always`, `parallel`, `disabled` |
+| `worktree_dir` | string | `.worktrees` | Directory where worktrees are created |
+| `auto_clean` | bool | `true` | Remove worktrees after task completion |
+| `worktree_mode` | string | `parallel` | When to create worktrees (see below) |
 
 **Worktree modes:**
 
-- `always` - Create worktree for every task
-- `parallel` - Create worktrees only for parallel task execution
-- `disabled` - Execute all tasks in main working directory
+- `always` - Every task gets its own worktree
+- `parallel` - Only when 2+ tasks can run concurrently (recommended)
+- `disabled` - All tasks run in the main working directory (no isolation)
+
+#### Post-Task Finalization
+
+After each task completes, Quorum can automatically finalize changes:
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `auto_commit` | bool | `true` | Commit changes after task completes |
+| `auto_push` | bool | `true` | Push task branch to remote |
+| `auto_pr` | bool | `true` | Create pull request for task branch |
+| `pr_base_branch` | string | `""` | Target branch for PRs. Empty uses repository default (main/master) |
+| `auto_merge` | bool | `false` | Merge PRs immediately after creation (requires review disabled) |
+| `merge_strategy` | string | `squash` | Merge method: `merge`, `squash`, `rebase` |
+
+**Finalization flow:**
+
+1. Task completes on branch `quorum/<task-id>`
+2. If `auto_commit`: changes are committed with task description
+3. If `auto_push`: branch is pushed to remote
+4. If `auto_pr`: PR is created targeting `pr_base_branch` (or repository default)
+5. If `auto_merge`: PR is merged using `merge_strategy`
+
+> **Safety note:** `auto_merge` is disabled by default. Enable only if you want PRs merged automatically without human review.
 
 ---
 
