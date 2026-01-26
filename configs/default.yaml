@@ -95,18 +95,14 @@ phases:
 # Note: temperature and max_tokens are omitted - let each CLI use its optimized defaults
 #
 # Each agent can have a "phases" map to control participation in workflow phases.
-# This uses an OPT-OUT model: omitted phases default to true (enabled).
-# Only specify phases you want to DISABLE (set to false).
+# This uses an OPT-IN model: only phases set to true are enabled.
+# Omitted phases are disabled. If phases is empty/missing, agent is enabled for all.
 # Available phases: refine, analyze, moderate, synthesize, plan, execute
 #
 # Example - agent only for execution:
 #   phases:
-#     refine: false
-#     analyze: false
-#     moderate: false
-#     synthesize: false
-#     plan: false
-#     # execute is omitted, so it defaults to true
+#     execute: true
+#     # all other phases are omitted, so they are disabled
 agents:
   # Default agent for analysis tasks
   default: claude

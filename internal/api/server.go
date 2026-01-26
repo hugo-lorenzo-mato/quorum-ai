@@ -13,6 +13,7 @@ import (
 	"github.com/rs/cors"
 
 	webadapters "github.com/hugo-lorenzo-mato/quorum-ai/internal/adapters/web"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/config"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/diagnostics"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/events"
@@ -27,6 +28,7 @@ type Server struct {
 	logger          *slog.Logger
 	chatHandler     *webadapters.ChatHandler
 	resourceMonitor *diagnostics.ResourceMonitor
+	configLoader    *config.Loader // for workflow execution configuration
 }
 
 // ServerOption configures the server.
@@ -50,6 +52,13 @@ func WithAgentRegistry(registry core.AgentRegistry) ServerOption {
 func WithResourceMonitor(monitor *diagnostics.ResourceMonitor) ServerOption {
 	return func(s *Server) {
 		s.resourceMonitor = monitor
+	}
+}
+
+// WithConfigLoader sets the configuration loader for workflow execution.
+func WithConfigLoader(loader *config.Loader) ServerOption {
+	return func(s *Server) {
+		s.configLoader = loader
 	}
 }
 
@@ -115,6 +124,7 @@ func (s *Server) setupRouter() chi.Router {
 				r.Put("/", s.handleUpdateWorkflow)
 				r.Delete("/", s.handleDeleteWorkflow)
 				r.Post("/activate", s.handleActivateWorkflow)
+				r.Post("/run", s.HandleRunWorkflow)
 
 				// Task endpoints nested under workflow
 				r.Route("/tasks", func(r chi.Router) {

@@ -190,6 +190,9 @@ func runServe(_ *cobra.Command, _ []string) error {
 	if stateManager != nil {
 		serverOpts = append(serverOpts, web.WithStateManager(stateManager))
 	}
+	if quorumCfg != nil {
+		serverOpts = append(serverOpts, web.WithConfigLoader(loader))
+	}
 
 	// Create and start server with event bus and agent registry
 	server := web.New(cfg, logger.Logger, serverOpts...)

@@ -286,6 +286,8 @@ type AgentConfig struct {
 }
 
 // IsEnabledForPhase returns true if the agent is enabled for the given phase.
+// Uses opt-in model: phases must be explicitly set to true to be enabled.
+// If phases map is empty, agent is enabled for all phases (backward compatible).
 func (c AgentConfig) IsEnabledForPhase(phase string) bool {
 	if !c.Enabled {
 		return false
@@ -295,7 +297,7 @@ func (c AgentConfig) IsEnabledForPhase(phase string) bool {
 	}
 	enabled, exists := c.Phases[phase]
 	if !exists {
-		return true // Phase not specified = enabled (opt-out model)
+		return false // Phase not specified = disabled (opt-in model)
 	}
 	return enabled
 }

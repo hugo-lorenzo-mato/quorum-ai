@@ -2,7 +2,6 @@ import { useEffect, useState, useCallback } from 'react';
 import { useFileStore } from '../stores';
 import {
   FolderOpen,
-  File,
   Upload,
   Download,
   Trash2,
@@ -16,14 +15,14 @@ import {
   X,
 } from 'lucide-react';
 
-function getFileIcon(filename) {
-  const ext = filename.split('.').pop()?.toLowerCase();
-  const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp'];
-  const codeExts = ['js', 'jsx', 'ts', 'tsx', 'py', 'go', 'rs', 'java', 'cpp', 'c', 'h'];
+const IMAGE_EXTS = ['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp'];
+const CODE_EXTS = ['js', 'jsx', 'ts', 'tsx', 'py', 'go', 'rs', 'java', 'cpp', 'c', 'h'];
 
-  if (imageExts.includes(ext)) return FileImage;
-  if (codeExts.includes(ext)) return FileCode;
-  return FileText;
+function FileIcon({ filename, className }) {
+  const ext = filename.split('.').pop()?.toLowerCase();
+  if (IMAGE_EXTS.includes(ext)) return <FileImage className={className} />;
+  if (CODE_EXTS.includes(ext)) return <FileCode className={className} />;
+  return <FileText className={className} />;
 }
 
 function formatFileSize(bytes) {
@@ -35,13 +34,11 @@ function formatFileSize(bytes) {
 }
 
 function FileCard({ file, viewMode, onDownload, onDelete }) {
-  const Icon = getFileIcon(file.name);
-
   if (viewMode === 'grid') {
     return (
       <div className="group p-4 rounded-xl border border-border bg-card hover:border-muted-foreground/30 hover:shadow-md transition-all">
         <div className="flex items-center justify-center w-12 h-12 mx-auto mb-3 rounded-xl bg-muted">
-          <Icon className="w-6 h-6 text-muted-foreground" />
+          <FileIcon filename={file.name} className="w-6 h-6 text-muted-foreground" />
         </div>
         <p className="text-sm font-medium text-foreground text-center truncate">{file.name}</p>
         <p className="text-xs text-muted-foreground text-center mt-1">{formatFileSize(file.size)}</p>
@@ -68,7 +65,7 @@ function FileCard({ file, viewMode, onDownload, onDelete }) {
   return (
     <div className="group flex items-center gap-4 p-3 rounded-lg border border-border bg-card hover:border-muted-foreground/30 transition-all">
       <div className="p-2 rounded-lg bg-muted">
-        <Icon className="w-5 h-5 text-muted-foreground" />
+        <FileIcon filename={file.name} className="w-5 h-5 text-muted-foreground" />
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-foreground truncate">{file.name}</p>

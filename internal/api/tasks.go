@@ -27,6 +27,7 @@ type TaskResponse struct {
 	StartedAt    *time.Time `json:"started_at,omitempty"`
 	CompletedAt  *time.Time `json:"completed_at,omitempty"`
 	Output       string     `json:"output,omitempty"`
+	OutputFile   string     `json:"output_file,omitempty"`
 }
 
 // handleListTasks returns all tasks for a workflow.
@@ -136,5 +137,6 @@ func taskStateToResponse(task *core.TaskState) TaskResponse {
 		StartedAt:    task.StartedAt,
 		CompletedAt:  task.CompletedAt,
 		Output:       task.Output,
+		OutputFile:   task.OutputFile,
 	}
 }

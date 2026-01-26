@@ -1,26 +1,32 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 
+	webadapters "github.com/hugo-lorenzo-mato/quorum-ai/internal/adapters/web"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service/workflow"
 )
 
 // WorkflowResponse is the API response for a workflow.
 type WorkflowResponse struct {
-	ID           string    `json:"id"`
-	Status       string    `json:"status"`
-	CurrentPhase string    `json:"current_phase"`
-	Prompt       string    `json:"prompt"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
-	IsActive     bool      `json:"is_active"`
-	TaskCount    int       `json:"task_count"`
-	Metrics      *Metrics  `json:"metrics,omitempty"`
+	ID              string    `json:"id"`
+	Status          string    `json:"status"`
+	CurrentPhase    string    `json:"current_phase"`
+	Prompt          string    `json:"prompt"`
+	OptimizedPrompt string    `json:"optimized_prompt,omitempty"`
+	ReportPath      string    `json:"report_path,omitempty"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
+	IsActive        bool      `json:"is_active"`
+	TaskCount       int       `json:"task_count"`
+	Metrics         *Metrics  `json:"metrics,omitempty"`
 }
 
 // Metrics represents workflow metrics in API responses.
@@ -44,6 +50,39 @@ type WorkflowConfig struct {
 	TimeoutSeconds     int     `json:"timeout_seconds,omitempty"`
 	DryRun             bool    `json:"dry_run,omitempty"`
 	Sandbox            bool    `json:"sandbox,omitempty"`
+}
+
+// RunWorkflowResponse is the response for starting a workflow.
+type RunWorkflowResponse struct {
+	ID           string `json:"id"`
+	Status       string `json:"status"`
+	CurrentPhase string `json:"current_phase"`
+	Prompt       string `json:"prompt"`
+	Message      string `json:"message"`
+}
+
+// runningWorkflows tracks workflows currently being executed to prevent double-execution.
+var runningWorkflows = struct {
+	sync.Mutex
+	ids map[string]bool
+}{ids: make(map[string]bool)}
+
+// markRunning marks a workflow as running. Returns false if already running.
+func markRunning(id string) bool {
+	runningWorkflows.Lock()
+	defer runningWorkflows.Unlock()
+	if runningWorkflows.ids[id] {
+		return false
+	}
+	runningWorkflows.ids[id] = true
+	return true
+}
+
+// markFinished marks a workflow as no longer running.
+func markFinished(id string) {
+	runningWorkflows.Lock()
+	defer runningWorkflows.Unlock()
+	delete(runningWorkflows.ids, id)
 }
 
 // handleListWorkflows returns all workflows.
@@ -323,14 +362,16 @@ func (s *Server) handleActivateWorkflow(w http.ResponseWriter, r *http.Request) 
 // stateToWorkflowResponse converts a WorkflowState to a WorkflowResponse.
 func stateToWorkflowResponse(state *core.WorkflowState, activeID core.WorkflowID) WorkflowResponse {
 	resp := WorkflowResponse{
-		ID:           string(state.WorkflowID),
-		Status:       string(state.Status),
-		CurrentPhase: string(state.CurrentPhase),
-		Prompt:       state.Prompt,
-		CreatedAt:    state.CreatedAt,
-		UpdatedAt:    state.UpdatedAt,
-		IsActive:     state.WorkflowID == activeID,
-		TaskCount:    len(state.Tasks),
+		ID:              string(state.WorkflowID),
+		Status:          string(state.Status),
+		CurrentPhase:    string(state.CurrentPhase),
+		Prompt:          state.Prompt,
+		OptimizedPrompt: state.OptimizedPrompt,
+		ReportPath:      state.ReportPath,
+		CreatedAt:       state.CreatedAt,
+		UpdatedAt:       state.UpdatedAt,
+		IsActive:        state.WorkflowID == activeID,
+		TaskCount:       len(state.Tasks),
 	}
 
 	if state.Metrics != nil {
@@ -348,4 +389,166 @@ func stateToWorkflowResponse(state *core.WorkflowState, activeID core.WorkflowID
 // generateWorkflowID creates a new workflow ID.
 func generateWorkflowID() core.WorkflowID {
 	return core.WorkflowID("wf-" + time.Now().Format("20060102-150405"))
+}
+
+// HandleRunWorkflow starts execution of a workflow.
+// POST /api/v1/workflows/{workflowID}/run
+//
+// Returns:
+//   - 202 Accepted: Workflow execution started
+//   - 404 Not Found: Workflow not found
+//   - 409 Conflict: Workflow already running or completed
+//   - 503 Service Unavailable: Execution not available (missing dependencies)
+func (s *Server) HandleRunWorkflow(w http.ResponseWriter, r *http.Request) {
+	// Get workflow ID from URL
+	workflowID := chi.URLParam(r, "workflowID")
+	if workflowID == "" {
+		respondError(w, http.StatusBadRequest, "workflow ID is required")
+		return
+	}
+
+	ctx := r.Context()
+
+	// Check if state manager is available
+	if s.stateManager == nil {
+		respondError(w, http.StatusServiceUnavailable, "workflow management not available")
+		return
+	}
+
+	// Load workflow state
+	state, err := s.stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
+	if err != nil {
+		s.logger.Error("failed to load workflow", "workflow_id", workflowID, "error", err)
+		respondError(w, http.StatusInternalServerError, "failed to load workflow")
+		return
+	}
+	if state == nil {
+		respondError(w, http.StatusNotFound, "workflow not found")
+		return
+	}
+
+	// Determine if this is a resume based on original state before validation
+	isResume := state.Status == core.WorkflowStatusFailed ||
+		state.Status == core.WorkflowStatusPaused ||
+		len(state.Checkpoints) > 0
+
+	// Validate workflow state for execution
+	switch state.Status {
+	case core.WorkflowStatusRunning:
+		respondError(w, http.StatusConflict, "workflow is already running")
+		return
+	case core.WorkflowStatusCompleted:
+		respondError(w, http.StatusConflict, "workflow is already completed; create a new workflow to re-run")
+		return
+	case core.WorkflowStatusPending, core.WorkflowStatusFailed, core.WorkflowStatusPaused:
+		// These states allow execution
+	default:
+		respondError(w, http.StatusConflict, "workflow is in invalid state for execution: "+string(state.Status))
+		return
+	}
+
+	// Prevent double-execution race condition
+	if !markRunning(workflowID) {
+		respondError(w, http.StatusConflict, "workflow execution already in progress")
+		return
+	}
+
+	// Get runner factory
+	factory := s.RunnerFactory()
+	if factory == nil {
+		markFinished(workflowID)
+		respondError(w, http.StatusServiceUnavailable, "workflow execution not available: missing configuration")
+		return
+	}
+
+	// Create runner with execution context
+	// Use background context since the HTTP request will complete before workflow finishes
+	execCtx, cancel := context.WithTimeout(context.Background(), 4*time.Hour)
+
+	runner, notifier, err := factory.CreateRunner(execCtx, workflowID)
+	if err != nil {
+		cancel()
+		markFinished(workflowID)
+		s.logger.Error("failed to create runner", "workflow_id", workflowID, "error", err)
+		respondError(w, http.StatusServiceUnavailable, "workflow execution not available: "+err.Error())
+		return
+	}
+
+	// Update workflow status to running
+	state.Status = core.WorkflowStatusRunning
+	state.UpdatedAt = time.Now()
+	if err := s.stateManager.Save(ctx, state); err != nil {
+		cancel()
+		markFinished(workflowID)
+		s.logger.Error("failed to update workflow status", "workflow_id", workflowID, "error", err)
+		respondError(w, http.StatusInternalServerError, "failed to start workflow")
+		return
+	}
+
+	// Emit workflow started event
+	notifier.WorkflowStarted(state.Prompt)
+
+	// Start execution in background
+	go s.executeWorkflowAsync(execCtx, cancel, runner, notifier, state, isResume)
+
+	// Return 202 Accepted
+	response := RunWorkflowResponse{
+		ID:           workflowID,
+		Status:       string(core.WorkflowStatusRunning),
+		CurrentPhase: string(state.CurrentPhase),
+		Prompt:       state.Prompt,
+		Message:      "Workflow execution started",
+	}
+	if isResume {
+		response.Message = "Workflow execution resumed"
+	}
+
+	respondJSON(w, http.StatusAccepted, response)
+}
+
+// executeWorkflowAsync runs the workflow in a background goroutine.
+func (s *Server) executeWorkflowAsync(
+	ctx context.Context,
+	cancel context.CancelFunc,
+	runner *workflow.Runner,
+	notifier *webadapters.WebOutputNotifier,
+	state *core.WorkflowState,
+	isResume bool,
+) {
+	defer cancel()
+	defer markFinished(string(state.WorkflowID))
+
+	startTime := time.Now()
+	var runErr error
+
+	// Execute workflow
+	if isResume {
+		runErr = runner.Resume(ctx)
+	} else {
+		runErr = runner.Run(ctx, state.Prompt)
+	}
+
+	// Get final state for metrics
+	finalState, _ := runner.GetState(ctx)
+	duration := time.Since(startTime)
+	var totalCost float64
+	if finalState != nil && finalState.Metrics != nil {
+		totalCost = finalState.Metrics.TotalCostUSD
+	}
+
+	// Emit lifecycle event
+	if runErr != nil {
+		s.logger.Error("workflow execution failed",
+			"workflow_id", state.WorkflowID,
+			"error", runErr,
+		)
+		notifier.WorkflowFailed(string(state.CurrentPhase), runErr)
+	} else {
+		s.logger.Info("workflow execution completed",
+			"workflow_id", state.WorkflowID,
+			"duration", duration,
+			"cost", totalCost,
+		)
+		notifier.WorkflowCompleted(duration, totalCost)
+	}
 }

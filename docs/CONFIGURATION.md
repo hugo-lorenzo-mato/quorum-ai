@@ -357,11 +357,11 @@ Each agent configuration supports these fields:
 
 #### Phase Participation Control
 
-The `phases` map controls which workflow phases an agent participates in. This uses an **opt-out model**:
+The `phases` map controls which workflow phases an agent participates in. This uses an **opt-in model**:
 
-- **Omitted phases default to `true` (enabled)**
-- Only specify phases you want to **disable** (set to `false`)
-- If `phases` is empty or not specified, the agent participates in all phases
+- **Only phases set to `true` are enabled**
+- **Omitted phases are disabled**
+- If `phases` is empty or not specified, the agent participates in all phases (backward compatible)
 
 Available phases:
 
@@ -382,14 +382,9 @@ agents:
     enabled: true
     path: copilot
     model: claude-sonnet-4-5
-    # Disable all phases except moderate
     phases:
-      refine: false
-      analyze: false
-      synthesize: false
-      plan: false
-      execute: false
-      # moderate is omitted, so it defaults to true
+      moderate: true
+      # all other phases are omitted, so they are disabled
 ```
 
 **Example - agent for analysis and execution only:**
@@ -399,14 +394,12 @@ agents:
   gemini:
     enabled: true
     phases:
-      refine: false
-      moderate: false
-      synthesize: false
-      plan: false
-      # analyze and execute are omitted, so they default to true
+      analyze: true
+      execute: true
+      # refine, moderate, synthesize, plan are omitted = disabled
 ```
 
-**Moderator fallback chain:** When the primary moderator fails, agents with `moderate: true` (or omitted) are tried as fallbacks in order.
+**Moderator fallback chain:** When the primary moderator fails, agents with `moderate: true` are tried as fallbacks in order.
 
 #### Token Discrepancy Detection
 

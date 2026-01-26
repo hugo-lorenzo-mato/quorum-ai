@@ -13,6 +13,7 @@ import (
 	"github.com/rs/cors"
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/api"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/config"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/diagnostics"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/events"
@@ -28,6 +29,7 @@ type Server struct {
 	agentRegistry   core.AgentRegistry
 	stateManager    core.StateManager
 	resourceMonitor *diagnostics.ResourceMonitor
+	configLoader    *config.Loader // for workflow execution configuration
 	apiServer       *api.Server
 }
 
@@ -90,6 +92,13 @@ func WithResourceMonitor(monitor *diagnostics.ResourceMonitor) ServerOption {
 	}
 }
 
+// WithConfigLoader sets the configuration loader for workflow execution.
+func WithConfigLoader(loader *config.Loader) ServerOption {
+	return func(s *Server) {
+		s.configLoader = loader
+	}
+}
+
 // New creates a new Server instance with the given configuration.
 func New(cfg Config, logger *slog.Logger, opts ...ServerOption) *Server {
 	if logger == nil {
@@ -111,6 +120,9 @@ func New(cfg Config, logger *slog.Logger, opts ...ServerOption) *Server {
 		apiOpts := []api.ServerOption{api.WithLogger(logger), api.WithAgentRegistry(s.agentRegistry)}
 		if s.resourceMonitor != nil {
 			apiOpts = append(apiOpts, api.WithResourceMonitor(s.resourceMonitor))
+		}
+		if s.configLoader != nil {
+			apiOpts = append(apiOpts, api.WithConfigLoader(s.configLoader))
 		}
 		s.apiServer = api.NewServer(s.stateManager, s.eventBus, apiOpts...)
 		if s.agentRegistry != nil && s.stateManager != nil {

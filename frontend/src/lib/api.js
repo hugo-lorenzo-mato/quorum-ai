@@ -13,8 +13,9 @@ async function request(endpoint, options = {}) {
   const response = await fetch(url, config);
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: response.statusText }));
-    throw new Error(error.message || 'Request failed');
+    const error = await response.json().catch(() => ({}));
+    const message = error.message || error.error || response.statusText;
+    throw new Error(message || 'Request failed');
   }
 
   return response.json();
