@@ -55,38 +55,12 @@ func runInit(_ *cobra.Command, _ []string) error {
 	// Create default config
 	defaultConfig := `# Quorum AI Configuration
 # Documentation: https://github.com/hugo-lorenzo-mato/quorum-ai/blob/main/docs/CONFIGURATION.md
-
-# Logging configuration
-log:
-  level: info
-  format: auto
-
-# Trace configuration (for debugging workflows)
-trace:
-  mode: off
-  dir: .quorum/traces
-  schema_version: 1
-  redact: true
-  redact_patterns: []
-  redact_allowlist: []
-  max_bytes: 262144
-  total_max_bytes: 10485760
-  max_files: 500
-  include_phases: [refine, analyze, plan, execute]
-
-# Workflow execution settings
-workflow:
-  timeout: 12h
-  max_retries: 3
-  dry_run: false
-  sandbox: true
-  deny_tools: []
+#
+# Values not specified here use sensible defaults. See docs for all options.
 
 # Phase configuration
 phases:
-  # Analyze phase settings
   analyze:
-    timeout: 2h
     # Prompt refiner - enhances user prompt before analysis
     refiner:
       enabled: true
@@ -99,166 +73,78 @@ phases:
       enabled: true
       agent: copilot
       threshold: 0.90
-      min_rounds: 2
-      max_rounds: 5
-      abort_threshold: 0.30
-      stagnation_threshold: 0.02
-  # Plan phase settings
   plan:
-    timeout: 1h
-    # Plan synthesizer - when enabled, all agents with plan phase enabled
-    # propose plans in parallel, then synthesizer consolidates them.
-    # When disabled, uses single-agent planning with the default agent.
+    # Plan synthesizer - when enabled, agents propose plans in parallel,
+    # then synthesizer consolidates. When disabled, single-agent planning.
     synthesizer:
       enabled: true
       agent: claude
-  # Execute phase settings
-  execute:
-    timeout: 2h
 
 # Agent configuration
-# Note: temperature and max_tokens are omitted - let each CLI use its optimized defaults
+# Phases use opt-in model: only phases set to true are enabled.
+# If phases is empty or omitted, agent is enabled for all phases.
+# Available phases: refine, analyze, moderate, synthesize, plan, execute
 agents:
   default: claude
 
-  # Claude (Anthropic) - Primary agent, synthesizer
   claude:
     enabled: true
     path: claude
     model: claude-opus-4-5-20251101
-    # Per-task model overrides. Only specify phases that need a different model.
-    # Unspecified phases use the default model above.
-    phase_models:
-      refine: claude-opus-4-5-20251101
-      analyze: claude-opus-4-5-20251101
-      moderate: claude-opus-4-5-20251101
-      synthesize: claude-opus-4-5-20251101
-      plan: claude-opus-4-5-20251101
-      execute: claude-opus-4-5-20251101
-    # Phases this agent participates in (opt-in model).
-    # Only phases set to true are enabled. Omitted phases are disabled.
-    # If phases is empty or not specified, agent is enabled for all phases.
-    # Available phases: refine, analyze, moderate, synthesize, plan, execute
     phases:
       analyze: true
-      synthesize: true   # assigned as synthesizer
+      synthesize: true
       plan: true
       execute: true
 
-  # Gemini (Google) - Secondary agent
   gemini:
     enabled: true
     path: gemini
     model: gemini-3-pro-preview
+    # Use faster model for execution
     phase_models:
-      refine: gemini-3-pro-preview
-      analyze: gemini-3-pro-preview
-      moderate: gemini-3-pro-preview
-      synthesize: gemini-3-pro-preview
-      plan: gemini-3-pro-preview
       execute: gemini-3-flash-preview
-    # Only analyze and execute enabled
     phases:
       analyze: true
       execute: true
 
-  # Codex (OpenAI) - Tertiary agent, refiner
   codex:
     enabled: true
     path: codex
     model: gpt-5.2-codex
-    # Codex-specific: default reasoning effort (minimal/low/medium/high/xhigh)
     reasoning_effort: high
-    phase_models:
-      refine: gpt-5.2-codex
-      analyze: gpt-5.2-codex
-      moderate: gpt-5.2-codex
-      synthesize: gpt-5.2-codex
-      plan: gpt-5.2-codex
-      execute: gpt-5.2-codex
-    # Per-phase reasoning effort overrides (optional)
     reasoning_effort_phases:
       refine: xhigh
       analyze: xhigh
       plan: xhigh
-    # Refiner + analysis + planning + execution
     phases:
-      refine: true       # assigned as refiner
+      refine: true
       analyze: true
       plan: true
       execute: true
 
-  # Copilot (GitHub) - Moderator only
   copilot:
     enabled: true
     path: copilot
     model: claude-sonnet-4-5
-    phase_models:
-      refine: claude-sonnet-4-5
-      analyze: claude-sonnet-4-5
-      moderate: claude-sonnet-4-5
-      synthesize: claude-sonnet-4-5
-      plan: claude-sonnet-4-5
-      execute: claude-sonnet-4-5
-    # Only moderator role
     phases:
-      moderate: true     # assigned as moderator
-
-# State persistence
-state:
-  # Storage backend: "json" (default) or "sqlite"
-  backend: json
-  path: .quorum/state/state.json
-  backup_path: .quorum/state/state.json.bak
-  lock_ttl: 1h
+      moderate: true
 
 # Git configuration
-# Quorum executes tasks in isolated git worktrees, each on its own branch.
-# After task completion, changes can be automatically committed, pushed, and PRs created.
+# Tasks run in isolated worktrees on branch quorum/<task-id>.
+# After completion: commit -> push -> PR (configurable).
 git:
-  # Directory where worktrees are created
-  worktree_dir: .worktrees
-  # Remove worktrees after task completion
-  auto_clean: true
   # When to create worktrees: always | parallel | disabled
-  #   always:   every task gets its own worktree
-  #   parallel: only when 2+ tasks can run concurrently (recommended)
-  #   disabled: all tasks run in the main working directory (no isolation)
   worktree_mode: parallel
-
-  # Post-task finalization (commit, push, PR)
-  # Each task runs on branch: quorum/<task-id>
-  auto_commit: true   # Commit changes after task completes
-  auto_push: true     # Push task branch to remote
-  auto_pr: true       # Create pull request for task branch
-
-  # PR target branch. Empty string uses repository default (main/master).
-  # Example: "develop" to target all PRs against develop branch.
+  # Post-task finalization
+  auto_commit: true
+  auto_push: true
+  auto_pr: true
+  # PR target branch (empty = repository default)
   pr_base_branch: ""
-
-  # Auto-merge: disabled by default for safety (requires human review).
-  # When enabled, PRs are merged immediately after creation.
+  # Auto-merge disabled by default for safety
   auto_merge: false
-  # Merge method when auto_merge is enabled: merge | squash | rebase
   merge_strategy: squash
-
-# GitHub integration
-# Note: GitHub token should be provided via GITHUB_TOKEN or GH_TOKEN environment variable
-github:
-  remote: origin
-
-# Chat/TUI settings
-chat:
-  timeout: 3m
-  progress_interval: 15s
-  editor: vim
-
-# Report configuration (Markdown output)
-report:
-  enabled: true
-  base_dir: .quorum/output
-  use_utc: true
-  include_raw: true
 `
 
 	if err := os.WriteFile(configPath, []byte(defaultConfig), 0o600); err != nil {
