@@ -226,6 +226,12 @@ quorum run --trace=full "Refactor the payment processing module"
 # Inspect trace runs
 quorum trace --list
 quorum trace --run-id wf-1234-1700000000
+
+# Reset workflow state and start fresh
+quorum new                # Deactivate current workflow (preserves history)
+quorum new --archive      # Archive completed workflows
+quorum new --purge        # Delete all workflow data permanently
+quorum new --purge --force # Skip confirmation prompt
 ```
 
 ### Trace artifacts
