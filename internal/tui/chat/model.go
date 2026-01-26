@@ -3017,6 +3017,8 @@ func (m Model) handleCommand(cmd *Command, args []string) (tea.Model, tea.Cmd) {
 
 		// Update internal state
 		m.workflowState = state
+		m.tasksPanel.SetState(state)
+		m.updateQuorumPanel(state)
 
 		// Show success message with workflow details
 		var sb strings.Builder
@@ -3134,6 +3136,8 @@ func (m Model) handleCommand(cmd *Command, args []string) (tea.Model, tea.Cmd) {
 			if m.workflowState == nil {
 				if state, err := m.runner.GetState(context.Background()); err == nil && state != nil {
 					m.workflowState = state
+					m.tasksPanel.SetState(state)
+					m.updateQuorumPanel(state)
 				}
 			}
 
@@ -3183,6 +3187,8 @@ func (m Model) handleCommand(cmd *Command, args []string) (tea.Model, tea.Cmd) {
 		if m.workflowState == nil {
 			if state, err := m.runner.GetState(context.Background()); err == nil && state != nil {
 				m.workflowState = state
+				m.tasksPanel.SetState(state)
+				m.updateQuorumPanel(state)
 			}
 		}
 
@@ -3224,6 +3230,8 @@ func (m Model) handleCommand(cmd *Command, args []string) (tea.Model, tea.Cmd) {
 		if m.workflowState == nil {
 			if state, err := m.runner.GetState(context.Background()); err == nil && state != nil {
 				m.workflowState = state
+				m.tasksPanel.SetState(state)
+				m.updateQuorumPanel(state)
 			}
 		}
 
@@ -3276,6 +3284,8 @@ func (m Model) handleCommand(cmd *Command, args []string) (tea.Model, tea.Cmd) {
 		if m.workflowState == nil {
 			if state, err := m.runner.GetState(context.Background()); err == nil && state != nil {
 				m.workflowState = state
+				m.tasksPanel.SetState(state)
+				m.updateQuorumPanel(state)
 			}
 		}
 
