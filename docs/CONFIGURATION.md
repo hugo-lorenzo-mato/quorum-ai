@@ -493,6 +493,7 @@ Configures workflow state persistence for resume capability.
 
 ```yaml
 state:
+  backend: json
   path: .quorum/state/state.json
   backup_path: .quorum/state/state.json.bak
   lock_ttl: 1h
@@ -500,9 +501,19 @@ state:
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
+| `backend` | string | `json` | Storage backend: `json` (file-based) or `sqlite` (database) |
 | `path` | string | `.quorum/state/state.json` | Base state directory (workflows stored in `workflows/` subdirectory) |
 | `backup_path` | string | `.quorum/state/state.json.bak` | Legacy backup path (per-workflow backups in `workflows/<id>.json.bak`) |
 | `lock_ttl` | duration | `1h` | Lock file TTL before considered stale |
+
+**Backend options:**
+
+| Backend | Description | Best For |
+|---------|-------------|----------|
+| `json` | File-based storage, human-readable | Default, simple setups, debugging |
+| `sqlite` | Database storage with WAL mode | Large workflows, concurrent access, better performance |
+
+> **Note:** When using SQLite, the path extension is automatically changed to `.db`. For example, `.quorum/state/state.json` becomes `.quorum/state/state.db`.
 
 **Multi-workflow storage:**
 
