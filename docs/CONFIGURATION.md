@@ -1,12 +1,12 @@
 # Configuration Reference
 
-This document describes all configuration options available in quorum-ai. Configuration files use YAML format and are loaded from `.quorum/config.yaml` in the project root.
+Complete reference for all quorum-ai configuration options.
 
 ## Table of Contents
 
 - [Overview](#overview)
 - [Configuration File Location](#configuration-file-location)
-- [Sections](#sections)
+- [Configuration Sections](#configuration-sections)
   - [log](#log)
   - [trace](#trace)
   - [workflow](#workflow)
@@ -15,21 +15,27 @@ This document describes all configuration options available in quorum-ai. Config
   - [state](#state)
   - [git](#git)
   - [github](#github)
+  - [chat](#chat)
+  - [report](#report)
+  - [diagnostics](#diagnostics)
+- [Environment Variables](#environment-variables)
+- [Example Configurations](#example-configurations)
+- [Validation](#validation)
 
 ---
 
 ## Overview
 
-quorum-ai uses a layered configuration system:
+quorum-ai uses a layered configuration system with the following precedence (highest to lowest):
 
-1. **Built-in defaults** - Sensible defaults for all options
-2. **Global config** - `~/.config/quorum/config.yaml` (user-level)
-3. **Project config** - `.quorum/config.yaml` in project root (project-level)
-4. **Legacy project config** - `.quorum.yaml` (for backwards compatibility)
-5. **Environment variables** - `QUORUM_*` prefix overrides
-6. **CLI flags** - Highest priority overrides
+1. **CLI flags** - Command-line arguments
+2. **Environment variables** - `QUORUM_*` prefix
+3. **Project config** - `.quorum/config.yaml` in project root
+4. **Legacy project config** - `.quorum.yaml` (backward compatibility)
+5. **Global config** - `~/.config/quorum/config.yaml`
+6. **Built-in defaults** - Sensible defaults for all options
 
-Later sources override earlier ones. Generate a starter configuration with:
+Generate a starter configuration:
 
 ```bash
 quorum init
@@ -41,18 +47,18 @@ quorum init
 
 | Location | Purpose |
 |----------|---------|
-| `~/.config/quorum/config.yaml` | User-level defaults |
 | `.quorum/config.yaml` | Project-specific settings (recommended) |
-| `.quorum.yaml` | Legacy project settings (backwards compatible) |
+| `.quorum.yaml` | Legacy project settings |
+| `~/.config/quorum/config.yaml` | User-level defaults |
 | `configs/default.yaml` | Reference template (do not edit) |
 
 ---
 
-## Sections
+## Configuration Sections
 
 ### log
 
-Controls logging output format and verbosity.
+Controls logging output.
 
 ```yaml
 log:
@@ -64,8 +70,6 @@ log:
 |-------|------|---------|-------------|
 | `level` | string | `info` | Log verbosity: `debug`, `info`, `warn`, `error` |
 | `format` | string | `auto` | Output format: `auto` (detect TTY), `text`, `json` |
-
-> **Debugging:** For detailed execution logs, use the [trace](#trace) system with `mode: full`. Traces capture all prompts, responses, and timing information.
 
 ---
 
@@ -91,20 +95,22 @@ trace:
 |-------|------|---------|-------------|
 | `mode` | string | `off` | Trace mode: `off`, `summary`, `full` |
 | `dir` | string | `.quorum/traces` | Directory for trace artifacts |
-| `schema_version` | int | `1` | Trace schema version for compatibility |
-| `redact` | bool | `true` | Redact sensitive values in traces |
+| `schema_version` | int | `1` | Trace schema version |
+| `redact` | bool | `true` | Redact sensitive values |
 | `redact_patterns` | []string | `[]` | Additional regex patterns to redact |
-| `redact_allowlist` | []string | `[]` | Regex patterns to exclude from redaction |
-| `max_bytes` | int | `262144` | Maximum bytes per trace file (256KB) |
-| `total_max_bytes` | int | `10485760` | Maximum total bytes per run (10MB) |
-| `max_files` | int | `500` | Maximum number of files per run |
-| `include_phases` | []string | all | Phases to include in tracing |
+| `redact_allowlist` | []string | `[]` | Patterns to exclude from redaction |
+| `max_bytes` | int | `262144` | Max bytes per trace file (256KB) |
+| `total_max_bytes` | int | `10485760` | Max total bytes per run (10MB) |
+| `max_files` | int | `500` | Max files per run |
+| `include_phases` | []string | all | Phases to trace |
 
 **Trace modes:**
 
-- `off` - No tracing
-- `summary` - Only `run.json` manifest and `trace.jsonl` events
-- `full` - Includes prompt/response payload files (subject to size limits)
+| Mode | Description |
+|------|-------------|
+| `off` | No tracing |
+| `summary` | Only manifest and event log |
+| `full` | Includes prompt/response payloads |
 
 ---
 
@@ -124,16 +130,16 @@ workflow:
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `timeout` | duration | `12h` | Maximum workflow execution time |
-| `max_retries` | int | `3` | Maximum retry attempts per failed task |
-| `dry_run` | bool | `false` | Simulate execution without running agents |
-| `sandbox` | bool | `true` | Restrict dangerous operations (security default) |
-| `deny_tools` | []string | `[]` | Tool names to deny during execution |
+| `max_retries` | int | `3` | Retry attempts per failed task (0-10) |
+| `dry_run` | bool | `false` | Simulate without running agents |
+| `sandbox` | bool | `true` | Restrict dangerous operations |
+| `deny_tools` | []string | `[]` | Tool names to block during execution |
 
 ---
 
 ### phases
 
-Configures per-phase settings including timeouts and phase-specific components.
+Configures per-phase settings.
 
 ```yaml
 phases:
@@ -141,17 +147,21 @@ phases:
     timeout: 2h
     refiner:
       enabled: true
-      agent: claude
+      agent: codex
     synthesizer:
       agent: claude
     moderator:
       enabled: true
-      agent: claude
+      agent: copilot
       threshold: 0.90
       min_rounds: 2
       max_rounds: 5
       abort_threshold: 0.30
       stagnation_threshold: 0.02
+    single_agent:
+      enabled: false
+      agent: ""
+      model: ""
   plan:
     timeout: 1h
     synthesizer:
@@ -161,111 +171,77 @@ phases:
     timeout: 2h
 ```
 
-#### Analyze Phase
+#### phases.analyze
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `timeout` | duration | `2h` | Maximum duration for analyze phase |
-| `refiner.enabled` | bool | `false` | Enable prompt refinement before analysis |
-| `refiner.agent` | string | - | Agent to use for refinement (model from `phase_models.refine`) |
-| `synthesizer.agent` | string | - | Agent to synthesize multi-agent analyses (model from `phase_models.analyze`) |
-| `moderator.enabled` | bool | `false` | Enable semantic moderator for consensus evaluation |
-| `moderator.agent` | string | - | Agent to use as moderator (model from `phase_models.analyze`) |
-| `moderator.threshold` | float | `0.90` | Minimum consensus score to proceed (0.0-1.0) |
-| `moderator.min_rounds` | int | `2` | Minimum refinement rounds before consensus can be declared |
-| `moderator.max_rounds` | int | `5` | Maximum refinement rounds before aborting |
+| `timeout` | duration | `2h` | Maximum duration |
+| `refiner.enabled` | bool | `false` | Enable prompt refinement |
+| `refiner.agent` | string | - | Agent for refinement |
+| `synthesizer.agent` | string | - | Agent to synthesize analyses |
+| `moderator.enabled` | bool | `false` | Enable consensus evaluation |
+| `moderator.agent` | string | - | Agent for moderation |
+| `moderator.threshold` | float | `0.80` | Consensus score to proceed (0.0-1.0) |
+| `moderator.min_rounds` | int | `2` | Minimum refinement rounds |
+| `moderator.max_rounds` | int | `5` | Maximum refinement rounds |
 | `moderator.abort_threshold` | float | `0.30` | Score below this aborts workflow |
-| `moderator.stagnation_threshold` | float | `0.02` | Minimum improvement required between rounds |
-| `single_agent.enabled` | bool | `false` | Enable single-agent mode (bypasses multi-agent consensus) |
-| `single_agent.agent` | string | - | Agent to use for single-agent analysis |
-| `single_agent.model` | string | - | Optional model override (uses `phase_models.analyze` if not set) |
+| `moderator.stagnation_threshold` | float | `0.02` | Minimum improvement between rounds |
+| `single_agent.enabled` | bool | `false` | Bypass multi-agent consensus |
+| `single_agent.agent` | string | - | Agent for single-agent mode |
+| `single_agent.model` | string | - | Optional model override |
 
-#### Plan Phase
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `timeout` | duration | `1h` | Maximum duration for plan phase |
-| `synthesizer.enabled` | bool | `false` | Enable multi-agent plan synthesis |
-| `synthesizer.agent` | string | - | Agent to synthesize plans (model from `phase_models.plan`) |
-
-#### Execute Phase
+#### phases.plan
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `timeout` | duration | `2h` | Maximum duration for execute phase |
+| `timeout` | duration | `1h` | Maximum duration |
+| `synthesizer.enabled` | bool | `false` | Enable multi-agent planning |
+| `synthesizer.agent` | string | - | Agent to synthesize plans |
+
+#### phases.execute
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `timeout` | duration | `2h` | Maximum duration |
 
 #### Prompt Refiner
 
-The refiner optimizes the user prompt before analysis for better LLM effectiveness.
+Enhances user prompts before analysis for better LLM effectiveness.
 
-**How it works:**
-
-1. User provides a prompt to `quorum run`
-2. The refiner enhances the prompt for clarity and LLM effectiveness
-3. The refined prompt is used for all subsequent phases
-4. Original prompt is preserved in state for reference
-
-**Disabling refinement:**
+**Behavior:**
+- Refines prompt for clarity and LLM effectiveness
+- Original prompt preserved in state
+- Skipped in dry-run mode and individual phase commands
+- Falls back to original on failure
 
 ```bash
-# Via CLI flag
+# Skip refinement via CLI
 quorum run --skip-refine "your prompt"
-
-# Via configuration
-phases:
-  analyze:
-    refiner:
-      enabled: false
 ```
-
-**Behavior in special modes:**
-
-- **Dry-run mode**: Refinement is skipped, original prompt is used
-- **Individual phase commands** (`quorum analyze`, etc.): Refinement is skipped
-- **Refinement failure**: Falls back to original prompt with a warning
 
 #### Semantic Moderator
 
-The moderator evaluates semantic agreement across agent outputs using weighted divergence scoring.
+Evaluates consensus across agent outputs using weighted divergence scoring.
 
 **Consensus flow:**
 
 ```
-V1 Analysis (all agents)
-    ↓
-V2 Refinement (all agents review V1, ultra-critical self-review)
-    ↓
-Moderator Evaluation → Score >= 90%? → Proceed to consolidation
-    ↓ No
-V(n+1) Refinement (integrate moderator feedback)
-    ↓
-Moderator Evaluation → Score >= 90%? → Proceed to consolidation
-    ↓ No (max rounds or stagnation)
-Abort or proceed with best result
+Analysis (all agents) → Refinement → Moderator → Score ≥ threshold? → Synthesize
+                                         ↓ No
+                                    Refine again (up to max_rounds)
 ```
 
-**Weighted Divergence Scoring:**
+**Divergence weights:**
 
-Not all disagreements are equal:
-
-| Impact Level | Weight | Examples |
-|--------------|--------|----------|
-| **High** | Major reduction | Architectural decisions, core logic, security, breaking changes |
-| **Medium** | Moderate reduction | Implementation details, edge cases, performance |
-| **Low** | Minimal reduction | Naming conventions, code style, documentation, cosmetic choices |
+| Impact | Weight | Examples |
+|--------|--------|----------|
+| High | Major | Architecture, security, breaking changes |
+| Medium | Moderate | Implementation details, edge cases |
+| Low | Minimal | Naming, style, documentation |
 
 #### Single-Agent Mode
 
-Single-agent mode bypasses multi-agent consensus for simpler tasks or when you want to use a specific agent without the overhead of consensus evaluation.
-
-**When to use:**
-
-- Simple, well-defined tasks
-- Rapid prototyping or experimentation
-- When a specific agent excels at the task type
-- Cost optimization (fewer LLM calls)
-
-**Configuration:**
+Bypasses multi-agent consensus. Mutually exclusive with `moderator.enabled`.
 
 ```yaml
 phases:
@@ -273,23 +249,15 @@ phases:
     single_agent:
       enabled: true
       agent: claude
-      model: claude-opus-4  # Optional: override the agent's default model
     moderator:
-      enabled: false  # Must be disabled when single_agent is enabled
+      enabled: false  # Required when single_agent is enabled
 ```
-
-**Important:** `single_agent.enabled` and `moderator.enabled` are mutually exclusive. Single-agent mode produces a `consolidated_analysis` checkpoint directly (with `mode: "single_agent"` metadata), compatible with downstream plan and execute phases.
 
 ---
 
 ### agents
 
-Configures LLM agent backends. Each agent can define a default model and per-phase model overrides.
-
-> **Agent Names are Aliases:** The key under `agents:` (e.g., `claude`, `copilot`) is just an alias/identifier.
-> You can use any name you want. The actual CLI type is determined by built-in mappings or explicit configuration.
-> This is useful for CLIs like **copilot** that support multiple models - you can define multiple entries
-> using the same CLI but with different models for multi-agent analysis.
+Configures LLM agent backends.
 
 ```yaml
 agents:
@@ -298,40 +266,26 @@ agents:
   claude:
     enabled: true
     path: claude
-    model: claude-sonnet-4-5-20250929
+    model: claude-opus-4-5-20251101
     phase_models:
-      optimize: claude-opus-4-5-20251101
-      analyze: claude-opus-4-5-20251101
-      plan: claude-sonnet-4-5-20250929
-      execute: claude-haiku-4-5-20251001
-    max_tokens: 4096
-    temperature: 0.7
-```
-
-#### Multiple Agents with Same CLI
-
-You can define multiple agent entries using the same CLI to run multi-agent analysis with different models:
-
-```yaml
-agents:
-  # Copilot with Claude model
-  copilot-claude:
-    enabled: true
-    path: copilot
-    model: claude-sonnet-4-5
+      execute: claude-sonnet-4-5-20250929
     phases:
+      refine: true
       analyze: true
       moderate: true
+      synthesize: true
+      plan: true
+      execute: true
+    token_discrepancy_threshold: 5.0
 
-  # Copilot with GPT model
-  copilot-gpt:
+  codex:
     enabled: true
-    path: copilot
-    model: gpt-5
-    phases:
-      analyze: true
-
-  # Both will participate in analysis, providing different perspectives
+    path: codex
+    model: gpt-5.2-codex
+    reasoning_effort: high
+    reasoning_effort_phases:
+      refine: xhigh
+      analyze: xhigh
 ```
 
 #### Agent Selection
@@ -342,209 +296,89 @@ agents:
 
 #### Common Agent Fields
 
-Each agent configuration supports these fields:
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `enabled` | bool | varies | Enable/disable agent |
+| `path` | string | agent name | Path to CLI executable |
+| `model` | string | varies | Default model |
+| `phase_models` | map | `{}` | Per-phase model overrides |
+| `phases` | map | `{}` | Phase participation (opt-in) |
+| `token_discrepancy_threshold` | float | `5.0` | Token validation threshold |
+
+#### Codex-Specific Fields
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `enabled` | bool | varies | Enable/disable this agent |
-| `path` | string | agent name | Path to CLI executable |
-| `model` | string | varies | Default model (fallback when phase not specified) |
-| `phase_models` | map | `{}` | Per-phase model overrides |
-| `phases` | map | `{}` | Phase participation control (see below) |
-| `token_discrepancy_threshold` | float | `5.0` | Token reporting validation threshold (see below) |
-| `max_tokens` | int | `4096` | Maximum output tokens |
-| `temperature` | float | `0.7` | Sampling temperature (0.0-2.0) |
+| `reasoning_effort` | string | - | Default reasoning effort: `minimal`, `low`, `medium`, `high`, `xhigh` |
+| `reasoning_effort_phases` | map | `{}` | Per-phase reasoning effort overrides |
 
-#### Phase Participation Control
+#### Phase Participation (opt-in model)
 
-The `phases` map controls which workflow phases an agent participates in. This uses an **opt-in model**:
+The `phases` map controls which phases an agent participates in:
 
 - **Only phases set to `true` are enabled**
 - **Omitted phases are disabled**
-- If `phases` is empty or not specified, the agent participates in all phases (backward compatible)
+- **Empty or missing `phases` = enabled for all** (backward compatible)
 
-Available phases:
+Available phases: `refine`, `analyze`, `moderate`, `synthesize`, `plan`, `execute`
 
-| Phase | Description |
-|-------|-------------|
-| `refine` | Prompt refinement before analysis |
-| `analyze` | Multi-agent analysis participation |
-| `moderate` | Consensus evaluation between agents |
-| `synthesize` | Consolidate multi-agent outputs |
-| `plan` | Task planning |
-| `execute` | Task execution |
+```yaml
+# Agent only as moderator
+copilot:
+  enabled: true
+  phases:
+    moderate: true
+    # All others omitted = disabled
 
-**Example - agent only as moderator:**
+# Agent for analysis and execution
+gemini:
+  enabled: true
+  phases:
+    analyze: true
+    execute: true
+```
+
+#### Model Resolution Order
+
+1. Task-specific model (CLI/task definition)
+2. Phase model (`phase_models.<phase>`)
+3. Default model (`model`)
+
+#### Token Discrepancy Detection
+
+Validates reported token counts against estimates.
+
+| Value | Behavior |
+|-------|----------|
+| `5` (default) | Reported must be 1/5 to 5x of estimated |
+| `0` | Disable validation |
+
+#### Multiple Agents with Same CLI
+
+Define multiple entries using the same CLI for multi-agent analysis:
 
 ```yaml
 agents:
-  copilot:
+  copilot-claude:
     enabled: true
     path: copilot
     model: claude-sonnet-4-5
     phases:
-      moderate: true
-      # all other phases are omitted, so they are disabled
-```
+      analyze: true
 
-**Example - agent for analysis and execution only:**
-
-```yaml
-agents:
-  gemini:
+  copilot-gpt:
     enabled: true
+    path: copilot
+    model: gpt-5
     phases:
       analyze: true
-      execute: true
-      # refine, moderate, synthesize, plan are omitted = disabled
 ```
-
-**Moderator fallback chain:** When the primary moderator fails, agents with `moderate: true` are tried as fallbacks in order.
-
-#### Token Discrepancy Detection
-
-The `token_discrepancy_threshold` validates token counts reported by CLI tools. If reported tokens differ from estimated by more than this factor, the estimated value is used instead.
-
-```yaml
-agents:
-  copilot:
-    enabled: true
-    token_discrepancy_threshold: 5  # Default: 5x
-    # Reported tokens must be within 1/5 to 5x of estimated
-    # Set to 0 to disable validation
-```
-
-| Value | Behavior |
-|-------|----------|
-| `5` (default) | Reported must be between 1/5 and 5x of estimated |
-| `3` | More strict - between 1/3 and 3x |
-| `0` | Disable discrepancy detection |
-
-#### Model Resolution Order
-
-Models are resolved in this priority order:
-
-1. **Task-specific model** - Passed via CLI or task definition
-2. **Phase model** - From `phase_models.<phase>` (optimize/analyze/plan/execute)
-3. **Default model** - From `model` field (fallback)
-
-If `phase_models` defines all four phases, the `model` field serves only as documentation or for non-workflow operations.
-
-#### Claude Configuration
-
-```yaml
-claude:
-  enabled: true
-  path: claude
-  model: claude-sonnet-4-5-20250929
-  phase_models:
-    optimize: claude-opus-4-5-20251101
-    analyze: claude-opus-4-5-20251101
-    plan: claude-sonnet-4-5-20250929
-    execute: claude-haiku-4-5-20251001
-```
-
-**Available models (as of January 2025):**
-
-| Model ID | Description | Best For |
-|----------|-------------|----------|
-| `claude-opus-4-5-20251101` | Maximum intelligence | Complex analysis, research |
-| `claude-sonnet-4-5-20250929` | Balanced performance | General tasks, planning |
-| `claude-haiku-4-5-20251001` | Fastest, near-frontier | Execution, high-volume |
-| `claude-opus-4-1-20250805` | Legacy Opus | Migration only |
-| `claude-sonnet-4-20250514` | Legacy Sonnet | Migration only |
-
-#### Gemini Configuration
-
-```yaml
-gemini:
-  enabled: true
-  path: gemini
-  model: gemini-2.5-flash
-  phase_models:
-    optimize: gemini-2.5-pro
-    analyze: gemini-2.5-pro
-    plan: gemini-2.5-flash
-    execute: gemini-2.5-flash
-```
-
-**Available models (as of January 2025):**
-
-| Model ID | Description | Best For |
-|----------|-------------|----------|
-| `gemini-3-pro` | Preview - Most capable | Complex analysis |
-| `gemini-3-flash` | Preview - Fast and capable | General tasks |
-| `gemini-2.5-pro` | GA - High capability | Production analysis |
-| `gemini-2.5-flash` | GA - Balanced | Production general |
-| `gemini-2.5-flash-lite` | GA - Lightweight | High-volume tasks |
-
-#### Codex Configuration
-
-```yaml
-codex:
-  enabled: false
-  path: codex
-  model: o4-mini
-  phase_models:
-    optimize: o3
-    analyze: o3
-    plan: o4-mini
-    execute: o4-mini
-```
-
-**Available models (as of January 2025):**
-
-| Model ID | Description | Best For |
-|----------|-------------|----------|
-| `o3` | Reasoning model | Complex analysis |
-| `o4-mini` | Fast reasoning | General tasks |
-| `gpt-4.1` | GPT-4 Turbo | Legacy compatibility |
-| `codex` | Code-specialized | Code generation |
-
-> **Note:** Model availability depends on your OpenAI account tier. Some models (e.g., `o3`) require API access.
-
-#### Copilot Configuration
-
-```yaml
-copilot:
-  enabled: false
-  path: copilot
-  model: claude-sonnet-4-5
-  phase_models:
-    optimize: claude-sonnet-4-5
-    analyze: claude-sonnet-4-5
-    plan: claude-sonnet-4-5
-    execute: claude-sonnet-4-5
-```
-
-GitHub Copilot CLI is a standalone coding agent (`npm install -g @github/copilot`) that replaced the deprecated `gh copilot` extension.
-
-**Installation:**
-```bash
-npm install -g @github/copilot
-copilot /login  # Authenticate with GitHub
-```
-
-**Available models:**
-
-| Model ID | Description | Best For |
-|----------|-------------|----------|
-| `claude-sonnet-4-5` | Claude Sonnet 4.5 (default) | General tasks |
-| `claude-sonnet-4` | Claude Sonnet 4 | Balanced |
-| `gpt-5` | GPT-5 | Alternative |
-
-**YOLO mode flags (auto-enabled by quorum-ai):**
-- `--allow-all-tools` - Auto-approve all tool usage
-- `--allow-all-paths` - Disable path verification
-- `--allow-all-urls` - Disable URL verification
-
-> **Note:** Requires GitHub Copilot Pro, Pro+, Business, or Enterprise subscription.
 
 ---
 
 ### state
 
-Configures workflow state persistence for resume capability.
+Configures workflow state persistence.
 
 ```yaml
 state:
@@ -556,112 +390,32 @@ state:
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `backend` | string | `json` | Storage backend: `json` (file-based) or `sqlite` (database) |
-| `path` | string | `.quorum/state/state.json` | Path to state file (relative or absolute) |
-| `backup_path` | string | `.quorum/state/state.json.bak` | Path to backup file |
-| `lock_ttl` | duration | `1h` | Lock file TTL before considered stale |
+| `backend` | string | `json` | Storage: `json` (file) or `sqlite` (database) |
+| `path` | string | `.quorum/state/state.json` | State file path |
+| `backup_path` | string | `.quorum/state/state.json.bak` | Backup file path |
+| `lock_ttl` | duration | `1h` | Lock TTL before stale |
 
-**Backend options:**
+**Backend comparison:**
 
-| Backend | Description | Best For |
-|---------|-------------|----------|
-| `json` | File-based storage, human-readable | Default, simple setups, debugging |
-| `sqlite` | Database storage with WAL mode | Large workflows, concurrent access, better performance |
+| Backend | Best For |
+|---------|----------|
+| `json` | Simple setups, debugging, human-readable |
+| `sqlite` | Large workflows, concurrent access, performance |
 
-#### Project-Local vs Global State
+**Path extension handling:**
 
-By default, state is stored **locally within each project** using a relative path (`.quorum/state/...`). This means:
+Extensions are automatically adjusted when switching backends:
 
-- Each project has its own independent workflow history
-- Running `quorum` in `/project-a/` creates state in `/project-a/.quorum/state/`
-- Running `quorum` in `/project-b/` creates separate state in `/project-b/.quorum/state/`
-- Workflows reference files relative to their project, so project-local storage is the recommended approach
-
-**For global state** (shared across all projects), configure an absolute path:
-
-```yaml
-state:
-  backend: sqlite
-  path: ~/.quorum/global/state.db
-  backup_path: ~/.quorum/global/state.db.bak
-```
-
-> **Warning:** Global state is not recommended because workflows contain project-specific paths (worktrees, file references) that won't resolve correctly across different projects.
-
-#### Automatic Path Extension Handling
-
-When switching backends, you don't need to change the `path` configuration. The extension is **automatically adjusted**:
-
-| Configured Path | Backend | Actual Path Used |
-|-----------------|---------|------------------|
-| `.quorum/state/state.json` | `json` | `.quorum/state/state.json` |
-| `.quorum/state/state.json` | `sqlite` | `.quorum/state/state.db` |
-| `.quorum/state/state.db` | `sqlite` | `.quorum/state/state.db` |
-| `.quorum/state/state.db` | `json` | `.quorum/state/state.json` |
-
-This allows easy backend switching without config changes:
-
-```bash
-# Switch from JSON to SQLite - no path change needed
-export QUORUM_STATE_BACKEND=sqlite
-quorum run "your prompt"
-```
-
-**Multi-workflow storage:**
-
-Workflows are stored in separate files under `.quorum/state/workflows/`:
-- Each workflow: `.quorum/state/workflows/<workflow-id>.json`
-- Active workflow tracking: `.quorum/state/workflows/active.json`
-- Per-workflow backups: `.quorum/state/workflows/<workflow-id>.json.bak`
-
-**Workflow continuity:**
-
-The `/plan` and `/execute` commands (both CLI and TUI) automatically continue from the active workflow when no prompt is provided:
-
-```bash
-# Start a new workflow
-quorum run "Implement feature X"
-
-# Continue planning (uses active workflow)
-quorum plan
-
-# Execute tasks (uses active workflow)
-quorum execute
-
-# Resume a specific workflow
-quorum plan --workflow wf-abc123
-quorum execute --workflow wf-abc123
-
-# List available workflows
-quorum workflows
-```
-
-**TUI mode commands:**
-
-```
-/workflows       List all available workflows
-/load [id]       Load and switch to a specific workflow
-/status          Show current workflow status
-/plan            Continue to planning phase (from completed analyze)
-/execute         Continue to execution phase (from completed plan)
-```
-
-Example TUI workflow:
-```
-/workflows               # List available workflows
-/load wf-1234567890-1    # Switch to a specific workflow
-/status                  # Check current state
-/plan                    # Continue to planning (if analyze completed)
-/execute                 # Continue to execution (if plan completed)
-```
+| Configured | Backend | Actual |
+|------------|---------|--------|
+| `state.json` | `sqlite` | `state.db` |
+| `state.db` | `json` | `state.json` |
 
 ---
 
 ### git
 
-Configures git integration, worktree isolation, and post-task finalization.
-
-Quorum executes tasks in isolated git worktrees, each on its own branch (`quorum/<task-id>`). After task completion, changes can be automatically committed, pushed, and PRs created.
+Configures git integration and task finalization.
 
 ```yaml
 git:
@@ -680,44 +434,44 @@ git:
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `worktree_dir` | string | `.worktrees` | Directory where worktrees are created |
-| `auto_clean` | bool | `true` | Remove worktrees after task completion |
-| `worktree_mode` | string | `parallel` | When to create worktrees (see below) |
+| `worktree_dir` | string | `.worktrees` | Worktree directory |
+| `auto_clean` | bool | `true` | Remove worktrees after completion |
+| `worktree_mode` | string | `parallel` | When to create worktrees |
 
 **Worktree modes:**
 
-- `always` - Every task gets its own worktree
-- `parallel` - Only when 2+ tasks can run concurrently (recommended)
-- `disabled` - All tasks run in the main working directory (no isolation)
+| Mode | Description |
+|------|-------------|
+| `always` | Every task gets its own worktree |
+| `parallel` | Only when 2+ tasks run concurrently (recommended) |
+| `disabled` | All tasks share main working directory |
 
 #### Post-Task Finalization
 
-After each task completes, Quorum can automatically finalize changes:
-
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `auto_commit` | bool | `true` | Commit changes after task completes |
-| `auto_push` | bool | `true` | Push task branch to remote |
-| `auto_pr` | bool | `true` | Create pull request for task branch |
-| `pr_base_branch` | string | `""` | Target branch for PRs. Empty uses repository default (main/master) |
-| `auto_merge` | bool | `false` | Merge PRs immediately after creation (requires review disabled) |
+| `auto_commit` | bool | `true` | Commit changes after task |
+| `auto_push` | bool | `true` | Push branch to remote |
+| `auto_pr` | bool | `true` | Create pull request |
+| `pr_base_branch` | string | `""` | PR target branch (empty = repo default) |
+| `auto_merge` | bool | `false` | Merge PR immediately |
 | `merge_strategy` | string | `squash` | Merge method: `merge`, `squash`, `rebase` |
 
 **Finalization flow:**
 
 1. Task completes on branch `quorum/<task-id>`
-2. If `auto_commit`: changes are committed with task description
-3. If `auto_push`: branch is pushed to remote
-4. If `auto_pr`: PR is created targeting `pr_base_branch` (or repository default)
-5. If `auto_merge`: PR is merged using `merge_strategy`
+2. `auto_commit` → commit changes
+3. `auto_push` → push to remote
+4. `auto_pr` → create PR targeting `pr_base_branch`
+5. `auto_merge` → merge using `merge_strategy`
 
-> **Safety note:** `auto_merge` is disabled by default. Enable only if you want PRs merged automatically without human review.
+> **Warning:** `auto_merge` is disabled by default. Enable only for automated pipelines.
 
 ---
 
 ### github
 
-Configures GitHub integration for PR creation and issue tracking.
+Configures GitHub integration.
 
 ```yaml
 github:
@@ -726,22 +480,123 @@ github:
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `remote` | string | `origin` | Git remote name for GitHub operations |
+| `remote` | string | `origin` | Git remote name |
 
-> **Authentication:** GitHub token should be provided via `GITHUB_TOKEN` or `GH_TOKEN` environment variable. Never commit tokens in configuration files.
+> **Authentication:** Provide token via `GITHUB_TOKEN` or `GH_TOKEN` environment variable.
+
+---
+
+### chat
+
+Configures TUI chat behavior.
+
+```yaml
+chat:
+  timeout: 3m
+  progress_interval: 15s
+  editor: vim
+```
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `timeout` | duration | `3m` | Chat message timeout |
+| `progress_interval` | duration | `15s` | Progress log interval |
+| `editor` | string | `vim` | Editor for file editing (`vim`, `nvim`, `code`) |
+
+---
+
+### report
+
+Configures markdown report generation.
+
+```yaml
+report:
+  enabled: true
+  base_dir: .quorum/output
+  use_utc: true
+  include_raw: true
+```
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `enabled` | bool | `true` | Enable report generation |
+| `base_dir` | string | `.quorum/output` | Output directory |
+| `use_utc` | bool | `true` | Use UTC timestamps |
+| `include_raw` | bool | `true` | Include raw agent outputs |
+
+---
+
+### diagnostics
+
+Configures system diagnostics for process resilience.
+
+```yaml
+diagnostics:
+  enabled: true
+
+  resource_monitoring:
+    interval: 30s
+    fd_threshold_percent: 80
+    goroutine_threshold: 10000
+    memory_threshold_mb: 4096
+    history_size: 120
+
+  crash_dump:
+    dir: .quorum/crashdumps
+    max_files: 10
+    include_stack: true
+    include_env: false
+
+  preflight_checks:
+    enabled: true
+    min_free_fd_percent: 20
+    min_free_memory_mb: 256
+```
+
+#### diagnostics (root)
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `enabled` | bool | `true` | Enable diagnostics subsystem |
+
+#### diagnostics.resource_monitoring
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `interval` | duration | `30s` | Snapshot interval |
+| `fd_threshold_percent` | int | `80` | FD usage warning threshold (0-100) |
+| `goroutine_threshold` | int | `10000` | Goroutine count warning threshold |
+| `memory_threshold_mb` | int | `4096` | Heap memory warning threshold (MB) |
+| `history_size` | int | `120` | Snapshots to retain |
+
+#### diagnostics.crash_dump
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `dir` | string | `.quorum/crashdumps` | Crash dump directory |
+| `max_files` | int | `10` | Max dumps to retain |
+| `include_stack` | bool | `true` | Include stack traces |
+| `include_env` | bool | `false` | Include environment (redacted) |
+
+#### diagnostics.preflight_checks
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `enabled` | bool | `true` | Enable preflight checks |
+| `min_free_fd_percent` | int | `20` | Minimum free FD percentage |
+| `min_free_memory_mb` | int | `256` | Minimum free memory (MB) |
 
 ---
 
 ## Environment Variables
 
-All configuration options can be overridden via environment variables using the `QUORUM_` prefix:
+Override any configuration via `QUORUM_` prefix:
 
 ```bash
 QUORUM_LOG_LEVEL=debug
 QUORUM_WORKFLOW_TIMEOUT=4h
 QUORUM_AGENTS_CLAUDE_MODEL=claude-opus-4-5-20251101
 QUORUM_PHASES_ANALYZE_MODERATOR_THRESHOLD=0.95
-QUORUM_PHASES_ANALYZE_REFINER_ENABLED=true
 ```
 
 Nested keys use underscores: `phases.analyze.moderator.threshold` → `QUORUM_PHASES_ANALYZE_MODERATOR_THRESHOLD`
@@ -750,104 +605,68 @@ Nested keys use underscores: `phases.analyze.moderator.threshold` → `QUORUM_PH
 
 ## Example Configurations
 
-### Minimal Configuration
+### Multi-Agent Analysis (Default)
 
 ```yaml
-agents:
-  default: claude
-  claude:
-    enabled: true
-    path: claude
-    phase_models:
-      refine: claude-opus-4-5-20251101
-      analyze: claude-opus-4-5-20251101
-      plan: claude-opus-4-5-20251101
-  gemini:
-    enabled: true
-    path: gemini
-    phase_models:
-      analyze: gemini-3-pro-preview
-      plan: gemini-3-pro-preview
-
 phases:
   analyze:
+    refiner:
+      enabled: true
+      agent: codex
     synthesizer:
       agent: claude
     moderator:
       enabled: true
-      agent: claude
+      agent: copilot
       threshold: 0.90
-```
 
-### High-Quality Analysis
-
-```yaml
 agents:
   default: claude
   claude:
     enabled: true
-    phase_models:
-      refine: claude-opus-4-5-20251101
-      analyze: claude-opus-4-5-20251101
-      plan: claude-sonnet-4-5-20250929
-      execute: claude-haiku-4-5-20251001
+    phases:
+      analyze: true
+      synthesize: true
+      plan: true
+      execute: true
   gemini:
     enabled: true
-    phase_models:
-      analyze: gemini-2.5-pro
-      plan: gemini-2.5-flash
-      execute: gemini-2.5-flash
-
-phases:
-  analyze:
-    refiner:
-      enabled: true
-      agent: claude
-    synthesizer:
-      agent: claude
-    moderator:
-      enabled: true
-      agent: claude
-      threshold: 0.95
-      min_rounds: 2
-      max_rounds: 5
+    phases:
+      analyze: true
+      execute: true
+  codex:
+    enabled: true
+    phases:
+      refine: true
+      analyze: true
+  copilot:
+    enabled: true
+    phases:
+      moderate: true
 ```
 
-### Lightweight Configuration
-
-Uses lighter models and reduced refinement rounds for faster execution.
+### Single-Agent Mode
 
 ```yaml
-agents:
-  default: gemini
-  claude:
-    enabled: false
-  gemini:
-    enabled: true
-    model: gemini-2.5-flash-lite
-    phase_models:
-      analyze: gemini-2.5-flash
-      plan: gemini-2.5-flash
-
 phases:
   analyze:
-    refiner:
-      enabled: false
-    synthesizer:
-      agent: gemini
-    moderator:
+    single_agent:
       enabled: true
-      agent: gemini
-      threshold: 0.85
-      max_rounds: 3
+      agent: claude
+    moderator:
+      enabled: false
+
+agents:
+  default: claude
+  claude:
+    enabled: true
 ```
 
-### Development/Debug Configuration
+### Debug Configuration
 
 ```yaml
 log:
   level: debug
-  format: text
 
 trace:
   mode: full
@@ -855,34 +674,21 @@ trace:
 
 workflow:
   dry_run: true
-
-agents:
-  default: claude
-  claude:
-    enabled: true
-    model: claude-haiku-4-5-20251001
-    phase_models:
-      analyze: claude-haiku-4-5-20251001
-
-phases:
-  analyze:
-    synthesizer:
-      agent: claude
 ```
 
 ---
 
 ## Validation
 
-Validate your configuration with:
+Validate configuration:
 
 ```bash
 quorum doctor
 ```
 
-This checks:
-- YAML syntax validity
-- Required fields presence
+Checks:
+- YAML syntax
+- Required fields
 - Agent CLI availability
 - Model identifier format
 - Threshold value ranges
