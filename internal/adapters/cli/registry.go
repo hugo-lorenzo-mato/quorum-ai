@@ -142,6 +142,21 @@ func (r *Registry) ListEnabled() []string {
 	return names
 }
 
+// ListEnabledForPhase returns agent names that are configured and enabled for the given phase.
+// Unlike AvailableForPhase, this does not ping agents - it only checks configuration.
+func (r *Registry) ListEnabledForPhase(phase string) []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	names := make([]string, 0)
+	for name, cfg := range r.configs {
+		if cfg.IsEnabledForPhase(phase) {
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
 // Has checks if an agent is registered.
 func (r *Registry) Has(name string) bool {
 	r.mu.RLock()

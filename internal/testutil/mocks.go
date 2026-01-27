@@ -393,6 +393,12 @@ func (r *MockRegistry) AvailableForPhase(ctx context.Context, _ string) []string
 	return r.Available(ctx)
 }
 
+// ListEnabledForPhase returns agent names that are configured and enabled for the given phase.
+// In the mock, this just returns all agent names (can be extended for specific tests).
+func (r *MockRegistry) ListEnabledForPhase(_ string) []string {
+	return r.List()
+}
+
 // Ensure interfaces are implemented
 var _ core.Agent = (*MockAgent)(nil)
 var _ core.StateManager = (*MockStateManager)(nil)

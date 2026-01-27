@@ -229,18 +229,19 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 		return err
 	}
 
-	agentName := task.CLI
-	if agentName == "" {
-		agentName = wctx.Config.DefaultAgent
+	// Get primary agent
+	primaryAgent := task.CLI
+	if primaryAgent == "" {
+		primaryAgent = wctx.Config.DefaultAgent
 	}
 
-	agent, err := wctx.Agents.Get(agentName)
-	if err != nil {
-		return fail(err)
-	}
-
-	if err := e.acquireRateLimit(wctx, agentName); err != nil {
-		return fail(fmt.Errorf("rate limit: %w", err))
+	// Build list of agents to try: primary first, then other agents enabled for execute phase
+	agentsToTry := []string{primaryAgent}
+	enabledAgents := wctx.Agents.ListEnabledForPhase(string(core.PhaseExecute))
+	for _, name := range enabledAgents {
+		if name != primaryAgent {
+			agentsToTry = append(agentsToTry, name)
+		}
 	}
 
 	prompt, err := wctx.Prompts.RenderTaskExecute(TaskExecuteParams{
@@ -251,28 +252,144 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 		return fail(err)
 	}
 
-	model := ResolvePhaseModel(wctx.Config, agentName, core.PhaseExecute, task.Model)
-	execStartTime := time.Now()
+	var lastErr error
+	var lastAgentName string
+	var lastModel string
+	var lastRetryCount int
+	var lastDurationMS int64
 
-	e.logTaskExecutionStart(wctx, task, agentName, model, workDir, prompt)
-	e.notifyAgentStarted(wctx, agentName, task, model, workDir)
+	// Try each agent in order until one succeeds
+	for agentIdx, agentName := range agentsToTry {
+		agent, err := wctx.Agents.Get(agentName)
+		if err != nil {
+			wctx.Logger.Warn("executor: agent not available, trying next",
+				"agent", agentName,
+				"error", err,
+				"task_id", task.ID,
+			)
+			lastErr = err
+			lastAgentName = agentName
+			continue
+		}
 
-	result, retryCount, durationMS, execErr := e.executeWithRetry(ctx, wctx, agent, agentName, task, prompt, model, workDir, execStartTime)
+		if err := e.acquireRateLimit(wctx, agentName); err != nil {
+			wctx.Logger.Warn("executor: rate limit error, trying next agent",
+				"agent", agentName,
+				"error", err,
+				"task_id", task.ID,
+			)
+			lastErr = fmt.Errorf("rate limit: %w", err)
+			lastAgentName = agentName
+			continue
+		}
 
-	wctx.Lock()
-	taskState.Retries = retryCount
-	wctx.Unlock()
+		model := ResolvePhaseModel(wctx.Config, agentName, core.PhaseExecute, task.Model)
+		execStartTime := time.Now()
 
-	if execErr != nil {
-		taskErr = execErr
-		return e.handleExecutionFailure(wctx, task, taskState, agentName, model, retryCount, durationMS, execErr)
+		// Log fallback attempt if not the primary agent
+		if agentIdx > 0 {
+			wctx.Logger.Info("executor: attempting fallback agent",
+				"task_id", task.ID,
+				"task_name", task.Name,
+				"fallback_agent", agentName,
+				"attempt", agentIdx+1,
+				"previous_agent", agentsToTry[agentIdx-1],
+			)
+			if wctx.Output != nil {
+				wctx.Output.Log("info", "executor", fmt.Sprintf("Trying fallback agent %s for task %s", agentName, task.Name))
+			}
+		}
+
+		e.logTaskExecutionStart(wctx, task, agentName, model, workDir, prompt)
+		e.notifyAgentStarted(wctx, agentName, task, model, workDir)
+
+		result, retryCount, durationMS, execErr := e.executeWithRetry(ctx, wctx, agent, agentName, task, prompt, model, workDir, execStartTime)
+
+		wctx.Lock()
+		taskState.Retries = retryCount
+		wctx.Unlock()
+
+		if execErr != nil {
+			lastErr = execErr
+			lastAgentName = agentName
+			lastModel = model
+			lastRetryCount = retryCount
+			lastDurationMS = durationMS
+
+			// Log failure and continue to next agent if available
+			wctx.Logger.Warn("executor: agent failed, checking for fallback",
+				"task_id", task.ID,
+				"agent", agentName,
+				"error", execErr,
+				"has_more_fallbacks", agentIdx < len(agentsToTry)-1,
+			)
+
+			// If there are more agents to try, continue
+			if agentIdx < len(agentsToTry)-1 {
+				if wctx.Output != nil {
+					wctx.Output.AgentEvent("fallback", agentName, fmt.Sprintf("Agent failed, trying next: %v", execErr), map[string]interface{}{
+						"task_id":    string(task.ID),
+						"next_agent": agentsToTry[agentIdx+1],
+					})
+				}
+				continue
+			}
+
+			// No more agents to try, fail the task
+			taskErr = execErr
+			return e.handleExecutionFailure(wctx, task, taskState, lastAgentName, lastModel, lastRetryCount, lastDurationMS, execErr)
+		}
+
+		// Validate output before declaring success - validation failure should trigger fallback
+		validation := e.validateTaskOutput(result, task)
+		if !validation.Valid {
+			validationErr := fmt.Errorf("task output validation failed: %s", validation.Warning)
+			wctx.Logger.Warn("executor: task output validation failed, checking for fallback",
+				"task_id", task.ID,
+				"task_name", task.Name,
+				"agent", agentName,
+				"tokens_out", result.TokensOut,
+				"warning", validation.Warning,
+				"has_more_fallbacks", agentIdx < len(agentsToTry)-1,
+			)
+
+			lastErr = validationErr
+			lastAgentName = agentName
+			lastModel = model
+			lastRetryCount = retryCount
+			lastDurationMS = durationMS
+
+			// If there are more agents to try, continue with fallback
+			if agentIdx < len(agentsToTry)-1 {
+				if wctx.Output != nil {
+					wctx.Output.AgentEvent("fallback", agentName, fmt.Sprintf("Output validation failed, trying next agent: %v", validationErr), map[string]interface{}{
+						"task_id":    string(task.ID),
+						"next_agent": agentsToTry[agentIdx+1],
+						"tokens_out": result.TokensOut,
+					})
+				}
+				continue
+			}
+
+			// No more agents to try, fail the task
+			taskErr = validationErr
+			e.setTaskFailed(wctx, taskState, validationErr)
+			return validationErr
+		}
+
+		// Success! Handle the successful execution (validation already passed)
+		if err := e.handleExecutionSuccessValidated(ctx, wctx, task, taskState, agentName, result, workDir, durationMS, validation); err != nil {
+			taskErr = err
+			return err
+		}
+		return nil
 	}
 
-	if err := e.handleExecutionSuccess(ctx, wctx, task, taskState, agentName, result, workDir, durationMS); err != nil {
-		taskErr = err
-		return err
+	// All agents failed (should only reach here if all agents were unavailable)
+	if lastErr != nil {
+		return fail(fmt.Errorf("all agents failed for task %s: last error from %s: %w", task.Name, lastAgentName, lastErr))
 	}
-	return nil
+	return fail(fmt.Errorf("no agents available for task %s", task.Name))
 }
 
 func (e *Executor) checkControl(ctx context.Context, wctx *Context) error {
@@ -480,7 +597,11 @@ func (e *Executor) handleExecutionSuccess(ctx context.Context, wctx *Context, ta
 		e.setTaskFailed(wctx, taskState, validationErr)
 		return validationErr
 	}
+	return e.handleExecutionSuccessValidated(ctx, wctx, task, taskState, agentName, result, workDir, durationMS, validation)
+}
 
+// handleExecutionSuccessValidated handles successful execution when validation has already been performed.
+func (e *Executor) handleExecutionSuccessValidated(ctx context.Context, wctx *Context, task *core.Task, taskState *core.TaskState, agentName string, result *core.ExecuteResult, workDir string, durationMS int64, validation TaskOutputValidationResult) error {
 	if validation.Warning != "" {
 		wctx.Logger.Warn("executor: task output validation warning",
 			"task_id", task.ID,
