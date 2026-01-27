@@ -79,6 +79,22 @@ const useWorkflowStore = create((set, get) => ({
     }
   },
 
+  updateWorkflow: async (id, data) => {
+    try {
+      const workflow = await workflowApi.update(id, data);
+      const { workflows, activeWorkflow } = get();
+      const updated = workflows.map(w => w.id === id ? { ...w, ...workflow } : w);
+      set({ workflows: updated });
+      if (activeWorkflow?.id === id) {
+        set({ activeWorkflow: { ...activeWorkflow, ...workflow } });
+      }
+      return workflow;
+    } catch (error) {
+      set({ error: error.message });
+      throw error;
+    }
+  },
+
   // Workflow control actions
   startWorkflow: async (id) => {
     set({ loading: true, error: null });

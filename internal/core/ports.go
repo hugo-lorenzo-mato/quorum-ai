@@ -200,6 +200,7 @@ type WorkflowSummary struct {
 type WorkflowState struct {
 	Version         int                   `json:"version"`
 	WorkflowID      WorkflowID            `json:"workflow_id"`
+	Title           string                `json:"title,omitempty"`
 	Status          WorkflowStatus        `json:"status"`
 	CurrentPhase    Phase                 `json:"current_phase"`
 	Prompt          string                `json:"prompt"`

@@ -4,6 +4,7 @@ import { useWorkflowStore, useTaskStore, useUIStore, useAgentStore } from '../st
 import { fileApi, workflowApi } from '../lib/api';
 import MarkdownViewer from '../components/MarkdownViewer';
 import AgentActivity, { AgentActivityCompact } from '../components/AgentActivity';
+import EditableField from '../components/EditableField';
 import {
   GitBranch,
   Plus,
@@ -160,10 +161,33 @@ function TaskItem({ task, selected, onClick }) {
 }
 
 function WorkflowDetail({ workflow, tasks, onBack }) {
-  const { startWorkflow, pauseWorkflow, stopWorkflow, error, clearError } = useWorkflowStore();
+  const { startWorkflow, pauseWorkflow, stopWorkflow, updateWorkflow, error, clearError } = useWorkflowStore();
   const notifyInfo = useUIStore((s) => s.notifyInfo);
   const notifyError = useUIStore((s) => s.notifyError);
-  const workflowTitle = useMemo(() => deriveWorkflowTitle(workflow, tasks), [workflow, tasks]);
+
+  // Editable workflow state
+  const canEdit = workflow.status === 'pending';
+  const displayTitle = workflow.title || deriveWorkflowTitle(workflow, tasks);
+
+  const handleUpdateTitle = useCallback(async (newTitle) => {
+    try {
+      await updateWorkflow(workflow.id, { title: newTitle });
+      notifyInfo('Title updated');
+    } catch (err) {
+      notifyError(err.message || 'Failed to update title');
+      throw err;
+    }
+  }, [workflow.id, updateWorkflow, notifyInfo, notifyError]);
+
+  const handleUpdatePrompt = useCallback(async (newPrompt) => {
+    try {
+      await updateWorkflow(workflow.id, { prompt: newPrompt });
+      notifyInfo('Prompt updated');
+    } catch (err) {
+      notifyError(err.message || 'Failed to update prompt');
+      throw err;
+    }
+  }, [workflow.id, updateWorkflow, notifyInfo, notifyError]);
 
   // Agent activity
   const [activityExpanded, setActivityExpanded] = useState(true);
@@ -537,8 +561,19 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
         >
           <ArrowLeft className="w-5 h-5 text-muted-foreground" />
         </button>
-        <div className="flex-1">
-          <h1 className="text-xl font-semibold text-foreground line-clamp-2">{workflowTitle}</h1>
+        <div className="flex-1 min-w-0">
+          {canEdit ? (
+            <EditableField
+              value={workflow.title || ''}
+              onSave={handleUpdateTitle}
+              placeholder={displayTitle}
+              className="mb-1"
+              displayClassName="text-xl font-semibold text-foreground"
+              inputClassName="text-xl font-semibold"
+            />
+          ) : (
+            <h1 className="text-xl font-semibold text-foreground line-clamp-2">{displayTitle}</h1>
+          )}
           <p className="text-sm text-muted-foreground">{workflow.id}</p>
         </div>
         <div className="flex items-center gap-3">
@@ -587,15 +622,29 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
 
       {/* Info Card */}
       <div className="p-6 rounded-xl border border-border bg-card">
-        <div className="flex items-start justify-between mb-4">
-          <div>
-            {workflow.prompt ? (
-              <p className="text-sm text-muted-foreground mb-2 line-clamp-3">
-                {normalizeWhitespace(workflow.prompt)}
-              </p>
-            ) : (
-              <p className="text-sm text-muted-foreground mb-2">No prompt</p>
+        <div className="mb-4">
+          <div className="flex items-center gap-2 mb-2">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Prompt</p>
+            {canEdit && (
+              <span className="text-xs text-muted-foreground">(click to edit)</span>
             )}
+          </div>
+          {canEdit ? (
+            <EditableField
+              value={workflow.prompt || ''}
+              onSave={handleUpdatePrompt}
+              placeholder="Describe what you want the AI agents to accomplish..."
+              multiline
+              maxLength={10000}
+              displayClassName="text-sm text-foreground whitespace-pre-wrap"
+              inputClassName="text-sm"
+            />
+          ) : (
+            <p className="text-sm text-foreground whitespace-pre-wrap">
+              {workflow.prompt || 'No prompt'}
+            </p>
+          )}
+          <div className="mt-3">
             <StatusBadge status={workflow.status} />
           </div>
         </div>

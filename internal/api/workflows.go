@@ -17,6 +17,7 @@ import (
 // WorkflowResponse is the API response for a workflow.
 type WorkflowResponse struct {
 	ID              string    `json:"id"`
+	Title           string    `json:"title,omitempty"`
 	Status          string    `json:"status"`
 	CurrentPhase    string    `json:"current_phase"`
 	Prompt          string    `json:"prompt"`
@@ -287,6 +288,8 @@ func (s *Server) handleUpdateWorkflow(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
+		Title  string `json:"title,omitempty"`
+		Prompt string `json:"prompt,omitempty"`
 		Status string `json:"status,omitempty"`
 		Phase  string `json:"phase,omitempty"`
 	}
@@ -295,6 +298,20 @@ func (s *Server) handleUpdateWorkflow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Only allow editing title and prompt when workflow is pending
+	if req.Title != "" || req.Prompt != "" {
+		if state.Status != core.WorkflowStatusPending {
+			respondError(w, http.StatusConflict, "cannot edit title or prompt after workflow has started")
+			return
+		}
+	}
+
+	if req.Title != "" {
+		state.Title = req.Title
+	}
+	if req.Prompt != "" {
+		state.Prompt = req.Prompt
+	}
 	if req.Status != "" {
 		state.Status = core.WorkflowStatus(req.Status)
 	}
@@ -363,6 +380,7 @@ func (s *Server) handleActivateWorkflow(w http.ResponseWriter, r *http.Request) 
 func stateToWorkflowResponse(state *core.WorkflowState, activeID core.WorkflowID) WorkflowResponse {
 	resp := WorkflowResponse{
 		ID:              string(state.WorkflowID),
+		Title:           state.Title,
 		Status:          string(state.Status),
 		CurrentPhase:    string(state.CurrentPhase),
 		Prompt:          state.Prompt,
