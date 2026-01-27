@@ -224,8 +224,9 @@ func (b *BaseAdapter) ExecuteCommand(ctx context.Context, args []string, stdin, 
 		cmd.Stderr = &stderr
 	}
 
-	// Set environment
+	// Set environment and identification
 	cmd.Env = os.Environ()
+	cmd.Env = append(cmd.Env, "QUORUM_MANAGED=true", fmt.Sprintf("QUORUM_AGENT=%s", b.config.Name))
 
 	// Log command execution start with truncated stdin for debugging
 	stdinPreview := stdin
@@ -252,6 +253,8 @@ func (b *BaseAdapter) ExecuteCommand(ctx context.Context, args []string, stdin, 
 		}
 		return nil, fmt.Errorf("starting command: %w", err)
 	}
+
+	b.logger.Info("cli: process started", "adapter", b.config.Name, "pid", cmd.Process.Pid)
 
 	// Stream stderr if we have a pipe
 	var wg sync.WaitGroup
@@ -527,6 +530,7 @@ func (b *BaseAdapter) executeWithJSONStreaming(
 	}
 
 	cmd.Env = os.Environ()
+	cmd.Env = append(cmd.Env, "QUORUM_MANAGED=true", fmt.Sprintf("QUORUM_AGENT=%s", adapterName))
 
 	b.logger.Debug("executing command with JSON streaming",
 		"path", cmdPath,
@@ -541,6 +545,8 @@ func (b *BaseAdapter) executeWithJSONStreaming(
 		stderrPipe.Close()
 		return nil, fmt.Errorf("starting command: %w", err)
 	}
+
+	b.logger.Info("cli: streaming process started", "adapter", adapterName, "pid", cmd.Process.Pid)
 
 	// Stream both stdout and stderr
 	var stdout, stderr bytes.Buffer
@@ -755,6 +761,7 @@ func (b *BaseAdapter) executeWithLogFileStreaming(
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	cmd.Env = os.Environ()
+	cmd.Env = append(cmd.Env, "QUORUM_MANAGED=true", fmt.Sprintf("QUORUM_AGENT=%s", adapterName))
 
 	b.logger.Debug("executing command with log file streaming",
 		"path", cmdPath,
@@ -767,6 +774,8 @@ func (b *BaseAdapter) executeWithLogFileStreaming(
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("starting command: %w", err)
 	}
+
+	b.logger.Info("cli: log-streaming process started", "adapter", adapterName, "pid", cmd.Process.Pid)
 
 	// Start log file tailer in background
 	stopTail := make(chan struct{})

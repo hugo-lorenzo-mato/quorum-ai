@@ -516,6 +516,10 @@ func RenderAgentProgressBars(agents []*AgentInfo, width int) string {
 			if desc == "" {
 				desc = "processing..."
 			}
+			// Prepend phase/role if available (e.g., "[moderator] thinking...")
+			if agent.Phase != "" {
+				desc = fmt.Sprintf("[%s] %s", agent.Phase, desc)
+			}
 			// Calculate icon visual width (emojis may be 2 chars wide)
 			iconWidth := lipgloss.Width(icon)
 			// Leave room for icon + space + desc

@@ -133,6 +133,10 @@ function AgentProgressBar({ agent, tick }) {
         <span className={isActive ? 'text-warning' : isDone ? 'text-success' : isError ? 'text-error' : 'text-muted-foreground'}>
           {activityIcon}
         </span>
+        {/* Show phase/role if available (e.g., "[moderator] thinking...") */}
+        {agent.data?.phase && isActive && (
+          <span className="text-muted-foreground text-xs">[{agent.data.phase}]</span>
+        )}
         <span className="text-muted-foreground truncate">
           {agent.message || (isDone ? 'done' : isActive ? 'processing...' : isError ? 'failed' : 'idle')}
         </span>
@@ -165,6 +169,9 @@ function ActivityEntry({ entry }) {
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <span className={`text-xs font-medium ${color.text}`}>{entry.agent}</span>
+          {entry.data?.phase && (
+            <span className="text-xs text-muted-foreground">[{entry.data.phase}]</span>
+          )}
           <span className="text-xs text-muted-foreground">{entry.eventKind}</span>
         </div>
         {entry.message && (
