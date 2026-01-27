@@ -1022,9 +1022,9 @@ func (r *Runner) UsePlan(ctx context.Context) error {
 }
 
 // findTasksDirectory searches for the tasks directory for a given workflow.
-// It looks in .quorum/output/ for directories matching the workflow ID pattern.
+// It looks in .quorum/runs/ for directories matching the workflow ID pattern.
 func (r *Runner) findTasksDirectory(workflowID core.WorkflowID) (string, error) {
-	outputDir := ".quorum/output"
+	outputDir := ".quorum/runs"
 
 	// Make absolute
 	cwd, _ := os.Getwd()

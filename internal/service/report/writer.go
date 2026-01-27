@@ -11,7 +11,7 @@ import (
 
 // Config configures the report writer
 type Config struct {
-	BaseDir    string // default: ".quorum/output"
+	BaseDir    string // default: ".quorum/runs"
 	UseUTC     bool   // default: true
 	IncludeRaw bool   // include raw JSON output in reports
 	Enabled    bool   // whether to write reports
@@ -20,7 +20,7 @@ type Config struct {
 // DefaultConfig returns sensible defaults
 func DefaultConfig() Config {
 	return Config{
-		BaseDir:    ".quorum/output",
+		BaseDir:    ".quorum/runs",
 		UseUTC:     true,
 		IncludeRaw: true,
 		Enabled:    true,
@@ -61,7 +61,7 @@ func NewWorkflowReportWriter(cfg Config, workflowID string) *WorkflowReportWrite
 // It reuses the original report directory path instead of creating a new one.
 func ResumeWorkflowReportWriter(cfg Config, workflowID, existingReportPath string) *WorkflowReportWriter {
 	// Extract just the execution directory name from the full path
-	// existingReportPath is like ".quorum/output/20260125-194123-wf-xxx"
+	// existingReportPath is like ".quorum/runs/wf-xxx"
 	executionDir := filepath.Base(existingReportPath)
 
 	return &WorkflowReportWriter{
@@ -129,6 +129,14 @@ func (w *WorkflowReportWriter) PlanPhasePath() string {
 // ExecutePhasePath returns the execute-phase directory path
 func (w *WorkflowReportWriter) ExecutePhasePath() string {
 	return filepath.Join(w.ExecutionPath(), "execute-phase")
+}
+
+// TaskOutputPath returns the path for saving large task outputs.
+// Creates the outputs directory if it doesn't exist.
+func (w *WorkflowReportWriter) TaskOutputPath(taskID string) string {
+	outputsDir := filepath.Join(w.ExecutePhasePath(), "outputs")
+	_ = os.MkdirAll(outputsDir, 0o750)
+	return filepath.Join(outputsDir, taskID+".md")
 }
 
 // IsEnabled returns whether report writing is enabled

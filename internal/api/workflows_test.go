@@ -328,7 +328,7 @@ func TestHandleGetWorkflow_IncludesReportPathAndOptimizedPrompt(t *testing.T) {
 		CurrentPhase:    core.PhaseExecute,
 		Prompt:          "original prompt",
 		OptimizedPrompt: "optimized prompt",
-		ReportPath:      ".quorum/output/20260126-000000-wf-artifacts",
+		ReportPath:      ".quorum/runs/wf-artifacts",
 		Tasks:           make(map[core.TaskID]*core.TaskState),
 		TaskOrder:       []core.TaskID{},
 		CreatedAt:       time.Now(),
@@ -354,8 +354,8 @@ func TestHandleGetWorkflow_IncludesReportPathAndOptimizedPrompt(t *testing.T) {
 		t.Fatalf("failed to decode response: %v", err)
 	}
 
-	if resp.ReportPath != ".quorum/output/20260126-000000-wf-artifacts" {
-		t.Errorf("expected report_path %q, got %q", ".quorum/output/20260126-000000-wf-artifacts", resp.ReportPath)
+	if resp.ReportPath != ".quorum/runs/wf-artifacts" {
+		t.Errorf("expected report_path %q, got %q", ".quorum/runs/wf-artifacts", resp.ReportPath)
 	}
 	if resp.OptimizedPrompt != "optimized prompt" {
 		t.Errorf("expected optimized_prompt %q, got %q", "optimized prompt", resp.OptimizedPrompt)

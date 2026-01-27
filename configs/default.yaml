@@ -228,7 +228,7 @@ report:
   # Enable/disable markdown report generation
   enabled: true
   # Base directory for report output
-  base_dir: ".quorum/output"
+  base_dir: ".quorum/runs"
   # Use UTC timestamps in reports
   use_utc: true
   # Include raw agent outputs in reports

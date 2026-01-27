@@ -512,7 +512,7 @@ Configures markdown report generation.
 ```yaml
 report:
   enabled: true
-  base_dir: .quorum/output
+  base_dir: .quorum/runs
   use_utc: true
   include_raw: true
 ```
@@ -520,7 +520,7 @@ report:
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `enabled` | bool | `true` | Enable report generation |
-| `base_dir` | string | `.quorum/output` | Output directory |
+| `base_dir` | string | `.quorum/runs` | Output directory |
 | `use_utc` | bool | `true` | Use UTC timestamps |
 | `include_raw` | bool | `true` | Include raw agent outputs |
 

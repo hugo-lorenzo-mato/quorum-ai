@@ -539,7 +539,7 @@ func (e *Executor) handleExecutionSuccess(ctx context.Context, wctx *Context, ta
 		taskState.Output = result.Output
 	} else {
 		taskState.Output = result.Output[:core.MaxInlineOutputSize] + "\n... [truncated, see output_file]"
-		outputPath := e.saveTaskOutput(task.ID, result.Output)
+		outputPath := e.saveTaskOutput(wctx, task.ID, result.Output)
 		if outputPath != "" {
 			taskState.OutputFile = outputPath
 		}
@@ -927,15 +927,23 @@ func shouldUseWorktrees(mode string, readyCount int) bool {
 }
 
 // saveTaskOutput saves large task output to a file.
-func (e *Executor) saveTaskOutput(taskID core.TaskID, output string) string {
-	// Create outputs directory
-	outputDir := ".quorum/outputs"
-	if err := os.MkdirAll(outputDir, 0o750); err != nil {
-		return ""
+// Uses the report writer path when available, otherwise falls back to .quorum/outputs.
+func (e *Executor) saveTaskOutput(wctx *Context, taskID core.TaskID, output string) string {
+	var outputPath string
+
+	// Use report writer path when available (outputs stored within run directory)
+	if wctx != nil && wctx.Report != nil && wctx.Report.IsEnabled() {
+		outputPath = wctx.Report.TaskOutputPath(string(taskID))
+	} else {
+		// Fallback: create outputs directory
+		outputDir := ".quorum/outputs"
+		if err := os.MkdirAll(outputDir, 0o750); err != nil {
+			return ""
+		}
+		outputPath = filepath.Join(outputDir, string(taskID)+".md")
 	}
 
 	// Write output file
-	outputPath := filepath.Join(outputDir, string(taskID)+".txt")
 	if err := os.WriteFile(outputPath, []byte(output), 0o600); err != nil {
 		return ""
 	}

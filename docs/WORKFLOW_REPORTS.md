@@ -31,8 +31,8 @@ Quorum AI genera automáticamente reportes Markdown estructurados para cada ejec
 ### Modo Multi-Agente (por defecto)
 
 ```
-.quorum-output/
-└── {timestamp}-{workflow-id}/           # Ej: 20240115-143052-wf-1705329052-1
+.quorum/runs/
+└── {workflow-id}/                       # Ej: wf-1705329052-1
     ├── metadata.md                      # Metadatos de la ejecución
     ├── workflow-summary.md              # Resumen final del workflow
     │
@@ -78,8 +78,8 @@ Quorum AI genera automáticamente reportes Markdown estructurados para cada ejec
 Cuando se activa el modo single-agent (`--single-agent` o `single_agent.enabled: true`), la estructura se simplifica:
 
 ```
-.quorum-output/
-└── {timestamp}-{workflow-id}/
+.quorum/runs/
+└── {workflow-id}/
     ├── metadata.md
     ├── workflow-summary.md
     │
@@ -181,7 +181,7 @@ La generación de reportes se configura en el archivo de configuración de Quoru
 ```yaml
 report:
   # Directorio base para los reportes (relativo al directorio del proyecto)
-  base_dir: ".quorum-output"
+  base_dir: ".quorum/runs"
 
   # Usar timestamps en UTC (recomendado para equipos distribuidos)
   use_utc: true
@@ -197,7 +197,7 @@ report:
 
 | Opción | Tipo | Default | Descripción |
 |--------|------|---------|-------------|
-| `base_dir` | string | `.quorum-output` | Directorio donde se guardan los reportes |
+| `base_dir` | string | `.quorum/runs` | Directorio donde se guardan los reportes |
 | `use_utc` | bool | `true` | Usar UTC para timestamps (recomendado) |
 | `include_raw` | bool | `true` | Incluir JSON raw en los reportes |
 | `enabled` | bool | `true` | Habilitar generación de reportes |
@@ -286,7 +286,7 @@ Los reportes pueden integrarse en pipelines de CI/CD:
   uses: actions/upload-artifact@v3
   with:
     name: quorum-reports
-    path: .quorum-output/
+    path: .quorum/runs/
 ```
 
 ## Limitaciones Conocidas

@@ -27,7 +27,7 @@ func TestHandleGetTask_IncludesOutputFile(t *testing.T) {
 				CLI:         "claude",
 				Model:       "test-model",
 				Output:      "short output",
-				OutputFile:  ".quorum/outputs/task-1.txt",
+				OutputFile:  ".quorum/runs/wf-1/execute-phase/outputs/task-1.md",
 				StartedAt:   ptrTime(time.Now().Add(-1 * time.Minute)),
 				CompletedAt: ptrTime(time.Now()),
 			},
@@ -53,8 +53,8 @@ func TestHandleGetTask_IncludesOutputFile(t *testing.T) {
 		t.Fatalf("failed to decode response: %v", err)
 	}
 
-	if resp.OutputFile != ".quorum/outputs/task-1.txt" {
-		t.Errorf("expected output_file %q, got %q", ".quorum/outputs/task-1.txt", resp.OutputFile)
+	if resp.OutputFile != ".quorum/runs/wf-1/execute-phase/outputs/task-1.md" {
+		t.Errorf("expected output_file %q, got %q", ".quorum/runs/wf-1/execute-phase/outputs/task-1.md", resp.OutputFile)
 	}
 }
 

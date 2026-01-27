@@ -201,7 +201,7 @@ func (l *Loader) setDefaults() {
 
 	// Report defaults (markdown report generation)
 	l.v.SetDefault("report.enabled", true)
-	l.v.SetDefault("report.base_dir", ".quorum/output")
+	l.v.SetDefault("report.base_dir", ".quorum/runs")
 	l.v.SetDefault("report.use_utc", true)
 	l.v.SetDefault("report.include_raw", true)
 

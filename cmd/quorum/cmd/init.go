@@ -160,7 +160,7 @@ git:
 		".quorum",
 		".quorum/state",
 		".quorum/logs",
-		".quorum/output",
+		".quorum/runs",
 	}
 
 	for _, dir := range dirs {
