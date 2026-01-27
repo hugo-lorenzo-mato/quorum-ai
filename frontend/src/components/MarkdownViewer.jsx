@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkBreaks from 'remark-breaks';
 import { PrismLight as SyntaxHighlighter } from 'react-syntax-highlighter';
 import bash from 'react-syntax-highlighter/dist/esm/languages/prism/bash';
 import diff from 'react-syntax-highlighter/dist/esm/languages/prism/diff';
@@ -95,7 +96,7 @@ export default function MarkdownViewer({ markdown }) {
 
       <div className="min-w-0">
         <ReactMarkdown
-          remarkPlugins={[remarkGfm]}
+          remarkPlugins={[remarkGfm, remarkBreaks]}
           components={{
             h1: ({ children, ...props }) => (
               <h1 className="text-2xl font-semibold tracking-tight mt-2 mb-4" {...props}>

@@ -17,6 +17,7 @@
     "react-markdown": "^9.1.0",
     "react-router-dom": "^7.13.0",
     "react-syntax-highlighter": "^15.6.3",
+    "remark-breaks": "^4.0.0",
     "remark-gfm": "^4.0.1",
     "tailwindcss": "^4.1.18",
     "zustand": "^5.0.10"
