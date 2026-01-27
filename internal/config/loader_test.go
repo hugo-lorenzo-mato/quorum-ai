@@ -318,8 +318,8 @@ func TestLoader_DefaultConfigFile(t *testing.T) {
 	if cfg.Agents.Default != "claude" {
 		t.Errorf("Agents.Default = %q, want %q", cfg.Agents.Default, "claude")
 	}
-	if cfg.Phases.Analyze.Moderator.Threshold != 0.80 {
-		t.Errorf("Phases.Analyze.Moderator.Threshold = %f, want %f", cfg.Phases.Analyze.Moderator.Threshold, 0.80)
+	if cfg.Phases.Analyze.Moderator.Threshold != 0.85 {
+		t.Errorf("Phases.Analyze.Moderator.Threshold = %f, want %f", cfg.Phases.Analyze.Moderator.Threshold, 0.85)
 	}
 }
 

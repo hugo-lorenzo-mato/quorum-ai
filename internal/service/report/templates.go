@@ -35,6 +35,16 @@ func sanitizeFilename(s string) string {
 	return strings.ToLower(result.String())
 }
 
+// analysisFilename generates the filename for an analysis report.
+// If model is empty, returns "{agentName}.md", otherwise "{agentName}-{model}.md"
+func analysisFilename(agentName, model string) string {
+	sanitizedModel := sanitizeFilename(model)
+	if sanitizedModel == "" {
+		return fmt.Sprintf("%s.md", agentName)
+	}
+	return fmt.Sprintf("%s-%s.md", agentName, sanitizedModel)
+}
+
 // formatDuration formats a duration in a human-readable way
 func formatDuration(ms int64) string {
 	d := time.Duration(ms) * time.Millisecond

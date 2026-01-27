@@ -5,10 +5,12 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/adapters/git"
 	webadapters "github.com/hugo-lorenzo-mato/quorum-ai/internal/adapters/web"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/config"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/control"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/events"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/logging"
@@ -50,12 +52,13 @@ func NewRunnerFactory(
 // Parameters:
 //   - ctx: Context for the runner (should have appropriate timeout)
 //   - workflowID: The ID of the workflow being executed
+//   - cp: Optional ControlPlane for pause/resume/cancel (may be nil)
 //
 // Returns:
 //   - *workflow.Runner: Fully configured runner
 //   - *webadapters.WebOutputNotifier: The notifier (for lifecycle events)
 //   - error: Any error during setup
-func (f *RunnerFactory) CreateRunner(ctx context.Context, workflowID string) (*workflow.Runner, *webadapters.WebOutputNotifier, error) {
+func (f *RunnerFactory) CreateRunner(ctx context.Context, workflowID string, cp *control.ControlPlane) (*workflow.Runner, *webadapters.WebOutputNotifier, error) {
 	// Validate prerequisites
 	if f.stateManager == nil {
 		return nil, nil, fmt.Errorf("state manager not configured")
@@ -137,6 +140,7 @@ func (f *RunnerFactory) CreateRunner(ctx context.Context, workflowID string) (*w
 		Logger:         f.logger,
 		Output:         outputNotifier,
 		ModeEnforcer:   modeEnforcerAdapter,
+		Control:        cp, // For pause/resume/cancel support
 	})
 
 	if runner == nil {
@@ -148,12 +152,21 @@ func (f *RunnerFactory) CreateRunner(ctx context.Context, workflowID string) (*w
 
 // buildRunnerConfig creates a RunnerConfig from the application configuration.
 func buildRunnerConfig(cfg *config.Config) *workflow.RunnerConfig {
+	// Parse workflow timeout (defaults to 12h if not set or invalid)
+	timeout := 12 * time.Hour
+	if cfg.Workflow.Timeout != "" {
+		if parsed, err := time.ParseDuration(cfg.Workflow.Timeout); err == nil {
+			timeout = parsed
+		}
+	}
+
 	return &workflow.RunnerConfig{
-		MaxRetries:         cfg.Workflow.MaxRetries,
-		DryRun:             cfg.Workflow.DryRun,
-		Sandbox:            cfg.Workflow.Sandbox,
-		DenyTools:          cfg.Workflow.DenyTools,
-		DefaultAgent:       cfg.Agents.Default,
+		Timeout:           timeout,
+		MaxRetries:        cfg.Workflow.MaxRetries,
+		DryRun:            cfg.Workflow.DryRun,
+		Sandbox:           cfg.Workflow.Sandbox,
+		DenyTools:         cfg.Workflow.DenyTools,
+		DefaultAgent:      cfg.Agents.Default,
 		WorktreeAutoClean: cfg.Git.AutoClean,
 		WorktreeMode:      cfg.Git.WorktreeMode,
 		Refiner: workflow.RefinerConfig{
@@ -162,6 +175,24 @@ func buildRunnerConfig(cfg *config.Config) *workflow.RunnerConfig {
 		},
 		Synthesizer: workflow.SynthesizerConfig{
 			Agent: cfg.Phases.Analyze.Synthesizer.Agent,
+		},
+		Moderator: workflow.ModeratorConfig{
+			Enabled:             cfg.Phases.Analyze.Moderator.Enabled,
+			Agent:               cfg.Phases.Analyze.Moderator.Agent,
+			Threshold:           cfg.Phases.Analyze.Moderator.Threshold,
+			MinRounds:           cfg.Phases.Analyze.Moderator.MinRounds,
+			MaxRounds:           cfg.Phases.Analyze.Moderator.MaxRounds,
+			AbortThreshold:      cfg.Phases.Analyze.Moderator.AbortThreshold,
+			StagnationThreshold: cfg.Phases.Analyze.Moderator.StagnationThreshold,
+		},
+		SingleAgent: workflow.SingleAgentConfig{
+			Enabled: cfg.Phases.Analyze.SingleAgent.Enabled,
+			Agent:   cfg.Phases.Analyze.SingleAgent.Agent,
+			Model:   cfg.Phases.Analyze.SingleAgent.Model,
+		},
+		PlanSynthesizer: workflow.PlanSynthesizerConfig{
+			Enabled: cfg.Phases.Plan.Synthesizer.Enabled,
+			Agent:   cfg.Phases.Plan.Synthesizer.Agent,
 		},
 	}
 }

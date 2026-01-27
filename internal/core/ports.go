@@ -205,11 +205,13 @@ type WorkflowState struct {
 	CurrentPhase    Phase                 `json:"current_phase"`
 	Prompt          string                `json:"prompt"`
 	OptimizedPrompt string                `json:"optimized_prompt,omitempty"`
+	Error           string                `json:"error,omitempty"` // Error message if workflow failed
 	Tasks           map[TaskID]*TaskState `json:"tasks"`
 	TaskOrder       []TaskID              `json:"task_order"`
 	Config          *WorkflowConfig       `json:"config"`
 	Metrics         *StateMetrics         `json:"metrics"`
 	Checkpoints     []Checkpoint          `json:"checkpoints"`
+	AgentEvents     []AgentEvent          `json:"agent_events,omitempty"` // Persisted agent activity for UI
 	CreatedAt       time.Time             `json:"created_at"`
 	UpdatedAt       time.Time             `json:"updated_at"`
 	Checksum        string                `json:"checksum,omitempty"`

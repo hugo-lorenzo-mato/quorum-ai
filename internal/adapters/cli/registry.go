@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -219,16 +220,32 @@ func (r *Registry) AvailableForPhase(ctx context.Context, phase string) []string
 
 	for name, err := range results {
 		if err != nil {
+			slog.Warn("agent ping failed",
+				slog.String("agent", name),
+				slog.String("phase", phase),
+				slog.String("error", err.Error()),
+			)
 			continue
 		}
 		// Check if agent is enabled for this phase
 		if cfg, ok := r.configs[name]; ok {
 			if !cfg.IsEnabledForPhase(phase) {
+				slog.Debug("agent not enabled for phase",
+					slog.String("agent", name),
+					slog.String("phase", phase),
+				)
 				continue
 			}
 		}
 		available = append(available, name)
 	}
+
+	slog.Info("agents available for phase",
+		slog.String("phase", phase),
+		slog.Any("available", available),
+		slog.Int("total_configured", len(results)),
+	)
+
 	return available
 }
 

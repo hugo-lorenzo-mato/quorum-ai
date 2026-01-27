@@ -14,6 +14,7 @@ import {
   Sparkles,
   Wifi,
   WifiOff,
+  RefreshCw,
 } from 'lucide-react';
 
 const navItems = [
@@ -53,21 +54,65 @@ function ThemeSwitcher() {
   );
 }
 
-function ConnectionStatus() {
-  const { sseConnected } = useUIStore();
+function ConnectionStatus({ compact = false }) {
+  const { connectionMode, retrySSEFn } = useUIStore();
+
+  const getStatusConfig = () => {
+    switch (connectionMode) {
+      case 'sse':
+        return {
+          icon: Wifi,
+          label: 'Live',
+          color: 'text-green-500',
+          bgColor: 'bg-green-500/10',
+          borderColor: 'border-green-500/20',
+        };
+      case 'polling':
+        return {
+          icon: RefreshCw,
+          label: 'Polling',
+          color: 'text-yellow-500',
+          bgColor: 'bg-yellow-500/10',
+          borderColor: 'border-yellow-500/20',
+          animate: true,
+        };
+      case 'disconnected':
+      default:
+        return {
+          icon: WifiOff,
+          label: 'Offline',
+          color: 'text-red-500',
+          bgColor: 'bg-red-500/10',
+          borderColor: 'border-red-500/20',
+        };
+    }
+  };
+
+  const config = getStatusConfig();
+  const Icon = config.icon;
+
+  if (compact) {
+    return (
+      <div className={`p-1.5 rounded-md ${config.bgColor} ${config.color}`} title={config.label}>
+        <Icon className={`w-4 h-4 ${config.animate ? 'animate-spin' : ''}`} />
+      </div>
+    );
+  }
 
   return (
-    <div className="flex items-center gap-2 text-sm">
-      {sseConnected ? (
-        <>
-          <Wifi className="w-4 h-4 text-success" />
-          <span className="text-muted-foreground">Connected</span>
-        </>
-      ) : (
-        <>
-          <WifiOff className="w-4 h-4 text-destructive" />
-          <span className="text-muted-foreground">Disconnected</span>
-        </>
+    <div
+      className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg border text-xs font-medium ${config.bgColor} ${config.borderColor} ${config.color}`}
+    >
+      <Icon className={`w-3.5 h-3.5 ${config.animate ? 'animate-spin' : ''}`} />
+      <span>{config.label}</span>
+      {connectionMode !== 'sse' && retrySSEFn && (
+        <button
+          onClick={retrySSEFn}
+          className="ml-1 p-0.5 rounded hover:bg-white/10 transition-colors"
+          title="Retry connection"
+        >
+          <RefreshCw className="w-3 h-3" />
+        </button>
       )}
     </div>
   );
@@ -145,7 +190,7 @@ export default function Layout({ children }) {
             </>
           ) : (
             <div className="flex flex-col items-center gap-2">
-              <ConnectionStatus />
+              <ConnectionStatus compact />
             </div>
           )}
         </div>

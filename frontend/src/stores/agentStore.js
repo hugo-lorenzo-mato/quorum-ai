@@ -64,6 +64,40 @@ const useAgentStore = create((set, get) => ({
     delete updatedAgents[workflowId];
     set({ agentActivity: updatedActivity, currentAgents: updatedAgents });
   },
+
+  // Load persisted agent events from workflow API response (for page reload recovery)
+  loadPersistedEvents: (workflowId, events) => {
+    if (!events || events.length === 0) return;
+
+    const { agentActivity, currentAgents } = get();
+
+    // Convert persisted events to activity entries (reverse to maintain newest-first order)
+    const activityEntries = events.map(event => ({
+      id: event.id || `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+      agent: event.agent,
+      eventKind: event.event_kind,
+      message: event.message,
+      data: event.data,
+      timestamp: event.timestamp,
+    })).reverse().slice(0, MAX_ACTIVITY_ENTRIES);
+
+    // Rebuild current agent statuses from the most recent event per agent
+    const agentStatuses = {};
+    for (const event of events) {
+      // Later events override earlier ones (events are in chronological order)
+      agentStatuses[event.agent] = {
+        status: event.event_kind,
+        message: event.message,
+        data: event.data,
+        timestamp: event.timestamp,
+      };
+    }
+
+    set({
+      currentAgents: { ...currentAgents, [workflowId]: agentStatuses },
+      agentActivity: { ...agentActivity, [workflowId]: activityEntries },
+    });
+  },
 }));
 
 export default useAgentStore;

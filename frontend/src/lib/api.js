@@ -48,6 +48,12 @@ export const workflowApi = {
   getTask: (workflowId, taskId) => request(`/workflows/${workflowId}/tasks/${taskId}`),
 
   run: (id) => request(`/workflows/${id}/run`, { method: 'POST' }),
+
+  cancel: (id) => request(`/workflows/${id}/cancel`, { method: 'POST' }),
+
+  pause: (id) => request(`/workflows/${id}/pause`, { method: 'POST' }),
+
+  resume: (id) => request(`/workflows/${id}/resume`, { method: 'POST' }),
 };
 
 // Chat API

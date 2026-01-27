@@ -34,25 +34,28 @@ const (
 
 // AgentEvent represents a real-time event from an agent during execution.
 // These events provide visibility into what the agent is doing before
-// the final result is returned.
+// the final result is returned. Also used for persistence in WorkflowState.
 type AgentEvent struct {
+	// ID is a unique identifier for the event (used for persistence)
+	ID string `json:"id,omitempty"`
+
 	// Type is the kind of event (started, tool_use, completed, etc.)
-	Type AgentEventType
+	Type AgentEventType `json:"event_kind"`
 
 	// Agent is the name of the agent emitting the event ("claude", "gemini", etc.)
-	Agent string
+	Agent string `json:"agent"`
 
 	// Timestamp when the event occurred
-	Timestamp time.Time
+	Timestamp time.Time `json:"timestamp"`
 
 	// Message is a human-readable description of the event
-	Message string
+	Message string `json:"message"`
 
 	// Data contains optional structured data specific to the event type.
 	// For tool_use: {"tool": "read_file", "args": {...}}
 	// For completed: {"tokens_in": 1000, "tokens_out": 500, "cost_usd": 0.01}
 	// For error: {"code": "TIMEOUT", "details": "..."}
-	Data map[string]any
+	Data map[string]any `json:"data,omitempty"`
 }
 
 // NewAgentEvent creates a new agent event with the current timestamp.

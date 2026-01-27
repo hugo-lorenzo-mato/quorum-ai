@@ -47,7 +47,8 @@ func (s *Server) handleListFiles(w http.ResponseWriter, r *http.Request) {
 	info, err := os.Stat(absPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			respondError(w, http.StatusNotFound, "path not found")
+			// Return empty list for non-existent directories
+			respondJSON(w, http.StatusOK, []FileEntry{})
 			return
 		}
 		s.logger.Error("failed to stat path", "path", absPath, "error", err)

@@ -59,13 +59,14 @@ type AgentConfig struct {
 const DefaultTokenDiscrepancyThreshold = 5.0
 
 // IsEnabledForPhase returns true if the agent is enabled for the given phase.
+// Uses opt-in model: only phases explicitly set to true are enabled.
 func (c AgentConfig) IsEnabledForPhase(phase string) bool {
 	if len(c.Phases) == 0 {
 		return true // No restrictions = enabled for all
 	}
 	enabled, exists := c.Phases[phase]
 	if !exists {
-		return true // Not specified = enabled (opt-out model)
+		return false // Phase not specified = disabled (opt-in model)
 	}
 	return enabled
 }

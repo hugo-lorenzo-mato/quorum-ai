@@ -10,24 +10,27 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	webadapters "github.com/hugo-lorenzo-mato/quorum-ai/internal/adapters/web"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/control"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service/workflow"
 )
 
 // WorkflowResponse is the API response for a workflow.
 type WorkflowResponse struct {
-	ID              string    `json:"id"`
-	Title           string    `json:"title,omitempty"`
-	Status          string    `json:"status"`
-	CurrentPhase    string    `json:"current_phase"`
-	Prompt          string    `json:"prompt"`
-	OptimizedPrompt string    `json:"optimized_prompt,omitempty"`
-	ReportPath      string    `json:"report_path,omitempty"`
-	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
-	IsActive        bool      `json:"is_active"`
-	TaskCount       int       `json:"task_count"`
-	Metrics         *Metrics  `json:"metrics,omitempty"`
+	ID              string              `json:"id"`
+	Title           string              `json:"title,omitempty"`
+	Status          string              `json:"status"`
+	CurrentPhase    string              `json:"current_phase"`
+	Prompt          string              `json:"prompt"`
+	OptimizedPrompt string              `json:"optimized_prompt,omitempty"`
+	Error           string              `json:"error,omitempty"`
+	ReportPath      string              `json:"report_path,omitempty"`
+	CreatedAt       time.Time           `json:"created_at"`
+	UpdatedAt       time.Time           `json:"updated_at"`
+	IsActive        bool                `json:"is_active"`
+	TaskCount       int                 `json:"task_count"`
+	Metrics         *Metrics            `json:"metrics,omitempty"`
+	AgentEvents     []core.AgentEvent   `json:"agent_events,omitempty"` // Persisted agent activity
 }
 
 // Metrics represents workflow metrics in API responses.
@@ -385,11 +388,13 @@ func stateToWorkflowResponse(state *core.WorkflowState, activeID core.WorkflowID
 		CurrentPhase:    string(state.CurrentPhase),
 		Prompt:          state.Prompt,
 		OptimizedPrompt: state.OptimizedPrompt,
+		Error:           state.Error,
 		ReportPath:      state.ReportPath,
 		CreatedAt:       state.CreatedAt,
 		UpdatedAt:       state.UpdatedAt,
 		IsActive:        state.WorkflowID == activeID,
 		TaskCount:       len(state.Tasks),
+		AgentEvents:     state.AgentEvents,
 	}
 
 	if state.Metrics != nil {
@@ -483,42 +488,60 @@ func (s *Server) HandleRunWorkflow(w http.ResponseWriter, r *http.Request) {
 	// Use background context since the HTTP request will complete before workflow finishes
 	execCtx, cancel := context.WithTimeout(context.Background(), 4*time.Hour)
 
-	runner, notifier, err := factory.CreateRunner(execCtx, workflowID)
+	// Create ControlPlane for this workflow (enables pause/resume/cancel)
+	cp := control.New()
+	s.registerControlPlane(workflowID, cp)
+
+	runner, notifier, err := factory.CreateRunner(execCtx, workflowID, cp)
 	if err != nil {
 		cancel()
+		s.unregisterControlPlane(workflowID)
 		markFinished(workflowID)
 		s.logger.Error("failed to create runner", "workflow_id", workflowID, "error", err)
 		respondError(w, http.StatusServiceUnavailable, "workflow execution not available: "+err.Error())
 		return
 	}
 
-	// Update workflow status to running
-	state.Status = core.WorkflowStatusRunning
-	state.UpdatedAt = time.Now()
-	if err := s.stateManager.Save(ctx, state); err != nil {
-		cancel()
-		markFinished(workflowID)
-		s.logger.Error("failed to update workflow status", "workflow_id", workflowID, "error", err)
-		respondError(w, http.StatusInternalServerError, "failed to start workflow")
-		return
-	}
-
-	// Emit workflow started event
-	notifier.WorkflowStarted(state.Prompt)
+	// Connect notifier to state for agent event persistence
+	notifier.SetState(state)
+	notifier.SetStateSaver(s.stateManager)
 
 	// Start execution in background
-	go s.executeWorkflowAsync(execCtx, cancel, runner, notifier, state, isResume)
+	// Note: Status is updated to "running" INSIDE the goroutine to avoid race condition
+	// where status is saved before the goroutine actually starts (causing zombie workflows)
+	go func() {
+		// Update status to running inside goroutine (after goroutine has started)
+		state.Status = core.WorkflowStatusRunning
+		state.Error = "" // Clear previous error on restart
+		state.UpdatedAt = time.Now()
+		if err := s.stateManager.Save(context.Background(), state); err != nil {
+			s.logger.Error("failed to update workflow status to running", "workflow_id", workflowID, "error", err)
+			notifier.WorkflowFailed(string(state.CurrentPhase), err)
+			cancel()
+			s.unregisterControlPlane(workflowID)
+			markFinished(workflowID)
+			return
+		}
+
+		// Emit workflow started event
+		notifier.WorkflowStarted(state.Prompt)
+
+		// Execute the workflow (unregisters ControlPlane on completion)
+		s.executeWorkflowAsync(execCtx, cancel, runner, notifier, state, isResume, workflowID)
+	}()
 
 	// Return 202 Accepted
+	// Note: Status is "pending" here; it will change to "running" once the goroutine confirms
+	// The client will receive status updates via SSE
 	response := RunWorkflowResponse{
 		ID:           workflowID,
-		Status:       string(core.WorkflowStatusRunning),
+		Status:       string(state.Status), // Will be "pending" or previous status
 		CurrentPhase: string(state.CurrentPhase),
 		Prompt:       state.Prompt,
-		Message:      "Workflow execution started",
+		Message:      "Workflow execution starting",
 	}
 	if isResume {
-		response.Message = "Workflow execution resumed"
+		response.Message = "Workflow execution resuming"
 	}
 
 	respondJSON(w, http.StatusAccepted, response)
@@ -532,9 +555,12 @@ func (s *Server) executeWorkflowAsync(
 	notifier *webadapters.WebOutputNotifier,
 	state *core.WorkflowState,
 	isResume bool,
+	workflowID string,
 ) {
 	defer cancel()
-	defer markFinished(string(state.WorkflowID))
+	defer markFinished(workflowID)
+	defer s.unregisterControlPlane(workflowID)
+	defer notifier.FlushState() // Ensure all pending agent events are saved
 
 	startTime := time.Now()
 	var runErr error
@@ -569,4 +595,147 @@ func (s *Server) executeWorkflowAsync(
 		)
 		notifier.WorkflowCompleted(duration, totalCost)
 	}
+}
+
+// WorkflowControlResponse is returned for workflow control operations (cancel, pause, resume).
+type WorkflowControlResponse struct {
+	ID      string `json:"id"`
+	Status  string `json:"status"`
+	Message string `json:"message"`
+}
+
+// handleCancelWorkflow cancels a running workflow.
+// POST /api/v1/workflows/{workflowID}/cancel
+func (s *Server) handleCancelWorkflow(w http.ResponseWriter, r *http.Request) {
+	workflowID := chi.URLParam(r, "workflowID")
+	if workflowID == "" {
+		respondError(w, http.StatusBadRequest, "workflow ID required")
+		return
+	}
+
+	// Get the ControlPlane for this workflow
+	cp, ok := s.getControlPlane(workflowID)
+	if !ok {
+		// No ControlPlane means workflow is not running
+		respondError(w, http.StatusConflict, "workflow is not running")
+		return
+	}
+
+	// Check if already cancelled
+	if cp.IsCancelled() {
+		respondError(w, http.StatusConflict, "workflow is already being cancelled")
+		return
+	}
+
+	// Cancel the workflow
+	cp.Cancel()
+	s.logger.Info("workflow cancellation requested", "workflow_id", workflowID)
+
+	// Return success response (actual state change happens asynchronously)
+	respondJSON(w, http.StatusAccepted, WorkflowControlResponse{
+		ID:      workflowID,
+		Status:  "cancelling",
+		Message: "Workflow cancellation requested. The workflow will stop after the current task completes.",
+	})
+}
+
+// handlePauseWorkflow pauses a running workflow.
+// POST /api/v1/workflows/{workflowID}/pause
+func (s *Server) handlePauseWorkflow(w http.ResponseWriter, r *http.Request) {
+	workflowID := chi.URLParam(r, "workflowID")
+	if workflowID == "" {
+		respondError(w, http.StatusBadRequest, "workflow ID required")
+		return
+	}
+
+	// Get the ControlPlane for this workflow
+	cp, ok := s.getControlPlane(workflowID)
+	if !ok {
+		respondError(w, http.StatusConflict, "workflow is not running")
+		return
+	}
+
+	// Check if already paused
+	if cp.IsPaused() {
+		respondError(w, http.StatusConflict, "workflow is already paused")
+		return
+	}
+
+	// Check if cancelled
+	if cp.IsCancelled() {
+		respondError(w, http.StatusConflict, "workflow is being cancelled")
+		return
+	}
+
+	// Pause the workflow
+	cp.Pause()
+	s.logger.Info("workflow paused", "workflow_id", workflowID)
+
+	// Update persisted state
+	ctx := r.Context()
+	state, err := s.stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
+	if err == nil && state != nil {
+		state.Status = core.WorkflowStatusPaused
+		state.UpdatedAt = time.Now()
+		if saveErr := s.stateManager.Save(ctx, state); saveErr != nil {
+			s.logger.Warn("failed to persist paused status", "workflow_id", workflowID, "error", saveErr)
+		}
+	}
+
+	respondJSON(w, http.StatusOK, WorkflowControlResponse{
+		ID:      workflowID,
+		Status:  "paused",
+		Message: "Workflow paused. Running tasks will complete, then execution will pause.",
+	})
+}
+
+// handleResumeWorkflow resumes a paused workflow.
+// POST /api/v1/workflows/{workflowID}/resume
+func (s *Server) handleResumeWorkflow(w http.ResponseWriter, r *http.Request) {
+	workflowID := chi.URLParam(r, "workflowID")
+	if workflowID == "" {
+		respondError(w, http.StatusBadRequest, "workflow ID required")
+		return
+	}
+
+	// Get the ControlPlane for this workflow
+	cp, ok := s.getControlPlane(workflowID)
+	if !ok {
+		respondError(w, http.StatusConflict, "workflow is not running")
+		return
+	}
+
+	// Check if not paused
+	if !cp.IsPaused() {
+		respondError(w, http.StatusConflict, "workflow is not paused")
+		return
+	}
+
+	// Check if cancelled
+	if cp.IsCancelled() {
+		respondError(w, http.StatusConflict, "workflow is being cancelled")
+		return
+	}
+
+	// Resume the workflow
+	cp.Resume()
+	s.logger.Info("workflow resumed", "workflow_id", workflowID)
+
+	// Update persisted state
+	ctx := r.Context()
+	state, err := s.stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
+	if err == nil && state != nil {
+		state.Status = core.WorkflowStatusRunning
+		state.Error = "" // Clear previous error on resume
+		state.UpdatedAt = time.Now()
+		if saveErr := s.stateManager.Save(ctx, state); saveErr != nil {
+			s.logger.Warn("failed to persist running status", "workflow_id", workflowID, "error", saveErr)
+		}
+	}
+
+	respondJSON(w, http.StatusOK, WorkflowControlResponse{
+		ID:      workflowID,
+		Status:  "running",
+		Message: "Workflow resumed. Execution will continue.",
+	})
 }

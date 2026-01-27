@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -14,6 +15,7 @@ import (
 
 	webadapters "github.com/hugo-lorenzo-mato/quorum-ai/internal/adapters/web"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/config"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/control"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/diagnostics"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/events"
@@ -29,6 +31,10 @@ type Server struct {
 	chatHandler     *webadapters.ChatHandler
 	resourceMonitor *diagnostics.ResourceMonitor
 	configLoader    *config.Loader // for workflow execution configuration
+
+	// Control planes for running workflows (enables pause/resume/cancel)
+	controlPlanesMu sync.RWMutex
+	controlPlanes   map[string]*control.ControlPlane
 }
 
 // ServerOption configures the server.
@@ -65,9 +71,10 @@ func WithConfigLoader(loader *config.Loader) ServerOption {
 // NewServer creates a new API server.
 func NewServer(stateManager core.StateManager, eventBus *events.EventBus, opts ...ServerOption) *Server {
 	s := &Server{
-		stateManager: stateManager,
-		eventBus:     eventBus,
-		logger:       slog.Default(),
+		stateManager:  stateManager,
+		eventBus:      eventBus,
+		logger:        slog.Default(),
+		controlPlanes: make(map[string]*control.ControlPlane),
 	}
 
 	for _, opt := range opts {
@@ -79,6 +86,28 @@ func NewServer(stateManager core.StateManager, eventBus *events.EventBus, opts .
 
 	s.router = s.setupRouter()
 	return s
+}
+
+// registerControlPlane registers a ControlPlane for a running workflow.
+func (s *Server) registerControlPlane(workflowID string, cp *control.ControlPlane) {
+	s.controlPlanesMu.Lock()
+	defer s.controlPlanesMu.Unlock()
+	s.controlPlanes[workflowID] = cp
+}
+
+// unregisterControlPlane removes a ControlPlane when workflow finishes.
+func (s *Server) unregisterControlPlane(workflowID string) {
+	s.controlPlanesMu.Lock()
+	defer s.controlPlanesMu.Unlock()
+	delete(s.controlPlanes, workflowID)
+}
+
+// getControlPlane retrieves a ControlPlane for a workflow.
+func (s *Server) getControlPlane(workflowID string) (*control.ControlPlane, bool) {
+	s.controlPlanesMu.RLock()
+	defer s.controlPlanesMu.RUnlock()
+	cp, ok := s.controlPlanes[workflowID]
+	return cp, ok
 }
 
 // Handler returns the HTTP handler for the server.
@@ -122,9 +151,13 @@ func (s *Server) setupRouter() chi.Router {
 			r.Route("/{workflowID}", func(r chi.Router) {
 				r.Get("/", s.handleGetWorkflow)
 				r.Put("/", s.handleUpdateWorkflow)
+				r.Patch("/", s.handleUpdateWorkflow)
 				r.Delete("/", s.handleDeleteWorkflow)
 				r.Post("/activate", s.handleActivateWorkflow)
 				r.Post("/run", s.HandleRunWorkflow)
+				r.Post("/cancel", s.handleCancelWorkflow)
+				r.Post("/pause", s.handlePauseWorkflow)
+				r.Post("/resume", s.handleResumeWorkflow)
 
 				// Task endpoints nested under workflow
 				r.Route("/tasks", func(r chi.Router) {

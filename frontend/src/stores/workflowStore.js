@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { workflowApi } from '../lib/api';
+import useAgentStore from './agentStore';
 
 const useWorkflowStore = create((set, get) => ({
   // State
@@ -25,6 +26,11 @@ const useWorkflowStore = create((set, get) => ({
     try {
       const activeWorkflow = await workflowApi.getActive();
       set({ activeWorkflow });
+
+      // Load persisted agent events for page reload recovery
+      if (activeWorkflow?.agent_events && activeWorkflow.agent_events.length > 0) {
+        useAgentStore.getState().loadPersistedEvents(activeWorkflow.id, activeWorkflow.agent_events);
+      }
     } catch (error) {
       // No active workflow is not an error
       if (!error.message.includes('not found')) {
@@ -43,6 +49,12 @@ const useWorkflowStore = create((set, get) => ({
         updated.push(workflow);
       }
       set({ workflows: updated, loading: false });
+
+      // Load persisted agent events for page reload recovery
+      if (workflow.agent_events && workflow.agent_events.length > 0) {
+        useAgentStore.getState().loadPersistedEvents(id, workflow.agent_events);
+      }
+
       return workflow;
     } catch (error) {
       set({ error: error.message, loading: false });
@@ -111,15 +123,63 @@ const useWorkflowStore = create((set, get) => ({
   },
 
   pauseWorkflow: async (id) => {
-    console.warn('pauseWorkflow not yet implemented', id);
-    set({ error: 'Pause workflow is not yet implemented.' });
-    return null;
+    set({ loading: true, error: null });
+    try {
+      const result = await workflowApi.pause(id);
+      // Update local state immediately for responsive UI
+      const { workflows, activeWorkflow } = get();
+      const updated = workflows.map(w =>
+        w.id === id ? { ...w, status: 'paused' } : w
+      );
+      set({
+        workflows: updated,
+        loading: false,
+      });
+      if (activeWorkflow?.id === id) {
+        set({ activeWorkflow: { ...activeWorkflow, status: 'paused' } });
+      }
+      return result;
+    } catch (error) {
+      set({ error: error.message, loading: false });
+      return null;
+    }
+  },
+
+  resumeWorkflow: async (id) => {
+    set({ loading: true, error: null });
+    try {
+      const result = await workflowApi.resume(id);
+      // Update local state immediately for responsive UI
+      const { workflows, activeWorkflow } = get();
+      const updated = workflows.map(w =>
+        w.id === id ? { ...w, status: 'running' } : w
+      );
+      set({
+        workflows: updated,
+        loading: false,
+      });
+      if (activeWorkflow?.id === id) {
+        set({ activeWorkflow: { ...activeWorkflow, status: 'running' } });
+      }
+      return result;
+    } catch (error) {
+      set({ error: error.message, loading: false });
+      return null;
+    }
   },
 
   stopWorkflow: async (id) => {
-    console.warn('stopWorkflow not yet implemented', id);
-    set({ error: 'Stop workflow is not yet implemented.' });
-    return null;
+    set({ loading: true, error: null });
+    try {
+      const result = await workflowApi.cancel(id);
+      // The backend cancels the workflow asynchronously.
+      // Real-time status updates will come via SSE events.
+      set({ loading: false });
+      return result;
+    } catch (error) {
+      set({ error: error.message, loading: false });
+      return null;
+    }
   },
 
   selectWorkflow: (id) => {
@@ -207,7 +267,38 @@ const useWorkflowStore = create((set, get) => ({
     }
   },
 
+  handleWorkflowPaused: (data) => {
+    const { workflows, activeWorkflow } = get();
+    const updated = workflows.map(w => {
+      if (w.id === data.workflow_id) {
+        return { ...w, status: 'paused', updated_at: data.timestamp };
+      }
+      return w;
+    });
+    set({ workflows: updated });
+    if (activeWorkflow?.id === data.workflow_id) {
+      set({ activeWorkflow: { ...activeWorkflow, status: 'paused' } });
+    }
+  },
+
+  handleWorkflowResumed: (data) => {
+    const { workflows, activeWorkflow } = get();
+    const updated = workflows.map(w => {
+      if (w.id === data.workflow_id) {
+        return { ...w, status: 'running', updated_at: data.timestamp };
+      }
+      return w;
+    });
+    set({ workflows: updated });
+    if (activeWorkflow?.id === data.workflow_id) {
+      set({ activeWorkflow: { ...activeWorkflow, status: 'running' } });
+    }
+  },
+
   clearError: () => set({ error: null }),
+
+  // Bulk update for polling fallback
+  setWorkflows: (workflows) => set({ workflows }),
 }));
 
 export default useWorkflowStore;

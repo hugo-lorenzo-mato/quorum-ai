@@ -1,28 +1,50 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import useWorkflowStore from '../stores/workflowStore';
 import useTaskStore from '../stores/taskStore';
 import useUIStore from '../stores/uiStore';
 import useAgentStore from '../stores/agentStore';
+import { workflowApi } from '../lib/api';
 
 const SSE_URL = '/api/v1/sse/events';
 const RECONNECT_DELAY = 3000;
 const MAX_RECONNECT_ATTEMPTS = 10;
+const POLLING_INTERVAL = 5000;
+
+// Connection modes
+export const CONNECTION_MODE = {
+  SSE: 'sse',
+  POLLING: 'polling',
+  DISCONNECTED: 'disconnected',
+};
 
 export default function useSSE() {
   const eventSourceRef = useRef(null);
   const reconnectAttemptRef = useRef(0);
   const reconnectTimeoutRef = useRef(null);
+  const pollingIntervalRef = useRef(null);
   const connectRef = useRef(null);
+  const [connectionMode, setConnectionModeLocal] = useState(CONNECTION_MODE.DISCONNECTED);
 
   const setSSEConnected = useUIStore(state => state.setSSEConnected);
+  const setConnectionModeInStore = useUIStore(state => state.setConnectionMode);
+  const setRetrySSEFn = useUIStore(state => state.setRetrySSEFn);
   const notifyError = useUIStore(state => state.notifyError);
   const notifyInfo = useUIStore(state => state.notifyInfo);
+
+  // Update both local state and store
+  const setConnectionMode = useCallback((mode) => {
+    setConnectionModeLocal(mode);
+    setConnectionModeInStore(mode);
+  }, [setConnectionModeInStore]);
 
   // Workflow event handlers
   const handleWorkflowStarted = useWorkflowStore(state => state.handleWorkflowStarted);
   const handleWorkflowStateUpdated = useWorkflowStore(state => state.handleWorkflowStateUpdated);
   const handleWorkflowCompleted = useWorkflowStore(state => state.handleWorkflowCompleted);
   const handleWorkflowFailed = useWorkflowStore(state => state.handleWorkflowFailed);
+  const handleWorkflowPaused = useWorkflowStore(state => state.handleWorkflowPaused);
+  const handleWorkflowResumed = useWorkflowStore(state => state.handleWorkflowResumed);
+  const setWorkflows = useWorkflowStore(state => state.setWorkflows);
 
   // Task event handlers
   const handleTaskCreated = useTaskStore(state => state.handleTaskCreated);
@@ -35,6 +57,38 @@ export default function useSSE() {
 
   // Agent event handler
   const handleAgentEvent = useAgentStore(state => state.handleAgentEvent);
+
+  // Polling function
+  const poll = useCallback(async () => {
+    try {
+      const workflows = await workflowApi.list();
+      setWorkflows(workflows);
+    } catch (error) {
+      console.error('Polling failed:', error);
+    }
+  }, [setWorkflows]);
+
+  // Start polling fallback
+  const startPolling = useCallback(() => {
+    if (pollingIntervalRef.current) return; // Already polling
+
+    console.log('Starting polling fallback');
+    setConnectionMode(CONNECTION_MODE.POLLING);
+    notifyInfo('Using polling mode (SSE unavailable)');
+
+    // Poll immediately, then at interval
+    poll();
+    pollingIntervalRef.current = setInterval(poll, POLLING_INTERVAL);
+  }, [poll, notifyInfo]);
+
+  // Stop polling
+  const stopPolling = useCallback(() => {
+    if (pollingIntervalRef.current) {
+      console.log('Stopping polling');
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+    }
+  }, []);
 
   const handleEvent = useCallback((eventType, data) => {
     switch (eventType) {
@@ -54,10 +108,12 @@ export default function useSSE() {
         notifyError(`Workflow ${data.workflow_id} failed: ${data.error}`);
         break;
       case 'workflow_paused':
-        // Handle pause if needed
+        handleWorkflowPaused(data);
+        notifyInfo(`Workflow ${data.workflow_id} paused`);
         break;
       case 'workflow_resumed':
-        // Handle resume if needed
+        handleWorkflowResumed(data);
+        notifyInfo(`Workflow ${data.workflow_id} resumed`);
         break;
 
       // Task events
@@ -91,7 +147,9 @@ export default function useSSE() {
       // Connection events
       case 'connected':
         setSSEConnected(true);
+        setConnectionMode(CONNECTION_MODE.SSE);
         reconnectAttemptRef.current = 0;
+        stopPolling(); // Stop polling when SSE reconnects
         break;
 
       default:
@@ -102,6 +160,8 @@ export default function useSSE() {
     handleWorkflowStateUpdated,
     handleWorkflowCompleted,
     handleWorkflowFailed,
+    handleWorkflowPaused,
+    handleWorkflowResumed,
     handleTaskCreated,
     handleTaskStarted,
     handleTaskProgress,
@@ -111,6 +171,7 @@ export default function useSSE() {
     handleTaskRetry,
     handleAgentEvent,
     setSSEConnected,
+    stopPolling,
     notifyInfo,
     notifyError,
   ]);
@@ -126,7 +187,9 @@ export default function useSSE() {
     eventSource.onopen = () => {
       console.log('SSE connection established');
       setSSEConnected(true);
+      setConnectionMode(CONNECTION_MODE.SSE);
       reconnectAttemptRef.current = 0;
+      stopPolling(); // Stop polling when SSE connects
     };
 
     eventSource.onerror = (error) => {
@@ -141,7 +204,9 @@ export default function useSSE() {
         console.log(`Reconnecting in ${delay}ms (attempt ${reconnectAttemptRef.current})`);
         reconnectTimeoutRef.current = setTimeout(() => connectRef.current?.(), delay);
       } else {
-        notifyError('Lost connection to server. Please refresh the page.');
+        // Max attempts reached, fall back to polling
+        console.log('Max reconnect attempts reached, falling back to polling');
+        startPolling();
       }
     };
 
@@ -184,7 +249,7 @@ export default function useSSE() {
         }
       });
     });
-  }, [handleEvent, setSSEConnected, notifyError]);
+  }, [handleEvent, setSSEConnected, startPolling, stopPolling]);
 
   // Keep ref updated for reconnection
   useEffect(() => {
@@ -199,8 +264,22 @@ export default function useSSE() {
       eventSourceRef.current.close();
       eventSourceRef.current = null;
     }
+    stopPolling();
     setSSEConnected(false);
-  }, [setSSEConnected]);
+    setConnectionMode(CONNECTION_MODE.DISCONNECTED);
+  }, [setSSEConnected, stopPolling]);
+
+  // Retry SSE connection (useful for manual reconnect)
+  const retrySSE = useCallback(() => {
+    stopPolling();
+    reconnectAttemptRef.current = 0;
+    connect();
+  }, [connect, stopPolling]);
+
+  // Register retry function with store so UI can access it
+  useEffect(() => {
+    setRetrySSEFn(() => retrySSE);
+  }, [retrySSE, setRetrySSEFn]);
 
   useEffect(() => {
     connect();
@@ -210,6 +289,8 @@ export default function useSSE() {
   return {
     connect,
     disconnect,
+    retrySSE,
+    connectionMode,
     isConnected: useUIStore(state => state.sseConnected),
   };
 }

@@ -201,6 +201,15 @@ func runServe(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("starting server: %w", err)
 	}
 
+	// Recover zombie workflows (workflows stuck in "running" state from previous crash/restart)
+	if stateManager != nil {
+		if recovered, err := recoverZombieWorkflows(ctx, stateManager, logger.Logger); err != nil {
+			logger.Warn("failed to recover zombie workflows", slog.String("error", err.Error()))
+		} else if recovered > 0 {
+			logger.Info("recovered zombie workflows", slog.Int("count", recovered))
+		}
+	}
+
 	logger.Info("server started",
 		slog.String("addr", server.Addr()),
 		slog.Bool("cors", cfg.EnableCORS),
@@ -221,4 +230,60 @@ func runServe(_ *cobra.Command, _ []string) error {
 
 	logger.Info("server stopped")
 	return nil
+}
+
+// recoverZombieWorkflows marks workflows stuck in "running" state as failed.
+// This handles cases where the server crashed or restarted while workflows were executing.
+func recoverZombieWorkflows(ctx context.Context, stateManager core.StateManager, logger *slog.Logger) (int, error) {
+	workflows, err := stateManager.ListWorkflows(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("listing workflows: %w", err)
+	}
+
+	recovered := 0
+	for _, summary := range workflows {
+		if summary.Status != core.WorkflowStatusRunning {
+			continue
+		}
+
+		// Load full workflow state
+		state, err := stateManager.LoadByID(ctx, summary.WorkflowID)
+		if err != nil {
+			logger.Warn("failed to load zombie workflow",
+				slog.String("workflow_id", string(summary.WorkflowID)),
+				slog.String("error", err.Error()))
+			continue
+		}
+		if state == nil {
+			continue
+		}
+
+		// Mark as failed
+		state.Status = core.WorkflowStatusFailed
+		state.UpdatedAt = time.Now()
+
+		// Add checkpoint explaining the recovery
+		state.Checkpoints = append(state.Checkpoints, core.Checkpoint{
+			ID:        fmt.Sprintf("recovery-%d", time.Now().UnixNano()),
+			Type:      "recovery",
+			Phase:     state.CurrentPhase,
+			Timestamp: time.Now(),
+			Message:   "Workflow interrupted (server restart). Status changed from 'running' to 'failed'. You can retry by clicking Start.",
+		})
+
+		// Save updated state
+		if err := stateManager.Save(ctx, state); err != nil {
+			logger.Warn("failed to save recovered workflow",
+				slog.String("workflow_id", string(summary.WorkflowID)),
+				slog.String("error", err.Error()))
+			continue
+		}
+
+		logger.Info("recovered zombie workflow",
+			slog.String("workflow_id", string(summary.WorkflowID)),
+			slog.String("phase", string(state.CurrentPhase)))
+		recovered++
+	}
+
+	return recovered, nil
 }

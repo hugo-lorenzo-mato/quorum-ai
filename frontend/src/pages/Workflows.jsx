@@ -162,7 +162,7 @@ function TaskItem({ task, selected, onClick }) {
 }
 
 function WorkflowDetail({ workflow, tasks, onBack }) {
-  const { startWorkflow, pauseWorkflow, stopWorkflow, updateWorkflow, error, clearError } = useWorkflowStore();
+  const { startWorkflow, pauseWorkflow, resumeWorkflow, stopWorkflow, updateWorkflow, error, clearError } = useWorkflowStore();
   const notifyInfo = useUIStore((s) => s.notifyInfo);
   const notifyError = useUIStore((s) => s.notifyError);
 
@@ -596,10 +596,50 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
               </button>
             </>
           )}
+          {workflow.status === 'paused' && (
+            <>
+              <button
+                onClick={() => resumeWorkflow(workflow.id)}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+              >
+                <Play className="w-4 h-4" />
+                Resume
+              </button>
+              <button
+                onClick={() => stopWorkflow(workflow.id)}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-destructive text-destructive-foreground text-sm font-medium hover:bg-destructive/90 transition-colors"
+              >
+                <StopCircle className="w-4 h-4" />
+                Stop
+              </button>
+            </>
+          )}
+          {workflow.status === 'failed' && (
+            <button
+              onClick={() => startWorkflow(workflow.id)}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Retry
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Error Banner */}
+      {/* Workflow Error Banner - Shows when workflow failed */}
+      {workflow.status === 'failed' && workflow.error && (
+        <div className="p-4 rounded-lg bg-destructive/10 border border-destructive/20">
+          <div className="flex items-start gap-3">
+            <XCircle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-destructive mb-1">Workflow Failed</p>
+              <p className="text-sm text-destructive/80 break-words">{workflow.error}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Store Error Banner */}
       {error && (
         <div className="p-4 rounded-lg bg-warning/10 border border-warning/20 flex items-start justify-between">
           <p className="text-sm text-warning">{error}</p>
@@ -652,14 +692,15 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
         </div>
       </div>
 
-      {/* Agent Activity Panel */}
-      {workflow.status === 'running' && (agentActivity.length > 0 || activeAgents.length > 0) && (
+      {/* Agent Activity Panel - Show when running or when there's persisted activity */}
+      {(agentActivity.length > 0 || activeAgents.length > 0) && (
         <AgentActivity
           workflowId={workflow.id}
           activity={agentActivity}
           activeAgents={activeAgents}
           expanded={activityExpanded}
           onToggle={() => setActivityExpanded(!activityExpanded)}
+          workflowStartTime={workflow.status === 'running' ? workflow.updated_at : null}
         />
       )}
 

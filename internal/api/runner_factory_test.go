@@ -20,7 +20,7 @@ func TestRunnerFactory_CreateRunner_MissingStateManager(t *testing.T) {
 	defer eventBus.Close()
 	factory := NewRunnerFactory(nil, nil, eventBus, nil, nil)
 
-	_, _, err := factory.CreateRunner(context.Background(), "wf-test")
+	_, _, err := factory.CreateRunner(context.Background(), "wf-test", nil)
 	if err == nil {
 		t.Error("expected error for missing state manager")
 	}
@@ -40,7 +40,7 @@ func TestRunnerFactory_CreateRunner_MissingAgentRegistry(t *testing.T) {
 		nil,
 	)
 
-	_, _, err := factory.CreateRunner(context.Background(), "wf-test")
+	_, _, err := factory.CreateRunner(context.Background(), "wf-test", nil)
 	if err == nil {
 		t.Error("expected error for missing agent registry")
 	}
@@ -58,7 +58,7 @@ func TestRunnerFactory_CreateRunner_MissingEventBus(t *testing.T) {
 		nil,
 	)
 
-	_, _, err := factory.CreateRunner(context.Background(), "wf-test")
+	_, _, err := factory.CreateRunner(context.Background(), "wf-test", nil)
 	if err == nil {
 		t.Error("expected error for missing event bus")
 	}
@@ -78,7 +78,7 @@ func TestRunnerFactory_CreateRunner_MissingConfigLoader(t *testing.T) {
 		nil,
 	)
 
-	_, _, err := factory.CreateRunner(context.Background(), "wf-test")
+	_, _, err := factory.CreateRunner(context.Background(), "wf-test", nil)
 	if err == nil {
 		t.Error("expected error for missing config loader")
 	}

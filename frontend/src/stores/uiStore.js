@@ -10,6 +10,8 @@ const useUIStore = create(
       currentPage: 'dashboard',
       notifications: [],
       sseConnected: false,
+      connectionMode: 'disconnected', // 'sse', 'polling', 'disconnected'
+      retrySSEFn: null, // Function to retry SSE connection
 
       // Sidebar
       toggleSidebar: () => {
@@ -74,6 +76,14 @@ const useUIStore = create(
       // SSE Connection status
       setSSEConnected: (connected) => {
         set({ sseConnected: connected });
+      },
+
+      setConnectionMode: (mode) => {
+        set({ connectionMode: mode });
+      },
+
+      setRetrySSEFn: (fn) => {
+        set({ retrySSEFn: fn });
       },
 
       // Notification helpers

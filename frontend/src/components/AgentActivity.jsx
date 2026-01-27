@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import {
   Activity,
   Bot,
@@ -9,6 +9,8 @@ import {
   XCircle,
   Wrench,
   Brain,
+  Clock,
+  Timer,
 } from 'lucide-react';
 
 const AGENT_COLORS = {
@@ -36,6 +38,39 @@ function getAgentColor(agentName) {
   return AGENT_COLORS.default;
 }
 
+// Format elapsed time like TUI (e.g., "45s", "2m30s")
+function formatElapsed(startTime) {
+  if (!startTime) return '';
+  const elapsed = Math.floor((Date.now() - new Date(startTime).getTime()) / 1000);
+  if (elapsed < 60) return `${elapsed}s`;
+  const mins = Math.floor(elapsed / 60);
+  const secs = elapsed % 60;
+  return `${mins}m${secs.toString().padStart(2, '0')}s`;
+}
+
+// Estimate progress based on elapsed time (like TUI - assumes 2 min = 100%)
+function estimateProgress(startTime, isDone) {
+  if (isDone) return 100;
+  if (!startTime) return 0;
+  const elapsed = (Date.now() - new Date(startTime).getTime()) / 1000;
+  const expectedDuration = 120; // 2 minutes
+  const pct = Math.min(95, Math.floor((elapsed / expectedDuration) * 100));
+  return pct;
+}
+
+// Get activity icon based on event kind
+function getActivityIcon(eventKind) {
+  switch (eventKind) {
+    case 'tool_use': return '🔧';
+    case 'thinking': return '💭';
+    case 'progress': return '◐';
+    case 'started': return '▶';
+    case 'completed': return '✓';
+    case 'error': return '✗';
+    default: return '◐';
+  }
+}
+
 function AgentBadge({ name, status, message }) {
   const color = getAgentColor(name);
   const isActive = ['started', 'thinking', 'tool_use', 'progress'].includes(status);
@@ -47,6 +82,66 @@ function AgentBadge({ name, status, message }) {
       <Bot className="w-3 h-3" />
       <span className="truncate max-w-[120px]">{name}</span>
       {isActive && <Loader2 className="w-3 h-3 animate-spin" />}
+    </div>
+  );
+}
+
+// TUI-style progress bar for a single agent
+function AgentProgressBar({ agent, tick }) {
+  const color = getAgentColor(agent.name);
+  const isActive = ['started', 'thinking', 'tool_use', 'progress'].includes(agent.status);
+  const isDone = agent.status === 'completed';
+  const isError = agent.status === 'error';
+
+  const progress = estimateProgress(agent.timestamp, isDone);
+  const filledBars = Math.floor(progress / 10);
+
+  const activityIcon = getActivityIcon(agent.status);
+  const elapsed = agent.timestamp ? formatElapsed(agent.timestamp) : '';
+
+  return (
+    <div className="flex items-center gap-3 py-1.5 font-mono text-xs">
+      {/* Agent name */}
+      <span className={`w-16 truncate font-semibold ${color.text}`}>
+        {agent.name}
+      </span>
+
+      {/* Progress bar */}
+      <div className="flex items-center gap-0.5">
+        <span className="text-muted-foreground">[</span>
+        {[...Array(10)].map((_, i) => (
+          <span
+            key={i}
+            className={
+              i < filledBars
+                ? isDone
+                  ? 'text-success'
+                  : isError
+                  ? 'text-error'
+                  : color.text
+                : 'text-muted-foreground/30'
+            }
+          >
+            {i < filledBars ? '▓' : '░'}
+          </span>
+        ))}
+        <span className="text-muted-foreground">]</span>
+      </div>
+
+      {/* Activity icon and message */}
+      <div className="flex-1 flex items-center gap-1.5 min-w-0">
+        <span className={isActive ? 'text-warning' : isDone ? 'text-success' : isError ? 'text-error' : 'text-muted-foreground'}>
+          {activityIcon}
+        </span>
+        <span className="text-muted-foreground truncate">
+          {agent.message || (isDone ? 'done' : isActive ? 'processing...' : isError ? 'failed' : 'idle')}
+        </span>
+      </div>
+
+      {/* Elapsed time */}
+      {elapsed && (
+        <span className="text-muted-foreground w-16 text-right">{elapsed}</span>
+      )}
     </div>
   );
 }
@@ -81,8 +176,63 @@ function ActivityEntry({ entry }) {
   );
 }
 
-export default function AgentActivity({ workflowId, activity = [], activeAgents = [], expanded, onToggle }) {
+export default function AgentActivity({ workflowId, activity = [], activeAgents = [], expanded, onToggle, workflowStartTime }) {
   const hasActivity = activity.length > 0 || activeAgents.length > 0;
+
+  // Timer tick for updating elapsed times
+  const [tick, setTick] = useState(0);
+
+  useEffect(() => {
+    if (!hasActivity) return;
+    const interval = setInterval(() => setTick(t => t + 1), 1000);
+    return () => clearInterval(interval);
+  }, [hasActivity]);
+
+  // Calculate total elapsed time
+  const totalElapsed = useMemo(() => {
+    if (!workflowStartTime) return null;
+    return formatElapsed(workflowStartTime);
+  }, [workflowStartTime, tick]);
+
+  // Build agent progress data from activity
+  const agentProgress = useMemo(() => {
+    const agents = new Map();
+
+    // Process activity in reverse (oldest first) to build up state
+    [...activity].reverse().forEach(entry => {
+      const existing = agents.get(entry.agent) || {
+        name: entry.agent,
+        status: 'idle',
+        message: '',
+        timestamp: null,
+      };
+
+      // Update with latest event
+      existing.status = entry.eventKind;
+      existing.message = entry.message;
+      if (!existing.timestamp) {
+        existing.timestamp = entry.timestamp;
+      }
+
+      agents.set(entry.agent, existing);
+    });
+
+    // Also add any active agents not in activity
+    activeAgents.forEach(agent => {
+      const existing = agents.get(agent.name) || {
+        name: agent.name,
+        status: agent.status,
+        message: agent.message,
+        timestamp: agent.timestamp,
+      };
+      existing.status = agent.status;
+      existing.message = agent.message;
+      if (agent.timestamp) existing.timestamp = agent.timestamp;
+      agents.set(agent.name, existing);
+    });
+
+    return Array.from(agents.values());
+  }, [activity, activeAgents, tick]);
 
   if (!hasActivity) return null;
 
@@ -107,6 +257,13 @@ export default function AgentActivity({ workflowId, activity = [], activeAgents 
           </div>
         </div>
         <div className="flex items-center gap-3">
+          {/* Total elapsed time */}
+          {totalElapsed && (
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Timer className="w-3.5 h-3.5" />
+              <span className="font-mono">{totalElapsed}</span>
+            </div>
+          )}
           {activeAgents.length > 0 && (
             <div className="flex -space-x-1">
               {activeAgents.slice(0, 3).map((agent) => (
@@ -134,27 +291,35 @@ export default function AgentActivity({ workflowId, activity = [], activeAgents 
 
       {expanded && (
         <div className="border-t border-border">
-          {activeAgents.length > 0 && (
-            <div className="p-4 border-b border-border bg-accent/20">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
-                Active Agents
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {activeAgents.map((agent) => (
-                  <AgentBadge
-                    key={agent.name}
-                    name={agent.name}
-                    status={agent.status}
-                    message={agent.message}
-                  />
+          {/* TUI-style progress bars section */}
+          {agentProgress.length > 0 && (
+            <div className="p-4 border-b border-border bg-accent/10">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                  Agent Progress
+                </p>
+                {totalElapsed && (
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Clock className="w-3 h-3" />
+                    <span className="font-mono">Total: {totalElapsed}</span>
+                  </div>
+                )}
+              </div>
+              <div className="space-y-0.5 bg-background/50 rounded-lg p-3">
+                {agentProgress.map((agent) => (
+                  <AgentProgressBar key={agent.name} agent={agent} tick={tick} />
                 ))}
               </div>
             </div>
           )}
 
+          {/* Activity log */}
           <div className="max-h-64 overflow-y-auto">
             {activity.length > 0 ? (
               <div className="p-2 space-y-0.5">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide px-3 py-2">
+                  Activity Log
+                </p>
                 {activity.slice(0, 50).map((entry) => (
                   <ActivityEntry key={entry.id} entry={entry} />
                 ))}

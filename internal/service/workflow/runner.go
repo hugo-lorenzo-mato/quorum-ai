@@ -478,6 +478,7 @@ func (r *Runner) handleError(ctx context.Context, state *core.WorkflowState, err
 	}
 
 	state.Status = core.WorkflowStatusFailed
+	state.Error = err.Error()
 	state.UpdatedAt = time.Now()
 	if checkpointErr := r.checkpoint.ErrorCheckpoint(state, err); checkpointErr != nil {
 		r.logger.Warn("failed to create error checkpoint", "checkpoint_error", checkpointErr)

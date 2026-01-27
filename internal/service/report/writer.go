@@ -155,20 +155,17 @@ func (w *WorkflowReportWriter) GetExecutionDir() string {
 
 // V1AnalysisPath returns the path where the LLM should write a V1 analysis
 func (w *WorkflowReportWriter) V1AnalysisPath(agentName, model string) string {
-	filename := fmt.Sprintf("%s-%s.md", agentName, sanitizeFilename(model))
-	return filepath.Join(w.AnalyzePhasePath(), "v1", filename)
+	return filepath.Join(w.AnalyzePhasePath(), "v1", analysisFilename(agentName, model))
 }
 
 // VnAnalysisPath returns the path where the LLM should write a V(n) analysis
 func (w *WorkflowReportWriter) VnAnalysisPath(agentName, model string, round int) string {
-	filename := fmt.Sprintf("%s-%s.md", agentName, sanitizeFilename(model))
-	return filepath.Join(w.AnalyzePhasePath(), fmt.Sprintf("v%d", round), filename)
+	return filepath.Join(w.AnalyzePhasePath(), fmt.Sprintf("v%d", round), analysisFilename(agentName, model))
 }
 
 // SingleAgentAnalysisPath returns the path where the LLM should write a single-agent analysis
 func (w *WorkflowReportWriter) SingleAgentAnalysisPath(agentName, model string) string {
-	filename := fmt.Sprintf("%s-%s.md", agentName, sanitizeFilename(model))
-	return filepath.Join(w.AnalyzePhasePath(), "single-agent", filename)
+	return filepath.Join(w.AnalyzePhasePath(), "single-agent", analysisFilename(agentName, model))
 }
 
 // ConsolidatedAnalysisPath returns the path where the LLM should write the consolidated analysis
@@ -269,8 +266,7 @@ func (w *WorkflowReportWriter) WriteV1Analysis(data AnalysisData) error {
 		return fmt.Errorf("creating v1 directory: %w", err)
 	}
 
-	filename := fmt.Sprintf("%s-%s.md", data.AgentName, sanitizeFilename(data.Model))
-	path := filepath.Join(v1Dir, filename)
+	path := filepath.Join(v1Dir, analysisFilename(data.AgentName, data.Model))
 
 	// Write only the raw LLM output, no frontmatter or metadata
 	return w.writeFileRaw(path, data.RawOutput+"\n")
@@ -419,8 +415,7 @@ func (w *WorkflowReportWriter) WriteVnAnalysis(data VnAnalysisData) error {
 		return fmt.Errorf("creating v%d directory: %w", data.Round, err)
 	}
 
-	filename := fmt.Sprintf("%s-%s.md", data.AgentName, sanitizeFilename(data.Model))
-	path := filepath.Join(vnDir, filename)
+	path := filepath.Join(vnDir, analysisFilename(data.AgentName, data.Model))
 
 	// Write only the raw LLM output, no frontmatter or metadata
 	return w.writeFileRaw(path, data.RawOutput+"\n")
