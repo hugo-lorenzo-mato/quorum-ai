@@ -220,7 +220,7 @@ func (r *Registry) AvailableForPhase(ctx context.Context, phase string) []string
 
 	for name, err := range results {
 		if err != nil {
-			slog.Warn("agent ping failed",
+			slog.Debug("agent ping failed",
 				slog.String("agent", name),
 				slog.String("phase", phase),
 				slog.String("error", err.Error()),
@@ -239,12 +239,6 @@ func (r *Registry) AvailableForPhase(ctx context.Context, phase string) []string
 		}
 		available = append(available, name)
 	}
-
-	slog.Info("agents available for phase",
-		slog.String("phase", phase),
-		slog.Any("available", available),
-		slog.Int("total_configured", len(results)),
-	)
 
 	return available
 }
