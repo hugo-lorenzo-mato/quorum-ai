@@ -44,7 +44,7 @@ graph TB
             CODEX[Codex Adapter]
         end
         subgraph "State Adapter"
-            JSON[JSON State Manager]
+            STATE[State Manager<br/>SQLite/JSON]
             LOCK[Process Lock]
         end
         subgraph "Git Adapters"
@@ -82,13 +82,13 @@ graph TB
     PORTS --> CLAUDE
     PORTS --> GEMINI
     PORTS --> CODEX
-    PORTS --> JSON
+    PORTS --> STATE
     PORTS --> GIT
 
     CLAUDE --> CLAUDE_CLI
     GEMINI --> GEMINI_CLI
     CODEX --> CODEX_CLI
-    JSON --> FS
+    STATE --> FS
     LOCK --> FS
     GIT --> GIT_BIN
     WT --> GIT_BIN
@@ -171,7 +171,8 @@ Implement ports by wrapping external systems.
 
 Responsibilities:
 
-- JSON-based persistence with atomic writes
+- SQLite-based persistence (default) with transactional writes
+- JSON-based persistence (alternative) with atomic writes
 - Process lock management with stale detection
 
 #### Git Adapters (`internal/adapters/git/`)
@@ -245,7 +246,7 @@ User Input (prompt)
        |
        v
 +------+-------+
-| State Load   |  <- JSON state manager
+| State Load   |  <- SQLite state manager (or JSON)
 +------+-------+
        |
        v

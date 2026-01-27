@@ -382,25 +382,25 @@ Configures workflow state persistence.
 
 ```yaml
 state:
-  backend: json
-  path: .quorum/state/state.json
-  backup_path: .quorum/state/state.json.bak
+  backend: sqlite
+  path: .quorum/state/state.db
+  backup_path: .quorum/state/state.db.bak
   lock_ttl: 1h
 ```
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `backend` | string | `json` | Storage: `json` (file) or `sqlite` (database) |
-| `path` | string | `.quorum/state/state.json` | State file path |
-| `backup_path` | string | `.quorum/state/state.json.bak` | Backup file path |
+| `backend` | string | `sqlite` | Storage: `sqlite` (database) or `json` (file) |
+| `path` | string | `.quorum/state/state.db` | State database path |
+| `backup_path` | string | `.quorum/state/state.db.bak` | Backup file path |
 | `lock_ttl` | duration | `1h` | Lock TTL before stale |
 
 **Backend comparison:**
 
 | Backend | Best For |
 |---------|----------|
+| `sqlite` | Large workflows, concurrent access, performance (default) |
 | `json` | Simple setups, debugging, human-readable |
-| `sqlite` | Large workflows, concurrent access, performance |
 
 **Path extension handling:**
 
@@ -408,8 +408,8 @@ Extensions are automatically adjusted when switching backends:
 
 | Configured | Backend | Actual |
 |------------|---------|--------|
-| `state.json` | `sqlite` | `state.db` |
 | `state.db` | `json` | `state.json` |
+| `state.json` | `sqlite` | `state.db` |
 
 ---
 
