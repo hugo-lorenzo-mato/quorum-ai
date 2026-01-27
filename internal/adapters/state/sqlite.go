@@ -26,6 +26,9 @@ var migrationV1 string
 //go:embed migrations/002_add_recovery_columns.sql
 var migrationV2 string
 
+//go:embed migrations/003_add_title_column.sql
+var migrationV3 string
+
 // SQLiteStateManager implements StateManager with SQLite storage.
 type SQLiteStateManager struct {
 	dbPath     string
@@ -195,6 +198,14 @@ func (m *SQLiteStateManager) migrate() error {
 		}
 	}
 
+	if version < 3 {
+		// Migration V3 adds title column - ignore error if column already exists
+		_, err := m.db.Exec(migrationV3)
+		if err != nil && !strings.Contains(err.Error(), "duplicate column") {
+			return fmt.Errorf("applying migration v3: %w", err)
+		}
+	}
+
 	return nil
 }
 
@@ -246,11 +257,12 @@ func (m *SQLiteStateManager) Save(ctx context.Context, state *core.WorkflowState
 	// Upsert workflow
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO workflows (
-			id, version, status, current_phase, prompt, optimized_prompt,
+			id, version, title, status, current_phase, prompt, optimized_prompt,
 			task_order, config, metrics, checksum, created_at, updated_at, report_path
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			version = excluded.version,
+			title = excluded.title,
 			status = excluded.status,
 			current_phase = excluded.current_phase,
 			prompt = excluded.prompt,
@@ -262,7 +274,7 @@ func (m *SQLiteStateManager) Save(ctx context.Context, state *core.WorkflowState
 			updated_at = excluded.updated_at,
 			report_path = excluded.report_path
 	`,
-		state.WorkflowID, state.Version, state.Status, state.CurrentPhase,
+		state.WorkflowID, state.Version, state.Title, state.Status, state.CurrentPhase,
 		state.Prompt, state.OptimizedPrompt, string(taskOrderJSON),
 		nullableString(configJSON), nullableString(metricsJSON),
 		checksum, state.CreatedAt, state.UpdatedAt,
@@ -412,13 +424,14 @@ func (m *SQLiteStateManager) loadWorkflowByID(ctx context.Context, id core.Workf
 	var optimizedPrompt sql.NullString
 	var checksum sql.NullString
 	var reportPath sql.NullString
+	var title sql.NullString
 
 	err := m.readDB.QueryRowContext(ctx, `
-		SELECT id, version, status, current_phase, prompt, optimized_prompt,
+		SELECT id, version, title, status, current_phase, prompt, optimized_prompt,
 		       task_order, config, metrics, checksum, created_at, updated_at, report_path
 		FROM workflows WHERE id = ?
 	`, id).Scan(
-		&state.WorkflowID, &state.Version, &state.Status, &state.CurrentPhase,
+		&state.WorkflowID, &state.Version, &title, &state.Status, &state.CurrentPhase,
 		&state.Prompt, &optimizedPrompt, &taskOrderJSON, &configJSON, &metricsJSON,
 		&checksum, &state.CreatedAt, &state.UpdatedAt, &reportPath,
 	)
@@ -429,6 +442,9 @@ func (m *SQLiteStateManager) loadWorkflowByID(ctx context.Context, id core.Workf
 		return nil, fmt.Errorf("loading workflow: %w", err)
 	}
 
+	if title.Valid {
+		state.Title = title.String
+	}
 	if optimizedPrompt.Valid {
 		state.OptimizedPrompt = optimizedPrompt.String
 	}
