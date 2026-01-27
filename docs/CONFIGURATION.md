@@ -181,7 +181,7 @@ phases:
 | `synthesizer.agent` | string | - | Agent to synthesize analyses |
 | `moderator.enabled` | bool | `false` | Enable consensus evaluation |
 | `moderator.agent` | string | - | Agent for moderation |
-| `moderator.threshold` | float | `0.80` | Consensus score to proceed (0.0-1.0) |
+| `moderator.threshold` | float | `0.85` | Consensus score to proceed (0.0-1.0) |
 | `moderator.min_rounds` | int | `2` | Minimum refinement rounds |
 | `moderator.max_rounds` | int | `5` | Maximum refinement rounds |
 | `moderator.abort_threshold` | float | `0.30` | Score below this aborts workflow |
