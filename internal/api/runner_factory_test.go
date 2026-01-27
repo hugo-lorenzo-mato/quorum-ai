@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/config"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/events"
 )
@@ -112,4 +113,68 @@ func (m *mockAgentRegistry) Available(_ context.Context) []string {
 
 func (m *mockAgentRegistry) AvailableForPhase(_ context.Context, _ string) []string {
 	return nil
+}
+
+func TestBuildAgentPhaseModels(t *testing.T) {
+	agents := config.AgentsConfig{
+		Claude: config.AgentConfig{
+			Enabled: true,
+			PhaseModels: map[string]string{
+				"analyze": "claude-opus",
+				"plan":    "claude-sonnet",
+			},
+		},
+		Gemini: config.AgentConfig{
+			Enabled: true,
+			PhaseModels: map[string]string{
+				"execute": "gemini-flash",
+			},
+		},
+		Codex: config.AgentConfig{
+			Enabled: false, // Disabled agent should be excluded
+			PhaseModels: map[string]string{
+				"analyze": "gpt-4",
+			},
+		},
+		Copilot: config.AgentConfig{
+			Enabled: true,
+			// No PhaseModels - should not appear in result
+		},
+	}
+
+	result := buildAgentPhaseModels(agents)
+
+	// Verify claude phase models
+	if result["claude"]["analyze"] != "claude-opus" {
+		t.Errorf("expected claude.analyze=claude-opus, got %s", result["claude"]["analyze"])
+	}
+	if result["claude"]["plan"] != "claude-sonnet" {
+		t.Errorf("expected claude.plan=claude-sonnet, got %s", result["claude"]["plan"])
+	}
+
+	// Verify gemini phase models
+	if result["gemini"]["execute"] != "gemini-flash" {
+		t.Errorf("expected gemini.execute=gemini-flash, got %s", result["gemini"]["execute"])
+	}
+
+	// Verify codex is excluded (disabled agent)
+	if _, exists := result["codex"]; exists {
+		t.Error("expected codex to be excluded (disabled agent)")
+	}
+
+	// Verify copilot is excluded (no phase models)
+	if _, exists := result["copilot"]; exists {
+		t.Error("expected copilot to be excluded (no phase models)")
+	}
+}
+
+func TestBuildAgentPhaseModels_Empty(t *testing.T) {
+	// Test with no agents enabled or no phase models
+	agents := config.AgentsConfig{}
+
+	result := buildAgentPhaseModels(agents)
+
+	if len(result) != 0 {
+		t.Errorf("expected empty result, got %d entries", len(result))
+	}
 }

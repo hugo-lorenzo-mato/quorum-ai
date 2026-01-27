@@ -31,26 +31,24 @@ func DefaultConfig() Config {
 type WorkflowReportWriter struct {
 	mu           sync.Mutex
 	config       Config
-	executionDir string // "20240115-143000-wf-abc123"
+	executionDir string // e.g., "wf-20250121-153045-k7m9p"
 	workflowID   string
 	startTime    time.Time
 	initialized  bool
 }
 
-// NewWorkflowReportWriter creates a writer for a new workflow execution
+// NewWorkflowReportWriter creates a writer for a new workflow execution.
+// The execution directory is named after the workflowID directly,
+// since the ID already contains a timestamp (e.g., wf-20250121-153045-k7m9p).
 func NewWorkflowReportWriter(cfg Config, workflowID string) *WorkflowReportWriter {
 	now := time.Now()
 	if cfg.UseUTC {
 		now = now.UTC()
 	}
 
-	executionDir := fmt.Sprintf("%s-%s",
-		now.Format("20060102-150405"),
-		workflowID)
-
 	return &WorkflowReportWriter{
 		config:       cfg,
-		executionDir: executionDir,
+		executionDir: workflowID,
 		workflowID:   workflowID,
 		startTime:    now,
 		initialized:  false,

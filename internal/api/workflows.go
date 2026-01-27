@@ -2,7 +2,9 @@ package api
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"sync"
 	"time"
@@ -410,8 +412,26 @@ func stateToWorkflowResponse(state *core.WorkflowState, activeID core.WorkflowID
 }
 
 // generateWorkflowID creates a new workflow ID.
+// Format: wf-YYYYMMDD-HHMMSS-xxxxx (e.g., wf-20250121-153045-k7m9p)
+// Uses UTC for consistency and a random suffix for uniqueness.
 func generateWorkflowID() core.WorkflowID {
-	return core.WorkflowID("wf-" + time.Now().Format("20060102-150405"))
+	now := time.Now().UTC()
+	return core.WorkflowID(fmt.Sprintf("wf-%s-%s", now.Format("20060102-150405"), randomSuffix(5)))
+}
+
+// randomSuffix generates a random alphanumeric suffix of the given length.
+// Uses base36 (0-9, a-z) for URL-safe, human-readable identifiers.
+func randomSuffix(length int) string {
+	const charset = "0123456789abcdefghijklmnopqrstuvwxyz"
+	b := make([]byte, length)
+	if _, err := rand.Read(b); err != nil {
+		// Fallback to timestamp nanoseconds if crypto/rand fails
+		return fmt.Sprintf("%05d", time.Now().UnixNano()%100000)
+	}
+	for i := range b {
+		b[i] = charset[b[i]%byte(len(charset))]
+	}
+	return string(b)
 }
 
 // HandleRunWorkflow starts execution of a workflow.

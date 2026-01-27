@@ -150,6 +150,27 @@ func (f *RunnerFactory) CreateRunner(ctx context.Context, workflowID string, cp 
 	return runner, outputNotifier, nil
 }
 
+// buildAgentPhaseModels extracts phase model overrides from agent configurations.
+// Returns a map of agent name -> phase name -> model name for use in ResolvePhaseModel.
+func buildAgentPhaseModels(agents config.AgentsConfig) map[string]map[string]string {
+	result := make(map[string]map[string]string)
+
+	agentMap := map[string]config.AgentConfig{
+		"claude":  agents.Claude,
+		"gemini":  agents.Gemini,
+		"codex":   agents.Codex,
+		"copilot": agents.Copilot,
+	}
+
+	for name, cfg := range agentMap {
+		if cfg.Enabled && len(cfg.PhaseModels) > 0 {
+			result[name] = cfg.PhaseModels
+		}
+	}
+
+	return result
+}
+
 // buildRunnerConfig creates a RunnerConfig from the application configuration.
 func buildRunnerConfig(cfg *config.Config) *workflow.RunnerConfig {
 	// Parse workflow timeout (defaults to 12h if not set or invalid)
@@ -167,6 +188,7 @@ func buildRunnerConfig(cfg *config.Config) *workflow.RunnerConfig {
 		Sandbox:           cfg.Workflow.Sandbox,
 		DenyTools:         cfg.Workflow.DenyTools,
 		DefaultAgent:      cfg.Agents.Default,
+		AgentPhaseModels:  buildAgentPhaseModels(cfg.Agents),
 		WorktreeAutoClean: cfg.Git.AutoClean,
 		WorktreeMode:      cfg.Git.WorktreeMode,
 		Refiner: workflow.RefinerConfig{

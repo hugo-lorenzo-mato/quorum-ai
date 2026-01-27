@@ -5,13 +5,13 @@ package workflow
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/control"
@@ -19,9 +19,6 @@ import (
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/logging"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service/report"
 )
-
-// idCounter provides additional uniqueness for workflow IDs.
-var idCounter uint64
 
 // StateManager manages workflow state persistence and locking.
 type StateManager interface {
@@ -1131,11 +1128,26 @@ func (r *Runner) SetDryRun(enabled bool) {
 }
 
 // generateWorkflowID generates a unique workflow ID.
-// Format: wf-YYYYMMDD-HHMMSS-NNN (e.g., wf-20250121-153045-001)
+// Format: wf-YYYYMMDD-HHMMSS-xxxxx (e.g., wf-20250121-153045-k7m9p)
+// Uses UTC for consistency and a random suffix for uniqueness.
 func generateWorkflowID() string {
-	counter := atomic.AddUint64(&idCounter, 1)
-	now := time.Now()
-	return fmt.Sprintf("wf-%s-%03d", now.Format("20060102-150405"), counter)
+	now := time.Now().UTC()
+	return fmt.Sprintf("wf-%s-%s", now.Format("20060102-150405"), randomSuffix(5))
+}
+
+// randomSuffix generates a random alphanumeric suffix of the given length.
+// Uses base36 (0-9, a-z) for URL-safe, human-readable identifiers.
+func randomSuffix(length int) string {
+	const charset = "0123456789abcdefghijklmnopqrstuvwxyz"
+	b := make([]byte, length)
+	if _, err := rand.Read(b); err != nil {
+		// Fallback to timestamp nanoseconds if crypto/rand fails
+		return fmt.Sprintf("%05d", time.Now().UnixNano()%100000)
+	}
+	for i := range b {
+		b[i] = charset[b[i]%byte(len(charset))]
+	}
+	return string(b)
 }
 
 // finalizeMetrics calculates final aggregate metrics.

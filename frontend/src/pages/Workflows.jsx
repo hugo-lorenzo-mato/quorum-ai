@@ -211,6 +211,7 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
   const inferReportPath = useCallback(async (workflowId) => {
     try {
       const entries = await fileApi.list('.quorum/runs');
+      // Report directories are named directly after the workflowId (e.g., wf-20250121-153045-k7m9p)
       const match = entries.find((e) => e.is_dir && e.name === workflowId);
       return match?.path || null;
     } catch {
