@@ -4,7 +4,7 @@ import { useWorkflowStore, useTaskStore, useUIStore, useAgentStore } from '../st
 import { fileApi, workflowApi } from '../lib/api';
 import MarkdownViewer from '../components/MarkdownViewer';
 import AgentActivity, { AgentActivityCompact } from '../components/AgentActivity';
-import EditableField from '../components/EditableField';
+import EditWorkflowModal from '../components/EditWorkflowModal';
 import {
   GitBranch,
   Plus,
@@ -21,6 +21,7 @@ import {
   Zap,
   Copy,
   RefreshCw,
+  Pencil,
 } from 'lucide-react';
 
 function normalizeWhitespace(s) {
@@ -165,26 +166,17 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
   const notifyInfo = useUIStore((s) => s.notifyInfo);
   const notifyError = useUIStore((s) => s.notifyError);
 
-  // Editable workflow state
+  // Edit modal state
+  const [editModalOpen, setEditModalOpen] = useState(false);
   const canEdit = workflow.status === 'pending';
   const displayTitle = workflow.title || deriveWorkflowTitle(workflow, tasks);
 
-  const handleUpdateTitle = useCallback(async (newTitle) => {
+  const handleSaveWorkflow = useCallback(async (updates) => {
     try {
-      await updateWorkflow(workflow.id, { title: newTitle });
-      notifyInfo('Title updated');
+      await updateWorkflow(workflow.id, updates);
+      notifyInfo('Workflow updated');
     } catch (err) {
-      notifyError(err.message || 'Failed to update title');
-      throw err;
-    }
-  }, [workflow.id, updateWorkflow, notifyInfo, notifyError]);
-
-  const handleUpdatePrompt = useCallback(async (newPrompt) => {
-    try {
-      await updateWorkflow(workflow.id, { prompt: newPrompt });
-      notifyInfo('Prompt updated');
-    } catch (err) {
-      notifyError(err.message || 'Failed to update prompt');
+      notifyError(err.message || 'Failed to update workflow');
       throw err;
     }
   }, [workflow.id, updateWorkflow, notifyInfo, notifyError]);
@@ -562,18 +554,18 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
           <ArrowLeft className="w-5 h-5 text-muted-foreground" />
         </button>
         <div className="flex-1 min-w-0">
-          {canEdit ? (
-            <EditableField
-              value={workflow.title || ''}
-              onSave={handleUpdateTitle}
-              placeholder={displayTitle}
-              className="mb-1"
-              displayClassName="text-xl font-semibold text-foreground"
-              inputClassName="text-xl font-semibold"
-            />
-          ) : (
+          <div className="flex items-center gap-2 group">
             <h1 className="text-xl font-semibold text-foreground line-clamp-2">{displayTitle}</h1>
-          )}
+            {canEdit && (
+              <button
+                onClick={() => setEditModalOpen(true)}
+                className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-accent text-muted-foreground hover:text-foreground transition-all"
+                title="Edit workflow"
+              >
+                <Pencil className="w-4 h-4" />
+              </button>
+            )}
+          </div>
           <p className="text-sm text-muted-foreground">{workflow.id}</p>
         </div>
         <div className="flex items-center gap-3">
@@ -622,31 +614,22 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
 
       {/* Info Card */}
       <div className="p-6 rounded-xl border border-border bg-card">
-        <div className="mb-4">
-          <div className="flex items-center gap-2 mb-2">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Prompt</p>
-            {canEdit && (
-              <span className="text-xs text-muted-foreground">(click to edit)</span>
-            )}
-          </div>
-          {canEdit ? (
-            <EditableField
-              value={workflow.prompt || ''}
-              onSave={handleUpdatePrompt}
-              placeholder="Describe what you want the AI agents to accomplish..."
-              multiline
-              maxLength={10000}
-              displayClassName="text-sm text-foreground whitespace-pre-wrap"
-              inputClassName="text-sm"
-            />
-          ) : (
-            <p className="text-sm text-foreground whitespace-pre-wrap">
+        <div className="flex items-start justify-between mb-4">
+          <div className="flex-1 min-w-0">
+            <p className="text-sm text-muted-foreground mb-2 line-clamp-3">
               {workflow.prompt || 'No prompt'}
             </p>
-          )}
-          <div className="mt-3">
             <StatusBadge status={workflow.status} />
           </div>
+          {canEdit && (
+            <button
+              onClick={() => setEditModalOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors ml-4 shrink-0"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+              Edit
+            </button>
+          )}
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 pt-4 border-t border-border">
           <div>
@@ -811,6 +794,14 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
           )}
         </div>
       </div>
+
+      {/* Edit Modal */}
+      <EditWorkflowModal
+        isOpen={editModalOpen}
+        onClose={() => setEditModalOpen(false)}
+        workflow={workflow}
+        onSave={handleSaveWorkflow}
+      />
     </div>
   );
 }
