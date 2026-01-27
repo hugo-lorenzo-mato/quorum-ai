@@ -1,5 +1,6 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { X, Pencil } from 'lucide-react';
+import TurndownService from 'turndown';
 
 /**
  * EditWorkflowModal - Clean modal for editing workflow title and prompt
@@ -10,6 +11,16 @@ export default function EditWorkflowModal({ isOpen, onClose, workflow, onSave })
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const titleRef = useRef(null);
+
+  const turndown = useMemo(() => {
+    const service = new TurndownService({
+      codeBlockStyle: 'fenced',
+      emDelimiter: '*',
+      bulletListMarker: '-',
+    });
+    service.keep(['kbd']);
+    return service;
+  }, []);
 
   // Sync values when modal opens
   useEffect(() => {
@@ -47,8 +58,10 @@ export default function EditWorkflowModal({ isOpen, onClose, workflow, onSave })
       if (title.trim() !== (workflow.title || '')) {
         updates.title = title.trim();
       }
-      if (prompt.trim() !== (workflow.prompt || '')) {
-        updates.prompt = prompt.trim();
+      // Preserve prompt formatting exactly as entered (do NOT trim),
+      // but still use trim() only for validation and change detection.
+      if (prompt !== (workflow.prompt || '')) {
+        updates.prompt = prompt;
       }
 
       if (Object.keys(updates).length > 0) {
@@ -68,6 +81,51 @@ export default function EditWorkflowModal({ isOpen, onClose, workflow, onSave })
       e.preventDefault();
       handleSave();
     }
+  };
+
+  const handlePromptPaste = (e) => {
+    const clipboard = e.clipboardData;
+    if (!clipboard) return;
+
+    const plain = clipboard.getData('text/plain') || '';
+    const html = clipboard.getData('text/html') || '';
+
+    const htmlSuggestsStructure = /<\s*(p|br|li|ul|ol|pre|code|h[1-6]|blockquote|table)\b/i.test(html);
+    const plainHasNewlines = plain.includes('\n');
+
+    let textToInsert = plain;
+    if (html && htmlSuggestsStructure && !plainHasNewlines) {
+      try {
+        textToInsert = turndown.turndown(html);
+      } catch {
+        textToInsert = plain;
+      }
+    }
+
+    if (!textToInsert) return;
+
+    // Insert preserving selection, avoiding React/DOM mismatch.
+    e.preventDefault();
+    const target = e.target;
+    if (!(target instanceof HTMLTextAreaElement)) return;
+
+    const start = target.selectionStart ?? 0;
+    const end = target.selectionEnd ?? start;
+    const currentValue = target.value ?? '';
+
+    const nextValue = currentValue.slice(0, start) + textToInsert + currentValue.slice(end);
+    setPrompt(nextValue);
+
+    // Restore caret position after React updates value.
+    const nextPos = start + textToInsert.length;
+    requestAnimationFrame(() => {
+      try {
+        target.selectionStart = nextPos;
+        target.selectionEnd = nextPos;
+      } catch {
+        // ignore
+      }
+    });
   };
 
   if (!isOpen) return null;
@@ -122,9 +180,11 @@ export default function EditWorkflowModal({ isOpen, onClose, workflow, onSave })
             <textarea
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
+              onPaste={handlePromptPaste}
               placeholder="Describe what you want the AI agents to accomplish..."
               rows={8}
-              className="w-full px-3 py-2 rounded-lg border border-input bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background resize-none transition-shadow"
+              spellCheck={false}
+              className="w-full px-3 py-2 rounded-lg border border-input bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background resize-none transition-shadow font-mono text-sm leading-6"
             />
             <p className="mt-1 text-xs text-muted-foreground text-right">
               {prompt.length.toLocaleString()} characters

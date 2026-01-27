@@ -210,12 +210,9 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
 
   const inferReportPath = useCallback(async (workflowId) => {
     try {
-      const entries = await fileApi.list('.quorum/output');
-      const candidates = entries
-        .filter((e) => e.is_dir && e.name?.endsWith(`-${workflowId}`))
-        .sort((a, b) => (b.name || '').localeCompare(a.name || ''));
-
-      return candidates[0]?.path || null;
+      const entries = await fileApi.list('.quorum/runs');
+      const match = entries.find((e) => e.is_dir && e.name === workflowId);
+      return match?.path || null;
     } catch {
       return null;
     }
@@ -811,7 +808,7 @@ function NewWorkflowForm({ onSubmit, onCancel, loading }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (prompt.trim()) onSubmit(prompt.trim());
+    if (prompt.trim()) onSubmit(prompt);
   };
 
   return (
