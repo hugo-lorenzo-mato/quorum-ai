@@ -272,8 +272,9 @@ type codexItem struct {
 }
 
 type codexUsage struct {
-	InputTokens  int `json:"input_tokens"`
-	OutputTokens int `json:"output_tokens"`
+	InputTokens       int `json:"input_tokens"`
+	OutputTokens      int `json:"output_tokens"`
+	CachedInputTokens int `json:"cached_input_tokens,omitempty"`
 }
 
 // ParseLine parses a single line of Codex JSON output.
