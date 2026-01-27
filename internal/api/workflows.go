@@ -526,23 +526,21 @@ func (s *Server) HandleRunWorkflow(w http.ResponseWriter, r *http.Request) {
 	notifier.SetState(state)
 	notifier.SetStateSaver(s.stateManager)
 
-	// Start execution in background
-	// Note: Status is updated to "running" INSIDE the goroutine to avoid race condition
-	// where status is saved before the goroutine actually starts (causing zombie workflows)
-	go func() {
-		// Update status to running inside goroutine (after goroutine has started)
-		state.Status = core.WorkflowStatusRunning
-		state.Error = "" // Clear previous error on restart
-		state.UpdatedAt = time.Now()
-		if err := s.stateManager.Save(context.Background(), state); err != nil {
-			s.logger.Error("failed to update workflow status to running", "workflow_id", workflowID, "error", err)
-			notifier.WorkflowFailed(string(state.CurrentPhase), err)
-			cancel()
-			s.unregisterControlPlane(workflowID)
-			markFinished(workflowID)
-			return
-		}
+	// Update status to "running" BEFORE responding to ensure DB consistency
+	// This way, any subsequent GET will return the correct status
+	state.Status = core.WorkflowStatusRunning
+	state.Error = "" // Clear previous error on restart
+	state.UpdatedAt = time.Now()
+	if err := s.stateManager.Save(r.Context(), state); err != nil {
+		s.logger.Error("failed to update workflow status to running", "workflow_id", workflowID, "error", err)
+		s.unregisterControlPlane(workflowID)
+		markFinished(workflowID)
+		respondError(w, http.StatusInternalServerError, "failed to start workflow: "+err.Error())
+		return
+	}
 
+	// Start execution in background
+	go func() {
 		// Emit workflow started event
 		notifier.WorkflowStarted(state.Prompt)
 
@@ -550,18 +548,18 @@ func (s *Server) HandleRunWorkflow(w http.ResponseWriter, r *http.Request) {
 		s.executeWorkflowAsync(execCtx, cancel, runner, notifier, state, isResume, workflowID)
 	}()
 
-	// Return 202 Accepted
-	// Note: Status is "pending" here; it will change to "running" once the goroutine confirms
-	// The client will receive status updates via SSE
+	// Return 202 Accepted with "running" status
+	// DB is already updated, so any GET will return consistent state
 	response := RunWorkflowResponse{
 		ID:           workflowID,
-		Status:       string(state.Status), // Will be "pending" or previous status
+		Status:       string(core.WorkflowStatusRunning),
 		CurrentPhase: string(state.CurrentPhase),
 		Prompt:       state.Prompt,
 		Message:      "Workflow execution starting",
 	}
 	if isResume {
 		response.Message = "Workflow execution resuming"
+		response.CurrentPhase = string(core.PhaseExecute)
 	}
 
 	respondJSON(w, http.StatusAccepted, response)

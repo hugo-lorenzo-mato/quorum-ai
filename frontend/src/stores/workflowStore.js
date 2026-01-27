@@ -112,9 +112,19 @@ const useWorkflowStore = create((set, get) => ({
     set({ loading: true, error: null });
     try {
       const result = await workflowApi.run(id);
-      // The backend starts the workflow asynchronously.
-      // Real-time updates will come via SSE events (workflow_started, task_progress, etc.)
-      set({ loading: false });
+      // Update local state immediately with the response from backend
+      // Backend now returns status: "running" for run/resume operations
+      const { workflows, activeWorkflow } = get();
+      const updated = workflows.map(w =>
+        w.id === id ? { ...w, status: result.status || 'running', currentPhase: result.current_phase || w.currentPhase } : w
+      );
+      set({
+        workflows: updated,
+        activeWorkflow: activeWorkflow?.id === id
+          ? { ...activeWorkflow, status: result.status || 'running', currentPhase: result.current_phase || activeWorkflow.currentPhase }
+          : activeWorkflow,
+        loading: false,
+      });
       return result;
     } catch (error) {
       set({ error: error.message, loading: false });
@@ -149,18 +159,18 @@ const useWorkflowStore = create((set, get) => ({
     set({ loading: true, error: null });
     try {
       const result = await workflowApi.resume(id);
-      // Update local state immediately for responsive UI
+      // Update local state immediately with the response from backend
       const { workflows, activeWorkflow } = get();
       const updated = workflows.map(w =>
-        w.id === id ? { ...w, status: 'running' } : w
+        w.id === id ? { ...w, status: result.status || 'running', currentPhase: result.current_phase || w.currentPhase } : w
       );
       set({
         workflows: updated,
+        activeWorkflow: activeWorkflow?.id === id
+          ? { ...activeWorkflow, status: result.status || 'running', currentPhase: result.current_phase || activeWorkflow.currentPhase }
+          : activeWorkflow,
         loading: false,
       });
-      if (activeWorkflow?.id === id) {
-        set({ activeWorkflow: { ...activeWorkflow, status: 'running' } });
-      }
       return result;
     } catch (error) {
       set({ error: error.message, loading: false });
