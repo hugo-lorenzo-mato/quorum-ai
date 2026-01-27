@@ -426,7 +426,7 @@ func TestStateConfig_EffectiveBackend(t *testing.T) {
 		backend string
 		want    string
 	}{
-		{"empty returns json", "", "json"},
+		{"empty returns sqlite", "", "sqlite"},
 		{"json returns json", "json", "json"},
 		{"JSON uppercase returns json", "JSON", "json"},
 		{"sqlite returns sqlite", "sqlite", "sqlite"},

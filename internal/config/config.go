@@ -328,18 +328,18 @@ func (c AgentConfig) GetReasoningEffortForPhase(phase string) string {
 
 // StateConfig configures state persistence.
 type StateConfig struct {
-	Backend    string `mapstructure:"backend"` // Backend type: "json" (default) or "sqlite"
+	Backend    string `mapstructure:"backend"` // Backend type: "sqlite" (default) or "json"
 	Path       string `mapstructure:"path"`
 	BackupPath string `mapstructure:"backup_path"`
 	LockTTL    string `mapstructure:"lock_ttl"`
 }
 
 // EffectiveBackend returns the normalized backend value.
-// Returns "json" if Backend is empty or unset.
+// Returns "sqlite" if Backend is empty or unset.
 func (s *StateConfig) EffectiveBackend() string {
 	backend := strings.ToLower(strings.TrimSpace(s.Backend))
 	if backend == "" {
-		return "json"
+		return "sqlite"
 	}
 	return backend
 }
