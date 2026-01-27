@@ -646,6 +646,19 @@ func (m Model) eventToMsg(event interface{}) tea.Msg {
 		}
 	}
 
+	// Handle workflow state updates (tasks created, task status changes, etc.)
+	// We reload the full state so the issues panel can render the current task list.
+	if _, ok := event.(events.WorkflowStateUpdatedEvent); ok {
+		if m.runner == nil {
+			return nil
+		}
+		state, err := m.runner.GetState(context.Background())
+		if err != nil || state == nil {
+			return nil
+		}
+		return WorkflowUpdateMsg{State: state}
+	}
+
 	// Handle task started events
 	if taskEvent, ok := event.(events.TaskStartedEvent); ok {
 		return TaskUpdateMsg{
@@ -2423,6 +2436,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.workflowRunning = false
 		m.workflowPhase = "done"
 		m.workflowState = msg.State
+		m.tasksPanel.SetState(msg.State)
 		m.updateQuorumPanel(msg.State)
 		// Mark all running agents as done
 		for _, a := range m.agentInfos {
