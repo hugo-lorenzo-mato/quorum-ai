@@ -823,8 +823,9 @@ function NewWorkflowForm({ onSubmit, onCancel, loading }) {
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             placeholder="Describe what you want the AI agents to accomplish..."
-            rows={4}
-            className="w-full px-4 py-3 border border-input rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background resize-none"
+            rows={8}
+            spellCheck={false}
+            className="w-full px-3 py-2 border border-input rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background resize-none font-mono text-sm leading-6"
           />
         </div>
         <div className="flex gap-3">
