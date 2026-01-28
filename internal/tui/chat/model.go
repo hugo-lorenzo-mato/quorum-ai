@@ -430,7 +430,7 @@ func NewModel(cp *control.ControlPlane, agents core.AgentRegistry, defaultAgent,
 	// Initialize agent display info from registry
 	var agentInfos []*AgentInfo
 	if agents != nil {
-		for _, name := range []string{"claude", "gemini", "codex", "copilot"} {
+		for _, name := range []string{"claude", "gemini", "codex", "copilot", "opencode"} {
 			agent, err := agents.Get(name)
 			status := AgentStatusDisabled
 			if err == nil && agent != nil {
