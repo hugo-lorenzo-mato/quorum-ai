@@ -209,47 +209,52 @@ func (s *Server) handleResetConfig(w http.ResponseWriter, _ *http.Request) {
 }
 
 // handleGetAgents returns available agents and their status.
+// Models are synced with internal/adapters/cli/*.go SupportedModels.
 func (s *Server) handleGetAgents(w http.ResponseWriter, _ *http.Request) {
 	agents := []map[string]interface{}{
 		{
 			"name":        "claude",
 			"displayName": "Claude",
+			// Synced with internal/adapters/cli/claude.go
 			"models": []string{
 				"claude-opus-4-5-20251101",
-				"claude-sonnet-4-5-20250514",
+				"claude-sonnet-4-5-20250929",
+				"claude-haiku-4-5-20251001",
 				"claude-sonnet-4-20250514",
-				"claude-3-7-sonnet-latest",
-				"claude-3-5-sonnet-latest",
-				"claude-3-5-haiku-latest",
+				"claude-opus-4-20250514",
+				"claude-opus-4-1-20250805",
 			},
 			"available": true,
 		},
 		{
 			"name":        "gemini",
 			"displayName": "Gemini",
+			// Synced with internal/adapters/cli/gemini.go
 			"models": []string{
+				"gemini-2.5-pro",
+				"gemini-2.5-flash",
+				"gemini-2.5-flash-lite",
 				"gemini-3-pro-preview",
 				"gemini-3-flash-preview",
-				"gemini-2.5-pro-preview-06-05",
-				"gemini-2.5-flash-preview-05-20",
-				"gemini-2.0-flash",
-				"gemini-2.0-flash-lite",
 			},
 			"available": true,
 		},
 		{
 			"name":        "codex",
 			"displayName": "Codex",
+			// Synced with internal/adapters/cli/codex.go
 			"models": []string{
+				"gpt-5.2",
+				"gpt-5.2-codex",
+				"gpt-5.1-codex-max",
+				"gpt-5.1-codex",
+				"gpt-5.1-codex-mini",
+				"gpt-5.1",
+				"gpt-5",
+				"gpt-5-mini",
+				"gpt-4.1",
 				"o3",
 				"o4-mini",
-				"gpt-5.2-codex",
-				"gpt-5.1-codex",
-				"gpt-4.1",
-				"gpt-4.1-mini",
-				"gpt-4.1-nano",
-				"gpt-4o",
-				"gpt-4o-mini",
 			},
 			"hasReasoningEffort": true,
 			"available":          true,
@@ -257,12 +262,22 @@ func (s *Server) handleGetAgents(w http.ResponseWriter, _ *http.Request) {
 		{
 			"name":        "copilot",
 			"displayName": "Copilot",
+			// Synced with internal/adapters/cli/copilot.go
 			"models": []string{
-				"claude-sonnet-4-5",
+				"claude-sonnet-4.5",
+				"claude-haiku-4.5",
+				"claude-opus-4.5",
 				"claude-sonnet-4",
+				"gpt-5.2-codex",
+				"gpt-5.1-codex-max",
+				"gpt-5.1-codex",
+				"gpt-5.2",
+				"gpt-5.1",
 				"gpt-5",
-				"gpt-4o",
-				"o3-mini",
+				"gpt-5.1-codex-mini",
+				"gpt-5-mini",
+				"gpt-4.1",
+				"gemini-3-pro-preview",
 			},
 			"available": true,
 		},
