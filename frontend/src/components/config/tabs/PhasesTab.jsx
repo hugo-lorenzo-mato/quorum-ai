@@ -14,21 +14,25 @@ export function PhasesTab() {
   return (
     <div className="space-y-6">
       <div className="mb-4">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-          Workflow Phases
-        </h2>
-        <p className="text-sm text-gray-500 dark:text-gray-400">
+        <h2 className="text-lg font-semibold text-foreground">Workflow Phases</h2>
+        <p className="text-sm text-muted-foreground">
           Configure how each phase of the workflow is executed.
         </p>
       </div>
 
       {/* Phase Flow Visualization */}
-      <div className="flex items-center justify-center gap-2 py-4 text-sm text-gray-500 dark:text-gray-400">
-        <span className="px-3 py-1 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded font-medium">Analyze</span>
-        <span>→</span>
-        <span className="px-3 py-1 bg-gray-100 dark:bg-gray-700 rounded">Plan</span>
-        <span>→</span>
-        <span className="px-3 py-1 bg-gray-100 dark:bg-gray-700 rounded">Execute</span>
+      <div className="flex items-center justify-center gap-2 py-4 text-sm text-muted-foreground">
+        <span className="px-3 py-1 rounded-md font-medium bg-info/10 text-info border border-info/20">
+          Analyze
+        </span>
+        <span aria-hidden="true">→</span>
+        <span className="px-3 py-1 rounded-md bg-muted text-foreground border border-border">
+          Plan
+        </span>
+        <span aria-hidden="true">→</span>
+        <span className="px-3 py-1 rounded-md bg-muted text-foreground border border-border">
+          Execute
+        </span>
       </div>
 
       {/* Analyze Phase - Full configuration */}

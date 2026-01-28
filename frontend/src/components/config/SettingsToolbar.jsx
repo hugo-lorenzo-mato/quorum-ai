@@ -1,4 +1,5 @@
 import { useConfigStore } from '../../stores/configStore';
+import { useUIStore } from '../../stores';
 
 export function SettingsToolbar() {
   const isDirty = useConfigStore((state) => state.isDirty);
@@ -7,6 +8,7 @@ export function SettingsToolbar() {
   const validationErrors = useConfigStore((state) => state.validationErrors);
   const saveChanges = useConfigStore((state) => state.saveChanges);
   const discardChanges = useConfigStore((state) => state.discardChanges);
+  const sidebarOpen = useUIStore((state) => state.sidebarOpen);
 
   const errorCount = Object.keys(validationErrors).length;
   const hasErrors = errorCount > 0;
@@ -16,15 +18,19 @@ export function SettingsToolbar() {
   }
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg">
-      <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
+    <div
+      className={`fixed bottom-0 right-0 z-50 border-t border-border bg-background/80 glass shadow-lg ${
+        sidebarOpen ? 'left-64' : 'left-16'
+      }`}
+    >
+      <div className="px-6 py-3 flex items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse" />
-          <span className="text-sm text-gray-600 dark:text-gray-400">
+          <div className="w-2 h-2 rounded-full bg-warning animate-pulse" />
+          <span className="text-sm text-muted-foreground">
             You have unsaved changes
           </span>
           {hasErrors && (
-            <span className="text-sm text-red-600 dark:text-red-400">
+            <span className="text-sm text-error">
               ({errorCount} validation error{errorCount > 1 ? 's' : ''})
             </span>
           )}
@@ -34,14 +40,16 @@ export function SettingsToolbar() {
           <button
             onClick={discardChanges}
             disabled={isLoading || isSaving}
-            className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md transition-colors disabled:opacity-50"
+            className="px-4 py-2 text-sm font-medium text-foreground bg-muted hover:bg-muted/80 rounded-lg transition-colors disabled:opacity-50 disabled:pointer-events-none"
+            type="button"
           >
             Discard
           </button>
           <button
             onClick={saveChanges}
             disabled={isLoading || isSaving || hasErrors}
-            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 rounded-md transition-colors flex items-center gap-2"
+            className="px-4 py-2 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:pointer-events-none"
+            type="button"
           >
             {isSaving ? (
               <>

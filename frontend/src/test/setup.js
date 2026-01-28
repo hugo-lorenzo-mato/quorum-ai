@@ -1,7 +1,7 @@
-import matchers from '@testing-library/jest-dom/matchers';
-import { expect, vi } from 'vitest';
+import * as matchers from '@testing-library/jest-dom/matchers';
+import { beforeEach, expect, vi } from 'vitest';
 
-expect.extend(matchers);
+expect.extend(matchers.default ?? matchers);
 
 if (!window.matchMedia) {
   window.matchMedia = vi.fn().mockImplementation((query) => ({
@@ -25,8 +25,8 @@ if (!window.cancelAnimationFrame) {
 }
 
 // Mock ResizeObserver
-if (!global.ResizeObserver) {
-  global.ResizeObserver = vi.fn().mockImplementation(() => ({
+if (!globalThis.ResizeObserver) {
+  globalThis.ResizeObserver = vi.fn().mockImplementation(() => ({
     observe: vi.fn(),
     unobserve: vi.fn(),
     disconnect: vi.fn(),

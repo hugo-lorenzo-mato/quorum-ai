@@ -12,9 +12,9 @@ import {
 export function AdvancedTab() {
   return (
     <div className="space-y-6">
-      <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
-        <p className="text-sm text-yellow-700 dark:text-yellow-300">
-          <strong>Warning:</strong> These settings are for advanced users. Incorrect values may cause unexpected behavior.
+      <div className="p-3 rounded-xl bg-warning/10 border border-warning/20">
+        <p className="text-sm text-foreground">
+          <strong className="text-warning">Warning:</strong> These settings are for advanced users. Incorrect values may cause unexpected behavior.
         </p>
       </div>
 
@@ -154,8 +154,8 @@ function ServerSection() {
       </div>
 
       {host.value === '0.0.0.0' && (
-        <div className="p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-sm text-red-700 dark:text-red-300">
-          <strong>Security Warning:</strong> Binding to 0.0.0.0 exposes the server to all network interfaces.
+        <div className="p-3 rounded-lg bg-warning/10 border border-warning/20 text-sm text-foreground">
+          <strong className="text-warning">Security warning:</strong> Binding to 0.0.0.0 exposes the server to all network interfaces.
         </div>
       )}
     </SettingSection>
@@ -178,20 +178,21 @@ function DangerZone() {
       description="Irreversible actions"
       variant="danger"
     >
-      <div className="p-4 border border-red-200 dark:border-red-800 rounded-lg bg-red-50 dark:bg-red-900/10">
-        <div className="flex items-center justify-between">
+      <div className="p-4 border border-destructive/20 rounded-lg bg-destructive/5">
+        <div className="flex items-center justify-between gap-4">
           <div>
-            <h4 className="font-medium text-red-800 dark:text-red-200">
+            <h4 className="font-medium text-destructive">
               Reset Configuration
             </h4>
-            <p className="text-sm text-red-600 dark:text-red-300">
+            <p className="text-sm text-muted-foreground">
               Reset all settings to their default values. This cannot be undone.
             </p>
           </div>
           <button
             onClick={() => setShowResetDialog(true)}
             disabled={isLoading}
-            className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white text-sm font-medium rounded-md transition-colors"
+            className="px-4 py-2 bg-destructive text-destructive-foreground hover:bg-destructive/90 disabled:opacity-50 disabled:pointer-events-none text-sm font-medium rounded-lg transition-colors"
+            type="button"
           >
             Reset to Defaults
           </button>
@@ -199,11 +200,11 @@ function DangerZone() {
       </div>
 
       <ConfirmDialog
-        open={showResetDialog}
+        isOpen={showResetDialog}
         onClose={() => setShowResetDialog(false)}
         onConfirm={handleReset}
         title="Reset Configuration?"
-        description="This will reset all configuration values to their defaults. Any unsaved changes will also be lost. This action cannot be undone."
+        message="This will reset all configuration values to their defaults. Any unsaved changes will also be lost. This action cannot be undone."
         confirmText="Reset Everything"
         variant="danger"
       />

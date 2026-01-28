@@ -37,52 +37,47 @@ export default function Settings() {
   const ActiveComponent = TABS.find((t) => t.id === activeTab)?.component;
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pb-20">
+    <div className="space-y-6 pb-32">
       {/* Header */}
-      <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-        <div className="max-w-5xl mx-auto px-4 py-6">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-            Settings
-          </h1>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            Configure Quorum behavior and preferences
-          </p>
-        </div>
-      </header>
+      <div>
+        <h1 className="text-2xl font-semibold text-foreground tracking-tight">Settings</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Configure Quorum behavior and preferences
+        </p>
+      </div>
 
       {/* Tab Navigation */}
-      <nav className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-40">
-        <div className="max-w-5xl mx-auto px-4">
-          <div className="flex space-x-1 overflow-x-auto">
-            {TABS.map((tab) => {
-              const Icon = tab.icon;
-              const isActive = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`
-                    flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap
-                    ${isActive
-                      ? 'border-blue-600 text-blue-600 dark:text-blue-400'
-                      : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-                    }
-                  `}
-                >
-                  <Icon className="w-4 h-4" />
-                  {tab.label}
-                </button>
-              );
-            })}
-          </div>
+      <div className="sticky top-14 z-30 -mx-6 px-6 py-3 border-b border-border bg-background/80 glass">
+        <div className="flex items-center gap-1 p-1 rounded-lg bg-secondary border border-border overflow-x-auto">
+          {TABS.map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md transition-all whitespace-nowrap ${
+                  isActive
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+                }`}
+                type="button"
+                role="tab"
+                aria-selected={isActive}
+              >
+                <Icon className="w-4 h-4" />
+                {tab.label}
+              </button>
+            );
+          })}
         </div>
-      </nav>
+      </div>
 
       {/* Content */}
-      <main className="max-w-5xl mx-auto px-4 py-6">
+      <div>
         {isLoading && !config && (
           <div className="flex items-center justify-center py-12">
-            <svg className="animate-spin h-8 w-8 text-blue-600" viewBox="0 0 24 24" role="status">
+            <svg className="animate-spin h-8 w-8 text-primary" viewBox="0 0 24 24" role="status">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
             </svg>
@@ -90,11 +85,12 @@ export default function Settings() {
         )}
 
         {error && (
-          <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-            <p className="text-red-700 dark:text-red-300">{error}</p>
+          <div className="p-4 bg-error/10 border border-error/20 rounded-xl">
+            <p className="text-error text-sm">{error}</p>
             <button
               onClick={loadConfig}
-              className="mt-2 text-sm text-red-600 dark:text-red-400 hover:underline"
+              className="mt-2 text-sm text-error hover:underline"
+              type="button"
             >
               Retry
             </button>
@@ -104,7 +100,7 @@ export default function Settings() {
         {!isLoading && !error && config && ActiveComponent && (
           <ActiveComponent />
         )}
-      </main>
+      </div>
 
       {/* Floating Toolbar */}
       <SettingsToolbar />

@@ -29,7 +29,7 @@ describe('Layout', () => {
   it('renders the active navigation label in the header', () => {
     renderLayout('/workflows');
 
-    expect(screen.getByText('Workflows')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'Workflows' })).toBeInTheDocument();
     expect(screen.getByText('Content')).toBeInTheDocument();
   });
 

@@ -79,7 +79,7 @@ export default function useSSE() {
     // Poll immediately, then at interval
     poll();
     pollingIntervalRef.current = setInterval(poll, POLLING_INTERVAL);
-  }, [poll, notifyInfo]);
+  }, [poll, notifyInfo, setConnectionMode]);
 
   // Stop polling
   const stopPolling = useCallback(() => {
@@ -171,6 +171,7 @@ export default function useSSE() {
     handleTaskRetry,
     handleAgentEvent,
     setSSEConnected,
+    setConnectionMode,
     stopPolling,
     notifyInfo,
     notifyError,
@@ -249,7 +250,7 @@ export default function useSSE() {
         }
       });
     });
-  }, [handleEvent, setSSEConnected, startPolling, stopPolling]);
+  }, [handleEvent, setConnectionMode, setSSEConnected, startPolling, stopPolling]);
 
   // Keep ref updated for reconnection
   useEffect(() => {
@@ -267,7 +268,7 @@ export default function useSSE() {
     stopPolling();
     setSSEConnected(false);
     setConnectionMode(CONNECTION_MODE.DISCONNECTED);
-  }, [setSSEConnected, stopPolling]);
+  }, [setConnectionMode, setSSEConnected, stopPolling]);
 
   // Retry SSE connection (useful for manual reconnect)
   const retrySSE = useCallback(() => {

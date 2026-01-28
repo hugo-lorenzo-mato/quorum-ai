@@ -69,15 +69,15 @@ export function PhaseCard({ phaseKey }) {
   };
 
   return (
-    <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
+    <div className="rounded-xl border border-border bg-card p-6">
       {/* Header */}
       <div className="flex items-center gap-3 mb-4">
         <span className="text-2xl">{info.icon}</span>
         <div>
-          <h3 className="font-semibold text-gray-900 dark:text-white">
+          <h3 className="font-semibold text-foreground">
             {info.name} Phase
           </h3>
-          <p className="text-sm text-gray-500 dark:text-gray-400">
+          <p className="text-sm text-muted-foreground">
             {info.description}
           </p>
         </div>
@@ -85,18 +85,17 @@ export function PhaseCard({ phaseKey }) {
 
       {/* Mode Selection */}
       <div className="space-y-4">
-        <div className="flex gap-2">
+        <div className="flex items-center gap-1 p-1 rounded-lg bg-secondary border border-border">
           {MODE_OPTIONS.map((option) => (
             <button
               key={option.value}
               onClick={() => handleModeChange(option.value)}
-              className={`
-                flex-1 px-3 py-2 text-sm font-medium rounded-md transition-colors
-                ${currentMode === option.value
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                }
-              `}
+              type="button"
+              className={`flex-1 px-3 py-2 text-sm font-medium rounded-md transition-all ${
+                currentMode === option.value
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+              }`}
             >
               {option.label}
             </button>

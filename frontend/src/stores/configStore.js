@@ -138,12 +138,34 @@ export const useConfigStore = create(
         // Remove from changes if reverting to original
         newChanges = { ...localChanges };
         const keys = path.split('.');
+        const stack = [];
         let current = newChanges;
         for (let i = 0; i < keys.length - 1; i++) {
-          if (!current[keys[i]]) break;
+          if (!current[keys[i]] || typeof current[keys[i]] !== 'object') {
+            current = null;
+            break;
+          }
+          stack.push([current, keys[i]]);
           current = current[keys[i]];
         }
-        delete current[keys[keys.length - 1]];
+
+        if (current) {
+          delete current[keys[keys.length - 1]];
+
+          // Prune empty objects created by the deletion
+          for (let i = stack.length - 1; i >= 0; i--) {
+            const [parent, key] = stack[i];
+            const child = parent[key];
+            if (
+              child &&
+              typeof child === 'object' &&
+              !Array.isArray(child) &&
+              Object.keys(child).length === 0
+            ) {
+              delete parent[key];
+            }
+          }
+        }
       }
 
       // Check if any changes remain

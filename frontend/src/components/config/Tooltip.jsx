@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { Info } from 'lucide-react';
 
 export function Tooltip({ content, children }) {
@@ -7,29 +7,30 @@ export function Tooltip({ content, children }) {
   const triggerRef = useRef(null);
   const tooltipRef = useRef(null);
 
-  useEffect(() => {
-    if (isVisible && triggerRef.current && tooltipRef.current) {
-      const trigger = triggerRef.current.getBoundingClientRect();
-      const tooltip = tooltipRef.current.getBoundingClientRect();
-      const viewport = { width: window.innerWidth, height: window.innerHeight };
+  const setTooltipNode = useCallback((node) => {
+    tooltipRef.current = node;
+    if (!node || !triggerRef.current) return;
 
-      let top = trigger.top - tooltip.height - 8;
-      let left = trigger.left + (trigger.width / 2) - (tooltip.width / 2);
+    const trigger = triggerRef.current.getBoundingClientRect();
+    const tooltip = node.getBoundingClientRect();
+    const viewport = { width: window.innerWidth, height: window.innerHeight };
 
-      // Flip to bottom if no space above
-      if (top < 8) {
-        top = trigger.bottom + 8;
-      }
+    let top = trigger.top - tooltip.height - 8;
+    let left = trigger.left + (trigger.width / 2) - (tooltip.width / 2);
 
-      // Keep within viewport horizontally
-      if (left < 8) left = 8;
-      if (left + tooltip.width > viewport.width - 8) {
-        left = viewport.width - tooltip.width - 8;
-      }
-
-      setPosition({ top, left });
+    // Flip to bottom if no space above
+    if (top < 8) {
+      top = trigger.bottom + 8;
     }
-  }, [isVisible]);
+
+    // Keep within viewport horizontally
+    if (left < 8) left = 8;
+    if (left + tooltip.width > viewport.width - 8) {
+      left = viewport.width - tooltip.width - 8;
+    }
+
+    setPosition((prev) => (prev.top === top && prev.left === left ? prev : { top, left }));
+  }, []);
 
   return (
     <span className="relative inline-flex items-center">
@@ -48,7 +49,7 @@ export function Tooltip({ content, children }) {
 
       {isVisible && (
         <div
-          ref={tooltipRef}
+          ref={setTooltipNode}
           role="tooltip"
           className="fixed z-50 px-3 py-2 text-sm text-primary-foreground bg-primary rounded-lg shadow-lg max-w-xs animate-fade-in"
           style={{ top: position.top, left: position.left }}

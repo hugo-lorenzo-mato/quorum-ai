@@ -52,7 +52,7 @@ describe('AgentActivity', () => {
     expect(screen.getByText('Agent Activity')).toBeInTheDocument();
     expect(screen.getByText('Agent Progress')).toBeInTheDocument();
     expect(screen.getByText('Activity Log')).toBeInTheDocument();
-    expect(screen.getByText('Codex')).toBeInTheDocument();
+    expect(screen.getAllByText('Codex').length).toBeGreaterThan(0);
     expect(screen.getByText('started')).toBeInTheDocument();
   });
 });

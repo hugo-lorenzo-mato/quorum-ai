@@ -31,7 +31,7 @@ export function AnalyzePhaseCard() {
         title="Analyze Phase"
         description="Loading configuration..."
       >
-        <div className="text-sm text-gray-500">Loading...</div>
+        <div className="text-sm text-muted-foreground">Loading...</div>
       </SettingSection>
     );
   }

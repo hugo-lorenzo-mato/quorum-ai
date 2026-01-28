@@ -11,6 +11,8 @@ export default function EditWorkflowModal({ isOpen, onClose, workflow, onSave })
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const titleRef = useRef(null);
+  const titleInputId = 'edit-workflow-title';
+  const promptInputId = 'edit-workflow-prompt';
 
   const turndown = useMemo(() => {
     const service = new TurndownService({
@@ -158,12 +160,13 @@ export default function EditWorkflowModal({ isOpen, onClose, workflow, onSave })
         <div className="p-4 space-y-4" onKeyDown={handleKeyDown}>
           {/* Title field */}
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1.5">
+            <label htmlFor={titleInputId} className="block text-sm font-medium text-foreground mb-1.5">
               Title
               <span className="text-muted-foreground font-normal ml-1">(optional)</span>
             </label>
             <input
               ref={titleRef}
+              id={titleInputId}
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
@@ -174,10 +177,11 @@ export default function EditWorkflowModal({ isOpen, onClose, workflow, onSave })
 
           {/* Prompt field */}
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1.5">
+            <label htmlFor={promptInputId} className="block text-sm font-medium text-foreground mb-1.5">
               Prompt
             </label>
             <textarea
+              id={promptInputId}
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               onPaste={handlePromptPaste}

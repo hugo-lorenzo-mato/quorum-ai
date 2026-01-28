@@ -36,11 +36,11 @@ export function ConfirmDialog({
   const variantStyles = {
     warning: {
       icon: 'text-warning',
-      button: 'bg-warning text-warning-foreground hover:bg-warning/90',
+      button: 'bg-warning text-black hover:bg-warning/90',
     },
     danger: {
-      icon: 'text-error',
-      button: 'bg-error text-error-foreground hover:bg-error/90',
+      icon: 'text-destructive',
+      button: 'bg-destructive text-destructive-foreground hover:bg-destructive/90',
     },
   };
 

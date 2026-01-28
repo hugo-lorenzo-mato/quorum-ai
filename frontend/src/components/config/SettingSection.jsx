@@ -1,6 +1,13 @@
-export function SettingSection({ title, description, children, className = '' }) {
+export function SettingSection({ title, description, children, className = '', variant = 'default' }) {
+  const variantClasses = {
+    default: 'border-border bg-card',
+    danger: 'border-destructive/30 bg-destructive/5',
+  };
+
+  const styleClasses = variantClasses[variant] || variantClasses.default;
+
   return (
-    <div className={`p-6 rounded-xl border border-border bg-card ${className}`}>
+    <section className={`p-6 rounded-xl border ${styleClasses} ${className}`}>
       {(title || description) && (
         <div className="mb-4">
           {title && (
@@ -12,7 +19,7 @@ export function SettingSection({ title, description, children, className = '' })
         </div>
       )}
       {children}
-    </div>
+    </section>
   );
 }
 

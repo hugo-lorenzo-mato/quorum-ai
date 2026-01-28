@@ -6,6 +6,7 @@ import { useConfigStore } from '../../../../stores/configStore';
 // Mock the config store
 vi.mock('../../../../stores/configStore', () => ({
   useConfigStore: vi.fn(),
+  getAtPath: (obj, path) => path.split('.').reduce((curr, key) => curr?.[key], obj),
 }));
 
 describe('GeneralTab', () => {
@@ -40,7 +41,7 @@ describe('GeneralTab', () => {
 
   it('renders logging section', () => {
     render(<GeneralTab />);
-    expect(screen.getByText(/logging/i)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 3, name: 'Logging' })).toBeInTheDocument();
   });
 
   it('renders log level setting', () => {
@@ -50,6 +51,6 @@ describe('GeneralTab', () => {
 
   it('renders report section', () => {
     render(<GeneralTab />);
-    expect(screen.getByText(/report/i)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 3, name: 'Report Generation' })).toBeInTheDocument();
   });
 });

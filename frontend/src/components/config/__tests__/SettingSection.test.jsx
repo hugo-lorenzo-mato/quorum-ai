@@ -33,6 +33,6 @@ describe('SettingSection', () => {
 
     // Check for danger styling on the section element
     const section = container.querySelector('section');
-    expect(section).toHaveClass('border-red-200');
+    expect(section).toHaveClass('border-destructive/30');
   });
 });

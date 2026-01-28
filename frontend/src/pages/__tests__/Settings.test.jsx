@@ -6,6 +6,7 @@ import { useConfigStore } from '../../stores/configStore';
 
 vi.mock('../../stores/configStore', () => ({
   useConfigStore: vi.fn(),
+  getAtPath: (obj, path) => path.split('.').reduce((curr, key) => curr?.[key], obj),
 }));
 
 const mockConfig = {

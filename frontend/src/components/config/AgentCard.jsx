@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Bot } from 'lucide-react';
+import { Bot, Check } from 'lucide-react';
 import { useConfigField } from '../../hooks/useConfigField';
 import { useConfigStore } from '../../stores/configStore';
 import { TextInputSetting, ToggleSetting, SelectSetting } from './index';
@@ -203,7 +203,7 @@ export function AgentCard({ agentKey }) {
           </button>
         </div>
 
-        <div className="mt-3 flex flex-wrap gap-2">
+        <div className="mt-3 flex flex-wrap gap-1 p-1 rounded-lg bg-secondary border border-border">
           {phaseKeys.map((phase) => {
             const active = isPhaseEnabled(phase);
             const label = PHASE_LABELS[phase] || phase;
@@ -213,13 +213,15 @@ export function AgentCard({ agentKey }) {
                 type="button"
                 onClick={() => togglePhase(phase)}
                 disabled={phases.disabled}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md border transition-colors ${
+                aria-pressed={active}
+                className={`inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
                   active
-                    ? 'bg-background text-foreground border-border shadow-sm'
-                    : 'bg-muted text-muted-foreground border-border hover:bg-accent/60 hover:text-foreground'
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
                 } disabled:opacity-50 disabled:pointer-events-none`}
                 title={phase}
               >
+                {active && <Check className="w-3 h-3" aria-hidden="true" />}
                 {label}
               </button>
             );
