@@ -41,6 +41,7 @@ func newTestServer(t *testing.T) (*httptest.Server, *api.Server, core.StateManag
 	registry := testutil.NewMockRegistry()
 	registry.Add("claude", testutil.NewMockAgent("claude"))
 	registry.Add("gemini", testutil.NewMockAgent("gemini"))
+	registry.Add("opencode", testutil.NewMockAgent("opencode"))
 
 	// 4. Setup Config Loader (pointing to a temp config file)
 	configPath := filepath.Join(dir, ".quorum.yaml")

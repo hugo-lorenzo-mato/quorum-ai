@@ -204,14 +204,14 @@ func TestRateLimiterRegistry_List(t *testing.T) {
 	registry := NewRateLimiterRegistry()
 
 	adapters := registry.List()
-	if len(adapters) != 4 {
-		t.Errorf("len(List) = %d, want 4", len(adapters))
+	if len(adapters) != 5 {
+		t.Errorf("len(List) = %d, want 5", len(adapters))
 	}
 
 	// Check expected adapters
 	expected := map[string]bool{
 		"claude": true, "gemini": true, "codex": true,
-		"copilot": true,
+		"copilot": true, "opencode": true,
 	}
 	for _, name := range adapters {
 		if !expected[name] {

@@ -243,6 +243,9 @@ func getAgentStrengths(agentName string) string {
 		"copilot": "Fast and efficient for common coding patterns. " +
 			"Good for standard implementations, bug fixes, and incremental changes. " +
 			"Integrates well with existing code style.",
+		"opencode": "AI coding agent with MCP support and project context awareness (Git, LSP). " +
+			"Excellent at autonomous coding tasks and understanding project-wide dependencies. " +
+			"Supports local execution via Ollama.",
 	}
 
 	// Check for exact match first

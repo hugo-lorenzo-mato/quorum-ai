@@ -161,6 +161,10 @@ func defaultAdapterConfigs() map[string]RateLimiterConfig {
 			MaxTokens:  5,
 			RefillRate: 0.5,
 		},
+		"opencode": {
+			MaxTokens:  10,
+			RefillRate: 1, // 1 request per second (standard for local Ollama)
+		},
 	}
 }
 
