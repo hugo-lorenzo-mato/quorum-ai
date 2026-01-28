@@ -257,6 +257,9 @@ type ComprehensivePlanParams struct {
 type TaskExecuteParams struct {
 	Task    *core.Task
 	Context string
+	WorkDir string
+	// Constraints are optional additional rules for the agent (e.g., policy, sandbox limits).
+	Constraints []string
 }
 
 // ModeratorAnalysisSummary represents an analysis for moderator evaluation.

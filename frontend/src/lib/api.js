@@ -61,6 +61,33 @@ export const workflowApi = {
   resume: (id) => request(`/workflows/${id}/resume`, { method: 'POST' }),
 
   delete: (id) => request(`/workflows/${id}/`, { method: 'DELETE' }),
+
+  // Workflow attachments
+  listAttachments: (id) => request(`/workflows/${id}/attachments`),
+
+  uploadAttachments: async (id, files) => {
+    const formData = new FormData();
+    for (const file of files) {
+      formData.append('files', file);
+    }
+
+    const response = await fetch(`${API_BASE}/workflows/${id}/attachments`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      const message = error.message || error.error || response.statusText;
+      throw new Error(message || 'Upload failed');
+    }
+
+    return response.json();
+  },
+
+  deleteAttachment: (id, attachmentId) => request(`/workflows/${id}/attachments/${attachmentId}`, {
+    method: 'DELETE',
+  }),
 };
 
 // Chat API
@@ -80,10 +107,36 @@ export const chatApi = {
 
   getMessages: (sessionId) => request(`/chat/sessions/${sessionId}/messages`),
 
-  sendMessage: (sessionId, content) => request(`/chat/sessions/${sessionId}/messages`, {
+  sendMessage: (sessionId, content, options = {}) => request(`/chat/sessions/${sessionId}/messages`, {
     method: 'POST',
-    body: JSON.stringify({ content }),
+    body: JSON.stringify({
+      content,
+      agent: options.agent || undefined,
+      model: options.model || undefined,
+      reasoning_effort: options.reasoningEffort || undefined,
+      attachments: options.attachments?.length > 0 ? options.attachments : undefined,
+    }),
   }),
+
+  uploadAttachments: async (sessionId, files) => {
+    const formData = new FormData();
+    for (const file of files) {
+      formData.append('files', file);
+    }
+
+    const response = await fetch(`${API_BASE}/chat/sessions/${sessionId}/attachments`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      const message = error.message || error.error || response.statusText;
+      throw new Error(message || 'Upload failed');
+    }
+
+    return response.json();
+  },
 };
 
 // Config API

@@ -223,8 +223,10 @@ func (a *PromptRendererAdapter) RenderSynthesizePlans(params SynthesizePlansPara
 // RenderTaskExecute renders the task execution prompt.
 func (a *PromptRendererAdapter) RenderTaskExecute(params TaskExecuteParams) (string, error) {
 	return a.renderer.RenderTaskExecute(service.TaskExecuteParams{
-		Task:    params.Task,
-		Context: params.Context,
+		Task:        params.Task,
+		Context:     params.Context,
+		WorkDir:     params.WorkDir,
+		Constraints: params.Constraints,
 	})
 }
 

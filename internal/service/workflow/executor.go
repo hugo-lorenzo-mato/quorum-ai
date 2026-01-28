@@ -244,9 +244,23 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 		}
 	}
 
+	// Build context, including any workflow attachments with paths reachable from the execution directory.
+	displayWorkDir := workDir
+	if strings.TrimSpace(displayWorkDir) == "" {
+		if wd, err := os.Getwd(); err == nil {
+			displayWorkDir = wd
+		}
+	}
+	execContext := wctx.GetContextString()
+	if attCtx := BuildAttachmentsContext(wctx.State, displayWorkDir); attCtx != "" {
+		execContext = execContext + "\n\n" + attCtx
+	}
+
 	prompt, err := wctx.Prompts.RenderTaskExecute(TaskExecuteParams{
-		Task:    task,
-		Context: wctx.GetContextString(),
+		Task:        task,
+		Context:     execContext,
+		WorkDir:     displayWorkDir,
+		Constraints: nil,
 	})
 	if err != nil {
 		return fail(err)

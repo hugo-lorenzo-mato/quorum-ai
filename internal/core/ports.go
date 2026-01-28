@@ -55,19 +55,20 @@ type Message struct {
 
 // ExecuteOptions configures an agent execution.
 type ExecuteOptions struct {
-	Prompt       string
-	SystemPrompt string
-	Messages     []Message // Conversation history (for API-based adapters)
-	Model        string
-	MaxTokens    int
-	Temperature  float64
-	Format       OutputFormat
-	Timeout      time.Duration
-	WorkDir      string
-	AllowedTools []string
-	DeniedTools  []string
-	Sandbox      bool
-	Phase        Phase // Current workflow phase (for phase-specific behavior)
+	Prompt          string
+	SystemPrompt    string
+	Messages        []Message // Conversation history (for API-based adapters)
+	Model           string
+	MaxTokens       int
+	Temperature     float64
+	Format          OutputFormat
+	Timeout         time.Duration
+	WorkDir         string
+	AllowedTools    []string
+	DeniedTools     []string
+	Sandbox         bool
+	Phase           Phase  // Current workflow phase (for phase-specific behavior)
+	ReasoningEffort string // Reasoning effort level: minimal, low, medium, high, xhigh (for supporting models)
 }
 
 // DefaultExecuteOptions returns sensible defaults.
@@ -213,6 +214,7 @@ type WorkflowState struct {
 	CurrentPhase    Phase                 `json:"current_phase"`
 	Prompt          string                `json:"prompt"`
 	OptimizedPrompt string                `json:"optimized_prompt,omitempty"`
+	Attachments     []Attachment          `json:"attachments,omitempty"`
 	Error           string                `json:"error,omitempty"` // Error message if workflow failed
 	Tasks           map[TaskID]*TaskState `json:"tasks"`
 	TaskOrder       []TaskID              `json:"task_order"`
@@ -224,6 +226,17 @@ type WorkflowState struct {
 	UpdatedAt       time.Time             `json:"updated_at"`
 	Checksum        string                `json:"checksum,omitempty"`
 	ReportPath      string                `json:"report_path,omitempty"` // Persisted report directory for resume
+}
+
+// Attachment represents a user-provided file associated with a chat session or workflow.
+// Attachments are stored under .quorum/attachments and are not expected to be part of the git repository.
+type Attachment struct {
+	ID          string    `json:"id"`
+	Name        string    `json:"name"`
+	Path        string    `json:"path"`
+	Size        int64     `json:"size"`
+	ContentType string    `json:"content_type,omitempty"`
+	CreatedAt   time.Time `json:"created_at"`
 }
 
 // TaskState represents persisted task state.

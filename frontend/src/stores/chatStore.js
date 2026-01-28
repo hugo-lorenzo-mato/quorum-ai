@@ -10,6 +10,12 @@ const useChatStore = create((set, get) => ({
   sending: false,
   error: null,
 
+  // Per-message options (reset after send)
+  currentAgent: 'claude',
+  currentModel: '',
+  currentReasoningEffort: 'medium',
+  attachments: [],
+
   // Actions
   fetchSessions: async () => {
     set({ loading: true, error: null });
@@ -77,7 +83,10 @@ const useChatStore = create((set, get) => ({
   },
 
   sendMessage: async (content) => {
-    const { activeSessionId, messages } = get();
+    const {
+      activeSessionId, messages, currentAgent, currentModel,
+      currentReasoningEffort, attachments,
+    } = get();
     if (!activeSessionId) {
       set({ error: 'No active session' });
       return null;
@@ -101,7 +110,13 @@ const useChatStore = create((set, get) => ({
     });
 
     try {
-      const response = await chatApi.sendMessage(activeSessionId, content);
+      // Send with per-message options
+      const response = await chatApi.sendMessage(activeSessionId, content, {
+        agent: currentAgent,
+        model: currentModel || undefined,
+        reasoningEffort: currentReasoningEffort,
+        attachments: attachments,
+      });
 
       // Add assistant response
       const assistantMessage = {
@@ -109,6 +124,7 @@ const useChatStore = create((set, get) => ({
         role: 'assistant',
         content: response.content,
         timestamp: response.timestamp || new Date().toISOString(),
+        agent: response.agent,
       };
 
       const { messages: currentMessages } = get();
@@ -120,6 +136,8 @@ const useChatStore = create((set, get) => ({
           [activeSessionId]: [...currentSessionMessages, assistantMessage],
         },
         sending: false,
+        // Reset attachments after send (keep agent and model for convenience)
+        attachments: [],
       });
 
       return response;
@@ -150,6 +168,50 @@ const useChatStore = create((set, get) => ({
   },
 
   clearError: () => set({ error: null }),
+
+  uploadAttachments: async (fileList) => {
+    const { activeSessionId, attachments } = get();
+    if (!activeSessionId) {
+      set({ error: 'No active session' });
+      return [];
+    }
+    if (!fileList || fileList.length === 0) return [];
+
+    try {
+      const uploaded = await chatApi.uploadAttachments(activeSessionId, fileList);
+      const uploadedPaths = (uploaded || []).map((a) => a.path).filter(Boolean);
+      const next = [...attachments];
+      for (const p of uploadedPaths) {
+        if (!next.includes(p)) next.push(p);
+      }
+      set({ attachments: next });
+      return uploaded || [];
+    } catch (error) {
+      set({ error: error.message });
+      return [];
+    }
+  },
+
+  // Per-message option setters
+  setCurrentAgent: (agent) => set({ currentAgent: agent, currentModel: '' }),
+  setCurrentModel: (model) => set({ currentModel: model }),
+  setCurrentReasoningEffort: (effort) => set({ currentReasoningEffort: effort }),
+  addAttachment: (path) => {
+    const { attachments } = get();
+    if (!attachments.includes(path)) {
+      set({ attachments: [...attachments, path] });
+    }
+  },
+  removeAttachment: (path) => {
+    const { attachments } = get();
+    set({ attachments: attachments.filter(a => a !== path) });
+  },
+  clearAttachments: () => set({ attachments: [] }),
+  resetMessageOptions: () => set({
+    currentModel: '',
+    currentReasoningEffort: 'medium',
+    attachments: [],
+  }),
 }));
 
 export default useChatStore;

@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/attachments"
 	webadapters "github.com/hugo-lorenzo-mato/quorum-ai/internal/adapters/web"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/control"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
@@ -25,6 +26,7 @@ type WorkflowResponse struct {
 	CurrentPhase    string              `json:"current_phase"`
 	Prompt          string              `json:"prompt"`
 	OptimizedPrompt string              `json:"optimized_prompt,omitempty"`
+	Attachments     []core.Attachment   `json:"attachments,omitempty"`
 	Error           string              `json:"error,omitempty"`
 	ReportPath      string              `json:"report_path,omitempty"`
 	CreatedAt       time.Time           `json:"created_at"`
@@ -365,6 +367,13 @@ func (s *Server) handleDeleteWorkflow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Best-effort cleanup of workflow attachments on disk.
+	if s.attachments != nil {
+		if err := s.attachments.DeleteAll(attachments.OwnerWorkflow, workflowID); err != nil {
+			s.logger.Warn("failed to delete workflow attachments", "workflow_id", workflowID, "error", err)
+		}
+	}
+
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -415,6 +424,7 @@ func stateToWorkflowResponse(state *core.WorkflowState, activeID core.WorkflowID
 		CurrentPhase:    string(state.CurrentPhase),
 		Prompt:          state.Prompt,
 		OptimizedPrompt: state.OptimizedPrompt,
+		Attachments:     state.Attachments,
 		Error:           state.Error,
 		ReportPath:      state.ReportPath,
 		CreatedAt:       state.CreatedAt,

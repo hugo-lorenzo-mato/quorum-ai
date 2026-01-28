@@ -21,6 +21,8 @@ import {
   Loader2,
   Zap,
   Copy,
+  Download,
+  Upload,
   RefreshCw,
   Pencil,
   Trash2,
@@ -905,10 +907,23 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
 
 function NewWorkflowForm({ onSubmit, onCancel, loading }) {
   const [prompt, setPrompt] = useState('');
+  const [files, setFiles] = useState([]);
+  const fileInputRef = useRef(null);
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (prompt.trim()) onSubmit(prompt);
+    if (prompt.trim()) onSubmit(prompt, files);
+  };
+
+  const handleFilesSelected = (e) => {
+    const selected = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (selected.length === 0) return;
+    setFiles((prev) => [...prev, ...selected]);
+  };
+
+  const removeFile = (index) => {
+    setFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
   return (
@@ -935,6 +950,54 @@ function NewWorkflowForm({ onSubmit, onCancel, loading }) {
             />
           </div>
         </div>
+
+        <div>
+          <label className="block text-sm font-medium text-foreground mb-2">
+            Attachments (optional)
+          </label>
+          <div className="flex items-center gap-3">
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              onChange={handleFilesSelected}
+              className="hidden"
+              disabled={loading}
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={loading}
+              className="px-3 py-2 rounded-lg bg-secondary text-secondary-foreground text-sm font-medium hover:bg-secondary/80 disabled:opacity-50 transition-colors"
+            >
+              Add files
+            </button>
+            <p className="text-xs text-muted-foreground">
+              Stored in <span className="font-mono">.quorum/attachments</span>
+            </p>
+          </div>
+          {files.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {files.map((f, idx) => (
+                <span
+                  key={`${f.name}-${f.size}-${idx}`}
+                  className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs"
+                >
+                  {f.name}
+                  <button
+                    type="button"
+                    onClick={() => removeFile(idx)}
+                    className="text-primary hover:text-destructive"
+                    title="Remove"
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+
         <div className="flex gap-3">
           <button
             type="submit"
@@ -999,12 +1062,22 @@ export default function Workflows() {
   const selectedWorkflow = workflows.find(w => w.id === id);
   const workflowTasks = id ? getTasksForWorkflow(id) : [];
 
-  const handleCreate = async (prompt) => {
+  const handleCreate = async (prompt, files = []) => {
     const workflow = await createWorkflow(prompt);
-    if (workflow) {
-      setShowNewForm(false);
-      navigate(`/workflows/${workflow.id}`);
+    if (!workflow) return;
+
+    if (files.length > 0) {
+      try {
+        await workflowApi.uploadAttachments(workflow.id, files);
+        await fetchWorkflow(workflow.id);
+        notifyInfo(`Uploaded ${files.length} attachment(s)`);
+      } catch (err) {
+        notifyError(err.message || 'Failed to upload attachments');
+      }
     }
+
+    setShowNewForm(false);
+    navigate(`/workflows/${workflow.id}`);
   };
 
   // Delete from list handlers

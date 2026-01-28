@@ -11,6 +11,12 @@ import {
   User,
   Loader2,
 } from 'lucide-react';
+import {
+  AgentSelector,
+  ModelSelector,
+  ReasoningSelector,
+  AttachmentPicker,
+} from '../components/chat';
 
 function TypingIndicator() {
   return (
@@ -29,6 +35,7 @@ function TypingIndicator() {
 
 function MessageBubble({ message, isLast }) {
   const isUser = message.role === 'user';
+  const agentName = message.agent ? message.agent.charAt(0).toUpperCase() + message.agent.slice(1) : 'Assistant';
 
   return (
     <div className={`flex gap-3 ${isUser ? 'flex-row-reverse' : ''} ${isLast ? 'animate-fade-up' : ''}`}>
@@ -46,6 +53,9 @@ function MessageBubble({ message, isLast }) {
           ? 'bg-primary text-primary-foreground rounded-br-md'
           : 'bg-card border border-border rounded-bl-md'
       }`}>
+        {!isUser && message.agent && (
+          <p className="text-xs font-medium text-primary mb-1">{agentName}</p>
+        )}
         <p className="text-sm whitespace-pre-wrap leading-relaxed">{message.content}</p>
         <p className={`text-xs mt-2 ${isUser ? 'text-primary-foreground/60' : 'text-muted-foreground'}`}>
           {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -88,53 +98,7 @@ function SessionItem({ session, isActive, onClick, onDelete }) {
   );
 }
 
-function NewSessionForm({ onSubmit, onCancel, loading }) {
-  const [agent, setAgent] = useState('claude');
-
-  const agents = [
-    { value: 'claude', label: 'Claude', description: 'Anthropic AI Assistant' },
-    { value: 'gemini', label: 'Gemini', description: 'Google AI' },
-    { value: 'codex', label: 'Codex', description: 'Code Assistant' },
-  ];
-
-  return (
-    <div className="p-4 border border-border rounded-xl bg-card animate-fade-up">
-      <h3 className="font-medium text-foreground mb-4">New Chat Session</h3>
-      <div className="space-y-2">
-        {agents.map((a) => (
-          <button
-            key={a.value}
-            type="button"
-            onClick={() => setAgent(a.value)}
-            className={`w-full p-3 rounded-lg border-2 transition-all text-left ${
-              agent === a.value
-                ? 'border-primary bg-primary/5'
-                : 'border-border hover:border-muted-foreground'
-            }`}
-          >
-            <p className="font-medium text-foreground">{a.label}</p>
-            <p className="text-xs text-muted-foreground">{a.description}</p>
-          </button>
-        ))}
-      </div>
-      <div className="flex gap-2 mt-4">
-        <button
-          onClick={() => onSubmit(agent)}
-          disabled={loading}
-          className="flex-1 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
-        >
-          {loading ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : 'Create Session'}
-        </button>
-        <button
-          onClick={onCancel}
-          className="px-4 py-2 rounded-lg bg-secondary text-secondary-foreground text-sm font-medium hover:bg-secondary/80 transition-colors"
-        >
-          Cancel
-        </button>
-      </div>
-    </div>
-  );
-}
+// Simplified - sessions now use defaults, agent/model selected per-message
 
 function EmptyChat({ onCreateSession }) {
   return (
@@ -163,10 +127,13 @@ export default function Chat() {
     sessions, activeSessionId, loading, sending, error,
     fetchSessions, createSession, selectSession, deleteSession,
     sendMessage, getActiveMessages, clearError,
+    // Per-message options
+    currentAgent, currentModel, currentReasoningEffort, attachments,
+    setCurrentAgent, setCurrentModel, setCurrentReasoningEffort,
+    addAttachment, removeAttachment, clearAttachments, uploadAttachments,
   } = useChatStore();
 
   const [input, setInput] = useState('');
-  const [showNewSession, setShowNewSession] = useState(false);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
 
@@ -184,9 +151,8 @@ export default function Chat() {
     inputRef.current?.focus();
   };
 
-  const handleCreateSession = async (agent) => {
-    const session = await createSession(agent);
-    if (session) setShowNewSession(false);
+  const handleCreateSession = async () => {
+    await createSession();
   };
 
   const activeMessages = getActiveMessages();
@@ -197,20 +163,13 @@ export default function Chat() {
       {/* Sessions sidebar */}
       <div className="w-72 flex-shrink-0 flex flex-col gap-4">
         <button
-          onClick={() => setShowNewSession(true)}
-          className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+          onClick={handleCreateSession}
+          disabled={loading}
+          className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
         >
-          <Plus className="w-4 h-4" />
-          New Session
+          {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+          New Chat
         </button>
-
-        {showNewSession && (
-          <NewSessionForm
-            onSubmit={handleCreateSession}
-            onCancel={() => setShowNewSession(false)}
-            loading={loading}
-          />
-        )}
 
         <div className="flex-1 overflow-y-auto space-y-1">
           {sessions.length > 0 ? (
@@ -224,7 +183,7 @@ export default function Chat() {
               />
             ))
           ) : (
-            <p className="text-center py-8 text-sm text-muted-foreground">No sessions yet</p>
+            <p className="text-center py-8 text-sm text-muted-foreground">No chats yet</p>
           )}
         </div>
       </div>
@@ -240,7 +199,7 @@ export default function Chat() {
                   <Sparkles className="w-5 h-5 text-primary" />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-foreground">{activeSession.agent || 'Claude'}</h3>
+                  <h3 className="font-semibold text-foreground">Chat</h3>
                   <p className="text-xs text-muted-foreground">Session {activeSession.id.substring(0, 8)}...</p>
                 </div>
               </div>
@@ -289,6 +248,36 @@ export default function Chat() {
                   </button>
                 </div>
               )}
+
+              {/* Message options bar */}
+              <div className="flex items-center gap-2 mb-3 flex-wrap">
+                <AgentSelector
+                  value={currentAgent}
+                  onChange={setCurrentAgent}
+                  disabled={sending}
+                />
+                <ModelSelector
+                  value={currentModel}
+                  onChange={setCurrentModel}
+                  agent={currentAgent}
+                  disabled={sending}
+                />
+                <ReasoningSelector
+                  value={currentReasoningEffort}
+                  onChange={setCurrentReasoningEffort}
+                  agent={currentAgent}
+                  disabled={sending}
+                />
+                <div className="flex-1" />
+                <AttachmentPicker
+                  attachments={attachments}
+                  onAdd={addAttachment}
+                  onRemove={removeAttachment}
+                  onClear={clearAttachments}
+                  onUpload={uploadAttachments}
+                />
+              </div>
+
               <form onSubmit={handleSend} className="flex gap-3">
                 <input
                   ref={inputRef}
@@ -296,7 +285,7 @@ export default function Chat() {
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSend(e)}
-                  placeholder="Type your message..."
+                  placeholder={`Message ${currentAgent}... (use @filename to reference files)`}
                   disabled={sending}
                   className="flex-1 h-10 px-4 border border-input rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background disabled:opacity-50 transition-all"
                 />
@@ -311,7 +300,7 @@ export default function Chat() {
             </div>
           </>
         ) : (
-          <EmptyChat onCreateSession={() => setShowNewSession(true)} />
+          <EmptyChat onCreateSession={handleCreateSession} />
         )}
       </div>
     </div>

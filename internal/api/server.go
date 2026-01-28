@@ -14,6 +14,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/rs/cors"
 
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/attachments"
 	webadapters "github.com/hugo-lorenzo-mato/quorum-ai/internal/adapters/web"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/config"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/control"
@@ -30,6 +31,7 @@ type Server struct {
 	agentRegistry   core.AgentRegistry
 	logger          *slog.Logger
 	chatHandler     *webadapters.ChatHandler
+	attachments     *attachments.Store
 	resourceMonitor *diagnostics.ResourceMonitor
 	configLoader    *config.Loader // for workflow execution configuration
 	root            string         // root directory for file operations
@@ -92,8 +94,10 @@ func NewServer(stateManager core.StateManager, eventBus *events.EventBus, opts .
 		opt(s)
 	}
 
+	s.attachments = attachments.NewStore(s.root)
+
 	// Create chat handler with agent registry (may be nil)
-	s.chatHandler = webadapters.NewChatHandler(s.agentRegistry, eventBus)
+	s.chatHandler = webadapters.NewChatHandler(s.agentRegistry, eventBus, s.attachments)
 
 	s.router = s.setupRouter()
 	return s
@@ -175,6 +179,14 @@ func (s *Server) setupRouter() chi.Router {
 					r.Get("/", s.handleListTasks)
 					r.Get("/{taskID}", s.handleGetTask)
 				})
+
+				// Workflow attachments
+				r.Route("/attachments", func(r chi.Router) {
+					r.Get("/", s.handleListWorkflowAttachments)
+					r.Post("/", s.handleUploadWorkflowAttachments)
+					r.Get("/{attachmentID}/download", s.handleDownloadWorkflowAttachment)
+					r.Delete("/{attachmentID}", s.handleDeleteWorkflowAttachment)
+				})
 			})
 		})
 
@@ -193,6 +205,10 @@ func (s *Server) setupRouter() chi.Router {
 			r.Delete("/sessions/{sessionID}", s.chatHandler.DeleteSession)
 			r.Get("/sessions/{sessionID}/messages", s.chatHandler.GetMessages)
 			r.Post("/sessions/{sessionID}/messages", s.chatHandler.SendMessage)
+			r.Get("/sessions/{sessionID}/attachments", s.chatHandler.ListAttachments)
+			r.Post("/sessions/{sessionID}/attachments", s.chatHandler.UploadAttachments)
+			r.Get("/sessions/{sessionID}/attachments/{attachmentID}/download", s.chatHandler.DownloadAttachment)
+			r.Delete("/sessions/{sessionID}/attachments/{attachmentID}", s.chatHandler.DeleteAttachment)
 			r.Put("/sessions/{sessionID}/agent", s.chatHandler.SetAgent)
 			r.Put("/sessions/{sessionID}/model", s.chatHandler.SetModel)
 		})

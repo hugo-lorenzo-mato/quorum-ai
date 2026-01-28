@@ -6,12 +6,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/attachments"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/events"
 )
@@ -47,9 +52,11 @@ type ChatSession struct {
 
 // SendMessageRequest is the request body for sending a chat message.
 type SendMessageRequest struct {
-	Content string `json:"content"`
-	Agent   string `json:"agent,omitempty"`
-	Model   string `json:"model,omitempty"`
+	Content         string   `json:"content"`
+	Agent           string   `json:"agent,omitempty"`
+	Model           string   `json:"model,omitempty"`
+	ReasoningEffort string   `json:"reasoning_effort,omitempty"` // minimal, low, medium, high, xhigh
+	Attachments     []string `json:"attachments,omitempty"`      // File paths to include as context
 }
 
 // SendMessageResponse is the response for sending a chat message.
@@ -76,22 +83,25 @@ type ChatHandler struct {
 	agents   core.AgentRegistry
 	eventBus *events.EventBus
 	sessions map[string]*chatSessionState
+	store    *attachments.Store
 }
 
 // chatSessionState holds the internal state of a chat session.
 type chatSessionState struct {
-	session  ChatSession
-	messages []ChatMessage
-	agent    string
-	model    string
+	session     ChatSession
+	messages    []ChatMessage
+	agent       string
+	model       string
+	projectRoot string // Directory where .quorum is located, for file access scoping
 }
 
 // NewChatHandler creates a new ChatHandler.
-func NewChatHandler(agents core.AgentRegistry, eventBus *events.EventBus) *ChatHandler {
+func NewChatHandler(agents core.AgentRegistry, eventBus *events.EventBus, store *attachments.Store) *ChatHandler {
 	return &ChatHandler{
 		agents:   agents,
 		eventBus: eventBus,
 		sessions: make(map[string]*chatSessionState),
+		store:    store,
 	}
 }
 
@@ -139,6 +149,9 @@ func (h *ChatHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
 	sessionID := uuid.New().String()
 
+	// Get project root for file access scoping
+	projectRoot, _ := os.Getwd()
+
 	session := ChatSession{
 		ID:           sessionID,
 		CreatedAt:    now,
@@ -150,10 +163,11 @@ func (h *ChatHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 
 	h.mu.Lock()
 	h.sessions[sessionID] = &chatSessionState{
-		session:  session,
-		messages: make([]ChatMessage, 0),
-		agent:    agent,
-		model:    req.Model,
+		session:     session,
+		messages:    make([]ChatMessage, 0),
+		agent:       agent,
+		model:       req.Model,
+		projectRoot: projectRoot,
 	}
 	h.mu.Unlock()
 
@@ -216,6 +230,11 @@ func (h *ChatHandler) DeleteSession(w http.ResponseWriter, r *http.Request) {
 	if !exists {
 		writeError(w, http.StatusNotFound, "session not found")
 		return
+	}
+
+	// Best-effort cleanup of attachments on disk.
+	if h.store != nil {
+		_ = h.store.DeleteAll(attachments.OwnerChatSession, sessionID)
 	}
 
 	w.WriteHeader(http.StatusNoContent)
@@ -292,8 +311,16 @@ func (h *ChatHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 		h.eventBus.Publish(events.NewChatMessageEvent("", events.RoleUser, "", req.Content))
 	}
 
-	// Execute agent
-	agentMsg, err := h.executeAgent(r.Context(), sessionID, agent, model, state.messages)
+	// Execute agent with all options
+	agentMsg, err := h.executeAgent(r.Context(), executeAgentOptions{
+		sessionID:       sessionID,
+		agentName:       agent,
+		model:           model,
+		reasoningEffort: req.ReasoningEffort,
+		attachments:     req.Attachments,
+		projectRoot:     state.projectRoot,
+		history:         state.messages,
+	})
 	if err != nil {
 		// Add error as system message
 		errMsg := ChatMessage{
@@ -322,24 +349,35 @@ func (h *ChatHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, agentMsg)
 }
 
+// executeAgentOptions contains options for executing an agent.
+type executeAgentOptions struct {
+	sessionID       string
+	agentName       string
+	model           string
+	reasoningEffort string
+	attachments     []string
+	projectRoot     string
+	history         []ChatMessage
+}
+
 // executeAgent runs the message through the agent and returns the response.
-func (h *ChatHandler) executeAgent(ctx context.Context, sessionID, agentName, model string, history []ChatMessage) (ChatMessage, error) {
+func (h *ChatHandler) executeAgent(ctx context.Context, opts executeAgentOptions) (ChatMessage, error) {
 	if h.agents == nil {
 		return ChatMessage{}, fmt.Errorf("no agent registry configured")
 	}
 
-	agent, err := h.agents.Get(agentName)
+	agent, err := h.agents.Get(opts.agentName)
 	if err != nil {
-		return ChatMessage{}, fmt.Errorf("agent %s not available: %w", agentName, err)
+		return ChatMessage{}, fmt.Errorf("agent %s not available: %w", opts.agentName, err)
 	}
 
 	// Build context from recent history
 	contextBuilder := ""
 	start := 0
-	if len(history) > 10 {
-		start = len(history) - 10
+	if len(opts.history) > 10 {
+		start = len(opts.history) - 10
 	}
-	for _, msg := range history[start:] {
+	for _, msg := range opts.history[start:] {
 		role := msg.Role
 		if role == "agent" {
 			role = "assistant"
@@ -349,10 +387,36 @@ func (h *ChatHandler) executeAgent(ctx context.Context, sessionID, agentName, mo
 
 	// Get the last user message
 	var lastContent string
-	for i := len(history) - 1; i >= 0; i-- {
-		if history[i].Role == "user" {
-			lastContent = history[i].Content
+	for i := len(opts.history) - 1; i >= 0; i-- {
+		if opts.history[i].Role == "user" {
+			lastContent = opts.history[i].Content
 			break
+		}
+	}
+
+	// Parse @file references from the message content
+	fileRefs := parseFileReferences(lastContent)
+
+	// Combine explicit attachments with @file references
+	allFiles := make(map[string]bool)
+	for _, path := range opts.attachments {
+		allFiles[path] = true
+	}
+	for _, path := range fileRefs {
+		allFiles[path] = true
+	}
+
+	// Build file context
+	fileContext := ""
+	if len(allFiles) > 0 {
+		fileContext = "\n## Attached Files\n\n"
+		for filePath := range allFiles {
+			content, err := h.loadFileContent(filePath, opts.projectRoot)
+			if err != nil {
+				fileContext += fmt.Sprintf("[File: %s]\nError loading file: %s\n\n", filePath, err.Error())
+			} else {
+				fileContext += fmt.Sprintf("[File: %s]\n```\n%s\n```\n\n", filePath, content)
+			}
 		}
 	}
 
@@ -360,29 +424,30 @@ func (h *ChatHandler) executeAgent(ctx context.Context, sessionID, agentName, mo
 
 ## Conversation Context
 %s
-
+%s
 ## Current Message
 %s
 
-Respond helpfully and concisely.`, contextBuilder, lastContent)
+Respond helpfully and concisely.`, contextBuilder, fileContext, lastContent)
 
-	opts := core.ExecuteOptions{
-		Prompt: prompt,
-		Model:  model,
-		Format: core.OutputFormatText,
-		Phase:  core.PhaseExecute,
+	execOpts := core.ExecuteOptions{
+		Prompt:          prompt,
+		Model:           opts.model,
+		Format:          core.OutputFormatText,
+		Phase:           core.PhaseExecute,
+		ReasoningEffort: opts.reasoningEffort,
 	}
 
-	result, err := agent.Execute(ctx, opts)
+	result, err := agent.Execute(ctx, execOpts)
 	if err != nil {
 		return ChatMessage{}, err
 	}
 
 	msg := ChatMessage{
 		ID:        uuid.New().String(),
-		SessionID: sessionID,
+		SessionID: opts.sessionID,
 		Role:      "agent",
-		Agent:     agentName,
+		Agent:     opts.agentName,
 		Content:   result.Output,
 		Timestamp: time.Now(),
 		Tokens: &TokenInfo{
@@ -394,7 +459,7 @@ Respond helpfully and concisely.`, contextBuilder, lastContent)
 
 	// Publish agent response event
 	if h.eventBus != nil {
-		h.eventBus.Publish(events.NewChatMessageEvent("", events.RoleAgent, agentName, result.Output))
+		h.eventBus.Publish(events.NewChatMessageEvent("", events.RoleAgent, opts.agentName, result.Output))
 	}
 
 	return msg, nil
@@ -486,4 +551,230 @@ func writeError(w http.ResponseWriter, status int, message string) {
 	writeJSON(w, status, map[string]string{
 		"error": message,
 	})
+}
+
+// parseFileReferences extracts @file references from message content.
+// It matches patterns like @path/to/file.ext and returns unique file paths.
+func parseFileReferences(content string) []string {
+	// Match @path/to/file.ext patterns (file must have an extension)
+	re := regexp.MustCompile(`@([^\s@]+\.[a-zA-Z0-9]+)`)
+	matches := re.FindAllStringSubmatch(content, -1)
+
+	// Deduplicate results
+	seen := make(map[string]bool)
+	var result []string
+	for _, match := range matches {
+		if len(match) > 1 {
+			path := match[1]
+			if !seen[path] {
+				seen[path] = true
+				result = append(result, path)
+			}
+		}
+	}
+	return result
+}
+
+// loadFileContent loads a file's content, ensuring it's within the project root.
+// Returns the file content as a string, or an error if the file cannot be read
+// or is outside the allowed directory.
+func (h *ChatHandler) loadFileContent(filePath, projectRoot string) (string, error) {
+	// If no project root specified, use current directory
+	if projectRoot == "" {
+		var err error
+		projectRoot, err = os.Getwd()
+		if err != nil {
+			return "", fmt.Errorf("failed to get working directory: %w", err)
+		}
+	}
+
+	// Resolve the file path
+	var absPath string
+	if filepath.IsAbs(filePath) {
+		absPath = filepath.Clean(filePath)
+	} else {
+		absPath = filepath.Clean(filepath.Join(projectRoot, filePath))
+	}
+
+	// Security check: ensure the file is within the project root
+	absProjectRoot, err := filepath.Abs(projectRoot)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve project root: %w", err)
+	}
+
+	if !strings.HasPrefix(absPath, absProjectRoot) {
+		return "", fmt.Errorf("file path is outside project directory")
+	}
+
+	// Check if file exists and is a regular file
+	info, err := os.Stat(absPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", fmt.Errorf("file not found: %s", filePath)
+		}
+		return "", fmt.Errorf("failed to access file: %w", err)
+	}
+
+	if info.IsDir() {
+		return "", fmt.Errorf("path is a directory, not a file: %s", filePath)
+	}
+
+	// Limit file size (10MB max)
+	const maxFileSize = 10 * 1024 * 1024
+	if info.Size() > maxFileSize {
+		return "", fmt.Errorf("file too large (max 10MB): %s", filePath)
+	}
+
+	// Read file content
+	content, err := os.ReadFile(absPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to read file: %w", err)
+	}
+
+	return string(content), nil
+}
+
+// ListAttachments lists all stored attachments for a chat session.
+func (h *ChatHandler) ListAttachments(w http.ResponseWriter, r *http.Request) {
+	if h.store == nil {
+		writeError(w, http.StatusServiceUnavailable, "attachments store not available")
+		return
+	}
+
+	sessionID := chi.URLParam(r, "sessionID")
+	h.mu.RLock()
+	_, exists := h.sessions[sessionID]
+	h.mu.RUnlock()
+	if !exists {
+		writeError(w, http.StatusNotFound, "session not found")
+		return
+	}
+
+	atts, err := h.store.List(attachments.OwnerChatSession, sessionID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to list attachments")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, atts)
+}
+
+// UploadAttachments uploads one or more files as chat session attachments.
+func (h *ChatHandler) UploadAttachments(w http.ResponseWriter, r *http.Request) {
+	if h.store == nil {
+		writeError(w, http.StatusServiceUnavailable, "attachments store not available")
+		return
+	}
+
+	sessionID := chi.URLParam(r, "sessionID")
+	h.mu.RLock()
+	_, exists := h.sessions[sessionID]
+	h.mu.RUnlock()
+	if !exists {
+		writeError(w, http.StatusNotFound, "session not found")
+		return
+	}
+
+	// Limit total upload size (best-effort). Per-file limits are enforced by the store.
+	r.Body = http.MaxBytesReader(w, r.Body, int64(attachments.MaxAttachmentSizeBytes)*10)
+	if err := r.ParseMultipartForm(32 << 20); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid multipart form")
+		return
+	}
+
+	form := r.MultipartForm
+	if form == nil || len(form.File) == 0 || len(form.File["files"]) == 0 {
+		writeError(w, http.StatusBadRequest, "no files provided")
+		return
+	}
+
+	files := form.File["files"]
+	saved := make([]core.Attachment, 0, len(files))
+	for _, fh := range files {
+		f, err := fh.Open()
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "failed to open uploaded file")
+			return
+		}
+		att, err := h.store.Save(attachments.OwnerChatSession, sessionID, f, fh.Filename)
+		_ = f.Close()
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		saved = append(saved, att)
+	}
+
+	writeJSON(w, http.StatusCreated, saved)
+}
+
+// DownloadAttachment downloads a stored chat session attachment.
+func (h *ChatHandler) DownloadAttachment(w http.ResponseWriter, r *http.Request) {
+	if h.store == nil {
+		writeError(w, http.StatusServiceUnavailable, "attachments store not available")
+		return
+	}
+
+	sessionID := chi.URLParam(r, "sessionID")
+	attachmentID := chi.URLParam(r, "attachmentID")
+	if sessionID == "" || attachmentID == "" {
+		writeError(w, http.StatusBadRequest, "session id and attachment id are required")
+		return
+	}
+
+	h.mu.RLock()
+	_, exists := h.sessions[sessionID]
+	h.mu.RUnlock()
+	if !exists {
+		writeError(w, http.StatusNotFound, "session not found")
+		return
+	}
+
+	meta, absPath, err := h.store.Resolve(attachments.OwnerChatSession, sessionID, attachmentID)
+	if err != nil {
+		if os.IsNotExist(err) {
+			writeError(w, http.StatusNotFound, "attachment not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "failed to resolve attachment")
+		return
+	}
+
+	w.Header().Set("Content-Type", meta.ContentType)
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", meta.Name))
+	http.ServeFile(w, r, absPath)
+}
+
+// DeleteAttachment deletes a stored chat session attachment.
+func (h *ChatHandler) DeleteAttachment(w http.ResponseWriter, r *http.Request) {
+	if h.store == nil {
+		writeError(w, http.StatusServiceUnavailable, "attachments store not available")
+		return
+	}
+
+	sessionID := chi.URLParam(r, "sessionID")
+	attachmentID := chi.URLParam(r, "attachmentID")
+	if sessionID == "" || attachmentID == "" {
+		writeError(w, http.StatusBadRequest, "session id and attachment id are required")
+		return
+	}
+
+	h.mu.RLock()
+	_, exists := h.sessions[sessionID]
+	h.mu.RUnlock()
+	if !exists {
+		writeError(w, http.StatusNotFound, "session not found")
+		return
+	}
+
+	if err := h.store.Delete(attachments.OwnerChatSession, sessionID, attachmentID); err != nil {
+		if os.IsNotExist(err) {
+			writeError(w, http.StatusNotFound, "attachment not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "failed to delete attachment")
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }

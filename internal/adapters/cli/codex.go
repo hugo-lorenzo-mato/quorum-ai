@@ -109,8 +109,8 @@ func (c *CodexAdapter) Execute(ctx context.Context, opts core.ExecuteOptions) (*
 func (c *CodexAdapter) buildArgs(opts core.ExecuteOptions) []string {
 	args := []string{"exec", "--skip-git-repo-check"}
 
-	// Determine reasoning effort: config > phase-based defaults
-	reasoningEffort := c.getReasoningEffort(opts.Phase)
+	// Determine reasoning effort: opts (per-message) > config > phase-based defaults
+	reasoningEffort := c.getReasoningEffort(opts)
 
 	// Headless approvals/sandbox via config overrides
 	args = append(args,
@@ -138,16 +138,21 @@ func (c *CodexAdapter) buildArgs(opts core.ExecuteOptions) []string {
 	return args
 }
 
-// getReasoningEffort returns reasoning effort for the given phase.
-// Priority: config > phase-based defaults.
-func (c *CodexAdapter) getReasoningEffort(phase core.Phase) string {
-	// Check config first
-	if effort := c.config.GetReasoningEffort(string(phase)); effort != "" {
+// getReasoningEffort returns reasoning effort for the given options.
+// Priority: opts.ReasoningEffort (per-message) > config > phase-based defaults.
+func (c *CodexAdapter) getReasoningEffort(opts core.ExecuteOptions) string {
+	// Check per-message override first
+	if opts.ReasoningEffort != "" {
+		return opts.ReasoningEffort
+	}
+
+	// Check config
+	if effort := c.config.GetReasoningEffort(string(opts.Phase)); effort != "" {
 		return effort
 	}
 
 	// Fall back to phase-based defaults
-	switch phase {
+	switch opts.Phase {
 	case core.PhaseRefine, core.PhaseAnalyze, core.PhasePlan:
 		return "xhigh"
 	case core.PhaseExecute:

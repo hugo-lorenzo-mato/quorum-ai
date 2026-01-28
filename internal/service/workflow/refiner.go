@@ -236,10 +236,24 @@ func parseRefinementResult(output string) (string, error) {
 
 // GetEffectivePrompt returns the optimized prompt if available, otherwise the original.
 func GetEffectivePrompt(state *core.WorkflowState) string {
+	base := state.Prompt
 	if state.OptimizedPrompt != "" {
-		return state.OptimizedPrompt
+		base = state.OptimizedPrompt
 	}
-	return state.Prompt
+
+	if len(state.Attachments) == 0 {
+		return base
+	}
+
+	var sb strings.Builder
+	sb.WriteString(base)
+	sb.WriteString("\n\n## Attached Documents\n")
+	sb.WriteString("The user attached the following documents. They are stored under `.quorum/attachments/` and can be read from disk if needed.\n\n")
+	for _, a := range state.Attachments {
+		sb.WriteString(fmt.Sprintf("- %s (%d bytes): %s\n", a.Name, a.Size, a.Path))
+	}
+	sb.WriteString("\n")
+	return sb.String()
 }
 
 // truncateForLog truncates a string to maxLen characters for logging purposes.
