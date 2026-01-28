@@ -338,6 +338,7 @@ agents:
 **Requirements:**
 - OpenCode CLI installed ([https://opencode.ai/docs/cli/](https://opencode.ai/docs/cli/))
 - Ollama running at `localhost:11434` with compatible models
+- Context window configured (see [Ollama Integration Guide](OLLAMA.md))
 
 **Model Profiles:**
 
@@ -350,6 +351,8 @@ agents:
 ```bash
 export OPENAI_BASE_URL=http://localhost:11434/v1
 ```
+
+> **Important:** Ollama defaults to 2048 tokens context, which is insufficient for most coding tasks. See [Ollama Integration Guide](OLLAMA.md#context-window-configuration) for configuration instructions.
 
 #### Phase Participation (opt-in model)
 

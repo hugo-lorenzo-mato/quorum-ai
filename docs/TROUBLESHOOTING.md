@@ -12,6 +12,11 @@ This document covers common issues and their solutions when using quorum-ai.
   - [No Agents Available](#no-agents-available)
 - [Workflow Issues](#workflow-issues)
   - [Workflow Stuck in Running State](#workflow-stuck-in-running-state)
+- [OpenCode / Ollama Issues](#opencode--ollama-issues)
+  - [Truncated Output or Missing Context](#truncated-output-or-missing-context)
+  - [OpenCode Connection Refused](#opencode-connection-refused)
+  - [Model Not Found](#model-not-found)
+  - [Slow OpenCode Response](#slow-opencode-response)
 
 ---
 
@@ -201,6 +206,130 @@ If manual intervention is needed:
    ```bash
    quorum serve  # or quorum status to verify
    ```
+
+---
+
+## OpenCode / Ollama Issues
+
+### Truncated Output or Missing Context
+
+**Symptoms:**
+
+- Agent responses are cut off mid-sentence
+- Code analysis misses important context
+- "Context too long" errors in Ollama logs
+
+**Cause:**
+
+Ollama defaults to 2048-4096 tokens context window, insufficient for code-intensive tasks. OpenCode requires 64K+ tokens for effective operation.
+
+**Diagnosis:**
+
+```bash
+# Check current context allocation
+ollama ps
+
+# Look for CONTEXT column - should show your configured value
+# NAME                 ID              SIZE     PROCESSOR   CONTEXT
+# qwen2.5-coder:32b    b92d6a0bd47e    27 GB    100% GPU    2048     <- TOO LOW
+```
+
+**Solution:**
+
+Configure Ollama context window globally:
+
+```bash
+# Create systemd override
+sudo systemctl edit ollama.service
+
+# Add:
+[Service]
+Environment="OLLAMA_CONTEXT_LENGTH=32768"
+
+# Apply changes
+sudo systemctl daemon-reload
+sudo systemctl restart ollama
+
+# Verify
+ollama ps
+```
+
+See [Ollama Integration Guide](OLLAMA.md#context-window-configuration) for detailed instructions.
+
+---
+
+### OpenCode Connection Refused
+
+**Symptoms:**
+
+```
+Error: connect ECONNREFUSED 127.0.0.1:11434
+```
+
+**Cause:**
+
+Ollama server not running or bound to different address.
+
+**Solution:**
+
+```bash
+# Check Ollama status
+systemctl status ollama
+
+# Start if not running
+sudo systemctl start ollama
+
+# Verify connectivity
+curl http://localhost:11434/api/tags
+```
+
+---
+
+### Model Not Found
+
+**Symptoms:**
+
+```
+Error: model "qwen2.5-coder" not found
+```
+
+**Solution:**
+
+```bash
+# List available models
+ollama list
+
+# Pull required model
+ollama pull qwen2.5-coder:32b
+
+# Update quorum config to match exact model tag
+```
+
+---
+
+### Slow OpenCode Response
+
+**Symptoms:**
+
+- Long delays (30s+) before output starts
+- Timeouts during execution
+
+**Cause:**
+
+1. Model cold start (first load after server restart)
+2. Context window too large for available VRAM
+3. CPU fallback due to insufficient GPU memory
+
+**Solution:**
+
+```bash
+# Pre-load model to avoid cold start
+ollama run qwen2.5-coder:32b --keepalive 1h
+
+# Or reduce context if VRAM constrained
+sudo systemctl edit ollama.service
+# Set: Environment="OLLAMA_CONTEXT_LENGTH=16384"
+```
 
 ---
 
