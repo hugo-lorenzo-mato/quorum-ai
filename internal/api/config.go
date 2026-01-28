@@ -163,6 +163,51 @@ func (s *Server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, response)
 }
 
+// handleResetConfig resets configuration to defaults.
+func (s *Server) handleResetConfig(w http.ResponseWriter, _ *http.Request) {
+	configPath := s.getConfigPath()
+
+	// Ensure .quorum directory exists
+	configDir := filepath.Dir(configPath)
+	if err := os.MkdirAll(configDir, 0o750); err != nil {
+		s.logger.Error("failed to create config directory", "error", err)
+		respondError(w, http.StatusInternalServerError, "failed to create configuration directory")
+		return
+	}
+
+	// Write the default configuration (same as quorum init)
+	if err := os.WriteFile(configPath, []byte(config.DefaultConfigYAML), 0o600); err != nil {
+		s.logger.Error("failed to write default config", "error", err)
+		respondError(w, http.StatusInternalServerError, "failed to write default configuration")
+		return
+	}
+	s.logger.Info("config reset to defaults", "path", configPath)
+
+	// Load the newly written config
+	cfg, err := config.NewLoader().WithConfigFile(configPath).Load()
+	if err != nil {
+		s.logger.Error("failed to load default config", "error", err)
+		respondError(w, http.StatusInternalServerError, "failed to load default configuration")
+		return
+	}
+
+	// Calculate ETag for the new config
+	etag, _ := calculateETag(cfg)
+	if etag != "" {
+		w.Header().Set("ETag", fmt.Sprintf(`"%s"`, etag))
+	}
+
+	response := ConfigResponseWithMeta{
+		Config: configToFullResponse(cfg),
+		Meta: ConfigMeta{
+			ETag:   etag,
+			Source: "file",
+		},
+	}
+
+	respondJSON(w, http.StatusOK, response)
+}
+
 // handleGetAgents returns available agents and their status.
 func (s *Server) handleGetAgents(w http.ResponseWriter, _ *http.Request) {
 	agents := []map[string]interface{}{

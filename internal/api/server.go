@@ -209,6 +209,7 @@ func (s *Server) setupRouter() chi.Router {
 			r.Get("/", s.handleGetConfig)
 			r.Patch("/", s.handleUpdateConfig)
 			r.Post("/validate", s.handleValidateConfig)
+			r.Post("/reset", s.handleResetConfig)
 			r.Get("/agents", s.handleGetAgents)
 			r.Get("/schema", s.handleGetConfigSchema)
 			r.Get("/enums", s.handleGetEnums)

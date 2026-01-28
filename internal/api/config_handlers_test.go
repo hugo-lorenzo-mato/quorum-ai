@@ -215,3 +215,88 @@ func containsString(items []string, value string) bool {
 	}
 	return false
 }
+
+func TestHandleResetConfig(t *testing.T) {
+	srv := setupConfigTestServer(t)
+
+	// First create a config file by updating it with a valid configuration
+	validConfig := `{
+		"log": {"level": "debug"},
+		"agents": {
+			"default": "claude",
+			"claude": {
+				"enabled": true,
+				"phases": {"plan": true, "execute": true, "synthesize": true}
+			}
+		},
+		"phases": {
+			"analyze": {
+				"synthesizer": {"agent": "claude"}
+			}
+		}
+	}`
+	updateReq := httptest.NewRequest(http.MethodPatch, "/api/v1/config?force=true", bytes.NewBufferString(validConfig))
+	updateReq.Header.Set("Content-Type", "application/json")
+	updateRec := httptest.NewRecorder()
+	srv.router.ServeHTTP(updateRec, updateReq)
+
+	if updateRec.Code != http.StatusOK {
+		t.Fatalf("failed to create config: %s", updateRec.Body.String())
+	}
+
+	// Verify the config was set to debug
+	var updateResp ConfigResponseWithMeta
+	if err := json.Unmarshal(updateRec.Body.Bytes(), &updateResp); err != nil {
+		t.Fatalf("unmarshal update response: %v", err)
+	}
+	if updateResp.Config.Log.Level != "debug" {
+		t.Fatalf("expected log level 'debug' after update, got %q", updateResp.Config.Log.Level)
+	}
+
+	// Now reset it
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/config/reset", nil)
+	rec := httptest.NewRecorder()
+
+	srv.router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusOK, rec.Code, rec.Body.String())
+	}
+
+	var response ConfigResponseWithMeta
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+
+	// After reset, source should be "file" (we write the default config to file)
+	if response.Meta.Source != "file" {
+		t.Errorf("expected source 'file', got %q", response.Meta.Source)
+	}
+
+	// Should have an ETag now
+	if response.Meta.ETag == "" {
+		t.Error("expected ETag after reset")
+	}
+
+	// Log level should be back to default "info"
+	if response.Config.Log.Level != "info" {
+		t.Errorf("expected log.level 'info' after reset, got %q", response.Config.Log.Level)
+	}
+
+	// Verify default config values from DefaultConfigYAML
+	if response.Config.Agents.Default != "claude" {
+		t.Errorf("expected agents.default 'claude', got %q", response.Config.Agents.Default)
+	}
+	if !response.Config.Agents.Claude.Enabled {
+		t.Error("expected agents.claude.enabled to be true")
+	}
+	if response.Config.Agents.Claude.Model != "claude-opus-4-5-20251101" {
+		t.Errorf("expected agents.claude.model 'claude-opus-4-5-20251101', got %q", response.Config.Agents.Claude.Model)
+	}
+	if !response.Config.Phases.Analyze.Refiner.Enabled {
+		t.Error("expected phases.analyze.refiner.enabled to be true")
+	}
+	if response.Config.Phases.Analyze.Moderator.Threshold != 0.90 {
+		t.Errorf("expected phases.analyze.moderator.threshold 0.90, got %v", response.Config.Phases.Analyze.Moderator.Threshold)
+	}
+}
