@@ -519,6 +519,7 @@ func init() {
 	RegisterStreamParser("gemini", &GeminiStreamParser{})
 	RegisterStreamParser("codex", &CodexStreamParser{})
 	RegisterStreamParser("copilot", NewCopilotLogParser())
+	RegisterStreamParser("opencode", &OpenCodeStreamParser{})
 }
 
 // =============================================================================

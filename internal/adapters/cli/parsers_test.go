@@ -349,12 +349,78 @@ func TestParserAgentNames(t *testing.T) {
 		{&GeminiStreamParser{}, "gemini"},
 		{&CodexStreamParser{}, "codex"},
 		{NewCopilotLogParser(), "copilot"},
+		{&OpenCodeStreamParser{}, "opencode"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := tt.parser.AgentName(); got != tt.name {
 				t.Errorf("AgentName() = %v, want %v", got, tt.name)
+			}
+		})
+	}
+}
+
+func TestOpenCodeStreamParser_ParseLine(t *testing.T) {
+	parser := &OpenCodeStreamParser{}
+
+	tests := []struct {
+		name      string
+		line      string
+		wantType  core.AgentEventType
+		wantAgent string
+	}{
+		{
+			name:      "thinking",
+			line:      `{"thinking":"analyzing project"}`,
+			wantType:  core.AgentEventThinking,
+			wantAgent: "opencode",
+		},
+		{
+			name:      "chunk",
+			line:      `{"content":"hello"}`,
+			wantType:  core.AgentEventChunk,
+			wantAgent: "opencode",
+		},
+		{
+			name:      "error",
+			line:      `{"error":"failed"}`,
+			wantType:  core.AgentEventError,
+			wantAgent: "opencode",
+		},
+		{
+			name:      "tool_use",
+			line:      `{"tool":"read_file"}`,
+			wantType:  core.AgentEventToolUse,
+			wantAgent: "opencode",
+		},
+		{
+			name:      "plain text thinking",
+			line:      "Thinking about the solution...",
+			wantType:  core.AgentEventThinking,
+			wantAgent: "opencode",
+		},
+		{
+			name:      "plain text chunk",
+			line:      "regular output",
+			wantType:  core.AgentEventChunk,
+			wantAgent: "opencode",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			events := parser.ParseLine(tt.line)
+			if len(events) == 0 {
+				t.Fatal("expected at least one event")
+			}
+
+			event := events[0]
+			if event.Type != tt.wantType {
+				t.Errorf("type = %v, want %v", event.Type, tt.wantType)
+			}
+			if event.Agent != tt.wantAgent {
+				t.Errorf("agent = %v, want %v", event.Agent, tt.wantAgent)
 			}
 		})
 	}

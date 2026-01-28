@@ -71,6 +71,11 @@ var StreamConfigs = map[string]StreamConfig{
 		LogLevelFlag:  "--log-level",
 		LogLevelValue: "debug",
 	},
+	"opencode": {
+		Method:            StreamMethodJSONStdout,
+		OutputFormatFlag:  "--json",
+		OutputFormatValue: "", // Boolean flag
+	},
 }
 
 // =============================================================================

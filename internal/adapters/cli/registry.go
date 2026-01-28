@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/config"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/diagnostics"
 )
@@ -45,6 +46,7 @@ func (r *Registry) registerBuiltins() {
 	r.RegisterFactory("gemini", NewGeminiAdapter)
 	r.RegisterFactory("codex", NewCodexAdapter)
 	r.RegisterFactory("copilot", NewCopilotAdapter)
+	r.RegisterFactory("opencode", NewOpenCodeAdapter)
 }
 
 // RegisterFactory registers a factory for an agent type.
@@ -309,6 +311,12 @@ func defaultConfig(name string) AgentConfig {
 			Model:   "", // NO default - must be configured or CLI uses its default
 			Timeout: 5 * time.Minute,
 		},
+		"opencode": {
+			Name:    "opencode",
+			Path:    "opencode",
+			Model:   "", // NO default - must be configured or CLI uses its default
+			Timeout: 5 * time.Minute,
+		},
 	}
 
 	if cfg, ok := defaults[name]; ok {
@@ -400,9 +408,94 @@ func (r *Registry) SetDiagnostics(safeExec *diagnostics.SafeExecutor, dumpWriter
 	r.crashDumpWriter = dumpWriter
 
 	// Apply to existing agents
-	for _, agent := range r.agents {
-		if dc, ok := agent.(DiagnosticsCapable); ok {
-			dc.WithDiagnostics(safeExec, dumpWriter)
+			for _, agent := range r.agents {
+			if dc, ok := agent.(DiagnosticsCapable); ok {
+				dc.WithDiagnostics(safeExec, dumpWriter)
+			}
 		}
 	}
-}
+	
+	// ConfigureRegistry configures agents in the registry using the application configuration.
+	// Agents are configured if their enabled flag is true in the config.
+	func ConfigureRegistry(registry *Registry, cfg *config.AgentsConfig) error {
+		// Configure Claude
+		if cfg.Claude.Enabled {
+			registry.Configure("claude", AgentConfig{
+				Name:                      "claude",
+				Path:                      cfg.Claude.Path,
+				Model:                     cfg.Claude.Model,
+				Timeout:                   5 * time.Minute,
+				Phases:                    cfg.Claude.Phases,
+				ReasoningEffort:           cfg.Claude.ReasoningEffort,
+				ReasoningEffortPhases:     cfg.Claude.ReasoningEffortPhases,
+				TokenDiscrepancyThreshold: GetTokenDiscrepancyThreshold(cfg.Claude.TokenDiscrepancyThreshold),
+			})
+		}
+	
+		// Configure Gemini
+		if cfg.Gemini.Enabled {
+			registry.Configure("gemini", AgentConfig{
+				Name:                      "gemini",
+				Path:                      cfg.Gemini.Path,
+				Model:                     cfg.Gemini.Model,
+				Timeout:                   5 * time.Minute,
+				Phases:                    cfg.Gemini.Phases,
+				ReasoningEffort:           cfg.Gemini.ReasoningEffort,
+				ReasoningEffortPhases:     cfg.Gemini.ReasoningEffortPhases,
+				TokenDiscrepancyThreshold: GetTokenDiscrepancyThreshold(cfg.Gemini.TokenDiscrepancyThreshold),
+			})
+		}
+	
+		// Configure Codex
+		if cfg.Codex.Enabled {
+			registry.Configure("codex", AgentConfig{
+				Name:                      "codex",
+				Path:                      cfg.Codex.Path,
+				Model:                     cfg.Codex.Model,
+				Timeout:                   5 * time.Minute,
+				Phases:                    cfg.Codex.Phases,
+				ReasoningEffort:           cfg.Codex.ReasoningEffort,
+				ReasoningEffortPhases:     cfg.Codex.ReasoningEffortPhases,
+				TokenDiscrepancyThreshold: GetTokenDiscrepancyThreshold(cfg.Codex.TokenDiscrepancyThreshold),
+			})
+		}
+	
+		// Configure Copilot
+		if cfg.Copilot.Enabled {
+			registry.Configure("copilot", AgentConfig{
+				Name:                      "copilot",
+				Path:                      cfg.Copilot.Path,
+				Model:                     cfg.Copilot.Model,
+				Timeout:                   5 * time.Minute,
+				Phases:                    cfg.Copilot.Phases,
+				ReasoningEffort:           cfg.Copilot.ReasoningEffort,
+				ReasoningEffortPhases:     cfg.Copilot.ReasoningEffortPhases,
+				TokenDiscrepancyThreshold: GetTokenDiscrepancyThreshold(cfg.Copilot.TokenDiscrepancyThreshold),
+			})
+		}
+	
+		// Configure OpenCode
+		if cfg.OpenCode.Enabled {
+			registry.Configure("opencode", AgentConfig{
+				Name:                      "opencode",
+				Path:                      cfg.OpenCode.Path,
+				Model:                     cfg.OpenCode.Model,
+				Timeout:                   5 * time.Minute,
+				Phases:                    cfg.OpenCode.Phases,
+				ReasoningEffort:           cfg.OpenCode.ReasoningEffort,
+				ReasoningEffortPhases:     cfg.OpenCode.ReasoningEffortPhases,
+				TokenDiscrepancyThreshold: GetTokenDiscrepancyThreshold(cfg.OpenCode.TokenDiscrepancyThreshold),
+			})
+		}
+	
+		return nil
+	}
+	
+	// GetTokenDiscrepancyThreshold returns the configured threshold or the default.
+	func GetTokenDiscrepancyThreshold(configured float64) float64 {
+		if configured > 0 {
+			return configured
+		}
+			return DefaultTokenDiscrepancyThreshold
+		}
+		

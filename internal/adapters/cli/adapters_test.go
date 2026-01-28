@@ -31,20 +31,23 @@ func TestRegistry_NewRegistry(t *testing.T) {
 	if !r.Has("copilot") {
 		t.Error("registry should have copilot factory")
 	}
+	if !r.Has("opencode") {
+		t.Error("registry should have opencode factory")
+	}
 }
 
 func TestRegistry_List(t *testing.T) {
 	r := NewRegistry()
 	list := r.List()
 
-	if len(list) != 4 {
-		t.Errorf("List() returned %d items, want 4", len(list))
+	if len(list) != 5 {
+		t.Errorf("List() returned %d items, want 5", len(list))
 	}
 
 	// Check all expected adapters are present
 	expected := map[string]bool{
 		"claude": true, "gemini": true, "codex": true,
-		"copilot": true,
+		"copilot": true, "opencode": true,
 	}
 
 	for _, name := range list {
@@ -596,6 +599,7 @@ func TestDefaultConfig(t *testing.T) {
 		{"gemini", "gemini"},
 		{"codex", "codex"},
 		{"copilot", "copilot"},
+		{"opencode", "opencode"},
 		{"unknown", ""},
 	}
 
