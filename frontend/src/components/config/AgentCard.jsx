@@ -48,8 +48,10 @@ export function AgentCard({ agentKey }) {
   const path = useConfigField(`${prefix}.path`);
   const model = useConfigField(`${prefix}.model`);
   const phases = useConfigField(`${prefix}.phases`);
+  const reasoningEffort = useConfigField(`${prefix}.reasoning_effort`);
 
   const phaseKeys = useConfigStore((state) => state.enums?.phase_model_keys) || FALLBACK_PHASE_KEYS;
+  const reasoningEfforts = useConfigStore((state) => state.enums?.reasoning_efforts) || [];
   const agentsMetadata = useConfigStore((state) => state.agents) || [];
 
   // Get available models for this agent
@@ -59,8 +61,18 @@ export function AgentCard({ agentKey }) {
     return agentMeta.models.map((m) => ({ value: m, label: m }));
   }, [agentMeta]);
 
-  const cleanPhases = useMemo(() => normalizeBoolMap(phases.value), [phases.value]);
-  const isRestricted = Object.keys(cleanPhases).length > 0;
+  // Check if this agent supports reasoning effort
+  const hasReasoningEffort = agentMeta?.hasReasoningEffort === true;
+  const reasoningEffortOptions = useMemo(() => {
+    return reasoningEfforts.map((e) => ({ value: e, label: e.charAt(0).toUpperCase() + e.slice(1) }));
+  }, [reasoningEfforts]);
+
+  const rawPhases = useMemo(
+    () => (phases.value && typeof phases.value === 'object' ? phases.value : {}),
+    [phases.value]
+  );
+  const cleanPhases = useMemo(() => normalizeBoolMap(rawPhases), [rawPhases]);
+  const isRestricted = Object.keys(rawPhases).length > 0;
   const isEnabled = !!enabled.value;
 
   const isPhaseEnabled = (phase) => {
@@ -95,7 +107,7 @@ export function AgentCard({ agentKey }) {
   return (
     <div
       className={`rounded-xl border p-6 transition-colors ${
-        isEnabled ? 'border-border bg-card' : 'border-border/70 bg-muted/20 border-dashed'
+        isEnabled ? 'border-border bg-card' : 'border-border/70 bg-muted border-dashed'
       }`}
     >
       {/* Header */}
@@ -111,7 +123,7 @@ export function AgentCard({ agentKey }) {
                 className={`text-xs font-medium px-2 py-0.5 rounded-md border ${
                   isEnabled
                     ? 'bg-success/10 text-success border-success/20'
-                    : 'bg-muted text-muted-foreground border-border'
+                    : 'bg-background text-muted-foreground border-border'
                 }`}
               >
                 {isEnabled ? 'Enabled' : 'Disabled'}
@@ -134,7 +146,7 @@ export function AgentCard({ agentKey }) {
       </div>
 
       {/* Basic settings */}
-      <div className="mt-4 grid gap-4 md:grid-cols-2">
+      <div className={`mt-4 grid gap-4 ${hasReasoningEffort ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>
         <TextInputSetting
           label="CLI path"
           tooltip="Command to invoke the agent CLI (e.g. 'claude', 'codex', 'gemini', 'copilot')."
@@ -155,6 +167,19 @@ export function AgentCard({ agentKey }) {
           disabled={model.disabled}
           placeholder="Select model..."
         />
+
+        {hasReasoningEffort && (
+          <SelectSetting
+            label="Reasoning effort"
+            tooltip="Controls reasoning depth. Higher effort = better quality but slower and more expensive."
+            value={reasoningEffort.value}
+            onChange={reasoningEffort.onChange}
+            options={reasoningEffortOptions}
+            error={reasoningEffort.error}
+            disabled={reasoningEffort.disabled}
+            placeholder="Select effort..."
+          />
+        )}
       </div>
 
       {/* Phase selection */}
@@ -206,4 +231,3 @@ export function AgentCard({ agentKey }) {
 }
 
 export default AgentCard;
-
