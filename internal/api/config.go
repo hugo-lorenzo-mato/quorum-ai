@@ -220,13 +220,19 @@ func (s *Server) handleGetAgents(w http.ResponseWriter, _ *http.Request) {
 		{
 			"name":        "gemini",
 			"displayName": "Gemini",
-			"models":      []string{"gemini-2.0-flash-thinking-exp", "gemini-2.0-flash-exp", "gemini-1.5-pro"},
+			"models":      []string{"gemini-3-pro-preview", "gemini-3-flash-preview", "gemini-2.5-pro", "gemini-2.5-flash"},
 			"available":   true,
 		},
 		{
 			"name":        "codex",
 			"displayName": "Codex",
-			"models":      []string{"gpt-5.2-codex", "gpt-5.1-codex", "gpt-4.1"},
+			"models":      []string{"gpt-5.2-codex", "gpt-5.1-codex", "o3", "o4-mini"},
+			"available":   true,
+		},
+		{
+			"name":        "copilot",
+			"displayName": "Copilot",
+			"models":      []string{"claude-sonnet-4-5", "claude-sonnet-4", "gpt-5"},
 			"available":   true,
 		},
 	}

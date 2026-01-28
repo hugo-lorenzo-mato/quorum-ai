@@ -1,71 +1,130 @@
+import { useMemo } from 'react';
+import { Bot } from 'lucide-react';
 import { useConfigField } from '../../hooks/useConfigField';
-import {
-  TextInputSetting,
-  NumberInputSetting,
-  DurationInputSetting,
-  SliderSetting,
-  ToggleSetting,
-} from './index';
+import { useConfigStore } from '../../stores/configStore';
+import { TextInputSetting, ToggleSetting, SelectSetting } from './index';
 
 const AGENT_INFO = {
   claude: {
     name: 'Claude',
-    description: 'Anthropic\'s Claude - Primary agent with strong reasoning',
-    icon: '🟣',
-    modelPlaceholder: 'claude-sonnet-4-20250514',
+    description: "Anthropic's Claude - primary agent with strong reasoning",
   },
   codex: {
     name: 'Codex',
-    description: 'OpenAI\'s GPT models - Strong code generation',
-    icon: '🟢',
-    modelPlaceholder: 'gpt-4o',
+    description: "OpenAI Codex - strong code generation (recommended for coding-heavy phases)",
   },
   gemini: {
     name: 'Gemini',
-    description: 'Google\'s Gemini - Fast and efficient',
-    icon: '🔵',
-    modelPlaceholder: 'gemini-2.0-flash',
+    description: "Google's Gemini - fast and efficient",
   },
   copilot: {
     name: 'Copilot',
-    description: 'GitHub Copilot - Optimized for code tasks',
-    icon: '⚫',
-    modelPlaceholder: 'gpt-4o',
+    description: 'GitHub Copilot CLI - optimized for code tasks',
   },
 };
 
+const FALLBACK_PHASE_KEYS = ['refine', 'analyze', 'moderate', 'synthesize', 'plan', 'execute'];
+
+const PHASE_LABELS = {
+  refine: 'Refine',
+  analyze: 'Analyze',
+  moderate: 'Moderate',
+  synthesize: 'Synthesize',
+  plan: 'Plan',
+  execute: 'Execute',
+};
+
+function normalizeBoolMap(value) {
+  if (!value || typeof value !== 'object') return {};
+  const entries = Object.entries(value).filter(([, v]) => v === true);
+  return Object.fromEntries(entries);
+}
+
 export function AgentCard({ agentKey }) {
-  const info = AGENT_INFO[agentKey];
+  const info = AGENT_INFO[agentKey] || { name: agentKey, description: '' };
   const prefix = `agents.${agentKey}`;
 
   const enabled = useConfigField(`${prefix}.enabled`);
+  const path = useConfigField(`${prefix}.path`);
   const model = useConfigField(`${prefix}.model`);
-  const maxTokens = useConfigField(`${prefix}.max_tokens`);
-  const temperature = useConfigField(`${prefix}.temperature`);
-  const timeout = useConfigField(`${prefix}.timeout`);
-  const maxRetries = useConfigField(`${prefix}.max_retries`);
+  const phases = useConfigField(`${prefix}.phases`);
 
-  const isDisabled = !enabled.value;
+  const phaseKeys = useConfigStore((state) => state.enums?.phase_model_keys) || FALLBACK_PHASE_KEYS;
+  const agentsMetadata = useConfigStore((state) => state.agents) || [];
+
+  // Get available models for this agent
+  const agentMeta = agentsMetadata.find((a) => a.name === agentKey);
+  const availableModels = useMemo(() => {
+    if (!agentMeta?.models?.length) return [];
+    return agentMeta.models.map((m) => ({ value: m, label: m }));
+  }, [agentMeta]);
+
+  const cleanPhases = useMemo(() => normalizeBoolMap(phases.value), [phases.value]);
+  const isRestricted = Object.keys(cleanPhases).length > 0;
+  const isEnabled = !!enabled.value;
+
+  const isPhaseEnabled = (phase) => {
+    if (!isRestricted) return true; // empty map => enabled for all phases (backward-compatible)
+    return cleanPhases[phase] === true;
+  };
+
+  const enabledPhaseCount = phaseKeys.filter((k) => isPhaseEnabled(k)).length;
+
+  const togglePhase = (phase) => {
+    const next = isRestricted ? { ...cleanPhases } : Object.fromEntries(phaseKeys.map((k) => [k, true]));
+
+    if (next[phase]) {
+      delete next[phase];
+    } else {
+      next[phase] = true;
+    }
+
+    // Prevent "no enabled phases" (use the agent toggle for that)
+    const nextEnabledCount = phaseKeys.filter((k) => next[k] === true).length;
+    if (nextEnabledCount === 0) return;
+
+    // If all phases are enabled, store empty map (means "all")
+    if (nextEnabledCount === phaseKeys.length) {
+      phases.onChange({});
+      return;
+    }
+
+    phases.onChange(next);
+  };
 
   return (
-    <div className={`
-      rounded-lg border p-4 transition-opacity bg-card border-border
-      ${isDisabled ? 'opacity-60' : ''}
-    `}>
+    <div
+      className={`rounded-xl border p-6 transition-colors ${
+        isEnabled ? 'border-border bg-card' : 'border-border/70 bg-muted/20 border-dashed'
+      }`}
+    >
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <span className="text-2xl">{info.icon}</span>
-          <div>
-            <h3 className="font-semibold text-foreground">
-              {info.name}
-            </h3>
-            <p className="text-sm text-muted-foreground">
-              {info.description}
-            </p>
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex items-start gap-3 min-w-0">
+          <div className="p-2 rounded-lg bg-muted border border-border">
+            <Bot className="w-5 h-5 text-muted-foreground" />
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="font-semibold text-foreground">{info.name}</h3>
+              <span
+                className={`text-xs font-medium px-2 py-0.5 rounded-md border ${
+                  isEnabled
+                    ? 'bg-success/10 text-success border-success/20'
+                    : 'bg-muted text-muted-foreground border-border'
+                }`}
+              >
+                {isEnabled ? 'Enabled' : 'Disabled'}
+              </span>
+            </div>
+            {info.description && (
+              <p className="text-sm text-muted-foreground mt-1">{info.description}</p>
+            )}
           </div>
         </div>
+
         <ToggleSetting
+          label={`Enable ${info.name}`}
           checked={enabled.value}
           onChange={enabled.onChange}
           error={enabled.error}
@@ -74,68 +133,77 @@ export function AgentCard({ agentKey }) {
         />
       </div>
 
-      {/* Settings Grid */}
-      <div className={`space-y-4 ${isDisabled ? 'pointer-events-none' : ''}`}>
+      {/* Basic settings */}
+      <div className="mt-4 grid gap-4 md:grid-cols-2">
         <TextInputSetting
-          label="Model"
-          tooltip={`Model identifier for ${info.name}. Check provider documentation for available models.`}
-          placeholder={info.modelPlaceholder}
+          label="CLI path"
+          tooltip="Command to invoke the agent CLI (e.g. 'claude', 'codex', 'gemini', 'copilot')."
+          placeholder={agentKey}
+          value={path.value}
+          onChange={path.onChange}
+          error={path.error}
+          disabled={path.disabled}
+        />
+
+        <SelectSetting
+          label="Default model"
+          tooltip="Default model used by this agent when no phase override is set."
           value={model.value}
           onChange={model.onChange}
+          options={availableModels}
           error={model.error}
-          disabled={model.disabled || isDisabled}
+          disabled={model.disabled}
+          placeholder="Select model..."
         />
+      </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          <NumberInputSetting
-            label="Max Tokens"
-            tooltip="Maximum tokens in agent responses. Higher values allow longer responses but cost more."
-            min={1000}
-            max={128000}
-            step={1000}
-            value={maxTokens.value}
-            onChange={maxTokens.onChange}
-            error={maxTokens.error}
-            disabled={maxTokens.disabled || isDisabled}
-          />
-
-          <NumberInputSetting
-            label="Max Retries"
-            tooltip="Number of retry attempts on transient failures like rate limits or network errors."
-            min={0}
-            max={10}
-            value={maxRetries.value}
-            onChange={maxRetries.onChange}
-            error={maxRetries.error}
-            disabled={maxRetries.disabled || isDisabled}
-          />
+      {/* Phase selection */}
+      <div className="mt-4 pt-4 border-t border-border">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-foreground">Use in phases</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {isRestricted
+                ? `${enabledPhaseCount} selected · This list is an allowlist`
+                : 'Default: enabled for all phases'}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => phases.onChange({})}
+            disabled={phases.disabled || !isRestricted}
+            className="text-xs font-medium text-muted-foreground hover:text-foreground disabled:opacity-50 disabled:pointer-events-none"
+          >
+            Reset to all
+          </button>
         </div>
 
-        <SliderSetting
-          label="Temperature"
-          tooltip="Controls randomness in responses. 0.0 = deterministic, 2.0 = very creative. Recommended: 0.5-0.8 for code tasks."
-          min={0}
-          max={2}
-          step={0.1}
-          value={temperature.value}
-          onChange={temperature.onChange}
-          error={temperature.error}
-          disabled={temperature.disabled || isDisabled}
-          showValue
-          formatValue={(v) => v.toFixed(1)}
-        />
-
-        <DurationInputSetting
-          label="Timeout"
-          tooltip="Per-request timeout for this agent. Example: '5m' for 5 minutes."
-          value={timeout.value}
-          onChange={timeout.onChange}
-          error={timeout.error}
-          disabled={timeout.disabled || isDisabled}
-        />
+        <div className="mt-3 flex flex-wrap gap-2">
+          {phaseKeys.map((phase) => {
+            const active = isPhaseEnabled(phase);
+            const label = PHASE_LABELS[phase] || phase;
+            return (
+              <button
+                key={phase}
+                type="button"
+                onClick={() => togglePhase(phase)}
+                disabled={phases.disabled}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md border transition-colors ${
+                  active
+                    ? 'bg-background text-foreground border-border shadow-sm'
+                    : 'bg-muted text-muted-foreground border-border hover:bg-accent/60 hover:text-foreground'
+                } disabled:opacity-50 disabled:pointer-events-none`}
+                title={phase}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
 }
 
 export default AgentCard;
+
