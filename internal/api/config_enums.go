@@ -28,7 +28,7 @@ func (s *Server) handleGetEnums(w http.ResponseWriter, _ *http.Request) {
 		WorktreeModes:    []string{"always", "parallel", "disabled"},
 		MergeStrategies:  []string{"merge", "squash", "rebase"},
 		ReasoningEfforts: []string{"minimal", "low", "medium", "high", "xhigh"},
-		Agents:           []string{"claude", "gemini", "codex", "copilot"},
+		Agents:           []string{"claude", "gemini", "codex", "copilot", "opencode"},
 		Phases:           []string{"refine", "analyze", "plan", "execute"},
 		PhaseModelKeys:   []string{"refine", "analyze", "moderate", "synthesize", "plan", "execute"},
 	}

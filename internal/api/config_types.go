@@ -125,11 +125,12 @@ type ExecutePhaseConfigResponse struct {
 
 // AgentsConfigResponse represents all agent configurations.
 type AgentsConfigResponse struct {
-	Default string                  `json:"default"`
-	Claude  FullAgentConfigResponse `json:"claude"`
-	Gemini  FullAgentConfigResponse `json:"gemini"`
-	Codex   FullAgentConfigResponse `json:"codex"`
-	Copilot FullAgentConfigResponse `json:"copilot"`
+	Default  string                  `json:"default"`
+	Claude   FullAgentConfigResponse `json:"claude"`
+	Gemini   FullAgentConfigResponse `json:"gemini"`
+	Codex    FullAgentConfigResponse `json:"codex"`
+	Copilot  FullAgentConfigResponse `json:"copilot"`
+	OpenCode FullAgentConfigResponse `json:"opencode"`
 }
 
 // FullAgentConfigResponse represents complete agent configuration.
@@ -330,11 +331,12 @@ type ExecutePhaseConfigUpdate struct {
 
 // AgentsConfigUpdate represents agents configuration update.
 type AgentsConfigUpdate struct {
-	Default *string                `json:"default,omitempty"`
-	Claude  *FullAgentConfigUpdate `json:"claude,omitempty"`
-	Gemini  *FullAgentConfigUpdate `json:"gemini,omitempty"`
+	Default  *string                `json:"default,omitempty"`
+	Claude   *FullAgentConfigUpdate `json:"claude,omitempty"`
+	Gemini   *FullAgentConfigUpdate `json:"gemini,omitempty"`
 	Codex   *FullAgentConfigUpdate `json:"codex,omitempty"`
 	Copilot *FullAgentConfigUpdate `json:"copilot,omitempty"`
+	OpenCode *FullAgentConfigUpdate `json:"opencode,omitempty"`
 }
 
 // FullAgentConfigUpdate represents complete agent update.

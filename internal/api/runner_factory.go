@@ -157,10 +157,11 @@ func buildAgentPhaseModels(agents config.AgentsConfig) map[string]map[string]str
 	result := make(map[string]map[string]string)
 
 	agentMap := map[string]config.AgentConfig{
-		"claude":  agents.Claude,
-		"gemini":  agents.Gemini,
-		"codex":   agents.Codex,
-		"copilot": agents.Copilot,
+		"claude":   agents.Claude,
+		"gemini":   agents.Gemini,
+		"codex":    agents.Codex,
+		"copilot":  agents.Copilot,
+		"opencode": agents.OpenCode,
 	}
 
 	for name, cfg := range agentMap {

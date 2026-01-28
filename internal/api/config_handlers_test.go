@@ -162,6 +162,9 @@ func TestHandleGetEnums(t *testing.T) {
 	if !containsString(enums.Agents, "copilot") {
 		t.Error("expected agents to include copilot")
 	}
+	if !containsString(enums.Agents, "opencode") {
+		t.Error("expected agents to include opencode")
+	}
 }
 
 func TestHandleValidateConfig(t *testing.T) {

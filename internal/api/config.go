@@ -281,6 +281,18 @@ func (s *Server) handleGetAgents(w http.ResponseWriter, _ *http.Request) {
 			},
 			"available": true,
 		},
+		{
+			"name":        "opencode",
+			"displayName": "OpenCode",
+			// Synced with internal/adapters/cli/opencode.go
+			"models": []string{
+				"qwen2.5-coder",
+				"deepseek-coder-v2",
+				"llama3.1",
+				"deepseek-r1",
+			},
+			"available": true,
+		},
 	}
 
 	respondJSON(w, http.StatusOK, agents)
@@ -390,11 +402,12 @@ func configToFullResponse(cfg *config.Config) FullConfigResponse {
 			},
 		},
 		Agents: AgentsConfigResponse{
-			Default: cfg.Agents.Default,
-			Claude:  agentConfigToResponse(&cfg.Agents.Claude),
-			Gemini:  agentConfigToResponse(&cfg.Agents.Gemini),
-			Codex:   agentConfigToResponse(&cfg.Agents.Codex),
-			Copilot: agentConfigToResponse(&cfg.Agents.Copilot),
+			Default:  cfg.Agents.Default,
+			Claude:   agentConfigToResponse(&cfg.Agents.Claude),
+			Gemini:   agentConfigToResponse(&cfg.Agents.Gemini),
+			Codex:    agentConfigToResponse(&cfg.Agents.Codex),
+			Copilot:  agentConfigToResponse(&cfg.Agents.Copilot),
+			OpenCode: agentConfigToResponse(&cfg.Agents.OpenCode),
 		},
 		State: StateConfigResponse{
 			Backend:    cfg.State.Backend,
@@ -675,6 +688,9 @@ func applyAgentsUpdates(cfg *config.AgentsConfig, update *AgentsConfigUpdate) {
 	}
 	if update.Copilot != nil {
 		applyAgentUpdates(&cfg.Copilot, update.Copilot)
+	}
+	if update.OpenCode != nil {
+		applyAgentUpdates(&cfg.OpenCode, update.OpenCode)
 	}
 }
 

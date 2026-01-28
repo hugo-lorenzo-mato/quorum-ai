@@ -139,13 +139,14 @@ func TestFullConfigUpdate_PointerFields(t *testing.T) {
 	}
 }
 
-func TestAgentsConfigResponse_IncludesCopilot(t *testing.T) {
+func TestAgentsConfigResponse_IncludesBuiltins(t *testing.T) {
 	response := AgentsConfigResponse{
-		Default: "claude",
-		Claude:  FullAgentConfigResponse{Enabled: true},
-		Gemini:  FullAgentConfigResponse{Enabled: false},
-		Codex:   FullAgentConfigResponse{Enabled: false},
-		Copilot: FullAgentConfigResponse{Enabled: false},
+		Default:  "claude",
+		Claude:   FullAgentConfigResponse{Enabled: true},
+		Gemini:   FullAgentConfigResponse{Enabled: false},
+		Codex:    FullAgentConfigResponse{Enabled: false},
+		Copilot:  FullAgentConfigResponse{Enabled: false},
+		OpenCode: FullAgentConfigResponse{Enabled: false},
 	}
 
 	data, err := json.Marshal(response)
@@ -158,8 +159,10 @@ func TestAgentsConfigResponse_IncludesCopilot(t *testing.T) {
 		t.Fatalf("unmarshal agents response: %v", err)
 	}
 
-	if _, ok := result["copilot"]; !ok {
-		t.Error("expected copilot key in agents response")
+	for _, key := range []string{"claude", "gemini", "codex", "copilot", "opencode"} {
+		if _, ok := result[key]; !ok {
+			t.Errorf("expected %s key in agents response", key)
+		}
 	}
 }
 
