@@ -17,6 +17,9 @@ export function PhasesTab() {
         <h2 className="text-lg font-semibold text-foreground">Workflow Phases</h2>
         <p className="text-sm text-muted-foreground">
           Configure how each phase of the workflow is executed.
+          <span className="block mt-1 text-xs">
+            Note: phase-specific model and reasoning settings live under Settings → Agents (Per-phase overrides).
+          </span>
         </p>
       </div>
 

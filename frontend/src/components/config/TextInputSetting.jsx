@@ -7,6 +7,7 @@ export function TextInputSetting({
   tooltip,
   value,
   onChange,
+  suggestions,
   disabled = false,
   error,
   required = false,
@@ -16,6 +17,7 @@ export function TextInputSetting({
   autoComplete = 'off',
 }) {
   const inputId = id || `input-${label?.replace(/\s+/g, '-').toLowerCase()}`;
+  const datalistId = suggestions?.length ? `${inputId}-list` : undefined;
 
   return (
     <div className="py-3">
@@ -46,6 +48,7 @@ export function TextInputSetting({
         disabled={disabled}
         placeholder={placeholder}
         autoComplete={autoComplete}
+        list={datalistId}
         className={`
           w-full h-10 px-3
           border rounded-lg bg-background text-foreground
@@ -58,6 +61,14 @@ export function TextInputSetting({
         aria-invalid={!!error}
         aria-describedby={error ? `${inputId}-error` : undefined}
       />
+
+      {datalistId && (
+        <datalist id={datalistId}>
+          {Array.from(new Set(suggestions)).map((opt) => (
+            <option key={opt} value={opt} />
+          ))}
+        </datalist>
+      )}
 
       <ValidationMessage error={error} />
     </div>

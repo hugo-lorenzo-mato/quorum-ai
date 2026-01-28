@@ -72,8 +72,8 @@ export function AnalyzePhaseCard() {
               options={AGENT_OPTIONS}
             />
             <TextInputSetting
-              label="Model Override"
-              tooltip="Optional: specific model to use (leave empty for default)"
+              label="Model override (analyze only)"
+              tooltip="Optional: overrides the agent's per-phase model setting for analyze in single-agent mode. Leave empty to use the agent defaults."
               value={analyzeConfig.single_agent?.model || ''}
               onChange={(val) => setField('phases.analyze.single_agent.model', val)}
               placeholder="e.g., claude-3-opus"
