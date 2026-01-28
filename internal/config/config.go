@@ -209,11 +209,12 @@ type PlanSynthesizerConfig struct {
 
 // AgentsConfig configures available AI agents.
 type AgentsConfig struct {
-	Default string      `mapstructure:"default"`
-	Claude  AgentConfig `mapstructure:"claude"`
-	Gemini  AgentConfig `mapstructure:"gemini"`
-	Codex   AgentConfig `mapstructure:"codex"`
-	Copilot AgentConfig `mapstructure:"copilot"`
+	Default  string      `mapstructure:"default"`
+	Claude   AgentConfig `mapstructure:"claude"`
+	Gemini   AgentConfig `mapstructure:"gemini"`
+	Codex    AgentConfig `mapstructure:"codex"`
+	Copilot  AgentConfig `mapstructure:"copilot"`
+	OpenCode AgentConfig `mapstructure:"opencode"`
 }
 
 // GetAgentConfig returns the config for a named agent, or nil if not found.
@@ -227,6 +228,8 @@ func (c AgentsConfig) GetAgentConfig(name string) *AgentConfig {
 		return &c.Codex
 	case "copilot":
 		return &c.Copilot
+	case "opencode":
+		return &c.OpenCode
 	default:
 		return nil
 	}
@@ -236,10 +239,11 @@ func (c AgentsConfig) GetAgentConfig(name string) *AgentConfig {
 func (c AgentsConfig) ListEnabledForPhase(phase string) []string {
 	var result []string
 	agents := map[string]AgentConfig{
-		"claude":  c.Claude,
-		"gemini":  c.Gemini,
-		"codex":   c.Codex,
-		"copilot": c.Copilot,
+		"claude":   c.Claude,
+		"gemini":   c.Gemini,
+		"codex":    c.Codex,
+		"copilot":  c.Copilot,
+		"opencode": c.OpenCode,
 	}
 	for name, cfg := range agents {
 		if cfg.IsEnabledForPhase(phase) {

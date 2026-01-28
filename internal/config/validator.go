@@ -154,7 +154,7 @@ func (v *Validator) validateWorkflow(cfg *WorkflowConfig) {
 
 func (v *Validator) validateAgents(cfg *AgentsConfig) {
 	validDefaults := map[string]bool{
-		"claude": true, "gemini": true, "codex": true, "copilot": true,
+		"claude": true, "gemini": true, "codex": true, "copilot": true, "opencode": true,
 	}
 	if !validDefaults[cfg.Default] {
 		v.addError("agents.default", cfg.Default, "unknown agent")
@@ -162,10 +162,11 @@ func (v *Validator) validateAgents(cfg *AgentsConfig) {
 
 	// Validate that default agent is enabled
 	defaultEnabled := map[string]bool{
-		"claude":  cfg.Claude.Enabled,
-		"gemini":  cfg.Gemini.Enabled,
-		"codex":   cfg.Codex.Enabled,
-		"copilot": cfg.Copilot.Enabled,
+		"claude":   cfg.Claude.Enabled,
+		"gemini":   cfg.Gemini.Enabled,
+		"codex":    cfg.Codex.Enabled,
+		"copilot":  cfg.Copilot.Enabled,
+		"opencode": cfg.OpenCode.Enabled,
 	}
 	if !defaultEnabled[cfg.Default] {
 		v.addError("agents.default", cfg.Default, "default agent must be enabled")
@@ -175,6 +176,7 @@ func (v *Validator) validateAgents(cfg *AgentsConfig) {
 	v.validateAgent("agents.gemini", &cfg.Gemini)
 	v.validateAgent("agents.codex", &cfg.Codex)
 	v.validateAgent("agents.copilot", &cfg.Copilot)
+	v.validateAgent("agents.opencode", &cfg.OpenCode)
 }
 
 func (v *Validator) validateAgent(prefix string, cfg *AgentConfig) {
@@ -352,10 +354,11 @@ func (v *Validator) validatePhases(cfg *PhasesConfig, agents *AgentsConfig) {
 func (v *Validator) validatePhaseParticipation(cfg *PhasesConfig, agents *AgentsConfig) {
 	// Build agent config map for easy lookup
 	agentConfigs := map[string]*AgentConfig{
-		"claude":  &agents.Claude,
-		"gemini":  &agents.Gemini,
-		"codex":   &agents.Codex,
-		"copilot": &agents.Copilot,
+		"claude":   &agents.Claude,
+		"gemini":   &agents.Gemini,
+		"codex":    &agents.Codex,
+		"copilot":  &agents.Copilot,
+		"opencode": &agents.OpenCode,
 	}
 
 	// 1. Validate refiner agent has phases.refine: true
@@ -448,7 +451,7 @@ func (v *Validator) validateRefiner(cfg *RefinerConfig, agents *AgentsConfig) {
 	}
 
 	validAgents := map[string]bool{
-		"claude": true, "gemini": true, "codex": true, "copilot": true,
+		"claude": true, "gemini": true, "codex": true, "copilot": true, "opencode": true,
 	}
 	if !validAgents[cfg.Agent] {
 		v.addError("phases.analyze.refiner.agent", cfg.Agent, "unknown agent")
@@ -457,10 +460,11 @@ func (v *Validator) validateRefiner(cfg *RefinerConfig, agents *AgentsConfig) {
 
 	// Validate that the specified agent is enabled
 	agentEnabled := map[string]bool{
-		"claude":  agents.Claude.Enabled,
-		"gemini":  agents.Gemini.Enabled,
-		"codex":   agents.Codex.Enabled,
-		"copilot": agents.Copilot.Enabled,
+		"claude":   agents.Claude.Enabled,
+		"gemini":   agents.Gemini.Enabled,
+		"codex":    agents.Codex.Enabled,
+		"copilot":  agents.Copilot.Enabled,
+		"opencode": agents.OpenCode.Enabled,
 	}
 	if !agentEnabled[cfg.Agent] {
 		v.addError("phases.analyze.refiner.agent", cfg.Agent, "specified agent must be enabled")
@@ -473,7 +477,7 @@ func (v *Validator) validateModerator(cfg *ModeratorConfig, agents *AgentsConfig
 	}
 
 	validAgents := map[string]bool{
-		"claude": true, "gemini": true, "codex": true, "copilot": true,
+		"claude": true, "gemini": true, "codex": true, "copilot": true, "opencode": true,
 	}
 	if !validAgents[cfg.Agent] {
 		v.addError("phases.analyze.moderator.agent", cfg.Agent, "unknown agent")
@@ -482,10 +486,11 @@ func (v *Validator) validateModerator(cfg *ModeratorConfig, agents *AgentsConfig
 
 	// Validate that the specified agent is enabled
 	agentEnabled := map[string]bool{
-		"claude":  agents.Claude.Enabled,
-		"gemini":  agents.Gemini.Enabled,
-		"codex":   agents.Codex.Enabled,
-		"copilot": agents.Copilot.Enabled,
+		"claude":   agents.Claude.Enabled,
+		"gemini":   agents.Gemini.Enabled,
+		"codex":    agents.Codex.Enabled,
+		"copilot":  agents.Copilot.Enabled,
+		"opencode": agents.OpenCode.Enabled,
 	}
 	if !agentEnabled[cfg.Agent] {
 		v.addError("phases.analyze.moderator.agent", cfg.Agent, "specified agent must be enabled")
@@ -520,7 +525,7 @@ func (v *Validator) validateSingleAgent(cfg *SingleAgentConfig, moderator *Moder
 	}
 
 	validAgents := map[string]bool{
-		"claude": true, "gemini": true, "codex": true, "copilot": true,
+		"claude": true, "gemini": true, "codex": true, "copilot": true, "opencode": true,
 	}
 	if !validAgents[cfg.Agent] {
 		v.addError("phases.analyze.single_agent.agent", cfg.Agent, "unknown agent")
@@ -529,10 +534,11 @@ func (v *Validator) validateSingleAgent(cfg *SingleAgentConfig, moderator *Moder
 
 	// Validate that the specified agent is enabled
 	agentEnabled := map[string]bool{
-		"claude":  agents.Claude.Enabled,
-		"gemini":  agents.Gemini.Enabled,
-		"codex":   agents.Codex.Enabled,
-		"copilot": agents.Copilot.Enabled,
+		"claude":   agents.Claude.Enabled,
+		"gemini":   agents.Gemini.Enabled,
+		"codex":    agents.Codex.Enabled,
+		"copilot":  agents.Copilot.Enabled,
+		"opencode": agents.OpenCode.Enabled,
 	}
 	if !agentEnabled[cfg.Agent] {
 		v.addError("phases.analyze.single_agent.agent", cfg.Agent, "specified agent must be enabled")
@@ -546,7 +552,7 @@ func (v *Validator) validateSynthesizer(prefix, agent string, agents *AgentsConf
 	}
 
 	validAgents := map[string]bool{
-		"claude": true, "gemini": true, "codex": true, "copilot": true,
+		"claude": true, "gemini": true, "codex": true, "copilot": true, "opencode": true,
 	}
 	if !validAgents[agent] {
 		v.addError(prefix+".agent", agent, "unknown agent")
@@ -555,10 +561,11 @@ func (v *Validator) validateSynthesizer(prefix, agent string, agents *AgentsConf
 
 	// Validate that the specified agent is enabled
 	agentEnabled := map[string]bool{
-		"claude":  agents.Claude.Enabled,
-		"gemini":  agents.Gemini.Enabled,
-		"codex":   agents.Codex.Enabled,
-		"copilot": agents.Copilot.Enabled,
+		"claude":   agents.Claude.Enabled,
+		"gemini":   agents.Gemini.Enabled,
+		"codex":    agents.Codex.Enabled,
+		"copilot":  agents.Copilot.Enabled,
+		"opencode": agents.OpenCode.Enabled,
 	}
 	if !agentEnabled[agent] {
 		v.addError(prefix+".agent", agent, "specified agent must be enabled")

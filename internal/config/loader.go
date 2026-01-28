@@ -179,6 +179,11 @@ func (l *Loader) setDefaults() {
 	l.v.SetDefault("agents.copilot.model", "")
 	l.v.SetDefault("agents.copilot.max_tokens", 16384)
 	l.v.SetDefault("agents.copilot.temperature", 0.7)
+	l.v.SetDefault("agents.opencode.enabled", false)
+	l.v.SetDefault("agents.opencode.path", "opencode")
+	l.v.SetDefault("agents.opencode.model", "")
+	l.v.SetDefault("agents.opencode.max_tokens", 16384)
+	l.v.SetDefault("agents.opencode.temperature", 0.7)
 
 	// State defaults
 	l.v.SetDefault("state.backend", "sqlite") // "sqlite" (recommended) or "json"

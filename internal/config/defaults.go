@@ -83,6 +83,26 @@ agents:
     phases:
       moderate: true
 
+  # OpenCode - Local LLM agent via Ollama (MCP-compatible)
+  # Requires: Ollama running at localhost:11434 with compatible models
+  # Profiles: coder (qwen2.5-coder, deepseek-coder-v2), architect (llama3.1, deepseek-r1)
+  opencode:
+    enabled: false
+    path: opencode
+    model: qwen2.5-coder
+    # Phase-specific models: use coder models for execution, architect for analysis/planning
+    phase_models:
+      refine: llama3.1
+      analyze: llama3.1
+      moderate: llama3.1
+      synthesize: llama3.1
+      plan: llama3.1
+      execute: qwen2.5-coder
+    phases:
+      analyze: true
+      plan: true
+      execute: true
+
 # Git configuration
 # Tasks run in isolated worktrees on branch quorum/<task-id>.
 # After completion: commit -> push -> PR (configurable).
