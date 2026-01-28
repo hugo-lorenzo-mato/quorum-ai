@@ -242,6 +242,15 @@ func runChat(_ *cobra.Command, _ []string) error {
 			"gemini-3-pro-preview",
 		}
 	}
+	if cfg.Agents.OpenCode.Enabled {
+		availableAgents = append(availableAgents, "opencode")
+		agentModels["opencode"] = []string{
+			"qwen2.5-coder",
+			"deepseek-coder-v2",
+			"llama3.1",
+			"deepseek-r1",
+		}
+	}
 
 	// Create chat model with workflow runner, config, and version
 	model := chat.NewModel(controlPlane, registry, defaultAgent, defaultModel)
@@ -326,10 +335,11 @@ func createWorkflowRunner(
 		DenyTools:    cfg.Workflow.DenyTools,
 		DefaultAgent: defaultAgent,
 		AgentPhaseModels: map[string]map[string]string{
-			"claude":  cfg.Agents.Claude.PhaseModels,
-			"gemini":  cfg.Agents.Gemini.PhaseModels,
-			"codex":   cfg.Agents.Codex.PhaseModels,
-			"copilot": cfg.Agents.Copilot.PhaseModels,
+			"claude":   cfg.Agents.Claude.PhaseModels,
+			"gemini":   cfg.Agents.Gemini.PhaseModels,
+			"codex":    cfg.Agents.Codex.PhaseModels,
+			"copilot":  cfg.Agents.Copilot.PhaseModels,
+			"opencode": cfg.Agents.OpenCode.PhaseModels,
 		},
 		WorktreeAutoClean: cfg.Git.AutoClean,
 		WorktreeMode:      cfg.Git.WorktreeMode,
@@ -656,10 +666,11 @@ func createWorkflowRunnerWithTrace(
 		DenyTools:    cfg.Workflow.DenyTools,
 		DefaultAgent: defaultAgent,
 		AgentPhaseModels: map[string]map[string]string{
-			"claude":  cfg.Agents.Claude.PhaseModels,
-			"gemini":  cfg.Agents.Gemini.PhaseModels,
-			"codex":   cfg.Agents.Codex.PhaseModels,
-			"copilot": cfg.Agents.Copilot.PhaseModels,
+			"claude":   cfg.Agents.Claude.PhaseModels,
+			"gemini":   cfg.Agents.Gemini.PhaseModels,
+			"codex":    cfg.Agents.Codex.PhaseModels,
+			"copilot":  cfg.Agents.Copilot.PhaseModels,
+			"opencode": cfg.Agents.OpenCode.PhaseModels,
 		},
 		WorktreeAutoClean: cfg.Git.AutoClean,
 		WorktreeMode:      cfg.Git.WorktreeMode,

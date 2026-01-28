@@ -241,10 +241,11 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 		DenyTools:    cfg.Workflow.DenyTools,
 		DefaultAgent: defaultAgent,
 		AgentPhaseModels: map[string]map[string]string{
-			"claude":  cfg.Agents.Claude.PhaseModels,
-			"gemini":  cfg.Agents.Gemini.PhaseModels,
-			"codex":   cfg.Agents.Codex.PhaseModels,
-			"copilot": cfg.Agents.Copilot.PhaseModels,
+			"claude":   cfg.Agents.Claude.PhaseModels,
+			"gemini":   cfg.Agents.Gemini.PhaseModels,
+			"codex":    cfg.Agents.Codex.PhaseModels,
+			"copilot":  cfg.Agents.Copilot.PhaseModels,
+			"opencode": cfg.Agents.OpenCode.PhaseModels,
 		},
 		WorktreeAutoClean: cfg.Git.AutoClean,
 		WorktreeMode:      cfg.Git.WorktreeMode,
@@ -551,6 +552,20 @@ func configureAgentsFromConfig(registry *cli.Registry, cfg *config.Config, _ *co
 			ReasoningEffort:           cfg.Agents.Copilot.ReasoningEffort,
 			ReasoningEffortPhases:     cfg.Agents.Copilot.ReasoningEffortPhases,
 			TokenDiscrepancyThreshold: getTokenDiscrepancyThreshold(cfg.Agents.Copilot.TokenDiscrepancyThreshold),
+		})
+	}
+
+	// Configure OpenCode
+	if cfg.Agents.OpenCode.Enabled {
+		registry.Configure("opencode", cli.AgentConfig{
+			Name:                      "opencode",
+			Path:                      cfg.Agents.OpenCode.Path,
+			Model:                     cfg.Agents.OpenCode.Model,
+			Timeout:                   5 * time.Minute,
+			Phases:                    cfg.Agents.OpenCode.Phases,
+			ReasoningEffort:           cfg.Agents.OpenCode.ReasoningEffort,
+			ReasoningEffortPhases:     cfg.Agents.OpenCode.ReasoningEffortPhases,
+			TokenDiscrepancyThreshold: getTokenDiscrepancyThreshold(cfg.Agents.OpenCode.TokenDiscrepancyThreshold),
 		})
 	}
 
