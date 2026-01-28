@@ -1102,5 +1102,78 @@ func (m *SQLiteStateManager) PurgeAllWorkflows(ctx context.Context) (int, error)
 	return count, nil
 }
 
+// DeleteWorkflow deletes a single workflow by ID.
+// Returns error if workflow does not exist.
+func (m *SQLiteStateManager) DeleteWorkflow(ctx context.Context, id core.WorkflowID) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	// Get report_path before deleting (for cleanup)
+	var reportPath sql.NullString
+	_ = m.db.QueryRowContext(ctx, "SELECT report_path FROM workflows WHERE id = ?", string(id)).Scan(&reportPath)
+
+	err := m.retryWrite(ctx, "deleting workflow", func() error {
+		// Check workflow exists
+		var exists int
+		err := m.db.QueryRowContext(ctx, "SELECT 1 FROM workflows WHERE id = ?", string(id)).Scan(&exists)
+		if err != nil {
+			return fmt.Errorf("workflow not found: %s", id)
+		}
+
+		// Delete checkpoints for tasks belonging to this workflow
+		_, err = m.db.ExecContext(ctx, `
+			DELETE FROM checkpoints
+			WHERE task_id IN (SELECT id FROM tasks WHERE workflow_id = ?)
+		`, string(id))
+		if err != nil {
+			return fmt.Errorf("deleting checkpoints: %w", err)
+		}
+
+		// Delete tasks
+		_, err = m.db.ExecContext(ctx, "DELETE FROM tasks WHERE workflow_id = ?", string(id))
+		if err != nil {
+			return fmt.Errorf("deleting tasks: %w", err)
+		}
+
+		// Delete workflow
+		_, err = m.db.ExecContext(ctx, "DELETE FROM workflows WHERE id = ?", string(id))
+		if err != nil {
+			return fmt.Errorf("deleting workflow: %w", err)
+		}
+
+		// Clear active workflow if it matches
+		_, err = m.db.ExecContext(ctx, "DELETE FROM active_workflow WHERE workflow_id = ?", string(id))
+		if err != nil {
+			return fmt.Errorf("clearing active workflow: %w", err)
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return err
+	}
+
+	// Delete report directory (best effort, don't fail if it doesn't exist)
+	m.deleteReportDirectory(reportPath.String, string(id))
+
+	return nil
+}
+
+// deleteReportDirectory removes the workflow's report directory.
+// It tries the stored reportPath first, then falls back to default location.
+func (m *SQLiteStateManager) deleteReportDirectory(reportPath, workflowID string) {
+	// Try stored report path first
+	if reportPath != "" {
+		if err := os.RemoveAll(reportPath); err == nil {
+			return
+		}
+	}
+
+	// Fall back to default location: .quorum/runs/{workflow-id}
+	defaultPath := filepath.Join(".quorum", "runs", workflowID)
+	_ = os.RemoveAll(defaultPath)
+}
+
 // Verify that SQLiteStateManager implements core.StateManager.
 var _ core.StateManager = (*SQLiteStateManager)(nil)

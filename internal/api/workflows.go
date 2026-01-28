@@ -337,10 +337,35 @@ func (s *Server) handleUpdateWorkflow(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleDeleteWorkflow deletes a workflow.
-func (s *Server) handleDeleteWorkflow(w http.ResponseWriter, _ *http.Request) {
-	// Note: StateManager interface doesn't have a Delete method yet
-	// For now, return not implemented
-	respondError(w, http.StatusNotImplemented, "delete not implemented")
+func (s *Server) handleDeleteWorkflow(w http.ResponseWriter, r *http.Request) {
+	if s.stateManager == nil {
+		respondError(w, http.StatusNotFound, "workflow not found")
+		return
+	}
+
+	ctx := r.Context()
+	workflowID := chi.URLParam(r, "workflowID")
+
+	// Load workflow to check it exists and is not running
+	state, err := s.stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
+	if err != nil || state == nil {
+		respondError(w, http.StatusNotFound, "workflow not found")
+		return
+	}
+
+	// Prevent deletion of running workflows
+	if state.Status == core.WorkflowStatusRunning {
+		respondError(w, http.StatusConflict, "cannot delete running workflow")
+		return
+	}
+
+	// Delete the workflow
+	if err := s.stateManager.DeleteWorkflow(ctx, core.WorkflowID(workflowID)); err != nil {
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // handleActivateWorkflow sets a workflow as active.

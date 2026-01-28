@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -284,6 +285,14 @@ func (m *mockStateManager) PurgeAllWorkflows(_ context.Context) (int, error) {
 		return 1, nil
 	}
 	return 0, nil
+}
+
+func (m *mockStateManager) DeleteWorkflow(_ context.Context, id core.WorkflowID) error {
+	if m.state != nil && m.state.WorkflowID == id {
+		m.state = nil
+		return nil
+	}
+	return fmt.Errorf("workflow not found: %s", id)
 }
 
 func TestRunner_SetDryRun(t *testing.T) {

@@ -302,6 +302,17 @@ func (m *MockStateManager) PurgeAllWorkflows(ctx context.Context) (int, error) {
 	return count, nil
 }
 
+// DeleteWorkflow mocks deleting a single workflow.
+func (m *MockStateManager) DeleteWorkflow(ctx context.Context, id core.WorkflowID) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.state != nil && m.state.WorkflowID == id {
+		m.state = nil
+		return nil
+	}
+	return core.ErrNotFound("workflow", string(id))
+}
+
 // SetState sets the mock state.
 func (m *MockStateManager) SetState(state *core.WorkflowState) {
 	m.mu.Lock()

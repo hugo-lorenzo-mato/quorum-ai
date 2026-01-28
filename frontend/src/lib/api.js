@@ -18,6 +18,11 @@ async function request(endpoint, options = {}) {
     throw new Error(message || 'Request failed');
   }
 
+  // Handle 204 No Content
+  if (response.status === 204) {
+    return null;
+  }
+
   return response.json();
 }
 
@@ -54,6 +59,8 @@ export const workflowApi = {
   pause: (id) => request(`/workflows/${id}/pause`, { method: 'POST' }),
 
   resume: (id) => request(`/workflows/${id}/resume`, { method: 'POST' }),
+
+  delete: (id) => request(`/workflows/${id}/`, { method: 'DELETE' }),
 };
 
 // Chat API

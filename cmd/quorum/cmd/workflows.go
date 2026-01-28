@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -167,4 +168,99 @@ func truncateString(s string, maxLen int) string {
 		return s
 	}
 	return s[:maxLen-3] + "..."
+}
+
+// Delete command
+var deleteCmd = &cobra.Command{
+	Use:   "delete <workflow-id>",
+	Short: "Delete a workflow",
+	Long: `Delete a specific workflow by its ID.
+
+This permanently removes the workflow and all its associated data including
+tasks, checkpoints, and analysis results.
+
+Running workflows cannot be deleted. Cancel them first if needed.
+
+Examples:
+  quorum workflow delete abc123
+  quorum workflow delete abc123 --force`,
+	Args: cobra.ExactArgs(1),
+	RunE: runDelete,
+}
+
+var deleteForce bool
+
+func init() {
+	workflowCmd.AddCommand(deleteCmd)
+	deleteCmd.Flags().BoolVarP(&deleteForce, "force", "f", false, "Skip confirmation prompt")
+}
+
+// workflowCmd is a parent command for workflow subcommands
+var workflowCmd = &cobra.Command{
+	Use:   "workflow",
+	Short: "Manage workflows",
+	Long:  `Commands for managing quorum workflows.`,
+}
+
+func init() {
+	rootCmd.AddCommand(workflowCmd)
+}
+
+func runDelete(_ *cobra.Command, args []string) error {
+	ctx := context.Background()
+	workflowID := core.WorkflowID(args[0])
+
+	// Load configuration
+	loader := config.NewLoader()
+	cfg, err := loader.Load()
+	if err != nil {
+		return fmt.Errorf("loading config: %w", err)
+	}
+
+	// Create state manager
+	stateManager, err := state.NewStateManager(cfg.State.EffectiveBackend(), cfg.State.Path)
+	if err != nil {
+		return fmt.Errorf("creating state manager: %w", err)
+	}
+	defer func() {
+		if closeErr := state.CloseStateManager(stateManager); closeErr != nil {
+			fmt.Fprintf(os.Stderr, "warning: closing state manager: %v\n", closeErr)
+		}
+	}()
+
+	// Load workflow to verify it exists and check status
+	wf, err := stateManager.LoadByID(ctx, workflowID)
+	if err != nil || wf == nil {
+		return fmt.Errorf("workflow not found: %s", workflowID)
+	}
+
+	// Prevent deletion of running workflows
+	if wf.Status == core.WorkflowStatusRunning {
+		return fmt.Errorf("cannot delete running workflow (use 'quorum cancel' first)")
+	}
+
+	// Confirmation prompt unless --force
+	if !deleteForce {
+		fmt.Printf("Delete workflow %s?\n", workflowID)
+		fmt.Printf("  Status: %s\n", formatStatus(wf.Status))
+		fmt.Printf("  Prompt: %s\n", truncateString(wf.Prompt, 60))
+		fmt.Print("\nThis action cannot be undone. Continue? [y/N] ")
+
+		reader := bufio.NewReader(os.Stdin)
+		response, _ := reader.ReadString('\n')
+		response = strings.TrimSpace(strings.ToLower(response))
+
+		if response != "y" && response != "yes" {
+			fmt.Println("Aborted.")
+			return nil
+		}
+	}
+
+	// Delete the workflow
+	if err := stateManager.DeleteWorkflow(ctx, workflowID); err != nil {
+		return fmt.Errorf("deleting workflow: %w", err)
+	}
+
+	fmt.Printf("Workflow %s deleted.\n", workflowID)
+	return nil
 }

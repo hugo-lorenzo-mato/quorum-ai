@@ -134,6 +134,13 @@ func NewCommandRegistry() *CommandRegistry {
 	})
 
 	r.Register(&Command{
+		Name:        "delete",
+		Aliases:     []string{"del", "rm"},
+		Description: "Delete a specific workflow",
+		Usage:       "/delete <workflow-id>",
+	})
+
+	r.Register(&Command{
 		Name:        "status",
 		Aliases:     []string{"s", "st"},
 		Description: "Show workflow status",

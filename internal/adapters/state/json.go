@@ -749,5 +749,59 @@ func (m *JSONStateManager) PurgeAllWorkflows(_ context.Context) (int, error) {
 	return deleted, nil
 }
 
+// DeleteWorkflow deletes a single workflow by ID.
+// Returns error if workflow does not exist.
+func (m *JSONStateManager) DeleteWorkflow(ctx context.Context, id core.WorkflowID) error {
+	workflowPath := m.workflowPath(id)
+
+	// Check workflow exists and get report_path for cleanup
+	if _, err := os.Stat(workflowPath); os.IsNotExist(err) {
+		return fmt.Errorf("workflow not found: %s", id)
+	}
+
+	// Load workflow to get report_path before deleting
+	var reportPath string
+	if state, err := m.LoadByID(ctx, id); err == nil && state != nil {
+		reportPath = state.ReportPath
+	}
+
+	// Remove workflow file
+	if err := os.Remove(workflowPath); err != nil {
+		return fmt.Errorf("removing workflow file: %w", err)
+	}
+
+	// Remove backup file if exists
+	backupPath := workflowPath + ".bak"
+	if _, err := os.Stat(backupPath); err == nil {
+		_ = os.Remove(backupPath)
+	}
+
+	// Clear active workflow if it matches
+	activeID, _ := m.GetActiveWorkflowID(ctx)
+	if activeID == id {
+		_ = m.DeactivateWorkflow(ctx)
+	}
+
+	// Delete report directory (best effort, don't fail if it doesn't exist)
+	m.deleteReportDirectory(reportPath, string(id))
+
+	return nil
+}
+
+// deleteReportDirectory removes the workflow's report directory.
+// It tries the stored reportPath first, then falls back to default location.
+func (m *JSONStateManager) deleteReportDirectory(reportPath, workflowID string) {
+	// Try stored report path first
+	if reportPath != "" {
+		if err := os.RemoveAll(reportPath); err == nil {
+			return
+		}
+	}
+
+	// Fall back to default location: .quorum/runs/{workflow-id}
+	defaultPath := filepath.Join(".quorum", "runs", workflowID)
+	_ = os.RemoveAll(defaultPath)
+}
+
 // Verify that JSONStateManager implements core.StateManager.
 var _ core.StateManager = (*JSONStateManager)(nil)

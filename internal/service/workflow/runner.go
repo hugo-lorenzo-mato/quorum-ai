@@ -30,6 +30,7 @@ type StateManager interface {
 	DeactivateWorkflow(ctx context.Context) error
 	ArchiveWorkflows(ctx context.Context) (int, error)
 	PurgeAllWorkflows(ctx context.Context) (int, error)
+	DeleteWorkflow(ctx context.Context, id core.WorkflowID) error
 }
 
 // ResumePointProvider determines where to resume a workflow.
@@ -1179,4 +1180,10 @@ func (r *Runner) ArchiveWorkflows(ctx context.Context) (int, error) {
 // Returns the number of workflows deleted.
 func (r *Runner) PurgeAllWorkflows(ctx context.Context) (int, error) {
 	return r.state.PurgeAllWorkflows(ctx)
+}
+
+// DeleteWorkflow deletes a single workflow by ID.
+// Returns error if workflow does not exist.
+func (r *Runner) DeleteWorkflow(ctx context.Context, workflowID string) error {
+	return r.state.DeleteWorkflow(ctx, core.WorkflowID(workflowID))
 }

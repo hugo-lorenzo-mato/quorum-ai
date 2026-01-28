@@ -23,7 +23,9 @@ import {
   Copy,
   RefreshCw,
   Pencil,
+  Trash2,
 } from 'lucide-react';
+import { ConfirmDialog } from '../components/config/ConfirmDialog';
 
 function normalizeWhitespace(s) {
   return String(s || '').replace(/\s+/g, ' ').trim();
@@ -98,14 +100,23 @@ function StatusBadge({ status }) {
   );
 }
 
-function WorkflowCard({ workflow, onClick }) {
+function WorkflowCard({ workflow, onClick, onDelete }) {
+  const canDelete = workflow.status !== 'running';
+
+  const handleDeleteClick = (e) => {
+    e.stopPropagation();
+    if (canDelete && onDelete) {
+      onDelete(workflow);
+    }
+  };
+
   return (
-    <button
+    <div
       onClick={onClick}
-      className="w-full text-left p-4 rounded-xl border border-border bg-card hover:border-muted-foreground/30 hover:shadow-md transition-all group"
+      className="relative w-full text-left p-4 rounded-xl border border-border bg-card hover:border-muted-foreground/30 hover:shadow-md transition-all group cursor-pointer"
     >
       <div className="flex items-start justify-between mb-3">
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0 pr-8">
           <p className="text-sm font-medium text-foreground line-clamp-2">
             {deriveWorkflowTitle(workflow)}
           </p>
@@ -117,8 +128,18 @@ function WorkflowCard({ workflow, onClick }) {
         <span>Phase: {workflow.current_phase || 'N/A'}</span>
         <span>Tasks: {workflow.task_count || 0}</span>
       </div>
-      <ChevronRight className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-    </button>
+      {/* Delete button - appears on hover */}
+      {canDelete && (
+        <button
+          onClick={handleDeleteClick}
+          className="absolute top-3 right-3 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-all"
+          title="Delete workflow"
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
+      )}
+      <ChevronRight className="absolute right-4 bottom-4 w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+    </div>
   );
 }
 
@@ -163,12 +184,27 @@ function TaskItem({ task, selected, onClick }) {
 }
 
 function WorkflowDetail({ workflow, tasks, onBack }) {
-  const { startWorkflow, pauseWorkflow, resumeWorkflow, stopWorkflow, updateWorkflow, error, clearError } = useWorkflowStore();
+  const { startWorkflow, pauseWorkflow, resumeWorkflow, stopWorkflow, deleteWorkflow, updateWorkflow, error, clearError } = useWorkflowStore();
   const notifyInfo = useUIStore((s) => s.notifyInfo);
   const notifyError = useUIStore((s) => s.notifyError);
+  const navigate = useNavigate();
 
   // Edit modal state
   const [editModalOpen, setEditModalOpen] = useState(false);
+
+  // Delete confirmation state
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const canDelete = workflow.status !== 'running';
+
+  const handleDelete = useCallback(async () => {
+    const success = await deleteWorkflow(workflow.id);
+    if (success) {
+      notifyInfo('Workflow deleted');
+      navigate('/workflows');
+    } else {
+      notifyError('Failed to delete workflow');
+    }
+  }, [workflow.id, deleteWorkflow, notifyInfo, notifyError, navigate]);
   const canEdit = workflow.status === 'pending';
   const displayTitle = workflow.title || deriveWorkflowTitle(workflow, tasks);
 
@@ -625,6 +661,16 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
               Retry
             </button>
           )}
+          {canDelete && (
+            <button
+              onClick={() => setDeleteDialogOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-destructive/10 text-destructive text-sm font-medium hover:bg-destructive/20 transition-colors"
+              title="Delete workflow"
+            >
+              <Trash2 className="w-4 h-4" />
+              Delete
+            </button>
+          )}
         </div>
       </div>
 
@@ -842,6 +888,17 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
         workflow={workflow}
         onSave={handleSaveWorkflow}
       />
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={deleteDialogOpen}
+        onClose={() => setDeleteDialogOpen(false)}
+        onConfirm={handleDelete}
+        title="Delete Workflow?"
+        message={`This will permanently delete "${displayTitle}" and all its associated data. This action cannot be undone.`}
+        confirmText="Delete"
+        variant="danger"
+      />
     </div>
   );
 }
@@ -903,9 +960,15 @@ function NewWorkflowForm({ onSubmit, onCancel, loading }) {
 export default function Workflows() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { workflows, loading, fetchWorkflows, fetchWorkflow, createWorkflow } = useWorkflowStore();
+  const { workflows, loading, fetchWorkflows, fetchWorkflow, createWorkflow, deleteWorkflow } = useWorkflowStore();
   const { getTasksForWorkflow, setTasks } = useTaskStore();
+  const notifyInfo = useUIStore((s) => s.notifyInfo);
+  const notifyError = useUIStore((s) => s.notifyError);
   const [showNewForm, setShowNewForm] = useState(false);
+
+  // Delete from list state
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [workflowToDelete, setWorkflowToDelete] = useState(null);
 
   useEffect(() => {
     fetchWorkflows();
@@ -943,6 +1006,29 @@ export default function Workflows() {
       navigate(`/workflows/${workflow.id}`);
     }
   };
+
+  // Delete from list handlers
+  const handleDeleteClick = useCallback((workflow) => {
+    setWorkflowToDelete(workflow);
+    setDeleteDialogOpen(true);
+  }, []);
+
+  const handleDeleteConfirm = useCallback(async () => {
+    if (!workflowToDelete) return;
+    const success = await deleteWorkflow(workflowToDelete.id);
+    if (success) {
+      notifyInfo('Workflow deleted');
+    } else {
+      notifyError('Failed to delete workflow');
+    }
+    setWorkflowToDelete(null);
+    setDeleteDialogOpen(false);
+  }, [workflowToDelete, deleteWorkflow, notifyInfo, notifyError]);
+
+  const handleDeleteCancel = useCallback(() => {
+    setWorkflowToDelete(null);
+    setDeleteDialogOpen(false);
+  }, []);
 
   // Show new workflow form
   if (id === 'new' || showNewForm) {
@@ -999,6 +1085,7 @@ export default function Workflows() {
               key={workflow.id}
               workflow={workflow}
               onClick={() => navigate(`/workflows/${workflow.id}`)}
+              onDelete={handleDeleteClick}
             />
           ))}
         </div>
@@ -1018,6 +1105,17 @@ export default function Workflows() {
           </Link>
         </div>
       )}
+
+      {/* Delete Confirmation Dialog for list view */}
+      <ConfirmDialog
+        isOpen={deleteDialogOpen}
+        onClose={handleDeleteCancel}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Workflow?"
+        message={workflowToDelete ? `This will permanently delete "${deriveWorkflowTitle(workflowToDelete)}" and all its associated data. This action cannot be undone.` : ''}
+        confirmText="Delete"
+        variant="danger"
+      />
     </div>
   );
 }

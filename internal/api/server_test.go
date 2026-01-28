@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -128,6 +129,17 @@ func (m *mockStateManager) PurgeAllWorkflows(_ context.Context) (int, error) {
 	m.workflows = make(map[core.WorkflowID]*core.WorkflowState)
 	m.activeID = ""
 	return count, nil
+}
+
+func (m *mockStateManager) DeleteWorkflow(_ context.Context, id core.WorkflowID) error {
+	if _, exists := m.workflows[id]; !exists {
+		return fmt.Errorf("workflow not found: %s", id)
+	}
+	delete(m.workflows, id)
+	if m.activeID == id {
+		m.activeID = ""
+	}
+	return nil
 }
 
 func TestHealthEndpoint(t *testing.T) {

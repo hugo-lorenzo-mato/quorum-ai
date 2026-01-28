@@ -210,7 +210,7 @@ func TestE2E_ConfigSections(t *testing.T) {
 
 	t.Run("Workflow Config", func(t *testing.T) {
 		// Update workflow settings
-		updateReq := api.ConfigUpdateRequest{
+		updateReq := api.FullConfigUpdate{
 			Workflow: &api.WorkflowConfigUpdate{
 				Timeout: strPtr("2h"),
 				Sandbox: boolPtr(true),
@@ -219,19 +219,19 @@ func TestE2E_ConfigSections(t *testing.T) {
 		resp, body := request(t, ts, "PATCH", "/api/v1/config", updateReq)
 		testutil.AssertEqual(t, resp.StatusCode, http.StatusOK)
 
-		var cfg api.ConfigResponse
+		var cfg api.ConfigResponseWithMeta
 		err := json.Unmarshal(body, &cfg)
 		testutil.AssertNoError(t, err)
-		testutil.AssertEqual(t, cfg.Workflow.Timeout, "2h")
-		testutil.AssertEqual(t, cfg.Workflow.Sandbox, true)
+		testutil.AssertEqual(t, cfg.Config.Workflow.Timeout, "2h")
+		testutil.AssertEqual(t, cfg.Config.Workflow.Sandbox, true)
 	})
 
 	t.Run("Agents Config", func(t *testing.T) {
 		// Update agents settings
-		updateReq := api.ConfigUpdateRequest{
+		updateReq := api.FullConfigUpdate{
 			Agents: &api.AgentsConfigUpdate{
 				Default: strPtr("gemini"),
-				Claude: &api.AgentConfigUpdate{
+				Claude: &api.FullAgentConfigUpdate{
 					Enabled: boolPtr(false),
 					Model:   strPtr("claude-3-5-sonnet-latest"),
 				},
@@ -240,16 +240,16 @@ func TestE2E_ConfigSections(t *testing.T) {
 		resp, body := request(t, ts, "PATCH", "/api/v1/config", updateReq)
 		testutil.AssertEqual(t, resp.StatusCode, http.StatusOK)
 
-		var cfg api.ConfigResponse
+		var cfg api.ConfigResponseWithMeta
 		err := json.Unmarshal(body, &cfg)
 		testutil.AssertNoError(t, err)
-		testutil.AssertEqual(t, cfg.Agents.Default, "gemini")
-		testutil.AssertEqual(t, cfg.Agents.Claude.Enabled, false)
-		testutil.AssertEqual(t, cfg.Agents.Claude.Model, "claude-3-5-sonnet-latest")
+		testutil.AssertEqual(t, cfg.Config.Agents.Default, "gemini")
+		testutil.AssertEqual(t, cfg.Config.Agents.Claude.Enabled, false)
+		testutil.AssertEqual(t, cfg.Config.Agents.Claude.Model, "claude-3-5-sonnet-latest")
 	})
 
 	t.Run("Git Config", func(t *testing.T) {
-		updateReq := api.ConfigUpdateRequest{
+		updateReq := api.FullConfigUpdate{
 			Git: &api.GitConfigUpdate{
 				AutoCommit:   boolPtr(true),
 				AutoPush:     boolPtr(true),
@@ -259,16 +259,16 @@ func TestE2E_ConfigSections(t *testing.T) {
 		resp, body := request(t, ts, "PATCH", "/api/v1/config", updateReq)
 		testutil.AssertEqual(t, resp.StatusCode, http.StatusOK)
 
-		var cfg api.ConfigResponse
+		var cfg api.ConfigResponseWithMeta
 		err := json.Unmarshal(body, &cfg)
 		testutil.AssertNoError(t, err)
-		testutil.AssertEqual(t, cfg.Git.AutoCommit, true)
-		testutil.AssertEqual(t, cfg.Git.AutoPush, true)
-		testutil.AssertEqual(t, cfg.Git.WorktreeMode, "shared")
+		testutil.AssertEqual(t, cfg.Config.Git.AutoCommit, true)
+		testutil.AssertEqual(t, cfg.Config.Git.AutoPush, true)
+		testutil.AssertEqual(t, cfg.Config.Git.WorktreeMode, "shared")
 	})
 
 	t.Run("Log Config", func(t *testing.T) {
-		updateReq := api.ConfigUpdateRequest{
+		updateReq := api.FullConfigUpdate{
 			Log: &api.LogConfigUpdate{
 				Level:  strPtr("debug"),
 				Format: strPtr("json"),
@@ -277,11 +277,11 @@ func TestE2E_ConfigSections(t *testing.T) {
 		resp, body := request(t, ts, "PATCH", "/api/v1/config", updateReq)
 		testutil.AssertEqual(t, resp.StatusCode, http.StatusOK)
 
-		var cfg api.ConfigResponse
+		var cfg api.ConfigResponseWithMeta
 		err := json.Unmarshal(body, &cfg)
 		testutil.AssertNoError(t, err)
-		testutil.AssertEqual(t, cfg.Log.Level, "debug")
-		testutil.AssertEqual(t, cfg.Log.Format, "json")
+		testutil.AssertEqual(t, cfg.Config.Log.Level, "debug")
+		testutil.AssertEqual(t, cfg.Config.Log.Format, "json")
 	})
 }
 
@@ -289,7 +289,7 @@ func TestE2E_ConfigPersistence(t *testing.T) {
 	ts, _, _ := newTestServer(t)
 
 	// 1. Update config
-	updateReq := api.ConfigUpdateRequest{
+	updateReq := api.FullConfigUpdate{
 		Workflow: &api.WorkflowConfigUpdate{
 			Timeout: strPtr("30m"),
 		},
@@ -304,11 +304,11 @@ func TestE2E_ConfigPersistence(t *testing.T) {
 	resp, body := request(t, ts, "GET", "/api/v1/config", nil)
 	testutil.AssertEqual(t, resp.StatusCode, http.StatusOK)
 
-	var cfg api.ConfigResponse
+	var cfg api.ConfigResponseWithMeta
 	err := json.Unmarshal(body, &cfg)
 	testutil.AssertNoError(t, err)
-	testutil.AssertEqual(t, cfg.Workflow.Timeout, "30m")
-	testutil.AssertEqual(t, cfg.Agents.Default, "codex")
+	testutil.AssertEqual(t, cfg.Config.Workflow.Timeout, "30m")
+	testutil.AssertEqual(t, cfg.Config.Agents.Default, "codex")
 }
 
 func TestE2E_Agents(t *testing.T) {
@@ -424,12 +424,12 @@ func TestE2E_ConfigPartialUpdate(t *testing.T) {
 	resp, body := request(t, ts, "GET", "/api/v1/config", nil)
 	testutil.AssertEqual(t, resp.StatusCode, http.StatusOK)
 
-	var initialCfg api.ConfigResponse
+	var initialCfg api.ConfigResponseWithMeta
 	err := json.Unmarshal(body, &initialCfg)
 	testutil.AssertNoError(t, err)
 
 	// Update only log level (other fields should remain unchanged)
-	updateReq := api.ConfigUpdateRequest{
+	updateReq := api.FullConfigUpdate{
 		Log: &api.LogConfigUpdate{
 			Level: strPtr("warn"),
 		},
@@ -437,16 +437,16 @@ func TestE2E_ConfigPartialUpdate(t *testing.T) {
 	resp, body = request(t, ts, "PATCH", "/api/v1/config", updateReq)
 	testutil.AssertEqual(t, resp.StatusCode, http.StatusOK)
 
-	var updatedCfg api.ConfigResponse
+	var updatedCfg api.ConfigResponseWithMeta
 	err = json.Unmarshal(body, &updatedCfg)
 	testutil.AssertNoError(t, err)
 
 	// Verify log level changed
-	testutil.AssertEqual(t, updatedCfg.Log.Level, "warn")
+	testutil.AssertEqual(t, updatedCfg.Config.Log.Level, "warn")
 
 	// Verify other sections unchanged
-	testutil.AssertEqual(t, updatedCfg.Agents.Default, initialCfg.Agents.Default)
-	testutil.AssertEqual(t, updatedCfg.Git.AutoCommit, initialCfg.Git.AutoCommit)
+	testutil.AssertEqual(t, updatedCfg.Config.Agents.Default, initialCfg.Config.Agents.Default)
+	testutil.AssertEqual(t, updatedCfg.Config.Git.AutoCommit, initialCfg.Config.Git.AutoCommit)
 }
 
 func TestE2E_ConfigInvalidRequest(t *testing.T) {

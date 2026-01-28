@@ -187,6 +187,10 @@ type StateManager interface {
 	// PurgeAllWorkflows deletes all workflow data permanently.
 	// Returns the number of workflows deleted.
 	PurgeAllWorkflows(ctx context.Context) (int, error)
+
+	// DeleteWorkflow deletes a single workflow by ID.
+	// Returns error if workflow does not exist.
+	DeleteWorkflow(ctx context.Context, id WorkflowID) error
 }
 
 // WorkflowSummary provides a lightweight summary of a workflow for listing.

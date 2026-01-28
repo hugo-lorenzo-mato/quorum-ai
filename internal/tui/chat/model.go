@@ -281,6 +281,7 @@ type WorkflowRunner interface {
 	DeactivateWorkflow(ctx context.Context) error
 	ArchiveWorkflows(ctx context.Context) (int, error)
 	PurgeAllWorkflows(ctx context.Context) (int, error)
+	DeleteWorkflow(ctx context.Context, workflowID string) error
 }
 
 // Model is the Bubble Tea model for the chat interface.
@@ -3255,6 +3256,59 @@ func (m Model) handleCommand(cmd *Command, args []string) (tea.Model, tea.Cmd) {
 		m.tasksPanel.SetState(nil)
 		m.updateQuorumPanel(nil)
 		addSystem("Workflow deactivated. Ready for new task.\nUse '/analyze <prompt>' to start a new workflow.\nPrevious workflows available via '/workflows'.")
+		m.updateViewport()
+		return m, nil
+
+	case "delete":
+		if m.runner == nil {
+			addSystem("Workflow runner not configured")
+			m.updateViewport()
+			return m, nil
+		}
+		if m.workflowRunning {
+			addSystem("Cannot delete while workflow is running. Use /cancel first.")
+			m.updateViewport()
+			return m, nil
+		}
+		if len(args) == 0 {
+			addSystem("Usage: /delete <workflow-id>\nUse /workflows to see available IDs.")
+			m.updateViewport()
+			return m, nil
+		}
+
+		ctx := context.Background()
+		workflowID := args[0]
+
+		// Load workflow to verify it exists and check status
+		wf, err := m.runner.LoadWorkflow(ctx, workflowID)
+		if err != nil || wf == nil {
+			addSystem(fmt.Sprintf("Workflow not found: %s", workflowID))
+			m.updateViewport()
+			return m, nil
+		}
+
+		// Prevent deletion of running workflows
+		if wf.Status == core.WorkflowStatusRunning {
+			addSystem("Cannot delete running workflow. Use /cancel first.")
+			m.updateViewport()
+			return m, nil
+		}
+
+		// Delete the workflow
+		if err := m.runner.DeleteWorkflow(ctx, workflowID); err != nil {
+			addSystem(fmt.Sprintf("Error deleting workflow: %v", err))
+			m.updateViewport()
+			return m, nil
+		}
+
+		// Clear state if we just deleted the active workflow
+		if m.workflowState != nil && string(m.workflowState.WorkflowID) == workflowID {
+			m.workflowState = nil
+			m.tasksPanel.SetState(nil)
+			m.updateQuorumPanel(nil)
+		}
+
+		addSystem(fmt.Sprintf("Workflow %s deleted.", workflowID))
 		m.updateViewport()
 		return m, nil
 

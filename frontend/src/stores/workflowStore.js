@@ -192,6 +192,24 @@ const useWorkflowStore = create((set, get) => ({
     }
   },
 
+  deleteWorkflow: async (id) => {
+    set({ loading: true, error: null });
+    try {
+      await workflowApi.delete(id);
+      const { workflows, activeWorkflow, selectedWorkflowId } = get();
+      set({
+        workflows: workflows.filter(w => w.id !== id),
+        activeWorkflow: activeWorkflow?.id === id ? null : activeWorkflow,
+        selectedWorkflowId: selectedWorkflowId === id ? null : selectedWorkflowId,
+        loading: false,
+      });
+      return true;
+    } catch (error) {
+      set({ error: error.message, loading: false });
+      return false;
+    }
+  },
+
   selectWorkflow: (id) => {
     set({ selectedWorkflowId: id });
   },
