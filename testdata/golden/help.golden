@@ -2,20 +2,31 @@ quorum-ai orchestrates multiple AI agents to analyze, plan, and execute
 development tasks. It uses consensus mechanisms to reduce hallucinations
 and improve output quality through V1/V2/V3 validation protocol.
 
+Running 'quorum' without arguments starts interactive chat mode.
+
 Usage:
+  quorum [flags]
   quorum [command]
 
 Available Commands:
+  analyze     Run the analysis phase only
+  chat        Start interactive chat mode
   completion  Generate the autocompletion script for the specified shell
   doctor      Check system dependencies
+  execute     Run the execution phase only
   help        Help about any command
   init        Initialize a new quorum project
+  new         Reset workflow state and start fresh
+  plan        Run the planning phase only
   run         Run a complete workflow
+  serve       Start the web server
   status      Show workflow status
+  trace       Show trace summaries
   version     Print version information
+  workflows   List available workflows
 
 Flags:
-      --config string       config file (default: .quorum.yaml)
+      --config string       config file (default: .quorum/config.yaml)
   -h, --help                help for quorum
       --log-format string   log format (auto, text, json) (default "auto")
       --log-level string    log level (debug, info, warn, error) (default "info")

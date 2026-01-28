@@ -2,121 +2,131 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
 
-	"gopkg.in/yaml.v3"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/config"
 )
 
-// ConfigResponse represents the configuration response.
-type ConfigResponse struct {
-	Workflow WorkflowConfigResponse `json:"workflow"`
-	Agents   AgentsConfigResponse   `json:"agents"`
-	Git      GitConfigResponse      `json:"git"`
-	Log      LogConfigResponse      `json:"log"`
-}
-
-// WorkflowConfigResponse represents workflow configuration.
-type WorkflowConfigResponse struct {
-	Timeout   string   `json:"timeout"`
-	Sandbox   bool     `json:"sandbox"`
-	DenyTools []string `json:"deny_tools"`
-}
-
-// AgentsConfigResponse represents agent configuration.
-type AgentsConfigResponse struct {
-	Default string              `json:"default"`
-	Claude  AgentConfigResponse `json:"claude"`
-	Gemini  AgentConfigResponse `json:"gemini"`
-	Codex   AgentConfigResponse `json:"codex"`
-}
-
-// AgentConfigResponse represents individual agent configuration.
-type AgentConfigResponse struct {
-	Enabled bool   `json:"enabled"`
-	Model   string `json:"model"`
-	Path    string `json:"path"`
-}
-
-// GitConfigResponse represents git configuration.
-type GitConfigResponse struct {
-	AutoCommit   bool   `json:"auto_commit"`
-	AutoPush     bool   `json:"auto_push"`
-	WorktreeMode string `json:"worktree_mode"`
-}
-
-// LogConfigResponse represents logging configuration.
-type LogConfigResponse struct {
-	Level  string `json:"level"`
-	Format string `json:"format"`
-}
-
-// ConfigUpdateRequest represents a config update request.
-type ConfigUpdateRequest struct {
-	Workflow *WorkflowConfigUpdate `json:"workflow,omitempty"`
-	Agents   *AgentsConfigUpdate   `json:"agents,omitempty"`
-	Git      *GitConfigUpdate      `json:"git,omitempty"`
-	Log      *LogConfigUpdate      `json:"log,omitempty"`
-}
-
-// WorkflowConfigUpdate represents workflow configuration update.
-type WorkflowConfigUpdate struct {
-	Timeout   *string   `json:"timeout,omitempty"`
-	Sandbox   *bool     `json:"sandbox,omitempty"`
-	DenyTools *[]string `json:"deny_tools,omitempty"`
-}
-
-// AgentsConfigUpdate represents agents configuration update.
-type AgentsConfigUpdate struct {
-	Default *string            `json:"default,omitempty"`
-	Claude  *AgentConfigUpdate `json:"claude,omitempty"`
-	Gemini  *AgentConfigUpdate `json:"gemini,omitempty"`
-	Codex   *AgentConfigUpdate `json:"codex,omitempty"`
-}
-
-// AgentConfigUpdate represents individual agent configuration update.
-type AgentConfigUpdate struct {
-	Enabled *bool   `json:"enabled,omitempty"`
-	Model   *string `json:"model,omitempty"`
-}
-
-// GitConfigUpdate represents git configuration update.
-type GitConfigUpdate struct {
-	AutoCommit   *bool   `json:"auto_commit,omitempty"`
-	AutoPush     *bool   `json:"auto_push,omitempty"`
-	WorktreeMode *string `json:"worktree_mode,omitempty"`
-}
-
-// LogConfigUpdate represents logging configuration update.
-type LogConfigUpdate struct {
-	Level  *string `json:"level,omitempty"`
-	Format *string `json:"format,omitempty"`
-}
+// Note: DTO types are defined in config_types.go
 
 // handleGetConfig returns the current configuration.
-func (s *Server) handleGetConfig(w http.ResponseWriter, _ *http.Request) {
-	config, err := s.loadConfig()
+func (s *Server) handleGetConfig(w http.ResponseWriter, r *http.Request) {
+	cfg, err := s.loadConfig()
 	if err != nil {
 		s.logger.Error("failed to load config", "error", err)
 		respondError(w, http.StatusInternalServerError, "failed to load configuration")
 		return
 	}
 
-	response := s.configToResponse(config)
+	// Calculate ETag
+	etag, err := calculateETag(cfg)
+	if err != nil {
+		s.logger.Error("failed to calculate ETag", "error", err)
+		// Non-fatal, continue without ETag
+		etag = ""
+	}
+
+	// Get file metadata
+	configPath := s.getConfigPath()
+	meta, _ := getConfigFileMeta(configPath)
+
+	// Set ETag header
+	if etag != "" {
+		w.Header().Set("ETag", fmt.Sprintf(`"%s"`, etag))
+	}
+
+	// Check If-None-Match for conditional GET
+	if clientETag := r.Header.Get("If-None-Match"); clientETag != "" {
+		// Remove quotes if present
+		clientETag = strings.Trim(clientETag, `"`)
+		if clientETag == etag {
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+	}
+
+	// Determine last modified time
+	lastModified := ""
+	if meta.Exists {
+		lastModified = meta.LastModified.Format(time.RFC3339)
+	}
+
+	response := ConfigResponseWithMeta{
+		Config: configToFullResponse(cfg),
+		Meta: ConfigMeta{
+			ETag:         etag,
+			LastModified: lastModified,
+			Source:       s.determineConfigSource(configPath),
+		},
+	}
+
 	respondJSON(w, http.StatusOK, response)
+}
+
+// determineConfigSource returns whether config comes from file or defaults.
+func (s *Server) determineConfigSource(configPath string) string {
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		return "default"
+	}
+	return "file"
 }
 
 // handleUpdateConfig updates configuration values.
 func (s *Server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
-	var req ConfigUpdateRequest
+	var req FullConfigUpdate
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
+	configPath := s.getConfigPath()
+
+	// Check for force update flag
+	forceUpdate := r.URL.Query().Get("force") == "true"
+
+	// Check If-Match header for ETag validation (unless forcing)
+	clientETag := r.Header.Get("If-Match")
+	if !forceUpdate && clientETag != "" {
+		clientETag = strings.Trim(clientETag, `"`)
+
+		matches, currentETag, err := ETagMatch(clientETag, configPath)
+		if err != nil {
+			s.logger.Error("failed to check ETag", "error", err)
+			respondError(w, http.StatusInternalServerError, "failed to check configuration version")
+			return
+		}
+
+		if !matches {
+			// Conflict detected!
+			s.logger.Warn("config update conflict",
+				"client_etag", clientETag,
+				"current_etag", currentETag)
+
+			// Return 412 with current config and ETag
+			cfg, loadErr := s.loadConfig()
+			if loadErr != nil {
+				respondError(w, http.StatusInternalServerError, "failed to load current configuration")
+				return
+			}
+
+			w.Header().Set("ETag", fmt.Sprintf(`"%s"`, currentETag))
+			respondJSON(w, http.StatusPreconditionFailed, map[string]interface{}{
+				"error":          "Configuration was modified externally",
+				"code":           "CONFLICT",
+				"current_etag":   currentETag,
+				"current_config": configToFullResponse(cfg),
+			})
+			return
+		}
+	}
+
 	// Load current config
-	config, err := s.loadConfig()
+	cfg, err := s.loadConfig()
 	if err != nil {
 		s.logger.Error("failed to load config", "error", err)
 		respondError(w, http.StatusInternalServerError, "failed to load configuration")
@@ -124,16 +134,32 @@ func (s *Server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Apply updates
-	s.applyConfigUpdates(config, &req)
+	applyFullConfigUpdates(cfg, &req)
 
-	// Save updated config
-	if err := s.saveConfig(config); err != nil {
+	// Validate merged config before saving
+	if !validateConfig(w, cfg, s.logger) {
+		return
+	}
+
+	// Save with atomic write
+	if err := atomicWriteConfig(cfg, configPath); err != nil {
 		s.logger.Error("failed to save config", "error", err)
 		respondError(w, http.StatusInternalServerError, "failed to save configuration")
 		return
 	}
 
-	response := s.configToResponse(config)
+	// Calculate new ETag
+	newETag, _ := calculateETag(cfg)
+	w.Header().Set("ETag", fmt.Sprintf(`"%s"`, newETag))
+
+	response := ConfigResponseWithMeta{
+		Config: configToFullResponse(cfg),
+		Meta: ConfigMeta{
+			ETag:   newETag,
+			Source: "file",
+		},
+	}
+
 	respondJSON(w, http.StatusOK, response)
 }
 
@@ -163,42 +189,22 @@ func (s *Server) handleGetAgents(w http.ResponseWriter, _ *http.Request) {
 	respondJSON(w, http.StatusOK, agents)
 }
 
-// loadConfig loads the configuration from file.
-func (s *Server) loadConfig() (map[string]interface{}, error) {
+// loadConfig loads the configuration from file using the config loader.
+func (s *Server) loadConfig() (*config.Config, error) {
 	configPath := s.getConfigPath()
 
-	// #nosec G304 -- config path is within application-controlled directory
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return s.getDefaultConfig(), nil
-		}
-		return nil, err
+	// Check if config file exists, if not use defaults
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		return config.NewLoader().Load()
 	}
 
-	var config map[string]interface{}
-	if err := yaml.Unmarshal(data, &config); err != nil {
-		return nil, err
-	}
-
-	return config, nil
+	// Load using config loader for consistency
+	return config.NewLoader().WithConfigFile(configPath).Load()
 }
 
-// saveConfig saves the configuration to file.
-func (s *Server) saveConfig(config map[string]interface{}) error {
-	configPath := s.getConfigPath()
-
-	// Ensure directory exists
-	if err := os.MkdirAll(filepath.Dir(configPath), 0o750); err != nil {
-		return err
-	}
-
-	data, err := yaml.Marshal(config)
-	if err != nil {
-		return err
-	}
-
-	return os.WriteFile(configPath, data, 0o600)
+// saveConfig saves configuration atomically.
+func (s *Server) saveConfig(cfg *config.Config) error {
+	return atomicWriteConfig(cfg, s.getConfigPath())
 }
 
 // getConfigPath returns the config file path.
@@ -206,214 +212,536 @@ func (s *Server) getConfigPath() string {
 	return filepath.Join(".quorum", "config.yaml")
 }
 
-// getDefaultConfig returns default configuration.
-func (s *Server) getDefaultConfig() map[string]interface{} {
-	return map[string]interface{}{
-		"workflow": map[string]interface{}{
-			"timeout":    "1h",
-			"sandbox":    false,
-			"deny_tools": []string{},
-		},
-		"agents": map[string]interface{}{
-			"default": "claude",
-			"claude": map[string]interface{}{
-				"enabled": true,
-				"model":   "claude-opus-4-5-20251101",
-				"path":    "claude",
-			},
-			"gemini": map[string]interface{}{
-				"enabled": true,
-				"model":   "gemini-2.0-flash-thinking-exp",
-				"path":    "gemini",
-			},
-			"codex": map[string]interface{}{
-				"enabled": true,
-				"model":   "gpt-5.2-codex",
-				"path":    "codex",
-			},
-		},
-		"git": map[string]interface{}{
-			"auto_commit":   false,
-			"auto_push":     false,
-			"worktree_mode": "per-task",
-		},
-		"log": map[string]interface{}{
-			"level":  "info",
-			"format": "auto",
-		},
+// configToFullResponse converts *config.Config to FullConfigResponse.
+func configToFullResponse(cfg *config.Config) FullConfigResponse {
+	// Ensure slices are never nil (use empty slices instead)
+	denyTools := cfg.Workflow.DenyTools
+	if denyTools == nil {
+		denyTools = []string{}
 	}
-}
+	redactPatterns := cfg.Trace.RedactPatterns
+	if redactPatterns == nil {
+		redactPatterns = []string{}
+	}
+	redactAllowlist := cfg.Trace.RedactAllowlist
+	if redactAllowlist == nil {
+		redactAllowlist = []string{}
+	}
+	includePhases := cfg.Trace.IncludePhases
+	if includePhases == nil {
+		includePhases = []string{}
+	}
 
-// configToResponse converts config map to response structure.
-func (s *Server) configToResponse(config map[string]interface{}) ConfigResponse {
-	response := ConfigResponse{
+	return FullConfigResponse{
+		Log: LogConfigResponse{
+			Level:  cfg.Log.Level,
+			Format: cfg.Log.Format,
+		},
+		Trace: TraceConfigResponse{
+			Mode:            cfg.Trace.Mode,
+			Dir:             cfg.Trace.Dir,
+			SchemaVersion:   cfg.Trace.SchemaVersion,
+			Redact:          cfg.Trace.Redact,
+			RedactPatterns:  redactPatterns,
+			RedactAllowlist: redactAllowlist,
+			MaxBytes:        cfg.Trace.MaxBytes,
+			TotalMaxBytes:   cfg.Trace.TotalMaxBytes,
+			MaxFiles:        cfg.Trace.MaxFiles,
+			IncludePhases:   includePhases,
+		},
 		Workflow: WorkflowConfigResponse{
-			Timeout:   "1h",
-			Sandbox:   false,
-			DenyTools: []string{},
+			Timeout:    cfg.Workflow.Timeout,
+			MaxRetries: cfg.Workflow.MaxRetries,
+			DryRun:     cfg.Workflow.DryRun,
+			Sandbox:    cfg.Workflow.Sandbox,
+			DenyTools:  denyTools,
+		},
+		Phases: PhasesConfigResponse{
+			Analyze: AnalyzePhaseConfigResponse{
+				Timeout: cfg.Phases.Analyze.Timeout,
+				Refiner: RefinerConfigResponse{
+					Enabled: cfg.Phases.Analyze.Refiner.Enabled,
+					Agent:   cfg.Phases.Analyze.Refiner.Agent,
+				},
+				Moderator: ModeratorConfigResponse{
+					Enabled:             cfg.Phases.Analyze.Moderator.Enabled,
+					Agent:               cfg.Phases.Analyze.Moderator.Agent,
+					Threshold:           cfg.Phases.Analyze.Moderator.Threshold,
+					MinRounds:           cfg.Phases.Analyze.Moderator.MinRounds,
+					MaxRounds:           cfg.Phases.Analyze.Moderator.MaxRounds,
+					AbortThreshold:      cfg.Phases.Analyze.Moderator.AbortThreshold,
+					StagnationThreshold: cfg.Phases.Analyze.Moderator.StagnationThreshold,
+				},
+				Synthesizer: SynthesizerConfigResponse{
+					Agent: cfg.Phases.Analyze.Synthesizer.Agent,
+				},
+				SingleAgent: SingleAgentConfigResponse{
+					Enabled: cfg.Phases.Analyze.SingleAgent.Enabled,
+					Agent:   cfg.Phases.Analyze.SingleAgent.Agent,
+					Model:   cfg.Phases.Analyze.SingleAgent.Model,
+				},
+			},
+			Plan: PlanPhaseConfigResponse{
+				Timeout: cfg.Phases.Plan.Timeout,
+				Synthesizer: PlanSynthesizerConfigResponse{
+					Enabled: cfg.Phases.Plan.Synthesizer.Enabled,
+					Agent:   cfg.Phases.Plan.Synthesizer.Agent,
+				},
+			},
+			Execute: ExecutePhaseConfigResponse{
+				Timeout: cfg.Phases.Execute.Timeout,
+			},
 		},
 		Agents: AgentsConfigResponse{
-			Default: "claude",
-			Claude:  AgentConfigResponse{Enabled: true, Model: "claude-opus-4-5-20251101", Path: "claude"},
-			Gemini:  AgentConfigResponse{Enabled: true, Model: "gemini-2.0-flash-thinking-exp", Path: "gemini"},
-			Codex:   AgentConfigResponse{Enabled: true, Model: "gpt-5.2-codex", Path: "codex"},
+			Default: cfg.Agents.Default,
+			Claude:  agentConfigToResponse(&cfg.Agents.Claude),
+			Gemini:  agentConfigToResponse(&cfg.Agents.Gemini),
+			Codex:   agentConfigToResponse(&cfg.Agents.Codex),
+			Copilot: agentConfigToResponse(&cfg.Agents.Copilot),
+		},
+		State: StateConfigResponse{
+			Backend:    cfg.State.Backend,
+			Path:       cfg.State.Path,
+			BackupPath: cfg.State.BackupPath,
+			LockTTL:    cfg.State.LockTTL,
 		},
 		Git: GitConfigResponse{
-			AutoCommit:   false,
-			AutoPush:     false,
-			WorktreeMode: "per-task",
+			WorktreeDir:   cfg.Git.WorktreeDir,
+			AutoClean:     cfg.Git.AutoClean,
+			WorktreeMode:  cfg.Git.WorktreeMode,
+			AutoCommit:    cfg.Git.AutoCommit,
+			AutoPush:      cfg.Git.AutoPush,
+			AutoPR:        cfg.Git.AutoPR,
+			AutoMerge:     cfg.Git.AutoMerge,
+			PRBaseBranch:  cfg.Git.PRBaseBranch,
+			MergeStrategy: cfg.Git.MergeStrategy,
 		},
-		Log: LogConfigResponse{
-			Level:  "info",
-			Format: "auto",
+		GitHub: GitHubConfigResponse{
+			Remote: cfg.GitHub.Remote,
+		},
+		Chat: ChatConfigResponse{
+			Timeout:          cfg.Chat.Timeout,
+			ProgressInterval: cfg.Chat.ProgressInterval,
+			Editor:           cfg.Chat.Editor,
+		},
+		Report: ReportConfigResponse{
+			Enabled:    cfg.Report.Enabled,
+			BaseDir:    cfg.Report.BaseDir,
+			UseUTC:     cfg.Report.UseUTC,
+			IncludeRaw: cfg.Report.IncludeRaw,
+		},
+		Diagnostics: DiagnosticsConfigResponse{
+			Enabled: cfg.Diagnostics.Enabled,
+			ResourceMonitoring: ResourceMonitoringConfigResponse{
+				Interval:           cfg.Diagnostics.ResourceMonitoring.Interval,
+				FDThresholdPercent: cfg.Diagnostics.ResourceMonitoring.FDThresholdPercent,
+				GoroutineThreshold: cfg.Diagnostics.ResourceMonitoring.GoroutineThreshold,
+				MemoryThresholdMB:  cfg.Diagnostics.ResourceMonitoring.MemoryThresholdMB,
+				HistorySize:        cfg.Diagnostics.ResourceMonitoring.HistorySize,
+			},
+			CrashDump: CrashDumpConfigResponse{
+				Dir:          cfg.Diagnostics.CrashDump.Dir,
+				MaxFiles:     cfg.Diagnostics.CrashDump.MaxFiles,
+				IncludeStack: cfg.Diagnostics.CrashDump.IncludeStack,
+				IncludeEnv:   cfg.Diagnostics.CrashDump.IncludeEnv,
+			},
+			PreflightChecks: PreflightConfigResponse{
+				Enabled:          cfg.Diagnostics.PreflightChecks.Enabled,
+				MinFreeFDPercent: cfg.Diagnostics.PreflightChecks.MinFreeFDPercent,
+				MinFreeMemoryMB:  cfg.Diagnostics.PreflightChecks.MinFreeMemoryMB,
+			},
 		},
 	}
-
-	// Extract values from config map
-	if workflow, ok := config["workflow"].(map[string]interface{}); ok {
-		if timeout, ok := workflow["timeout"].(string); ok {
-			response.Workflow.Timeout = timeout
-		}
-		if sandbox, ok := workflow["sandbox"].(bool); ok {
-			response.Workflow.Sandbox = sandbox
-		}
-	}
-
-	if agents, ok := config["agents"].(map[string]interface{}); ok {
-		if def, ok := agents["default"].(string); ok {
-			response.Agents.Default = def
-		}
-		if claude, ok := agents["claude"].(map[string]interface{}); ok {
-			if enabled, ok := claude["enabled"].(bool); ok {
-				response.Agents.Claude.Enabled = enabled
-			}
-			if model, ok := claude["model"].(string); ok {
-				response.Agents.Claude.Model = model
-			}
-		}
-		if gemini, ok := agents["gemini"].(map[string]interface{}); ok {
-			if enabled, ok := gemini["enabled"].(bool); ok {
-				response.Agents.Gemini.Enabled = enabled
-			}
-			if model, ok := gemini["model"].(string); ok {
-				response.Agents.Gemini.Model = model
-			}
-		}
-		if codex, ok := agents["codex"].(map[string]interface{}); ok {
-			if enabled, ok := codex["enabled"].(bool); ok {
-				response.Agents.Codex.Enabled = enabled
-			}
-			if model, ok := codex["model"].(string); ok {
-				response.Agents.Codex.Model = model
-			}
-		}
-	}
-
-	if git, ok := config["git"].(map[string]interface{}); ok {
-		if autoCommit, ok := git["auto_commit"].(bool); ok {
-			response.Git.AutoCommit = autoCommit
-		}
-		if autoPush, ok := git["auto_push"].(bool); ok {
-			response.Git.AutoPush = autoPush
-		}
-		if mode, ok := git["worktree_mode"].(string); ok {
-			response.Git.WorktreeMode = mode
-		}
-	}
-
-	if log, ok := config["log"].(map[string]interface{}); ok {
-		if level, ok := log["level"].(string); ok {
-			response.Log.Level = level
-		}
-		if format, ok := log["format"].(string); ok {
-			response.Log.Format = format
-		}
-	}
-
-	return response
 }
 
-// applyConfigUpdates applies update request to config.
-func (s *Server) applyConfigUpdates(config map[string]interface{}, req *ConfigUpdateRequest) {
-	if req.Workflow != nil {
-		workflow, ok := config["workflow"].(map[string]interface{})
-		if !ok {
-			workflow = make(map[string]interface{})
-			config["workflow"] = workflow
-		}
-		if req.Workflow.Timeout != nil {
-			workflow["timeout"] = *req.Workflow.Timeout
-		}
-		if req.Workflow.Sandbox != nil {
-			workflow["sandbox"] = *req.Workflow.Sandbox
-		}
-		if req.Workflow.DenyTools != nil {
-			workflow["deny_tools"] = *req.Workflow.DenyTools
-		}
+// agentConfigToResponse converts *config.AgentConfig to FullAgentConfigResponse.
+func agentConfigToResponse(cfg *config.AgentConfig) FullAgentConfigResponse {
+	phaseModels := cfg.PhaseModels
+	if phaseModels == nil {
+		phaseModels = make(map[string]string)
+	}
+	phases := cfg.Phases
+	if phases == nil {
+		phases = make(map[string]bool)
+	}
+	reasoningEffortPhases := cfg.ReasoningEffortPhases
+	if reasoningEffortPhases == nil {
+		reasoningEffortPhases = make(map[string]string)
 	}
 
-	if req.Agents != nil {
-		agents, ok := config["agents"].(map[string]interface{})
-		if !ok {
-			agents = make(map[string]interface{})
-			config["agents"] = agents
-		}
-		if req.Agents.Default != nil {
-			agents["default"] = *req.Agents.Default
-		}
-		s.applyAgentUpdate(agents, "claude", req.Agents.Claude)
-		s.applyAgentUpdate(agents, "gemini", req.Agents.Gemini)
-		s.applyAgentUpdate(agents, "codex", req.Agents.Codex)
+	return FullAgentConfigResponse{
+		Enabled:                   cfg.Enabled,
+		Path:                      cfg.Path,
+		Model:                     cfg.Model,
+		PhaseModels:               phaseModels,
+		Phases:                    phases,
+		ReasoningEffort:           cfg.ReasoningEffort,
+		ReasoningEffortPhases:     reasoningEffortPhases,
+		TokenDiscrepancyThreshold: cfg.TokenDiscrepancyThreshold,
 	}
+}
 
-	if req.Git != nil {
-		git, ok := config["git"].(map[string]interface{})
-		if !ok {
-			git = make(map[string]interface{})
-			config["git"] = git
-		}
-		if req.Git.AutoCommit != nil {
-			git["auto_commit"] = *req.Git.AutoCommit
-		}
-		if req.Git.AutoPush != nil {
-			git["auto_push"] = *req.Git.AutoPush
-		}
-		if req.Git.WorktreeMode != nil {
-			git["worktree_mode"] = *req.Git.WorktreeMode
-		}
-	}
-
+// applyFullConfigUpdates applies partial updates to config.
+func applyFullConfigUpdates(cfg *config.Config, req *FullConfigUpdate) {
 	if req.Log != nil {
-		log, ok := config["log"].(map[string]interface{})
-		if !ok {
-			log = make(map[string]interface{})
-			config["log"] = log
+		applyLogUpdates(&cfg.Log, req.Log)
+	}
+	if req.Trace != nil {
+		applyTraceUpdates(&cfg.Trace, req.Trace)
+	}
+	if req.Workflow != nil {
+		applyWorkflowUpdates(&cfg.Workflow, req.Workflow)
+	}
+	if req.Phases != nil {
+		applyPhasesUpdates(&cfg.Phases, req.Phases)
+	}
+	if req.Agents != nil {
+		applyAgentsUpdates(&cfg.Agents, req.Agents)
+	}
+	if req.State != nil {
+		applyStateUpdates(&cfg.State, req.State)
+	}
+	if req.Git != nil {
+		applyGitUpdates(&cfg.Git, req.Git)
+	}
+	if req.GitHub != nil {
+		applyGitHubUpdates(&cfg.GitHub, req.GitHub)
+	}
+	if req.Chat != nil {
+		applyChatUpdates(&cfg.Chat, req.Chat)
+	}
+	if req.Report != nil {
+		applyReportUpdates(&cfg.Report, req.Report)
+	}
+	if req.Diagnostics != nil {
+		applyDiagnosticsUpdates(&cfg.Diagnostics, req.Diagnostics)
+	}
+}
+
+func applyLogUpdates(cfg *config.LogConfig, update *LogConfigUpdate) {
+	if update.Level != nil {
+		cfg.Level = *update.Level
+	}
+	if update.Format != nil {
+		cfg.Format = *update.Format
+	}
+}
+
+func applyTraceUpdates(cfg *config.TraceConfig, update *TraceConfigUpdate) {
+	if update.Mode != nil {
+		cfg.Mode = *update.Mode
+	}
+	if update.Dir != nil {
+		cfg.Dir = *update.Dir
+	}
+	if update.SchemaVersion != nil {
+		cfg.SchemaVersion = *update.SchemaVersion
+	}
+	if update.Redact != nil {
+		cfg.Redact = *update.Redact
+	}
+	if update.RedactPatterns != nil {
+		cfg.RedactPatterns = *update.RedactPatterns
+	}
+	if update.RedactAllowlist != nil {
+		cfg.RedactAllowlist = *update.RedactAllowlist
+	}
+	if update.MaxBytes != nil {
+		cfg.MaxBytes = *update.MaxBytes
+	}
+	if update.TotalMaxBytes != nil {
+		cfg.TotalMaxBytes = *update.TotalMaxBytes
+	}
+	if update.MaxFiles != nil {
+		cfg.MaxFiles = *update.MaxFiles
+	}
+	if update.IncludePhases != nil {
+		cfg.IncludePhases = *update.IncludePhases
+	}
+}
+
+func applyWorkflowUpdates(cfg *config.WorkflowConfig, update *WorkflowConfigUpdate) {
+	if update.Timeout != nil {
+		cfg.Timeout = *update.Timeout
+	}
+	if update.MaxRetries != nil {
+		cfg.MaxRetries = *update.MaxRetries
+	}
+	if update.DryRun != nil {
+		cfg.DryRun = *update.DryRun
+	}
+	if update.Sandbox != nil {
+		cfg.Sandbox = *update.Sandbox
+	}
+	if update.DenyTools != nil {
+		cfg.DenyTools = *update.DenyTools
+	}
+}
+
+func applyPhasesUpdates(cfg *config.PhasesConfig, update *PhasesConfigUpdate) {
+	if update.Analyze != nil {
+		applyAnalyzePhaseUpdates(&cfg.Analyze, update.Analyze)
+	}
+	if update.Plan != nil {
+		applyPlanPhaseUpdates(&cfg.Plan, update.Plan)
+	}
+	if update.Execute != nil {
+		applyExecutePhaseUpdates(&cfg.Execute, update.Execute)
+	}
+}
+
+func applyAnalyzePhaseUpdates(cfg *config.AnalyzePhaseConfig, update *AnalyzePhaseConfigUpdate) {
+	if update.Timeout != nil {
+		cfg.Timeout = *update.Timeout
+	}
+	if update.Refiner != nil {
+		if update.Refiner.Enabled != nil {
+			cfg.Refiner.Enabled = *update.Refiner.Enabled
 		}
-		if req.Log.Level != nil {
-			log["level"] = *req.Log.Level
+		if update.Refiner.Agent != nil {
+			cfg.Refiner.Agent = *update.Refiner.Agent
 		}
-		if req.Log.Format != nil {
-			log["format"] = *req.Log.Format
+	}
+	if update.Moderator != nil {
+		if update.Moderator.Enabled != nil {
+			cfg.Moderator.Enabled = *update.Moderator.Enabled
+		}
+		if update.Moderator.Agent != nil {
+			cfg.Moderator.Agent = *update.Moderator.Agent
+		}
+		if update.Moderator.Threshold != nil {
+			cfg.Moderator.Threshold = *update.Moderator.Threshold
+		}
+		if update.Moderator.MinRounds != nil {
+			cfg.Moderator.MinRounds = *update.Moderator.MinRounds
+		}
+		if update.Moderator.MaxRounds != nil {
+			cfg.Moderator.MaxRounds = *update.Moderator.MaxRounds
+		}
+		if update.Moderator.AbortThreshold != nil {
+			cfg.Moderator.AbortThreshold = *update.Moderator.AbortThreshold
+		}
+		if update.Moderator.StagnationThreshold != nil {
+			cfg.Moderator.StagnationThreshold = *update.Moderator.StagnationThreshold
+		}
+	}
+	if update.Synthesizer != nil {
+		if update.Synthesizer.Agent != nil {
+			cfg.Synthesizer.Agent = *update.Synthesizer.Agent
+		}
+	}
+	if update.SingleAgent != nil {
+		if update.SingleAgent.Enabled != nil {
+			cfg.SingleAgent.Enabled = *update.SingleAgent.Enabled
+		}
+		if update.SingleAgent.Agent != nil {
+			cfg.SingleAgent.Agent = *update.SingleAgent.Agent
+		}
+		if update.SingleAgent.Model != nil {
+			cfg.SingleAgent.Model = *update.SingleAgent.Model
 		}
 	}
 }
 
-// applyAgentUpdate applies agent-specific update.
-func (s *Server) applyAgentUpdate(agents map[string]interface{}, name string, update *AgentConfigUpdate) {
-	if update == nil {
-		return
+func applyPlanPhaseUpdates(cfg *config.PlanPhaseConfig, update *PlanPhaseConfigUpdate) {
+	if update.Timeout != nil {
+		cfg.Timeout = *update.Timeout
 	}
-
-	agent, ok := agents[name].(map[string]interface{})
-	if !ok {
-		agent = make(map[string]interface{})
-		agents[name] = agent
+	if update.Synthesizer != nil {
+		if update.Synthesizer.Enabled != nil {
+			cfg.Synthesizer.Enabled = *update.Synthesizer.Enabled
+		}
+		if update.Synthesizer.Agent != nil {
+			cfg.Synthesizer.Agent = *update.Synthesizer.Agent
+		}
 	}
+}
 
+func applyExecutePhaseUpdates(cfg *config.ExecutePhaseConfig, update *ExecutePhaseConfigUpdate) {
+	if update.Timeout != nil {
+		cfg.Timeout = *update.Timeout
+	}
+}
+
+func applyAgentsUpdates(cfg *config.AgentsConfig, update *AgentsConfigUpdate) {
+	if update.Default != nil {
+		cfg.Default = *update.Default
+	}
+	if update.Claude != nil {
+		applyAgentUpdates(&cfg.Claude, update.Claude)
+	}
+	if update.Gemini != nil {
+		applyAgentUpdates(&cfg.Gemini, update.Gemini)
+	}
+	if update.Codex != nil {
+		applyAgentUpdates(&cfg.Codex, update.Codex)
+	}
+	if update.Copilot != nil {
+		applyAgentUpdates(&cfg.Copilot, update.Copilot)
+	}
+}
+
+func applyAgentUpdates(cfg *config.AgentConfig, update *FullAgentConfigUpdate) {
 	if update.Enabled != nil {
-		agent["enabled"] = *update.Enabled
+		cfg.Enabled = *update.Enabled
+	}
+	if update.Path != nil {
+		cfg.Path = *update.Path
 	}
 	if update.Model != nil {
-		agent["model"] = *update.Model
+		cfg.Model = *update.Model
+	}
+	if update.PhaseModels != nil {
+		cfg.PhaseModels = *update.PhaseModels
+	}
+	if update.Phases != nil {
+		cfg.Phases = *update.Phases
+	}
+	if update.ReasoningEffort != nil {
+		cfg.ReasoningEffort = *update.ReasoningEffort
+	}
+	if update.ReasoningEffortPhases != nil {
+		cfg.ReasoningEffortPhases = *update.ReasoningEffortPhases
+	}
+	if update.TokenDiscrepancyThreshold != nil {
+		cfg.TokenDiscrepancyThreshold = *update.TokenDiscrepancyThreshold
+	}
+}
+
+func applyStateUpdates(cfg *config.StateConfig, update *StateConfigUpdate) {
+	if update.Backend != nil {
+		cfg.Backend = *update.Backend
+	}
+	if update.Path != nil {
+		cfg.Path = *update.Path
+	}
+	if update.BackupPath != nil {
+		cfg.BackupPath = *update.BackupPath
+	}
+	if update.LockTTL != nil {
+		cfg.LockTTL = *update.LockTTL
+	}
+}
+
+func applyGitUpdates(cfg *config.GitConfig, update *GitConfigUpdate) {
+	if update.WorktreeDir != nil {
+		cfg.WorktreeDir = *update.WorktreeDir
+	}
+	if update.AutoClean != nil {
+		cfg.AutoClean = *update.AutoClean
+	}
+	if update.WorktreeMode != nil {
+		cfg.WorktreeMode = *update.WorktreeMode
+	}
+	if update.AutoCommit != nil {
+		cfg.AutoCommit = *update.AutoCommit
+	}
+	if update.AutoPush != nil {
+		cfg.AutoPush = *update.AutoPush
+	}
+	if update.AutoPR != nil {
+		cfg.AutoPR = *update.AutoPR
+	}
+	if update.AutoMerge != nil {
+		cfg.AutoMerge = *update.AutoMerge
+	}
+	if update.PRBaseBranch != nil {
+		cfg.PRBaseBranch = *update.PRBaseBranch
+	}
+	if update.MergeStrategy != nil {
+		cfg.MergeStrategy = *update.MergeStrategy
+	}
+}
+
+func applyGitHubUpdates(cfg *config.GitHubConfig, update *GitHubConfigUpdate) {
+	if update.Remote != nil {
+		cfg.Remote = *update.Remote
+	}
+}
+
+func applyChatUpdates(cfg *config.ChatConfig, update *ChatConfigUpdate) {
+	if update.Timeout != nil {
+		cfg.Timeout = *update.Timeout
+	}
+	if update.ProgressInterval != nil {
+		cfg.ProgressInterval = *update.ProgressInterval
+	}
+	if update.Editor != nil {
+		cfg.Editor = *update.Editor
+	}
+}
+
+func applyReportUpdates(cfg *config.ReportConfig, update *ReportConfigUpdate) {
+	if update.Enabled != nil {
+		cfg.Enabled = *update.Enabled
+	}
+	if update.BaseDir != nil {
+		cfg.BaseDir = *update.BaseDir
+	}
+	if update.UseUTC != nil {
+		cfg.UseUTC = *update.UseUTC
+	}
+	if update.IncludeRaw != nil {
+		cfg.IncludeRaw = *update.IncludeRaw
+	}
+}
+
+func applyDiagnosticsUpdates(cfg *config.DiagnosticsConfig, update *DiagnosticsConfigUpdate) {
+	if update.Enabled != nil {
+		cfg.Enabled = *update.Enabled
+	}
+	if update.ResourceMonitoring != nil {
+		applyResourceMonitoringUpdates(&cfg.ResourceMonitoring, update.ResourceMonitoring)
+	}
+	if update.CrashDump != nil {
+		applyCrashDumpUpdates(&cfg.CrashDump, update.CrashDump)
+	}
+	if update.PreflightChecks != nil {
+		applyPreflightUpdates(&cfg.PreflightChecks, update.PreflightChecks)
+	}
+}
+
+func applyResourceMonitoringUpdates(cfg *config.ResourceMonitoringConfig, update *ResourceMonitoringConfigUpdate) {
+	if update.Interval != nil {
+		cfg.Interval = *update.Interval
+	}
+	if update.FDThresholdPercent != nil {
+		cfg.FDThresholdPercent = *update.FDThresholdPercent
+	}
+	if update.GoroutineThreshold != nil {
+		cfg.GoroutineThreshold = *update.GoroutineThreshold
+	}
+	if update.MemoryThresholdMB != nil {
+		cfg.MemoryThresholdMB = *update.MemoryThresholdMB
+	}
+	if update.HistorySize != nil {
+		cfg.HistorySize = *update.HistorySize
+	}
+}
+
+func applyCrashDumpUpdates(cfg *config.CrashDumpConfig, update *CrashDumpConfigUpdate) {
+	if update.Dir != nil {
+		cfg.Dir = *update.Dir
+	}
+	if update.MaxFiles != nil {
+		cfg.MaxFiles = *update.MaxFiles
+	}
+	if update.IncludeStack != nil {
+		cfg.IncludeStack = *update.IncludeStack
+	}
+	if update.IncludeEnv != nil {
+		cfg.IncludeEnv = *update.IncludeEnv
+	}
+}
+
+func applyPreflightUpdates(cfg *config.PreflightConfig, update *PreflightConfigUpdate) {
+	if update.Enabled != nil {
+		cfg.Enabled = *update.Enabled
+	}
+	if update.MinFreeFDPercent != nil {
+		cfg.MinFreeFDPercent = *update.MinFreeFDPercent
+	}
+	if update.MinFreeMemoryMB != nil {
+		cfg.MinFreeMemoryMB = *update.MinFreeMemoryMB
 	}
 }

@@ -127,20 +127,21 @@ func (f *RunnerFactory) CreateRunner(ctx context.Context, workflowID string, cp 
 
 	// Create runner with all dependencies
 	runner := workflow.NewRunner(workflow.RunnerDeps{
-		Config:         runnerConfig,
-		State:          f.stateManager,
-		Agents:         f.agentRegistry,
-		DAG:            dagAdapter,
-		Checkpoint:     checkpointAdapter,
-		ResumeProvider: resumeAdapter,
-		Prompts:        promptAdapter,
-		Retry:          retryAdapter,
-		RateLimits:     rateLimiterAdapter,
-		Worktrees:      worktreeManager,
-		Logger:         f.logger,
-		Output:         outputNotifier,
-		ModeEnforcer:   modeEnforcerAdapter,
-		Control:        cp, // For pause/resume/cancel support
+		Config:           runnerConfig,
+		State:            f.stateManager,
+		Agents:           f.agentRegistry,
+		DAG:              dagAdapter,
+		Checkpoint:       checkpointAdapter,
+		ResumeProvider:   resumeAdapter,
+		Prompts:          promptAdapter,
+		Retry:            retryAdapter,
+		RateLimits:       rateLimiterAdapter,
+		Worktrees:        worktreeManager,
+		GitClientFactory: git.NewClientFactory(),
+		Logger:           f.logger,
+		Output:           outputNotifier,
+		ModeEnforcer:     modeEnforcerAdapter,
+		Control:          cp, // For pause/resume/cancel support
 	})
 
 	if runner == nil {

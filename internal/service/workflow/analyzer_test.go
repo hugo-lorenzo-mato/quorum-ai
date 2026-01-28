@@ -53,6 +53,10 @@ func (m *mockAgentRegistry) ListEnabled() []string {
 	return m.List()
 }
 
+func (m *mockAgentRegistry) ListEnabledForPhase(_ string) []string {
+	return m.List()
+}
+
 // mockAgent implements core.Agent for testing.
 type mockAgent struct {
 	name   string

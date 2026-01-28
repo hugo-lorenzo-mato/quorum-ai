@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS active_workflow (
 CREATE TABLE IF NOT EXISTS workflows (
     id TEXT PRIMARY KEY,
     version INTEGER NOT NULL DEFAULT 1,
+    title TEXT,
     status TEXT NOT NULL,
     current_phase TEXT NOT NULL,
     prompt TEXT NOT NULL,

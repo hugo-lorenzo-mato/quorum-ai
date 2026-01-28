@@ -7,4 +7,18 @@ Checking dependencies...
   ✓ codex
   ✓ copilot
 
-All dependencies available
+Checking agent configurations...
+
+  ✓ All agent configurations valid
+
+Validating quorum configuration...
+
+  ✗ config validation: agents.default: unknown agent (got: )
+  ✗ config validation: agents.default: default agent must be enabled (got: )
+  ✗ config validation: agents.*.phases.plan: at least 1 agent must have phases.plan: true (got: [])
+  ✗ config validation: agents.*.phases.execute: at least 1 agent must have phases.execute: true (got: [])
+
+Configuration errors must be fixed before running workflows.
+Edit .quorum/config.yaml to fix the issues above.
+
+Required dependencies available, some optional tools missing

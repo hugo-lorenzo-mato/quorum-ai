@@ -369,19 +369,20 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 
 	// Create workflow runner using modular architecture (ADR-0005)
 	runner := workflow.NewRunner(workflow.RunnerDeps{
-		Config:         runnerConfig,
-		State:          stateAdapter,
-		Agents:         registry,
-		DAG:            dagAdapter,
-		Checkpoint:     checkpointAdapter,
-		ResumeProvider: resumeAdapter,
-		Prompts:        promptAdapter,
-		Retry:          retryAdapter,
-		RateLimits:     rateLimiterAdapter,
-		Worktrees:      worktreeManager,
-		Logger:         logger,
-		Output:         outputNotifier,
-		ModeEnforcer:   modeEnforcerAdapter,
+		Config:           runnerConfig,
+		State:            stateAdapter,
+		Agents:           registry,
+		DAG:              dagAdapter,
+		Checkpoint:       checkpointAdapter,
+		ResumeProvider:   resumeAdapter,
+		Prompts:          promptAdapter,
+		Retry:            retryAdapter,
+		RateLimits:       rateLimiterAdapter,
+		Worktrees:        worktreeManager,
+		GitClientFactory: git.NewClientFactory(),
+		Logger:           logger,
+		Output:           outputNotifier,
+		ModeEnforcer:     modeEnforcerAdapter,
 	})
 
 	// Connect agent streaming events to the output notifier for real-time progress

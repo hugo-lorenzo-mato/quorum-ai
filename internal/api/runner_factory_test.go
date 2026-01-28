@@ -111,6 +111,10 @@ func (m *mockAgentRegistry) Available(_ context.Context) []string {
 	return nil
 }
 
+func (m *mockAgentRegistry) ListEnabledForPhase(_ string) []string {
+	return nil
+}
+
 func (m *mockAgentRegistry) AvailableForPhase(_ context.Context, _ string) []string {
 	return nil
 }

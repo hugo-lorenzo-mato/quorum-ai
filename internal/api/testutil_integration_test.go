@@ -410,6 +410,10 @@ func (m *mockAgentRegistryIntegration) Available(_ context.Context) []string {
 	return m.available
 }
 
+func (m *mockAgentRegistryIntegration) ListEnabledForPhase(_ string) []string {
+	return m.available
+}
+
 func (m *mockAgentRegistryIntegration) AvailableForPhase(_ context.Context, _ string) []string {
 	return m.available
 }

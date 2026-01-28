@@ -164,8 +164,9 @@ func runExecute(_ *cobra.Command, _ []string) error {
 	// Create workflow context
 	wctx := CreateWorkflowContext(deps, workflowState)
 
-	// Create executor
-	executor := workflow.NewExecutor(deps.DAGAdapter, deps.StateAdapter, deps.RunnerConfig.DenyTools)
+	// Create executor with git factory for task finalization (commit, push, PR)
+	executor := workflow.NewExecutor(deps.DAGAdapter, deps.StateAdapter, deps.RunnerConfig.DenyTools).
+		WithGitFactory(deps.GitClientFactory)
 
 	output.PhaseStarted(core.PhaseExecute)
 

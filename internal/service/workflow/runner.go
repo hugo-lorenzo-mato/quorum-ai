@@ -162,16 +162,17 @@ type RunnerDeps struct {
 		DAGBuilder
 		TaskDAG
 	}
-	Checkpoint     CheckpointCreator
-	ResumeProvider ResumePointProvider
-	Prompts        PromptRenderer
-	Retry          RetryExecutor
-	RateLimits     RateLimiterGetter
-	Worktrees      WorktreeManager
-	Logger         *logging.Logger
-	Output         OutputNotifier
-	ModeEnforcer   ModeEnforcerInterface
-	Control        *control.ControlPlane
+	Checkpoint       CheckpointCreator
+	ResumeProvider   ResumePointProvider
+	Prompts          PromptRenderer
+	Retry            RetryExecutor
+	RateLimits       RateLimiterGetter
+	Worktrees        WorktreeManager
+	GitClientFactory GitClientFactory
+	Logger           *logging.Logger
+	Output           OutputNotifier
+	ModeEnforcer     ModeEnforcerInterface
+	Control          *control.ControlPlane
 }
 
 // NewRunner creates a new workflow runner with all dependencies.
@@ -201,7 +202,7 @@ func NewRunner(deps RunnerDeps) *Runner {
 		refiner:        NewRefiner(deps.Config.Refiner),
 		analyzer:       analyzer,
 		planner:        NewPlanner(deps.DAG, deps.State),
-		executor:       NewExecutor(deps.DAG, deps.State, deps.Config.DenyTools),
+		executor:       NewExecutor(deps.DAG, deps.State, deps.Config.DenyTools).WithGitFactory(deps.GitClientFactory),
 		checkpoint:     deps.Checkpoint,
 		resumeProvider: deps.ResumeProvider,
 		prompts:        deps.Prompts,

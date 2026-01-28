@@ -424,20 +424,21 @@ func createWorkflowRunner(
 
 	// Create workflow runner
 	runner := workflow.NewRunner(workflow.RunnerDeps{
-		Config:         runnerConfig,
-		State:          stateAdapter,
-		Agents:         registry,
-		DAG:            dagAdapter,
-		Checkpoint:     checkpointAdapter,
-		ResumeProvider: resumeAdapter,
-		Prompts:        promptAdapter,
-		Retry:          retryAdapter,
-		RateLimits:     rateLimiterAdapter,
-		Worktrees:      worktreeManager,
-		Logger:         logger,
-		Output:         outputNotifier,
-		ModeEnforcer:   modeEnforcerAdapter,
-		Control:        controlPlane,
+		Config:           runnerConfig,
+		State:            stateAdapter,
+		Agents:           registry,
+		DAG:              dagAdapter,
+		Checkpoint:       checkpointAdapter,
+		ResumeProvider:   resumeAdapter,
+		Prompts:          promptAdapter,
+		Retry:            retryAdapter,
+		RateLimits:       rateLimiterAdapter,
+		Worktrees:        worktreeManager,
+		GitClientFactory: git.NewClientFactory(),
+		Logger:           logger,
+		Output:           outputNotifier,
+		ModeEnforcer:     modeEnforcerAdapter,
+		Control:          controlPlane,
 	})
 
 	return runner, nil
@@ -756,20 +757,21 @@ func createWorkflowRunnerWithTrace(
 
 	// Create workflow runner
 	runner := workflow.NewRunner(workflow.RunnerDeps{
-		Config:         runnerConfig,
-		State:          stateAdapter,
-		Agents:         registry,
-		DAG:            dagAdapter,
-		Checkpoint:     checkpointAdapter,
-		ResumeProvider: resumeAdapter,
-		Prompts:        promptAdapter,
-		Retry:          retryAdapter,
-		RateLimits:     rateLimiterAdapter,
-		Worktrees:      worktreeManager,
-		Logger:         logger,
-		Output:         outputNotifier,
-		ModeEnforcer:   modeEnforcerAdapter,
-		Control:        controlPlane,
+		Config:           runnerConfig,
+		State:            stateAdapter,
+		Agents:           registry,
+		DAG:              dagAdapter,
+		Checkpoint:       checkpointAdapter,
+		ResumeProvider:   resumeAdapter,
+		Prompts:          promptAdapter,
+		Retry:            retryAdapter,
+		RateLimits:       rateLimiterAdapter,
+		Worktrees:        worktreeManager,
+		GitClientFactory: git.NewClientFactory(),
+		Logger:           logger,
+		Output:           outputNotifier,
+		ModeEnforcer:     modeEnforcerAdapter,
+		Control:          controlPlane,
 	})
 
 	return runner, nil

@@ -43,6 +43,7 @@ type PhaseRunnerDeps struct {
 	ResumeAdapter     *workflow.ResumePointAdapter
 	DAGAdapter        *workflow.DAGAdapter
 	WorktreeManager   workflow.WorktreeManager
+	GitClientFactory  workflow.GitClientFactory
 	RunnerConfig      *workflow.RunnerConfig
 	PhaseTimeout      time.Duration
 }
@@ -232,6 +233,9 @@ func InitPhaseRunner(ctx context.Context, phase core.Phase, maxRetries int, dryR
 		worktreeManager = git.NewTaskWorktreeManager(gitClient, cfg.Git.WorktreeDir).WithLogger(logger)
 	}
 
+	// Create git client factory for task finalization (commit, push, PR)
+	gitClientFactory := git.NewClientFactory()
+
 	// Create adapters for modular runner interfaces
 	checkpointAdapter := workflow.NewCheckpointAdapter(checkpointManager, ctx)
 	retryAdapter := workflow.NewRetryAdapter(retryPolicy, ctx)
@@ -257,6 +261,7 @@ func InitPhaseRunner(ctx context.Context, phase core.Phase, maxRetries int, dryR
 		ResumeAdapter:     resumeAdapter,
 		DAGAdapter:        dagAdapter,
 		WorktreeManager:   worktreeManager,
+		GitClientFactory:  gitClientFactory,
 		RunnerConfig:      runnerConfig,
 		PhaseTimeout:      phaseTimeout,
 	}, nil

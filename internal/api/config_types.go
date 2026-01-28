@@ -1,0 +1,441 @@
+package api
+
+// ============================================================================
+// RESPONSE DTOs (for GET /api/v1/config)
+// ============================================================================
+
+// ConfigResponseWithMeta wraps config response with metadata.
+type ConfigResponseWithMeta struct {
+	Config FullConfigResponse `json:"config"`
+	Meta   ConfigMeta         `json:"_meta"`
+}
+
+// ConfigMeta contains configuration metadata for sync/conflict detection.
+type ConfigMeta struct {
+	ETag         string `json:"etag"`
+	LastModified string `json:"last_modified,omitempty"`
+	Source       string `json:"source"` // "file", "default"
+}
+
+// FullConfigResponse represents the complete configuration response.
+type FullConfigResponse struct {
+	Log         LogConfigResponse         `json:"log"`
+	Trace       TraceConfigResponse       `json:"trace"`
+	Workflow    WorkflowConfigResponse    `json:"workflow"`
+	Phases      PhasesConfigResponse      `json:"phases"`
+	Agents      AgentsConfigResponse      `json:"agents"`
+	State       StateConfigResponse       `json:"state"`
+	Git         GitConfigResponse         `json:"git"`
+	GitHub      GitHubConfigResponse      `json:"github"`
+	Chat        ChatConfigResponse        `json:"chat"`
+	Report      ReportConfigResponse      `json:"report"`
+	Diagnostics DiagnosticsConfigResponse `json:"diagnostics"`
+}
+
+// LogConfigResponse represents logging configuration.
+type LogConfigResponse struct {
+	Level  string `json:"level"`
+	Format string `json:"format"`
+}
+
+// TraceConfigResponse represents trace configuration.
+type TraceConfigResponse struct {
+	Mode            string   `json:"mode"`
+	Dir             string   `json:"dir"`
+	SchemaVersion   int      `json:"schema_version"`
+	Redact          bool     `json:"redact"`
+	RedactPatterns  []string `json:"redact_patterns"`
+	RedactAllowlist []string `json:"redact_allowlist"`
+	MaxBytes        int64    `json:"max_bytes"`
+	TotalMaxBytes   int64    `json:"total_max_bytes"`
+	MaxFiles        int      `json:"max_files"`
+	IncludePhases   []string `json:"include_phases"`
+}
+
+// WorkflowConfigResponse represents workflow configuration.
+type WorkflowConfigResponse struct {
+	Timeout    string   `json:"timeout"`
+	MaxRetries int      `json:"max_retries"`
+	DryRun     bool     `json:"dry_run"`
+	Sandbox    bool     `json:"sandbox"`
+	DenyTools  []string `json:"deny_tools"`
+}
+
+// PhasesConfigResponse represents all phase configurations.
+type PhasesConfigResponse struct {
+	Analyze AnalyzePhaseConfigResponse `json:"analyze"`
+	Plan    PlanPhaseConfigResponse    `json:"plan"`
+	Execute ExecutePhaseConfigResponse `json:"execute"`
+}
+
+// AnalyzePhaseConfigResponse represents analyze phase configuration.
+type AnalyzePhaseConfigResponse struct {
+	Timeout     string                    `json:"timeout"`
+	Refiner     RefinerConfigResponse     `json:"refiner"`
+	Moderator   ModeratorConfigResponse   `json:"moderator"`
+	Synthesizer SynthesizerConfigResponse `json:"synthesizer"`
+	SingleAgent SingleAgentConfigResponse `json:"single_agent"`
+}
+
+// RefinerConfigResponse represents refiner configuration.
+type RefinerConfigResponse struct {
+	Enabled bool   `json:"enabled"`
+	Agent   string `json:"agent"`
+}
+
+// ModeratorConfigResponse represents moderator configuration.
+type ModeratorConfigResponse struct {
+	Enabled             bool    `json:"enabled"`
+	Agent               string  `json:"agent"`
+	Threshold           float64 `json:"threshold"`
+	MinRounds           int     `json:"min_rounds"`
+	MaxRounds           int     `json:"max_rounds"`
+	AbortThreshold      float64 `json:"abort_threshold"`
+	StagnationThreshold float64 `json:"stagnation_threshold"`
+}
+
+// SynthesizerConfigResponse represents synthesizer configuration.
+type SynthesizerConfigResponse struct {
+	Agent string `json:"agent"`
+}
+
+// SingleAgentConfigResponse represents single-agent mode configuration.
+type SingleAgentConfigResponse struct {
+	Enabled bool   `json:"enabled"`
+	Agent   string `json:"agent"`
+	Model   string `json:"model"`
+}
+
+// PlanPhaseConfigResponse represents plan phase configuration.
+type PlanPhaseConfigResponse struct {
+	Timeout     string                        `json:"timeout"`
+	Synthesizer PlanSynthesizerConfigResponse `json:"synthesizer"`
+}
+
+// PlanSynthesizerConfigResponse represents plan synthesizer configuration.
+type PlanSynthesizerConfigResponse struct {
+	Enabled bool   `json:"enabled"`
+	Agent   string `json:"agent"`
+}
+
+// ExecutePhaseConfigResponse represents execute phase configuration.
+type ExecutePhaseConfigResponse struct {
+	Timeout string `json:"timeout"`
+}
+
+// AgentsConfigResponse represents all agent configurations.
+type AgentsConfigResponse struct {
+	Default string                  `json:"default"`
+	Claude  FullAgentConfigResponse `json:"claude"`
+	Gemini  FullAgentConfigResponse `json:"gemini"`
+	Codex   FullAgentConfigResponse `json:"codex"`
+	Copilot FullAgentConfigResponse `json:"copilot"`
+}
+
+// FullAgentConfigResponse represents complete agent configuration.
+type FullAgentConfigResponse struct {
+	Enabled                   bool              `json:"enabled"`
+	Path                      string            `json:"path"`
+	Model                     string            `json:"model"`
+	PhaseModels               map[string]string `json:"phase_models"`
+	Phases                    map[string]bool   `json:"phases"`
+	ReasoningEffort           string            `json:"reasoning_effort"`
+	ReasoningEffortPhases     map[string]string `json:"reasoning_effort_phases"`
+	TokenDiscrepancyThreshold float64           `json:"token_discrepancy_threshold"`
+}
+
+// StateConfigResponse represents state persistence configuration.
+type StateConfigResponse struct {
+	Backend    string `json:"backend"`
+	Path       string `json:"path"`
+	BackupPath string `json:"backup_path"`
+	LockTTL    string `json:"lock_ttl"`
+}
+
+// GitConfigResponse represents git configuration.
+type GitConfigResponse struct {
+	WorktreeDir   string `json:"worktree_dir"`
+	AutoClean     bool   `json:"auto_clean"`
+	WorktreeMode  string `json:"worktree_mode"`
+	AutoCommit    bool   `json:"auto_commit"`
+	AutoPush      bool   `json:"auto_push"`
+	AutoPR        bool   `json:"auto_pr"`
+	AutoMerge     bool   `json:"auto_merge"`
+	PRBaseBranch  string `json:"pr_base_branch"`
+	MergeStrategy string `json:"merge_strategy"`
+}
+
+// GitHubConfigResponse represents GitHub configuration.
+type GitHubConfigResponse struct {
+	Remote string `json:"remote"`
+}
+
+// ChatConfigResponse represents chat configuration.
+type ChatConfigResponse struct {
+	Timeout          string `json:"timeout"`
+	ProgressInterval string `json:"progress_interval"`
+	Editor           string `json:"editor"`
+}
+
+// ReportConfigResponse represents report configuration.
+type ReportConfigResponse struct {
+	Enabled    bool   `json:"enabled"`
+	BaseDir    string `json:"base_dir"`
+	UseUTC     bool   `json:"use_utc"`
+	IncludeRaw bool   `json:"include_raw"`
+}
+
+// DiagnosticsConfigResponse represents diagnostics configuration.
+type DiagnosticsConfigResponse struct {
+	Enabled            bool                             `json:"enabled"`
+	ResourceMonitoring ResourceMonitoringConfigResponse `json:"resource_monitoring"`
+	CrashDump          CrashDumpConfigResponse          `json:"crash_dump"`
+	PreflightChecks    PreflightConfigResponse          `json:"preflight_checks"`
+}
+
+// ResourceMonitoringConfigResponse represents resource monitoring configuration.
+type ResourceMonitoringConfigResponse struct {
+	Interval           string `json:"interval"`
+	FDThresholdPercent int    `json:"fd_threshold_percent"`
+	GoroutineThreshold int    `json:"goroutine_threshold"`
+	MemoryThresholdMB  int    `json:"memory_threshold_mb"`
+	HistorySize        int    `json:"history_size"`
+}
+
+// CrashDumpConfigResponse represents crash dump configuration.
+type CrashDumpConfigResponse struct {
+	Dir          string `json:"dir"`
+	MaxFiles     int    `json:"max_files"`
+	IncludeStack bool   `json:"include_stack"`
+	IncludeEnv   bool   `json:"include_env"`
+}
+
+// PreflightConfigResponse represents preflight checks configuration.
+type PreflightConfigResponse struct {
+	Enabled          bool `json:"enabled"`
+	MinFreeFDPercent int  `json:"min_free_fd_percent"`
+	MinFreeMemoryMB  int  `json:"min_free_memory_mb"`
+}
+
+// ============================================================================
+// UPDATE DTOs (for PATCH /api/v1/config)
+// All fields are pointers to support partial updates (nil = unchanged)
+// ============================================================================
+
+// FullConfigUpdate represents a complete configuration update request.
+type FullConfigUpdate struct {
+	Log         *LogConfigUpdate         `json:"log,omitempty"`
+	Trace       *TraceConfigUpdate       `json:"trace,omitempty"`
+	Workflow    *WorkflowConfigUpdate    `json:"workflow,omitempty"`
+	Phases      *PhasesConfigUpdate      `json:"phases,omitempty"`
+	Agents      *AgentsConfigUpdate      `json:"agents,omitempty"`
+	State       *StateConfigUpdate       `json:"state,omitempty"`
+	Git         *GitConfigUpdate         `json:"git,omitempty"`
+	GitHub      *GitHubConfigUpdate      `json:"github,omitempty"`
+	Chat        *ChatConfigUpdate        `json:"chat,omitempty"`
+	Report      *ReportConfigUpdate      `json:"report,omitempty"`
+	Diagnostics *DiagnosticsConfigUpdate `json:"diagnostics,omitempty"`
+}
+
+// LogConfigUpdate represents log configuration update.
+type LogConfigUpdate struct {
+	Level  *string `json:"level,omitempty"`
+	Format *string `json:"format,omitempty"`
+}
+
+// TraceConfigUpdate represents trace configuration update.
+type TraceConfigUpdate struct {
+	Mode            *string   `json:"mode,omitempty"`
+	Dir             *string   `json:"dir,omitempty"`
+	SchemaVersion   *int      `json:"schema_version,omitempty"`
+	Redact          *bool     `json:"redact,omitempty"`
+	RedactPatterns  *[]string `json:"redact_patterns,omitempty"`
+	RedactAllowlist *[]string `json:"redact_allowlist,omitempty"`
+	MaxBytes        *int64    `json:"max_bytes,omitempty"`
+	TotalMaxBytes   *int64    `json:"total_max_bytes,omitempty"`
+	MaxFiles        *int      `json:"max_files,omitempty"`
+	IncludePhases   *[]string `json:"include_phases,omitempty"`
+}
+
+// WorkflowConfigUpdate represents workflow configuration update.
+type WorkflowConfigUpdate struct {
+	Timeout    *string   `json:"timeout,omitempty"`
+	MaxRetries *int      `json:"max_retries,omitempty"`
+	DryRun     *bool     `json:"dry_run,omitempty"`
+	Sandbox    *bool     `json:"sandbox,omitempty"`
+	DenyTools  *[]string `json:"deny_tools,omitempty"`
+}
+
+// PhasesConfigUpdate represents phases configuration update.
+type PhasesConfigUpdate struct {
+	Analyze *AnalyzePhaseConfigUpdate `json:"analyze,omitempty"`
+	Plan    *PlanPhaseConfigUpdate    `json:"plan,omitempty"`
+	Execute *ExecutePhaseConfigUpdate `json:"execute,omitempty"`
+}
+
+// AnalyzePhaseConfigUpdate represents analyze phase update.
+type AnalyzePhaseConfigUpdate struct {
+	Timeout     *string                  `json:"timeout,omitempty"`
+	Refiner     *RefinerConfigUpdate     `json:"refiner,omitempty"`
+	Moderator   *ModeratorConfigUpdate   `json:"moderator,omitempty"`
+	Synthesizer *SynthesizerConfigUpdate `json:"synthesizer,omitempty"`
+	SingleAgent *SingleAgentConfigUpdate `json:"single_agent,omitempty"`
+}
+
+// RefinerConfigUpdate represents refiner update.
+type RefinerConfigUpdate struct {
+	Enabled *bool   `json:"enabled,omitempty"`
+	Agent   *string `json:"agent,omitempty"`
+}
+
+// ModeratorConfigUpdate represents moderator update.
+type ModeratorConfigUpdate struct {
+	Enabled             *bool    `json:"enabled,omitempty"`
+	Agent               *string  `json:"agent,omitempty"`
+	Threshold           *float64 `json:"threshold,omitempty"`
+	MinRounds           *int     `json:"min_rounds,omitempty"`
+	MaxRounds           *int     `json:"max_rounds,omitempty"`
+	AbortThreshold      *float64 `json:"abort_threshold,omitempty"`
+	StagnationThreshold *float64 `json:"stagnation_threshold,omitempty"`
+}
+
+// SynthesizerConfigUpdate represents synthesizer update.
+type SynthesizerConfigUpdate struct {
+	Agent *string `json:"agent,omitempty"`
+}
+
+// SingleAgentConfigUpdate represents single-agent mode update.
+type SingleAgentConfigUpdate struct {
+	Enabled *bool   `json:"enabled,omitempty"`
+	Agent   *string `json:"agent,omitempty"`
+	Model   *string `json:"model,omitempty"`
+}
+
+// PlanPhaseConfigUpdate represents plan phase update.
+type PlanPhaseConfigUpdate struct {
+	Timeout     *string                      `json:"timeout,omitempty"`
+	Synthesizer *PlanSynthesizerConfigUpdate `json:"synthesizer,omitempty"`
+}
+
+// PlanSynthesizerConfigUpdate represents plan synthesizer update.
+type PlanSynthesizerConfigUpdate struct {
+	Enabled *bool   `json:"enabled,omitempty"`
+	Agent   *string `json:"agent,omitempty"`
+}
+
+// ExecutePhaseConfigUpdate represents execute phase update.
+type ExecutePhaseConfigUpdate struct {
+	Timeout *string `json:"timeout,omitempty"`
+}
+
+// AgentsConfigUpdate represents agents configuration update.
+type AgentsConfigUpdate struct {
+	Default *string                `json:"default,omitempty"`
+	Claude  *FullAgentConfigUpdate `json:"claude,omitempty"`
+	Gemini  *FullAgentConfigUpdate `json:"gemini,omitempty"`
+	Codex   *FullAgentConfigUpdate `json:"codex,omitempty"`
+	Copilot *FullAgentConfigUpdate `json:"copilot,omitempty"`
+}
+
+// FullAgentConfigUpdate represents complete agent update.
+type FullAgentConfigUpdate struct {
+	Enabled                   *bool              `json:"enabled,omitempty"`
+	Path                      *string            `json:"path,omitempty"`
+	Model                     *string            `json:"model,omitempty"`
+	PhaseModels               *map[string]string `json:"phase_models,omitempty"`
+	Phases                    *map[string]bool   `json:"phases,omitempty"`
+	ReasoningEffort           *string            `json:"reasoning_effort,omitempty"`
+	ReasoningEffortPhases     *map[string]string `json:"reasoning_effort_phases,omitempty"`
+	TokenDiscrepancyThreshold *float64           `json:"token_discrepancy_threshold,omitempty"`
+}
+
+// StateConfigUpdate represents state configuration update.
+type StateConfigUpdate struct {
+	Backend    *string `json:"backend,omitempty"`
+	Path       *string `json:"path,omitempty"`
+	BackupPath *string `json:"backup_path,omitempty"`
+	LockTTL    *string `json:"lock_ttl,omitempty"`
+}
+
+// GitConfigUpdate represents git configuration update.
+type GitConfigUpdate struct {
+	WorktreeDir   *string `json:"worktree_dir,omitempty"`
+	AutoClean     *bool   `json:"auto_clean,omitempty"`
+	WorktreeMode  *string `json:"worktree_mode,omitempty"`
+	AutoCommit    *bool   `json:"auto_commit,omitempty"`
+	AutoPush      *bool   `json:"auto_push,omitempty"`
+	AutoPR        *bool   `json:"auto_pr,omitempty"`
+	AutoMerge     *bool   `json:"auto_merge,omitempty"`
+	PRBaseBranch  *string `json:"pr_base_branch,omitempty"`
+	MergeStrategy *string `json:"merge_strategy,omitempty"`
+}
+
+// GitHubConfigUpdate represents GitHub configuration update.
+type GitHubConfigUpdate struct {
+	Remote *string `json:"remote,omitempty"`
+}
+
+// ChatConfigUpdate represents chat configuration update.
+type ChatConfigUpdate struct {
+	Timeout          *string `json:"timeout,omitempty"`
+	ProgressInterval *string `json:"progress_interval,omitempty"`
+	Editor           *string `json:"editor,omitempty"`
+}
+
+// ReportConfigUpdate represents report configuration update.
+type ReportConfigUpdate struct {
+	Enabled    *bool   `json:"enabled,omitempty"`
+	BaseDir    *string `json:"base_dir,omitempty"`
+	UseUTC     *bool   `json:"use_utc,omitempty"`
+	IncludeRaw *bool   `json:"include_raw,omitempty"`
+}
+
+// DiagnosticsConfigUpdate represents diagnostics configuration update.
+type DiagnosticsConfigUpdate struct {
+	Enabled            *bool                            `json:"enabled,omitempty"`
+	ResourceMonitoring *ResourceMonitoringConfigUpdate  `json:"resource_monitoring,omitempty"`
+	CrashDump          *CrashDumpConfigUpdate           `json:"crash_dump,omitempty"`
+	PreflightChecks    *PreflightConfigUpdate           `json:"preflight_checks,omitempty"`
+}
+
+// ResourceMonitoringConfigUpdate represents resource monitoring update.
+type ResourceMonitoringConfigUpdate struct {
+	Interval           *string `json:"interval,omitempty"`
+	FDThresholdPercent *int    `json:"fd_threshold_percent,omitempty"`
+	GoroutineThreshold *int    `json:"goroutine_threshold,omitempty"`
+	MemoryThresholdMB  *int    `json:"memory_threshold_mb,omitempty"`
+	HistorySize        *int    `json:"history_size,omitempty"`
+}
+
+// CrashDumpConfigUpdate represents crash dump update.
+type CrashDumpConfigUpdate struct {
+	Dir          *string `json:"dir,omitempty"`
+	MaxFiles     *int    `json:"max_files,omitempty"`
+	IncludeStack *bool   `json:"include_stack,omitempty"`
+	IncludeEnv   *bool   `json:"include_env,omitempty"`
+}
+
+// PreflightConfigUpdate represents preflight checks update.
+type PreflightConfigUpdate struct {
+	Enabled          *bool `json:"enabled,omitempty"`
+	MinFreeFDPercent *int  `json:"min_free_fd_percent,omitempty"`
+	MinFreeMemoryMB  *int  `json:"min_free_memory_mb,omitempty"`
+}
+
+// ============================================================================
+// METADATA DTOs (for GET /api/v1/config/schema)
+// ============================================================================
+
+// ConfigFieldMeta provides metadata about a configuration field.
+type ConfigFieldMeta struct {
+	Type        string      `json:"type"`          // string, int, bool, float64, []string, map[string]string, map[string]bool
+	Default     interface{} `json:"default"`       // Default value from loader
+	Required    bool        `json:"required"`      // Is this field required?
+	ValidValues []string    `json:"valid_values"`  // For enums, list of valid values
+	Min         *float64    `json:"min,omitempty"` // For numeric types, minimum value
+	Max         *float64    `json:"max,omitempty"` // For numeric types, maximum value
+	Description string      `json:"description"`   // Human-readable description
+	Tooltip     string      `json:"tooltip"`       // Tooltip text for UI
+	DependsOn   []string    `json:"depends_on"`    // Fields this depends on
+	Category    string      `json:"category"`      // UI grouping category
+}

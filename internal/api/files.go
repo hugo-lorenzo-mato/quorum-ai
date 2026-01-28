@@ -265,9 +265,13 @@ func (s *Server) buildFileTree(dir, relPath string, depth, maxDepth int) ([]File
 // resolvePath resolves a relative path and validates it's within the project.
 func (s *Server) resolvePath(requestedPath string) (string, error) {
 	// Get working directory
-	wd, err := os.Getwd()
-	if err != nil {
-		return "", err
+	wd := s.root
+	if wd == "" {
+		var err error
+		wd, err = os.Getwd()
+		if err != nil {
+			return "", err
+		}
 	}
 
 	// Clean and resolve the path

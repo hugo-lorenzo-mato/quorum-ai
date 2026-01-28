@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 
@@ -31,6 +32,7 @@ type Server struct {
 	chatHandler     *webadapters.ChatHandler
 	resourceMonitor *diagnostics.ResourceMonitor
 	configLoader    *config.Loader // for workflow execution configuration
+	root            string         // root directory for file operations
 
 	// Control planes for running workflows (enables pause/resume/cancel)
 	controlPlanesMu sync.RWMutex
@@ -68,12 +70,21 @@ func WithConfigLoader(loader *config.Loader) ServerOption {
 	}
 }
 
+// WithRoot sets the root directory for file operations.
+func WithRoot(root string) ServerOption {
+	return func(s *Server) {
+		s.root = root
+	}
+}
+
 // NewServer creates a new API server.
 func NewServer(stateManager core.StateManager, eventBus *events.EventBus, opts ...ServerOption) *Server {
+	wd, _ := os.Getwd() // Best effort default
 	s := &Server{
 		stateManager:  stateManager,
 		eventBus:      eventBus,
 		logger:        slog.Default(),
+		root:          wd,
 		controlPlanes: make(map[string]*control.ControlPlane),
 	}
 
@@ -197,7 +208,10 @@ func (s *Server) setupRouter() chi.Router {
 		r.Route("/config", func(r chi.Router) {
 			r.Get("/", s.handleGetConfig)
 			r.Patch("/", s.handleUpdateConfig)
+			r.Post("/validate", s.handleValidateConfig)
 			r.Get("/agents", s.handleGetAgents)
+			r.Get("/schema", s.handleGetConfigSchema)
+			r.Get("/enums", s.handleGetEnums)
 		})
 	})
 

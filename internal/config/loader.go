@@ -223,6 +223,9 @@ func (l *Loader) setDefaults() {
 
 // ConfigFile returns the config file path if one was used.
 func (l *Loader) ConfigFile() string {
+	if l.configFile != "" {
+		return l.configFile
+	}
 	return l.v.ConfigFileUsed()
 }
 

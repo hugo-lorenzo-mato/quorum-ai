@@ -1,195 +1,166 @@
-import { useState } from 'react';
-import { useUIStore } from '../stores';
+import { useEffect, useState } from 'react';
+import { useConfigStore } from '../stores/configStore';
 import {
-  Settings as SettingsIcon,
-  Sun,
-  Moon,
-  Monitor,
-  Palette,
-  Bell,
-  Shield,
-  Database,
-  Info,
-  Check,
-  ExternalLink,
-} from 'lucide-react';
+  SettingsToolbar,
+  ConflictDialog,
+  GeneralTab,
+  WorkflowTab,
+  AgentsTab,
+  PhasesTab,
+  GitTab,
+  AdvancedTab,
+} from '../components/config';
 
-function SettingSection({ title, description, children }) {
-  return (
-    <div className="p-6 rounded-xl border border-border bg-card">
-      <div className="mb-4">
-        <h3 className="text-lg font-semibold text-foreground">{title}</h3>
-        {description && (
-          <p className="text-sm text-muted-foreground mt-1">{description}</p>
-        )}
-      </div>
-      {children}
-    </div>
-  );
-}
-
-function ThemeOption({ value, icon: Icon, label, description, selected, onClick }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`relative flex items-start gap-4 p-4 rounded-lg border-2 transition-all text-left ${
-        selected
-          ? 'border-primary bg-primary/5'
-          : 'border-border hover:border-muted-foreground/50'
-      }`}
-    >
-      <div className={`p-2 rounded-lg ${selected ? 'bg-primary/10' : 'bg-muted'}`}>
-        <Icon className={`w-5 h-5 ${selected ? 'text-primary' : 'text-muted-foreground'}`} />
-      </div>
-      <div className="flex-1">
-        <p className="font-medium text-foreground">{label}</p>
-        <p className="text-sm text-muted-foreground">{description}</p>
-      </div>
-      {selected && (
-        <div className="absolute top-3 right-3 p-1 rounded-full bg-primary">
-          <Check className="w-3 h-3 text-primary-foreground" />
-        </div>
-      )}
-    </button>
-  );
-}
-
-function ToggleSetting({ label, description, checked, onChange }) {
-  return (
-    <div className="flex items-center justify-between py-3">
-      <div>
-        <p className="text-sm font-medium text-foreground">{label}</p>
-        {description && (
-          <p className="text-xs text-muted-foreground">{description}</p>
-        )}
-      </div>
-      <button
-        onClick={() => onChange(!checked)}
-        className={`relative w-11 h-6 rounded-full transition-colors ${
-          checked ? 'bg-primary' : 'bg-muted'
-        }`}
-      >
-        <span
-          className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${
-            checked ? 'translate-x-5' : ''
-          }`}
-        />
-      </button>
-    </div>
-  );
-}
+const TABS = [
+  { id: 'general', label: 'General', icon: SettingsIcon, component: GeneralTab },
+  { id: 'workflow', label: 'Workflow', icon: WorkflowIcon, component: WorkflowTab },
+  { id: 'agents', label: 'Agents', icon: AgentsIcon, component: AgentsTab },
+  { id: 'phases', label: 'Phases', icon: PhasesIcon, component: PhasesTab },
+  { id: 'git', label: 'Git', icon: GitIcon, component: GitTab },
+  { id: 'advanced', label: 'Advanced', icon: AdvancedIcon, component: AdvancedTab },
+];
 
 export default function Settings() {
-  const { theme, setTheme } = useUIStore();
-  const [notifications, setNotifications] = useState(true);
-  const [sounds, setSounds] = useState(false);
+  const [activeTab, setActiveTab] = useState('general');
+  const loadConfig = useConfigStore((state) => state.loadConfig);
+  const loadMetadata = useConfigStore((state) => state.loadMetadata);
+  const isLoading = useConfigStore((state) => state.isLoading);
+  const error = useConfigStore((state) => state.error);
+  const config = useConfigStore((state) => state.config);
 
-  const themes = [
-    { value: 'light', icon: Sun, label: 'Light', description: 'Clean and bright interface' },
-    { value: 'dark', icon: Moon, label: 'Dark', description: 'Easy on the eyes' },
-    { value: 'midnight', icon: Palette, label: 'Midnight', description: 'Pure black for OLED displays' },
-    { value: 'system', icon: Monitor, label: 'System', description: 'Follow system preference' },
-  ];
+  // Load config and metadata on mount
+  useEffect(() => {
+    loadConfig();
+    loadMetadata();
+  }, [loadConfig, loadMetadata]);
+
+  const ActiveComponent = TABS.find((t) => t.id === activeTab)?.component;
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6 animate-fade-in">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pb-20">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-semibold text-foreground tracking-tight">Settings</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Customize your Quorum AI experience
-        </p>
-      </div>
-
-      {/* Appearance */}
-      <SettingSection
-        title="Appearance"
-        description="Choose how Quorum AI looks to you"
-      >
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {themes.map((t) => (
-            <ThemeOption
-              key={t.value}
-              value={t.value}
-              icon={t.icon}
-              label={t.label}
-              description={t.description}
-              selected={theme === t.value}
-              onClick={() => setTheme(t.value)}
-            />
-          ))}
+      <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+        <div className="max-w-5xl mx-auto px-4 py-6">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+            Settings
+          </h1>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            Configure Quorum behavior and preferences
+          </p>
         </div>
-      </SettingSection>
+      </header>
 
-      {/* Notifications */}
-      <SettingSection
-        title="Notifications"
-        description="Configure how you receive updates"
-      >
-        <div className="divide-y divide-border">
-          <ToggleSetting
-            label="Push Notifications"
-            description="Receive notifications when workflows complete"
-            checked={notifications}
-            onChange={setNotifications}
-          />
-          <ToggleSetting
-            label="Sound Effects"
-            description="Play sounds for important events"
-            checked={sounds}
-            onChange={setSounds}
-          />
-        </div>
-      </SettingSection>
-
-      {/* API Configuration */}
-      <SettingSection
-        title="API Configuration"
-        description="Configure API endpoints and authentication"
-      >
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-foreground mb-2">
-              API Endpoint
-            </label>
-            <input
-              type="text"
-              value="http://localhost:8080/api/v1"
-              readOnly
-              className="w-full h-10 px-4 border border-input rounded-lg bg-muted text-muted-foreground"
-            />
-          </div>
-          <div className="flex items-center gap-2 p-3 rounded-lg bg-info/10 text-info">
-            <Info className="w-4 h-4 flex-shrink-0" />
-            <p className="text-sm">API configuration is managed by the server</p>
+      {/* Tab Navigation */}
+      <nav className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-40">
+        <div className="max-w-5xl mx-auto px-4">
+          <div className="flex space-x-1 overflow-x-auto">
+            {TABS.map((tab) => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`
+                    flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap
+                    ${isActive
+                      ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                      : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                    }
+                  `}
+                >
+                  <Icon className="w-4 h-4" />
+                  {tab.label}
+                </button>
+              );
+            })}
           </div>
         </div>
-      </SettingSection>
+      </nav>
 
-      {/* About */}
-      <SettingSection title="About">
-        <div className="space-y-4">
-          <div className="flex items-center justify-between py-2">
-            <span className="text-sm text-muted-foreground">Version</span>
-            <span className="text-sm font-medium text-foreground">1.0.0</span>
+      {/* Content */}
+      <main className="max-w-5xl mx-auto px-4 py-6">
+        {isLoading && !config && (
+          <div className="flex items-center justify-center py-12">
+            <svg className="animate-spin h-8 w-8 text-blue-600" viewBox="0 0 24 24" role="status">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+            </svg>
           </div>
-          <div className="flex items-center justify-between py-2">
-            <span className="text-sm text-muted-foreground">Build</span>
-            <span className="text-sm font-medium text-foreground">2024.01.25</span>
-          </div>
-          <div className="pt-4 border-t border-border">
-            <a
-              href="https://github.com/hugo-lorenzo-mato/quorum-ai"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+        )}
+
+        {error && (
+          <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+            <p className="text-red-700 dark:text-red-300">{error}</p>
+            <button
+              onClick={loadConfig}
+              className="mt-2 text-sm text-red-600 dark:text-red-400 hover:underline"
             >
-              <ExternalLink className="w-4 h-4" />
-              View on GitHub
-            </a>
+              Retry
+            </button>
           </div>
-        </div>
-      </SettingSection>
+        )}
+
+        {!isLoading && !error && config && ActiveComponent && (
+          <ActiveComponent />
+        )}
+      </main>
+
+      {/* Floating Toolbar */}
+      <SettingsToolbar />
+
+      {/* Conflict Dialog */}
+      <ConflictDialog />
     </div>
+  );
+}
+
+// Icon Components
+function SettingsIcon({ className }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+    </svg>
+  );
+}
+
+function WorkflowIcon({ className }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
+    </svg>
+  );
+}
+
+function AgentsIcon({ className }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+    </svg>
+  );
+}
+
+function PhasesIcon({ className }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+    </svg>
+  );
+}
+
+function GitIcon({ className }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+    </svg>
+  );
+}
+
+function AdvancedIcon({ className }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+    </svg>
   );
 }
