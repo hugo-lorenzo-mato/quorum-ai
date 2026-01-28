@@ -5,6 +5,7 @@ import { fileApi, workflowApi } from '../lib/api';
 import MarkdownViewer from '../components/MarkdownViewer';
 import AgentActivity, { AgentActivityCompact } from '../components/AgentActivity';
 import EditWorkflowModal from '../components/EditWorkflowModal';
+import VoiceInputButton from '../components/VoiceInputButton';
 import {
   GitBranch,
   Plus,
@@ -861,14 +862,21 @@ function NewWorkflowForm({ onSubmit, onCancel, loading }) {
           <label className="block text-sm font-medium text-foreground mb-2">
             Workflow Prompt
           </label>
-          <textarea
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            placeholder="Describe what you want the AI agents to accomplish..."
-            rows={8}
-            spellCheck={false}
-            className="w-full px-3 py-2 border border-input rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background resize-none font-mono text-sm leading-6"
-          />
+          <div className="relative">
+            <textarea
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              placeholder="Describe what you want the AI agents to accomplish..."
+              rows={8}
+              spellCheck={false}
+              className="w-full px-3 py-2 pr-12 border border-input rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background resize-none font-mono text-sm leading-6"
+            />
+            <VoiceInputButton
+              onTranscript={(text) => setPrompt((prev) => (prev ? prev + ' ' + text : text))}
+              disabled={loading}
+              className="absolute top-2 right-2"
+            />
+          </div>
         </div>
         <div className="flex gap-3">
           <button

@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { X, Pencil } from 'lucide-react';
 import TurndownService from 'turndown';
+import VoiceInputButton from './VoiceInputButton';
 
 /**
  * EditWorkflowModal - Clean modal for editing workflow title and prompt
@@ -180,16 +181,23 @@ export default function EditWorkflowModal({ isOpen, onClose, workflow, onSave })
             <label htmlFor={promptInputId} className="block text-sm font-medium text-foreground mb-1.5">
               Prompt
             </label>
-            <textarea
-              id={promptInputId}
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              onPaste={handlePromptPaste}
-              placeholder="Describe what you want the AI agents to accomplish..."
-              rows={8}
-              spellCheck={false}
-              className="w-full px-3 py-2 rounded-lg border border-input bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background resize-none transition-shadow font-mono text-sm leading-6"
-            />
+            <div className="relative">
+              <textarea
+                id={promptInputId}
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                onPaste={handlePromptPaste}
+                placeholder="Describe what you want the AI agents to accomplish..."
+                rows={8}
+                spellCheck={false}
+                className="w-full px-3 py-2 pr-12 rounded-lg border border-input bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background resize-none transition-shadow font-mono text-sm leading-6"
+              />
+              <VoiceInputButton
+                onTranscript={(text) => setPrompt((prev) => (prev ? prev + ' ' + text : text))}
+                disabled={saving}
+                className="absolute top-2 right-2"
+              />
+            </div>
             <p className="mt-1 text-xs text-muted-foreground text-right">
               {prompt.length.toLocaleString()} characters
             </p>
