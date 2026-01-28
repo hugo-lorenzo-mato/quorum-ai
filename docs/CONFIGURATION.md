@@ -312,6 +312,45 @@ agents:
 | `reasoning_effort` | string | - | Default reasoning effort: `minimal`, `low`, `medium`, `high`, `xhigh` |
 | `reasoning_effort_phases` | map | `{}` | Per-phase reasoning effort overrides |
 
+#### OpenCode Agent
+
+OpenCode is an MCP-compatible software engineering agent that connects to local LLMs via Ollama. It supports intelligent model selection based on task type.
+
+```yaml
+agents:
+  opencode:
+    enabled: false
+    path: opencode
+    model: qwen2.5-coder
+    phase_models:
+      refine: llama3.1
+      analyze: llama3.1
+      moderate: llama3.1
+      synthesize: llama3.1
+      plan: llama3.1
+      execute: qwen2.5-coder
+    phases:
+      analyze: true
+      plan: true
+      execute: true
+```
+
+**Requirements:**
+- OpenCode CLI installed ([https://opencode.ai/docs/cli/](https://opencode.ai/docs/cli/))
+- Ollama running at `localhost:11434` with compatible models
+
+**Model Profiles:**
+
+| Profile | Models | Use Case |
+|---------|--------|----------|
+| Coder | `qwen2.5-coder`, `deepseek-coder-v2` | Code generation, editing, execution |
+| Architect | `llama3.1`, `deepseek-r1` | Analysis, planning, architecture review |
+
+**Environment Setup:**
+```bash
+export OPENAI_BASE_URL=http://localhost:11434/v1
+```
+
 #### Phase Participation (opt-in model)
 
 The `phases` map controls which phases an agent participates in:

@@ -176,6 +176,22 @@ agents:
       execute: claude-sonnet-4-5
     # No phases specified = enabled for all phases (when enabled: true)
 
+  # OpenCode CLI configuration (optional)
+  # Uses the OpenCode CLI (https://opencode.ai/docs/cli/)
+  # Requires: opencode CLI installed, Ollama running at localhost:11434
+  opencode:
+    enabled: false
+    path: opencode
+    model: qwen2.5-coder
+    phase_models:
+      refine: qwen2.5-coder
+      analyze: llama3.1
+      moderate: llama3.1
+      synthesize: llama3.1
+      plan: llama3.1
+      execute: qwen2.5-coder
+    # No phases specified = enabled for all phases (when enabled: true)
+
 # State persistence configuration
 state:
   # Storage backend: "sqlite" (default, database) or "json" (file-based)
