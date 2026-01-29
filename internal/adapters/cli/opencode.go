@@ -68,23 +68,25 @@ func NewOpenCodeAdapter(cfg AgentConfig) (core.Agent, error) {
 			MaxContextTokens:  128000,
 			MaxOutputTokens:   8192,
 			SupportedModels: []string{
-				"qwen2.5-coder",
-				"deepseek-coder-v2",
-				"llama3.1",
-				"deepseek-r1",
+				// Local Ollama models (update based on `ollama list`)
+				"qwen2.5-coder:32b",  // Best local coding model
+				"qwen3-coder:30b",    // Latest Qwen coder
+				"deepseek-r1:32b",    // Reasoning model
+				"codestral:22b",      // Mistral code model
+				"gpt-oss:20b",        // Open source GPT
 			},
-			DefaultModel: "qwen2.5-coder",
+			DefaultModel: "qwen2.5-coder:32b",
 		},
 		ollamaURL: ollamaURL,
 		ollamaKey: ollamaKey,
 		profiles: map[Profile]ProfileConfig{
 			ProfileCoder: {
-				Primary:   "qwen2.5-coder",
-				Fallbacks: []string{"deepseek-coder-v2"},
+				Primary:   "qwen2.5-coder:32b",
+				Fallbacks: []string{"qwen3-coder:30b", "codestral:22b"},
 			},
 			ProfileArchitect: {
-				Primary:   "llama3.1",
-				Fallbacks: []string{"deepseek-r1"},
+				Primary:   "deepseek-r1:32b",
+				Fallbacks: []string{"gpt-oss:20b"},
 			},
 		},
 		httpClient: &http.Client{Timeout: 5 * time.Second},

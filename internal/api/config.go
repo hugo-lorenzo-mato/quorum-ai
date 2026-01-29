@@ -315,12 +315,14 @@ func (s *Server) handleGetAgents(w http.ResponseWriter, _ *http.Request) {
 			"name":        "opencode",
 			"displayName": "OpenCode",
 			// Synced with internal/adapters/cli/opencode.go
-			// Requires local Ollama server
+			// Requires local Ollama server with these models installed
 			"models": []string{
-				"qwen2.5-coder",
-				"deepseek-coder-v2",
-				"llama3.1",
-				"deepseek-r1",
+				// Local Ollama models (from `ollama list`)
+				"qwen2.5-coder:32b",  // Best local coding model
+				"qwen3-coder:30b",    // Latest Qwen coder
+				"deepseek-r1:32b",    // Reasoning model
+				"codestral:22b",      // Mistral code model
+				"gpt-oss:20b",        // Open source GPT
 			},
 			"available": true,
 		},

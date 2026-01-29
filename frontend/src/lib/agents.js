@@ -61,9 +61,12 @@ export const AGENT_MODELS = {
   ],
   opencode: [
     { value: '', label: 'Default', description: 'Use config default' },
-    { value: 'anthropic/claude-sonnet-4-5-20250929', label: 'Sonnet 4.5', description: 'Via OpenCode' },
-    { value: 'openai/gpt-4o', label: 'GPT-4o', description: 'OpenAI via OpenCode' },
-    { value: 'google/gemini-2.5-pro', label: 'Gemini 2.5 Pro', description: 'Google via OpenCode' },
+    // Local Ollama models
+    { value: 'qwen2.5-coder:32b', label: 'Qwen 2.5 Coder 32B', description: 'Best local coding model' },
+    { value: 'qwen3-coder:30b', label: 'Qwen 3 Coder 30B', description: 'Latest Qwen coder' },
+    { value: 'deepseek-r1:32b', label: 'DeepSeek R1 32B', description: 'Reasoning model' },
+    { value: 'codestral:22b', label: 'Codestral 22B', description: 'Mistral code model' },
+    { value: 'gpt-oss:20b', label: 'GPT-OSS 20B', description: 'Open source GPT' },
   ],
   copilot: [
     { value: '', label: 'Default', description: 'Use config default' },
