@@ -200,6 +200,24 @@ type StateManager interface {
 	// FindZombieWorkflows returns workflows with status "running" but stale heartbeats.
 	// A workflow is considered a zombie if its heartbeat is older than the threshold.
 	FindZombieWorkflows(ctx context.Context, staleThreshold time.Duration) ([]*WorkflowState, error)
+
+	// GetWorkflowBranch returns the Git branch for a workflow.
+	GetWorkflowBranch(ctx context.Context, workflowID WorkflowID) (string, error)
+
+	// SetWorkflowBranch sets the Git branch for a workflow.
+	SetWorkflowBranch(ctx context.Context, workflowID WorkflowID, branch string) error
+
+	// GetWorkflowGitInfo returns all Git-related information for a workflow.
+	GetWorkflowGitInfo(ctx context.Context, workflowID WorkflowID) (*WorkflowGitInfo, error)
+
+	// SetWorkflowGitInfo sets all Git-related information for a workflow.
+	SetWorkflowGitInfo(ctx context.Context, workflowID WorkflowID, info *WorkflowGitInfo) error
+
+	// ListWorkflowsWithBranch returns all workflow IDs that have a Git branch assigned.
+	ListWorkflowsWithBranch(ctx context.Context) ([]WorkflowID, error)
+
+	// ListWorkflowsByStatus returns all workflows with a specific status.
+	ListWorkflowsByStatus(ctx context.Context, status WorkflowStatus) ([]*WorkflowState, error)
 }
 
 // WorkflowSummary provides a lightweight summary of a workflow for listing.
@@ -240,6 +258,62 @@ type WorkflowState struct {
 	HeartbeatAt *time.Time `json:"heartbeat_at,omitempty"` // Last heartbeat timestamp
 	ResumeCount int        `json:"resume_count,omitempty"` // Number of auto-resumes performed
 	MaxResumes  int        `json:"max_resumes,omitempty"`  // Maximum allowed auto-resumes (default: 3)
+
+	// Git isolation fields for concurrent workflow execution
+	WorkflowBranch string `json:"workflow_branch,omitempty"` // Git branch for this workflow (e.g., "quorum/wf-20250129-abc12")
+	BaseBranch     string `json:"base_branch,omitempty"`     // Base branch (e.g., "main")
+	MergeStrategy  string `json:"merge_strategy,omitempty"`  // "sequential", "parallel", "rebase"
+	WorktreeRoot   string `json:"worktree_root,omitempty"`   // Path to worktree directory (e.g., ".worktrees/wf-abc12")
+}
+
+// WorkflowGitInfo contains Git-related information for a workflow.
+type WorkflowGitInfo struct {
+	WorkflowBranch string `json:"workflow_branch"`
+	BaseBranch     string `json:"base_branch"`
+	MergeStrategy  string `json:"merge_strategy"`
+	WorktreeRoot   string `json:"worktree_root"`
+}
+
+// GetGitInfo returns a WorkflowGitInfo from the WorkflowState.
+func (w *WorkflowState) GetGitInfo() *WorkflowGitInfo {
+	return &WorkflowGitInfo{
+		WorkflowBranch: w.WorkflowBranch,
+		BaseBranch:     w.BaseBranch,
+		MergeStrategy:  w.MergeStrategy,
+		WorktreeRoot:   w.WorktreeRoot,
+	}
+}
+
+// SetGitInfo sets Git information on the WorkflowState.
+func (w *WorkflowState) SetGitInfo(info *WorkflowGitInfo) {
+	if info == nil {
+		return
+	}
+	w.WorkflowBranch = info.WorkflowBranch
+	w.BaseBranch = info.BaseBranch
+	w.MergeStrategy = info.MergeStrategy
+	w.WorktreeRoot = info.WorktreeRoot
+}
+
+// HasGitIsolation returns true if the workflow uses Git isolation.
+func (w *WorkflowState) HasGitIsolation() bool {
+	return w.WorkflowBranch != ""
+}
+
+// DefaultMergeStrategy is the default merge strategy for workflows.
+const DefaultMergeStrategy = "sequential"
+
+// ValidMergeStrategies are the valid values for MergeStrategy.
+var ValidMergeStrategies = []string{"sequential", "parallel", "rebase"}
+
+// IsValidMergeStrategy checks if a strategy is valid.
+func IsValidMergeStrategy(strategy string) bool {
+	for _, s := range ValidMergeStrategies {
+		if s == strategy {
+			return true
+		}
+	}
+	return false
 }
 
 // Attachment represents a user-provided file associated with a chat session or workflow.

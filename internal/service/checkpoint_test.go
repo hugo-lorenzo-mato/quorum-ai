@@ -114,6 +114,50 @@ func (m *mockStateManager) FindZombieWorkflows(_ context.Context, staleThreshold
 	return nil, nil
 }
 
+func (m *mockStateManager) GetWorkflowBranch(_ context.Context, workflowID core.WorkflowID) (string, error) {
+	if m.state != nil && m.state.WorkflowID == workflowID {
+		return m.state.WorkflowBranch, nil
+	}
+	return "", fmt.Errorf("workflow not found: %s", workflowID)
+}
+
+func (m *mockStateManager) SetWorkflowBranch(_ context.Context, workflowID core.WorkflowID, branch string) error {
+	if m.state != nil && m.state.WorkflowID == workflowID {
+		m.state.WorkflowBranch = branch
+		return nil
+	}
+	return fmt.Errorf("workflow not found: %s", workflowID)
+}
+
+func (m *mockStateManager) GetWorkflowGitInfo(_ context.Context, workflowID core.WorkflowID) (*core.WorkflowGitInfo, error) {
+	if m.state != nil && m.state.WorkflowID == workflowID {
+		return m.state.GetGitInfo(), nil
+	}
+	return nil, fmt.Errorf("workflow not found: %s", workflowID)
+}
+
+func (m *mockStateManager) SetWorkflowGitInfo(_ context.Context, workflowID core.WorkflowID, info *core.WorkflowGitInfo) error {
+	if m.state != nil && m.state.WorkflowID == workflowID {
+		m.state.SetGitInfo(info)
+		return nil
+	}
+	return fmt.Errorf("workflow not found: %s", workflowID)
+}
+
+func (m *mockStateManager) ListWorkflowsWithBranch(_ context.Context) ([]core.WorkflowID, error) {
+	if m.state != nil && m.state.HasGitIsolation() {
+		return []core.WorkflowID{m.state.WorkflowID}, nil
+	}
+	return nil, nil
+}
+
+func (m *mockStateManager) ListWorkflowsByStatus(_ context.Context, status core.WorkflowStatus) ([]*core.WorkflowState, error) {
+	if m.state != nil && m.state.Status == status {
+		return []*core.WorkflowState{m.state}, nil
+	}
+	return nil, nil
+}
+
 func newTestWorkflowState() *core.WorkflowState {
 	return &core.WorkflowState{
 		Version:      1,

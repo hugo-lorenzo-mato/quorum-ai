@@ -32,6 +32,9 @@ var migrationV3 string
 //go:embed migrations/004_add_heartbeat_columns.sql
 var migrationV4 string
 
+//go:embed migrations/006_workflow_isolation.sql
+var migrationV6 string
+
 // SQLiteStateManager implements StateManager with SQLite storage.
 type SQLiteStateManager struct {
 	dbPath     string
@@ -217,6 +220,14 @@ func (m *SQLiteStateManager) migrate() error {
 		}
 	}
 
+	if version < 6 {
+		// Migration V6 adds Git isolation columns and tables
+		_, err := m.db.Exec(migrationV6)
+		if err != nil && !strings.Contains(err.Error(), "duplicate column") {
+			return fmt.Errorf("applying migration v6: %w", err)
+		}
+	}
+
 	return nil
 }
 
@@ -269,8 +280,9 @@ func (m *SQLiteStateManager) Save(ctx context.Context, state *core.WorkflowState
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO workflows (
 			id, version, title, status, current_phase, prompt, optimized_prompt,
-			task_order, config, metrics, checksum, created_at, updated_at, report_path
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			task_order, config, metrics, checksum, created_at, updated_at, report_path,
+			workflow_branch, base_branch, merge_strategy, worktree_root
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			version = excluded.version,
 			title = excluded.title,
@@ -283,13 +295,21 @@ func (m *SQLiteStateManager) Save(ctx context.Context, state *core.WorkflowState
 			metrics = excluded.metrics,
 			checksum = excluded.checksum,
 			updated_at = excluded.updated_at,
-			report_path = excluded.report_path
+			report_path = excluded.report_path,
+			workflow_branch = excluded.workflow_branch,
+			base_branch = excluded.base_branch,
+			merge_strategy = excluded.merge_strategy,
+			worktree_root = excluded.worktree_root
 	`,
 		state.WorkflowID, state.Version, state.Title, state.Status, state.CurrentPhase,
 		state.Prompt, state.OptimizedPrompt, string(taskOrderJSON),
 		nullableString(configJSON), nullableString(metricsJSON),
 		checksum, state.CreatedAt, state.UpdatedAt,
 		nullableString([]byte(state.ReportPath)),
+		nullableStr(state.WorkflowBranch),
+		nullableStr(state.BaseBranch),
+		nullableStr(state.MergeStrategy),
+		nullableStr(state.WorktreeRoot),
 	)
 	if err != nil {
 		return fmt.Errorf("upserting workflow: %w", err)
@@ -436,15 +456,18 @@ func (m *SQLiteStateManager) loadWorkflowByID(ctx context.Context, id core.Workf
 	var checksum sql.NullString
 	var reportPath sql.NullString
 	var title sql.NullString
+	var workflowBranch, baseBranch, mergeStrategy, worktreeRoot sql.NullString
 
 	err := m.readDB.QueryRowContext(ctx, `
 		SELECT id, version, title, status, current_phase, prompt, optimized_prompt,
-		       task_order, config, metrics, checksum, created_at, updated_at, report_path
+		       task_order, config, metrics, checksum, created_at, updated_at, report_path,
+		       workflow_branch, base_branch, merge_strategy, worktree_root
 		FROM workflows WHERE id = ?
 	`, id).Scan(
 		&state.WorkflowID, &state.Version, &title, &state.Status, &state.CurrentPhase,
 		&state.Prompt, &optimizedPrompt, &taskOrderJSON, &configJSON, &metricsJSON,
 		&checksum, &state.CreatedAt, &state.UpdatedAt, &reportPath,
+		&workflowBranch, &baseBranch, &mergeStrategy, &worktreeRoot,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil // Workflow doesn't exist
@@ -464,6 +487,18 @@ func (m *SQLiteStateManager) loadWorkflowByID(ctx context.Context, id core.Workf
 	}
 	if reportPath.Valid {
 		state.ReportPath = reportPath.String
+	}
+	if workflowBranch.Valid {
+		state.WorkflowBranch = workflowBranch.String
+	}
+	if baseBranch.Valid {
+		state.BaseBranch = baseBranch.String
+	}
+	if mergeStrategy.Valid {
+		state.MergeStrategy = mergeStrategy.String
+	}
+	if worktreeRoot.Valid {
+		state.WorktreeRoot = worktreeRoot.String
 	}
 
 	// Parse JSON fields
@@ -963,6 +998,13 @@ func nullableTime(t *time.Time) sql.NullTime {
 	return sql.NullTime{Time: *t, Valid: true}
 }
 
+func nullableStr(s string) sql.NullString {
+	if s == "" {
+		return sql.NullString{}
+	}
+	return sql.NullString{String: s, Valid: true}
+}
+
 // DeactivateWorkflow clears the active workflow without deleting any data.
 func (m *SQLiteStateManager) DeactivateWorkflow(ctx context.Context) error {
 	m.mu.Lock()
@@ -1254,6 +1296,184 @@ func (m *SQLiteStateManager) FindZombieWorkflows(ctx context.Context, staleThres
 	}
 
 	return zombies, nil
+}
+
+// GetWorkflowBranch returns the Git branch for a workflow.
+func (m *SQLiteStateManager) GetWorkflowBranch(ctx context.Context, workflowID core.WorkflowID) (string, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	var branch sql.NullString
+	err := m.readDB.QueryRowContext(ctx, `
+		SELECT workflow_branch FROM workflows WHERE id = ?
+	`, string(workflowID)).Scan(&branch)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return "", fmt.Errorf("workflow %s not found", workflowID)
+		}
+		return "", fmt.Errorf("getting workflow branch: %w", err)
+	}
+
+	if !branch.Valid {
+		return "", nil
+	}
+
+	return branch.String, nil
+}
+
+// SetWorkflowBranch sets the Git branch for a workflow.
+func (m *SQLiteStateManager) SetWorkflowBranch(ctx context.Context, workflowID core.WorkflowID, branch string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	result, err := m.db.ExecContext(ctx, `
+		UPDATE workflows SET workflow_branch = ?, updated_at = ? WHERE id = ?
+	`, nullableStr(branch), time.Now().UTC(), string(workflowID))
+
+	if err != nil {
+		return fmt.Errorf("setting workflow branch: %w", err)
+	}
+
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return fmt.Errorf("workflow %s not found", workflowID)
+	}
+
+	return nil
+}
+
+// GetWorkflowGitInfo returns all Git-related information for a workflow.
+func (m *SQLiteStateManager) GetWorkflowGitInfo(ctx context.Context, workflowID core.WorkflowID) (*core.WorkflowGitInfo, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	var workflowBranch, baseBranch, mergeStrategy, worktreeRoot sql.NullString
+
+	err := m.readDB.QueryRowContext(ctx, `
+		SELECT workflow_branch, base_branch, merge_strategy, worktree_root
+		FROM workflows WHERE id = ?
+	`, string(workflowID)).Scan(&workflowBranch, &baseBranch, &mergeStrategy, &worktreeRoot)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("workflow %s not found", workflowID)
+		}
+		return nil, fmt.Errorf("getting workflow git info: %w", err)
+	}
+
+	info := &core.WorkflowGitInfo{}
+	if workflowBranch.Valid {
+		info.WorkflowBranch = workflowBranch.String
+	}
+	if baseBranch.Valid {
+		info.BaseBranch = baseBranch.String
+	}
+	if mergeStrategy.Valid {
+		info.MergeStrategy = mergeStrategy.String
+	}
+	if worktreeRoot.Valid {
+		info.WorktreeRoot = worktreeRoot.String
+	}
+
+	return info, nil
+}
+
+// SetWorkflowGitInfo sets all Git-related information for a workflow.
+func (m *SQLiteStateManager) SetWorkflowGitInfo(ctx context.Context, workflowID core.WorkflowID, info *core.WorkflowGitInfo) error {
+	if info == nil {
+		return fmt.Errorf("git info cannot be nil")
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	result, err := m.db.ExecContext(ctx, `
+		UPDATE workflows
+		SET workflow_branch = ?,
+		    base_branch = ?,
+		    merge_strategy = ?,
+		    worktree_root = ?,
+		    updated_at = ?
+		WHERE id = ?
+	`,
+		nullableStr(info.WorkflowBranch),
+		nullableStr(info.BaseBranch),
+		nullableStr(info.MergeStrategy),
+		nullableStr(info.WorktreeRoot),
+		time.Now().UTC(),
+		string(workflowID),
+	)
+
+	if err != nil {
+		return fmt.Errorf("setting workflow git info: %w", err)
+	}
+
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return fmt.Errorf("workflow %s not found", workflowID)
+	}
+
+	return nil
+}
+
+// ListWorkflowsWithBranch returns all workflow IDs that have a Git branch assigned.
+func (m *SQLiteStateManager) ListWorkflowsWithBranch(ctx context.Context) ([]core.WorkflowID, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	rows, err := m.readDB.QueryContext(ctx, `
+		SELECT id FROM workflows
+		WHERE workflow_branch IS NOT NULL AND workflow_branch != ''
+		ORDER BY created_at DESC
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("querying workflows with branch: %w", err)
+	}
+	defer rows.Close()
+
+	var ids []core.WorkflowID
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scanning workflow id: %w", err)
+		}
+		ids = append(ids, core.WorkflowID(id))
+	}
+
+	return ids, rows.Err()
+}
+
+// ListWorkflowsByStatus returns all workflows with a specific status.
+func (m *SQLiteStateManager) ListWorkflowsByStatus(ctx context.Context, status core.WorkflowStatus) ([]*core.WorkflowState, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	rows, err := m.readDB.QueryContext(ctx, `
+		SELECT id FROM workflows WHERE status = ? ORDER BY created_at DESC
+	`, string(status))
+	if err != nil {
+		return nil, fmt.Errorf("querying workflows by status: %w", err)
+	}
+	defer rows.Close()
+
+	var workflows []*core.WorkflowState
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scanning workflow id: %w", err)
+		}
+
+		state, err := m.loadWorkflowByID(ctx, core.WorkflowID(id))
+		if err != nil {
+			continue // Skip workflows that fail to load
+		}
+		if state != nil {
+			workflows = append(workflows, state)
+		}
+	}
+
+	return workflows, rows.Err()
 }
 
 // Verify that SQLiteStateManager implements core.StateManager.

@@ -853,5 +853,115 @@ func (m *JSONStateManager) FindZombieWorkflows(ctx context.Context, staleThresho
 	return zombies, nil
 }
 
+// GetWorkflowBranch returns the Git branch for a workflow.
+func (m *JSONStateManager) GetWorkflowBranch(ctx context.Context, workflowID core.WorkflowID) (string, error) {
+	state, err := m.LoadByID(ctx, workflowID)
+	if err != nil {
+		return "", err
+	}
+	if state == nil {
+		return "", fmt.Errorf("workflow %s not found", workflowID)
+	}
+	return state.WorkflowBranch, nil
+}
+
+// SetWorkflowBranch sets the Git branch for a workflow.
+func (m *JSONStateManager) SetWorkflowBranch(ctx context.Context, workflowID core.WorkflowID, branch string) error {
+	state, err := m.LoadByID(ctx, workflowID)
+	if err != nil {
+		return err
+	}
+	if state == nil {
+		return fmt.Errorf("workflow %s not found", workflowID)
+	}
+	state.WorkflowBranch = branch
+	state.UpdatedAt = time.Now()
+	return m.Save(ctx, state)
+}
+
+// GetWorkflowGitInfo returns all Git-related information for a workflow.
+func (m *JSONStateManager) GetWorkflowGitInfo(ctx context.Context, workflowID core.WorkflowID) (*core.WorkflowGitInfo, error) {
+	state, err := m.LoadByID(ctx, workflowID)
+	if err != nil {
+		return nil, err
+	}
+	if state == nil {
+		return nil, fmt.Errorf("workflow %s not found", workflowID)
+	}
+	return state.GetGitInfo(), nil
+}
+
+// SetWorkflowGitInfo sets all Git-related information for a workflow.
+func (m *JSONStateManager) SetWorkflowGitInfo(ctx context.Context, workflowID core.WorkflowID, info *core.WorkflowGitInfo) error {
+	if info == nil {
+		return fmt.Errorf("git info cannot be nil")
+	}
+
+	state, err := m.LoadByID(ctx, workflowID)
+	if err != nil {
+		return err
+	}
+	if state == nil {
+		return fmt.Errorf("workflow %s not found", workflowID)
+	}
+	state.SetGitInfo(info)
+	state.UpdatedAt = time.Now()
+	return m.Save(ctx, state)
+}
+
+// ListWorkflowsWithBranch returns all workflow IDs that have a Git branch assigned.
+func (m *JSONStateManager) ListWorkflowsWithBranch(ctx context.Context) ([]core.WorkflowID, error) {
+	entries, err := os.ReadDir(m.workflowsDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("reading workflows directory: %w", err)
+	}
+
+	var ids []core.WorkflowID
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		workflowID := core.WorkflowID(entry.Name())
+		state, err := m.LoadByID(ctx, workflowID)
+		if err != nil || state == nil {
+			continue
+		}
+		if state.HasGitIsolation() {
+			ids = append(ids, workflowID)
+		}
+	}
+	return ids, nil
+}
+
+// ListWorkflowsByStatus returns all workflows with a specific status.
+func (m *JSONStateManager) ListWorkflowsByStatus(ctx context.Context, status core.WorkflowStatus) ([]*core.WorkflowState, error) {
+	entries, err := os.ReadDir(m.workflowsDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("reading workflows directory: %w", err)
+	}
+
+	var workflows []*core.WorkflowState
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		workflowID := core.WorkflowID(entry.Name())
+		state, err := m.LoadByID(ctx, workflowID)
+		if err != nil || state == nil {
+			continue
+		}
+		if state.Status == status {
+			workflows = append(workflows, state)
+		}
+	}
+	return workflows, nil
+}
+
 // Verify that JSONStateManager implements core.StateManager.
 var _ core.StateManager = (*JSONStateManager)(nil)

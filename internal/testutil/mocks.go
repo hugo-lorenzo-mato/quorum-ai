@@ -355,6 +355,71 @@ func (m *MockStateManager) FindZombieWorkflows(_ context.Context, staleThreshold
 	return nil, nil
 }
 
+// GetWorkflowBranch returns the Git branch for a workflow.
+func (m *MockStateManager) GetWorkflowBranch(_ context.Context, workflowID core.WorkflowID) (string, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.state != nil && m.state.WorkflowID == workflowID {
+		return m.state.WorkflowBranch, nil
+	}
+	return "", core.ErrNotFound("workflow", string(workflowID))
+}
+
+// SetWorkflowBranch sets the Git branch for a workflow.
+func (m *MockStateManager) SetWorkflowBranch(_ context.Context, workflowID core.WorkflowID, branch string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.state != nil && m.state.WorkflowID == workflowID {
+		m.state.WorkflowBranch = branch
+		return nil
+	}
+	return core.ErrNotFound("workflow", string(workflowID))
+}
+
+// GetWorkflowGitInfo returns all Git-related information for a workflow.
+func (m *MockStateManager) GetWorkflowGitInfo(_ context.Context, workflowID core.WorkflowID) (*core.WorkflowGitInfo, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.state != nil && m.state.WorkflowID == workflowID {
+		return m.state.GetGitInfo(), nil
+	}
+	return nil, core.ErrNotFound("workflow", string(workflowID))
+}
+
+// SetWorkflowGitInfo sets all Git-related information for a workflow.
+func (m *MockStateManager) SetWorkflowGitInfo(_ context.Context, workflowID core.WorkflowID, info *core.WorkflowGitInfo) error {
+	if info == nil {
+		return core.ErrValidation("INVALID_GIT_INFO", "git info cannot be nil")
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.state != nil && m.state.WorkflowID == workflowID {
+		m.state.SetGitInfo(info)
+		return nil
+	}
+	return core.ErrNotFound("workflow", string(workflowID))
+}
+
+// ListWorkflowsWithBranch returns all workflow IDs that have a Git branch assigned.
+func (m *MockStateManager) ListWorkflowsWithBranch(_ context.Context) ([]core.WorkflowID, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.state != nil && m.state.HasGitIsolation() {
+		return []core.WorkflowID{m.state.WorkflowID}, nil
+	}
+	return nil, nil
+}
+
+// ListWorkflowsByStatus returns all workflows with a specific status.
+func (m *MockStateManager) ListWorkflowsByStatus(_ context.Context, status core.WorkflowStatus) ([]*core.WorkflowState, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.state != nil && m.state.Status == status {
+		return []*core.WorkflowState{m.state}, nil
+	}
+	return nil, nil
+}
+
 // MockRegistry implements AgentRegistry for testing.
 type MockRegistry struct {
 	agents map[string]*MockAgent
