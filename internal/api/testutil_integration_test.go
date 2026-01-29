@@ -394,6 +394,32 @@ func (m *threadSafeMockStateManager) DeleteWorkflow(_ context.Context, id core.W
 	return nil
 }
 
+func (m *threadSafeMockStateManager) UpdateHeartbeat(_ context.Context, id core.WorkflowID) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if wf, ok := m.workflows[id]; ok {
+		now := time.Now().UTC()
+		wf.HeartbeatAt = &now
+		return nil
+	}
+	return fmt.Errorf("workflow not found: %s", id)
+}
+
+func (m *threadSafeMockStateManager) FindZombieWorkflows(_ context.Context, staleThreshold time.Duration) ([]*core.WorkflowState, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	var zombies []*core.WorkflowState
+	cutoff := time.Now().UTC().Add(-staleThreshold)
+	for _, wf := range m.workflows {
+		if wf.Status == core.WorkflowStatusRunning {
+			if wf.HeartbeatAt == nil || wf.HeartbeatAt.Before(cutoff) {
+				zombies = append(zombies, wf)
+			}
+		}
+	}
+	return zombies, nil
+}
+
 // mockAgentRegistryIntegration for integration tests - separate from unit test mock
 type mockAgentRegistryIntegration struct {
 	agents    map[string]*mockAgent

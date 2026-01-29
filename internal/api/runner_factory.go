@@ -28,6 +28,7 @@ type RunnerFactory struct {
 	eventBus      *events.EventBus
 	configLoader  *config.Loader
 	logger        *logging.Logger
+	heartbeat     *workflow.HeartbeatManager
 }
 
 // NewRunnerFactory creates a new runner factory.
@@ -45,6 +46,12 @@ func NewRunnerFactory(
 		configLoader:  configLoader,
 		logger:        logger,
 	}
+}
+
+// WithHeartbeat sets the heartbeat manager for zombie detection support.
+func (f *RunnerFactory) WithHeartbeat(hb *workflow.HeartbeatManager) *RunnerFactory {
+	f.heartbeat = hb
+	return f
 }
 
 // CreateRunner creates a new workflow.Runner for executing a workflow.
@@ -162,7 +169,8 @@ func (f *RunnerFactory) CreateRunner(ctx context.Context, workflowID string, cp 
 		Logger:           f.logger,
 		Output:           outputNotifier,
 		ModeEnforcer:     modeEnforcerAdapter,
-		Control:          cp, // For pause/resume/cancel support
+		Control:          cp,          // For pause/resume/cancel support
+		Heartbeat:        f.heartbeat, // For zombie detection support
 	})
 
 	if runner == nil {
@@ -204,6 +212,30 @@ func buildRunnerConfig(cfg *config.Config) *workflow.RunnerConfig {
 		}
 	}
 
+	// Parse phase timeouts (default 3h per phase if not set or invalid)
+	defaultPhaseTimeout := 3 * time.Hour
+
+	analyzeTimeout := defaultPhaseTimeout
+	if cfg.Phases.Analyze.Timeout != "" {
+		if parsed, err := time.ParseDuration(cfg.Phases.Analyze.Timeout); err == nil {
+			analyzeTimeout = parsed
+		}
+	}
+
+	planTimeout := defaultPhaseTimeout
+	if cfg.Phases.Plan.Timeout != "" {
+		if parsed, err := time.ParseDuration(cfg.Phases.Plan.Timeout); err == nil {
+			planTimeout = parsed
+		}
+	}
+
+	executeTimeout := defaultPhaseTimeout
+	if cfg.Phases.Execute.Timeout != "" {
+		if parsed, err := time.ParseDuration(cfg.Phases.Execute.Timeout); err == nil {
+			executeTimeout = parsed
+		}
+	}
+
 	return &workflow.RunnerConfig{
 		Timeout:           timeout,
 		MaxRetries:        cfg.Workflow.MaxRetries,
@@ -239,6 +271,19 @@ func buildRunnerConfig(cfg *config.Config) *workflow.RunnerConfig {
 			Enabled: cfg.Phases.Plan.Synthesizer.Enabled,
 			Agent:   cfg.Phases.Plan.Synthesizer.Agent,
 		},
+		PhaseTimeouts: workflow.PhaseTimeouts{
+			Analyze: analyzeTimeout,
+			Plan:    planTimeout,
+			Execute: executeTimeout,
+		},
+		Finalization: workflow.FinalizationConfig{
+			AutoCommit:    cfg.Git.AutoCommit,
+			AutoPush:      cfg.Git.AutoPush,
+			AutoPR:        cfg.Git.AutoPR,
+			AutoMerge:     cfg.Git.AutoMerge,
+			PRBaseBranch:  cfg.Git.PRBaseBranch,
+			MergeStrategy: cfg.Git.MergeStrategy,
+		},
 	}
 }
 
@@ -255,11 +300,18 @@ func (s *Server) RunnerFactory() *RunnerFactory {
 		logger = logging.NewWithHandler(s.logger.Handler())
 	}
 
-	return NewRunnerFactory(
+	factory := NewRunnerFactory(
 		s.stateManager,
 		s.agentRegistry,
 		s.eventBus,
 		s.configLoader,
 		logger,
 	)
+
+	// Add heartbeat manager if available
+	if s.heartbeat != nil {
+		factory.WithHeartbeat(s.heartbeat)
+	}
+
+	return factory
 }

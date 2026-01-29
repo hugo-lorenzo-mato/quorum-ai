@@ -29,6 +29,9 @@ var migrationV2 string
 //go:embed migrations/003_add_title_column.sql
 var migrationV3 string
 
+//go:embed migrations/004_add_heartbeat_columns.sql
+var migrationV4 string
+
 // SQLiteStateManager implements StateManager with SQLite storage.
 type SQLiteStateManager struct {
 	dbPath     string
@@ -203,6 +206,14 @@ func (m *SQLiteStateManager) migrate() error {
 		_, err := m.db.Exec(migrationV3)
 		if err != nil && !strings.Contains(err.Error(), "duplicate column") {
 			return fmt.Errorf("applying migration v3: %w", err)
+		}
+	}
+
+	if version < 4 {
+		// Migration V4 adds heartbeat columns - ignore error if columns already exist
+		_, err := m.db.Exec(migrationV4)
+		if err != nil && !strings.Contains(err.Error(), "duplicate column") {
+			return fmt.Errorf("applying migration v4: %w", err)
 		}
 	}
 
@@ -1173,6 +1184,72 @@ func (m *SQLiteStateManager) deleteReportDirectory(reportPath, workflowID string
 	// Fall back to default location: .quorum/runs/{workflow-id}
 	defaultPath := filepath.Join(".quorum", "runs", workflowID)
 	_ = os.RemoveAll(defaultPath)
+}
+
+// UpdateHeartbeat updates the heartbeat timestamp for a running workflow.
+// This is used for zombie detection - workflows with stale heartbeats are considered dead.
+func (m *SQLiteStateManager) UpdateHeartbeat(ctx context.Context, id core.WorkflowID) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return m.retryWrite(ctx, "updating heartbeat", func() error {
+		result, err := m.db.ExecContext(ctx,
+			`UPDATE workflows SET heartbeat_at = ? WHERE id = ? AND status = 'running'`,
+			time.Now().UTC(), string(id))
+		if err != nil {
+			return fmt.Errorf("updating heartbeat: %w", err)
+		}
+
+		rowsAffected, _ := result.RowsAffected()
+		if rowsAffected == 0 {
+			return fmt.Errorf("workflow not found or not running: %s", id)
+		}
+		return nil
+	})
+}
+
+// FindZombieWorkflows returns workflows with status "running" but stale heartbeats.
+// A workflow is considered a zombie if its heartbeat is older than the threshold.
+func (m *SQLiteStateManager) FindZombieWorkflows(ctx context.Context, staleThreshold time.Duration) ([]*core.WorkflowState, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	cutoff := time.Now().UTC().Add(-staleThreshold)
+
+	// Find workflows that are "running" but have stale heartbeats
+	// Also include workflows with NULL heartbeat_at (never had a heartbeat)
+	rows, err := m.readDB.QueryContext(ctx, `
+		SELECT id FROM workflows
+		WHERE status = 'running'
+		AND (heartbeat_at IS NULL OR heartbeat_at < ?)
+	`, cutoff)
+	if err != nil {
+		return nil, fmt.Errorf("querying zombie workflows: %w", err)
+	}
+	defer rows.Close()
+
+	var zombies []*core.WorkflowState
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scanning workflow id: %w", err)
+		}
+
+		// Load full workflow state
+		state, err := m.loadWorkflowByID(ctx, core.WorkflowID(id))
+		if err != nil {
+			continue // Skip workflows that fail to load
+		}
+		if state != nil {
+			zombies = append(zombies, state)
+		}
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating zombie workflows: %w", err)
+	}
+
+	return zombies, nil
 }
 
 // Verify that SQLiteStateManager implements core.StateManager.

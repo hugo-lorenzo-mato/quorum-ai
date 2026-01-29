@@ -669,27 +669,27 @@ func TestDefaultConfigAllAdapters(t *testing.T) {
 		{
 			name:        "claude",
 			wantPath:    "claude",
-			wantTimeout: 5 * time.Minute,
+			wantTimeout: 0, // Defer to phase timeout
 		},
 		{
 			name:        "gemini",
 			wantPath:    "gemini",
-			wantTimeout: 5 * time.Minute,
+			wantTimeout: 0, // Defer to phase timeout
 		},
 		{
 			name:        "copilot",
 			wantPath:    "copilot",
-			wantTimeout: 5 * time.Minute,
+			wantTimeout: 0, // Defer to phase timeout
 		},
 		{
 			name:        "codex",
 			wantPath:    "codex",
-			wantTimeout: 5 * time.Minute,
+			wantTimeout: 0, // Defer to phase timeout
 		},
 		{
 			name:        "unknown",
 			wantPath:    "",
-			wantTimeout: 5 * time.Minute,
+			wantTimeout: 0, // Defer to phase timeout
 		},
 	}
 

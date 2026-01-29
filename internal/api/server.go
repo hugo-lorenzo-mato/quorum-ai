@@ -21,6 +21,7 @@ import (
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/diagnostics"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/events"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service/workflow"
 )
 
 // Server provides HTTP REST API endpoints for workflow management.
@@ -39,6 +40,12 @@ type Server struct {
 	// Control planes for running workflows (enables pause/resume/cancel)
 	controlPlanesMu sync.RWMutex
 	controlPlanes   map[string]*control.ControlPlane
+
+	// Workflow executor for centralized execution management
+	executor *WorkflowExecutor
+
+	// Heartbeat manager for zombie workflow detection
+	heartbeat *workflow.HeartbeatManager
 }
 
 // ServerOption configures the server.
@@ -76,6 +83,20 @@ func WithConfigLoader(loader *config.Loader) ServerOption {
 func WithRoot(root string) ServerOption {
 	return func(s *Server) {
 		s.root = root
+	}
+}
+
+// WithWorkflowExecutor sets the workflow executor for centralized execution management.
+func WithWorkflowExecutor(executor *WorkflowExecutor) ServerOption {
+	return func(s *Server) {
+		s.executor = executor
+	}
+}
+
+// WithHeartbeatManager sets the heartbeat manager for zombie workflow detection.
+func WithHeartbeatManager(hb *workflow.HeartbeatManager) ServerOption {
+	return func(s *Server) {
+		s.heartbeat = hb
 	}
 }
 

@@ -142,6 +142,28 @@ func (m *mockStateManager) DeleteWorkflow(_ context.Context, id core.WorkflowID)
 	return nil
 }
 
+func (m *mockStateManager) UpdateHeartbeat(_ context.Context, id core.WorkflowID) error {
+	if wf, exists := m.workflows[id]; exists {
+		now := time.Now().UTC()
+		wf.HeartbeatAt = &now
+		return nil
+	}
+	return fmt.Errorf("workflow not found: %s", id)
+}
+
+func (m *mockStateManager) FindZombieWorkflows(_ context.Context, staleThreshold time.Duration) ([]*core.WorkflowState, error) {
+	var zombies []*core.WorkflowState
+	cutoff := time.Now().UTC().Add(-staleThreshold)
+	for _, wf := range m.workflows {
+		if wf.Status == core.WorkflowStatusRunning {
+			if wf.HeartbeatAt == nil || wf.HeartbeatAt.Before(cutoff) {
+				zombies = append(zombies, wf)
+			}
+		}
+	}
+	return zombies, nil
+}
+
 func TestHealthEndpoint(t *testing.T) {
 	sm := newMockStateManager()
 	eb := events.New(100)
