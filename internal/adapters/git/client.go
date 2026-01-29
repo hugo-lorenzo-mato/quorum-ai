@@ -330,6 +330,33 @@ func (c *Client) DiffFiles(ctx context.Context, base, head string) ([]string, er
 	return files, nil
 }
 
+// Merge merges a branch into the current branch.
+func (c *Client) Merge(ctx context.Context, branch string, opts core.MergeOptions) error {
+	args := []string{"merge"}
+	if opts.Squash {
+		args = append(args, "--squash")
+	}
+	if opts.NoFastForward {
+		args = append(args, "--no-ff")
+	}
+	if opts.Message != "" {
+		args = append(args, "-m", opts.Message)
+	}
+	if opts.Strategy != "" {
+		args = append(args, "-X", opts.Strategy)
+	}
+	args = append(args, branch)
+
+	_, err := c.run(ctx, args...)
+	return err
+}
+
+// Rebase rebases the current branch onto another branch.
+func (c *Client) Rebase(ctx context.Context, base string) error {
+	_, err := c.run(ctx, "rebase", base)
+	return err
+}
+
 // Log returns recent commit history.
 func (c *Client) Log(ctx context.Context, count int) ([]Commit, error) {
 	output, err := c.run(ctx, "log", fmt.Sprintf("-n%d", count),

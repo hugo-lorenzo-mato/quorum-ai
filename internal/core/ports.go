@@ -236,6 +236,12 @@ type WorkflowState struct {
 	Checksum        string                `json:"checksum,omitempty"`
 	ReportPath      string                `json:"report_path,omitempty"` // Persisted report directory for resume
 
+	// Git isolation metadata
+	WorkflowBranch string `json:"workflow_branch,omitempty"`
+	BaseBranch     string `json:"base_branch,omitempty"`
+	MergeStrategy  string `json:"merge_strategy,omitempty"`
+	WorktreeRoot   string `json:"worktree_root,omitempty"`
+
 	// Heartbeat tracking for zombie detection and auto-resume
 	HeartbeatAt *time.Time `json:"heartbeat_at,omitempty"` // Last heartbeat timestamp
 	ResumeCount int        `json:"resume_count,omitempty"` // Number of auto-resumes performed
@@ -283,6 +289,7 @@ type TaskState struct {
 	Branch        string   `json:"branch,omitempty"`         // Git branch used for this task
 	Resumable     bool     `json:"resumable,omitempty"`      // Whether task can be resumed
 	ResumeHint    string   `json:"resume_hint,omitempty"`    // Hint for resuming execution
+	MergePending  bool     `json:"merge_pending,omitempty"`  // Whether task branch is pending merge to workflow branch
 }
 
 // MaxInlineOutputSize is the maximum size of output to store inline.
@@ -331,6 +338,12 @@ func NewWorkflowState(w *Workflow) *WorkflowState {
 		Checkpoints: make([]Checkpoint, 0),
 		CreatedAt:   w.CreatedAt,
 		UpdatedAt:   time.Now(),
+
+		// Copy Git isolation metadata
+		WorkflowBranch: w.WorkflowBranch,
+		BaseBranch:     w.BaseBranch,
+		MergeStrategy:  w.MergeStrategy,
+		WorktreeRoot:   w.WorktreeRoot,
 	}
 
 	for id, task := range w.Tasks {
@@ -353,6 +366,11 @@ func NewWorkflowState(w *Workflow) *WorkflowState {
 	}
 
 	return state
+}
+
+// HasGitIsolation returns true if the workflow has an isolated Git branch.
+func (s *WorkflowState) HasGitIsolation() bool {
+	return s.WorkflowBranch != ""
 }
 
 // =============================================================================
@@ -388,9 +406,21 @@ type GitClient interface {
 	Diff(ctx context.Context, base, head string) (string, error)
 	DiffFiles(ctx context.Context, base, head string) ([]string, error)
 
+	// Merge/Rebase operations
+	Merge(ctx context.Context, branch string, opts MergeOptions) error
+	Rebase(ctx context.Context, base string) error
+
 	// Utility
 	IsClean(ctx context.Context) (bool, error)
 	Fetch(ctx context.Context, remote string) error
+}
+
+// MergeOptions configures a git merge operation.
+type MergeOptions struct {
+	Squash        bool
+	NoFastForward bool
+	Message       string
+	Strategy      string // e.g. "theirs", "ours"
 }
 
 // Worktree represents a git worktree.

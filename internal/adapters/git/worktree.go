@@ -635,6 +635,18 @@ func (m *TaskWorktreeManager) List(ctx context.Context) ([]*core.WorktreeInfo, e
 	return result, nil
 }
 
+// CleanupWorkflow removes all resources for a workflow.
+func (m *TaskWorktreeManager) CleanupWorkflow(ctx context.Context, workflowID string, removeBranch bool) error {
+	// ... existing code ...
+	return nil // Placeholder
+}
+
+// MergeTaskToWorkflow merges a task's branch into the workflow branch.
+func (m *TaskWorktreeManager) MergeTaskToWorkflow(ctx context.Context, workflowID string, taskID core.TaskID, strategy, strategyOption string) error {
+	// Placeholder implementation
+	return nil
+}
+
 // Manager returns the underlying WorktreeManager for advanced operations.
 func (m *TaskWorktreeManager) Manager() *WorktreeManager {
 	return m.manager

@@ -3,7 +3,6 @@ package cmd
 import (
 	"bufio"
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -18,22 +17,16 @@ import (
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/tui"
 )
 
-var workflowsCmd = &cobra.Command{
-	Use:   "workflows",
-	Short: "List available workflows",
-	Long: `List all available workflows with their status and details.
-
-Displays workflow ID, status, current phase, creation time, and prompt summary.
-The active workflow is marked with an asterisk (*).
-
-Use 'quorum plan --workflow <id>' or 'quorum execute --workflow <id>' to resume
-a specific workflow.`,
-	RunE: runWorkflows,
-}
-
 var (
 	workflowsOutput string
 )
+
+var workflowsCmd = &cobra.Command{
+	Use:    "workflows",
+	Short:  "List available workflows (alias for 'workflow list')",
+	Hidden: true,
+	RunE:   runWorkflows,
+}
 
 func init() {
 	rootCmd.AddCommand(workflowsCmd)
@@ -76,7 +69,7 @@ func runWorkflows(_ *cobra.Command, _ []string) error {
 
 	if len(workflows) == 0 {
 		if outputMode == tui.ModeJSON {
-			return json.NewEncoder(os.Stdout).Encode([]interface{}{})
+			return OutputJSON([]interface{}{})
 		}
 		fmt.Println("No workflows found.")
 		fmt.Println("Run 'quorum analyze <prompt>' to start a new workflow.")
@@ -85,9 +78,7 @@ func runWorkflows(_ *cobra.Command, _ []string) error {
 
 	// JSON output
 	if outputMode == tui.ModeJSON {
-		enc := json.NewEncoder(os.Stdout)
-		enc.SetIndent("", "  ")
-		return enc.Encode(workflows)
+		return OutputJSON(workflows)
 	}
 
 	// Table output
@@ -106,7 +97,7 @@ func runWorkflows(_ *cobra.Command, _ []string) error {
 		status := formatStatus(wf.Status)
 		phase := formatPhase(wf.CurrentPhase)
 		created := formatWorkflowTime(wf.CreatedAt)
-		prompt := truncateString(wf.Prompt, 50)
+		prompt := TruncateString(wf.Prompt, 50)
 
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", id, status, phase, created, prompt)
 	}
@@ -159,17 +150,6 @@ func formatWorkflowTime(t time.Time) string {
 	return t.Format("2006-01-02 15:04")
 }
 
-func truncateString(s string, maxLen int) string {
-	// Remove newlines
-	s = strings.ReplaceAll(s, "\n", " ")
-	s = strings.ReplaceAll(s, "\r", "")
-
-	if len(s) <= maxLen {
-		return s
-	}
-	return s[:maxLen-3] + "..."
-}
-
 // Delete command
 var deleteCmd = &cobra.Command{
 	Use:   "delete <workflow-id>",
@@ -202,8 +182,172 @@ var workflowCmd = &cobra.Command{
 	Long:  `Commands for managing quorum workflows.`,
 }
 
+var listCmd = &cobra.Command{
+	Use:   "list",
+	Short: "List available workflows",
+	Long: `List all available workflows with their status and details.
+
+Displays workflow ID, status, current phase, creation time, and prompt summary.
+The active workflow is marked with an asterisk (*).`,
+	RunE: runWorkflows,
+}
+
+var switchCmd = &cobra.Command{
+	Use:   "switch <workflow-id>",
+	Short: "Switch the active workflow",
+	Long: `Set a specific workflow as the active one.
+
+Future 'plan' or 'execute' commands will use this workflow by default if no
+ID is specified via flags.`,
+	Args: cobra.ExactArgs(1),
+	RunE: runSwitch,
+}
+
+var archiveCmd = &cobra.Command{
+	Use:   "archive",
+	Short: "Archive completed and failed workflows",
+	Long: `Archive all workflows with 'completed' or 'failed' status.
+
+Archived workflows are moved to the .quorum/state/archive directory as JSON
+files and removed from the active database. This helps keep the workflow list
+clean and improves performance.`,
+	RunE: runArchive,
+}
+
+var purgeCmd = &cobra.Command{
+	Use:   "purge",
+	Short: "Permanently delete all workflows",
+	Long: `Permanently remove ALL workflows and their associated data.
+
+This action is destructive and cannot be undone. It clears the entire
+workflow database.`,
+	RunE: runPurge,
+}
+
+var purgeForce bool
+
 func init() {
 	rootCmd.AddCommand(workflowCmd)
+	workflowCmd.AddCommand(listCmd)
+	workflowCmd.AddCommand(switchCmd)
+	workflowCmd.AddCommand(archiveCmd)
+	workflowCmd.AddCommand(purgeCmd)
+
+	listCmd.Flags().StringVarP(&workflowsOutput, "output", "o", "", "Output mode (plain, json)")
+	purgeCmd.Flags().BoolVarP(&purgeForce, "force", "f", false, "Skip confirmation prompt")
+}
+
+func runSwitch(_ *cobra.Command, args []string) error {
+	ctx := context.Background()
+	workflowID := core.WorkflowID(args[0])
+
+	// Load configuration
+	loader := config.NewLoader()
+	cfg, err := loader.Load()
+	if err != nil {
+		return fmt.Errorf("loading config: %w", err)
+	}
+
+	// Create state manager
+	stateManager, err := state.NewStateManager(cfg.State.EffectiveBackend(), cfg.State.Path)
+	if err != nil {
+		return fmt.Errorf("creating state manager: %w", err)
+	}
+	defer func() {
+		_ = state.CloseStateManager(stateManager)
+	}()
+
+	// Verify workflow exists
+	wf, err := stateManager.LoadByID(ctx, workflowID)
+	if err != nil || wf == nil {
+		return fmt.Errorf("workflow not found: %s", workflowID)
+	}
+
+	// Set as active
+	if err := stateManager.SetActiveWorkflowID(ctx, workflowID); err != nil {
+		return fmt.Errorf("switching workflow: %w", err)
+	}
+
+	fmt.Printf("Switched to workflow %s\n", workflowID)
+	return nil
+}
+
+func runArchive(_ *cobra.Command, _ []string) error {
+	ctx := context.Background()
+
+	// Load configuration
+	loader := config.NewLoader()
+	cfg, err := loader.Load()
+	if err != nil {
+		return fmt.Errorf("loading config: %w", err)
+	}
+
+	// Create state manager
+	stateManager, err := state.NewStateManager(cfg.State.EffectiveBackend(), cfg.State.Path)
+	if err != nil {
+		return fmt.Errorf("creating state manager: %w", err)
+	}
+	defer func() {
+		_ = state.CloseStateManager(stateManager)
+	}()
+
+	// Archive workflows
+	count, err := stateManager.ArchiveWorkflows(ctx)
+	if err != nil {
+		return fmt.Errorf("archiving workflows: %w", err)
+	}
+
+	if count == 0 {
+		fmt.Println("No workflows to archive.")
+	} else {
+		fmt.Printf("Archived %d workflow(s).\n", count)
+	}
+
+	return nil
+}
+
+func runPurge(_ *cobra.Command, _ []string) error {
+	ctx := context.Background()
+
+	// Confirmation prompt unless --force
+	if !purgeForce {
+		fmt.Println("WARNING: This will permanently delete ALL workflows and their associated data.")
+		fmt.Print("Are you sure you want to continue? [y/N] ")
+
+		reader := bufio.NewReader(os.Stdin)
+		response, _ := reader.ReadString('\n')
+		response = strings.TrimSpace(strings.ToLower(response))
+
+		if response != "y" && response != "yes" {
+			fmt.Println("Aborted.")
+			return nil
+		}
+	}
+
+	// Load configuration
+	loader := config.NewLoader()
+	cfg, err := loader.Load()
+	if err != nil {
+		return fmt.Errorf("loading config: %w", err)
+	}
+
+	// Create state manager
+	stateManager, err := state.NewStateManager(cfg.State.EffectiveBackend(), cfg.State.Path)
+	if err != nil {
+		return fmt.Errorf("creating state manager: %w", err)
+	}
+	defer func() {
+		_ = state.CloseStateManager(stateManager)
+	}()
+
+	// Purge all workflows
+	count, err := stateManager.PurgeAllWorkflows(ctx)
+	if err != nil {
+		return fmt.Errorf("purging workflows: %w", err)
+	}
+
+	fmt.Printf("Purged %d workflow(s). All data cleared.\n", count)
+	return nil
 }
 
 func runDelete(_ *cobra.Command, args []string) error {
@@ -243,7 +387,7 @@ func runDelete(_ *cobra.Command, args []string) error {
 	if !deleteForce {
 		fmt.Printf("Delete workflow %s?\n", workflowID)
 		fmt.Printf("  Status: %s\n", formatStatus(wf.Status))
-		fmt.Printf("  Prompt: %s\n", truncateString(wf.Prompt, 60))
+		fmt.Printf("  Prompt: %s\n", TruncateString(wf.Prompt, 60))
 		fmt.Print("\nThis action cannot be undone. Continue? [y/N] ")
 
 		reader := bufio.NewReader(os.Stdin)

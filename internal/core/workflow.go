@@ -37,6 +37,12 @@ type Workflow struct {
 	StartedAt      *time.Time
 	CompletedAt    *time.Time
 	Error          string
+
+	// Git isolation metadata
+	WorkflowBranch string
+	BaseBranch     string
+	MergeStrategy  string
+	WorktreeRoot   string
 }
 
 // WorkflowConfig holds workflow-specific configuration.
@@ -258,4 +264,14 @@ func (w *Workflow) Validate() error {
 		}
 	}
 	return nil
+}
+
+// IsValidMergeStrategy checks if a merge strategy is valid.
+func IsValidMergeStrategy(strategy string) bool {
+	switch strategy {
+	case "sequential", "parallel", "rebase", "squash":
+		return true
+	default:
+		return false
+	}
 }

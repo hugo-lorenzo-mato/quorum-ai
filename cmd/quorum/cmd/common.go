@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -341,6 +342,42 @@ func InitializeWorkflowState(prompt string) *core.WorkflowState {
 func generateCmdWorkflowID() string {
 	counter := atomic.AddUint64(&cmdIDCounter, 1)
 	return fmt.Sprintf("wf-%d-%d", time.Now().UnixNano(), counter)
+}
+
+// initStateManager initializes the state manager using the current configuration.
+func initStateManager() (core.StateManager, error) {
+	loader := config.NewLoader()
+	cfg, err := loader.Load()
+	if err != nil {
+		return nil, fmt.Errorf("loading config: %w", err)
+	}
+
+	statePath := cfg.State.Path
+	if statePath == "" {
+		statePath = ".quorum/state/state.json"
+	}
+	backend := cfg.State.EffectiveBackend()
+
+	return state.NewStateManager(backend, statePath)
+}
+
+// OutputJSON writes the given value to stdout as indented JSON.
+func OutputJSON(v interface{}) error {
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	return enc.Encode(v)
+}
+
+// TruncateString removes newlines and truncates the string to maxLen.
+func TruncateString(s string, maxLen int) string {
+	// Remove newlines
+	s = strings.ReplaceAll(s, "\n", " ")
+	s = strings.ReplaceAll(s, "\r", "")
+
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen-3] + "..."
 }
 
 func parseDurationDefault(value string, fallback time.Duration) (time.Duration, error) {

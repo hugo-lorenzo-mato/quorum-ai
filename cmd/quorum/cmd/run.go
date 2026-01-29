@@ -59,6 +59,15 @@ func init() {
 	}
 	runCmd.Flags().StringVarP(&runOutput, "output", "o", "", "Output mode (tui, plain, json, quiet)")
 	runCmd.Flags().BoolVar(&runSkipOptimize, "skip-refine", false, "Skip prompt refinement phase")
+
+	// Git isolation flags
+	runCmd.Flags().Bool("workflow-branch", true, "Create isolated Git branch for workflow")
+	runCmd.Flags().String("base-branch", "", "Base branch for workflow (default: auto-detect main/master)")
+	runCmd.Flags().String("merge-strategy", "sequential", "Merge strategy for task branches: sequential, parallel, rebase")
+	runCmd.Flags().Bool("auto-merge", false, "Automatically merge workflow branch to base on successful completion")
+
+	// Concurrency flags
+	runCmd.Flags().Int("max-concurrent", 5, "Maximum number of concurrent workflows allowed")
 }
 
 func parseLogLevel(level string) slog.Level {
@@ -75,7 +84,7 @@ func parseLogLevel(level string) slog.Level {
 }
 
 //nolint:gocyclo // Complexity is acceptable for CLI orchestration function
-func runWorkflow(_ *cobra.Command, args []string) error {
+func runWorkflow(cmd *cobra.Command, args []string) error {
 	// Setup context with cancellation
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -135,6 +144,18 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 	verboseOutput := runTrace != ""
 	output := tui.NewOutput(outputMode, useColor, verboseOutput)
 	defer func() { _ = output.Close() }()
+
+	// Parse Git isolation flags
+	workflowBranch, _ := cmd.Flags().GetBool("workflow-branch")
+	baseBranch, _ := cmd.Flags().GetString("base-branch")
+	mergeStrategy, _ := cmd.Flags().GetString("merge-strategy")
+	autoMerge, _ := cmd.Flags().GetBool("auto-merge")
+	maxConcurrent, _ := cmd.Flags().GetInt("max-concurrent")
+
+	// Validate merge strategy
+	if !core.IsValidMergeStrategy(mergeStrategy) {
+		return fmt.Errorf("invalid merge strategy: %s (valid: sequential, parallel, rebase)", mergeStrategy)
+	}
 
 	// For TUI mode, start the TUI in a goroutine and run workflow in background
 	var tuiOutput *tui.TUIOutput
@@ -381,25 +402,44 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 	})
 	modeEnforcerAdapter := workflow.NewModeEnforcerAdapter(modeEnforcer)
 
-	// Create workflow runner using modular architecture (ADR-0005)
-	runner := workflow.NewRunner(workflow.RunnerDeps{
-		Config:           runnerConfig,
-		State:            stateAdapter,
-		Agents:           registry,
-		DAG:              dagAdapter,
-		Checkpoint:       checkpointAdapter,
-		ResumeProvider:   resumeAdapter,
-		Prompts:          promptAdapter,
-		Retry:            retryAdapter,
-		RateLimits:       rateLimiterAdapter,
-		Worktrees:        worktreeManager,
-		GitClientFactory: git.NewClientFactory(),
-		Git:              gitClient,
-		GitHub:           githubClient,
-		Logger:           logger,
-		Output:           outputNotifier,
-		ModeEnforcer:     modeEnforcerAdapter,
-	})
+	// Configure Git isolation
+	var gitIsolation *workflow.GitIsolationConfig
+	if workflowBranch {
+		gitIsolation = &workflow.GitIsolationConfig{
+			Enabled:       true,
+			BaseBranch:    baseBranch,
+			MergeStrategy: mergeStrategy,
+			AutoMerge:     autoMerge,
+		}
+	}
+
+	// Build runner using unified builder
+	builder := workflow.NewRunnerBuilder().
+		WithConfig(cfg).
+		WithRunnerConfig(runnerConfig).
+		WithStateManager(stateAdapter).
+		WithAgentRegistry(registry).
+		WithDAG(dagAdapter).
+		WithCheckpoint(checkpointAdapter).
+		WithResumeProvider(resumeAdapter).
+		WithPrompts(promptAdapter).
+		WithRetry(retryAdapter).
+		WithRateLimits(rateLimiterAdapter).
+		WithWorktrees(worktreeManager).
+		WithGitClientFactory(git.NewClientFactory()).
+		WithGit(gitClient).
+		WithGitHub(githubClient).
+		WithLogger(logger).
+		WithOutput(outputNotifier).
+		WithModeEnforcer(modeEnforcerAdapter).
+		WithGitIsolation(gitIsolation)
+
+	runner, err := builder.Build()
+	if err != nil {
+		return fmt.Errorf("building runner: %w", err)
+	}
+
+	runner.SetMaxConcurrentWorkflows(maxConcurrent)
 
 	// Connect agent streaming events to the output notifier for real-time progress
 	registry.SetEventHandler(func(event core.AgentEvent) {

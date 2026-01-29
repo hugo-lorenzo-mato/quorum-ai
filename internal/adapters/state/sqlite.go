@@ -32,6 +32,9 @@ var migrationV3 string
 //go:embed migrations/004_add_heartbeat_columns.sql
 var migrationV4 string
 
+//go:embed migrations/005_add_workflow_isolation_columns.sql
+var migrationV5 string
+
 // SQLiteStateManager implements StateManager with SQLite storage.
 type SQLiteStateManager struct {
 	dbPath     string
@@ -217,6 +220,14 @@ func (m *SQLiteStateManager) migrate() error {
 		}
 	}
 
+	if version < 5 {
+		// Migration V5 adds workflow isolation columns - ignore error if columns already exist
+		_, err := m.db.Exec(migrationV5)
+		if err != nil && !strings.Contains(err.Error(), "duplicate column") {
+			return fmt.Errorf("applying migration v5: %w", err)
+		}
+	}
+
 	return nil
 }
 
@@ -269,8 +280,9 @@ func (m *SQLiteStateManager) Save(ctx context.Context, state *core.WorkflowState
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO workflows (
 			id, version, title, status, current_phase, prompt, optimized_prompt,
-			task_order, config, metrics, checksum, created_at, updated_at, report_path
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			task_order, config, metrics, checksum, created_at, updated_at, report_path,
+			workflow_branch, base_branch, merge_strategy, worktree_root
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			version = excluded.version,
 			title = excluded.title,
@@ -283,13 +295,21 @@ func (m *SQLiteStateManager) Save(ctx context.Context, state *core.WorkflowState
 			metrics = excluded.metrics,
 			checksum = excluded.checksum,
 			updated_at = excluded.updated_at,
-			report_path = excluded.report_path
+			report_path = excluded.report_path,
+			workflow_branch = excluded.workflow_branch,
+			base_branch = excluded.base_branch,
+			merge_strategy = excluded.merge_strategy,
+			worktree_root = excluded.worktree_root
 	`,
 		state.WorkflowID, state.Version, state.Title, state.Status, state.CurrentPhase,
 		state.Prompt, state.OptimizedPrompt, string(taskOrderJSON),
 		nullableString(configJSON), nullableString(metricsJSON),
 		checksum, state.CreatedAt, state.UpdatedAt,
 		nullableString([]byte(state.ReportPath)),
+		nullableString([]byte(state.WorkflowBranch)),
+		nullableString([]byte(state.BaseBranch)),
+		nullableString([]byte(state.MergeStrategy)),
+		nullableString([]byte(state.WorktreeRoot)),
 	)
 	if err != nil {
 		return fmt.Errorf("upserting workflow: %w", err)
@@ -367,14 +387,20 @@ func (m *SQLiteStateManager) insertTask(ctx context.Context, tx *sql.Tx, workflo
 		resumableInt = 1
 	}
 
+	mergePendingInt := 0
+	if task.MergePending {
+		mergePendingInt = 1
+	}
+
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO tasks (
 			id, workflow_id, phase, name, status, cli, model,
 			dependencies, tokens_in, tokens_out, cost_usd, retries,
 			error, worktree_path, started_at, completed_at,
 			output, output_file, model_used, finish_reason, tool_calls,
-			last_commit, files_modified, branch, resumable, resume_hint
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			last_commit, files_modified, branch, resumable, resume_hint,
+			merge_pending
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
 		task.ID, workflowID, task.Phase, task.Name, task.Status,
 		task.CLI, task.Model, string(depsJSON),
@@ -386,6 +412,7 @@ func (m *SQLiteStateManager) insertTask(ctx context.Context, tx *sql.Tx, workflo
 		nullableString(toolCallsJSON),
 		nullableString([]byte(task.LastCommit)), nullableString(filesModifiedJSON),
 		nullableString([]byte(task.Branch)), resumableInt, nullableString([]byte(task.ResumeHint)),
+		mergePendingInt,
 	)
 	return err
 }
@@ -436,15 +463,18 @@ func (m *SQLiteStateManager) loadWorkflowByID(ctx context.Context, id core.Workf
 	var checksum sql.NullString
 	var reportPath sql.NullString
 	var title sql.NullString
+	var workflowBranch, baseBranch, mergeStrategy, worktreeRoot sql.NullString
 
 	err := m.readDB.QueryRowContext(ctx, `
 		SELECT id, version, title, status, current_phase, prompt, optimized_prompt,
-		       task_order, config, metrics, checksum, created_at, updated_at, report_path
+		       task_order, config, metrics, checksum, created_at, updated_at, report_path,
+		       workflow_branch, base_branch, merge_strategy, worktree_root
 		FROM workflows WHERE id = ?
 	`, id).Scan(
 		&state.WorkflowID, &state.Version, &title, &state.Status, &state.CurrentPhase,
 		&state.Prompt, &optimizedPrompt, &taskOrderJSON, &configJSON, &metricsJSON,
 		&checksum, &state.CreatedAt, &state.UpdatedAt, &reportPath,
+		&workflowBranch, &baseBranch, &mergeStrategy, &worktreeRoot,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil // Workflow doesn't exist
@@ -464,6 +494,18 @@ func (m *SQLiteStateManager) loadWorkflowByID(ctx context.Context, id core.Workf
 	}
 	if reportPath.Valid {
 		state.ReportPath = reportPath.String
+	}
+	if workflowBranch.Valid {
+		state.WorkflowBranch = workflowBranch.String
+	}
+	if baseBranch.Valid {
+		state.BaseBranch = baseBranch.String
+	}
+	if mergeStrategy.Valid {
+		state.MergeStrategy = mergeStrategy.String
+	}
+	if worktreeRoot.Valid {
+		state.WorktreeRoot = worktreeRoot.String
 	}
 
 	// Parse JSON fields
@@ -492,7 +534,8 @@ func (m *SQLiteStateManager) loadWorkflowByID(ctx context.Context, id core.Workf
 		       tokens_in, tokens_out, cost_usd, retries, error,
 		       worktree_path, started_at, completed_at, output,
 		       output_file, model_used, finish_reason, tool_calls,
-		       last_commit, files_modified, branch, resumable, resume_hint
+		       last_commit, files_modified, branch, resumable, resume_hint,
+		       merge_pending
 		FROM tasks WHERE workflow_id = ?
 	`, id)
 	if err != nil {
@@ -542,7 +585,7 @@ func (m *SQLiteStateManager) scanTask(rows *sql.Rows) (*core.TaskState, error) {
 	var startedAt, completedAt sql.NullTime
 	var output, outputFile, modelUsed, finishReason sql.NullString
 	var lastCommit, filesModifiedJSON, branch, resumeHint sql.NullString
-	var resumable int
+	var resumable, mergePending int
 
 	err := rows.Scan(
 		&task.ID, &task.Phase, &task.Name, &task.Status,
@@ -551,6 +594,7 @@ func (m *SQLiteStateManager) scanTask(rows *sql.Rows) (*core.TaskState, error) {
 		&errorStr, &worktreePath, &startedAt, &completedAt,
 		&output, &outputFile, &modelUsed, &finishReason, &toolCallsJSON,
 		&lastCommit, &filesModifiedJSON, &branch, &resumable, &resumeHint,
+		&mergePending,
 	)
 	if err != nil {
 		return nil, err
@@ -596,6 +640,7 @@ func (m *SQLiteStateManager) scanTask(rows *sql.Rows) (*core.TaskState, error) {
 		task.ResumeHint = resumeHint.String
 	}
 	task.Resumable = resumable != 0
+	task.MergePending = mergePending != 0
 
 	if depsJSON.Valid && depsJSON.String != "" {
 		if err := json.Unmarshal([]byte(depsJSON.String), &task.Dependencies); err != nil {

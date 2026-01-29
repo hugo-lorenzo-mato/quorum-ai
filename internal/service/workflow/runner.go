@@ -75,6 +75,16 @@ type RunnerConfig struct {
 	SingleAgent SingleAgentConfig
 	// Finalization configures post-task git operations (commit, push, PR).
 	Finalization FinalizationConfig
+	// GitIsolation configures workflow-level Git branch isolation.
+	GitIsolation *GitIsolationConfig
+}
+
+// GitIsolationConfig configures Git branch isolation for a workflow.
+type GitIsolationConfig struct {
+	Enabled       bool
+	BaseBranch    string
+	MergeStrategy string
+	AutoMerge     bool
 }
 
 // SynthesizerConfig configures the analysis synthesis phase.
@@ -600,7 +610,7 @@ func (r *Runner) ResumeWithState(ctx context.Context, state *core.WorkflowState)
 
 // initializeState creates initial workflow state.
 func (r *Runner) initializeState(prompt string) *core.WorkflowState {
-	return &core.WorkflowState{
+	state := &core.WorkflowState{
 		Version:      core.CurrentStateVersion,
 		WorkflowID:   core.WorkflowID(generateWorkflowID()),
 		Status:       core.WorkflowStatusRunning,
@@ -613,6 +623,16 @@ func (r *Runner) initializeState(prompt string) *core.WorkflowState {
 		CreatedAt:    time.Now(),
 		UpdatedAt:    time.Now(),
 	}
+
+	// Set Git isolation from config if enabled
+	if r.config.GitIsolation != nil && r.config.GitIsolation.Enabled {
+		state.WorkflowBranch = fmt.Sprintf("quorum/%s", state.WorkflowID)
+		state.BaseBranch = r.config.GitIsolation.BaseBranch
+		state.MergeStrategy = r.config.GitIsolation.MergeStrategy
+		state.WorktreeRoot = ".worktrees" // Default root
+	}
+
+	return state
 }
 
 // createContext creates a workflow context for phase runners.
@@ -1332,6 +1352,11 @@ func (r *Runner) LoadWorkflow(ctx context.Context, workflowID string) (*core.Wor
 // SetDryRun enables or disables dry-run mode.
 func (r *Runner) SetDryRun(enabled bool) {
 	r.config.DryRun = enabled
+}
+
+// SetMaxConcurrentWorkflows sets the maximum number of concurrent workflows allowed.
+func (r *Runner) SetMaxConcurrentWorkflows(max int) {
+	// Placeholder - in a real implementation this would configure the executor or a semaphore
 }
 
 // generateWorkflowID generates a unique workflow ID.

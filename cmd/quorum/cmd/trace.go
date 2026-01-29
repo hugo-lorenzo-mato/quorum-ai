@@ -69,7 +69,7 @@ func runTraceCmd(_ *cobra.Command, _ []string) error {
 	}
 
 	if traceJSON {
-		return outputJSON(manifest)
+		return OutputJSON(manifest)
 	}
 
 	return renderTraceSummary(manifest, runDir)

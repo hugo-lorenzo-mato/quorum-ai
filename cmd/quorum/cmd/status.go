@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"text/tabwriter"
@@ -55,7 +54,7 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 	}
 
 	if statusJSON {
-		return outputJSON(workflowState)
+		return OutputJSON(workflowState)
 	}
 
 	// Text output
@@ -82,10 +81,4 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 	}
 
 	return nil
-}
-
-func outputJSON(v interface{}) error {
-	enc := json.NewEncoder(os.Stdout)
-	enc.SetIndent("", "  ")
-	return enc.Encode(v)
 }
