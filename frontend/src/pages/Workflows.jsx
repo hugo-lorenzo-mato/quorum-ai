@@ -122,29 +122,30 @@ function WorkflowCard({ workflow, onClick, onDelete }) {
       onClick={onClick}
       className="relative w-full text-left p-4 rounded-xl border border-border bg-card hover:border-muted-foreground/30 hover:shadow-md transition-all group cursor-pointer"
     >
-      <div className="flex items-start justify-between mb-3">
-        <div className="flex-1 min-w-0 pr-8">
+      <div className="flex items-start justify-between gap-2 mb-3">
+        <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-foreground line-clamp-2">
             {deriveWorkflowTitle(workflow)}
           </p>
           <p className="text-xs text-muted-foreground mt-1">{workflow.id}</p>
         </div>
-        <StatusBadge status={workflow.status} />
+        <div className="flex items-center gap-2 shrink-0">
+          <StatusBadge status={workflow.status} />
+          {canDelete && (
+            <button
+              onClick={handleDeleteClick}
+              className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-all"
+              title="Delete workflow"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          )}
+        </div>
       </div>
       <div className="flex items-center gap-4 text-xs text-muted-foreground">
         <span>Phase: {workflow.current_phase || 'N/A'}</span>
         <span>Tasks: {workflow.task_count || 0}</span>
       </div>
-      {/* Delete button - appears on hover */}
-      {canDelete && (
-        <button
-          onClick={handleDeleteClick}
-          className="absolute top-3 right-3 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-all"
-          title="Delete workflow"
-        >
-          <Trash2 className="w-4 h-4" />
-        </button>
-      )}
       <ChevronRight className="absolute right-4 bottom-4 w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
     </div>
   );

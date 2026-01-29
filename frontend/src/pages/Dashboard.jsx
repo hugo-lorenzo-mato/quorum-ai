@@ -218,8 +218,10 @@ export default function Dashboard() {
         </Link>
       </div>
 
-      {/* Active Workflow Banner */}
-      {activeWorkflow && <ActiveWorkflowBanner workflow={activeWorkflow} />}
+      {/* Active Workflow Banner - only show if actually running */}
+      {activeWorkflow && activeWorkflow.status === 'running' && (
+        <ActiveWorkflowBanner workflow={activeWorkflow} />
+      )}
 
       {/* Bento Grid Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">

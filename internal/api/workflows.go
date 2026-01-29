@@ -207,6 +207,12 @@ func (s *Server) handleGetActiveWorkflow(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	// Only return as "active" if the workflow is actually running
+	if state.Status != core.WorkflowStatusRunning {
+		respondError(w, http.StatusNotFound, "no active workflow")
+		return
+	}
+
 	response := stateToWorkflowResponse(state, activeID)
 	respondJSON(w, http.StatusOK, response)
 }
