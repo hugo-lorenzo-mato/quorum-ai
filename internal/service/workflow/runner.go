@@ -115,9 +115,9 @@ func DefaultRunnerConfig() *RunnerConfig {
 		},
 		Report: report.DefaultConfig(),
 		PhaseTimeouts: PhaseTimeouts{
-			Analyze: 2 * time.Hour,
-			Plan:    2 * time.Hour,
-			Execute: 2 * time.Hour,
+			Analyze: 3 * time.Hour,
+			Plan:    3 * time.Hour,
+			Execute: 3 * time.Hour,
 		},
 		Moderator: ModeratorConfig{
 			Enabled:             false, // Disabled by default - must be explicitly enabled
@@ -154,6 +154,7 @@ type Runner struct {
 	output         OutputNotifier
 	modeEnforcer   ModeEnforcerInterface
 	control        *control.ControlPlane
+	heartbeat      *HeartbeatManager
 }
 
 // RunnerDeps holds dependencies for creating a Runner.
@@ -178,6 +179,7 @@ type RunnerDeps struct {
 	Output           OutputNotifier
 	ModeEnforcer     ModeEnforcerInterface
 	Control          *control.ControlPlane
+	Heartbeat        *HeartbeatManager
 }
 
 // NewRunner creates a new workflow runner with all dependencies.
@@ -220,6 +222,7 @@ func NewRunner(deps RunnerDeps) *Runner {
 		output:         deps.Output,
 		modeEnforcer:   deps.ModeEnforcer,
 		control:        deps.Control,
+		heartbeat:      deps.Heartbeat,
 	}
 }
 
@@ -290,6 +293,111 @@ func (r *Runner) Run(ctx context.Context, prompt string) error {
 	r.finalizeMetrics(workflowState)
 
 	// Mark completed
+	workflowState.Status = core.WorkflowStatusCompleted
+	workflowState.UpdatedAt = time.Now()
+
+	r.logger.Info("workflow completed",
+		"workflow_id", workflowState.WorkflowID,
+		"total_tasks", len(workflowState.Tasks),
+		"duration", workflowState.Metrics.Duration,
+		"total_cost", workflowState.Metrics.TotalCostUSD,
+	)
+	if r.output != nil {
+		r.output.Log("success", "workflow", fmt.Sprintf("Workflow completed: %d tasks, $%.4f, %s",
+			len(workflowState.Tasks),
+			workflowState.Metrics.TotalCostUSD,
+			workflowState.Metrics.Duration.Round(time.Second)))
+	}
+
+	return r.state.Save(ctx, workflowState)
+}
+
+// RunWithState executes a workflow using an existing pre-created state.
+// This is for API usage where the workflow was created and persisted before execution.
+// Unlike Run(), it does NOT create a new workflow ID - it uses the provided state's ID.
+func (r *Runner) RunWithState(ctx context.Context, state *core.WorkflowState) error {
+	if state == nil {
+		return core.ErrValidation("NIL_STATE", "workflow state cannot be nil")
+	}
+	if state.WorkflowID == "" {
+		return core.ErrValidation("MISSING_WORKFLOW_ID", "workflow state must have a workflow ID")
+	}
+	if err := r.validateRunInput(state.Prompt); err != nil {
+		return err
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, r.config.Timeout)
+	defer cancel()
+
+	if err := r.ValidateAgentAvailability(ctx); err != nil {
+		return err
+	}
+
+	if err := r.state.AcquireLock(ctx); err != nil {
+		return fmt.Errorf("acquiring lock: %w", err)
+	}
+	defer func() { _ = r.state.ReleaseLock(ctx) }()
+
+	// Use provided state - NO initializeState()
+	workflowState := state
+	if workflowState.Status != core.WorkflowStatusRunning {
+		workflowState.Status = core.WorkflowStatusRunning
+	}
+	if workflowState.CurrentPhase == "" {
+		workflowState.CurrentPhase = core.PhaseRefine
+	}
+	if workflowState.Tasks == nil {
+		workflowState.Tasks = make(map[core.TaskID]*core.TaskState)
+	}
+	if workflowState.TaskOrder == nil {
+		workflowState.TaskOrder = make([]core.TaskID, 0)
+	}
+	if workflowState.Checkpoints == nil {
+		workflowState.Checkpoints = make([]core.Checkpoint, 0)
+	}
+	if workflowState.Metrics == nil {
+		workflowState.Metrics = &core.StateMetrics{}
+	}
+	workflowState.UpdatedAt = time.Now()
+
+	r.logger.Info("starting workflow with existing state",
+		"workflow_id", workflowState.WorkflowID,
+		"prompt_length", len(workflowState.Prompt),
+	)
+	if r.output != nil {
+		r.output.Log("info", "workflow", fmt.Sprintf("Workflow started: %s", workflowState.WorkflowID))
+	}
+
+	if err := r.state.Save(ctx, workflowState); err != nil {
+		return fmt.Errorf("saving state: %w", err)
+	}
+
+	// Start heartbeat tracking if available
+	if r.heartbeat != nil {
+		r.heartbeat.Start(workflowState.WorkflowID)
+		defer r.heartbeat.Stop(workflowState.WorkflowID)
+	}
+
+	wctx := r.createContext(workflowState)
+
+	// Run all phases (same as Run())
+	if err := r.refiner.Run(ctx, wctx); err != nil {
+		return r.handleError(ctx, workflowState, err)
+	}
+	if err := r.ValidateModeratorConfig(); err != nil {
+		return r.handleError(ctx, workflowState, err)
+	}
+	if err := r.analyzer.Run(ctx, wctx); err != nil {
+		return r.handleError(ctx, workflowState, err)
+	}
+	if err := r.planner.Run(ctx, wctx); err != nil {
+		return r.handleError(ctx, workflowState, err)
+	}
+	if err := r.executor.Run(ctx, wctx); err != nil {
+		return r.handleError(ctx, workflowState, err)
+	}
+
+	r.finalizeMetrics(workflowState)
 	workflowState.Status = core.WorkflowStatusCompleted
 	workflowState.UpdatedAt = time.Now()
 
@@ -399,6 +507,95 @@ func (r *Runner) Resume(ctx context.Context) error {
 	}
 
 	return r.state.Save(ctx, workflowState)
+}
+
+// ResumeWithState continues execution using pre-loaded state.
+// This is for API usage where the state was loaded before calling resume.
+func (r *Runner) ResumeWithState(ctx context.Context, state *core.WorkflowState) error {
+	if state == nil {
+		return core.ErrState("NIL_STATE", "workflow state cannot be nil")
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, r.config.Timeout)
+	defer cancel()
+
+	if err := r.state.AcquireLock(ctx); err != nil {
+		return fmt.Errorf("acquiring lock: %w", err)
+	}
+	defer func() { _ = r.state.ReleaseLock(ctx) }()
+
+	resumePoint, err := r.resumeProvider.GetResumePoint(state)
+	if err != nil {
+		return fmt.Errorf("determining resume point: %w", err)
+	}
+
+	r.logger.Info("resuming workflow with existing state",
+		"workflow_id", state.WorkflowID,
+		"phase", resumePoint.Phase,
+		"task_id", resumePoint.TaskID,
+		"from_start", resumePoint.FromStart,
+	)
+	if r.output != nil {
+		r.output.Log("info", "workflow", fmt.Sprintf("Resuming workflow from %s phase", resumePoint.Phase))
+	}
+
+	// Start heartbeat tracking if available
+	if r.heartbeat != nil {
+		r.heartbeat.Start(state.WorkflowID)
+		defer r.heartbeat.Stop(state.WorkflowID)
+	}
+
+	wctx := r.createContext(state)
+
+	// Resume from appropriate phase (same logic as Resume())
+	switch resumePoint.Phase {
+	case core.PhaseRefine:
+		if err := r.refiner.Run(ctx, wctx); err != nil {
+			return r.handleError(ctx, state, err)
+		}
+		fallthrough
+	case core.PhaseAnalyze:
+		if err := r.analyzer.Run(ctx, wctx); err != nil {
+			return r.handleError(ctx, state, err)
+		}
+		fallthrough
+	case core.PhasePlan:
+		if err := r.planner.Run(ctx, wctx); err != nil {
+			return r.handleError(ctx, state, err)
+		}
+		fallthrough
+	case core.PhaseExecute:
+		if len(state.Tasks) > 0 {
+			r.logger.Info("rebuilding DAG from existing tasks",
+				"task_count", len(state.Tasks))
+			if r.output != nil {
+				r.output.Log("info", "workflow", fmt.Sprintf("Rebuilding task DAG from %d existing tasks", len(state.Tasks)))
+			}
+			if err := r.planner.RebuildDAGFromState(state); err != nil {
+				return r.handleError(ctx, state, fmt.Errorf("rebuilding DAG: %w", err))
+			}
+		}
+		if err := r.executor.Run(ctx, wctx); err != nil {
+			return r.handleError(ctx, state, err)
+		}
+	}
+
+	r.finalizeMetrics(state)
+	state.Status = core.WorkflowStatusCompleted
+	state.UpdatedAt = time.Now()
+
+	r.logger.Info("workflow resumed and completed",
+		"workflow_id", state.WorkflowID,
+		"duration", state.Metrics.Duration,
+		"total_cost", state.Metrics.TotalCostUSD,
+	)
+	if r.output != nil {
+		r.output.Log("success", "workflow", fmt.Sprintf("Resumed workflow completed: %d tasks, $%.4f",
+			len(state.Tasks),
+			state.Metrics.TotalCostUSD))
+	}
+
+	return r.state.Save(ctx, state)
 }
 
 // initializeState creates initial workflow state.

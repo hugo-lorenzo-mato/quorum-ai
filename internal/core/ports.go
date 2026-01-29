@@ -192,6 +192,14 @@ type StateManager interface {
 	// DeleteWorkflow deletes a single workflow by ID.
 	// Returns error if workflow does not exist.
 	DeleteWorkflow(ctx context.Context, id WorkflowID) error
+
+	// UpdateHeartbeat updates the heartbeat timestamp for a running workflow.
+	// Used for zombie detection - workflows with stale heartbeats are considered dead.
+	UpdateHeartbeat(ctx context.Context, id WorkflowID) error
+
+	// FindZombieWorkflows returns workflows with status "running" but stale heartbeats.
+	// A workflow is considered a zombie if its heartbeat is older than the threshold.
+	FindZombieWorkflows(ctx context.Context, staleThreshold time.Duration) ([]*WorkflowState, error)
 }
 
 // WorkflowSummary provides a lightweight summary of a workflow for listing.
@@ -226,6 +234,11 @@ type WorkflowState struct {
 	UpdatedAt       time.Time             `json:"updated_at"`
 	Checksum        string                `json:"checksum,omitempty"`
 	ReportPath      string                `json:"report_path,omitempty"` // Persisted report directory for resume
+
+	// Heartbeat tracking for zombie detection and auto-resume
+	HeartbeatAt *time.Time `json:"heartbeat_at,omitempty"` // Last heartbeat timestamp
+	ResumeCount int        `json:"resume_count,omitempty"` // Number of auto-resumes performed
+	MaxResumes  int        `json:"max_resumes,omitempty"`  // Maximum allowed auto-resumes (default: 3)
 }
 
 // Attachment represents a user-provided file associated with a chat session or workflow.

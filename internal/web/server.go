@@ -17,20 +17,23 @@ import (
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/diagnostics"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/events"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service/workflow"
 )
 
 // Server represents the HTTP server for the Quorum web interface.
 type Server struct {
-	router          chi.Router
-	httpServer      *http.Server
-	config          Config
-	logger          *slog.Logger
-	eventBus        *events.EventBus
-	agentRegistry   core.AgentRegistry
-	stateManager    core.StateManager
-	resourceMonitor *diagnostics.ResourceMonitor
-	configLoader    *config.Loader // for workflow execution configuration
-	apiServer       *api.Server
+	router           chi.Router
+	httpServer       *http.Server
+	config           Config
+	logger           *slog.Logger
+	eventBus         *events.EventBus
+	agentRegistry    core.AgentRegistry
+	stateManager     core.StateManager
+	resourceMonitor  *diagnostics.ResourceMonitor
+	configLoader     *config.Loader             // for workflow execution configuration
+	workflowExecutor *api.WorkflowExecutor      // for centralized workflow execution
+	heartbeatManager *workflow.HeartbeatManager // for zombie workflow detection
+	apiServer        *api.Server
 }
 
 // Config holds the server configuration.
@@ -99,6 +102,20 @@ func WithConfigLoader(loader *config.Loader) ServerOption {
 	}
 }
 
+// WithWorkflowExecutor sets the workflow executor for centralized execution management.
+func WithWorkflowExecutor(executor *api.WorkflowExecutor) ServerOption {
+	return func(s *Server) {
+		s.workflowExecutor = executor
+	}
+}
+
+// WithHeartbeatManager sets the heartbeat manager for zombie workflow detection.
+func WithHeartbeatManager(hb *workflow.HeartbeatManager) ServerOption {
+	return func(s *Server) {
+		s.heartbeatManager = hb
+	}
+}
+
 // New creates a new Server instance with the given configuration.
 func New(cfg Config, logger *slog.Logger, opts ...ServerOption) *Server {
 	if logger == nil {
@@ -123,6 +140,12 @@ func New(cfg Config, logger *slog.Logger, opts ...ServerOption) *Server {
 		}
 		if s.configLoader != nil {
 			apiOpts = append(apiOpts, api.WithConfigLoader(s.configLoader))
+		}
+		if s.workflowExecutor != nil {
+			apiOpts = append(apiOpts, api.WithWorkflowExecutor(s.workflowExecutor))
+		}
+		if s.heartbeatManager != nil {
+			apiOpts = append(apiOpts, api.WithHeartbeatManager(s.heartbeatManager))
 		}
 		s.apiServer = api.NewServer(s.stateManager, s.eventBus, apiOpts...)
 		if s.agentRegistry != nil && s.stateManager != nil {

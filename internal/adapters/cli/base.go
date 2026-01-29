@@ -158,7 +158,7 @@ func (b *BaseAdapter) ExecuteCommand(ctx context.Context, args []string, stdin, 
 		timeout = b.config.Timeout
 	}
 	if timeout == 0 {
-		timeout = 5 * time.Minute
+		timeout = 3 * time.Hour
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
@@ -428,7 +428,7 @@ func (b *BaseAdapter) ExecuteWithStreaming(ctx context.Context, adapterName stri
 		actualTimeout = b.config.Timeout
 	}
 	if actualTimeout == 0 {
-		actualTimeout = 5 * time.Minute
+		actualTimeout = 3 * time.Hour
 	}
 
 	// Emit started event with command info and timeout
@@ -467,7 +467,7 @@ func (b *BaseAdapter) executeWithJSONStreaming(
 		timeout = b.config.Timeout
 	}
 	if timeout == 0 {
-		timeout = 5 * time.Minute
+		timeout = 3 * time.Hour
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
@@ -724,7 +724,7 @@ func (b *BaseAdapter) executeWithLogFileStreaming(
 		timeout = b.config.Timeout
 	}
 	if timeout == 0 {
-		timeout = 5 * time.Minute
+		timeout = 3 * time.Hour
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()

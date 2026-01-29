@@ -163,7 +163,7 @@ type MockStateManager struct {
 	state    *core.WorkflowState
 	locked   bool
 	saveFunc func(*core.WorkflowState) error
-	mu       sync.Mutex
+	mu       sync.RWMutex
 }
 
 // NewMockStateManager creates a new mock state manager.
@@ -326,6 +326,33 @@ func (m *MockStateManager) WithSaveError(err error) *MockStateManager {
 		return err
 	}
 	return m
+}
+
+// UpdateHeartbeat updates the heartbeat timestamp for a running workflow.
+func (m *MockStateManager) UpdateHeartbeat(_ context.Context, id core.WorkflowID) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.state != nil && m.state.WorkflowID == id {
+		now := time.Now().UTC()
+		m.state.HeartbeatAt = &now
+		return nil
+	}
+	return core.ErrNotFound("workflow", string(id))
+}
+
+// FindZombieWorkflows returns workflows with stale heartbeats.
+func (m *MockStateManager) FindZombieWorkflows(_ context.Context, staleThreshold time.Duration) ([]*core.WorkflowState, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.state == nil || m.state.Status != core.WorkflowStatusRunning {
+		return nil, nil
+	}
+
+	cutoff := time.Now().UTC().Add(-staleThreshold)
+	if m.state.HeartbeatAt == nil || m.state.HeartbeatAt.Before(cutoff) {
+		return []*core.WorkflowState{m.state}, nil
+	}
+	return nil, nil
 }
 
 // MockRegistry implements AgentRegistry for testing.

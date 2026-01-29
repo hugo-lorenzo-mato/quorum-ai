@@ -803,5 +803,54 @@ func (m *JSONStateManager) deleteReportDirectory(reportPath, workflowID string) 
 	_ = os.RemoveAll(defaultPath)
 }
 
+// UpdateHeartbeat updates the heartbeat timestamp for a running workflow.
+// This is used for zombie detection - workflows with stale heartbeats are considered dead.
+func (m *JSONStateManager) UpdateHeartbeat(ctx context.Context, id core.WorkflowID) error {
+	state, err := m.LoadByID(ctx, id)
+	if err != nil {
+		return fmt.Errorf("loading workflow: %w", err)
+	}
+	if state == nil {
+		return fmt.Errorf("workflow not found: %s", id)
+	}
+	if state.Status != core.WorkflowStatusRunning {
+		return fmt.Errorf("workflow not running: %s", id)
+	}
+
+	now := time.Now().UTC()
+	state.HeartbeatAt = &now
+	return m.Save(ctx, state)
+}
+
+// FindZombieWorkflows returns workflows with status "running" but stale heartbeats.
+// A workflow is considered a zombie if its heartbeat is older than the threshold.
+func (m *JSONStateManager) FindZombieWorkflows(ctx context.Context, staleThreshold time.Duration) ([]*core.WorkflowState, error) {
+	summaries, err := m.ListWorkflows(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("listing workflows: %w", err)
+	}
+
+	cutoff := time.Now().UTC().Add(-staleThreshold)
+	var zombies []*core.WorkflowState
+
+	for _, summary := range summaries {
+		if summary.Status != core.WorkflowStatusRunning {
+			continue
+		}
+
+		state, err := m.LoadByID(ctx, summary.WorkflowID)
+		if err != nil || state == nil {
+			continue
+		}
+
+		// Consider zombie if no heartbeat or heartbeat is stale
+		if state.HeartbeatAt == nil || state.HeartbeatAt.Before(cutoff) {
+			zombies = append(zombies, state)
+		}
+	}
+
+	return zombies, nil
+}
+
 // Verify that JSONStateManager implements core.StateManager.
 var _ core.StateManager = (*JSONStateManager)(nil)

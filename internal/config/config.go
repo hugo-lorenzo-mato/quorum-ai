@@ -94,11 +94,28 @@ type PreflightConfig struct {
 
 // WorkflowConfig configures workflow execution.
 type WorkflowConfig struct {
-	Timeout    string   `mapstructure:"timeout"`
-	MaxRetries int      `mapstructure:"max_retries"`
-	DryRun     bool     `mapstructure:"dry_run"`
-	Sandbox    bool     `mapstructure:"sandbox"`
-	DenyTools  []string `mapstructure:"deny_tools"`
+	Timeout    string          `mapstructure:"timeout"`
+	MaxRetries int             `mapstructure:"max_retries"`
+	DryRun     bool            `mapstructure:"dry_run"`
+	Sandbox    bool            `mapstructure:"sandbox"`
+	DenyTools  []string        `mapstructure:"deny_tools"`
+	Heartbeat  HeartbeatConfig `mapstructure:"heartbeat"`
+}
+
+// HeartbeatConfig configures the heartbeat system for zombie workflow detection.
+type HeartbeatConfig struct {
+	// Enabled activates the heartbeat system.
+	Enabled bool `mapstructure:"enabled"`
+	// Interval is how often to write heartbeats (e.g., "30s").
+	Interval string `mapstructure:"interval"`
+	// StaleThreshold is when to consider a workflow zombie (e.g., "2m").
+	StaleThreshold string `mapstructure:"stale_threshold"`
+	// CheckInterval is how often to check for zombies (e.g., "60s").
+	CheckInterval string `mapstructure:"check_interval"`
+	// AutoResume enables automatic resume of zombie workflows.
+	AutoResume bool `mapstructure:"auto_resume"`
+	// MaxResumes is the maximum auto-resume attempts per workflow.
+	MaxResumes int `mapstructure:"max_resumes"`
 }
 
 // PhasesConfig configures each workflow phase.

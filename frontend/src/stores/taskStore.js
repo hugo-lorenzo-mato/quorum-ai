@@ -20,6 +20,38 @@ const useTaskStore = create((set, get) => ({
     });
   },
 
+  // Load persisted tasks from API response (on page reload)
+  loadPersistedTasks: (workflowId, tasks) => {
+    if (!tasks || tasks.length === 0) return;
+
+    const { tasksByWorkflow } = get();
+    const tasksMap = {};
+
+    for (const task of tasks) {
+      tasksMap[task.id] = {
+        id: task.id,
+        name: task.name,
+        phase: task.phase,
+        status: task.status,
+        cli: task.cli,
+        model: task.model,
+        tokens_in: task.tokens_in,
+        tokens_out: task.tokens_out,
+        cost_usd: task.cost_usd,
+        error: task.error,
+        started_at: task.started_at,
+        completed_at: task.completed_at,
+      };
+    }
+
+    set({
+      tasksByWorkflow: {
+        ...tasksByWorkflow,
+        [workflowId]: tasksMap,
+      },
+    });
+  },
+
   selectTask: (taskId) => {
     set({ selectedTaskId: taskId });
   },

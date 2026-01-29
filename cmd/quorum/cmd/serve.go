@@ -19,6 +19,7 @@ import (
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/diagnostics"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/events"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/logging"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service/workflow"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/web"
 )
 
@@ -179,6 +180,17 @@ func runServe(_ *cobra.Command, _ []string) error {
 		)
 	}
 
+	// Create heartbeat manager for zombie workflow detection (if enabled)
+	var heartbeatManager *workflow.HeartbeatManager
+	if quorumCfg != nil && quorumCfg.Workflow.Heartbeat.Enabled && stateManager != nil {
+		heartbeatCfg := buildHeartbeatConfig(quorumCfg.Workflow.Heartbeat)
+		heartbeatManager = workflow.NewHeartbeatManager(heartbeatCfg, stateManager, logger.Logger)
+		logger.Info("heartbeat manager initialized",
+			slog.Duration("interval", heartbeatCfg.Interval),
+			slog.Duration("stale_threshold", heartbeatCfg.StaleThreshold),
+			slog.Bool("auto_resume", heartbeatCfg.AutoResume))
+	}
+
 	// Create server options
 	serverOpts := []web.ServerOption{web.WithEventBus(eventBus)}
 	if registry != nil {
@@ -192,6 +204,9 @@ func runServe(_ *cobra.Command, _ []string) error {
 	}
 	if quorumCfg != nil {
 		serverOpts = append(serverOpts, web.WithConfigLoader(loader))
+	}
+	if heartbeatManager != nil {
+		serverOpts = append(serverOpts, web.WithHeartbeatManager(heartbeatManager))
 	}
 
 	// Create and start server with event bus and agent registry
@@ -208,6 +223,26 @@ func runServe(_ *cobra.Command, _ []string) error {
 		} else if recovered > 0 {
 			logger.Info("recovered zombie workflows", slog.Int("count", recovered))
 		}
+	}
+
+	// Start zombie detector if heartbeat is enabled
+	if heartbeatManager != nil {
+		heartbeatManager.StartZombieDetector(func(state *core.WorkflowState) {
+			// Log zombie detection - auto-resume is handled by HandleZombie if enabled
+			logger.Warn("zombie workflow detected by heartbeat manager",
+				slog.String("workflow_id", string(state.WorkflowID)),
+				slog.String("phase", string(state.CurrentPhase)))
+			// Mark as failed since we don't have executor reference here
+			// The HandleZombie method requires an executor interface, which we don't have in serve.go
+			// For now, just mark failed - auto-resume would need tighter integration
+			state.Status = core.WorkflowStatusFailed
+			state.Error = "Zombie workflow detected (stale heartbeat)"
+			state.UpdatedAt = time.Now()
+			if err := stateManager.Save(ctx, state); err != nil {
+				logger.Error("failed to save zombie state", slog.String("error", err.Error()))
+			}
+		})
+		defer heartbeatManager.Shutdown()
 	}
 
 	logger.Info("server started",
@@ -258,17 +293,29 @@ func recoverZombieWorkflows(ctx context.Context, stateManager core.StateManager,
 			continue
 		}
 
-		// Mark as failed
+		// Determine what phase was interrupted
+		lastPhase := state.CurrentPhase
+		checkpointCount := len(state.Checkpoints)
+		taskCount := len(state.Tasks)
+
+		// Mark as failed with informative error message
 		state.Status = core.WorkflowStatusFailed
+		state.Error = fmt.Sprintf("Workflow interrupted during %s phase (server restart)", lastPhase)
 		state.UpdatedAt = time.Now()
 
-		// Add checkpoint explaining the recovery
+		// Add checkpoint explaining the recovery with detailed context
+		recoveryMessage := fmt.Sprintf(
+			"Server restarted while workflow was in '%s' phase. "+
+				"Had %d checkpoint(s) and %d task(s). "+
+				"Click 'Start' to retry from the beginning, or check the report for partial results.",
+			lastPhase, checkpointCount, taskCount)
+
 		state.Checkpoints = append(state.Checkpoints, core.Checkpoint{
 			ID:        fmt.Sprintf("recovery-%d", time.Now().UnixNano()),
 			Type:      "recovery",
-			Phase:     state.CurrentPhase,
+			Phase:     lastPhase,
 			Timestamp: time.Now(),
-			Message:   "Workflow interrupted (server restart). Status changed from 'running' to 'failed'. You can retry by clicking Start.",
+			Message:   recoveryMessage,
 		})
 
 		// Save updated state
@@ -281,9 +328,45 @@ func recoverZombieWorkflows(ctx context.Context, stateManager core.StateManager,
 
 		logger.Info("recovered zombie workflow",
 			slog.String("workflow_id", string(summary.WorkflowID)),
-			slog.String("phase", string(state.CurrentPhase)))
+			slog.String("phase", string(lastPhase)),
+			slog.Int("checkpoints", checkpointCount),
+			slog.Int("tasks", taskCount))
 		recovered++
 	}
 
 	return recovered, nil
+}
+
+// buildHeartbeatConfig converts config.HeartbeatConfig to workflow.HeartbeatConfig.
+func buildHeartbeatConfig(cfg config.HeartbeatConfig) workflow.HeartbeatConfig {
+	result := workflow.DefaultHeartbeatConfig()
+
+	// Parse interval
+	if cfg.Interval != "" {
+		if d, err := time.ParseDuration(cfg.Interval); err == nil {
+			result.Interval = d
+		}
+	}
+
+	// Parse stale threshold
+	if cfg.StaleThreshold != "" {
+		if d, err := time.ParseDuration(cfg.StaleThreshold); err == nil {
+			result.StaleThreshold = d
+		}
+	}
+
+	// Parse check interval
+	if cfg.CheckInterval != "" {
+		if d, err := time.ParseDuration(cfg.CheckInterval); err == nil {
+			result.CheckInterval = d
+		}
+	}
+
+	result.AutoResume = cfg.AutoResume
+
+	if cfg.MaxResumes > 0 {
+		result.MaxResumes = cfg.MaxResumes
+	}
+
+	return result
 }

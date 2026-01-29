@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -31,10 +32,13 @@ type WorkflowResponse struct {
 	ReportPath      string            `json:"report_path,omitempty"`
 	CreatedAt       time.Time         `json:"created_at"`
 	UpdatedAt       time.Time         `json:"updated_at"`
+	HeartbeatAt     *time.Time        `json:"heartbeat_at,omitempty"` // Last heartbeat for zombie detection
 	IsActive        bool              `json:"is_active"`
+	ActuallyRunning bool              `json:"actually_running,omitempty"` // True if executing in this process
 	TaskCount       int               `json:"task_count"`
 	Metrics         *Metrics          `json:"metrics,omitempty"`
 	AgentEvents     []core.AgentEvent `json:"agent_events,omitempty"` // Persisted agent activity
+	Tasks           []TaskResponse    `json:"tasks,omitempty"`        // Persisted task state for reload
 }
 
 // Metrics represents workflow metrics in API responses.
@@ -91,6 +95,14 @@ func markFinished(id string) {
 	runningWorkflows.Lock()
 	defer runningWorkflows.Unlock()
 	delete(runningWorkflows.ids, id)
+}
+
+// isWorkflowActuallyRunning checks if a workflow marked as "running"
+// has an active execution in this process. Useful for detecting zombies.
+func isWorkflowActuallyRunning(workflowID string) bool {
+	runningWorkflows.Lock()
+	defer runningWorkflows.Unlock()
+	return runningWorkflows.ids[workflowID]
 }
 
 // handleListWorkflows returns all workflows.
@@ -429,7 +441,9 @@ func stateToWorkflowResponse(state *core.WorkflowState, activeID core.WorkflowID
 		ReportPath:      state.ReportPath,
 		CreatedAt:       state.CreatedAt,
 		UpdatedAt:       state.UpdatedAt,
+		HeartbeatAt:     state.HeartbeatAt,
 		IsActive:        state.WorkflowID == activeID,
+		ActuallyRunning: isWorkflowActuallyRunning(string(state.WorkflowID)),
 		TaskCount:       len(state.Tasks),
 		AgentEvents:     state.AgentEvents,
 	}
@@ -440,6 +454,16 @@ func stateToWorkflowResponse(state *core.WorkflowState, activeID core.WorkflowID
 			TotalTokensIn:  state.Metrics.TotalTokensIn,
 			TotalTokensOut: state.Metrics.TotalTokensOut,
 			ConsensusScore: state.Metrics.ConsensusScore,
+		}
+	}
+
+	// Populate tasks in order for frontend to restore state on reload
+	if len(state.TaskOrder) > 0 {
+		resp.Tasks = make([]TaskResponse, 0, len(state.TaskOrder))
+		for _, taskID := range state.TaskOrder {
+			if task, ok := state.Tasks[taskID]; ok {
+				resp.Tasks = append(resp.Tasks, taskStateToResponse(task))
+			}
 		}
 	}
 
@@ -493,7 +517,7 @@ func (s *Server) HandleRunWorkflow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Load workflow state
+	// Load workflow state for initial validation and response
 	state, err := s.stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
 	if err != nil {
 		s.logger.Error("failed to load workflow", "workflow_id", workflowID, "error", err)
@@ -510,6 +534,50 @@ func (s *Server) HandleRunWorkflow(w http.ResponseWriter, r *http.Request) {
 		state.Status == core.WorkflowStatusPaused ||
 		len(state.Checkpoints) > 0
 
+	// Use WorkflowExecutor if available (preferred path with heartbeat support)
+	if s.executor != nil {
+		var execErr error
+		if isResume {
+			execErr = s.executor.Resume(ctx, core.WorkflowID(workflowID))
+		} else {
+			execErr = s.executor.Run(ctx, core.WorkflowID(workflowID))
+		}
+
+		if execErr != nil {
+			// Map errors to HTTP status codes
+			errMsg := execErr.Error()
+			switch {
+			case errMsg == "workflow is already running" || errMsg == "workflow execution already in progress":
+				respondError(w, http.StatusConflict, errMsg)
+			case errMsg == "workflow is already completed":
+				respondError(w, http.StatusConflict, errMsg+"; create a new workflow to re-run")
+			case strings.Contains(errMsg, "workflow not found"):
+				respondError(w, http.StatusNotFound, "workflow not found")
+			case strings.Contains(errMsg, "missing configuration"):
+				respondError(w, http.StatusServiceUnavailable, errMsg)
+			default:
+				respondError(w, http.StatusInternalServerError, errMsg)
+			}
+			return
+		}
+
+		// Return 202 Accepted - executor started the workflow
+		response := RunWorkflowResponse{
+			ID:           workflowID,
+			Status:       string(core.WorkflowStatusRunning),
+			CurrentPhase: string(state.CurrentPhase),
+			Prompt:       state.Prompt,
+			Message:      "Workflow execution starting",
+		}
+		if isResume {
+			response.Message = "Workflow execution resuming"
+			response.CurrentPhase = string(core.PhaseExecute)
+		}
+		respondJSON(w, http.StatusAccepted, response)
+		return
+	}
+
+	// Fallback to legacy execution path (without executor)
 	// Validate workflow state for execution
 	switch state.Status {
 	case core.WorkflowStatusRunning:
@@ -619,11 +687,12 @@ func (s *Server) executeWorkflowAsync(
 	startTime := time.Now()
 	var runErr error
 
-	// Execute workflow
+	// Execute workflow using state-aware methods to avoid duplicate workflow creation.
+	// These methods use the pre-created state instead of generating a new workflow ID.
 	if isResume {
-		runErr = runner.Resume(ctx)
+		runErr = runner.ResumeWithState(ctx, state)
 	} else {
-		runErr = runner.Run(ctx, state.Prompt)
+		runErr = runner.RunWithState(ctx, state)
 	}
 
 	// Get final state for metrics

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
-	"time"
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/config"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
@@ -285,37 +284,38 @@ func (r *Registry) Clear() {
 // the config file (.quorum/config.yaml).
 // Temperature and max_tokens are intentionally omitted - let each CLI
 // use its optimized defaults for coding tasks.
+// Timeout is 0 to defer to phase timeout from ExecuteOptions.
 func defaultConfig(name string) AgentConfig {
 	defaults := map[string]AgentConfig{
 		"claude": {
 			Name:    "claude",
 			Path:    "claude",
 			Model:   "", // NO default - must be configured or CLI uses its default
-			Timeout: 5 * time.Minute,
+			Timeout: 0,  // Defer to ExecuteOptions.Timeout (phase timeout)
 		},
 		"gemini": {
 			Name:    "gemini",
 			Path:    "gemini",
 			Model:   "", // NO default - must be configured or CLI uses its default
-			Timeout: 5 * time.Minute,
+			Timeout: 0,  // Defer to ExecuteOptions.Timeout (phase timeout)
 		},
 		"codex": {
 			Name:    "codex",
 			Path:    "codex",
 			Model:   "", // NO default - must be configured or CLI uses its default
-			Timeout: 5 * time.Minute,
+			Timeout: 0,  // Defer to ExecuteOptions.Timeout (phase timeout)
 		},
 		"copilot": {
 			Name:    "copilot",
 			Path:    "copilot",
 			Model:   "", // NO default - must be configured or CLI uses its default
-			Timeout: 5 * time.Minute,
+			Timeout: 0,  // Defer to ExecuteOptions.Timeout (phase timeout)
 		},
 		"opencode": {
 			Name:    "opencode",
 			Path:    "opencode",
 			Model:   "", // NO default - must be configured or CLI uses its default
-			Timeout: 5 * time.Minute,
+			Timeout: 0,  // Defer to ExecuteOptions.Timeout (phase timeout)
 		},
 	}
 
@@ -325,7 +325,7 @@ func defaultConfig(name string) AgentConfig {
 
 	return AgentConfig{
 		Name:    name,
-		Timeout: 5 * time.Minute,
+		Timeout: 0, // Defer to ExecuteOptions.Timeout (phase timeout)
 	}
 }
 
@@ -417,6 +417,7 @@ func (r *Registry) SetDiagnostics(safeExec *diagnostics.SafeExecutor, dumpWriter
 
 // ConfigureRegistry configures agents in the registry using the application configuration.
 // Agents are configured if their enabled flag is true in the config.
+// Timeout is set to 0 to defer to phase timeout passed via ExecuteOptions.
 func ConfigureRegistry(registry *Registry, cfg *config.AgentsConfig) error {
 	// Configure Claude
 	if cfg.Claude.Enabled {
@@ -424,7 +425,7 @@ func ConfigureRegistry(registry *Registry, cfg *config.AgentsConfig) error {
 			Name:                      "claude",
 			Path:                      cfg.Claude.Path,
 			Model:                     cfg.Claude.Model,
-			Timeout:                   5 * time.Minute,
+			Timeout:                   0, // Defer to ExecuteOptions.Timeout (phase timeout)
 			Phases:                    cfg.Claude.Phases,
 			ReasoningEffort:           cfg.Claude.ReasoningEffort,
 			ReasoningEffortPhases:     cfg.Claude.ReasoningEffortPhases,
@@ -438,7 +439,7 @@ func ConfigureRegistry(registry *Registry, cfg *config.AgentsConfig) error {
 			Name:                      "gemini",
 			Path:                      cfg.Gemini.Path,
 			Model:                     cfg.Gemini.Model,
-			Timeout:                   5 * time.Minute,
+			Timeout:                   0, // Defer to ExecuteOptions.Timeout (phase timeout)
 			Phases:                    cfg.Gemini.Phases,
 			ReasoningEffort:           cfg.Gemini.ReasoningEffort,
 			ReasoningEffortPhases:     cfg.Gemini.ReasoningEffortPhases,
@@ -452,7 +453,7 @@ func ConfigureRegistry(registry *Registry, cfg *config.AgentsConfig) error {
 			Name:                      "codex",
 			Path:                      cfg.Codex.Path,
 			Model:                     cfg.Codex.Model,
-			Timeout:                   5 * time.Minute,
+			Timeout:                   0, // Defer to ExecuteOptions.Timeout (phase timeout)
 			Phases:                    cfg.Codex.Phases,
 			ReasoningEffort:           cfg.Codex.ReasoningEffort,
 			ReasoningEffortPhases:     cfg.Codex.ReasoningEffortPhases,
@@ -466,7 +467,7 @@ func ConfigureRegistry(registry *Registry, cfg *config.AgentsConfig) error {
 			Name:                      "copilot",
 			Path:                      cfg.Copilot.Path,
 			Model:                     cfg.Copilot.Model,
-			Timeout:                   5 * time.Minute,
+			Timeout:                   0, // Defer to ExecuteOptions.Timeout (phase timeout)
 			Phases:                    cfg.Copilot.Phases,
 			ReasoningEffort:           cfg.Copilot.ReasoningEffort,
 			ReasoningEffortPhases:     cfg.Copilot.ReasoningEffortPhases,
@@ -480,7 +481,7 @@ func ConfigureRegistry(registry *Registry, cfg *config.AgentsConfig) error {
 			Name:                      "opencode",
 			Path:                      cfg.OpenCode.Path,
 			Model:                     cfg.OpenCode.Model,
-			Timeout:                   5 * time.Minute,
+			Timeout:                   0, // Defer to ExecuteOptions.Timeout (phase timeout)
 			Phases:                    cfg.OpenCode.Phases,
 			ReasoningEffort:           cfg.OpenCode.ReasoningEffort,
 			ReasoningEffortPhases:     cfg.OpenCode.ReasoningEffortPhases,

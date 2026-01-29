@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { workflowApi } from '../lib/api';
 import useAgentStore from './agentStore';
+import useTaskStore from './taskStore';
 
 const useWorkflowStore = create((set, get) => ({
   // State
@@ -31,6 +32,11 @@ const useWorkflowStore = create((set, get) => ({
       if (activeWorkflow?.agent_events && activeWorkflow.agent_events.length > 0) {
         useAgentStore.getState().loadPersistedEvents(activeWorkflow.id, activeWorkflow.agent_events);
       }
+
+      // Load persisted tasks for page reload recovery
+      if (activeWorkflow?.tasks && activeWorkflow.tasks.length > 0) {
+        useTaskStore.getState().loadPersistedTasks(activeWorkflow.id, activeWorkflow.tasks);
+      }
     } catch (error) {
       // No active workflow is not an error
       if (!error.message.includes('not found')) {
@@ -53,6 +59,11 @@ const useWorkflowStore = create((set, get) => ({
       // Load persisted agent events for page reload recovery
       if (workflow.agent_events && workflow.agent_events.length > 0) {
         useAgentStore.getState().loadPersistedEvents(id, workflow.agent_events);
+      }
+
+      // Load persisted tasks for page reload recovery
+      if (workflow.tasks && workflow.tasks.length > 0) {
+        useTaskStore.getState().loadPersistedTasks(id, workflow.tasks);
       }
 
       return workflow;
