@@ -210,19 +210,31 @@ func (s *Server) handleResetConfig(w http.ResponseWriter, _ *http.Request) {
 
 // handleGetAgents returns available agents and their status.
 // Models are synced with internal/adapters/cli/*.go SupportedModels.
+// Reasoning efforts synced with internal/core/constants.go.
 func (s *Server) handleGetAgents(w http.ResponseWriter, _ *http.Request) {
+	// Common reasoning efforts for agents that support it
+	reasoningEfforts := []string{"low", "medium", "high"}
+
 	agents := []map[string]interface{}{
 		{
 			"name":        "claude",
 			"displayName": "Claude",
 			// Synced with internal/adapters/cli/claude.go
+			// Aliases (recommended): opus, sonnet, haiku
+			// Full names for explicit version control
 			"models": []string{
+				// Aliases (map to latest version)
+				"opus",
+				"sonnet",
+				"haiku",
+				// Claude 4.5 family
 				"claude-opus-4-5-20251101",
 				"claude-sonnet-4-5-20250929",
 				"claude-haiku-4-5-20251001",
-				"claude-sonnet-4-20250514",
+				// Claude 4 family
 				"claude-opus-4-20250514",
 				"claude-opus-4-1-20250805",
+				"claude-sonnet-4-20250514",
 			},
 			"available": true,
 		},
@@ -231,9 +243,14 @@ func (s *Server) handleGetAgents(w http.ResponseWriter, _ *http.Request) {
 			"displayName": "Gemini",
 			// Synced with internal/adapters/cli/gemini.go
 			"models": []string{
+				// Gemini 2.5 family (stable, recommended)
 				"gemini-2.5-pro",
 				"gemini-2.5-flash",
 				"gemini-2.5-flash-lite",
+				// Gemini 2.0 family (retiring March 2026)
+				"gemini-2.0-flash",
+				"gemini-2.0-flash-lite",
+				// Gemini 3 preview
 				"gemini-3-pro-preview",
 				"gemini-3-flash-preview",
 			},
@@ -243,48 +260,62 @@ func (s *Server) handleGetAgents(w http.ResponseWriter, _ *http.Request) {
 			"name":        "codex",
 			"displayName": "Codex",
 			// Synced with internal/adapters/cli/codex.go
+			// Note: o3, o4-mini, gpt-4.1, gpt-5-mini require API key (not ChatGPT account)
 			"models": []string{
-				"gpt-5.2",
+				// GPT-5.2 family (latest)
 				"gpt-5.2-codex",
+				"gpt-5.2",
+				// GPT-5.1 family
 				"gpt-5.1-codex-max",
 				"gpt-5.1-codex",
 				"gpt-5.1-codex-mini",
 				"gpt-5.1",
+				// GPT-5 family
 				"gpt-5",
-				"gpt-5-mini",
-				"gpt-4.1",
+				// Reasoning models (require API key)
 				"o3",
 				"o4-mini",
+				// Legacy (require API key)
+				"gpt-5-mini",
+				"gpt-4.1",
 			},
 			"hasReasoningEffort": true,
+			"reasoningEfforts":   reasoningEfforts,
 			"available":          true,
 		},
 		{
 			"name":        "copilot",
 			"displayName": "Copilot",
 			// Synced with internal/adapters/cli/copilot.go
+			// Copilot supports multiple providers via GitHub subscription
 			"models": []string{
+				// Anthropic Claude (via Copilot)
 				"claude-sonnet-4.5",
 				"claude-haiku-4.5",
 				"claude-opus-4.5",
 				"claude-sonnet-4",
+				// OpenAI GPT (via Copilot)
 				"gpt-5.2-codex",
+				"gpt-5.2",
 				"gpt-5.1-codex-max",
 				"gpt-5.1-codex",
-				"gpt-5.2",
 				"gpt-5.1",
 				"gpt-5",
 				"gpt-5.1-codex-mini",
 				"gpt-5-mini",
 				"gpt-4.1",
+				// Google Gemini (via Copilot)
 				"gemini-3-pro-preview",
 			},
-			"available": true,
+			"hasReasoningEffort": true,
+			"reasoningEfforts":   reasoningEfforts,
+			"available":          true,
 		},
 		{
 			"name":        "opencode",
 			"displayName": "OpenCode",
 			// Synced with internal/adapters/cli/opencode.go
+			// Requires local Ollama server
 			"models": []string{
 				"qwen2.5-coder",
 				"deepseek-coder-v2",
