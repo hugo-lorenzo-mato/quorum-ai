@@ -12,6 +12,18 @@ import {
   TrendingUp,
 } from 'lucide-react';
 
+// Get workflow display title
+function getWorkflowTitle(workflow) {
+  if (workflow.title) return workflow.title;
+  if (workflow.prompt) {
+    // Extract first meaningful line, skip generic prefixes
+    const firstLine = workflow.prompt.split('\n')[0].trim();
+    const cleaned = firstLine.replace(/^(analyze|analiza|implement|implementa|create|crea|fix|arregla|update|actualiza|add|añade|you are|eres)\s+/i, '');
+    return cleaned.substring(0, 80) || workflow.prompt.substring(0, 80);
+  }
+  return workflow.id;
+}
+
 // Bento Grid Card Component
 function BentoCard({ children, className = '', span = 1 }) {
   const spanClasses = {
@@ -85,7 +97,7 @@ function WorkflowItem({ workflow }) {
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-foreground truncate">
-          {workflow.prompt?.substring(0, 50) || 'Untitled workflow'}...
+          {getWorkflowTitle(workflow)}
         </p>
         <p className="text-xs text-muted-foreground">
           {workflow.current_phase || 'Pending'} · {workflow.task_count || 0} tasks
@@ -113,7 +125,7 @@ function ActiveWorkflowBanner({ workflow }) {
           <div>
             <p className="text-sm font-medium text-muted-foreground">Active Workflow</p>
             <p className="text-lg font-semibold text-foreground">
-              {workflow.prompt?.substring(0, 60) || workflow.id}...
+              {getWorkflowTitle(workflow)}
             </p>
             <p className="text-sm text-muted-foreground mt-1">
               Phase: {workflow.current_phase} · {workflow.task_count || 0} tasks

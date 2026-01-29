@@ -146,8 +146,20 @@ func splitStatements(script string) []string {
 	var statements []string
 	for _, stmt := range strings.Split(script, ";") {
 		stmt = strings.TrimSpace(stmt)
-		if stmt != "" && !strings.HasPrefix(stmt, "--") {
-			statements = append(statements, stmt)
+		if stmt == "" {
+			continue
+		}
+		// Remove leading comment lines, keeping the actual SQL
+		lines := strings.Split(stmt, "\n")
+		var sqlLines []string
+		for _, line := range lines {
+			trimmed := strings.TrimSpace(line)
+			if trimmed != "" && !strings.HasPrefix(trimmed, "--") {
+				sqlLines = append(sqlLines, line)
+			}
+		}
+		if len(sqlLines) > 0 {
+			statements = append(statements, strings.Join(sqlLines, "\n"))
 		}
 	}
 	return statements
