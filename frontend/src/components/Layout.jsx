@@ -4,7 +4,6 @@ import {
   LayoutDashboard,
   GitBranch,
   MessageSquare,
-  FolderOpen,
   Settings,
   PanelLeftClose,
   PanelLeft,
@@ -21,7 +20,6 @@ const navItems = [
   { path: '/', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/workflows', label: 'Workflows', icon: GitBranch },
   { path: '/chat', label: 'Chat', icon: MessageSquare },
-  { path: '/files', label: 'Files', icon: FolderOpen },
   { path: '/settings', label: 'Settings', icon: Settings },
 ];
 

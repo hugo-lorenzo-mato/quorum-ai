@@ -186,7 +186,7 @@ function TaskItem({ task, selected, onClick }) {
 }
 
 function WorkflowDetail({ workflow, tasks, onBack }) {
-  const { startWorkflow, pauseWorkflow, resumeWorkflow, stopWorkflow, deleteWorkflow, updateWorkflow, error, clearError } = useWorkflowStore();
+  const { startWorkflow, pauseWorkflow, resumeWorkflow, stopWorkflow, deleteWorkflow, updateWorkflow, fetchWorkflow, error, clearError } = useWorkflowStore();
   const notifyInfo = useUIStore((s) => s.notifyInfo);
   const notifyError = useUIStore((s) => s.notifyError);
   const navigate = useNavigate();
@@ -197,6 +197,46 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
   // Delete confirmation state
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const canDelete = workflow.status !== 'running';
+  const canModifyAttachments = workflow.status !== 'running';
+  const attachmentInputRef = useRef(null);
+  const [attachmentUploading, setAttachmentUploading] = useState(false);
+
+  const handleUploadAttachments = useCallback(async (fileList) => {
+    if (!fileList || fileList.length === 0) return;
+    if (!canModifyAttachments) return;
+    setAttachmentUploading(true);
+    try {
+      await workflowApi.uploadAttachments(workflow.id, fileList);
+      await fetchWorkflow(workflow.id);
+      notifyInfo(`Uploaded ${fileList.length} attachment(s)`);
+    } catch (err) {
+      notifyError(err.message || 'Failed to upload attachments');
+    } finally {
+      setAttachmentUploading(false);
+    }
+  }, [workflow.id, canModifyAttachments, fetchWorkflow, notifyInfo, notifyError]);
+
+  const handleAttachmentSelect = (e) => {
+    const selected = Array.from(e.target.files || []);
+    e.target.value = '';
+    handleUploadAttachments(selected);
+  };
+
+  const handleDeleteAttachment = useCallback(async (attachment) => {
+    if (!canModifyAttachments) return;
+    if (!window.confirm(`Delete "${attachment.name}"?`)) return;
+    try {
+      await workflowApi.deleteAttachment(workflow.id, attachment.id);
+      await fetchWorkflow(workflow.id);
+      notifyInfo('Attachment deleted');
+    } catch (err) {
+      notifyError(err.message || 'Failed to delete attachment');
+    }
+  }, [workflow.id, canModifyAttachments, fetchWorkflow, notifyInfo, notifyError]);
+
+  const handleDownloadAttachment = (attachment) => {
+    window.open(`/api/v1/workflows/${workflow.id}/attachments/${attachment.id}/download`, '_blank');
+  };
 
   const handleDelete = useCallback(async () => {
     const success = await deleteWorkflow(workflow.id);
@@ -757,6 +797,83 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
       {/* Inspector */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="space-y-6">
+          {/* Attachments */}
+          <div className="p-4 rounded-xl border border-border bg-card">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold text-foreground">
+                Attachments ({workflow.attachments?.length || 0})
+              </h3>
+              {canModifyAttachments && (
+                <div className="flex items-center gap-2">
+                  <input
+                    ref={attachmentInputRef}
+                    type="file"
+                    multiple
+                    className="hidden"
+                    disabled={attachmentUploading}
+                    onChange={handleAttachmentSelect}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => attachmentInputRef.current?.click()}
+                    disabled={attachmentUploading}
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-secondary text-secondary-foreground text-sm font-medium hover:bg-secondary/80 disabled:opacity-50 transition-colors"
+                  >
+                    {attachmentUploading ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Upload className="w-4 h-4" />
+                    )}
+                    Upload
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {workflow.attachments && workflow.attachments.length > 0 ? (
+              <div className="space-y-2">
+                {workflow.attachments.map((a) => (
+                  <div
+                    key={a.id}
+                    className="flex items-center justify-between gap-3 p-2 rounded-lg border border-border bg-background"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-foreground truncate">{a.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {a.size >= 1024 ? `${Math.round(a.size / 1024)} KB` : `${a.size} B`}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => handleDownloadAttachment(a)}
+                        className="p-2 rounded-lg hover:bg-accent transition-colors"
+                        title="Download"
+                      >
+                        <Download className="w-4 h-4 text-muted-foreground" />
+                      </button>
+                      {canModifyAttachments && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteAttachment(a)}
+                          className="p-2 rounded-lg hover:bg-destructive/10 transition-colors"
+                          title="Delete"
+                        >
+                          <Trash2 className="w-4 h-4 text-destructive" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <p className="text-sm">No attachments</p>
+                <p className="text-xs mt-1">Upload documents to add context</p>
+              </div>
+            )}
+          </div>
+
           {/* Tasks */}
           <div className="p-4 rounded-xl border border-border bg-card">
             <div className="flex items-center justify-between mb-3">
