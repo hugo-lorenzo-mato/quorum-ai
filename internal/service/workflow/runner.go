@@ -31,6 +31,18 @@ type StateManager interface {
 	ArchiveWorkflows(ctx context.Context) (int, error)
 	PurgeAllWorkflows(ctx context.Context) (int, error)
 	DeleteWorkflow(ctx context.Context, id core.WorkflowID) error
+
+	// Per-workflow locking (workflow isolation support)
+	AcquireWorkflowLock(ctx context.Context, workflowID core.WorkflowID) error
+	ReleaseWorkflowLock(ctx context.Context, workflowID core.WorkflowID) error
+
+	// Running workflow tracking
+	SetWorkflowRunning(ctx context.Context, workflowID core.WorkflowID) error
+	ClearWorkflowRunning(ctx context.Context, workflowID core.WorkflowID) error
+	ListRunningWorkflows(ctx context.Context) ([]core.WorkflowID, error)
+
+	// Heartbeat management
+	UpdateWorkflowHeartbeat(ctx context.Context, workflowID core.WorkflowID) error
 }
 
 // ResumePointProvider determines where to resume a workflow.
@@ -43,6 +55,49 @@ type ResumePoint struct {
 	Phase     core.Phase
 	TaskID    core.TaskID
 	FromStart bool
+}
+
+// GitIsolationConfig holds Git isolation settings for workflows.
+type GitIsolationConfig struct {
+	Enabled       bool   // Whether Git isolation is enabled
+	BaseBranch    string // Base branch for workflow branches (empty = auto-detect)
+	MergeStrategy string // Merge strategy: "sequential", "parallel", or "manual"
+	AutoMerge     bool   // Whether to auto-merge workflow branch on success
+}
+
+// WorkflowWorktreeManager manages workflow-level worktrees.
+// This interface provides higher-level workflow isolation than task-level worktrees.
+type WorkflowWorktreeManager interface {
+	// InitializeWorkflow creates a workflow branch and optionally a worktree.
+	// Returns git info including branch name and worktree path.
+	InitializeWorkflow(ctx context.Context, workflowID string, baseBranch string) (*WorkflowGitInfo, error)
+
+	// FinalizeWorkflow cleans up workflow resources.
+	// If merge is true, merges the workflow branch to base before cleanup.
+	FinalizeWorkflow(ctx context.Context, workflowID string, merge bool) error
+
+	// GetWorkflowInfo returns git info for an existing workflow.
+	GetWorkflowInfo(ctx context.Context, workflowID string) (*WorkflowGitInfo, error)
+}
+
+// WorkflowGitInfo contains git isolation information for a workflow.
+type WorkflowGitInfo struct {
+	WorkflowID     string // Workflow identifier
+	WorkflowBranch string // Name of the workflow branch (e.g., "quorum/wf-xxx")
+	BaseBranch     string // Base branch the workflow was created from
+	WorktreeRoot   string // Path to workflow worktree root (if using worktrees)
+}
+
+// GitClient extends core.GitClient with workflow-specific methods.
+// This is a local interface that embeds core.GitClient.
+type GitClient interface {
+	core.GitClient
+	// DefaultBranch returns the default branch name (usually "main" or "master").
+	DefaultBranch(ctx context.Context) (string, error)
+	// BranchExists checks if a branch exists.
+	BranchExists(ctx context.Context, branch string) (bool, error)
+	// CreateBranch creates a new branch from the given base.
+	CreateBranch(ctx context.Context, name string, base string) error
 }
 
 // RunnerConfig holds configuration for the workflow runner.
@@ -155,6 +210,11 @@ type Runner struct {
 	modeEnforcer   ModeEnforcerInterface
 	control        *control.ControlPlane
 	heartbeat      *HeartbeatManager
+
+	// Git isolation support
+	gitIsolation          *GitIsolationConfig
+	workflowWorktrees     WorkflowWorktreeManager
+	maxConcurrentWorkflows int
 }
 
 // RunnerDeps holds dependencies for creating a Runner.
@@ -180,6 +240,11 @@ type RunnerDeps struct {
 	ModeEnforcer     ModeEnforcerInterface
 	Control          *control.ControlPlane
 	Heartbeat        *HeartbeatManager
+
+	// Git isolation support (optional)
+	GitIsolation          *GitIsolationConfig
+	WorkflowWorktrees     WorkflowWorktreeManager
+	MaxConcurrentWorkflows int
 }
 
 // NewRunner creates a new workflow runner with all dependencies.
@@ -200,6 +265,12 @@ func NewRunner(deps RunnerDeps) *Runner {
 	if err != nil {
 		deps.Logger.Error("failed to create analyzer", "error", err)
 		return nil
+	}
+
+	// Set default max concurrent workflows
+	maxConcurrent := deps.MaxConcurrentWorkflows
+	if maxConcurrent <= 0 {
+		maxConcurrent = 5 // Default
 	}
 
 	return &Runner{
@@ -223,6 +294,10 @@ func NewRunner(deps RunnerDeps) *Runner {
 		modeEnforcer:   deps.ModeEnforcer,
 		control:        deps.Control,
 		heartbeat:      deps.Heartbeat,
+		// Git isolation support
+		gitIsolation:          deps.GitIsolation,
+		workflowWorktrees:     deps.WorkflowWorktrees,
+		maxConcurrentWorkflows: maxConcurrent,
 	}
 }
 
@@ -230,6 +305,11 @@ func NewRunner(deps RunnerDeps) *Runner {
 func (r *Runner) Run(ctx context.Context, prompt string) error {
 	// Validate input
 	if err := r.validateRunInput(prompt); err != nil {
+		return err
+	}
+
+	// Check concurrent workflow limit
+	if err := r.checkConcurrencyLimit(ctx); err != nil {
 		return err
 	}
 
@@ -242,14 +322,41 @@ func (r *Runner) Run(ctx context.Context, prompt string) error {
 		return err
 	}
 
-	// Acquire lock
-	if err := r.state.AcquireLock(ctx); err != nil {
-		return fmt.Errorf("acquiring lock: %w", err)
-	}
-	defer func() { _ = r.state.ReleaseLock(ctx) }()
-
-	// Initialize state
+	// Initialize state first to get workflow ID
 	workflowState := r.initializeState(prompt)
+	workflowID := workflowState.WorkflowID
+
+	// Acquire per-workflow lock
+	if err := r.state.AcquireWorkflowLock(ctx, workflowID); err != nil {
+		return fmt.Errorf("acquiring workflow lock: %w", err)
+	}
+	defer func() {
+		if releaseErr := r.state.ReleaseWorkflowLock(ctx, workflowID); releaseErr != nil {
+			r.logger.Warn("failed to release workflow lock", "error", releaseErr)
+		}
+	}()
+
+	// Mark workflow as running
+	if err := r.state.SetWorkflowRunning(ctx, workflowID); err != nil {
+		return fmt.Errorf("setting workflow running: %w", err)
+	}
+	defer func() {
+		if clearErr := r.state.ClearWorkflowRunning(ctx, workflowID); clearErr != nil {
+			r.logger.Warn("failed to clear workflow running", "error", clearErr)
+		}
+	}()
+
+	// Initialize Git isolation if enabled
+	if r.gitIsolation != nil && r.gitIsolation.Enabled {
+		if err := r.initializeWorkflowBranch(ctx, workflowState); err != nil {
+			return fmt.Errorf("initializing workflow branch: %w", err)
+		}
+	}
+
+	// Start heartbeat updates
+	heartbeatCtx, cancelHeartbeat := context.WithCancel(ctx)
+	defer cancelHeartbeat()
+	go r.runHeartbeatLoop(heartbeatCtx, workflowID)
 
 	r.logger.Info("starting workflow",
 		"workflow_id", workflowState.WorkflowID,
@@ -268,33 +375,50 @@ func (r *Runner) Run(ctx context.Context, prompt string) error {
 	wctx := r.createContext(workflowState)
 
 	// Run phases
-	if err := r.refiner.Run(ctx, wctx); err != nil {
-		return r.handleError(ctx, workflowState, err)
+	var runErr error
+	if runErr = r.refiner.Run(ctx, wctx); runErr != nil {
+		r.handleError(ctx, workflowState, runErr)
+		if finalizeErr := r.finalizeWorkflowExecution(ctx, workflowState, runErr); finalizeErr != nil {
+			r.logger.Warn("failed to finalize workflow", "error", finalizeErr)
+		}
+		return runErr
 	}
 
 	// Validate arbiter config before analyze phase (requires arbiter for multi-agent)
-	if err := r.ValidateModeratorConfig(); err != nil {
-		return r.handleError(ctx, workflowState, err)
+	if runErr = r.ValidateModeratorConfig(); runErr != nil {
+		r.handleError(ctx, workflowState, runErr)
+		if finalizeErr := r.finalizeWorkflowExecution(ctx, workflowState, runErr); finalizeErr != nil {
+			r.logger.Warn("failed to finalize workflow", "error", finalizeErr)
+		}
+		return runErr
 	}
 
-	if err := r.analyzer.Run(ctx, wctx); err != nil {
-		return r.handleError(ctx, workflowState, err)
+	if runErr = r.analyzer.Run(ctx, wctx); runErr != nil {
+		r.handleError(ctx, workflowState, runErr)
+		if finalizeErr := r.finalizeWorkflowExecution(ctx, workflowState, runErr); finalizeErr != nil {
+			r.logger.Warn("failed to finalize workflow", "error", finalizeErr)
+		}
+		return runErr
 	}
 
-	if err := r.planner.Run(ctx, wctx); err != nil {
-		return r.handleError(ctx, workflowState, err)
+	if runErr = r.planner.Run(ctx, wctx); runErr != nil {
+		r.handleError(ctx, workflowState, runErr)
+		if finalizeErr := r.finalizeWorkflowExecution(ctx, workflowState, runErr); finalizeErr != nil {
+			r.logger.Warn("failed to finalize workflow", "error", finalizeErr)
+		}
+		return runErr
 	}
 
-	if err := r.executor.Run(ctx, wctx); err != nil {
-		return r.handleError(ctx, workflowState, err)
+	if runErr = r.executor.Run(ctx, wctx); runErr != nil {
+		r.handleError(ctx, workflowState, runErr)
+		if finalizeErr := r.finalizeWorkflowExecution(ctx, workflowState, runErr); finalizeErr != nil {
+			r.logger.Warn("failed to finalize workflow", "error", finalizeErr)
+		}
+		return runErr
 	}
 
 	// Finalize metrics
 	r.finalizeMetrics(workflowState)
-
-	// Mark completed
-	workflowState.Status = core.WorkflowStatusCompleted
-	workflowState.UpdatedAt = time.Now()
 
 	r.logger.Info("workflow completed",
 		"workflow_id", workflowState.WorkflowID,
@@ -309,7 +433,8 @@ func (r *Runner) Run(ctx context.Context, prompt string) error {
 			workflowState.Metrics.Duration.Round(time.Second)))
 	}
 
-	return r.state.Save(ctx, workflowState)
+	// Finalize workflow (success path)
+	return r.finalizeWorkflowExecution(ctx, workflowState, nil)
 }
 
 // RunWithState executes a workflow using an existing pre-created state.
@@ -326,6 +451,11 @@ func (r *Runner) RunWithState(ctx context.Context, state *core.WorkflowState) er
 		return err
 	}
 
+	// Check concurrent workflow limit
+	if err := r.checkConcurrencyLimit(ctx); err != nil {
+		return err
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, r.config.Timeout)
 	defer cancel()
 
@@ -333,13 +463,31 @@ func (r *Runner) RunWithState(ctx context.Context, state *core.WorkflowState) er
 		return err
 	}
 
-	if err := r.state.AcquireLock(ctx); err != nil {
-		return fmt.Errorf("acquiring lock: %w", err)
-	}
-	defer func() { _ = r.state.ReleaseLock(ctx) }()
-
 	// Use provided state - NO initializeState()
 	workflowState := state
+	workflowID := workflowState.WorkflowID
+
+	// Acquire per-workflow lock
+	if err := r.state.AcquireWorkflowLock(ctx, workflowID); err != nil {
+		return fmt.Errorf("acquiring workflow lock: %w", err)
+	}
+	defer func() {
+		if releaseErr := r.state.ReleaseWorkflowLock(ctx, workflowID); releaseErr != nil {
+			r.logger.Warn("failed to release workflow lock", "error", releaseErr)
+		}
+	}()
+
+	// Mark workflow as running
+	if err := r.state.SetWorkflowRunning(ctx, workflowID); err != nil {
+		return fmt.Errorf("setting workflow running: %w", err)
+	}
+	defer func() {
+		if clearErr := r.state.ClearWorkflowRunning(ctx, workflowID); clearErr != nil {
+			r.logger.Warn("failed to clear workflow running", "error", clearErr)
+		}
+	}()
+
+	// Initialize state fields
 	if workflowState.Status != core.WorkflowStatusRunning {
 		workflowState.Status = core.WorkflowStatusRunning
 	}
@@ -360,6 +508,18 @@ func (r *Runner) RunWithState(ctx context.Context, state *core.WorkflowState) er
 	}
 	workflowState.UpdatedAt = time.Now()
 
+	// Initialize Git isolation if enabled
+	if r.gitIsolation != nil && r.gitIsolation.Enabled {
+		if err := r.initializeWorkflowBranch(ctx, workflowState); err != nil {
+			return fmt.Errorf("initializing workflow branch: %w", err)
+		}
+	}
+
+	// Start heartbeat updates
+	heartbeatCtx, cancelHeartbeat := context.WithCancel(ctx)
+	defer cancelHeartbeat()
+	go r.runHeartbeatLoop(heartbeatCtx, workflowID)
+
 	r.logger.Info("starting workflow with existing state",
 		"workflow_id", workflowState.WorkflowID,
 		"prompt_length", len(workflowState.Prompt),
@@ -372,34 +532,47 @@ func (r *Runner) RunWithState(ctx context.Context, state *core.WorkflowState) er
 		return fmt.Errorf("saving state: %w", err)
 	}
 
-	// Start heartbeat tracking if available
-	if r.heartbeat != nil {
-		r.heartbeat.Start(workflowState.WorkflowID)
-		defer r.heartbeat.Stop(workflowState.WorkflowID)
-	}
-
 	wctx := r.createContext(workflowState)
 
 	// Run all phases (same as Run())
-	if err := r.refiner.Run(ctx, wctx); err != nil {
-		return r.handleError(ctx, workflowState, err)
+	var runErr error
+	if runErr = r.refiner.Run(ctx, wctx); runErr != nil {
+		r.handleError(ctx, workflowState, runErr)
+		if finalizeErr := r.finalizeWorkflowExecution(ctx, workflowState, runErr); finalizeErr != nil {
+			r.logger.Warn("failed to finalize workflow", "error", finalizeErr)
+		}
+		return runErr
 	}
-	if err := r.ValidateModeratorConfig(); err != nil {
-		return r.handleError(ctx, workflowState, err)
+	if runErr = r.ValidateModeratorConfig(); runErr != nil {
+		r.handleError(ctx, workflowState, runErr)
+		if finalizeErr := r.finalizeWorkflowExecution(ctx, workflowState, runErr); finalizeErr != nil {
+			r.logger.Warn("failed to finalize workflow", "error", finalizeErr)
+		}
+		return runErr
 	}
-	if err := r.analyzer.Run(ctx, wctx); err != nil {
-		return r.handleError(ctx, workflowState, err)
+	if runErr = r.analyzer.Run(ctx, wctx); runErr != nil {
+		r.handleError(ctx, workflowState, runErr)
+		if finalizeErr := r.finalizeWorkflowExecution(ctx, workflowState, runErr); finalizeErr != nil {
+			r.logger.Warn("failed to finalize workflow", "error", finalizeErr)
+		}
+		return runErr
 	}
-	if err := r.planner.Run(ctx, wctx); err != nil {
-		return r.handleError(ctx, workflowState, err)
+	if runErr = r.planner.Run(ctx, wctx); runErr != nil {
+		r.handleError(ctx, workflowState, runErr)
+		if finalizeErr := r.finalizeWorkflowExecution(ctx, workflowState, runErr); finalizeErr != nil {
+			r.logger.Warn("failed to finalize workflow", "error", finalizeErr)
+		}
+		return runErr
 	}
-	if err := r.executor.Run(ctx, wctx); err != nil {
-		return r.handleError(ctx, workflowState, err)
+	if runErr = r.executor.Run(ctx, wctx); runErr != nil {
+		r.handleError(ctx, workflowState, runErr)
+		if finalizeErr := r.finalizeWorkflowExecution(ctx, workflowState, runErr); finalizeErr != nil {
+			r.logger.Warn("failed to finalize workflow", "error", finalizeErr)
+		}
+		return runErr
 	}
 
 	r.finalizeMetrics(workflowState)
-	workflowState.Status = core.WorkflowStatusCompleted
-	workflowState.UpdatedAt = time.Now()
 
 	r.logger.Info("workflow completed",
 		"workflow_id", workflowState.WorkflowID,
@@ -414,20 +587,13 @@ func (r *Runner) RunWithState(ctx context.Context, state *core.WorkflowState) er
 			workflowState.Metrics.Duration.Round(time.Second)))
 	}
 
-	return r.state.Save(ctx, workflowState)
+	// Finalize workflow (success path)
+	return r.finalizeWorkflowExecution(ctx, workflowState, nil)
 }
 
 // Resume continues a workflow from the last checkpoint.
 func (r *Runner) Resume(ctx context.Context) error {
-	ctx, cancel := context.WithTimeout(ctx, r.config.Timeout)
-	defer cancel()
-
-	if err := r.state.AcquireLock(ctx); err != nil {
-		return fmt.Errorf("acquiring lock: %w", err)
-	}
-	defer func() { _ = r.state.ReleaseLock(ctx) }()
-
-	// Load existing state
+	// Load existing state first (before acquiring lock)
 	workflowState, err := r.state.Load(ctx)
 	if err != nil {
 		return fmt.Errorf("loading state: %w", err)
@@ -437,11 +603,46 @@ func (r *Runner) Resume(ctx context.Context) error {
 		return core.ErrState("NO_STATE", "no workflow state found to resume")
 	}
 
+	// Check concurrent workflow limit
+	if err := r.checkConcurrencyLimit(ctx); err != nil {
+		return err
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, r.config.Timeout)
+	defer cancel()
+
+	workflowID := workflowState.WorkflowID
+
+	// Acquire per-workflow lock
+	if err := r.state.AcquireWorkflowLock(ctx, workflowID); err != nil {
+		return fmt.Errorf("acquiring workflow lock: %w", err)
+	}
+	defer func() {
+		if releaseErr := r.state.ReleaseWorkflowLock(ctx, workflowID); releaseErr != nil {
+			r.logger.Warn("failed to release workflow lock", "error", releaseErr)
+		}
+	}()
+
+	// Mark workflow as running
+	if err := r.state.SetWorkflowRunning(ctx, workflowID); err != nil {
+		return fmt.Errorf("setting workflow running: %w", err)
+	}
+	defer func() {
+		if clearErr := r.state.ClearWorkflowRunning(ctx, workflowID); clearErr != nil {
+			r.logger.Warn("failed to clear workflow running", "error", clearErr)
+		}
+	}()
+
 	// Get resume point
 	resumePoint, err := r.resumeProvider.GetResumePoint(workflowState)
 	if err != nil {
 		return fmt.Errorf("determining resume point: %w", err)
 	}
+
+	// Start heartbeat updates
+	heartbeatCtx, cancelHeartbeat := context.WithCancel(ctx)
+	defer cancelHeartbeat()
+	go r.runHeartbeatLoop(heartbeatCtx, workflowID)
 
 	r.logger.Info("resuming workflow",
 		"workflow_id", workflowState.WorkflowID,
@@ -453,23 +654,42 @@ func (r *Runner) Resume(ctx context.Context) error {
 		r.output.Log("info", "workflow", fmt.Sprintf("Resuming workflow from %s phase", resumePoint.Phase))
 	}
 
+	// Update status and save
+	workflowState.Status = core.WorkflowStatusRunning
+	if err := r.state.Save(ctx, workflowState); err != nil {
+		return fmt.Errorf("saving state: %w", err)
+	}
+
 	wctx := r.createContext(workflowState)
 
 	// Resume from appropriate phase
+	var runErr error
 	switch resumePoint.Phase {
 	case core.PhaseRefine:
-		if err := r.refiner.Run(ctx, wctx); err != nil {
-			return r.handleError(ctx, workflowState, err)
+		if runErr = r.refiner.Run(ctx, wctx); runErr != nil {
+			r.handleError(ctx, workflowState, runErr)
+			if finalizeErr := r.finalizeWorkflowExecution(ctx, workflowState, runErr); finalizeErr != nil {
+				r.logger.Warn("failed to finalize workflow", "error", finalizeErr)
+			}
+			return runErr
 		}
 		fallthrough
 	case core.PhaseAnalyze:
-		if err := r.analyzer.Run(ctx, wctx); err != nil {
-			return r.handleError(ctx, workflowState, err)
+		if runErr = r.analyzer.Run(ctx, wctx); runErr != nil {
+			r.handleError(ctx, workflowState, runErr)
+			if finalizeErr := r.finalizeWorkflowExecution(ctx, workflowState, runErr); finalizeErr != nil {
+				r.logger.Warn("failed to finalize workflow", "error", finalizeErr)
+			}
+			return runErr
 		}
 		fallthrough
 	case core.PhasePlan:
-		if err := r.planner.Run(ctx, wctx); err != nil {
-			return r.handleError(ctx, workflowState, err)
+		if runErr = r.planner.Run(ctx, wctx); runErr != nil {
+			r.handleError(ctx, workflowState, runErr)
+			if finalizeErr := r.finalizeWorkflowExecution(ctx, workflowState, runErr); finalizeErr != nil {
+				r.logger.Warn("failed to finalize workflow", "error", finalizeErr)
+			}
+			return runErr
 		}
 		fallthrough
 	case core.PhaseExecute:
@@ -480,20 +700,25 @@ func (r *Runner) Resume(ctx context.Context) error {
 			if r.output != nil {
 				r.output.Log("info", "workflow", fmt.Sprintf("Rebuilding task DAG from %d existing tasks", len(workflowState.Tasks)))
 			}
-			if err := r.planner.RebuildDAGFromState(workflowState); err != nil {
-				return r.handleError(ctx, workflowState, fmt.Errorf("rebuilding DAG: %w", err))
+			if runErr = r.planner.RebuildDAGFromState(workflowState); runErr != nil {
+				r.handleError(ctx, workflowState, fmt.Errorf("rebuilding DAG: %w", runErr))
+				if finalizeErr := r.finalizeWorkflowExecution(ctx, workflowState, runErr); finalizeErr != nil {
+					r.logger.Warn("failed to finalize workflow", "error", finalizeErr)
+				}
+				return runErr
 			}
 		}
-		if err := r.executor.Run(ctx, wctx); err != nil {
-			return r.handleError(ctx, workflowState, err)
+		if runErr = r.executor.Run(ctx, wctx); runErr != nil {
+			r.handleError(ctx, workflowState, runErr)
+			if finalizeErr := r.finalizeWorkflowExecution(ctx, workflowState, runErr); finalizeErr != nil {
+				r.logger.Warn("failed to finalize workflow", "error", finalizeErr)
+			}
+			return runErr
 		}
 	}
 
 	// Finalize metrics
 	r.finalizeMetrics(workflowState)
-
-	workflowState.Status = core.WorkflowStatusCompleted
-	workflowState.UpdatedAt = time.Now()
 
 	r.logger.Info("workflow resumed and completed",
 		"workflow_id", workflowState.WorkflowID,
@@ -506,7 +731,8 @@ func (r *Runner) Resume(ctx context.Context) error {
 			workflowState.Metrics.TotalCostUSD))
 	}
 
-	return r.state.Save(ctx, workflowState)
+	// Finalize workflow (success path)
+	return r.finalizeWorkflowExecution(ctx, workflowState, nil)
 }
 
 // ResumeWithState continues execution using pre-loaded state.
@@ -516,18 +742,45 @@ func (r *Runner) ResumeWithState(ctx context.Context, state *core.WorkflowState)
 		return core.ErrState("NIL_STATE", "workflow state cannot be nil")
 	}
 
+	// Check concurrent workflow limit
+	if err := r.checkConcurrencyLimit(ctx); err != nil {
+		return err
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, r.config.Timeout)
 	defer cancel()
 
-	if err := r.state.AcquireLock(ctx); err != nil {
-		return fmt.Errorf("acquiring lock: %w", err)
+	workflowID := state.WorkflowID
+
+	// Acquire per-workflow lock
+	if err := r.state.AcquireWorkflowLock(ctx, workflowID); err != nil {
+		return fmt.Errorf("acquiring workflow lock: %w", err)
 	}
-	defer func() { _ = r.state.ReleaseLock(ctx) }()
+	defer func() {
+		if releaseErr := r.state.ReleaseWorkflowLock(ctx, workflowID); releaseErr != nil {
+			r.logger.Warn("failed to release workflow lock", "error", releaseErr)
+		}
+	}()
+
+	// Mark workflow as running
+	if err := r.state.SetWorkflowRunning(ctx, workflowID); err != nil {
+		return fmt.Errorf("setting workflow running: %w", err)
+	}
+	defer func() {
+		if clearErr := r.state.ClearWorkflowRunning(ctx, workflowID); clearErr != nil {
+			r.logger.Warn("failed to clear workflow running", "error", clearErr)
+		}
+	}()
 
 	resumePoint, err := r.resumeProvider.GetResumePoint(state)
 	if err != nil {
 		return fmt.Errorf("determining resume point: %w", err)
 	}
+
+	// Start heartbeat updates
+	heartbeatCtx, cancelHeartbeat := context.WithCancel(ctx)
+	defer cancelHeartbeat()
+	go r.runHeartbeatLoop(heartbeatCtx, workflowID)
 
 	r.logger.Info("resuming workflow with existing state",
 		"workflow_id", state.WorkflowID,
@@ -539,29 +792,42 @@ func (r *Runner) ResumeWithState(ctx context.Context, state *core.WorkflowState)
 		r.output.Log("info", "workflow", fmt.Sprintf("Resuming workflow from %s phase", resumePoint.Phase))
 	}
 
-	// Start heartbeat tracking if available
-	if r.heartbeat != nil {
-		r.heartbeat.Start(state.WorkflowID)
-		defer r.heartbeat.Stop(state.WorkflowID)
+	// Update status and save
+	state.Status = core.WorkflowStatusRunning
+	if err := r.state.Save(ctx, state); err != nil {
+		return fmt.Errorf("saving state: %w", err)
 	}
 
 	wctx := r.createContext(state)
 
 	// Resume from appropriate phase (same logic as Resume())
+	var runErr error
 	switch resumePoint.Phase {
 	case core.PhaseRefine:
-		if err := r.refiner.Run(ctx, wctx); err != nil {
-			return r.handleError(ctx, state, err)
+		if runErr = r.refiner.Run(ctx, wctx); runErr != nil {
+			r.handleError(ctx, state, runErr)
+			if finalizeErr := r.finalizeWorkflowExecution(ctx, state, runErr); finalizeErr != nil {
+				r.logger.Warn("failed to finalize workflow", "error", finalizeErr)
+			}
+			return runErr
 		}
 		fallthrough
 	case core.PhaseAnalyze:
-		if err := r.analyzer.Run(ctx, wctx); err != nil {
-			return r.handleError(ctx, state, err)
+		if runErr = r.analyzer.Run(ctx, wctx); runErr != nil {
+			r.handleError(ctx, state, runErr)
+			if finalizeErr := r.finalizeWorkflowExecution(ctx, state, runErr); finalizeErr != nil {
+				r.logger.Warn("failed to finalize workflow", "error", finalizeErr)
+			}
+			return runErr
 		}
 		fallthrough
 	case core.PhasePlan:
-		if err := r.planner.Run(ctx, wctx); err != nil {
-			return r.handleError(ctx, state, err)
+		if runErr = r.planner.Run(ctx, wctx); runErr != nil {
+			r.handleError(ctx, state, runErr)
+			if finalizeErr := r.finalizeWorkflowExecution(ctx, state, runErr); finalizeErr != nil {
+				r.logger.Warn("failed to finalize workflow", "error", finalizeErr)
+			}
+			return runErr
 		}
 		fallthrough
 	case core.PhaseExecute:
@@ -571,18 +837,24 @@ func (r *Runner) ResumeWithState(ctx context.Context, state *core.WorkflowState)
 			if r.output != nil {
 				r.output.Log("info", "workflow", fmt.Sprintf("Rebuilding task DAG from %d existing tasks", len(state.Tasks)))
 			}
-			if err := r.planner.RebuildDAGFromState(state); err != nil {
-				return r.handleError(ctx, state, fmt.Errorf("rebuilding DAG: %w", err))
+			if runErr = r.planner.RebuildDAGFromState(state); runErr != nil {
+				r.handleError(ctx, state, fmt.Errorf("rebuilding DAG: %w", runErr))
+				if finalizeErr := r.finalizeWorkflowExecution(ctx, state, runErr); finalizeErr != nil {
+					r.logger.Warn("failed to finalize workflow", "error", finalizeErr)
+				}
+				return runErr
 			}
 		}
-		if err := r.executor.Run(ctx, wctx); err != nil {
-			return r.handleError(ctx, state, err)
+		if runErr = r.executor.Run(ctx, wctx); runErr != nil {
+			r.handleError(ctx, state, runErr)
+			if finalizeErr := r.finalizeWorkflowExecution(ctx, state, runErr); finalizeErr != nil {
+				r.logger.Warn("failed to finalize workflow", "error", finalizeErr)
+			}
+			return runErr
 		}
 	}
 
 	r.finalizeMetrics(state)
-	state.Status = core.WorkflowStatusCompleted
-	state.UpdatedAt = time.Now()
 
 	r.logger.Info("workflow resumed and completed",
 		"workflow_id", state.WorkflowID,
@@ -595,7 +867,8 @@ func (r *Runner) ResumeWithState(ctx context.Context, state *core.WorkflowState)
 			state.Metrics.TotalCostUSD))
 	}
 
-	return r.state.Save(ctx, state)
+	// Finalize workflow (success path)
+	return r.finalizeWorkflowExecution(ctx, state, nil)
 }
 
 // initializeState creates initial workflow state.
@@ -1391,4 +1664,134 @@ func (r *Runner) PurgeAllWorkflows(ctx context.Context) (int, error) {
 // Returns error if workflow does not exist.
 func (r *Runner) DeleteWorkflow(ctx context.Context, workflowID string) error {
 	return r.state.DeleteWorkflow(ctx, core.WorkflowID(workflowID))
+}
+
+// checkConcurrencyLimit verifies we haven't exceeded the concurrent workflow limit.
+func (r *Runner) checkConcurrencyLimit(ctx context.Context) error {
+	running, err := r.state.ListRunningWorkflows(ctx)
+	if err != nil {
+		r.logger.Warn("failed to list running workflows, proceeding anyway", "error", err)
+		return nil
+	}
+
+	if len(running) >= r.maxConcurrentWorkflows {
+		return core.ErrState("MAX_WORKFLOWS_REACHED",
+			fmt.Sprintf("maximum concurrent workflows (%d) reached, %d running",
+				r.maxConcurrentWorkflows, len(running)))
+	}
+
+	r.logger.Debug("concurrency check passed",
+		"running", len(running),
+		"max", r.maxConcurrentWorkflows)
+
+	return nil
+}
+
+// initializeWorkflowBranch creates the workflow branch and worktree root.
+func (r *Runner) initializeWorkflowBranch(ctx context.Context, state *core.WorkflowState) error {
+	if r.workflowWorktrees == nil {
+		return fmt.Errorf("workflow worktree manager not configured")
+	}
+
+	// Determine base branch
+	baseBranch := r.gitIsolation.BaseBranch
+	if baseBranch == "" {
+		// Auto-detect default branch
+		if gitClient, ok := r.git.(GitClient); ok {
+			var err error
+			baseBranch, err = gitClient.DefaultBranch(ctx)
+			if err != nil {
+				baseBranch = "main"
+			}
+		} else {
+			baseBranch = "main"
+		}
+	}
+
+	// Initialize workflow git isolation
+	gitInfo, err := r.workflowWorktrees.InitializeWorkflow(ctx, string(state.WorkflowID), baseBranch)
+	if err != nil {
+		return fmt.Errorf("initializing workflow: %w", err)
+	}
+
+	// Update state with git info
+	// Note: These fields would need to be added to core.WorkflowState
+	// For now, we store them in the Config or as extension fields
+	if state.Config == nil {
+		state.Config = &core.WorkflowConfig{}
+	}
+	// Store in Config.Extra or use dedicated fields when available
+	r.logger.Info("initialized workflow git isolation",
+		"workflow_id", state.WorkflowID,
+		"workflow_branch", gitInfo.WorkflowBranch,
+		"base_branch", gitInfo.BaseBranch,
+		"worktree_root", gitInfo.WorktreeRoot)
+
+	return nil
+}
+
+// runHeartbeatLoop periodically updates the workflow heartbeat.
+// This is a background goroutine that runs until the context is cancelled.
+func (r *Runner) runHeartbeatLoop(ctx context.Context, workflowID core.WorkflowID) {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := r.state.UpdateWorkflowHeartbeat(ctx, workflowID); err != nil {
+				r.logger.Warn("failed to update heartbeat",
+					"workflow_id", workflowID,
+					"error", err)
+			}
+		}
+	}
+}
+
+// finalizeWorkflowExecution handles workflow completion or failure cleanup.
+func (r *Runner) finalizeWorkflowExecution(ctx context.Context, state *core.WorkflowState, runErr error) error {
+	// Update final status
+	if runErr != nil {
+		state.Status = core.WorkflowStatusFailed
+		state.Error = runErr.Error()
+	} else {
+		state.Status = core.WorkflowStatusCompleted
+	}
+	state.UpdatedAt = time.Now()
+
+	// Finalize Git isolation if enabled
+	if r.gitIsolation != nil && r.gitIsolation.Enabled && r.workflowWorktrees != nil {
+		merge := runErr == nil && r.gitIsolation.AutoMerge
+		if err := r.workflowWorktrees.FinalizeWorkflow(ctx, string(state.WorkflowID), merge); err != nil {
+			r.logger.Warn("failed to finalize workflow git isolation",
+				"workflow_id", state.WorkflowID,
+				"error", err)
+		}
+	}
+
+	// Save final state
+	if err := r.state.Save(ctx, state); err != nil {
+		return fmt.Errorf("saving final state: %w", err)
+	}
+
+	return nil
+}
+
+// SetGitIsolation configures Git isolation for the runner.
+func (r *Runner) SetGitIsolation(config *GitIsolationConfig) {
+	r.gitIsolation = config
+}
+
+// SetWorkflowWorktrees sets the workflow worktree manager.
+func (r *Runner) SetWorkflowWorktrees(mgr WorkflowWorktreeManager) {
+	r.workflowWorktrees = mgr
+}
+
+// SetMaxConcurrentWorkflows sets the maximum concurrent workflows.
+func (r *Runner) SetMaxConcurrentWorkflows(max int) {
+	if max > 0 {
+		r.maxConcurrentWorkflows = max
+	}
 }

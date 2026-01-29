@@ -355,6 +355,52 @@ func (m *MockStateManager) FindZombieWorkflows(_ context.Context, staleThreshold
 	return nil, nil
 }
 
+// AcquireWorkflowLock obtains an exclusive lock for a specific workflow.
+func (m *MockStateManager) AcquireWorkflowLock(_ context.Context, _ core.WorkflowID) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return nil
+}
+
+// ReleaseWorkflowLock releases the exclusive lock for a specific workflow.
+func (m *MockStateManager) ReleaseWorkflowLock(_ context.Context, _ core.WorkflowID) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return nil
+}
+
+// SetWorkflowRunning marks a workflow as actively running.
+func (m *MockStateManager) SetWorkflowRunning(_ context.Context, id core.WorkflowID) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.state != nil && m.state.WorkflowID == id {
+		m.state.Status = core.WorkflowStatusRunning
+		now := time.Now().UTC()
+		m.state.HeartbeatAt = &now
+	}
+	return nil
+}
+
+// ClearWorkflowRunning removes the running status from a workflow.
+func (m *MockStateManager) ClearWorkflowRunning(_ context.Context, _ core.WorkflowID) error {
+	return nil
+}
+
+// ListRunningWorkflows returns the IDs of all currently running workflows.
+func (m *MockStateManager) ListRunningWorkflows(_ context.Context) ([]core.WorkflowID, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.state != nil && m.state.Status == core.WorkflowStatusRunning {
+		return []core.WorkflowID{m.state.WorkflowID}, nil
+	}
+	return nil, nil
+}
+
+// UpdateWorkflowHeartbeat updates the heartbeat for workflow-level tracking.
+func (m *MockStateManager) UpdateWorkflowHeartbeat(ctx context.Context, workflowID core.WorkflowID) error {
+	return m.UpdateHeartbeat(ctx, workflowID)
+}
+
 // MockRegistry implements AgentRegistry for testing.
 type MockRegistry struct {
 	agents map[string]*MockAgent

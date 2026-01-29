@@ -853,5 +853,59 @@ func (m *JSONStateManager) FindZombieWorkflows(ctx context.Context, staleThresho
 	return zombies, nil
 }
 
+// AcquireWorkflowLock obtains an exclusive lock for a specific workflow.
+// For JSON, we use the global file lock.
+func (m *JSONStateManager) AcquireWorkflowLock(_ context.Context, _ core.WorkflowID) error {
+	return m.AcquireLock(nil)
+}
+
+// ReleaseWorkflowLock releases the exclusive lock for a specific workflow.
+func (m *JSONStateManager) ReleaseWorkflowLock(_ context.Context, _ core.WorkflowID) error {
+	return m.ReleaseLock(nil)
+}
+
+// SetWorkflowRunning marks a workflow as actively running.
+func (m *JSONStateManager) SetWorkflowRunning(ctx context.Context, workflowID core.WorkflowID) error {
+	state, err := m.LoadByID(ctx, workflowID)
+	if err != nil {
+		return fmt.Errorf("loading workflow: %w", err)
+	}
+	if state == nil {
+		return nil // Workflow doesn't exist yet, will be created on save
+	}
+	state.Status = core.WorkflowStatusRunning
+	now := time.Now().UTC()
+	state.HeartbeatAt = &now
+	return m.Save(ctx, state)
+}
+
+// ClearWorkflowRunning removes the running status from a workflow.
+func (m *JSONStateManager) ClearWorkflowRunning(_ context.Context, _ core.WorkflowID) error {
+	// Note: This doesn't change status - status is set by finalizeWorkflowExecution
+	// This is intentional to preserve completed/failed status
+	return nil
+}
+
+// ListRunningWorkflows returns the IDs of all currently running workflows.
+func (m *JSONStateManager) ListRunningWorkflows(ctx context.Context) ([]core.WorkflowID, error) {
+	summaries, err := m.ListWorkflows(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("listing workflows: %w", err)
+	}
+
+	var ids []core.WorkflowID
+	for _, summary := range summaries {
+		if summary.Status == core.WorkflowStatusRunning {
+			ids = append(ids, summary.WorkflowID)
+		}
+	}
+	return ids, nil
+}
+
+// UpdateWorkflowHeartbeat updates the heartbeat for workflow-level tracking.
+func (m *JSONStateManager) UpdateWorkflowHeartbeat(ctx context.Context, workflowID core.WorkflowID) error {
+	return m.UpdateHeartbeat(ctx, workflowID)
+}
+
 // Verify that JSONStateManager implements core.StateManager.
 var _ core.StateManager = (*JSONStateManager)(nil)

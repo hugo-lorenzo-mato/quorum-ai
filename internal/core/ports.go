@@ -200,6 +200,32 @@ type StateManager interface {
 	// FindZombieWorkflows returns workflows with status "running" but stale heartbeats.
 	// A workflow is considered a zombie if its heartbeat is older than the threshold.
 	FindZombieWorkflows(ctx context.Context, staleThreshold time.Duration) ([]*WorkflowState, error)
+
+	// Per-workflow locking (workflow isolation support)
+
+	// AcquireWorkflowLock obtains an exclusive lock for a specific workflow.
+	// This allows multiple workflows to run concurrently while preventing
+	// concurrent access to the same workflow.
+	AcquireWorkflowLock(ctx context.Context, workflowID WorkflowID) error
+
+	// ReleaseWorkflowLock releases the exclusive lock for a specific workflow.
+	ReleaseWorkflowLock(ctx context.Context, workflowID WorkflowID) error
+
+	// Running workflow tracking
+
+	// SetWorkflowRunning marks a workflow as actively running.
+	// Used for concurrent workflow tracking.
+	SetWorkflowRunning(ctx context.Context, workflowID WorkflowID) error
+
+	// ClearWorkflowRunning removes the running status from a workflow.
+	ClearWorkflowRunning(ctx context.Context, workflowID WorkflowID) error
+
+	// ListRunningWorkflows returns the IDs of all currently running workflows.
+	ListRunningWorkflows(ctx context.Context) ([]WorkflowID, error)
+
+	// UpdateWorkflowHeartbeat updates the heartbeat for workflow-level tracking.
+	// This is an alias for UpdateHeartbeat but explicitly named for clarity.
+	UpdateWorkflowHeartbeat(ctx context.Context, workflowID WorkflowID) error
 }
 
 // WorkflowSummary provides a lightweight summary of a workflow for listing.

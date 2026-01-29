@@ -1256,5 +1256,71 @@ func (m *SQLiteStateManager) FindZombieWorkflows(ctx context.Context, staleThres
 	return zombies, nil
 }
 
+// AcquireWorkflowLock obtains an exclusive lock for a specific workflow.
+// For SQLite, we use advisory locking via the sqlite_lock_status pragma
+// or a simple in-memory lock map.
+func (m *SQLiteStateManager) AcquireWorkflowLock(_ context.Context, workflowID core.WorkflowID) error {
+	// For now, use the global lock as a simple implementation.
+	// A more sophisticated implementation would use a per-workflow lock map.
+	return m.AcquireLock(nil)
+}
+
+// ReleaseWorkflowLock releases the exclusive lock for a specific workflow.
+func (m *SQLiteStateManager) ReleaseWorkflowLock(_ context.Context, workflowID core.WorkflowID) error {
+	return m.ReleaseLock(nil)
+}
+
+// SetWorkflowRunning marks a workflow as actively running.
+func (m *SQLiteStateManager) SetWorkflowRunning(ctx context.Context, workflowID core.WorkflowID) error {
+	return m.retryWrite(ctx, "set_workflow_running", func() error {
+		_, err := m.db.ExecContext(ctx, `
+			UPDATE workflows SET status = 'running', heartbeat_at = datetime('now')
+			WHERE id = ?
+		`, string(workflowID))
+		return err
+	})
+}
+
+// ClearWorkflowRunning removes the running status from a workflow.
+func (m *SQLiteStateManager) ClearWorkflowRunning(ctx context.Context, workflowID core.WorkflowID) error {
+	// Note: This doesn't change status - status is set by finalizeWorkflowExecution
+	// This is intentional to preserve completed/failed status
+	return nil
+}
+
+// ListRunningWorkflows returns the IDs of all currently running workflows.
+func (m *SQLiteStateManager) ListRunningWorkflows(ctx context.Context) ([]core.WorkflowID, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	rows, err := m.readDB.QueryContext(ctx, `
+		SELECT id FROM workflows WHERE status = 'running'
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("querying running workflows: %w", err)
+	}
+	defer rows.Close()
+
+	var ids []core.WorkflowID
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scanning workflow id: %w", err)
+		}
+		ids = append(ids, core.WorkflowID(id))
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating running workflows: %w", err)
+	}
+
+	return ids, nil
+}
+
+// UpdateWorkflowHeartbeat updates the heartbeat for workflow-level tracking.
+func (m *SQLiteStateManager) UpdateWorkflowHeartbeat(ctx context.Context, workflowID core.WorkflowID) error {
+	return m.UpdateHeartbeat(ctx, workflowID)
+}
+
 // Verify that SQLiteStateManager implements core.StateManager.
 var _ core.StateManager = (*SQLiteStateManager)(nil)

@@ -295,6 +295,33 @@ func (m *mockStateManager) DeleteWorkflow(_ context.Context, id core.WorkflowID)
 	return fmt.Errorf("workflow not found: %s", id)
 }
 
+// Per-workflow locking methods (workflow isolation support)
+func (m *mockStateManager) AcquireWorkflowLock(_ context.Context, _ core.WorkflowID) error {
+	return m.lockErr
+}
+
+func (m *mockStateManager) ReleaseWorkflowLock(_ context.Context, _ core.WorkflowID) error {
+	return nil
+}
+
+// Running workflow tracking
+func (m *mockStateManager) SetWorkflowRunning(_ context.Context, _ core.WorkflowID) error {
+	return nil
+}
+
+func (m *mockStateManager) ClearWorkflowRunning(_ context.Context, _ core.WorkflowID) error {
+	return nil
+}
+
+func (m *mockStateManager) ListRunningWorkflows(_ context.Context) ([]core.WorkflowID, error) {
+	return nil, nil
+}
+
+// Heartbeat management
+func (m *mockStateManager) UpdateWorkflowHeartbeat(_ context.Context, _ core.WorkflowID) error {
+	return nil
+}
+
 func TestRunner_SetDryRun(t *testing.T) {
 	runner := &Runner{
 		config: DefaultRunnerConfig(),

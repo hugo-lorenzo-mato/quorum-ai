@@ -420,6 +420,45 @@ func (m *threadSafeMockStateManager) FindZombieWorkflows(_ context.Context, stal
 	return zombies, nil
 }
 
+func (m *threadSafeMockStateManager) AcquireWorkflowLock(_ context.Context, _ core.WorkflowID) error {
+	return nil
+}
+
+func (m *threadSafeMockStateManager) ReleaseWorkflowLock(_ context.Context, _ core.WorkflowID) error {
+	return nil
+}
+
+func (m *threadSafeMockStateManager) SetWorkflowRunning(_ context.Context, id core.WorkflowID) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if wf, exists := m.workflows[id]; exists {
+		wf.Status = core.WorkflowStatusRunning
+		now := time.Now().UTC()
+		wf.HeartbeatAt = &now
+	}
+	return nil
+}
+
+func (m *threadSafeMockStateManager) ClearWorkflowRunning(_ context.Context, _ core.WorkflowID) error {
+	return nil
+}
+
+func (m *threadSafeMockStateManager) ListRunningWorkflows(_ context.Context) ([]core.WorkflowID, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	var ids []core.WorkflowID
+	for id, wf := range m.workflows {
+		if wf.Status == core.WorkflowStatusRunning {
+			ids = append(ids, id)
+		}
+	}
+	return ids, nil
+}
+
+func (m *threadSafeMockStateManager) UpdateWorkflowHeartbeat(ctx context.Context, workflowID core.WorkflowID) error {
+	return m.UpdateHeartbeat(ctx, workflowID)
+}
+
 // mockAgentRegistryIntegration for integration tests - separate from unit test mock
 type mockAgentRegistryIntegration struct {
 	agents    map[string]*mockAgent

@@ -164,6 +164,41 @@ func (m *mockStateManager) FindZombieWorkflows(_ context.Context, staleThreshold
 	return zombies, nil
 }
 
+func (m *mockStateManager) AcquireWorkflowLock(_ context.Context, _ core.WorkflowID) error {
+	return nil
+}
+
+func (m *mockStateManager) ReleaseWorkflowLock(_ context.Context, _ core.WorkflowID) error {
+	return nil
+}
+
+func (m *mockStateManager) SetWorkflowRunning(_ context.Context, id core.WorkflowID) error {
+	if wf, exists := m.workflows[id]; exists {
+		wf.Status = core.WorkflowStatusRunning
+		now := time.Now().UTC()
+		wf.HeartbeatAt = &now
+	}
+	return nil
+}
+
+func (m *mockStateManager) ClearWorkflowRunning(_ context.Context, _ core.WorkflowID) error {
+	return nil
+}
+
+func (m *mockStateManager) ListRunningWorkflows(_ context.Context) ([]core.WorkflowID, error) {
+	var ids []core.WorkflowID
+	for id, wf := range m.workflows {
+		if wf.Status == core.WorkflowStatusRunning {
+			ids = append(ids, id)
+		}
+	}
+	return ids, nil
+}
+
+func (m *mockStateManager) UpdateWorkflowHeartbeat(ctx context.Context, workflowID core.WorkflowID) error {
+	return m.UpdateHeartbeat(ctx, workflowID)
+}
+
 func TestHealthEndpoint(t *testing.T) {
 	sm := newMockStateManager()
 	eb := events.New(100)
