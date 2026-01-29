@@ -31,6 +31,7 @@ type StateManager interface {
 	ArchiveWorkflows(ctx context.Context) (int, error)
 	PurgeAllWorkflows(ctx context.Context) (int, error)
 	DeleteWorkflow(ctx context.Context, id core.WorkflowID) error
+	FindZombieWorkflows(ctx context.Context, staleThreshold time.Duration) ([]*core.WorkflowState, error)
 }
 
 // ResumePointProvider determines where to resume a workflow.
@@ -1391,4 +1392,65 @@ func (r *Runner) PurgeAllWorkflows(ctx context.Context) (int, error) {
 // Returns error if workflow does not exist.
 func (r *Runner) DeleteWorkflow(ctx context.Context, workflowID string) error {
 	return r.state.DeleteWorkflow(ctx, core.WorkflowID(workflowID))
+}
+
+// RecoverZombies finds and recovers zombie workflows on startup.
+// Returns results for each recovered workflow.
+func (r *Runner) RecoverZombies(ctx context.Context) ([]*RecoveryResult, error) {
+	repoPath := "."
+	if r.git != nil {
+		var err error
+		repoPath, err = r.git.RepoRoot(ctx)
+		if err != nil {
+			repoPath = "."
+		}
+	}
+
+	rm := NewRecoveryManager(
+		&runnerStateManagerAdapter{r.state},
+		repoPath,
+		r.logger,
+	)
+
+	zombies, err := rm.FindZombieWorkflows(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("finding zombie workflows: %w", err)
+	}
+
+	if len(zombies) == 0 {
+		r.logger.Info("no zombie workflows found")
+		return nil, nil
+	}
+
+	r.logger.Info("found zombie workflows", "count", len(zombies))
+
+	var results []*RecoveryResult
+	for _, zombie := range zombies {
+		result, err := rm.RecoverWorkflow(ctx, zombie.WorkflowID)
+		if err != nil {
+			r.logger.Error("failed to recover workflow",
+				"workflow_id", zombie.WorkflowID,
+				"error", err)
+		}
+		results = append(results, result)
+	}
+
+	return results, nil
+}
+
+// runnerStateManagerAdapter wraps StateManager to implement RecoveryStateManager.
+type runnerStateManagerAdapter struct {
+	sm StateManager
+}
+
+func (a *runnerStateManagerAdapter) LoadByID(ctx context.Context, id core.WorkflowID) (*core.WorkflowState, error) {
+	return a.sm.LoadByID(ctx, id)
+}
+
+func (a *runnerStateManagerAdapter) Save(ctx context.Context, state *core.WorkflowState) error {
+	return a.sm.Save(ctx, state)
+}
+
+func (a *runnerStateManagerAdapter) FindZombieWorkflows(ctx context.Context, staleThreshold time.Duration) ([]*core.WorkflowState, error) {
+	return a.sm.FindZombieWorkflows(ctx, staleThreshold)
 }

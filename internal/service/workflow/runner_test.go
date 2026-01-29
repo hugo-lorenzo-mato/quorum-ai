@@ -295,6 +295,10 @@ func (m *mockStateManager) DeleteWorkflow(_ context.Context, id core.WorkflowID)
 	return fmt.Errorf("workflow not found: %s", id)
 }
 
+func (m *mockStateManager) FindZombieWorkflows(_ context.Context, _ time.Duration) ([]*core.WorkflowState, error) {
+	return nil, nil
+}
+
 func TestRunner_SetDryRun(t *testing.T) {
 	runner := &Runner{
 		config: DefaultRunnerConfig(),

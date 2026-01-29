@@ -576,3 +576,37 @@ func parseWorktreesToCore(output, mainRepoPath string) []core.Worktree {
 
 	return worktrees
 }
+
+// Run executes a raw git command and returns the output.
+// This is exposed for operations not covered by dedicated methods.
+func (c *Client) Run(ctx context.Context, args ...string) (string, error) {
+	return c.run(ctx, args...)
+}
+
+// HasUncommittedChanges returns true if the repository has uncommitted changes.
+// This includes staged, unstaged, and untracked files.
+func (c *Client) HasUncommittedChanges(ctx context.Context) (bool, error) {
+	status, err := c.StatusLocal(ctx)
+	if err != nil {
+		return false, err
+	}
+	return !status.IsClean(), nil
+}
+
+// AbortMerge aborts an in-progress merge operation.
+func (c *Client) AbortMerge(ctx context.Context) error {
+	_, err := c.run(ctx, "merge", "--abort")
+	return err
+}
+
+// AbortRebase aborts an in-progress rebase operation.
+func (c *Client) AbortRebase(ctx context.Context) error {
+	_, err := c.run(ctx, "rebase", "--abort")
+	return err
+}
+
+// AbortCherryPick aborts an in-progress cherry-pick operation.
+func (c *Client) AbortCherryPick(ctx context.Context) error {
+	_, err := c.run(ctx, "cherry-pick", "--abort")
+	return err
+}
