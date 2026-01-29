@@ -11,8 +11,10 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
@@ -34,6 +36,9 @@ var migrationV4 string
 
 //go:embed migrations/005_add_agent_events.sql
 var migrationV5 string
+
+//go:embed migrations/006_workflow_isolation.sql
+var migrationV6 string
 
 // SQLiteStateManager implements StateManager with SQLite storage.
 type SQLiteStateManager struct {
@@ -221,9 +226,9 @@ func (m *SQLiteStateManager) migrate() error {
 	}
 
 	if version < 5 {
-		// Migration V5 adds agent_events column - ignore error if column already exists
+		// Migration V5 adds agent_events column for UI reload recovery
 		_, err := m.db.Exec(migrationV5)
-		if err != nil && !strings.Contains(err.Error(), "duplicate column") {
+		if err != nil && !strings.Contains(err.Error(), "already exists") {
 			return fmt.Errorf("applying migration v5: %w", err)
 		}
 	}
@@ -276,21 +281,12 @@ func (m *SQLiteStateManager) Save(ctx context.Context, state *core.WorkflowState
 		}
 	}
 
-	// Serialize agent events
-	var agentEventsJSON []byte
-	if len(state.AgentEvents) > 0 {
-		agentEventsJSON, err = json.Marshal(state.AgentEvents)
-		if err != nil {
-			return fmt.Errorf("marshaling agent events: %w", err)
-		}
-	}
-
 	// Upsert workflow
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO workflows (
 			id, version, title, status, current_phase, prompt, optimized_prompt,
-			task_order, config, metrics, checksum, created_at, updated_at, report_path, agent_events
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			task_order, config, metrics, checksum, created_at, updated_at, report_path
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			version = excluded.version,
 			title = excluded.title,
@@ -303,14 +299,13 @@ func (m *SQLiteStateManager) Save(ctx context.Context, state *core.WorkflowState
 			metrics = excluded.metrics,
 			checksum = excluded.checksum,
 			updated_at = excluded.updated_at,
-			report_path = excluded.report_path,
-			agent_events = excluded.agent_events
+			report_path = excluded.report_path
 	`,
 		state.WorkflowID, state.Version, state.Title, state.Status, state.CurrentPhase,
 		state.Prompt, state.OptimizedPrompt, string(taskOrderJSON),
 		nullableString(configJSON), nullableString(metricsJSON),
 		checksum, state.CreatedAt, state.UpdatedAt,
-		nullableString([]byte(state.ReportPath)), nullableString(agentEventsJSON),
+		nullableString([]byte(state.ReportPath)),
 	)
 	if err != nil {
 		return fmt.Errorf("upserting workflow: %w", err)
@@ -457,16 +452,15 @@ func (m *SQLiteStateManager) loadWorkflowByID(ctx context.Context, id core.Workf
 	var checksum sql.NullString
 	var reportPath sql.NullString
 	var title sql.NullString
-	var agentEventsJSON sql.NullString
 
 	err := m.readDB.QueryRowContext(ctx, `
 		SELECT id, version, title, status, current_phase, prompt, optimized_prompt,
-		       task_order, config, metrics, checksum, created_at, updated_at, report_path, agent_events
+		       task_order, config, metrics, checksum, created_at, updated_at, report_path
 		FROM workflows WHERE id = ?
 	`, id).Scan(
 		&state.WorkflowID, &state.Version, &title, &state.Status, &state.CurrentPhase,
 		&state.Prompt, &optimizedPrompt, &taskOrderJSON, &configJSON, &metricsJSON,
-		&checksum, &state.CreatedAt, &state.UpdatedAt, &reportPath, &agentEventsJSON,
+		&checksum, &state.CreatedAt, &state.UpdatedAt, &reportPath,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil // Workflow doesn't exist
@@ -504,11 +498,6 @@ func (m *SQLiteStateManager) loadWorkflowByID(ctx context.Context, id core.Workf
 		state.Metrics = &core.StateMetrics{}
 		if err := json.Unmarshal([]byte(metricsJSON.String), state.Metrics); err != nil {
 			return nil, fmt.Errorf("unmarshaling metrics: %w", err)
-		}
-	}
-	if agentEventsJSON.Valid && agentEventsJSON.String != "" {
-		if err := json.Unmarshal([]byte(agentEventsJSON.String), &state.AgentEvents); err != nil {
-			return nil, fmt.Errorf("unmarshaling agent events: %w", err)
 		}
 	}
 
@@ -852,6 +841,267 @@ func (m *SQLiteStateManager) ReleaseLock(_ context.Context) error {
 	}
 
 	return nil
+}
+
+// AcquireWorkflowLock acquires an exclusive lock for a specific workflow.
+// Uses database-backed locking with stale lock detection.
+func (m *SQLiteStateManager) AcquireWorkflowLock(ctx context.Context, workflowID core.WorkflowID) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	pid := os.Getpid()
+	hostname, _ := os.Hostname()
+	now := time.Now().UTC()
+	expiresAt := now.Add(m.lockTTL)
+
+	return m.retryWrite(ctx, "acquire_workflow_lock", func() error {
+		// Check for existing lock
+		var existingPID sql.NullInt64
+		var existingHost sql.NullString
+		var existingExpires sql.NullTime
+
+		err := m.db.QueryRowContext(ctx, `
+			SELECT holder_pid, holder_host, expires_at
+			FROM workflow_locks
+			WHERE workflow_id = ?
+		`, string(workflowID)).Scan(&existingPID, &existingHost, &existingExpires)
+
+		if err == nil {
+			// Lock exists - check if stale
+			if existingExpires.Valid && existingExpires.Time.Before(now) {
+				// Lock expired - delete it
+				_, _ = m.db.ExecContext(ctx, `
+					DELETE FROM workflow_locks WHERE workflow_id = ?
+				`, string(workflowID))
+			} else if existingPID.Valid {
+				// Check if process still alive
+				if sqliteProcessExists(int(existingPID.Int64)) {
+					return core.ErrState("WORKFLOW_LOCK_HELD",
+						fmt.Sprintf("workflow %s locked by process %d on %s",
+							workflowID, existingPID.Int64, existingHost.String))
+				}
+				// Process dead - delete stale lock
+				_, _ = m.db.ExecContext(ctx, `
+					DELETE FROM workflow_locks WHERE workflow_id = ?
+				`, string(workflowID))
+			}
+		} else if err != sql.ErrNoRows {
+			return fmt.Errorf("checking existing lock: %w", err)
+		}
+
+		// Try to acquire lock (PRIMARY KEY constraint handles race conditions)
+		_, err = m.db.ExecContext(ctx, `
+			INSERT INTO workflow_locks (workflow_id, holder_pid, holder_host, acquired_at, expires_at)
+			VALUES (?, ?, ?, ?, ?)
+		`, string(workflowID), pid, hostname, now, expiresAt)
+
+		if err != nil {
+			if strings.Contains(err.Error(), "UNIQUE constraint failed") ||
+				strings.Contains(err.Error(), "PRIMARY KEY constraint failed") {
+				return core.ErrState("WORKFLOW_LOCK_HELD",
+					fmt.Sprintf("workflow %s is already locked", workflowID))
+			}
+			return fmt.Errorf("inserting lock: %w", err)
+		}
+
+		return nil
+	})
+}
+
+// ReleaseWorkflowLock releases the lock for a specific workflow.
+// Only releases if the current process holds the lock.
+func (m *SQLiteStateManager) ReleaseWorkflowLock(ctx context.Context, workflowID core.WorkflowID) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	pid := os.Getpid()
+
+	return m.retryWrite(ctx, "release_workflow_lock", func() error {
+		result, err := m.db.ExecContext(ctx, `
+			DELETE FROM workflow_locks
+			WHERE workflow_id = ? AND holder_pid = ?
+		`, string(workflowID), pid)
+
+		if err != nil {
+			return fmt.Errorf("deleting lock: %w", err)
+		}
+
+		rows, _ := result.RowsAffected()
+		if rows == 0 {
+			// Lock didn't exist or wasn't ours - not an error, just log
+			// (no logger on struct, so we silently continue)
+		}
+
+		return nil
+	})
+}
+
+// RefreshWorkflowLock extends the lock expiration time for a workflow.
+// Returns error if the lock is not held by this process.
+func (m *SQLiteStateManager) RefreshWorkflowLock(ctx context.Context, workflowID core.WorkflowID) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	pid := os.Getpid()
+	now := time.Now().UTC()
+	expiresAt := now.Add(m.lockTTL)
+
+	return m.retryWrite(ctx, "refresh_workflow_lock", func() error {
+		result, err := m.db.ExecContext(ctx, `
+			UPDATE workflow_locks
+			SET expires_at = ?, acquired_at = ?
+			WHERE workflow_id = ? AND holder_pid = ?
+		`, expiresAt, now, string(workflowID), pid)
+
+		if err != nil {
+			return fmt.Errorf("refreshing lock: %w", err)
+		}
+
+		rows, _ := result.RowsAffected()
+		if rows == 0 {
+			return core.ErrState("LOCK_NOT_HELD",
+				fmt.Sprintf("workflow %s lock not held by this process", workflowID))
+		}
+
+		return nil
+	})
+}
+
+// SetWorkflowRunning marks a workflow as currently executing.
+func (m *SQLiteStateManager) SetWorkflowRunning(ctx context.Context, workflowID core.WorkflowID) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	pid := os.Getpid()
+	hostname, _ := os.Hostname()
+	now := time.Now().UTC()
+
+	return m.retryWrite(ctx, "set_workflow_running", func() error {
+		_, err := m.db.ExecContext(ctx, `
+			INSERT OR REPLACE INTO running_workflows
+			(workflow_id, started_at, lock_holder_pid, lock_holder_host, heartbeat_at)
+			VALUES (?, ?, ?, ?, ?)
+		`, string(workflowID), now, pid, hostname, now)
+
+		if err != nil {
+			return fmt.Errorf("setting workflow running: %w", err)
+		}
+
+		return nil
+	})
+}
+
+// ClearWorkflowRunning removes a workflow from the running state.
+func (m *SQLiteStateManager) ClearWorkflowRunning(ctx context.Context, workflowID core.WorkflowID) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return m.retryWrite(ctx, "clear_workflow_running", func() error {
+		_, err := m.db.ExecContext(ctx, `
+			DELETE FROM running_workflows WHERE workflow_id = ?
+		`, string(workflowID))
+
+		if err != nil {
+			return fmt.Errorf("clearing workflow running: %w", err)
+		}
+
+		return nil
+	})
+}
+
+// ListRunningWorkflows returns IDs of all currently executing workflows.
+func (m *SQLiteStateManager) ListRunningWorkflows(ctx context.Context) ([]core.WorkflowID, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	rows, err := m.readDB.QueryContext(ctx, `
+		SELECT workflow_id FROM running_workflows ORDER BY started_at
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("querying running workflows: %w", err)
+	}
+	defer rows.Close()
+
+	var ids []core.WorkflowID
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scanning workflow id: %w", err)
+		}
+		ids = append(ids, core.WorkflowID(id))
+	}
+
+	return ids, rows.Err()
+}
+
+// IsWorkflowRunning checks if a specific workflow is currently executing.
+func (m *SQLiteStateManager) IsWorkflowRunning(ctx context.Context, workflowID core.WorkflowID) (bool, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	var count int
+	err := m.readDB.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM running_workflows WHERE workflow_id = ?
+	`, string(workflowID)).Scan(&count)
+
+	if err != nil {
+		return false, fmt.Errorf("checking if workflow running: %w", err)
+	}
+
+	return count > 0, nil
+}
+
+// UpdateWorkflowHeartbeat updates the heartbeat timestamp for a running workflow.
+func (m *SQLiteStateManager) UpdateWorkflowHeartbeat(ctx context.Context, workflowID core.WorkflowID) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	now := time.Now().UTC()
+
+	return m.retryWrite(ctx, "update_workflow_heartbeat", func() error {
+		result, err := m.db.ExecContext(ctx, `
+			UPDATE running_workflows
+			SET heartbeat_at = ?
+			WHERE workflow_id = ?
+		`, now, string(workflowID))
+
+		if err != nil {
+			return fmt.Errorf("updating heartbeat: %w", err)
+		}
+
+		rows, _ := result.RowsAffected()
+		if rows == 0 {
+			// Workflow not in running_workflows, add it
+			pid := os.Getpid()
+			hostname, _ := os.Hostname()
+			_, err := m.db.ExecContext(ctx, `
+				INSERT INTO running_workflows
+				(workflow_id, started_at, lock_holder_pid, lock_holder_host, heartbeat_at)
+				VALUES (?, ?, ?, ?, ?)
+			`, string(workflowID), now, pid, hostname, now)
+			if err != nil {
+				return fmt.Errorf("inserting running workflow: %w", err)
+			}
+		}
+
+		return nil
+	})
+}
+
+// sqliteProcessExists checks if a process is running.
+// This is a local copy for SQLite state manager to avoid import cycles.
+func sqliteProcessExists(pid int) bool {
+	// Windows reports no access when signaling the current process; treat that as existing.
+	if runtime.GOOS == "windows" && pid == os.Getpid() {
+		return true
+	}
+	process, err := os.FindProcess(pid)
+	if err != nil {
+		return false
+	}
+	// On Unix, FindProcess always succeeds, so we send signal 0
+	err = process.Signal(syscall.Signal(0))
+	return err == nil
 }
 
 // Exists checks if the database file exists and has data.
@@ -1247,12 +1497,14 @@ func (m *SQLiteStateManager) FindZombieWorkflows(ctx context.Context, staleThres
 
 	cutoff := time.Now().UTC().Add(-staleThreshold)
 
-	// Find workflows that are "running" but have stale heartbeats
-	// Also include workflows with NULL heartbeat_at (never had a heartbeat)
+	// Find workflows that are in running_workflows table but have stale heartbeats.
+	// This uses the new running_workflows table for tracking active workflows.
+	// Also include workflows with NULL heartbeat_at (never had a heartbeat).
 	rows, err := m.readDB.QueryContext(ctx, `
-		SELECT id FROM workflows
-		WHERE status = 'running'
-		AND (heartbeat_at IS NULL OR heartbeat_at < ?)
+		SELECT w.id
+		FROM workflows w
+		INNER JOIN running_workflows rw ON w.id = rw.workflow_id
+		WHERE (rw.heartbeat_at IS NULL OR rw.heartbeat_at < ?)
 	`, cutoff)
 	if err != nil {
 		return nil, fmt.Errorf("querying zombie workflows: %w", err)
