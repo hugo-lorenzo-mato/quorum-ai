@@ -66,7 +66,7 @@ phases:
       # Agent to use for moderation (model from agent's phase_models.analyze)
       agent: claude
       # Minimum consensus score to accept (0.0-1.0)
-      threshold: 0.85
+      threshold: 0.80
       # Minimum refinement rounds before accepting consensus
       min_rounds: 2
       # Maximum refinement rounds before giving up
