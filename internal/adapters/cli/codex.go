@@ -34,25 +34,8 @@ func NewCodexAdapter(cfg AgentConfig) (core.Agent, error) {
 			SupportsTools:     true,
 			MaxContextTokens:  128000,
 			MaxOutputTokens:   16384,
-			SupportedModels: []string{
-				// GPT-5.2 family (latest)
-				"gpt-5.2-codex", // Most advanced agentic coding model (default for Codex)
-				"gpt-5.2",       // Base GPT-5.2 model
-				// GPT-5.1 family
-				"gpt-5.1-codex-max",  // Maximum capability codex variant
-				"gpt-5.1-codex",      // Code-optimized GPT-5.1
-				"gpt-5.1-codex-mini", // Small, cost-effective codex
-				"gpt-5.1",            // Base GPT-5.1 model
-				// GPT-5 family
-				"gpt-5",      // Base GPT-5 model
-				"gpt-5-mini", // Small, fast GPT-5
-				// GPT-4.1
-				"gpt-4.1", // Previous generation flagship
-				// Reasoning models (o-series)
-				"o3",      // Advanced reasoning, math, science, coding
-				"o4-mini", // Fast, cost-efficient reasoning
-			},
-			DefaultModel: "gpt-5.2-codex",
+			SupportedModels:   core.GetSupportedModels(core.AgentCodex),
+			DefaultModel:      core.GetDefaultModel(core.AgentCodex),
 		},
 	}
 

@@ -7,6 +7,7 @@ import Chat from './pages/Chat';
 import Settings from './pages/Settings';
 import useSSE from './hooks/useSSE';
 import { useUIStore } from './stores';
+import { loadEnums } from './lib/agents';
 
 function AppContent() {
   // Initialize SSE connection
@@ -18,6 +19,11 @@ function AppContent() {
   useEffect(() => {
     setTheme(theme);
   }, [theme, setTheme]);
+
+  // Load enums from API on app start
+  useEffect(() => {
+    loadEnums();
+  }, []);
 
   return (
     <Layout>

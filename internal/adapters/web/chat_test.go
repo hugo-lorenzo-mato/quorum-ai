@@ -102,7 +102,7 @@ func TestCreateSession(t *testing.T) {
 	eventBus := events.New(10)
 	defer eventBus.Close()
 
-	h := NewChatHandler(registry, eventBus, nil)
+	h := NewChatHandler(registry, eventBus, nil, nil)
 	r := setupTestRouter(h)
 
 	tests := []struct {
@@ -165,7 +165,7 @@ func TestCreateSession(t *testing.T) {
 }
 
 func TestListSessions(t *testing.T) {
-	h := NewChatHandler(nil, nil, nil)
+	h := NewChatHandler(nil, nil, nil, nil)
 	r := setupTestRouter(h)
 
 	// Create some sessions
@@ -199,7 +199,7 @@ func TestListSessions(t *testing.T) {
 }
 
 func TestGetSession(t *testing.T) {
-	h := NewChatHandler(nil, nil, nil)
+	h := NewChatHandler(nil, nil, nil, nil)
 	r := setupTestRouter(h)
 
 	h.sessions["session-1"] = &chatSessionState{
@@ -252,7 +252,7 @@ func TestGetSession(t *testing.T) {
 }
 
 func TestDeleteSession(t *testing.T) {
-	h := NewChatHandler(nil, nil, nil)
+	h := NewChatHandler(nil, nil, nil, nil)
 	r := setupTestRouter(h)
 
 	h.sessions["session-1"] = &chatSessionState{
@@ -284,7 +284,7 @@ func TestDeleteSession(t *testing.T) {
 }
 
 func TestGetMessages(t *testing.T) {
-	h := NewChatHandler(nil, nil, nil)
+	h := NewChatHandler(nil, nil, nil, nil)
 	r := setupTestRouter(h)
 
 	h.sessions["session-1"] = &chatSessionState{
@@ -319,7 +319,7 @@ func TestSendMessage(t *testing.T) {
 	eventBus := events.New(10)
 	defer eventBus.Close()
 
-	h := NewChatHandler(registry, eventBus, nil)
+	h := NewChatHandler(registry, eventBus, nil, nil)
 	r := setupTestRouter(h)
 
 	// Create a session first
@@ -391,7 +391,7 @@ func TestSendMessage(t *testing.T) {
 
 func TestSetAgent(t *testing.T) {
 	registry := newMockAgentRegistry()
-	h := NewChatHandler(registry, nil, nil)
+	h := NewChatHandler(registry, nil, nil, nil)
 	r := setupTestRouter(h)
 
 	h.sessions["session-1"] = &chatSessionState{
@@ -447,7 +447,7 @@ func TestSetAgent(t *testing.T) {
 }
 
 func TestSetModel(t *testing.T) {
-	h := NewChatHandler(nil, nil, nil)
+	h := NewChatHandler(nil, nil, nil, nil)
 	r := setupTestRouter(h)
 
 	h.sessions["session-1"] = &chatSessionState{
@@ -472,7 +472,7 @@ func TestSetModel(t *testing.T) {
 
 func TestChatHandlerWithNilDependencies(t *testing.T) {
 	// Handler should work with nil dependencies for basic operations
-	h := NewChatHandler(nil, nil, nil)
+	h := NewChatHandler(nil, nil, nil, nil)
 	r := setupTestRouter(h)
 
 	// Create session should still work

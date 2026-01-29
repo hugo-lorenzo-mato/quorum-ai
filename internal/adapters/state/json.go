@@ -294,6 +294,7 @@ func (m *JSONStateManager) stateToSummary(state *core.WorkflowState, activeID co
 
 	return core.WorkflowSummary{
 		WorkflowID:   state.WorkflowID,
+		Title:        state.Title,
 		Status:       state.Status,
 		CurrentPhase: state.CurrentPhase,
 		Prompt:       prompt,

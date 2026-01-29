@@ -67,15 +67,8 @@ func NewOpenCodeAdapter(cfg AgentConfig) (core.Agent, error) {
 			SupportsTools:     true,  // OpenCode has MCP support
 			MaxContextTokens:  128000,
 			MaxOutputTokens:   8192,
-			SupportedModels: []string{
-				// Local Ollama models (update based on `ollama list`)
-				"qwen2.5-coder:32b",  // Best local coding model
-				"qwen3-coder:30b",    // Latest Qwen coder
-				"deepseek-r1:32b",    // Reasoning model
-				"codestral:22b",      // Mistral code model
-				"gpt-oss:20b",        // Open source GPT
-			},
-			DefaultModel: "qwen2.5-coder:32b",
+			SupportedModels:   core.GetSupportedModels(core.AgentOpenCode),
+			DefaultModel:      core.GetDefaultModel(core.AgentOpenCode),
 		},
 		ollamaURL: ollamaURL,
 		ollamaKey: ollamaKey,

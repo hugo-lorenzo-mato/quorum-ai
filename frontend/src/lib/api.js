@@ -105,6 +105,11 @@ export const chatApi = {
     method: 'DELETE',
   }),
 
+  updateSession: (id, data) => request(`/chat/sessions/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  }),
+
   getMessages: (sessionId) => request(`/chat/sessions/${sessionId}/messages`),
 
   sendMessage: (sessionId, content, options = {}) => request(`/chat/sessions/${sessionId}/messages`, {
@@ -149,6 +154,8 @@ export const configApi = {
   }),
 
   getAgents: () => request('/config/agents'),
+
+  getEnums: () => request('/config/enums'),
 };
 
 // Files API

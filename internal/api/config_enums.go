@@ -18,21 +18,28 @@ type EnumsResponse struct {
 	Agents           []string `json:"agents"`
 	Phases           []string `json:"phases"`
 	PhaseModelKeys   []string `json:"phase_model_keys"`
+	// Model configuration (centralized source of truth)
+	AgentModels        map[string][]string `json:"agent_models"`
+	AgentDefaultModels map[string]string   `json:"agent_default_models"`
+	AgentsWithReasoning []string           `json:"agents_with_reasoning"`
 }
 
 // handleGetEnums returns all enum values for UI dropdowns.
 func (s *Server) handleGetEnums(w http.ResponseWriter, _ *http.Request) {
 	enums := EnumsResponse{
-		LogLevels:        core.LogLevels,
-		LogFormats:       core.LogFormats,
-		TraceModes:       core.TraceModes,
-		StateBackends:    core.StateBackends,
-		WorktreeModes:    core.WorktreeModes,
-		MergeStrategies:  core.MergeStrategies,
-		ReasoningEfforts: core.ReasoningEfforts,
-		Agents:           core.Agents,
-		Phases:           core.Phases,
-		PhaseModelKeys:   core.PhaseModelKeys,
+		LogLevels:           core.LogLevels,
+		LogFormats:          core.LogFormats,
+		TraceModes:          core.TraceModes,
+		StateBackends:       core.StateBackends,
+		WorktreeModes:       core.WorktreeModes,
+		MergeStrategies:     core.MergeStrategies,
+		ReasoningEfforts:    core.ReasoningEfforts,
+		Agents:              core.Agents,
+		Phases:              core.Phases,
+		PhaseModelKeys:      core.PhaseModelKeys,
+		AgentModels:         core.AgentModels,
+		AgentDefaultModels:  core.AgentDefaultModels,
+		AgentsWithReasoning: core.AgentsWithReasoning,
 	}
 
 	respondJSON(w, http.StatusOK, enums)

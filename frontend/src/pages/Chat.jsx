@@ -10,6 +10,8 @@ import {
   Bot,
   User,
   Loader2,
+  Pencil,
+  Check,
 } from 'lucide-react';
 import {
   AgentSelector,
@@ -65,7 +67,36 @@ function MessageBubble({ message, isLast }) {
   );
 }
 
-function SessionItem({ session, isActive, onClick, onDelete }) {
+function SessionItem({ session, isActive, onClick, onDelete, onRename }) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editValue, setEditValue] = useState('');
+  const inputRef = useRef(null);
+
+  const displayTitle = session.title || `${session.agent || 'Claude'} Session`;
+
+  const handleStartEdit = (e) => {
+    e.stopPropagation();
+    setEditValue(session.title || '');
+    setIsEditing(true);
+    setTimeout(() => inputRef.current?.focus(), 0);
+  };
+
+  const handleSave = () => {
+    const newTitle = editValue.trim();
+    if (newTitle !== (session.title || '')) {
+      onRename(session.id, newTitle);
+    }
+    setIsEditing(false);
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      handleSave();
+    } else if (e.key === 'Escape') {
+      setIsEditing(false);
+    }
+  };
+
   return (
     <button
       onClick={onClick}
@@ -77,22 +108,54 @@ function SessionItem({ session, isActive, onClick, onDelete }) {
     >
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3 flex-1 min-w-0">
-          <Sparkles className={`w-4 h-4 ${isActive ? 'text-primary' : ''}`} />
+          <Sparkles className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-primary' : ''}`} />
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium truncate">
-              {session.agent || 'Claude'} Session
-            </p>
+            {isEditing ? (
+              <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                <input
+                  ref={inputRef}
+                  type="text"
+                  value={editValue}
+                  onChange={(e) => setEditValue(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  onBlur={handleSave}
+                  placeholder="Session title"
+                  className="flex-1 min-w-0 text-sm font-medium bg-background border border-input rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+                <button
+                  onClick={handleSave}
+                  className="p-1 text-primary hover:bg-primary/10 rounded"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ) : (
+              <p className="text-sm font-medium truncate">
+                {displayTitle}
+              </p>
+            )}
             <p className="text-xs text-muted-foreground">
               {new Date(session.created_at).toLocaleDateString()}
             </p>
           </div>
         </div>
-        <button
-          onClick={(e) => { e.stopPropagation(); onDelete(session.id); }}
-          className="p-1.5 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md transition-all"
-        >
-          <Trash2 className="w-4 h-4" />
-        </button>
+        <div className="flex items-center gap-1">
+          {!isEditing && (
+            <button
+              onClick={handleStartEdit}
+              className="p-1.5 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground hover:bg-accent rounded-md transition-all"
+              title="Rename session"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+            </button>
+          )}
+          <button
+            onClick={(e) => { e.stopPropagation(); onDelete(session.id); }}
+            className="p-1.5 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md transition-all"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
       </div>
     </button>
   );
@@ -125,7 +188,7 @@ function EmptyChat({ onCreateSession }) {
 export default function Chat() {
   const {
     sessions, activeSessionId, loading, sending, error,
-    fetchSessions, createSession, selectSession, deleteSession,
+    fetchSessions, createSession, selectSession, deleteSession, updateSession,
     sendMessage, getActiveMessages, clearError,
     // Per-message options
     currentAgent, currentModel, currentReasoningEffort, attachments,
@@ -158,6 +221,10 @@ export default function Chat() {
     await createSession();
   };
 
+  const handleRenameSession = async (sessionId, newTitle) => {
+    await updateSession(sessionId, { title: newTitle });
+  };
+
   return (
     <div className="h-[calc(100vh-8rem)] flex gap-4 animate-fade-in">
       {/* Sessions sidebar */}
@@ -180,6 +247,7 @@ export default function Chat() {
                 isActive={activeSessionId === session.id}
                 onClick={() => selectSession(session.id)}
                 onDelete={deleteSession}
+                onRename={handleRenameSession}
               />
             ))
           ) : (
@@ -199,8 +267,12 @@ export default function Chat() {
                   <Sparkles className="w-5 h-5 text-primary" />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-foreground">Chat</h3>
-                  <p className="text-xs text-muted-foreground">Session {activeSession.id.substring(0, 8)}...</p>
+                  <h3 className="font-semibold text-foreground">
+                    {activeSession.title || `${activeSession.agent || 'Claude'} Chat`}
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    {activeSession.agent || 'Claude'} · {new Date(activeSession.created_at).toLocaleDateString()}
+                  </p>
                 </div>
               </div>
               <button

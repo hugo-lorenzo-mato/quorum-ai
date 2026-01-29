@@ -71,6 +71,20 @@ const useChatStore = create((set, get) => ({
     }
   },
 
+  updateSession: async (sessionId, updates) => {
+    try {
+      const updatedSession = await chatApi.updateSession(sessionId, updates);
+      const { sessions } = get();
+      set({
+        sessions: sessions.map(s => s.id === sessionId ? { ...s, ...updatedSession } : s),
+      });
+      return updatedSession;
+    } catch (error) {
+      set({ error: error.message });
+      return null;
+    }
+  },
+
   fetchMessages: async (sessionId) => {
     try {
       const messageList = await chatApi.getMessages(sessionId);

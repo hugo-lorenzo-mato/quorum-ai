@@ -42,6 +42,7 @@ type TokenInfo struct {
 // ChatSession represents a chat session.
 type ChatSession struct {
 	ID           string        `json:"id"`
+	Title        string        `json:"title,omitempty"`
 	CreatedAt    time.Time     `json:"created_at"`
 	UpdatedAt    time.Time     `json:"updated_at"`
 	Agent        string        `json:"agent"`
@@ -71,6 +72,11 @@ type CreateSessionRequest struct {
 	Model string `json:"model,omitempty"`
 }
 
+// UpdateSessionRequest is the request body for updating a chat session.
+type UpdateSessionRequest struct {
+	Title *string `json:"title,omitempty"` // Use pointer to distinguish between empty and not provided
+}
+
 // ListSessionsResponse is the response for listing chat sessions.
 type ListSessionsResponse struct {
 	Sessions []ChatSession `json:"sessions"`
@@ -79,11 +85,12 @@ type ListSessionsResponse struct {
 
 // ChatHandler handles chat-related HTTP requests.
 type ChatHandler struct {
-	mu       sync.RWMutex
-	agents   core.AgentRegistry
-	eventBus *events.EventBus
-	sessions map[string]*chatSessionState
-	store    *attachments.Store
+	mu              sync.RWMutex
+	agents          core.AgentRegistry
+	eventBus        *events.EventBus
+	sessions        map[string]*chatSessionState
+	attachmentStore *attachments.Store
+	chatStore       core.ChatStore
 }
 
 // chatSessionState holds the internal state of a chat session.
@@ -92,16 +99,78 @@ type chatSessionState struct {
 	messages    []ChatMessage
 	agent       string
 	model       string
+	title       string
 	projectRoot string // Directory where .quorum is located, for file access scoping
 }
 
 // NewChatHandler creates a new ChatHandler.
-func NewChatHandler(agents core.AgentRegistry, eventBus *events.EventBus, store *attachments.Store) *ChatHandler {
-	return &ChatHandler{
-		agents:   agents,
-		eventBus: eventBus,
-		sessions: make(map[string]*chatSessionState),
-		store:    store,
+func NewChatHandler(agents core.AgentRegistry, eventBus *events.EventBus, attachmentStore *attachments.Store, chatStore core.ChatStore) *ChatHandler {
+	h := &ChatHandler{
+		agents:          agents,
+		eventBus:        eventBus,
+		sessions:        make(map[string]*chatSessionState),
+		attachmentStore: attachmentStore,
+		chatStore:       chatStore,
+	}
+
+	// Load existing sessions from persistent store
+	if chatStore != nil {
+		h.loadPersistedSessions()
+	}
+
+	return h
+}
+
+// loadPersistedSessions loads all sessions from the persistent store.
+func (h *ChatHandler) loadPersistedSessions() {
+	ctx := context.Background()
+
+	sessions, err := h.chatStore.ListSessions(ctx)
+	if err != nil {
+		// Log error but continue - sessions will be empty
+		return
+	}
+
+	for _, sess := range sessions {
+		messages, err := h.chatStore.LoadMessages(ctx, sess.ID)
+		if err != nil {
+			continue
+		}
+
+		// Convert persisted messages to ChatMessage
+		chatMessages := make([]ChatMessage, 0, len(messages))
+		for _, msg := range messages {
+			chatMessages = append(chatMessages, ChatMessage{
+				ID:        msg.ID,
+				SessionID: msg.SessionID,
+				Role:      msg.Role,
+				Agent:     msg.Agent,
+				Content:   msg.Content,
+				Timestamp: msg.Timestamp,
+				Tokens: &TokenInfo{
+					Input:   msg.TokensIn,
+					Output:  msg.TokensOut,
+					CostUSD: msg.CostUSD,
+				},
+			})
+		}
+
+		h.sessions[sess.ID] = &chatSessionState{
+			session: ChatSession{
+				ID:           sess.ID,
+				Title:        sess.Title,
+				CreatedAt:    sess.CreatedAt,
+				UpdatedAt:    sess.UpdatedAt,
+				Agent:        sess.Agent,
+				Model:        sess.Model,
+				MessageCount: len(chatMessages),
+			},
+			messages:    chatMessages,
+			agent:       sess.Agent,
+			model:       sess.Model,
+			title:       sess.Title,
+			projectRoot: sess.ProjectRoot,
+		}
 	}
 }
 
@@ -112,6 +181,7 @@ func (h *ChatHandler) RegisterRoutes(r chi.Router) {
 		r.Post("/sessions", h.CreateSession)
 		r.Get("/sessions", h.ListSessions)
 		r.Get("/sessions/{sessionID}", h.GetSession)
+		r.Patch("/sessions/{sessionID}", h.UpdateSession)
 		r.Delete("/sessions/{sessionID}", h.DeleteSession)
 
 		// Messages
@@ -171,6 +241,22 @@ func (h *ChatHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 	}
 	h.mu.Unlock()
 
+	// Persist session to store
+	if h.chatStore != nil {
+		persistedSession := &core.ChatSessionState{
+			ID:          sessionID,
+			CreatedAt:   now,
+			UpdatedAt:   now,
+			Agent:       agent,
+			Model:       req.Model,
+			ProjectRoot: projectRoot,
+		}
+		if err := h.chatStore.SaveSession(r.Context(), persistedSession); err != nil {
+			// Log error but don't fail the request - session is already in memory
+			_ = err
+		}
+	}
+
 	// Publish event
 	if h.eventBus != nil {
 		h.eventBus.Publish(events.NewChatMessageEvent("", events.RoleSystem, "", fmt.Sprintf("Session %s created", sessionID)))
@@ -216,6 +302,60 @@ func (h *ChatHandler) GetSession(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, session)
 }
 
+// UpdateSession updates a chat session (e.g., title).
+func (h *ChatHandler) UpdateSession(w http.ResponseWriter, r *http.Request) {
+	sessionID := chi.URLParam(r, "sessionID")
+
+	var req UpdateSessionRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	h.mu.Lock()
+	state, exists := h.sessions[sessionID]
+	if !exists {
+		h.mu.Unlock()
+		writeError(w, http.StatusNotFound, "session not found")
+		return
+	}
+
+	now := time.Now()
+	updated := false
+
+	// Update title if provided
+	if req.Title != nil {
+		state.title = *req.Title
+		state.session.Title = *req.Title
+		updated = true
+	}
+
+	if updated {
+		state.session.UpdatedAt = now
+	}
+
+	// Copy session for response
+	session := state.session
+	session.MessageCount = len(state.messages)
+	h.mu.Unlock()
+
+	// Persist changes
+	if updated && h.chatStore != nil {
+		persistedSession := &core.ChatSessionState{
+			ID:          sessionID,
+			Title:       state.title,
+			CreatedAt:   state.session.CreatedAt,
+			UpdatedAt:   now,
+			Agent:       state.agent,
+			Model:       state.model,
+			ProjectRoot: state.projectRoot,
+		}
+		_ = h.chatStore.SaveSession(r.Context(), persistedSession)
+	}
+
+	writeJSON(w, http.StatusOK, session)
+}
+
 // DeleteSession deletes a chat session.
 func (h *ChatHandler) DeleteSession(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "sessionID")
@@ -232,9 +372,14 @@ func (h *ChatHandler) DeleteSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Delete from persistent store
+	if h.chatStore != nil {
+		_ = h.chatStore.DeleteSession(r.Context(), sessionID)
+	}
+
 	// Best-effort cleanup of attachments on disk.
-	if h.store != nil {
-		_ = h.store.DeleteAll(attachments.OwnerChatSession, sessionID)
+	if h.attachmentStore != nil {
+		_ = h.attachmentStore.DeleteAll(attachments.OwnerChatSession, sessionID)
 	}
 
 	w.WriteHeader(http.StatusNoContent)
@@ -306,6 +451,18 @@ func (h *ChatHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 
 	h.mu.Unlock()
 
+	// Persist user message
+	if h.chatStore != nil {
+		persistedMsg := &core.ChatMessageState{
+			ID:        userMsg.ID,
+			SessionID: sessionID,
+			Role:      userMsg.Role,
+			Content:   userMsg.Content,
+			Timestamp: userMsg.Timestamp,
+		}
+		_ = h.chatStore.SaveMessage(r.Context(), persistedMsg)
+	}
+
 	// Publish user message event
 	if h.eventBus != nil {
 		h.eventBus.Publish(events.NewChatMessageEvent("", events.RoleUser, "", req.Content))
@@ -343,6 +500,29 @@ func (h *ChatHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 	state.messages = append(state.messages, agentMsg)
 	state.session.UpdatedAt = agentMsg.Timestamp
 	h.mu.Unlock()
+
+	// Persist agent message
+	if h.chatStore != nil {
+		var tokensIn, tokensOut int
+		var costUSD float64
+		if agentMsg.Tokens != nil {
+			tokensIn = agentMsg.Tokens.Input
+			tokensOut = agentMsg.Tokens.Output
+			costUSD = agentMsg.Tokens.CostUSD
+		}
+		persistedMsg := &core.ChatMessageState{
+			ID:        agentMsg.ID,
+			SessionID: sessionID,
+			Role:      agentMsg.Role,
+			Agent:     agentMsg.Agent,
+			Content:   agentMsg.Content,
+			Timestamp: agentMsg.Timestamp,
+			TokensIn:  tokensIn,
+			TokensOut: tokensOut,
+			CostUSD:   costUSD,
+		}
+		_ = h.chatStore.SaveMessage(r.Context(), persistedMsg)
+	}
 
 	// Return agent message directly for frontend compatibility
 	// Frontend expects {id, content, timestamp} at top level
@@ -499,8 +679,22 @@ func (h *ChatHandler) SetAgent(w http.ResponseWriter, r *http.Request) {
 	}
 	state.agent = req.Agent
 	state.session.Agent = req.Agent
-	state.session.UpdatedAt = time.Now()
+	now := time.Now()
+	state.session.UpdatedAt = now
 	h.mu.Unlock()
+
+	// Persist session update
+	if h.chatStore != nil {
+		persistedSession := &core.ChatSessionState{
+			ID:          sessionID,
+			CreatedAt:   state.session.CreatedAt,
+			UpdatedAt:   now,
+			Agent:       req.Agent,
+			Model:       state.model,
+			ProjectRoot: state.projectRoot,
+		}
+		_ = h.chatStore.SaveSession(r.Context(), persistedSession)
+	}
 
 	writeJSON(w, http.StatusOK, map[string]string{
 		"agent": req.Agent,
@@ -528,8 +722,22 @@ func (h *ChatHandler) SetModel(w http.ResponseWriter, r *http.Request) {
 	}
 	state.model = req.Model
 	state.session.Model = req.Model
-	state.session.UpdatedAt = time.Now()
+	now := time.Now()
+	state.session.UpdatedAt = now
 	h.mu.Unlock()
+
+	// Persist session update
+	if h.chatStore != nil {
+		persistedSession := &core.ChatSessionState{
+			ID:          sessionID,
+			CreatedAt:   state.session.CreatedAt,
+			UpdatedAt:   now,
+			Agent:       state.agent,
+			Model:       req.Model,
+			ProjectRoot: state.projectRoot,
+		}
+		_ = h.chatStore.SaveSession(r.Context(), persistedSession)
+	}
 
 	writeJSON(w, http.StatusOK, map[string]string{
 		"model": req.Model,
@@ -643,7 +851,7 @@ func (h *ChatHandler) loadFileContent(filePath, projectRoot string) (string, err
 
 // ListAttachments lists all stored attachments for a chat session.
 func (h *ChatHandler) ListAttachments(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
+	if h.attachmentStore == nil {
 		writeError(w, http.StatusServiceUnavailable, "attachments store not available")
 		return
 	}
@@ -657,7 +865,7 @@ func (h *ChatHandler) ListAttachments(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	atts, err := h.store.List(attachments.OwnerChatSession, sessionID)
+	atts, err := h.attachmentStore.List(attachments.OwnerChatSession, sessionID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list attachments")
 		return
@@ -668,7 +876,7 @@ func (h *ChatHandler) ListAttachments(w http.ResponseWriter, r *http.Request) {
 
 // UploadAttachments uploads one or more files as chat session attachments.
 func (h *ChatHandler) UploadAttachments(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
+	if h.attachmentStore == nil {
 		writeError(w, http.StatusServiceUnavailable, "attachments store not available")
 		return
 	}
@@ -703,7 +911,7 @@ func (h *ChatHandler) UploadAttachments(w http.ResponseWriter, r *http.Request) 
 			writeError(w, http.StatusBadRequest, "failed to open uploaded file")
 			return
 		}
-		att, err := h.store.Save(attachments.OwnerChatSession, sessionID, f, fh.Filename)
+		att, err := h.attachmentStore.Save(attachments.OwnerChatSession, sessionID, f, fh.Filename)
 		_ = f.Close()
 		if err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())
@@ -717,7 +925,7 @@ func (h *ChatHandler) UploadAttachments(w http.ResponseWriter, r *http.Request) 
 
 // DownloadAttachment downloads a stored chat session attachment.
 func (h *ChatHandler) DownloadAttachment(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
+	if h.attachmentStore == nil {
 		writeError(w, http.StatusServiceUnavailable, "attachments store not available")
 		return
 	}
@@ -737,7 +945,7 @@ func (h *ChatHandler) DownloadAttachment(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	meta, absPath, err := h.store.Resolve(attachments.OwnerChatSession, sessionID, attachmentID)
+	meta, absPath, err := h.attachmentStore.Resolve(attachments.OwnerChatSession, sessionID, attachmentID)
 	if err != nil {
 		if os.IsNotExist(err) {
 			writeError(w, http.StatusNotFound, "attachment not found")
@@ -754,7 +962,7 @@ func (h *ChatHandler) DownloadAttachment(w http.ResponseWriter, r *http.Request)
 
 // DeleteAttachment deletes a stored chat session attachment.
 func (h *ChatHandler) DeleteAttachment(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
+	if h.attachmentStore == nil {
 		writeError(w, http.StatusServiceUnavailable, "attachments store not available")
 		return
 	}
@@ -774,7 +982,7 @@ func (h *ChatHandler) DeleteAttachment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.store.Delete(attachments.OwnerChatSession, sessionID, attachmentID); err != nil {
+	if err := h.attachmentStore.Delete(attachments.OwnerChatSession, sessionID, attachmentID); err != nil {
 		if os.IsNotExist(err) {
 			writeError(w, http.StatusNotFound, "attachment not found")
 			return

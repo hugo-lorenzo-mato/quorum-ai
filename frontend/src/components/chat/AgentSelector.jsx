@@ -1,10 +1,13 @@
 import { Bot, ChevronDown } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
-import { AGENTS, getAgentByValue } from '../../lib/agents';
+import { getAgents, getAgentByValue, useEnums } from '../../lib/agents';
 
 export default function AgentSelector({ value, onChange, disabled }) {
   const [isOpen, setIsOpen] = useState(false);
   const ref = useRef(null);
+
+  // Subscribe to enums updates for re-render when API data loads
+  useEnums();
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -16,6 +19,7 @@ export default function AgentSelector({ value, onChange, disabled }) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  const agents = getAgents();
   const selected = getAgentByValue(value);
 
   return (
@@ -34,7 +38,7 @@ export default function AgentSelector({ value, onChange, disabled }) {
       {isOpen && (
         <div className="absolute bottom-full left-0 mb-1 z-50 min-w-[180px] rounded-lg border border-border bg-popover shadow-lg animate-fade-in">
           <div className="p-1">
-            {AGENTS.map((agent) => (
+            {agents.map((agent) => (
               <button
                 key={agent.value}
                 type="button"

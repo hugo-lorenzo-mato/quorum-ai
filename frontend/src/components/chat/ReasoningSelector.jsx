@@ -1,10 +1,13 @@
 import { Brain, ChevronDown } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
-import { REASONING_LEVELS, getReasoningLevelByValue, supportsReasoning } from '../../lib/agents';
+import { getReasoningLevels, getReasoningLevelByValue, supportsReasoning, useEnums } from '../../lib/agents';
 
 export default function ReasoningSelector({ value, onChange, agent, disabled }) {
   const [isOpen, setIsOpen] = useState(false);
   const ref = useRef(null);
+
+  // Subscribe to enums updates for re-render when API data loads
+  useEnums();
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -21,6 +24,7 @@ export default function ReasoningSelector({ value, onChange, agent, disabled }) 
     return null;
   }
 
+  const levels = getReasoningLevels();
   const selected = getReasoningLevelByValue(value);
 
   return (
@@ -39,7 +43,7 @@ export default function ReasoningSelector({ value, onChange, agent, disabled }) 
       {isOpen && (
         <div className="absolute bottom-full left-0 mb-1 z-50 min-w-[180px] rounded-lg border border-border bg-popover shadow-lg animate-fade-in">
           <div className="p-1">
-            {REASONING_LEVELS.map((level) => (
+            {levels.map((level) => (
               <button
                 key={level.value}
                 type="button"

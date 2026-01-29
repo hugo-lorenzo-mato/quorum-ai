@@ -67,9 +67,9 @@ func IsValidReasoningEffort(effort string) bool {
 }
 
 // AgentsWithReasoning lists agents that support extended thinking/reasoning effort.
+// Only Codex CLI exposes reasoning effort configuration via -c model_reasoning_effort="level"
 var AgentsWithReasoning = []string{
 	AgentCodex,
-	AgentCopilot,
 }
 
 // SupportsReasoning checks if an agent supports reasoning effort configuration.
@@ -82,11 +82,143 @@ func SupportsReasoning(agent string) bool {
 	return false
 }
 
+// CodexModelMaxReasoning maps Codex models to their maximum supported reasoning effort.
+// Models not in this map default to "high".
+var CodexModelMaxReasoning = map[string]string{
+	// These models support xhigh (maximum)
+	"gpt-5.2-codex":     ReasoningXHigh,
+	"gpt-5.2":           ReasoningXHigh,
+	"gpt-5.1-codex-max": ReasoningXHigh,
+	// These models support up to high
+	"gpt-5.1-codex": ReasoningHigh,
+	"gpt-5.1":       ReasoningHigh,
+	"gpt-5-codex":   ReasoningHigh,
+	"gpt-5":         ReasoningHigh,
+	// Mini models only support up to medium
+	"gpt-5.1-codex-mini": ReasoningMedium,
+}
+
+// GetMaxReasoningEffort returns the maximum reasoning effort supported by a Codex model.
+// Returns "high" as default if model is not found.
+func GetMaxReasoningEffort(model string) string {
+	if max, ok := CodexModelMaxReasoning[model]; ok {
+		return max
+	}
+	return ReasoningHigh
+}
+
 // Task/role identifiers (not workflow phases, but config keys for models/reasoning)
 const (
 	TaskModerate   = "moderate"
 	TaskSynthesize = "synthesize"
 )
+
+// =============================================================================
+// Model Configuration (Centralized Source of Truth)
+// =============================================================================
+
+// AgentModels maps each agent to its supported models.
+// This is the single source of truth for model availability.
+var AgentModels = map[string][]string{
+	AgentClaude: {
+		// Claude 4.5 family (latest)
+		"claude-opus-4-5-20251101",   // Most powerful model
+		"claude-sonnet-4-5-20250929", // Best balance of intelligence, speed, and cost
+		"claude-haiku-4-5-20251001",  // Fastest model with near-frontier performance
+		// Claude 4 family
+		"claude-opus-4-20250514",
+		"claude-opus-4-1-20250805",
+		"claude-sonnet-4-20250514",
+		// Aliases (shortcuts accepted by claude CLI)
+		"opus",   // Maps to latest opus model
+		"sonnet", // Maps to latest sonnet model
+		"haiku",  // Maps to latest haiku model
+	},
+	AgentGemini: {
+		// Gemini 2.5 family (stable, recommended)
+		"gemini-2.5-pro",        // Most powerful, best for coding and agentic tasks
+		"gemini-2.5-flash",      // Best price/performance balance with thinking
+		"gemini-2.5-flash-lite", // Fast, low-cost, 1M context
+		// Gemini 2.0 family (retiring March 2026)
+		"gemini-2.0-flash",
+		"gemini-2.0-flash-lite",
+		// Gemini 3 preview models
+		"gemini-3-pro-preview",
+		"gemini-3-flash-preview",
+	},
+	AgentCodex: {
+		// GPT-5.2 family (latest, recommended) - supports xhigh reasoning
+		"gpt-5.2-codex", // Most advanced agentic coding model (default for Codex CLI)
+		"gpt-5.2",       // Base GPT-5.2 model
+		// GPT-5.1 family
+		"gpt-5.1-codex-max",  // Maximum capability for extended tasks (xhigh reasoning)
+		"gpt-5.1-codex",      // Code-optimized GPT-5.1 (max: high reasoning)
+		"gpt-5.1-codex-mini", // Cost-effective codex (max: medium reasoning)
+		"gpt-5.1",            // Base GPT-5.1 model (max: high reasoning)
+		// GPT-5 family
+		"gpt-5-codex", // GPT-5 codex version (max: high reasoning)
+		"gpt-5",       // Base GPT-5 model (max: high reasoning)
+	},
+	AgentCopilot: {
+		// Anthropic Claude models (via Copilot) - from copilot --help
+		"claude-sonnet-4.5", // Best balance, strong reasoning (default)
+		"claude-opus-4.5",   // Most powerful Claude
+		"claude-haiku-4.5",  // Fast, efficient
+		"claude-sonnet-4",   // Previous gen sonnet
+		// OpenAI GPT models (via Copilot) - from copilot --help
+		"gpt-5.2-codex",      // Advanced agentic coding
+		"gpt-5.2",            // Latest GPT-5.2
+		"gpt-5.1-codex-max",  // Maximum capability codex
+		"gpt-5.1-codex",      // Code-optimized GPT-5.1
+		"gpt-5.1-codex-mini", // Small codex
+		"gpt-5.1",            // Base GPT-5.1
+		"gpt-5",              // Base GPT-5
+		"gpt-5-mini",         // Small, fast GPT-5
+		"gpt-4.1",            // Previous generation
+		// Google Gemini models (via Copilot) - from copilot --help
+		"gemini-3-pro-preview", // Gemini 3 Pro preview
+	},
+	AgentOpenCode: {
+		// Local Ollama models
+		"qwen2.5-coder:32b", // Best local coding model
+		"qwen3-coder:30b",   // Latest Qwen coder
+		"deepseek-r1:32b",   // Reasoning model
+		"codestral:22b",     // Mistral code model
+		"gpt-oss:20b",       // Open source GPT
+	},
+}
+
+// AgentDefaultModels maps each agent to its default model.
+var AgentDefaultModels = map[string]string{
+	AgentClaude:   "sonnet",
+	AgentGemini:   "gemini-2.5-flash",
+	AgentCodex:    "gpt-5.2-codex",
+	AgentCopilot:  "claude-sonnet-4.5",
+	AgentOpenCode: "qwen2.5-coder:32b",
+}
+
+// GetSupportedModels returns the list of supported models for an agent.
+// Returns nil if the agent is not recognized.
+func GetSupportedModels(agent string) []string {
+	return AgentModels[agent]
+}
+
+// GetDefaultModel returns the default model for an agent.
+// Returns empty string if the agent is not recognized.
+func GetDefaultModel(agent string) string {
+	return AgentDefaultModels[agent]
+}
+
+// IsValidModel checks if a model is valid for a given agent.
+func IsValidModel(agent, model string) bool {
+	models := AgentModels[agent]
+	for _, m := range models {
+		if m == model {
+			return true
+		}
+	}
+	return false
+}
 
 // Phases is the ordered list of workflow phases (uses Phase type from phase.go).
 var Phases = []string{

@@ -127,6 +127,7 @@ func (s *Server) handleListWorkflows(w http.ResponseWriter, r *http.Request) {
 	for _, wf := range workflows {
 		response = append(response, WorkflowResponse{
 			ID:           string(wf.WorkflowID),
+			Title:        wf.Title,
 			Status:       string(wf.Status),
 			CurrentPhase: string(wf.CurrentPhase),
 			Prompt:       wf.Prompt,

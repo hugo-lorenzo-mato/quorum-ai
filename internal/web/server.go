@@ -29,6 +29,7 @@ type Server struct {
 	eventBus         *events.EventBus
 	agentRegistry    core.AgentRegistry
 	stateManager     core.StateManager
+	chatStore        core.ChatStore
 	resourceMonitor  *diagnostics.ResourceMonitor
 	configLoader     *config.Loader             // for workflow execution configuration
 	workflowExecutor *api.WorkflowExecutor      // for centralized workflow execution
@@ -116,6 +117,13 @@ func WithHeartbeatManager(hb *workflow.HeartbeatManager) ServerOption {
 	}
 }
 
+// WithChatStore sets the chat store for chat session persistence.
+func WithChatStore(store core.ChatStore) ServerOption {
+	return func(s *Server) {
+		s.chatStore = store
+	}
+}
+
 // New creates a new Server instance with the given configuration.
 func New(cfg Config, logger *slog.Logger, opts ...ServerOption) *Server {
 	if logger == nil {
@@ -146,6 +154,9 @@ func New(cfg Config, logger *slog.Logger, opts ...ServerOption) *Server {
 		}
 		if s.heartbeatManager != nil {
 			apiOpts = append(apiOpts, api.WithHeartbeatManager(s.heartbeatManager))
+		}
+		if s.chatStore != nil {
+			apiOpts = append(apiOpts, api.WithChatStore(s.chatStore))
 		}
 		s.apiServer = api.NewServer(s.stateManager, s.eventBus, apiOpts...)
 		if s.agentRegistry != nil && s.stateManager != nil {

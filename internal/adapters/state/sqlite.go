@@ -647,7 +647,7 @@ func (m *SQLiteStateManager) ListWorkflows(ctx context.Context) ([]core.Workflow
 	_ = m.readDB.QueryRowContext(ctx, "SELECT workflow_id FROM active_workflow WHERE id = 1").Scan(&activeID)
 
 	rows, err := m.readDB.QueryContext(ctx, `
-		SELECT id, status, current_phase, prompt, created_at, updated_at
+		SELECT id, title, status, current_phase, prompt, created_at, updated_at
 		FROM workflows
 		ORDER BY updated_at DESC
 	`)
@@ -659,9 +659,13 @@ func (m *SQLiteStateManager) ListWorkflows(ctx context.Context) ([]core.Workflow
 	var summaries []core.WorkflowSummary
 	for rows.Next() {
 		var s core.WorkflowSummary
-		err := rows.Scan(&s.WorkflowID, &s.Status, &s.CurrentPhase, &s.Prompt, &s.CreatedAt, &s.UpdatedAt)
+		var title sql.NullString
+		err := rows.Scan(&s.WorkflowID, &title, &s.Status, &s.CurrentPhase, &s.Prompt, &s.CreatedAt, &s.UpdatedAt)
 		if err != nil {
 			return nil, fmt.Errorf("scanning workflow summary: %w", err)
+		}
+		if title.Valid {
+			s.Title = title.String
 		}
 
 		// Truncate prompt for display

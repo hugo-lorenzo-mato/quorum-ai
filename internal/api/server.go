@@ -28,6 +28,7 @@ import (
 type Server struct {
 	router          chi.Router
 	stateManager    core.StateManager
+	chatStore       core.ChatStore
 	eventBus        *events.EventBus
 	agentRegistry   core.AgentRegistry
 	logger          *slog.Logger
@@ -100,6 +101,13 @@ func WithHeartbeatManager(hb *workflow.HeartbeatManager) ServerOption {
 	}
 }
 
+// WithChatStore sets the chat store for chat session persistence.
+func WithChatStore(store core.ChatStore) ServerOption {
+	return func(s *Server) {
+		s.chatStore = store
+	}
+}
+
 // NewServer creates a new API server.
 func NewServer(stateManager core.StateManager, eventBus *events.EventBus, opts ...ServerOption) *Server {
 	wd, _ := os.Getwd() // Best effort default
@@ -117,8 +125,8 @@ func NewServer(stateManager core.StateManager, eventBus *events.EventBus, opts .
 
 	s.attachments = attachments.NewStore(s.root)
 
-	// Create chat handler with agent registry (may be nil)
-	s.chatHandler = webadapters.NewChatHandler(s.agentRegistry, eventBus, s.attachments)
+	// Create chat handler with agent registry and chat store (may be nil)
+	s.chatHandler = webadapters.NewChatHandler(s.agentRegistry, eventBus, s.attachments, s.chatStore)
 
 	s.router = s.setupRouter()
 	return s
@@ -223,6 +231,7 @@ func (s *Server) setupRouter() chi.Router {
 			r.Post("/sessions", s.chatHandler.CreateSession)
 			r.Get("/sessions", s.chatHandler.ListSessions)
 			r.Get("/sessions/{sessionID}", s.chatHandler.GetSession)
+			r.Patch("/sessions/{sessionID}", s.chatHandler.UpdateSession)
 			r.Delete("/sessions/{sessionID}", s.chatHandler.DeleteSession)
 			r.Get("/sessions/{sessionID}/messages", s.chatHandler.GetMessages)
 			r.Post("/sessions/{sessionID}/messages", s.chatHandler.SendMessage)

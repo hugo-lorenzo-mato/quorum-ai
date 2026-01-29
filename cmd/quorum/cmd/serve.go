@@ -6,12 +6,14 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/adapters/chat"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/adapters/cli"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/adapters/state"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/config"
@@ -107,6 +109,25 @@ func runServe(_ *cobra.Command, _ []string) error {
 		}
 	}
 
+	// Create chat store for chat session persistence (uses same backend as state)
+	var chatStore core.ChatStore
+	if quorumCfg != nil {
+		backend := quorumCfg.State.EffectiveBackend()
+		var chatPath string
+		if backend == "sqlite" {
+			chatPath = filepath.Join(".quorum", "chat.db")
+		} else {
+			chatPath = filepath.Join(".quorum", "chat")
+		}
+		cs, err := chat.NewChatStore(backend, chatPath)
+		if err != nil {
+			logger.Warn("failed to create chat store", slog.String("error", err.Error()))
+		} else {
+			chatStore = cs
+			logger.Info("chat store initialized", slog.String("backend", backend), slog.String("path", chatPath))
+		}
+	}
+
 	// Create server configuration
 	cfg := web.DefaultConfig()
 	cfg.Host = serveHost
@@ -118,6 +139,15 @@ func runServe(_ *cobra.Command, _ []string) error {
 		defer func() {
 			if closeErr := state.CloseStateManager(stateManager); closeErr != nil {
 				logger.Warn("failed to close state manager", slog.String("error", closeErr.Error()))
+			}
+		}()
+	}
+
+	// Ensure chat store is closed on exit
+	if chatStore != nil {
+		defer func() {
+			if closeErr := chat.CloseChatStore(chatStore); closeErr != nil {
+				logger.Warn("failed to close chat store", slog.String("error", closeErr.Error()))
 			}
 		}()
 	}
@@ -201,6 +231,9 @@ func runServe(_ *cobra.Command, _ []string) error {
 	}
 	if stateManager != nil {
 		serverOpts = append(serverOpts, web.WithStateManager(stateManager))
+	}
+	if chatStore != nil {
+		serverOpts = append(serverOpts, web.WithChatStore(chatStore))
 	}
 	if quorumCfg != nil {
 		serverOpts = append(serverOpts, web.WithConfigLoader(loader))

@@ -1,10 +1,13 @@
 import { Cpu, ChevronDown } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
-import { getModelsForAgent, getModelByValue } from '../../lib/agents';
+import { getModelsForAgent, getModelByValue, useEnums } from '../../lib/agents';
 
 export default function ModelSelector({ value, onChange, agent, disabled }) {
   const [isOpen, setIsOpen] = useState(false);
   const ref = useRef(null);
+
+  // Subscribe to enums updates for re-render when API data loads
+  useEnums();
 
   useEffect(() => {
     const handleClickOutside = (event) => {

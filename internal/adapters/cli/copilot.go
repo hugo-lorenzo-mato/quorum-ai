@@ -46,26 +46,8 @@ func NewCopilotAdapter(cfg AgentConfig) (core.Agent, error) {
 			SupportsTools:     true,
 			MaxContextTokens:  200000,
 			MaxOutputTokens:   16384,
-			SupportedModels: []string{
-				// Anthropic Claude models (via Copilot)
-				"claude-sonnet-4.5", // Best balance, strong reasoning (default)
-				"claude-haiku-4.5",  // Fast, efficient
-				"claude-opus-4.5",   // Most powerful Claude
-				"claude-sonnet-4",   // Previous gen sonnet
-				// OpenAI GPT models (via Copilot)
-				"gpt-5.2-codex",     // Advanced agentic coding
-				"gpt-5.2",           // Latest GPT-5.2
-				"gpt-5.1-codex-max", // Maximum capability codex
-				"gpt-5.1-codex",     // Code-optimized GPT-5.1
-				"gpt-5.1",           // Base GPT-5.1
-				"gpt-5",             // Base GPT-5
-				"gpt-5.1-codex-mini", // Small, cost-effective
-				"gpt-5-mini",        // Small, fast GPT-5
-				"gpt-4.1",           // Previous generation
-				// Google Gemini models (via Copilot)
-				"gemini-3-pro-preview", // Gemini 3 preview
-			},
-			DefaultModel: "claude-sonnet-4.5",
+			SupportedModels:   core.GetSupportedModels(core.AgentCopilot),
+			DefaultModel:      core.GetDefaultModel(core.AgentCopilot),
 		},
 	}
 

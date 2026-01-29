@@ -205,6 +205,7 @@ type StateManager interface {
 // WorkflowSummary provides a lightweight summary of a workflow for listing.
 type WorkflowSummary struct {
 	WorkflowID   WorkflowID     `json:"workflow_id"`
+	Title        string         `json:"title,omitempty"`
 	Status       WorkflowStatus `json:"status"`
 	CurrentPhase Phase          `json:"current_phase"`
 	Prompt       string         `json:"prompt"` // Truncated for display
@@ -589,4 +590,55 @@ func (cs *CheckStatus) IsSuccess() bool {
 // IsPending returns true if any checks are still running.
 func (cs *CheckStatus) IsPending() bool {
 	return cs.Pending > 0 || cs.State == "pending"
+}
+
+// =============================================================================
+// ChatStore Port (Chat Session Persistence)
+// =============================================================================
+
+// ChatStore defines the contract for chat session persistence.
+// Implementations can use JSON files or SQLite for storage.
+type ChatStore interface {
+	// SaveSession persists a chat session.
+	SaveSession(ctx context.Context, session *ChatSessionState) error
+
+	// LoadSession retrieves a chat session by ID.
+	// Returns nil and no error if session doesn't exist.
+	LoadSession(ctx context.Context, id string) (*ChatSessionState, error)
+
+	// ListSessions returns all chat sessions (without messages for efficiency).
+	ListSessions(ctx context.Context) ([]*ChatSessionState, error)
+
+	// DeleteSession removes a chat session and all its messages.
+	DeleteSession(ctx context.Context, id string) error
+
+	// SaveMessage adds a message to a session.
+	SaveMessage(ctx context.Context, msg *ChatMessageState) error
+
+	// LoadMessages retrieves all messages for a session.
+	LoadMessages(ctx context.Context, sessionID string) ([]*ChatMessageState, error)
+}
+
+// ChatSessionState represents the persisted state of a chat session.
+type ChatSessionState struct {
+	ID          string    `json:"id"`
+	Title       string    `json:"title,omitempty"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+	Agent       string    `json:"agent"`
+	Model       string    `json:"model,omitempty"`
+	ProjectRoot string    `json:"project_root,omitempty"`
+}
+
+// ChatMessageState represents a persisted chat message.
+type ChatMessageState struct {
+	ID        string    `json:"id"`
+	SessionID string    `json:"session_id"`
+	Role      string    `json:"role"` // "user", "agent", "system"
+	Agent     string    `json:"agent,omitempty"`
+	Content   string    `json:"content"`
+	Timestamp time.Time `json:"timestamp"`
+	TokensIn  int       `json:"tokens_in,omitempty"`
+	TokensOut int       `json:"tokens_out,omitempty"`
+	CostUSD   float64   `json:"cost_usd,omitempty"`
 }
