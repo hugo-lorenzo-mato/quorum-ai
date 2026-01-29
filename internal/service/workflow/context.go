@@ -74,6 +74,10 @@ type Context struct {
 	ModeEnforcer ModeEnforcerInterface
 	Control      *control.ControlPlane
 	Report       *report.WorkflowReportWriter // Writes analysis/plan/execute reports to markdown
+
+	// Workflow-level Git isolation
+	WorkflowWorktrees core.WorkflowWorktreeManager // Workflow-scoped worktree manager
+	GitIsolation      *GitIsolationConfig          // Git isolation configuration
 }
 
 // ModeEnforcerInterface provides mode enforcement capabilities.
@@ -183,6 +187,17 @@ type FinalizationConfig struct {
 	MergeStrategy string
 	// Remote is the git remote name (default: origin).
 	Remote string
+}
+
+// GitIsolationConfig configures workflow-level Git isolation.
+type GitIsolationConfig struct {
+	// Enabled activates workflow-level Git isolation.
+	// When enabled, each workflow gets its own branch and tasks are
+	// executed in worktrees branched from the workflow branch.
+	Enabled bool
+	// MergeStrategy controls how task branches are merged to the workflow branch.
+	// Options: "sequential" (default), "parallel".
+	MergeStrategy string
 }
 
 // PromptRenderer renders prompts for different phases.
@@ -387,6 +402,21 @@ func (c *Context) RLock() {
 // RUnlock releases the read lock on the context state.
 func (c *Context) RUnlock() {
 	c.mu.RUnlock()
+}
+
+// UseWorkflowIsolation returns true if workflow-level Git isolation is enabled.
+// This requires GitIsolation to be configured with Enabled=true, WorkflowWorktrees
+// to be set, and a WorkflowBranch to be established in the workflow state.
+func (c *Context) UseWorkflowIsolation() bool {
+	if c.GitIsolation == nil || !c.GitIsolation.Enabled {
+		return false
+	}
+	if c.WorkflowWorktrees == nil {
+		return false
+	}
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.State != nil && c.State.WorkflowBranch != ""
 }
 
 // UpdateMetrics safely updates workflow metrics.

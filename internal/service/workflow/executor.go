@@ -220,8 +220,9 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 		return e.completeDryRun(wctx, taskState)
 	}
 
-	workDir, worktreeCreated := e.setupWorktree(ctx, wctx, task, taskState, useWorktrees)
-	defer e.cleanupWorktree(ctx, wctx, task, worktreeCreated)
+	// Setup worktree (workflow-scoped if isolation enabled, otherwise legacy)
+	workDir, worktreeCreated := e.setupWorkflowScopedWorktree(ctx, wctx, task, taskState, useWorktrees)
+	defer e.cleanupWorkflowScopedWorktree(ctx, wctx, task, worktreeCreated)
 
 	fail := func(err error) error {
 		e.setTaskFailed(wctx, taskState, err)
@@ -665,6 +666,22 @@ func (e *Executor) handleExecutionSuccessValidated(ctx context.Context, wctx *Co
 		}
 	}
 
+	// Merge task to workflow branch if using workflow isolation
+	// This happens after finalization so that the task's commits are merged
+	if wctx.UseWorkflowIsolation() {
+		if err := e.mergeTaskToWorkflow(ctx, wctx, task); err != nil {
+			// Log but don't fail the task - merge can be retried
+			wctx.Logger.Warn("task completed but merge failed",
+				"task_id", task.ID,
+				"error", err,
+			)
+			if wctx.Output != nil {
+				wctx.Output.Log("warn", "executor", fmt.Sprintf("Task %s completed but merge to workflow branch failed: %s", task.Name, err.Error()))
+			}
+			// MergePending is already set by mergeTaskToWorkflow
+		}
+	}
+
 	if err := wctx.Checkpoint.TaskCheckpoint(wctx.State, task, true); err != nil {
 		wctx.Logger.Warn("failed to create task complete checkpoint", "error", err)
 	}
@@ -801,6 +818,138 @@ func (e *Executor) cleanupWorktree(ctx context.Context, wctx *Context, task *cor
 	} else {
 		wctx.Logger.Info("cleaned up worktree", "task_id", task.ID)
 	}
+}
+
+// =============================================================================
+// Workflow-Scoped Worktree Methods
+// =============================================================================
+
+// setupWorkflowScopedWorktree creates a worktree for task isolation.
+// If workflow isolation is enabled, it uses the WorkflowWorktreeManager to create
+// a task worktree within the workflow namespace. Otherwise, falls back to legacy behavior.
+func (e *Executor) setupWorkflowScopedWorktree(ctx context.Context, wctx *Context, task *core.Task, taskState *core.TaskState, useWorktrees bool) (workDir string, created bool) {
+	if !useWorktrees {
+		return "", false
+	}
+
+	// Check if we should use workflow isolation
+	if wctx.UseWorkflowIsolation() {
+		return e.setupWorktreeWithIsolation(ctx, wctx, task, taskState)
+	}
+
+	// Fall back to legacy worktree behavior
+	return e.setupWorktree(ctx, wctx, task, taskState, true)
+}
+
+// setupWorktreeWithIsolation creates a task worktree using WorkflowWorktreeManager.
+// The worktree is created within the workflow namespace, branching from the workflow branch.
+func (e *Executor) setupWorktreeWithIsolation(ctx context.Context, wctx *Context, task *core.Task, taskState *core.TaskState) (workDir string, created bool) {
+	wctx.RLock()
+	workflowID := string(wctx.State.WorkflowID)
+	wctx.RUnlock()
+
+	wtInfo, err := wctx.WorkflowWorktrees.CreateTaskWorktree(ctx, workflowID, task)
+	if err != nil {
+		wctx.Logger.Warn("failed to create workflow-scoped worktree, falling back to non-isolated execution",
+			"workflow_id", workflowID,
+			"task_id", task.ID,
+			"error", err,
+		)
+		// Fall back to non-isolated execution
+		return "", false
+	}
+
+	wctx.Lock()
+	taskState.WorktreePath = wtInfo.Path
+	taskState.Branch = wtInfo.Branch
+	wctx.Unlock()
+
+	wctx.Logger.Info("created workflow-scoped worktree",
+		"workflow_id", workflowID,
+		"task_id", task.ID,
+		"path", wtInfo.Path,
+		"branch", wtInfo.Branch,
+	)
+
+	return wtInfo.Path, true
+}
+
+// cleanupWorkflowScopedWorktree cleans up the task worktree after execution.
+// If workflow isolation is enabled, uses WorkflowWorktreeManager.
+// The branch is NOT removed here as it may be needed for merge later.
+func (e *Executor) cleanupWorkflowScopedWorktree(ctx context.Context, wctx *Context, task *core.Task, worktreeCreated bool) {
+	if !worktreeCreated {
+		return
+	}
+
+	if wctx.UseWorkflowIsolation() {
+		wctx.RLock()
+		workflowID := string(wctx.State.WorkflowID)
+		wctx.RUnlock()
+
+		// Don't remove the branch - it will be merged later
+		if err := wctx.WorkflowWorktrees.RemoveTaskWorktree(ctx, workflowID, task.ID, false); err != nil {
+			wctx.Logger.Warn("failed to remove workflow-scoped worktree",
+				"workflow_id", workflowID,
+				"task_id", task.ID,
+				"error", err,
+			)
+		} else {
+			wctx.Logger.Info("removed workflow-scoped worktree",
+				"workflow_id", workflowID,
+				"task_id", task.ID,
+			)
+		}
+		return
+	}
+
+	// Fall back to legacy cleanup
+	e.cleanupWorktree(ctx, wctx, task, true)
+}
+
+// mergeTaskToWorkflow merges the task branch to the workflow branch after completion.
+// This integrates task changes into the workflow branch for subsequent tasks.
+func (e *Executor) mergeTaskToWorkflow(ctx context.Context, wctx *Context, task *core.Task) error {
+	if !wctx.UseWorkflowIsolation() {
+		return nil // No merge needed without isolation
+	}
+
+	wctx.RLock()
+	workflowID := string(wctx.State.WorkflowID)
+	wctx.RUnlock()
+
+	strategy := wctx.GitIsolation.MergeStrategy
+	if strategy == "" {
+		strategy = "sequential"
+	}
+
+	wctx.Logger.Info("merging task to workflow branch",
+		"workflow_id", workflowID,
+		"task_id", task.ID,
+		"strategy", strategy,
+	)
+
+	if err := wctx.WorkflowWorktrees.MergeTaskToWorkflow(ctx, workflowID, task.ID, strategy); err != nil {
+		// Update task state with merge failure info
+		wctx.Lock()
+		if taskState, ok := wctx.State.Tasks[task.ID]; ok {
+			taskState.Resumable = true
+			taskState.MergePending = true
+			if taskState.Error == "" {
+				taskState.Error = fmt.Sprintf("merge failed: %v", err)
+			}
+		}
+		wctx.Unlock()
+
+		return fmt.Errorf("merging task %s to workflow: %w", task.ID, err)
+	}
+
+	wctx.Logger.Info("task merged to workflow branch",
+		"workflow_id", workflowID,
+		"task_id", task.ID,
+	)
+
+	return nil
 }
 
 // executeTaskSafe wraps executeTask with panic recovery.
