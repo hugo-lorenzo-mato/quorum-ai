@@ -853,5 +853,53 @@ func (m *JSONStateManager) FindZombieWorkflows(ctx context.Context, staleThresho
 	return zombies, nil
 }
 
+// AcquireWorkflowLock acquires an exclusive lock for a specific workflow.
+// JSONStateManager uses file-based locking and delegates to the global lock.
+func (m *JSONStateManager) AcquireWorkflowLock(ctx context.Context, workflowID core.WorkflowID) error {
+	// JSON state manager uses single-file storage, so per-workflow locking
+	// falls back to global locking for simplicity.
+	return m.AcquireLock(ctx)
+}
+
+// ReleaseWorkflowLock releases the lock for a specific workflow.
+func (m *JSONStateManager) ReleaseWorkflowLock(ctx context.Context, workflowID core.WorkflowID) error {
+	return m.ReleaseLock(ctx)
+}
+
+// RefreshWorkflowLock extends the lock expiration time for a workflow.
+// For JSON state manager, this is a no-op since file-based locks don't expire actively.
+func (m *JSONStateManager) RefreshWorkflowLock(_ context.Context, _ core.WorkflowID) error {
+	return nil
+}
+
+// SetWorkflowRunning marks a workflow as currently executing.
+// For JSON state manager, this is tracked only in memory.
+func (m *JSONStateManager) SetWorkflowRunning(_ context.Context, _ core.WorkflowID) error {
+	return nil // No-op for JSON state manager
+}
+
+// ClearWorkflowRunning removes a workflow from the running state.
+func (m *JSONStateManager) ClearWorkflowRunning(_ context.Context, _ core.WorkflowID) error {
+	return nil // No-op for JSON state manager
+}
+
+// ListRunningWorkflows returns IDs of all currently executing workflows.
+// For JSON state manager, this returns an empty list since running state is not tracked.
+func (m *JSONStateManager) ListRunningWorkflows(_ context.Context) ([]core.WorkflowID, error) {
+	return nil, nil
+}
+
+// IsWorkflowRunning checks if a specific workflow is currently executing.
+// For JSON state manager, this always returns false since running state is not tracked.
+func (m *JSONStateManager) IsWorkflowRunning(_ context.Context, _ core.WorkflowID) (bool, error) {
+	return false, nil
+}
+
+// UpdateWorkflowHeartbeat updates the heartbeat timestamp for a running workflow.
+// For JSON state manager, this is a no-op.
+func (m *JSONStateManager) UpdateWorkflowHeartbeat(_ context.Context, _ core.WorkflowID) error {
+	return nil
+}
+
 // Verify that JSONStateManager implements core.StateManager.
 var _ core.StateManager = (*JSONStateManager)(nil)

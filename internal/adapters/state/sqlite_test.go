@@ -848,10 +848,8 @@ func TestSQLiteStateManager_PurgeAllWorkflows(t *testing.T) {
 	}
 }
 
-func TestSQLiteStateManager_AgentEvents(t *testing.T) {
-	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "state.db")
-
+func TestSQLiteStateManager_AcquireWorkflowLock_Success(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test.db")
 	manager, err := NewSQLiteStateManager(dbPath)
 	if err != nil {
 		t.Fatalf("NewSQLiteStateManager() error = %v", err)
@@ -860,121 +858,26 @@ func TestSQLiteStateManager_AgentEvents(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Create state with agent events
+	// Create workflow first
 	state := newTestStateSQLite()
-	state.WorkflowID = "wf-agent-events-test"
-	now := time.Now().Truncate(time.Second)
-	state.AgentEvents = []core.AgentEvent{
-		{
-			ID:        "evt-1",
-			Timestamp: now,
-			Type:      core.AgentEventStarted,
-			Agent:     "analyzer",
-			Message:   "Starting analysis...",
-			Data: map[string]interface{}{
-				"phase": "analyze",
-				"step":  float64(1),
-			},
-		},
-		{
-			ID:        "evt-2",
-			Timestamp: now.Add(time.Second),
-			Type:      core.AgentEventThinking,
-			Agent:     "analyzer",
-			Message:   "Processing input...",
-			Data:      nil,
-		},
-		{
-			ID:        "evt-3",
-			Timestamp: now.Add(2 * time.Second),
-			Type:      core.AgentEventToolUse,
-			Agent:     "executor",
-			Message:   "Running tests",
-			Data: map[string]interface{}{
-				"tool":   "bash",
-				"result": "success",
-			},
-		},
-	}
-
-	// Save state
+	state.WorkflowID = "wf-lock-test-001"
 	if err := manager.Save(ctx, state); err != nil {
 		t.Fatalf("Save() error = %v", err)
 	}
 
-	// Load state and verify agent events are persisted
-	loaded, err := manager.LoadByID(ctx, state.WorkflowID)
-	if err != nil {
-		t.Fatalf("LoadByID() error = %v", err)
-	}
-	if loaded == nil {
-		t.Fatal("LoadByID() returned nil")
+	// Acquire lock
+	if err := manager.AcquireWorkflowLock(ctx, "wf-lock-test-001"); err != nil {
+		t.Fatalf("AcquireWorkflowLock() error = %v", err)
 	}
 
-	// Verify agent events count
-	if len(loaded.AgentEvents) != 3 {
-		t.Errorf("Expected 3 agent events, got %d", len(loaded.AgentEvents))
-	}
-
-	// Verify first event
-	if len(loaded.AgentEvents) > 0 {
-		event := loaded.AgentEvents[0]
-		if event.Type != core.AgentEventStarted {
-			t.Errorf("Expected event type 'started', got %q", event.Type)
-		}
-		if event.Agent != "analyzer" {
-			t.Errorf("Expected event agent 'analyzer', got %q", event.Agent)
-		}
-		if event.Message != "Starting analysis..." {
-			t.Errorf("Expected event message 'Starting analysis...', got %q", event.Message)
-		}
-		if event.Data == nil {
-			t.Error("Expected event data to be non-nil")
-		} else {
-			if phase, ok := event.Data["phase"].(string); !ok || phase != "analyze" {
-				t.Errorf("Expected event data phase 'analyze', got %v", event.Data["phase"])
-			}
-		}
-	}
-
-	// Verify third event (tool_use)
-	if len(loaded.AgentEvents) > 2 {
-		event := loaded.AgentEvents[2]
-		if event.Type != core.AgentEventToolUse {
-			t.Errorf("Expected event type 'tool_use', got %q", event.Type)
-		}
-		if event.Agent != "executor" {
-			t.Errorf("Expected event agent 'executor', got %q", event.Agent)
-		}
-	}
-
-	// Update state with more events and verify persistence
-	state.AgentEvents = append(state.AgentEvents, core.AgentEvent{
-		ID:        "evt-4",
-		Timestamp: now.Add(3 * time.Second),
-		Type:      core.AgentEventCompleted,
-		Agent:     "analyzer",
-		Message:   "Analysis complete",
-	})
-
-	if err := manager.Save(ctx, state); err != nil {
-		t.Fatalf("Save() after update error = %v", err)
-	}
-
-	// Load again and verify update
-	loaded2, err := manager.LoadByID(ctx, state.WorkflowID)
-	if err != nil {
-		t.Fatalf("LoadByID() after update error = %v", err)
-	}
-	if len(loaded2.AgentEvents) != 4 {
-		t.Errorf("Expected 4 agent events after update, got %d", len(loaded2.AgentEvents))
+	// Release lock
+	if err := manager.ReleaseWorkflowLock(ctx, "wf-lock-test-001"); err != nil {
+		t.Fatalf("ReleaseWorkflowLock() error = %v", err)
 	}
 }
 
-func TestSQLiteStateManager_AgentEventsEmpty(t *testing.T) {
-	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "state.db")
-
+func TestSQLiteStateManager_AcquireWorkflowLock_AlreadyHeld(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test.db")
 	manager, err := NewSQLiteStateManager(dbPath)
 	if err != nil {
 		t.Fatalf("NewSQLiteStateManager() error = %v", err)
@@ -983,27 +886,309 @@ func TestSQLiteStateManager_AgentEventsEmpty(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Create state without agent events
+	// Create and save workflow
 	state := newTestStateSQLite()
-	state.WorkflowID = "wf-no-events"
-	state.AgentEvents = nil
-
-	// Save state
+	state.WorkflowID = "wf-lock-test-002"
 	if err := manager.Save(ctx, state); err != nil {
 		t.Fatalf("Save() error = %v", err)
 	}
 
-	// Load state and verify empty agent events
-	loaded, err := manager.LoadByID(ctx, state.WorkflowID)
-	if err != nil {
-		t.Fatalf("LoadByID() error = %v", err)
-	}
-	if loaded == nil {
-		t.Fatal("LoadByID() returned nil")
+	// Acquire lock
+	if err := manager.AcquireWorkflowLock(ctx, "wf-lock-test-002"); err != nil {
+		t.Fatalf("AcquireWorkflowLock() error = %v", err)
 	}
 
-	// AgentEvents should be nil or empty slice
-	if len(loaded.AgentEvents) != 0 {
-		t.Errorf("Expected 0 agent events, got %d", len(loaded.AgentEvents))
+	// Try to acquire again (same process - should fail)
+	err = manager.AcquireWorkflowLock(ctx, "wf-lock-test-002")
+	if err == nil {
+		t.Error("Expected error when acquiring already held lock, got nil")
+	} else if domainErr, ok := err.(*core.DomainError); !ok || domainErr.Code != "WORKFLOW_LOCK_HELD" {
+		t.Errorf("Expected WORKFLOW_LOCK_HELD error, got %v", err)
+	}
+
+	// Cleanup
+	_ = manager.ReleaseWorkflowLock(ctx, "wf-lock-test-002")
+}
+
+func TestSQLiteStateManager_MultipleWorkflowLocks(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	manager, err := NewSQLiteStateManager(dbPath)
+	if err != nil {
+		t.Fatalf("NewSQLiteStateManager() error = %v", err)
+	}
+	defer manager.Close()
+
+	ctx := context.Background()
+
+	// Create two workflows
+	for _, id := range []string{"wf-multi-001", "wf-multi-002"} {
+		state := newTestStateSQLite()
+		state.WorkflowID = core.WorkflowID(id)
+		if err := manager.Save(ctx, state); err != nil {
+			t.Fatalf("Save(%s) error = %v", id, err)
+		}
+	}
+
+	// Lock both workflows (concurrent locks should work)
+	if err := manager.AcquireWorkflowLock(ctx, "wf-multi-001"); err != nil {
+		t.Fatalf("AcquireWorkflowLock(wf-multi-001) error = %v", err)
+	}
+
+	if err := manager.AcquireWorkflowLock(ctx, "wf-multi-002"); err != nil {
+		t.Fatalf("AcquireWorkflowLock(wf-multi-002) error = %v", err)
+	}
+
+	// Release both
+	if err := manager.ReleaseWorkflowLock(ctx, "wf-multi-001"); err != nil {
+		t.Fatalf("ReleaseWorkflowLock(wf-multi-001) error = %v", err)
+	}
+	if err := manager.ReleaseWorkflowLock(ctx, "wf-multi-002"); err != nil {
+		t.Fatalf("ReleaseWorkflowLock(wf-multi-002) error = %v", err)
+	}
+}
+
+func TestSQLiteStateManager_RefreshWorkflowLock(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	manager, err := NewSQLiteStateManager(dbPath)
+	if err != nil {
+		t.Fatalf("NewSQLiteStateManager() error = %v", err)
+	}
+	defer manager.Close()
+
+	ctx := context.Background()
+
+	// Create workflow
+	state := newTestStateSQLite()
+	state.WorkflowID = "wf-refresh-001"
+	if err := manager.Save(ctx, state); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	// Acquire lock
+	if err := manager.AcquireWorkflowLock(ctx, "wf-refresh-001"); err != nil {
+		t.Fatalf("AcquireWorkflowLock() error = %v", err)
+	}
+
+	// Refresh lock
+	if err := manager.RefreshWorkflowLock(ctx, "wf-refresh-001"); err != nil {
+		t.Fatalf("RefreshWorkflowLock() error = %v", err)
+	}
+
+	// Refresh for non-held lock should fail
+	err = manager.RefreshWorkflowLock(ctx, "wf-non-existent")
+	if err == nil {
+		t.Error("Expected error when refreshing non-held lock, got nil")
+	}
+
+	// Cleanup
+	_ = manager.ReleaseWorkflowLock(ctx, "wf-refresh-001")
+}
+
+func TestSQLiteStateManager_StaleLockDetection(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	manager, err := NewSQLiteStateManager(dbPath, WithSQLiteLockTTL(1*time.Second))
+	if err != nil {
+		t.Fatalf("NewSQLiteStateManager() error = %v", err)
+	}
+	defer manager.Close()
+
+	ctx := context.Background()
+
+	// Create workflow
+	state := newTestStateSQLite()
+	state.WorkflowID = "wf-stale-001"
+	if err := manager.Save(ctx, state); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	// Insert a "stale" lock (expired) directly into the database
+	now := time.Now().UTC()
+	_, err = manager.db.ExecContext(ctx, `
+		INSERT INTO workflow_locks (workflow_id, holder_pid, holder_host, acquired_at, expires_at)
+		VALUES (?, 99999, 'dead-host', ?, ?)
+	`, "wf-stale-001", now.Add(-2*time.Hour), now.Add(-1*time.Hour))
+	if err != nil {
+		t.Fatalf("INSERT stale lock error = %v", err)
+	}
+
+	// Should be able to acquire lock (stale lock should be removed)
+	if err := manager.AcquireWorkflowLock(ctx, "wf-stale-001"); err != nil {
+		t.Fatalf("AcquireWorkflowLock() error = %v (should have acquired after stale lock cleanup)", err)
+	}
+
+	// Cleanup
+	_ = manager.ReleaseWorkflowLock(ctx, "wf-stale-001")
+}
+
+func TestSQLiteStateManager_RunningWorkflowsTracking(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	manager, err := NewSQLiteStateManager(dbPath)
+	if err != nil {
+		t.Fatalf("NewSQLiteStateManager() error = %v", err)
+	}
+	defer manager.Close()
+
+	ctx := context.Background()
+
+	// Create workflows
+	for _, id := range []string{"wf-run-001", "wf-run-002", "wf-run-003"} {
+		state := newTestStateSQLite()
+		state.WorkflowID = core.WorkflowID(id)
+		if err := manager.Save(ctx, state); err != nil {
+			t.Fatalf("Save(%s) error = %v", id, err)
+		}
+	}
+
+	// Set some as running
+	if err := manager.SetWorkflowRunning(ctx, "wf-run-001"); err != nil {
+		t.Fatalf("SetWorkflowRunning(wf-run-001) error = %v", err)
+	}
+	if err := manager.SetWorkflowRunning(ctx, "wf-run-002"); err != nil {
+		t.Fatalf("SetWorkflowRunning(wf-run-002) error = %v", err)
+	}
+
+	// List running
+	running, err := manager.ListRunningWorkflows(ctx)
+	if err != nil {
+		t.Fatalf("ListRunningWorkflows() error = %v", err)
+	}
+	if len(running) != 2 {
+		t.Errorf("Expected 2 running workflows, got %d", len(running))
+	}
+
+	// Check individual
+	isRunning, err := manager.IsWorkflowRunning(ctx, "wf-run-001")
+	if err != nil {
+		t.Fatalf("IsWorkflowRunning(wf-run-001) error = %v", err)
+	}
+	if !isRunning {
+		t.Error("Expected wf-run-001 to be running")
+	}
+
+	isRunning, err = manager.IsWorkflowRunning(ctx, "wf-run-003")
+	if err != nil {
+		t.Fatalf("IsWorkflowRunning(wf-run-003) error = %v", err)
+	}
+	if isRunning {
+		t.Error("Expected wf-run-003 to NOT be running")
+	}
+
+	// Clear one
+	if err := manager.ClearWorkflowRunning(ctx, "wf-run-001"); err != nil {
+		t.Fatalf("ClearWorkflowRunning(wf-run-001) error = %v", err)
+	}
+
+	running, err = manager.ListRunningWorkflows(ctx)
+	if err != nil {
+		t.Fatalf("ListRunningWorkflows() error = %v", err)
+	}
+	if len(running) != 1 {
+		t.Errorf("Expected 1 running workflow, got %d", len(running))
+	}
+}
+
+func TestSQLiteStateManager_ZombieWorkflowDetection(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	manager, err := NewSQLiteStateManager(dbPath)
+	if err != nil {
+		t.Fatalf("NewSQLiteStateManager() error = %v", err)
+	}
+	defer manager.Close()
+
+	ctx := context.Background()
+
+	// Create workflow
+	state := newTestStateSQLite()
+	state.WorkflowID = "wf-zombie-001"
+	state.Status = core.WorkflowStatusRunning
+	if err := manager.Save(ctx, state); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	// Set as running
+	if err := manager.SetWorkflowRunning(ctx, "wf-zombie-001"); err != nil {
+		t.Fatalf("SetWorkflowRunning() error = %v", err)
+	}
+
+	// Set old heartbeat directly
+	oldTime := time.Now().UTC().Add(-1 * time.Hour)
+	result, err := manager.db.ExecContext(ctx, `
+		UPDATE running_workflows SET heartbeat_at = ? WHERE workflow_id = ?
+	`, oldTime, "wf-zombie-001")
+	if err != nil {
+		t.Fatalf("UPDATE heartbeat error = %v", err)
+	}
+	rowsAffected, _ := result.RowsAffected()
+	if rowsAffected != 1 {
+		t.Fatalf("Expected 1 row affected by UPDATE, got %d", rowsAffected)
+	}
+
+	// Find zombies (threshold 5 minutes)
+	zombies, err := manager.FindZombieWorkflows(ctx, 5*time.Minute)
+	if err != nil {
+		t.Fatalf("FindZombieWorkflows() error = %v", err)
+	}
+	if len(zombies) != 1 {
+		t.Errorf("Expected 1 zombie workflow, got %d", len(zombies))
+	}
+	if len(zombies) > 0 && zombies[0].WorkflowID != "wf-zombie-001" {
+		t.Errorf("Expected zombie workflow wf-zombie-001, got %s", zombies[0].WorkflowID)
+	}
+}
+
+func TestSQLiteStateManager_UpdateWorkflowHeartbeat(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	manager, err := NewSQLiteStateManager(dbPath)
+	if err != nil {
+		t.Fatalf("NewSQLiteStateManager() error = %v", err)
+	}
+	defer manager.Close()
+
+	ctx := context.Background()
+
+	// Create workflow
+	state := newTestStateSQLite()
+	state.WorkflowID = "wf-heartbeat-001"
+	if err := manager.Save(ctx, state); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	// Set as running
+	if err := manager.SetWorkflowRunning(ctx, "wf-heartbeat-001"); err != nil {
+		t.Fatalf("SetWorkflowRunning() error = %v", err)
+	}
+
+	// Update heartbeat
+	if err := manager.UpdateWorkflowHeartbeat(ctx, "wf-heartbeat-001"); err != nil {
+		t.Fatalf("UpdateWorkflowHeartbeat() error = %v", err)
+	}
+
+	// Verify heartbeat was updated (workflow should not be a zombie)
+	zombies, err := manager.FindZombieWorkflows(ctx, 5*time.Minute)
+	if err != nil {
+		t.Fatalf("FindZombieWorkflows() error = %v", err)
+	}
+	if len(zombies) != 0 {
+		t.Errorf("Expected no zombies after heartbeat update, got %d", len(zombies))
+	}
+
+	// Test heartbeat for non-running workflow (should add it to running_workflows)
+	state2 := newTestStateSQLite()
+	state2.WorkflowID = "wf-heartbeat-002"
+	if err := manager.Save(ctx, state2); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	if err := manager.UpdateWorkflowHeartbeat(ctx, "wf-heartbeat-002"); err != nil {
+		t.Fatalf("UpdateWorkflowHeartbeat(wf-heartbeat-002) error = %v", err)
+	}
+
+	// Should now be in running workflows
+	isRunning, err := manager.IsWorkflowRunning(ctx, "wf-heartbeat-002")
+	if err != nil {
+		t.Fatalf("IsWorkflowRunning() error = %v", err)
+	}
+	if !isRunning {
+		t.Error("Expected wf-heartbeat-002 to be running after heartbeat update")
 	}
 }

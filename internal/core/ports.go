@@ -166,7 +166,35 @@ type StateManager interface {
 	AcquireLock(ctx context.Context) error
 
 	// ReleaseLock releases the exclusive lock.
+	// DEPRECATED: Use ReleaseWorkflowLock for per-workflow locking.
 	ReleaseLock(ctx context.Context) error
+
+	// AcquireWorkflowLock obtains an exclusive lock for a specific workflow.
+	// Returns error if lock cannot be acquired (another process holds it).
+	AcquireWorkflowLock(ctx context.Context, workflowID WorkflowID) error
+
+	// ReleaseWorkflowLock releases the lock for a specific workflow.
+	ReleaseWorkflowLock(ctx context.Context, workflowID WorkflowID) error
+
+	// RefreshWorkflowLock extends the lock expiration time for a workflow.
+	// Returns error if the lock is not held by this process.
+	RefreshWorkflowLock(ctx context.Context, workflowID WorkflowID) error
+
+	// SetWorkflowRunning marks a workflow as currently executing.
+	SetWorkflowRunning(ctx context.Context, workflowID WorkflowID) error
+
+	// ClearWorkflowRunning removes a workflow from the running state.
+	ClearWorkflowRunning(ctx context.Context, workflowID WorkflowID) error
+
+	// ListRunningWorkflows returns IDs of all currently executing workflows.
+	ListRunningWorkflows(ctx context.Context) ([]WorkflowID, error)
+
+	// IsWorkflowRunning checks if a specific workflow is currently executing.
+	IsWorkflowRunning(ctx context.Context, workflowID WorkflowID) (bool, error)
+
+	// UpdateWorkflowHeartbeat updates the heartbeat timestamp for a running workflow.
+	// Used to prove liveness - workflows with stale heartbeats are considered dead.
+	UpdateWorkflowHeartbeat(ctx context.Context, workflowID WorkflowID) error
 
 	// Exists checks if state file exists.
 	Exists() bool
