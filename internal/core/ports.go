@@ -268,6 +268,9 @@ type WorkflowState struct {
 	HeartbeatAt *time.Time `json:"heartbeat_at,omitempty"` // Last heartbeat timestamp
 	ResumeCount int        `json:"resume_count,omitempty"` // Number of auto-resumes performed
 	MaxResumes  int        `json:"max_resumes,omitempty"`  // Maximum allowed auto-resumes (default: 3)
+
+	// Workflow Git isolation
+	WorkflowBranch string `json:"workflow_branch,omitempty"` // Git branch for this workflow (e.g., quorum/wf-xxx)
 }
 
 // Attachment represents a user-provided file associated with a chat session or workflow.
@@ -311,6 +314,10 @@ type TaskState struct {
 	Branch        string   `json:"branch,omitempty"`         // Git branch used for this task
 	Resumable     bool     `json:"resumable,omitempty"`      // Whether task can be resumed
 	ResumeHint    string   `json:"resume_hint,omitempty"`    // Hint for resuming execution
+
+	// Workflow isolation merge tracking
+	MergePending bool   `json:"merge_pending,omitempty"` // True if merge to workflow branch failed
+	MergeCommit  string `json:"merge_commit,omitempty"`  // Commit hash of merge commit
 }
 
 // MaxInlineOutputSize is the maximum size of output to store inline.
@@ -519,6 +526,30 @@ const (
 	WorktreeStatusStale   WorktreeStatus = "stale"
 	WorktreeStatusCleaned WorktreeStatus = "cleaned"
 )
+
+// WorkflowWorktreeManager provides workflow-scoped worktree management.
+// Unlike WorktreeManager which operates at the task level, this manager
+// creates task worktrees within a workflow namespace and handles merging
+// task branches back to the workflow branch.
+type WorkflowWorktreeManager interface {
+	// CreateTaskWorktree creates a worktree for a task within the workflow namespace.
+	// The worktree is created from the workflow branch, allowing tasks to inherit
+	// workflow-level changes.
+	CreateTaskWorktree(ctx context.Context, workflowID string, task *Task) (*WorktreeInfo, error)
+
+	// MergeTaskToWorkflow merges the task branch back to the workflow branch.
+	// The strategy parameter controls how the merge is performed:
+	// - "sequential": Merge one task at a time (default)
+	// - "parallel": Attempt to merge multiple tasks
+	MergeTaskToWorkflow(ctx context.Context, workflowID string, taskID TaskID, strategy string) error
+
+	// RemoveTaskWorktree removes the task worktree.
+	// If removeBranch is true, the task branch is also deleted.
+	RemoveTaskWorktree(ctx context.Context, workflowID string, taskID TaskID, removeBranch bool) error
+
+	// GetWorkflowBranch returns the workflow branch name for a given workflow ID.
+	GetWorkflowBranch(workflowID string) string
+}
 
 // =============================================================================
 // GitHubClient Port (T030)
