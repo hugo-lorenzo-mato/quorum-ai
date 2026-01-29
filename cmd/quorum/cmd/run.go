@@ -196,12 +196,6 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 		return fmt.Errorf("configuring agents: %w", err)
 	}
 
-	// Create prompt renderer
-	promptRenderer, err := service.NewPromptRenderer()
-	if err != nil {
-		return fmt.Errorf("creating prompt renderer: %w", err)
-	}
-
 	traceCfg, err := parseTraceConfig(cfg, runTrace)
 	if err != nil {
 		return err
@@ -318,11 +312,25 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 		}
 	}
 
-	// Create service components needed by the modular runner
-	checkpointManager := service.NewCheckpointManager(stateManager, logger)
-	retryPolicy := service.NewRetryPolicy(service.WithMaxAttempts(runMaxRetries))
-	rateLimiterRegistry := service.NewRateLimiterRegistry()
-	dagBuilder := service.NewDAGBuilder()
+	// Create output notifier adapter for real-time TUI updates
+	baseNotifier := tui.NewOutputNotifierAdapter(output)
+
+	// Wrap with trace notifier if tracing is enabled
+	var outputNotifier workflow.OutputNotifier
+	if traceWriter.Enabled() {
+		traceNotifier := service.NewTraceOutputNotifier(traceWriter)
+		outputNotifier = tui.NewTracingOutputNotifierAdapter(baseNotifier, traceNotifier)
+	} else {
+		outputNotifier = baseNotifier
+	}
+
+	// Create mode enforcer from config
+	modeEnforcer := service.NewModeEnforcer(service.ExecutionMode{
+		DryRun:      runnerConfig.DryRun,
+		Sandbox:     runnerConfig.Sandbox,
+		DeniedTools: runnerConfig.DenyTools,
+	})
+	modeEnforcerAdapter := workflow.NewModeEnforcerAdapter(modeEnforcer)
 
 	// Create worktree manager for task isolation
 	cwd, err := os.Getwd()
@@ -350,56 +358,23 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 		}
 	}
 
-	// Create adapters for modular runner interfaces
-	checkpointAdapter := workflow.NewCheckpointAdapter(checkpointManager, ctx)
-	retryAdapter := workflow.NewRetryAdapter(retryPolicy, ctx)
-	rateLimiterAdapter := workflow.NewRateLimiterRegistryAdapter(rateLimiterRegistry, ctx)
-	promptAdapter := workflow.NewPromptRendererAdapter(promptRenderer)
-	resumeAdapter := workflow.NewResumePointAdapter(checkpointManager)
-	dagAdapter := workflow.NewDAGAdapter(dagBuilder)
-
-	// core.StateManager satisfies workflow.StateManager interface
-	stateAdapter := stateManager
-
-	// Create output notifier adapter for real-time TUI updates
-	baseNotifier := tui.NewOutputNotifierAdapter(output)
-
-	// Wrap with trace notifier if tracing is enabled
-	var outputNotifier workflow.OutputNotifier
-	if traceWriter.Enabled() {
-		traceNotifier := service.NewTraceOutputNotifier(traceWriter)
-		outputNotifier = tui.NewTracingOutputNotifierAdapter(baseNotifier, traceNotifier)
-	} else {
-		outputNotifier = baseNotifier
+	// Create workflow runner using RunnerBuilder (ADR-0005 + Task-6)
+	runner, err := workflow.NewRunnerBuilder().
+		WithConfig(cfg).
+		WithStateManager(stateManager).
+		WithAgentRegistry(registry).
+		WithRunnerConfig(runnerConfig).
+		WithLogger(logger).
+		WithOutputNotifier(outputNotifier).
+		WithModeEnforcer(modeEnforcerAdapter).
+		WithGitClient(gitClient).
+		WithGitHubClient(githubClient).
+		WithGitClientFactory(git.NewClientFactory()).
+		WithWorktreeManager(worktreeManager).
+		Build(ctx)
+	if err != nil {
+		return fmt.Errorf("building runner: %w", err)
 	}
-
-	// Create mode enforcer from config
-	modeEnforcer := service.NewModeEnforcer(service.ExecutionMode{
-		DryRun:      runnerConfig.DryRun,
-		Sandbox:     runnerConfig.Sandbox,
-		DeniedTools: runnerConfig.DenyTools,
-	})
-	modeEnforcerAdapter := workflow.NewModeEnforcerAdapter(modeEnforcer)
-
-	// Create workflow runner using modular architecture (ADR-0005)
-	runner := workflow.NewRunner(workflow.RunnerDeps{
-		Config:           runnerConfig,
-		State:            stateAdapter,
-		Agents:           registry,
-		DAG:              dagAdapter,
-		Checkpoint:       checkpointAdapter,
-		ResumeProvider:   resumeAdapter,
-		Prompts:          promptAdapter,
-		Retry:            retryAdapter,
-		RateLimits:       rateLimiterAdapter,
-		Worktrees:        worktreeManager,
-		GitClientFactory: git.NewClientFactory(),
-		Git:              gitClient,
-		GitHub:           githubClient,
-		Logger:           logger,
-		Output:           outputNotifier,
-		ModeEnforcer:     modeEnforcerAdapter,
-	})
 
 	// Connect agent streaming events to the output notifier for real-time progress
 	registry.SetEventHandler(func(event core.AgentEvent) {
