@@ -3,6 +3,7 @@ package git
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -11,6 +12,25 @@ import (
 	"time"
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
+)
+
+// DefaultMergeOptions returns sensible defaults for merge operations.
+func DefaultMergeOptions() core.MergeOptions {
+	return core.MergeOptions{
+		Strategy:      "recursive",
+		NoFastForward: false,
+	}
+}
+
+// Git operation errors.
+var (
+	ErrMergeConflict    = errors.New("merge conflict")
+	ErrRebaseConflict   = errors.New("rebase conflict")
+	ErrNothingToMerge   = errors.New("nothing to merge")
+	ErrNotOnBranch      = errors.New("not on a branch")
+	ErrMergeInProgress  = errors.New("merge already in progress")
+	ErrRebaseInProgress = errors.New("rebase already in progress")
+	ErrBranchNotFound   = errors.New("branch not found")
 )
 
 // Compile-time interface conformance check.
@@ -72,6 +92,33 @@ func (c *Client) run(ctx context.Context, args ...string) (string, error) {
 	}
 
 	return strings.TrimSpace(stdout.String()), nil
+}
+
+// runWithOutput executes a git command and returns both stdout and stderr even on error.
+// This is useful for commands like merge where conflict info is in stdout.
+func (c *Client) runWithOutput(ctx context.Context, args ...string) (stdout, stderr string, err error) {
+	ctx, cancel := context.WithTimeout(ctx, c.timeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd.Dir = c.repoPath
+
+	var stdoutBuf, stderrBuf bytes.Buffer
+	cmd.Stdout = &stdoutBuf
+	cmd.Stderr = &stderrBuf
+
+	err = cmd.Run()
+	stdout = strings.TrimSpace(stdoutBuf.String())
+	stderr = strings.TrimSpace(stderrBuf.String())
+
+	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return stdout, stderr, core.ErrTimeout("git command timed out")
+		}
+		return stdout, stderr, err
+	}
+
+	return stdout, stderr, nil
 }
 
 // RepoRoot returns the repository root path (implements core.GitClient).
@@ -575,4 +622,304 @@ func parseWorktreesToCore(output, mainRepoPath string) []core.Worktree {
 	}
 
 	return worktrees
+}
+
+// =============================================================================
+// Merge Operations
+// =============================================================================
+
+// Merge merges a branch into the current branch.
+func (c *Client) Merge(ctx context.Context, branch string, opts core.MergeOptions) error {
+	args := []string{"merge"}
+
+	// Add strategy
+	if opts.Strategy != "" {
+		args = append(args, "-s", opts.Strategy)
+	}
+
+	// Add strategy option
+	if opts.StrategyOption != "" {
+		args = append(args, "-X", opts.StrategyOption)
+	}
+
+	// Add flags
+	if opts.NoCommit {
+		args = append(args, "--no-commit")
+	}
+	if opts.NoFastForward {
+		args = append(args, "--no-ff")
+	}
+	if opts.Squash {
+		args = append(args, "--squash")
+	}
+	if opts.Message != "" {
+		args = append(args, "-m", opts.Message)
+	}
+
+	args = append(args, branch)
+
+	stdout, stderr, err := c.runWithOutput(ctx, args...)
+	if err != nil {
+		// Check for conflict (git outputs conflict info to stdout)
+		if strings.Contains(stdout, "CONFLICT") ||
+			strings.Contains(stdout, "Automatic merge failed") ||
+			strings.Contains(stderr, "CONFLICT") {
+			return fmt.Errorf("%w: %s", ErrMergeConflict, stdout)
+		}
+		// Check for nothing to merge
+		if strings.Contains(stdout, "Already up to date") ||
+			strings.Contains(stderr, "Already up to date") {
+			return nil // Not an error, just nothing to do
+		}
+		// Check for branch not found
+		if strings.Contains(stderr, "not something we can merge") ||
+			strings.Contains(stdout, "not something we can merge") {
+			return fmt.Errorf("%w: %s", ErrBranchNotFound, branch)
+		}
+		return fmt.Errorf("git merge: %w: %s%s", err, stdout, stderr)
+	}
+
+	return nil
+}
+
+// AbortMerge aborts a merge in progress.
+func (c *Client) AbortMerge(ctx context.Context) error {
+	_, err := c.run(ctx, "merge", "--abort")
+	if err != nil {
+		// May fail if no merge in progress
+		if strings.Contains(err.Error(), "no merge to abort") ||
+			strings.Contains(err.Error(), "There is no merge to abort") {
+			return nil
+		}
+		return err
+	}
+	return nil
+}
+
+// HasMergeConflicts checks if there are unresolved merge conflicts.
+func (c *Client) HasMergeConflicts(ctx context.Context) (bool, error) {
+	// Check if MERGE_HEAD exists (merge in progress)
+	gitDir := c.findGitDir()
+	mergeHead := filepath.Join(gitDir, "MERGE_HEAD")
+	if _, err := os.Stat(mergeHead); os.IsNotExist(err) {
+		return false, nil
+	}
+
+	// Check for unmerged files
+	output, err := c.run(ctx, "diff", "--name-only", "--diff-filter=U")
+	if err != nil {
+		return false, err
+	}
+
+	return strings.TrimSpace(output) != "", nil
+}
+
+// GetConflictFiles returns the list of files with conflicts.
+func (c *Client) GetConflictFiles(ctx context.Context) ([]string, error) {
+	output, err := c.run(ctx, "diff", "--name-only", "--diff-filter=U")
+	if err != nil {
+		return nil, err
+	}
+
+	if output == "" {
+		return nil, nil
+	}
+
+	files := make([]string, 0)
+	for _, line := range strings.Split(output, "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			files = append(files, line)
+		}
+	}
+	return files, nil
+}
+
+// =============================================================================
+// Rebase Operations
+// =============================================================================
+
+// Rebase rebases the current branch onto another branch.
+func (c *Client) Rebase(ctx context.Context, onto string) error {
+	stdout, stderr, err := c.runWithOutput(ctx, "rebase", onto)
+	if err != nil {
+		// Rebase conflict info can be in stdout or stderr
+		if strings.Contains(stdout, "CONFLICT") ||
+			strings.Contains(stderr, "CONFLICT") ||
+			strings.Contains(stderr, "could not apply") ||
+			strings.Contains(stdout, "could not apply") {
+			return fmt.Errorf("%w: %s%s", ErrRebaseConflict, stdout, stderr)
+		}
+		return fmt.Errorf("git rebase: %w: %s%s", err, stdout, stderr)
+	}
+	return nil
+}
+
+// AbortRebase aborts a rebase in progress.
+func (c *Client) AbortRebase(ctx context.Context) error {
+	_, err := c.run(ctx, "rebase", "--abort")
+	if err != nil {
+		if strings.Contains(err.Error(), "No rebase in progress") ||
+			strings.Contains(err.Error(), "no rebase in progress") {
+			return nil
+		}
+		return err
+	}
+	return nil
+}
+
+// ContinueRebase continues a rebase after resolving conflicts.
+func (c *Client) ContinueRebase(ctx context.Context) error {
+	_, err := c.run(ctx, "rebase", "--continue")
+	return err
+}
+
+// HasRebaseInProgress checks if a rebase is in progress.
+func (c *Client) HasRebaseInProgress(ctx context.Context) (bool, error) {
+	gitDir := c.findGitDir()
+	rebaseApply := filepath.Join(gitDir, "rebase-apply")
+	rebaseMerge := filepath.Join(gitDir, "rebase-merge")
+
+	if _, err := os.Stat(rebaseApply); err == nil {
+		return true, nil
+	}
+	if _, err := os.Stat(rebaseMerge); err == nil {
+		return true, nil
+	}
+	return false, nil
+}
+
+// =============================================================================
+// Reset Operations
+// =============================================================================
+
+// ResetHard performs a hard reset to the given reference.
+func (c *Client) ResetHard(ctx context.Context, ref string) error {
+	_, err := c.run(ctx, "reset", "--hard", ref)
+	return err
+}
+
+// ResetSoft performs a soft reset to the given reference.
+func (c *Client) ResetSoft(ctx context.Context, ref string) error {
+	_, err := c.run(ctx, "reset", "--soft", ref)
+	return err
+}
+
+// =============================================================================
+// Cherry-Pick Operations
+// =============================================================================
+
+// CherryPick cherry-picks a commit onto the current branch.
+func (c *Client) CherryPick(ctx context.Context, commit string) error {
+	stdout, stderr, err := c.runWithOutput(ctx, "cherry-pick", commit)
+	if err != nil {
+		// Cherry-pick conflict info can be in stdout or stderr
+		if strings.Contains(stdout, "CONFLICT") ||
+			strings.Contains(stderr, "CONFLICT") ||
+			strings.Contains(stderr, "could not apply") {
+			return fmt.Errorf("%w: commit %s", ErrMergeConflict, commit)
+		}
+		return fmt.Errorf("git cherry-pick: %w: %s%s", err, stdout, stderr)
+	}
+	return nil
+}
+
+// AbortCherryPick aborts a cherry-pick in progress.
+func (c *Client) AbortCherryPick(ctx context.Context) error {
+	_, err := c.run(ctx, "cherry-pick", "--abort")
+	if err != nil {
+		if strings.Contains(err.Error(), "no cherry-pick") ||
+			strings.Contains(err.Error(), "error: no cherry-pick or revert in progress") {
+			return nil
+		}
+		return err
+	}
+	return nil
+}
+
+// =============================================================================
+// Query Operations
+// =============================================================================
+
+// RevParse resolves a revision to its SHA.
+func (c *Client) RevParse(ctx context.Context, ref string) (string, error) {
+	return c.run(ctx, "rev-parse", ref)
+}
+
+// IsAncestor checks if ancestor is an ancestor of commit.
+func (c *Client) IsAncestor(ctx context.Context, ancestor, commit string) (bool, error) {
+	_, err := c.run(ctx, "merge-base", "--is-ancestor", ancestor, commit)
+	if err != nil {
+		// Exit code 1 means not an ancestor
+		if strings.Contains(err.Error(), "exit status 1") {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
+// =============================================================================
+// Status Operations
+// =============================================================================
+
+// HasUncommittedChanges checks if there are any uncommitted changes.
+func (c *Client) HasUncommittedChanges(ctx context.Context) (bool, error) {
+	// Check for staged changes
+	staged, err := c.run(ctx, "diff", "--cached", "--name-only")
+	if err != nil {
+		return false, err
+	}
+	if staged != "" {
+		return true, nil
+	}
+
+	// Check for unstaged changes
+	unstaged, err := c.run(ctx, "diff", "--name-only")
+	if err != nil {
+		return false, err
+	}
+	if unstaged != "" {
+		return true, nil
+	}
+
+	// Check for untracked files
+	untracked, err := c.run(ctx, "ls-files", "--others", "--exclude-standard")
+	if err != nil {
+		return false, err
+	}
+	return untracked != "", nil
+}
+
+// =============================================================================
+// Helper Functions
+// =============================================================================
+
+// findGitDir finds the .git directory for the repository.
+// Handles both regular repositories and worktrees.
+func (c *Client) findGitDir() string {
+	gitPath := filepath.Join(c.repoPath, ".git")
+
+	info, err := os.Stat(gitPath)
+	if err != nil {
+		return gitPath // Fallback to default
+	}
+
+	// If .git is a directory, it's a regular repo
+	if info.IsDir() {
+		return gitPath
+	}
+
+	// If .git is a file, it's a worktree - read the path from it
+	content, err := os.ReadFile(gitPath)
+	if err != nil {
+		return gitPath
+	}
+
+	// Parse "gitdir: /path/to/main/.git/worktrees/name"
+	gitdir := strings.TrimSpace(string(content))
+	if strings.HasPrefix(gitdir, "gitdir: ") {
+		return strings.TrimPrefix(gitdir, "gitdir: ")
+	}
+
+	return gitPath
 }

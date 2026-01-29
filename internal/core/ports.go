@@ -391,6 +391,33 @@ type GitClient interface {
 	// Utility
 	IsClean(ctx context.Context) (bool, error)
 	Fetch(ctx context.Context, remote string) error
+
+	// Merge operations
+	Merge(ctx context.Context, branch string, opts MergeOptions) error
+	AbortMerge(ctx context.Context) error
+	HasMergeConflicts(ctx context.Context) (bool, error)
+	GetConflictFiles(ctx context.Context) ([]string, error)
+
+	// Rebase operations
+	Rebase(ctx context.Context, onto string) error
+	AbortRebase(ctx context.Context) error
+	ContinueRebase(ctx context.Context) error
+	HasRebaseInProgress(ctx context.Context) (bool, error)
+
+	// Reset operations
+	ResetHard(ctx context.Context, ref string) error
+	ResetSoft(ctx context.Context, ref string) error
+
+	// Cherry-pick operations
+	CherryPick(ctx context.Context, commit string) error
+	AbortCherryPick(ctx context.Context) error
+
+	// Query operations
+	RevParse(ctx context.Context, ref string) (string, error)
+	IsAncestor(ctx context.Context, ancestor, commit string) (bool, error)
+
+	// Status operations
+	HasUncommittedChanges(ctx context.Context) (bool, error)
 }
 
 // Worktree represents a git worktree.
@@ -400,6 +427,16 @@ type Worktree struct {
 	Commit   string
 	IsMain   bool
 	IsLocked bool
+}
+
+// MergeOptions configures merge behavior.
+type MergeOptions struct {
+	Strategy       string // "recursive", "ours", "theirs", "resolve"
+	StrategyOption string // e.g., "ours", "theirs" for recursive strategy
+	NoCommit       bool   // Stage changes but don't commit
+	NoFastForward  bool   // Always create merge commit
+	Squash         bool   // Squash all commits into one
+	Message        string // Custom commit message
 }
 
 // GitStatus represents the status of a git repository.

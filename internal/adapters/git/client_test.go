@@ -284,3 +284,437 @@ func TestGitClient_Add(t *testing.T) {
 	// File should be staged
 	testutil.AssertLen(t, status.Untracked, 0)
 }
+
+// =============================================================================
+// Merge Tests
+// =============================================================================
+
+func TestGitClient_Merge_FastForward(t *testing.T) {
+	repo := testutil.NewGitRepo(t)
+	repo.WriteFile("README.md", "# Test")
+	repo.Commit("Initial commit")
+
+	client, err := git.NewClient(repo.Path)
+	testutil.AssertNoError(t, err)
+
+	// Create feature branch
+	repo.CreateBranch("feature")
+	repo.WriteFile("feature.txt", "feature content")
+	repo.Commit("Add feature")
+
+	// Switch back to main and merge
+	repo.Checkout("main")
+	err = client.Merge(context.Background(), "feature", git.DefaultMergeOptions())
+	testutil.AssertNoError(t, err)
+
+	// Verify merge happened
+	exists := fileExists(t, filepath.Join(repo.Path, "feature.txt"))
+	testutil.AssertTrue(t, exists, "feature.txt should exist after merge")
+}
+
+func TestGitClient_Merge_NoFastForward(t *testing.T) {
+	repo := testutil.NewGitRepo(t)
+	repo.WriteFile("README.md", "# Test")
+	repo.Commit("Initial commit")
+
+	client, err := git.NewClient(repo.Path)
+	testutil.AssertNoError(t, err)
+
+	// Create feature branch
+	repo.CreateBranch("feature")
+	repo.WriteFile("feature.txt", "feature content")
+	repo.Commit("Add feature")
+
+	// Switch back to main
+	repo.Checkout("main")
+
+	opts := git.DefaultMergeOptions()
+	opts.NoFastForward = true
+	opts.Message = "Merge feature branch"
+
+	err = client.Merge(context.Background(), "feature", opts)
+	testutil.AssertNoError(t, err)
+
+	// Verify merge happened
+	exists := fileExists(t, filepath.Join(repo.Path, "feature.txt"))
+	testutil.AssertTrue(t, exists, "feature.txt should exist after merge")
+}
+
+func TestGitClient_Merge_Conflict(t *testing.T) {
+	repo := testutil.NewGitRepo(t)
+	repo.WriteFile("conflict.txt", "original")
+	repo.Commit("Initial commit")
+
+	client, err := git.NewClient(repo.Path)
+	testutil.AssertNoError(t, err)
+
+	// Create feature branch with conflicting change
+	repo.CreateBranch("feature")
+	repo.WriteFile("conflict.txt", "feature version")
+	repo.Commit("Feature change")
+
+	// Switch back to main and make conflicting change
+	repo.Checkout("main")
+	repo.WriteFile("conflict.txt", "main version")
+	repo.Commit("Main change")
+
+	// Merge should fail with conflict
+	err = client.Merge(context.Background(), "feature", git.DefaultMergeOptions())
+	testutil.AssertError(t, err)
+	testutil.AssertContains(t, err.Error(), "merge conflict")
+
+	// Check conflict state
+	hasConflicts, err := client.HasMergeConflicts(context.Background())
+	testutil.AssertNoError(t, err)
+	testutil.AssertTrue(t, hasConflicts, "should have conflicts")
+
+	// Get conflict files
+	files, err := client.GetConflictFiles(context.Background())
+	testutil.AssertNoError(t, err)
+	testutil.AssertLen(t, files, 1)
+	testutil.AssertEqual(t, files[0], "conflict.txt")
+
+	// Abort merge
+	err = client.AbortMerge(context.Background())
+	testutil.AssertNoError(t, err)
+
+	// Conflicts should be gone
+	hasConflicts, err = client.HasMergeConflicts(context.Background())
+	testutil.AssertNoError(t, err)
+	testutil.AssertFalse(t, hasConflicts, "should not have conflicts after abort")
+}
+
+func TestGitClient_Merge_AlreadyUpToDate(t *testing.T) {
+	repo := testutil.NewGitRepo(t)
+	repo.WriteFile("README.md", "# Test")
+	repo.Commit("Initial commit")
+
+	client, err := git.NewClient(repo.Path)
+	testutil.AssertNoError(t, err)
+
+	// Create feature branch (same commit as main)
+	repo.CreateBranch("feature")
+	repo.Checkout("main")
+
+	// Merge should succeed (nothing to do)
+	err = client.Merge(context.Background(), "feature", git.DefaultMergeOptions())
+	testutil.AssertNoError(t, err)
+}
+
+func TestGitClient_AbortMerge_NoMergeInProgress(t *testing.T) {
+	repo := testutil.NewGitRepo(t)
+	repo.WriteFile("README.md", "# Test")
+	repo.Commit("Initial commit")
+
+	client, err := git.NewClient(repo.Path)
+	testutil.AssertNoError(t, err)
+
+	// Should not error when no merge in progress
+	err = client.AbortMerge(context.Background())
+	testutil.AssertNoError(t, err)
+}
+
+// =============================================================================
+// Rebase Tests
+// =============================================================================
+
+func TestGitClient_Rebase_Success(t *testing.T) {
+	repo := testutil.NewGitRepo(t)
+	repo.WriteFile("README.md", "# Test")
+	repo.Commit("Initial commit")
+
+	client, err := git.NewClient(repo.Path)
+	testutil.AssertNoError(t, err)
+
+	// Create feature branch
+	repo.CreateBranch("feature")
+	repo.WriteFile("feature.txt", "feature content")
+	repo.Commit("Add feature")
+
+	// Switch back to main and add another commit
+	repo.Checkout("main")
+	repo.WriteFile("main.txt", "main content")
+	repo.Commit("Add main file")
+
+	// Switch to feature and rebase onto main
+	repo.Checkout("feature")
+	err = client.Rebase(context.Background(), "main")
+	testutil.AssertNoError(t, err)
+
+	// Verify rebase: feature branch should have main.txt
+	exists := fileExists(t, filepath.Join(repo.Path, "main.txt"))
+	testutil.AssertTrue(t, exists, "main.txt should exist after rebase")
+}
+
+func TestGitClient_Rebase_Conflict(t *testing.T) {
+	repo := testutil.NewGitRepo(t)
+	repo.WriteFile("conflict.txt", "original")
+	repo.Commit("Initial commit")
+
+	client, err := git.NewClient(repo.Path)
+	testutil.AssertNoError(t, err)
+
+	// Create feature branch with conflicting change
+	repo.CreateBranch("feature")
+	repo.WriteFile("conflict.txt", "feature version")
+	repo.Commit("Feature change")
+
+	// Switch back to main and make conflicting change
+	repo.Checkout("main")
+	repo.WriteFile("conflict.txt", "main version")
+	repo.Commit("Main change")
+
+	// Switch to feature and try to rebase
+	repo.Checkout("feature")
+	err = client.Rebase(context.Background(), "main")
+	testutil.AssertError(t, err)
+	testutil.AssertContains(t, err.Error(), "rebase conflict")
+
+	// Check rebase in progress
+	inProgress, err := client.HasRebaseInProgress(context.Background())
+	testutil.AssertNoError(t, err)
+	testutil.AssertTrue(t, inProgress, "rebase should be in progress")
+
+	// Abort rebase
+	err = client.AbortRebase(context.Background())
+	testutil.AssertNoError(t, err)
+
+	// Rebase should no longer be in progress
+	inProgress, err = client.HasRebaseInProgress(context.Background())
+	testutil.AssertNoError(t, err)
+	testutil.AssertFalse(t, inProgress, "rebase should not be in progress")
+}
+
+func TestGitClient_AbortRebase_NoRebaseInProgress(t *testing.T) {
+	repo := testutil.NewGitRepo(t)
+	repo.WriteFile("README.md", "# Test")
+	repo.Commit("Initial commit")
+
+	client, err := git.NewClient(repo.Path)
+	testutil.AssertNoError(t, err)
+
+	// Should not error when no rebase in progress
+	err = client.AbortRebase(context.Background())
+	testutil.AssertNoError(t, err)
+}
+
+func TestGitClient_HasRebaseInProgress_False(t *testing.T) {
+	repo := testutil.NewGitRepo(t)
+	repo.WriteFile("README.md", "# Test")
+	repo.Commit("Initial commit")
+
+	client, err := git.NewClient(repo.Path)
+	testutil.AssertNoError(t, err)
+
+	inProgress, err := client.HasRebaseInProgress(context.Background())
+	testutil.AssertNoError(t, err)
+	testutil.AssertFalse(t, inProgress, "no rebase should be in progress")
+}
+
+// =============================================================================
+// Reset Tests
+// =============================================================================
+
+func TestGitClient_ResetHard(t *testing.T) {
+	repo := testutil.NewGitRepo(t)
+	repo.WriteFile("README.md", "# Test")
+	firstCommit := repo.Commit("Initial commit")
+
+	client, err := git.NewClient(repo.Path)
+	testutil.AssertNoError(t, err)
+
+	// Make another commit
+	repo.WriteFile("file.txt", "content")
+	repo.Commit("Second commit")
+
+	// Reset hard to first commit
+	err = client.ResetHard(context.Background(), firstCommit)
+	testutil.AssertNoError(t, err)
+
+	// Verify file.txt doesn't exist
+	exists := fileExists(t, filepath.Join(repo.Path, "file.txt"))
+	testutil.AssertFalse(t, exists, "file.txt should not exist after reset")
+}
+
+func TestGitClient_ResetSoft(t *testing.T) {
+	repo := testutil.NewGitRepo(t)
+	repo.WriteFile("README.md", "# Test")
+	firstCommit := repo.Commit("Initial commit")
+
+	client, err := git.NewClient(repo.Path)
+	testutil.AssertNoError(t, err)
+
+	// Make another commit
+	repo.WriteFile("file.txt", "content")
+	repo.Commit("Second commit")
+
+	// Reset soft to first commit
+	err = client.ResetSoft(context.Background(), firstCommit)
+	testutil.AssertNoError(t, err)
+
+	// file.txt should still exist (working directory preserved)
+	exists := fileExists(t, filepath.Join(repo.Path, "file.txt"))
+	testutil.AssertTrue(t, exists, "file.txt should exist after soft reset")
+}
+
+// =============================================================================
+// Cherry-Pick Tests
+// =============================================================================
+
+func TestGitClient_CherryPick(t *testing.T) {
+	repo := testutil.NewGitRepo(t)
+	repo.WriteFile("README.md", "# Test")
+	repo.Commit("Initial commit")
+
+	client, err := git.NewClient(repo.Path)
+	testutil.AssertNoError(t, err)
+
+	// Create feature branch and add file
+	repo.CreateBranch("feature")
+	repo.WriteFile("cherry.txt", "cherry content")
+	cherryCommit := repo.Commit("Add cherry")
+
+	// Switch back to main
+	repo.Checkout("main")
+
+	// Verify cherry.txt doesn't exist
+	exists := fileExists(t, filepath.Join(repo.Path, "cherry.txt"))
+	testutil.AssertFalse(t, exists, "cherry.txt should not exist before cherry-pick")
+
+	// Cherry-pick the commit
+	err = client.CherryPick(context.Background(), cherryCommit)
+	testutil.AssertNoError(t, err)
+
+	// Verify cherry.txt now exists
+	exists = fileExists(t, filepath.Join(repo.Path, "cherry.txt"))
+	testutil.AssertTrue(t, exists, "cherry.txt should exist after cherry-pick")
+}
+
+func TestGitClient_CherryPick_Conflict(t *testing.T) {
+	repo := testutil.NewGitRepo(t)
+	repo.WriteFile("conflict.txt", "original")
+	repo.Commit("Initial commit")
+
+	client, err := git.NewClient(repo.Path)
+	testutil.AssertNoError(t, err)
+
+	// Create feature branch with conflicting change
+	repo.CreateBranch("feature")
+	repo.WriteFile("conflict.txt", "feature version")
+	cherryCommit := repo.Commit("Feature change")
+
+	// Switch back to main and make different change
+	repo.Checkout("main")
+	repo.WriteFile("conflict.txt", "main version")
+	repo.Commit("Main change")
+
+	// Cherry-pick should fail with conflict
+	err = client.CherryPick(context.Background(), cherryCommit)
+	testutil.AssertError(t, err)
+	testutil.AssertContains(t, err.Error(), "merge conflict")
+
+	// Abort cherry-pick
+	err = client.AbortCherryPick(context.Background())
+	testutil.AssertNoError(t, err)
+}
+
+func TestGitClient_AbortCherryPick_NoCherryPickInProgress(t *testing.T) {
+	repo := testutil.NewGitRepo(t)
+	repo.WriteFile("README.md", "# Test")
+	repo.Commit("Initial commit")
+
+	client, err := git.NewClient(repo.Path)
+	testutil.AssertNoError(t, err)
+
+	// Should not error when no cherry-pick in progress
+	err = client.AbortCherryPick(context.Background())
+	testutil.AssertNoError(t, err)
+}
+
+// =============================================================================
+// Query Tests
+// =============================================================================
+
+func TestGitClient_RevParse(t *testing.T) {
+	repo := testutil.NewGitRepo(t)
+	repo.WriteFile("README.md", "# Test")
+	expectedHash := repo.Commit("Initial commit")
+
+	client, err := git.NewClient(repo.Path)
+	testutil.AssertNoError(t, err)
+
+	hash, err := client.RevParse(context.Background(), "HEAD")
+	testutil.AssertNoError(t, err)
+	testutil.AssertEqual(t, hash, expectedHash)
+}
+
+func TestGitClient_IsAncestor(t *testing.T) {
+	repo := testutil.NewGitRepo(t)
+	repo.WriteFile("README.md", "# Test")
+	firstCommit := repo.Commit("Initial commit")
+
+	repo.WriteFile("file.txt", "content")
+	secondCommit := repo.Commit("Second commit")
+
+	client, err := git.NewClient(repo.Path)
+	testutil.AssertNoError(t, err)
+
+	// First commit should be ancestor of second
+	isAncestor, err := client.IsAncestor(context.Background(), firstCommit, secondCommit)
+	testutil.AssertNoError(t, err)
+	testutil.AssertTrue(t, isAncestor, "first commit should be ancestor of second")
+
+	// Second commit should NOT be ancestor of first
+	isAncestor, err = client.IsAncestor(context.Background(), secondCommit, firstCommit)
+	testutil.AssertNoError(t, err)
+	testutil.AssertFalse(t, isAncestor, "second commit should not be ancestor of first")
+}
+
+// =============================================================================
+// Status Tests
+// =============================================================================
+
+func TestGitClient_HasUncommittedChanges(t *testing.T) {
+	repo := testutil.NewGitRepo(t)
+	repo.WriteFile("README.md", "# Test")
+	repo.Commit("Initial commit")
+
+	client, err := git.NewClient(repo.Path)
+	testutil.AssertNoError(t, err)
+
+	// Clean repo
+	hasChanges, err := client.HasUncommittedChanges(context.Background())
+	testutil.AssertNoError(t, err)
+	testutil.AssertFalse(t, hasChanges, "should not have changes initially")
+
+	// Add untracked file
+	repo.WriteFile("new.txt", "content")
+	hasChanges, err = client.HasUncommittedChanges(context.Background())
+	testutil.AssertNoError(t, err)
+	testutil.AssertTrue(t, hasChanges, "should have changes with untracked file")
+}
+
+func TestGitClient_HasUncommittedChanges_Modified(t *testing.T) {
+	repo := testutil.NewGitRepo(t)
+	repo.WriteFile("README.md", "# Test")
+	repo.Commit("Initial commit")
+
+	client, err := git.NewClient(repo.Path)
+	testutil.AssertNoError(t, err)
+
+	// Modify tracked file
+	repo.WriteFile("README.md", "# Modified Test")
+	hasChanges, err := client.HasUncommittedChanges(context.Background())
+	testutil.AssertNoError(t, err)
+	testutil.AssertTrue(t, hasChanges, "should have changes with modified file")
+}
+
+// =============================================================================
+// Helper Functions
+// =============================================================================
+
+func fileExists(t *testing.T, path string) bool {
+	t.Helper()
+	_, err := os.Stat(path)
+	return err == nil
+}
