@@ -3,36 +3,7 @@ import { Bot, Check, ChevronDown, ChevronUp } from 'lucide-react';
 import { useConfigField } from '../../hooks/useConfigField';
 import { useConfigStore } from '../../stores/configStore';
 import { TextInputSetting, ToggleSetting, SelectSetting } from './index';
-
-const AGENT_INFO = {
-  claude: {
-    name: 'Claude',
-    description: "Anthropic's Claude - primary agent with strong reasoning",
-  },
-  codex: {
-    name: 'Codex',
-    description: "OpenAI Codex - strong code generation (recommended for coding-heavy phases)",
-  },
-  gemini: {
-    name: 'Gemini',
-    description: "Google's Gemini - fast and efficient",
-  },
-  copilot: {
-    name: 'Copilot',
-    description: 'GitHub Copilot CLI - optimized for code tasks',
-  },
-};
-
-const FALLBACK_PHASE_KEYS = ['refine', 'analyze', 'moderate', 'synthesize', 'plan', 'execute'];
-
-const PHASE_LABELS = {
-  refine: 'Refine',
-  analyze: 'Analyze',
-  moderate: 'Moderate',
-  synthesize: 'Synthesize',
-  plan: 'Plan',
-  execute: 'Execute',
-};
+import { AGENT_INFO, PHASE_MODEL_KEYS, PHASE_LABELS, supportsReasoning } from '../../lib/agents';
 
 function normalizeBoolMap(value) {
   if (!value || typeof value !== 'object') return {};
@@ -60,7 +31,7 @@ export function AgentCard({ agentKey }) {
   const phaseModels = useConfigField(`${prefix}.phase_models`);
   const reasoningEffortPhases = useConfigField(`${prefix}.reasoning_effort_phases`);
 
-  const phaseKeys = useConfigStore((state) => state.enums?.phase_model_keys) || FALLBACK_PHASE_KEYS;
+  const phaseKeys = useConfigStore((state) => state.enums?.phase_model_keys) || PHASE_MODEL_KEYS;
   const reasoningEfforts = useConfigStore((state) => state.enums?.reasoning_efforts);
   const agentsMetadata = useConfigStore((state) => state.agents) || [];
 
@@ -74,7 +45,7 @@ export function AgentCard({ agentKey }) {
   }, [agentMeta]);
 
   // Check if this agent supports reasoning effort
-  const hasReasoningEffort = agentMeta?.hasReasoningEffort === true || agentKey === 'codex';
+  const hasReasoningEffort = agentMeta?.hasReasoningEffort === true || supportsReasoning(agentKey);
   const reasoningEffortOptions = useMemo(() => {
     return (reasoningEfforts || []).map((e) => ({ value: e, label: e.charAt(0).toUpperCase() + e.slice(1) }));
   }, [reasoningEfforts]);

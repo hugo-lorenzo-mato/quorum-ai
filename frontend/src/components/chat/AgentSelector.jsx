@@ -1,12 +1,6 @@
 import { Bot, ChevronDown } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
-
-const AGENTS = [
-  { value: 'claude', label: 'Claude', description: 'Anthropic AI' },
-  { value: 'gemini', label: 'Gemini', description: 'Google AI' },
-  { value: 'codex', label: 'Codex', description: 'OpenAI Codex' },
-  { value: 'opencode', label: 'OpenCode', description: 'Open Source' },
-];
+import { AGENTS, getAgentByValue } from '../../lib/agents';
 
 export default function AgentSelector({ value, onChange, disabled }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -22,7 +16,7 @@ export default function AgentSelector({ value, onChange, disabled }) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const selected = AGENTS.find(a => a.value === value) || AGENTS[0];
+  const selected = getAgentByValue(value);
 
   return (
     <div className="relative" ref={ref}>
@@ -38,7 +32,7 @@ export default function AgentSelector({ value, onChange, disabled }) {
       </button>
 
       {isOpen && (
-        <div className="absolute top-full left-0 mt-1 z-50 min-w-[180px] rounded-lg border border-border bg-popover shadow-lg animate-fade-in">
+        <div className="absolute bottom-full left-0 mb-1 z-50 min-w-[180px] rounded-lg border border-border bg-popover shadow-lg animate-fade-in">
           <div className="p-1">
             {AGENTS.map((agent) => (
               <button

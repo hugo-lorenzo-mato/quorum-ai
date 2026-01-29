@@ -1,16 +1,6 @@
 import { Brain, ChevronDown } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
-
-const REASONING_LEVELS = [
-  { value: 'minimal', label: 'Minimal', description: 'Quick responses' },
-  { value: 'low', label: 'Low', description: 'Light reasoning' },
-  { value: 'medium', label: 'Medium', description: 'Balanced (default)' },
-  { value: 'high', label: 'High', description: 'Deep analysis' },
-  { value: 'xhigh', label: 'Max', description: 'Maximum reasoning' },
-];
-
-// Agents that support reasoning effort
-const REASONING_AGENTS = ['codex'];
+import { REASONING_LEVELS, getReasoningLevelByValue, supportsReasoning } from '../../lib/agents';
 
 export default function ReasoningSelector({ value, onChange, agent, disabled }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -27,11 +17,11 @@ export default function ReasoningSelector({ value, onChange, agent, disabled }) 
   }, []);
 
   // Only show for agents that support reasoning effort
-  if (!REASONING_AGENTS.includes(agent)) {
+  if (!supportsReasoning(agent)) {
     return null;
   }
 
-  const selected = REASONING_LEVELS.find(r => r.value === value) || REASONING_LEVELS[2];
+  const selected = getReasoningLevelByValue(value);
 
   return (
     <div className="relative" ref={ref}>
@@ -47,7 +37,7 @@ export default function ReasoningSelector({ value, onChange, agent, disabled }) 
       </button>
 
       {isOpen && (
-        <div className="absolute top-full left-0 mt-1 z-50 min-w-[180px] rounded-lg border border-border bg-popover shadow-lg animate-fade-in">
+        <div className="absolute bottom-full left-0 mb-1 z-50 min-w-[180px] rounded-lg border border-border bg-popover shadow-lg animate-fade-in">
           <div className="p-1">
             {REASONING_LEVELS.map((level) => (
               <button

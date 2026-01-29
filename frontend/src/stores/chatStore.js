@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { chatApi } from '../lib/api';
+import { DEFAULT_AGENT, DEFAULT_REASONING } from '../lib/agents';
 
 const useChatStore = create((set, get) => ({
   // State
@@ -11,9 +12,9 @@ const useChatStore = create((set, get) => ({
   error: null,
 
   // Per-message options (reset after send)
-  currentAgent: 'claude',
+  currentAgent: DEFAULT_AGENT,
   currentModel: '',
-  currentReasoningEffort: 'medium',
+  currentReasoningEffort: DEFAULT_REASONING,
   attachments: [],
 
   // Actions
@@ -27,7 +28,7 @@ const useChatStore = create((set, get) => ({
     }
   },
 
-  createSession: async (agent = 'claude') => {
+  createSession: async (agent = DEFAULT_AGENT) => {
     set({ loading: true, error: null });
     try {
       const session = await chatApi.createSession(agent);
@@ -209,7 +210,7 @@ const useChatStore = create((set, get) => ({
   clearAttachments: () => set({ attachments: [] }),
   resetMessageOptions: () => set({
     currentModel: '',
-    currentReasoningEffort: 'medium',
+    currentReasoningEffort: DEFAULT_REASONING,
     attachments: [],
   }),
 }));

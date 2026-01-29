@@ -3,8 +3,9 @@ import { useConfigField } from '../../../hooks/useConfigField';
 import { useConfigStore } from '../../../stores/configStore';
 import { AgentCard } from '../AgentCard';
 import { SettingSection, SelectSetting } from '../index';
+import { AGENTS } from '../../../lib/agents';
 
-const FALLBACK_AGENTS = ['claude', 'gemini', 'codex', 'copilot'];
+const FALLBACK_AGENTS = AGENTS.map(a => a.value);
 
 export function AgentsTab() {
   const defaultAgent = useConfigField('agents.default');

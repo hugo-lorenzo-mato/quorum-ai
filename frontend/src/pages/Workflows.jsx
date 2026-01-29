@@ -70,6 +70,11 @@ function deriveTitleFromPrompt(prompt) {
 }
 
 function deriveWorkflowTitle(workflow, tasks = []) {
+  // Use explicit title if available
+  if (workflow?.title && String(workflow.title).trim().length > 0) {
+    return String(workflow.title).trim();
+  }
+
   const namedTasks = (tasks || []).filter((t) => t?.name && String(t.name).trim().length > 0);
   if (namedTasks.length > 0) {
     const first = String(namedTasks[0].name).trim();
@@ -247,7 +252,10 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
       notifyError('Failed to delete workflow');
     }
   }, [workflow.id, deleteWorkflow, notifyInfo, notifyError, navigate]);
-  const canEdit = workflow.status === 'pending';
+  // Title can be edited anytime except when running
+  // Prompt can only be edited when pending
+  const canEdit = workflow.status !== 'running';
+  const canEditPrompt = workflow.status === 'pending';
   const displayTitle = workflow.title || deriveWorkflowTitle(workflow, tasks);
 
   const handleSaveWorkflow = useCallback(async (updates) => {
@@ -1006,6 +1014,7 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
         onClose={() => setEditModalOpen(false)}
         workflow={workflow}
         onSave={handleSaveWorkflow}
+        canEditPrompt={canEditPrompt}
       />
 
       {/* Delete Confirmation Dialog */}
@@ -1023,13 +1032,14 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
 }
 
 function NewWorkflowForm({ onSubmit, onCancel, loading }) {
+  const [title, setTitle] = useState('');
   const [prompt, setPrompt] = useState('');
   const [files, setFiles] = useState([]);
   const fileInputRef = useRef(null);
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (prompt.trim()) onSubmit(prompt, files);
+    if (prompt.trim()) onSubmit(prompt, files, title.trim() || undefined);
   };
 
   const handleFilesSelected = (e) => {
@@ -1049,7 +1059,19 @@ function NewWorkflowForm({ onSubmit, onCancel, loading }) {
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <label className="block text-sm font-medium text-foreground mb-2">
-            Workflow Prompt
+            Title <span className="text-muted-foreground font-normal">(optional)</span>
+          </label>
+          <input
+            type="text"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Give your workflow a descriptive name..."
+            className="w-full px-3 py-2 border border-input rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-foreground mb-2">
+            Prompt
           </label>
           <div className="relative">
             <textarea
@@ -1179,8 +1201,8 @@ export default function Workflows() {
   const selectedWorkflow = workflows.find(w => w.id === id);
   const workflowTasks = id ? getTasksForWorkflow(id) : [];
 
-  const handleCreate = async (prompt, files = []) => {
-    const workflow = await createWorkflow(prompt);
+  const handleCreate = async (prompt, files = [], title) => {
+    const workflow = await createWorkflow(prompt, { title });
     if (!workflow) return;
 
     if (files.length > 0) {

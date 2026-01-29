@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 )
 
 // ValidationError represents a configuration validation error.
@@ -79,14 +81,14 @@ func (v *Validator) addError(field string, value interface{}, msg string) {
 
 func (v *Validator) validateLog(cfg *LogConfig) {
 	validLevels := map[string]bool{
-		"debug": true, "info": true, "warn": true, "error": true,
+		core.LogDebug: true, core.LogInfo: true, core.LogWarn: true, core.LogError: true,
 	}
 	if !validLevels[cfg.Level] {
 		v.addError("log.level", cfg.Level, "must be one of: debug, info, warn, error")
 	}
 
 	validFormats := map[string]bool{
-		"auto": true, "text": true, "json": true,
+		core.LogFormatAuto: true, core.LogFormatText: true, core.LogFormatJSON: true,
 	}
 	if !validFormats[cfg.Format] {
 		v.addError("log.format", cfg.Format, "must be one of: auto, text, json")
@@ -95,7 +97,7 @@ func (v *Validator) validateLog(cfg *LogConfig) {
 
 func (v *Validator) validateTrace(cfg *TraceConfig) {
 	validModes := map[string]bool{
-		"off": true, "summary": true, "full": true,
+		core.TraceModeOff: true, core.TraceModeSummary: true, core.TraceModeFull: true,
 	}
 	if !validModes[cfg.Mode] {
 		v.addError("trace.mode", cfg.Mode, "must be one of: off, summary, full")
@@ -129,7 +131,7 @@ func (v *Validator) validateTrace(cfg *TraceConfig) {
 
 	if len(cfg.IncludePhases) > 0 {
 		validPhases := map[string]bool{
-			"refine": true, "analyze": true, "plan": true, "execute": true,
+			string(core.PhaseRefine): true, string(core.PhaseAnalyze): true, string(core.PhasePlan): true, string(core.PhaseExecute): true,
 		}
 		for _, phase := range cfg.IncludePhases {
 			if !validPhases[phase] {
@@ -153,20 +155,17 @@ func (v *Validator) validateWorkflow(cfg *WorkflowConfig) {
 }
 
 func (v *Validator) validateAgents(cfg *AgentsConfig) {
-	validDefaults := map[string]bool{
-		"claude": true, "gemini": true, "codex": true, "copilot": true, "opencode": true,
-	}
-	if !validDefaults[cfg.Default] {
+	if !core.IsValidAgent(cfg.Default) {
 		v.addError("agents.default", cfg.Default, "unknown agent")
 	}
 
 	// Validate that default agent is enabled
 	defaultEnabled := map[string]bool{
-		"claude":   cfg.Claude.Enabled,
-		"gemini":   cfg.Gemini.Enabled,
-		"codex":    cfg.Codex.Enabled,
-		"copilot":  cfg.Copilot.Enabled,
-		"opencode": cfg.OpenCode.Enabled,
+		core.AgentClaude:   cfg.Claude.Enabled,
+		core.AgentGemini:   cfg.Gemini.Enabled,
+		core.AgentCodex:    cfg.Codex.Enabled,
+		core.AgentCopilot:  cfg.Copilot.Enabled,
+		core.AgentOpenCode: cfg.OpenCode.Enabled,
 	}
 	if !defaultEnabled[cfg.Default] {
 		v.addError("agents.default", cfg.Default, "default agent must be enabled")
@@ -198,17 +197,8 @@ func (v *Validator) validatePhaseModels(prefix string, phaseModels map[string]st
 		return
 	}
 
-	validKeys := map[string]bool{
-		"refine":     true,
-		"analyze":    true,
-		"moderate":   true,
-		"synthesize": true,
-		"plan":       true,
-		"execute":    true,
-	}
-
 	for key, model := range phaseModels {
-		if !validKeys[key] {
+		if !core.IsValidPhaseModelKey(key) {
 			v.addError(prefix, key, "unknown phase or task (valid: refine, analyze, moderate, synthesize, plan, execute)")
 			continue
 		}
@@ -223,15 +213,7 @@ func (v *Validator) validateReasoningEffortDefault(prefix, effort string) {
 		return
 	}
 
-	validEfforts := map[string]bool{
-		"minimal": true,
-		"low":     true,
-		"medium":  true,
-		"high":    true,
-		"xhigh":   true,
-	}
-
-	if !validEfforts[effort] {
+	if !core.IsValidReasoningEffort(effort) {
 		v.addError(prefix, effort, "invalid reasoning effort (valid: minimal, low, medium, high, xhigh)")
 	}
 }
@@ -241,29 +223,12 @@ func (v *Validator) validateReasoningEffortPhases(prefix string, phases map[stri
 		return
 	}
 
-	validKeys := map[string]bool{
-		"refine":     true,
-		"analyze":    true,
-		"moderate":   true,
-		"synthesize": true,
-		"plan":       true,
-		"execute":    true,
-	}
-
-	validEfforts := map[string]bool{
-		"minimal": true,
-		"low":     true,
-		"medium":  true,
-		"high":    true,
-		"xhigh":   true,
-	}
-
 	for key, effort := range phases {
-		if !validKeys[key] {
+		if !core.IsValidPhaseModelKey(key) {
 			v.addError(prefix, key, "unknown phase (valid: refine, analyze, moderate, synthesize, plan, execute)")
 			continue
 		}
-		if !validEfforts[effort] {
+		if !core.IsValidReasoningEffort(effort) {
 			v.addError(prefix+"."+key, effort, "invalid reasoning effort (valid: minimal, low, medium, high, xhigh)")
 		}
 	}
@@ -273,7 +238,7 @@ func (v *Validator) validateState(cfg *StateConfig) {
 	// Validate backend (empty string is valid - means use default "json")
 	if cfg.Backend != "" {
 		switch strings.ToLower(strings.TrimSpace(cfg.Backend)) {
-		case "json", "sqlite":
+		case core.StateBackendJSON, core.StateBackendSQLite:
 			// Valid backends
 		default:
 			v.addError("state.backend", cfg.Backend, "must be 'json' or 'sqlite'")
@@ -295,7 +260,7 @@ func (v *Validator) validateGit(cfg *GitConfig) {
 	}
 	if strings.TrimSpace(cfg.WorktreeMode) != "" {
 		switch strings.ToLower(strings.TrimSpace(cfg.WorktreeMode)) {
-		case "always", "parallel", "disabled":
+		case core.WorktreeModeAlways, core.WorktreeModeParallel, core.WorktreeModeDisabled:
 			// ok
 		default:
 			v.addError("git.worktree_mode", cfg.WorktreeMode, "must be always, parallel, or disabled")
@@ -305,7 +270,7 @@ func (v *Validator) validateGit(cfg *GitConfig) {
 	// Validate merge strategy
 	if cfg.MergeStrategy != "" {
 		switch strings.ToLower(cfg.MergeStrategy) {
-		case "merge", "squash", "rebase":
+		case core.MergeStrategyMerge, core.MergeStrategySquash, core.MergeStrategyRebase:
 			// ok
 		default:
 			v.addError("git.merge_strategy", cfg.MergeStrategy, "must be merge, squash, or rebase")
@@ -354,18 +319,18 @@ func (v *Validator) validatePhases(cfg *PhasesConfig, agents *AgentsConfig) {
 func (v *Validator) validatePhaseParticipation(cfg *PhasesConfig, agents *AgentsConfig) {
 	// Build agent config map for easy lookup
 	agentConfigs := map[string]*AgentConfig{
-		"claude":   &agents.Claude,
-		"gemini":   &agents.Gemini,
-		"codex":    &agents.Codex,
-		"copilot":  &agents.Copilot,
-		"opencode": &agents.OpenCode,
+		core.AgentClaude:   &agents.Claude,
+		core.AgentGemini:   &agents.Gemini,
+		core.AgentCodex:    &agents.Codex,
+		core.AgentCopilot:  &agents.Copilot,
+		core.AgentOpenCode: &agents.OpenCode,
 	}
 
 	// 1. Validate refiner agent has phases.refine: true
 	if cfg.Analyze.Refiner.Enabled && cfg.Analyze.Refiner.Agent != "" {
 		agent := cfg.Analyze.Refiner.Agent
 		if ac, ok := agentConfigs[agent]; ok && ac.Enabled {
-			if !ac.IsEnabledForPhase("refine") {
+			if !ac.IsEnabledForPhase(string(core.PhaseRefine)) {
 				v.addError("agents."+agent+".phases.refine", false,
 					"agent is assigned as refiner but phases.refine is false")
 			}
@@ -376,7 +341,7 @@ func (v *Validator) validatePhaseParticipation(cfg *PhasesConfig, agents *Agents
 	if cfg.Analyze.Moderator.Enabled && cfg.Analyze.Moderator.Agent != "" {
 		agent := cfg.Analyze.Moderator.Agent
 		if ac, ok := agentConfigs[agent]; ok && ac.Enabled {
-			if !ac.IsEnabledForPhase("moderate") {
+			if !ac.IsEnabledForPhase(core.TaskModerate) {
 				v.addError("agents."+agent+".phases.moderate", false,
 					"agent is assigned as moderator but phases.moderate is false")
 			}
@@ -387,7 +352,7 @@ func (v *Validator) validatePhaseParticipation(cfg *PhasesConfig, agents *Agents
 	if cfg.Analyze.Synthesizer.Agent != "" {
 		agent := cfg.Analyze.Synthesizer.Agent
 		if ac, ok := agentConfigs[agent]; ok && ac.Enabled {
-			if !ac.IsEnabledForPhase("synthesize") {
+			if !ac.IsEnabledForPhase(core.TaskSynthesize) {
 				v.addError("agents."+agent+".phases.synthesize", false,
 					"agent is assigned as synthesizer but phases.synthesize is false")
 			}
@@ -402,15 +367,15 @@ func (v *Validator) validatePhaseParticipation(cfg *PhasesConfig, agents *Agents
 		if !ac.Enabled {
 			continue
 		}
-		if ac.IsEnabledForPhase("analyze") {
+		if ac.IsEnabledForPhase(string(core.PhaseAnalyze)) {
 			analyzeCount++
 			analyzeAgents = append(analyzeAgents, name)
 		}
-		if ac.IsEnabledForPhase("plan") {
+		if ac.IsEnabledForPhase(string(core.PhasePlan)) {
 			planCount++
 			planAgents = append(planAgents, name)
 		}
-		if ac.IsEnabledForPhase("execute") {
+		if ac.IsEnabledForPhase(string(core.PhaseExecute)) {
 			executeCount++
 			executeAgents = append(executeAgents, name)
 		}
@@ -450,21 +415,18 @@ func (v *Validator) validateRefiner(cfg *RefinerConfig, agents *AgentsConfig) {
 		return
 	}
 
-	validAgents := map[string]bool{
-		"claude": true, "gemini": true, "codex": true, "copilot": true, "opencode": true,
-	}
-	if !validAgents[cfg.Agent] {
+	if !core.IsValidAgent(cfg.Agent) {
 		v.addError("phases.analyze.refiner.agent", cfg.Agent, "unknown agent")
 		return
 	}
 
 	// Validate that the specified agent is enabled
 	agentEnabled := map[string]bool{
-		"claude":   agents.Claude.Enabled,
-		"gemini":   agents.Gemini.Enabled,
-		"codex":    agents.Codex.Enabled,
-		"copilot":  agents.Copilot.Enabled,
-		"opencode": agents.OpenCode.Enabled,
+		core.AgentClaude:   agents.Claude.Enabled,
+		core.AgentGemini:   agents.Gemini.Enabled,
+		core.AgentCodex:    agents.Codex.Enabled,
+		core.AgentCopilot:  agents.Copilot.Enabled,
+		core.AgentOpenCode: agents.OpenCode.Enabled,
 	}
 	if !agentEnabled[cfg.Agent] {
 		v.addError("phases.analyze.refiner.agent", cfg.Agent, "specified agent must be enabled")
@@ -476,21 +438,18 @@ func (v *Validator) validateModerator(cfg *ModeratorConfig, agents *AgentsConfig
 		return
 	}
 
-	validAgents := map[string]bool{
-		"claude": true, "gemini": true, "codex": true, "copilot": true, "opencode": true,
-	}
-	if !validAgents[cfg.Agent] {
+	if !core.IsValidAgent(cfg.Agent) {
 		v.addError("phases.analyze.moderator.agent", cfg.Agent, "unknown agent")
 		return
 	}
 
 	// Validate that the specified agent is enabled
 	agentEnabled := map[string]bool{
-		"claude":   agents.Claude.Enabled,
-		"gemini":   agents.Gemini.Enabled,
-		"codex":    agents.Codex.Enabled,
-		"copilot":  agents.Copilot.Enabled,
-		"opencode": agents.OpenCode.Enabled,
+		core.AgentClaude:   agents.Claude.Enabled,
+		core.AgentGemini:   agents.Gemini.Enabled,
+		core.AgentCodex:    agents.Codex.Enabled,
+		core.AgentCopilot:  agents.Copilot.Enabled,
+		core.AgentOpenCode: agents.OpenCode.Enabled,
 	}
 	if !agentEnabled[cfg.Agent] {
 		v.addError("phases.analyze.moderator.agent", cfg.Agent, "specified agent must be enabled")
@@ -524,21 +483,18 @@ func (v *Validator) validateSingleAgent(cfg *SingleAgentConfig, moderator *Moder
 		return
 	}
 
-	validAgents := map[string]bool{
-		"claude": true, "gemini": true, "codex": true, "copilot": true, "opencode": true,
-	}
-	if !validAgents[cfg.Agent] {
+	if !core.IsValidAgent(cfg.Agent) {
 		v.addError("phases.analyze.single_agent.agent", cfg.Agent, "unknown agent")
 		return
 	}
 
 	// Validate that the specified agent is enabled
 	agentEnabled := map[string]bool{
-		"claude":   agents.Claude.Enabled,
-		"gemini":   agents.Gemini.Enabled,
-		"codex":    agents.Codex.Enabled,
-		"copilot":  agents.Copilot.Enabled,
-		"opencode": agents.OpenCode.Enabled,
+		core.AgentClaude:   agents.Claude.Enabled,
+		core.AgentGemini:   agents.Gemini.Enabled,
+		core.AgentCodex:    agents.Codex.Enabled,
+		core.AgentCopilot:  agents.Copilot.Enabled,
+		core.AgentOpenCode: agents.OpenCode.Enabled,
 	}
 	if !agentEnabled[cfg.Agent] {
 		v.addError("phases.analyze.single_agent.agent", cfg.Agent, "specified agent must be enabled")
@@ -551,21 +507,18 @@ func (v *Validator) validateSynthesizer(prefix, agent string, agents *AgentsConf
 		return
 	}
 
-	validAgents := map[string]bool{
-		"claude": true, "gemini": true, "codex": true, "copilot": true, "opencode": true,
-	}
-	if !validAgents[agent] {
+	if !core.IsValidAgent(agent) {
 		v.addError(prefix+".agent", agent, "unknown agent")
 		return
 	}
 
 	// Validate that the specified agent is enabled
 	agentEnabled := map[string]bool{
-		"claude":   agents.Claude.Enabled,
-		"gemini":   agents.Gemini.Enabled,
-		"codex":    agents.Codex.Enabled,
-		"copilot":  agents.Copilot.Enabled,
-		"opencode": agents.OpenCode.Enabled,
+		core.AgentClaude:   agents.Claude.Enabled,
+		core.AgentGemini:   agents.Gemini.Enabled,
+		core.AgentCodex:    agents.Codex.Enabled,
+		core.AgentCopilot:  agents.Copilot.Enabled,
+		core.AgentOpenCode: agents.OpenCode.Enabled,
 	}
 	if !agentEnabled[agent] {
 		v.addError(prefix+".agent", agent, "specified agent must be enabled")

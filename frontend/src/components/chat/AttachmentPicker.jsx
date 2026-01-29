@@ -173,7 +173,7 @@ export default function AttachmentPicker({ attachments, onAdd, onRemove, onClear
       </button>
 
       {isOpen && (
-        <div className="absolute top-full right-0 mt-1 z-50 w-80 max-h-96 rounded-lg border border-border bg-popover shadow-lg animate-fade-in flex flex-col">
+        <div className="absolute bottom-full right-0 mb-1 z-50 w-80 max-h-96 rounded-lg border border-border bg-popover shadow-lg animate-fade-in flex flex-col">
           <div className="p-2 border-b border-border">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />

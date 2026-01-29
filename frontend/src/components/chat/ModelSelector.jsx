@@ -1,33 +1,6 @@
 import { Cpu, ChevronDown } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
-
-// Models grouped by agent
-const AGENT_MODELS = {
-  claude: [
-    { value: '', label: 'Default', description: 'Use config default' },
-    { value: 'claude-sonnet-4-5-20250929', label: 'Sonnet 4.5', description: 'Fast & capable' },
-    { value: 'claude-opus-4-5-20251101', label: 'Opus 4.5', description: 'Most powerful' },
-    { value: 'claude-haiku-3-5-20241022', label: 'Haiku 3.5', description: 'Quick & efficient' },
-  ],
-  gemini: [
-    { value: '', label: 'Default', description: 'Use config default' },
-    { value: 'gemini-2.5-pro-preview-05-06', label: 'Gemini 2.5 Pro', description: 'Advanced reasoning' },
-    { value: 'gemini-2.5-flash-preview-05-20', label: 'Gemini 2.5 Flash', description: 'Fast responses' },
-    { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash', description: 'Quick & capable' },
-  ],
-  codex: [
-    { value: '', label: 'Default', description: 'Use config default' },
-    { value: 'gpt-5.2', label: 'GPT-5.2', description: 'Latest model' },
-    { value: 'gpt-5.1-codex', label: 'GPT-5.1 Codex', description: 'Code optimized' },
-    { value: 'o3', label: 'o3', description: 'Reasoning model' },
-    { value: 'o4-mini', label: 'o4-mini', description: 'Fast reasoning' },
-  ],
-  opencode: [
-    { value: '', label: 'Default', description: 'Use config default' },
-    { value: 'anthropic/claude-sonnet-4-5-20250929', label: 'Sonnet 4.5', description: 'Via OpenCode' },
-    { value: 'openai/gpt-4o', label: 'GPT-4o', description: 'OpenAI via OpenCode' },
-  ],
-};
+import { getModelsForAgent, getModelByValue } from '../../lib/agents';
 
 export default function ModelSelector({ value, onChange, agent, disabled }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -43,8 +16,8 @@ export default function ModelSelector({ value, onChange, agent, disabled }) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const models = AGENT_MODELS[agent] || AGENT_MODELS.claude;
-  const selected = models.find(m => m.value === value) || models[0];
+  const models = getModelsForAgent(agent);
+  const selected = getModelByValue(agent, value);
 
   return (
     <div className="relative" ref={ref}>
@@ -60,7 +33,7 @@ export default function ModelSelector({ value, onChange, agent, disabled }) {
       </button>
 
       {isOpen && (
-        <div className="absolute top-full left-0 mt-1 z-50 min-w-[200px] rounded-lg border border-border bg-popover shadow-lg animate-fade-in">
+        <div className="absolute bottom-full left-0 mb-1 z-50 min-w-[200px] rounded-lg border border-border bg-popover shadow-lg animate-fade-in">
           <div className="p-1 max-h-64 overflow-y-auto">
             {models.map((model) => (
               <button

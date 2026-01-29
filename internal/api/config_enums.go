@@ -2,6 +2,8 @@ package api
 
 import (
 	"net/http"
+
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 )
 
 // EnumsResponse contains all enum values used in configuration.
@@ -21,16 +23,16 @@ type EnumsResponse struct {
 // handleGetEnums returns all enum values for UI dropdowns.
 func (s *Server) handleGetEnums(w http.ResponseWriter, _ *http.Request) {
 	enums := EnumsResponse{
-		LogLevels:        []string{"debug", "info", "warn", "error"},
-		LogFormats:       []string{"auto", "text", "json"},
-		TraceModes:       []string{"off", "summary", "full"},
-		StateBackends:    []string{"sqlite", "json"},
-		WorktreeModes:    []string{"always", "parallel", "disabled"},
-		MergeStrategies:  []string{"merge", "squash", "rebase"},
-		ReasoningEfforts: []string{"minimal", "low", "medium", "high", "xhigh"},
-		Agents:           []string{"claude", "gemini", "codex", "copilot", "opencode"},
-		Phases:           []string{"refine", "analyze", "plan", "execute"},
-		PhaseModelKeys:   []string{"refine", "analyze", "moderate", "synthesize", "plan", "execute"},
+		LogLevels:        core.LogLevels,
+		LogFormats:       core.LogFormats,
+		TraceModes:       core.TraceModes,
+		StateBackends:    core.StateBackends,
+		WorktreeModes:    core.WorktreeModes,
+		MergeStrategies:  core.MergeStrategies,
+		ReasoningEfforts: core.ReasoningEfforts,
+		Agents:           core.Agents,
+		Phases:           core.Phases,
+		PhaseModelKeys:   core.PhaseModelKeys,
 	}
 
 	respondJSON(w, http.StatusOK, enums)
