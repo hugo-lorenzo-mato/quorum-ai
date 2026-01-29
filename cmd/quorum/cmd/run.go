@@ -321,7 +321,7 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 	// Create service components needed by the modular runner
 	checkpointManager := service.NewCheckpointManager(stateManager, logger)
 	retryPolicy := service.NewRetryPolicy(service.WithMaxAttempts(runMaxRetries))
-	rateLimiterRegistry := service.NewRateLimiterRegistry()
+	rateLimiterRegistry := service.GetGlobalRateLimiter()
 	dagBuilder := service.NewDAGBuilder()
 
 	// Create worktree manager for task isolation

@@ -225,7 +225,7 @@ func InitPhaseRunner(ctx context.Context, phase core.Phase, maxRetries int, dryR
 	// Create service components
 	checkpointManager := service.NewCheckpointManager(stateManager, logger)
 	retryPolicy := service.NewRetryPolicy(service.WithMaxAttempts(maxRetries))
-	rateLimiterRegistry := service.NewRateLimiterRegistry()
+	rateLimiterRegistry := service.GetGlobalRateLimiter()
 	dagBuilder := service.NewDAGBuilder()
 
 	// Create worktree manager for task isolation
