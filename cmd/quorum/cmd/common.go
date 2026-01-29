@@ -12,6 +12,7 @@ import (
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/adapters/cli"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/adapters/git"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/adapters/github"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/adapters/state"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/config"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
@@ -44,6 +45,8 @@ type PhaseRunnerDeps struct {
 	DAGAdapter        *workflow.DAGAdapter
 	WorktreeManager   workflow.WorktreeManager
 	GitClientFactory  workflow.GitClientFactory
+	GitClient         core.GitClient
+	GitHubClient      core.GitHubClient
 	RunnerConfig      *workflow.RunnerConfig
 	PhaseTimeout      time.Duration
 }
@@ -209,6 +212,14 @@ func InitPhaseRunner(ctx context.Context, phase core.Phase, maxRetries int, dryR
 			Plan:    planTimeout,
 			Execute: executeTimeout,
 		},
+		Finalization: workflow.FinalizationConfig{
+			AutoCommit:    cfg.Git.AutoCommit,
+			AutoPush:      cfg.Git.AutoPush,
+			AutoPR:        cfg.Git.AutoPR,
+			AutoMerge:     cfg.Git.AutoMerge,
+			PRBaseBranch:  cfg.Git.PRBaseBranch,
+			MergeStrategy: cfg.Git.MergeStrategy,
+		},
 	}
 
 	// Create service components
@@ -236,6 +247,18 @@ func InitPhaseRunner(ctx context.Context, phase core.Phase, maxRetries int, dryR
 	// Create git client factory for task finalization (commit, push, PR)
 	gitClientFactory := git.NewClientFactory()
 
+	// Create GitHub client for PR creation (only if auto_pr is enabled)
+	var githubClient core.GitHubClient
+	if cfg.Git.AutoPR {
+		ghClient, ghErr := github.NewClientFromRepo()
+		if ghErr != nil {
+			logger.Warn("failed to create GitHub client, PR creation disabled", "error", ghErr)
+		} else {
+			githubClient = ghClient
+			logger.Info("GitHub client initialized for PR creation")
+		}
+	}
+
 	// Create adapters for modular runner interfaces
 	checkpointAdapter := workflow.NewCheckpointAdapter(checkpointManager, ctx)
 	retryAdapter := workflow.NewRetryAdapter(retryPolicy, ctx)
@@ -262,6 +285,8 @@ func InitPhaseRunner(ctx context.Context, phase core.Phase, maxRetries int, dryR
 		DAGAdapter:        dagAdapter,
 		WorktreeManager:   worktreeManager,
 		GitClientFactory:  gitClientFactory,
+		GitClient:         gitClient,
+		GitHubClient:      githubClient,
 		RunnerConfig:      runnerConfig,
 		PhaseTimeout:      phaseTimeout,
 	}, nil
@@ -277,17 +302,20 @@ func CreateWorkflowContext(deps *PhaseRunnerDeps, state *core.WorkflowState) *wo
 		Retry:      deps.RetryAdapter,
 		RateLimits: deps.RateLimiterAdapt,
 		Worktrees:  deps.WorktreeManager,
+		Git:        deps.GitClient,
+		GitHub:     deps.GitHubClient,
 		Logger:     deps.Logger,
 		Config: &workflow.Config{
-			DryRun:             deps.RunnerConfig.DryRun,
-			Sandbox:            deps.RunnerConfig.Sandbox,
-			DenyTools:          deps.RunnerConfig.DenyTools,
-			DefaultAgent:       deps.RunnerConfig.DefaultAgent,
-			AgentPhaseModels:   deps.RunnerConfig.AgentPhaseModels,
+			DryRun:            deps.RunnerConfig.DryRun,
+			Sandbox:           deps.RunnerConfig.Sandbox,
+			DenyTools:         deps.RunnerConfig.DenyTools,
+			DefaultAgent:      deps.RunnerConfig.DefaultAgent,
+			AgentPhaseModels:  deps.RunnerConfig.AgentPhaseModels,
 			WorktreeAutoClean: deps.RunnerConfig.WorktreeAutoClean,
 			WorktreeMode:      deps.RunnerConfig.WorktreeMode,
 			PhaseTimeouts:     deps.RunnerConfig.PhaseTimeouts,
-			Moderator:          deps.ModeratorConfig,
+			Moderator:         deps.ModeratorConfig,
+			Finalization:      deps.RunnerConfig.Finalization,
 		},
 	}
 }

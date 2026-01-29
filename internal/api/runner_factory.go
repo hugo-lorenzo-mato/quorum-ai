@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/adapters/git"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/adapters/github"
 	webadapters "github.com/hugo-lorenzo-mato/quorum-ai/internal/adapters/web"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/config"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/control"
@@ -96,13 +97,31 @@ func (f *RunnerFactory) CreateRunner(ctx context.Context, workflowID string, cp 
 
 	// Create git client and worktree manager (optional, may fail)
 	var worktreeManager workflow.WorktreeManager
+	var gitClient core.GitClient
 	cwd, err := os.Getwd()
 	if err == nil {
-		gitClient, gitErr := git.NewClient(cwd)
-		if gitErr == nil && gitClient != nil {
-			worktreeManager = git.NewTaskWorktreeManager(gitClient, cfg.Git.WorktreeDir).WithLogger(f.logger)
+		gc, gitErr := git.NewClient(cwd)
+		if gitErr == nil && gc != nil {
+			gitClient = gc
+			worktreeManager = git.NewTaskWorktreeManager(gc, cfg.Git.WorktreeDir).WithLogger(f.logger)
 		} else if f.logger != nil {
 			f.logger.Warn("git client unavailable, worktree isolation disabled", "error", gitErr)
+		}
+	}
+
+	// Create GitHub client for PR creation (only if auto_pr is enabled)
+	var githubClient core.GitHubClient
+	if cfg.Git.AutoPR {
+		ghClient, ghErr := github.NewClientFromRepo()
+		if ghErr != nil {
+			if f.logger != nil {
+				f.logger.Warn("failed to create GitHub client, PR creation disabled", "error", ghErr)
+			}
+		} else {
+			githubClient = ghClient
+			if f.logger != nil {
+				f.logger.Info("GitHub client initialized for PR creation")
+			}
 		}
 	}
 
@@ -138,6 +157,8 @@ func (f *RunnerFactory) CreateRunner(ctx context.Context, workflowID string, cp 
 		RateLimits:       rateLimiterAdapter,
 		Worktrees:        worktreeManager,
 		GitClientFactory: git.NewClientFactory(),
+		Git:              gitClient,
+		GitHub:           githubClient,
 		Logger:           f.logger,
 		Output:           outputNotifier,
 		ModeEnforcer:     modeEnforcerAdapter,

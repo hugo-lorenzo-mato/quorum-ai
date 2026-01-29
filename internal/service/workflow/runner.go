@@ -148,6 +148,8 @@ type Runner struct {
 	retry          RetryExecutor
 	rateLimits     RateLimiterGetter
 	worktrees      WorktreeManager
+	git            core.GitClient
+	github         core.GitHubClient
 	logger         *logging.Logger
 	output         OutputNotifier
 	modeEnforcer   ModeEnforcerInterface
@@ -170,6 +172,8 @@ type RunnerDeps struct {
 	RateLimits       RateLimiterGetter
 	Worktrees        WorktreeManager
 	GitClientFactory GitClientFactory
+	Git              core.GitClient
+	GitHub           core.GitHubClient
 	Logger           *logging.Logger
 	Output           OutputNotifier
 	ModeEnforcer     ModeEnforcerInterface
@@ -210,6 +214,8 @@ func NewRunner(deps RunnerDeps) *Runner {
 		retry:          deps.Retry,
 		rateLimits:     deps.RateLimits,
 		worktrees:      deps.Worktrees,
+		git:            deps.Git,
+		github:         deps.GitHub,
 		logger:         deps.Logger,
 		output:         deps.Output,
 		modeEnforcer:   deps.ModeEnforcer,
@@ -441,6 +447,8 @@ func (r *Runner) createContext(state *core.WorkflowState) *Context {
 		Retry:        r.retry,
 		RateLimits:   r.rateLimits,
 		Worktrees:    r.worktrees,
+		Git:          r.git,
+		GitHub:       r.github,
 		Logger:       r.logger,
 		Output:       r.output,
 		ModeEnforcer: r.modeEnforcer,
@@ -515,7 +523,7 @@ func (r *Runner) validateRunInput(prompt string) error {
 // ValidateAgentAvailability checks that all configured agents have their CLIs installed.
 // This runs early to fail fast with a clear error message before any phase starts.
 func (r *Runner) ValidateAgentAvailability(ctx context.Context) error {
-	configured := r.agents.List()
+	configured := r.agents.ListEnabled()
 	available := r.agents.Available(ctx)
 
 	// Build set of available agents

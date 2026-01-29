@@ -14,6 +14,7 @@ import (
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/adapters/cli"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/adapters/git"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/adapters/github"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/adapters/state"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/config"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
@@ -337,6 +338,18 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 		worktreeManager = git.NewTaskWorktreeManager(gitClient, cfg.Git.WorktreeDir).WithLogger(logger)
 	}
 
+	// Create GitHub client for PR creation (only if auto_pr is enabled)
+	var githubClient core.GitHubClient
+	if cfg.Git.AutoPR {
+		ghClient, ghErr := github.NewClientFromRepo()
+		if ghErr != nil {
+			logger.Warn("failed to create GitHub client, PR creation disabled", "error", ghErr)
+		} else {
+			githubClient = ghClient
+			logger.Info("GitHub client initialized for PR creation")
+		}
+	}
+
 	// Create adapters for modular runner interfaces
 	checkpointAdapter := workflow.NewCheckpointAdapter(checkpointManager, ctx)
 	retryAdapter := workflow.NewRetryAdapter(retryPolicy, ctx)
@@ -381,6 +394,8 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 		RateLimits:       rateLimiterAdapter,
 		Worktrees:        worktreeManager,
 		GitClientFactory: git.NewClientFactory(),
+		Git:              gitClient,
+		GitHub:           githubClient,
 		Logger:           logger,
 		Output:           outputNotifier,
 		ModeEnforcer:     modeEnforcerAdapter,
