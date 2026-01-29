@@ -128,7 +128,7 @@ func (o *OpenCodeAdapter) Ping(ctx context.Context) error {
 // checkOllamaConnectivity attempts to verify Ollama is reachable.
 // This is advisory only - execution may still work without connectivity.
 func (o *OpenCodeAdapter) checkOllamaConnectivity(ctx context.Context) {
-	req, err := http.NewRequestWithContext(ctx, "GET", o.ollamaURL+"/models", nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", o.ollamaURL+"/models", http.NoBody)
 	if err != nil {
 		o.logger.Debug("ollama check failed to create request", "error", err)
 		return
@@ -179,8 +179,12 @@ func (o *OpenCodeAdapter) Execute(ctx context.Context, opts core.ExecuteOptions)
 
 // setOllamaEnv sets environment variables required for Ollama backend.
 func (o *OpenCodeAdapter) setOllamaEnv() {
-	os.Setenv("OPENAI_BASE_URL", o.ollamaURL)
-	os.Setenv("OPENAI_API_KEY", o.ollamaKey)
+	if err := os.Setenv("OPENAI_BASE_URL", o.ollamaURL); err != nil {
+		o.logger.Warn("failed to set OPENAI_BASE_URL", "error", err)
+	}
+	if err := os.Setenv("OPENAI_API_KEY", o.ollamaKey); err != nil {
+		o.logger.Warn("failed to set OPENAI_API_KEY", "error", err)
+	}
 }
 
 // unsetOllamaEnv cleans up Ollama environment variables.
@@ -301,7 +305,7 @@ func (o *OpenCodeAdapter) isModelAvailable(model string) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, "GET", o.ollamaURL+"/models", nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", o.ollamaURL+"/models", http.NoBody)
 	if err != nil {
 		return true // Assume available if we can't check
 	}
@@ -323,7 +327,7 @@ func (o *OpenCodeAdapter) isModelAvailable(model string) bool {
 }
 
 // buildArgs constructs CLI arguments for opencode run.
-func (o *OpenCodeAdapter) buildArgs(opts core.ExecuteOptions, model string) []string {
+func (o *OpenCodeAdapter) buildArgs(_ core.ExecuteOptions, model string) []string {
 	args := []string{"run"}
 
 	// Add model flag

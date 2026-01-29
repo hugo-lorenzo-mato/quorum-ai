@@ -14,8 +14,8 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/rs/cors"
 
-	"github.com/hugo-lorenzo-mato/quorum-ai/internal/attachments"
 	webadapters "github.com/hugo-lorenzo-mato/quorum-ai/internal/adapters/web"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/attachments"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/config"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/control"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"

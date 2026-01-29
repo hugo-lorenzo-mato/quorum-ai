@@ -59,13 +59,19 @@ func (s *Store) Save(ownerType OwnerType, ownerID string, r io.Reader, filename 
 	attachmentID := uuid.New().String()
 	safeName := sanitizeFilename(filename)
 
-	attachmentDir := filepath.Join(s.baseDir, string(ownerType), ownerID, attachmentID)
-	if err := os.MkdirAll(attachmentDir, 0o750); err != nil {
+	root, err := os.OpenRoot(s.baseDir)
+	if err != nil {
+		return core.Attachment{}, fmt.Errorf("opening attachments root: %w", err)
+	}
+	defer func() { _ = root.Close() }()
+
+	attachmentDirRel := filepath.Join(string(ownerType), ownerID, attachmentID)
+	if err := root.MkdirAll(attachmentDirRel, 0o750); err != nil {
 		return core.Attachment{}, fmt.Errorf("creating attachment dir: %w", err)
 	}
 
-	absPath := filepath.Join(attachmentDir, safeName)
-	f, err := os.OpenFile(absPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	fileRelPath := filepath.Join(attachmentDirRel, safeName)
+	f, err := root.OpenFile(fileRelPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
 		return core.Attachment{}, fmt.Errorf("creating attachment file: %w", err)
 	}
@@ -79,7 +85,7 @@ func (s *Store) Save(ownerType OwnerType, ownerID string, r io.Reader, filename 
 			return core.Attachment{}, fmt.Errorf("writing attachment header: %w", err)
 		}
 	}
-	contentType := http.DetectContentType(sniffBuf[:max(0, n)])
+	contentType := http.DetectContentType(sniffBuf[:n])
 
 	remainingLimit := int64(MaxAttachmentSizeBytes - n)
 	if remainingLimit < 0 {
@@ -95,18 +101,18 @@ func (s *Store) Save(ownerType OwnerType, ownerID string, r io.Reader, filename 
 
 	size := int64(n) + written
 
-	relPath := filepath.ToSlash(filepath.Join(".quorum", "attachments", string(ownerType), ownerID, attachmentID, safeName))
+	metaRelPath := filepath.ToSlash(filepath.Join(".quorum", "attachments", string(ownerType), ownerID, attachmentID, safeName))
 	meta := core.Attachment{
 		ID:          attachmentID,
 		Name:        safeName,
-		Path:        relPath,
+		Path:        metaRelPath,
 		Size:        size,
 		ContentType: contentType,
 		CreatedAt:   time.Now(),
 	}
 
-	metaPath := filepath.Join(attachmentDir, "meta.json")
-	if err := writeJSONFile(metaPath, meta, 0o600); err != nil {
+	metaPath := filepath.Join(attachmentDirRel, "meta.json")
+	if err := writeJSONFile(root, metaPath, meta, 0o600); err != nil {
 		return core.Attachment{}, fmt.Errorf("writing meta: %w", err)
 	}
 
@@ -226,22 +232,14 @@ func sanitizeFilename(name string) string {
 	return base
 }
 
-func writeJSONFile(path string, v interface{}, perm os.FileMode) error {
+func writeJSONFile(root *os.Root, path string, v interface{}, perm os.FileMode) error {
 	tmp := path + ".tmp"
 	b, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(tmp, b, perm); err != nil { // #nosec G304 -- controlled path
+	if err := root.WriteFile(tmp, b, perm); err != nil {
 		return err
 	}
-	return os.Rename(tmp, path)
+	return root.Rename(tmp, path)
 }
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
-

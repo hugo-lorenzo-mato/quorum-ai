@@ -41,4 +41,3 @@ func BuildAttachmentsContext(state *core.WorkflowState, workDir string) string {
 	sb.WriteString("\n")
 	return sb.String()
 }
-

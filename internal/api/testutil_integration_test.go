@@ -381,6 +381,19 @@ func (m *threadSafeMockStateManager) PurgeAllWorkflows(_ context.Context) (int, 
 	return count, nil
 }
 
+func (m *threadSafeMockStateManager) DeleteWorkflow(_ context.Context, id core.WorkflowID) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.workflows[id]; !ok {
+		return fmt.Errorf("workflow not found: %s", id)
+	}
+	delete(m.workflows, id)
+	if m.activeID == id {
+		m.activeID = ""
+	}
+	return nil
+}
+
 // mockAgentRegistryIntegration for integration tests - separate from unit test mock
 type mockAgentRegistryIntegration struct {
 	agents    map[string]*mockAgent

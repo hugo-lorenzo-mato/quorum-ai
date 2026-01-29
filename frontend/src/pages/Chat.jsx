@@ -137,10 +137,13 @@ export default function Chat() {
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
 
+  const activeMessages = getActiveMessages();
+  const activeSession = sessions.find((s) => s.id === activeSessionId);
+
   useEffect(() => { fetchSessions(); }, [fetchSessions]);
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [getActiveMessages(), activeSessionId]);
+  }, [activeMessages, activeSessionId]);
 
   const handleSend = async (e) => {
     e.preventDefault();
@@ -154,9 +157,6 @@ export default function Chat() {
   const handleCreateSession = async () => {
     await createSession();
   };
-
-  const activeMessages = getActiveMessages();
-  const activeSession = sessions.find((s) => s.id === activeSessionId);
 
   return (
     <div className="h-[calc(100vh-8rem)] flex gap-4 animate-fade-in">

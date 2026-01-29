@@ -31,7 +31,7 @@ type Result struct {
 
 // These vars exist for testability.
 var (
-	nativeWriteAll = func(text string) error { return atotto.WriteAll(text) }
+	nativeWriteAll = atotto.WriteAll
 	osc52WriteAll  = writeAllOSC52
 )
 
@@ -102,8 +102,9 @@ func writeTempFile(text string) (string, error) {
 	if _, err = f.WriteString(text); err != nil {
 		return "", err
 	}
-	if err = f.Close(); err != nil {
-		return "", err
+	if closeErr := f.Close(); closeErr != nil {
+		err = closeErr
+		return "", closeErr
 	}
 
 	// Make the path a bit friendlier to read/copy (no functional changes).

@@ -249,7 +249,7 @@ func (b *BaseAdapter) ExecuteCommand(ctx context.Context, args []string, stdin, 
 	if err := cmd.Start(); err != nil {
 		// CRITICAL: Close pipe if Start() fails to prevent FD leak
 		if stderrPipe != nil {
-			stderrPipe.Close()
+			_ = stderrPipe.Close()
 		}
 		return nil, fmt.Errorf("starting command: %w", err)
 	}
@@ -525,7 +525,7 @@ func (b *BaseAdapter) executeWithJSONStreaming(
 	stderrPipe, err := cmd.StderrPipe()
 	if err != nil {
 		// CRITICAL: Close stdout pipe if stderr pipe creation fails
-		stdoutPipe.Close()
+		_ = stdoutPipe.Close()
 		return nil, fmt.Errorf("creating stderr pipe: %w", err)
 	}
 
@@ -541,8 +541,8 @@ func (b *BaseAdapter) executeWithJSONStreaming(
 
 	if err := cmd.Start(); err != nil {
 		// CRITICAL: Close both pipes if Start() fails to prevent FD leak
-		stdoutPipe.Close()
-		stderrPipe.Close()
+		_ = stdoutPipe.Close()
+		_ = stderrPipe.Close()
 		return nil, fmt.Errorf("starting command: %w", err)
 	}
 

@@ -4,7 +4,6 @@ import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import Workflows from './pages/Workflows';
 import Chat from './pages/Chat';
-import Files from './pages/Files';
 import Settings from './pages/Settings';
 import useSSE from './hooks/useSSE';
 import { useUIStore } from './stores';
@@ -27,7 +26,6 @@ function AppContent() {
         <Route path="/workflows" element={<Workflows />} />
         <Route path="/workflows/:id" element={<Workflows />} />
         <Route path="/chat" element={<Chat />} />
-        <Route path="/files" element={<Files />} />
         <Route path="/settings" element={<Settings />} />
       </Routes>
     </Layout>

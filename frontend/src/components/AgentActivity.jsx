@@ -1,7 +1,6 @@
 import { useMemo, useState, useEffect } from 'react';
 import {
   Activity,
-  Bot,
   ChevronDown,
   ChevronUp,
   Loader2,
@@ -71,23 +70,8 @@ function getActivityIcon(eventKind) {
   }
 }
 
-function AgentBadge({ name, status, message }) {
-  const color = getAgentColor(name);
-  const isActive = ['started', 'thinking', 'tool_use', 'progress'].includes(status);
-
-  return (
-    <div
-      className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium border ${color.bg} ${color.text} ${color.border}`}
-    >
-      <Bot className="w-3 h-3" />
-      <span className="truncate max-w-[120px]">{name}</span>
-      {isActive && <Loader2 className="w-3 h-3 animate-spin" />}
-    </div>
-  );
-}
-
 // TUI-style progress bar for a single agent
-function AgentProgressBar({ agent, tick }) {
+function AgentProgressBar({ agent }) {
   const color = getAgentColor(agent.name);
   const isActive = ['started', 'thinking', 'tool_use', 'progress'].includes(agent.status);
   const isDone = agent.status === 'completed';
@@ -183,11 +167,11 @@ function ActivityEntry({ entry }) {
   );
 }
 
-export default function AgentActivity({ workflowId, activity = [], activeAgents = [], expanded, onToggle, workflowStartTime }) {
+export default function AgentActivity({ activity = [], activeAgents = [], expanded, onToggle, workflowStartTime }) {
   const hasActivity = activity.length > 0 || activeAgents.length > 0;
 
   // Timer tick for updating elapsed times
-  const [tick, setTick] = useState(0);
+  const [, setTick] = useState(0);
 
   useEffect(() => {
     if (!hasActivity) return;
@@ -196,10 +180,7 @@ export default function AgentActivity({ workflowId, activity = [], activeAgents 
   }, [hasActivity]);
 
   // Calculate total elapsed time
-  const totalElapsed = useMemo(() => {
-    if (!workflowStartTime) return null;
-    return formatElapsed(workflowStartTime);
-  }, [workflowStartTime, tick]);
+  const totalElapsed = workflowStartTime ? formatElapsed(workflowStartTime) : null;
 
   // Build agent progress data from activity
   const agentProgress = useMemo(() => {
@@ -239,7 +220,7 @@ export default function AgentActivity({ workflowId, activity = [], activeAgents 
     });
 
     return Array.from(agents.values());
-  }, [activity, activeAgents, tick]);
+  }, [activity, activeAgents]);
 
   if (!hasActivity) return null;
 
@@ -314,7 +295,7 @@ export default function AgentActivity({ workflowId, activity = [], activeAgents 
               </div>
               <div className="space-y-0.5 bg-background/50 rounded-lg p-3">
                 {agentProgress.map((agent) => (
-                  <AgentProgressBar key={agent.name} agent={agent} tick={tick} />
+                  <AgentProgressBar key={agent.name} agent={agent} />
                 ))}
               </div>
             </div>
