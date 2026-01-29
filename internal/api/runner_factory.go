@@ -16,6 +16,7 @@ import (
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/events"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/logging"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service/report"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service/workflow"
 )
 
@@ -283,6 +284,12 @@ func buildRunnerConfig(cfg *config.Config) *workflow.RunnerConfig {
 			AutoMerge:     cfg.Git.AutoMerge,
 			PRBaseBranch:  cfg.Git.PRBaseBranch,
 			MergeStrategy: cfg.Git.MergeStrategy,
+		},
+		Report: report.Config{
+			Enabled:    cfg.Report.Enabled,
+			BaseDir:    cfg.Report.BaseDir,
+			UseUTC:     cfg.Report.UseUTC,
+			IncludeRaw: cfg.Report.IncludeRaw,
 		},
 	}
 }

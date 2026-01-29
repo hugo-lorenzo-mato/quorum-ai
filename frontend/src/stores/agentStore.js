@@ -14,8 +14,28 @@ const useAgentStore = create((set, get) => ({
     const agent = data.agent;
     const eventKind = data.event_kind;
 
-    // Update current agent status
+    // Update current agent status with proper timestamp handling
     const workflowAgents = currentAgents[workflowId] || {};
+    const existingAgent = workflowAgents[agent] || {};
+
+    // Determine timestamps based on event kind
+    const isStartEvent = eventKind === 'started';
+    const isEndEvent = eventKind === 'completed' || eventKind === 'error';
+
+    // startedAt: set on first 'started' event, preserve existing
+    const startedAt = isStartEvent
+      ? data.timestamp
+      : existingAgent.startedAt || data.timestamp;
+
+    // completedAt: set when agent completes or errors
+    const completedAt = isEndEvent ? data.timestamp : existingAgent.completedAt;
+
+    // durationMs: calculate fixed duration when completed
+    let durationMs = existingAgent.durationMs;
+    if (isEndEvent && startedAt && data.timestamp) {
+      durationMs = new Date(data.timestamp).getTime() - new Date(startedAt).getTime();
+    }
+
     const updatedAgents = {
       ...workflowAgents,
       [agent]: {
@@ -23,6 +43,9 @@ const useAgentStore = create((set, get) => ({
         message: data.message,
         data: data.data,
         timestamp: data.timestamp,
+        startedAt,
+        completedAt,
+        durationMs,
       },
     };
 
@@ -81,15 +104,37 @@ const useAgentStore = create((set, get) => ({
       timestamp: event.timestamp,
     })).reverse().slice(0, MAX_ACTIVITY_ENTRIES);
 
-    // Rebuild current agent statuses from the most recent event per agent
+    // Rebuild current agent statuses from events with proper timestamp handling
     const agentStatuses = {};
     for (const event of events) {
-      // Later events override earlier ones (events are in chronological order)
+      // Events are in chronological order, so we process them sequentially
+      const existing = agentStatuses[event.agent] || {};
+      const eventKind = event.event_kind;
+      const isStartEvent = eventKind === 'started';
+      const isEndEvent = eventKind === 'completed' || eventKind === 'error';
+
+      // Track startedAt from first 'started' event
+      const startedAt = isStartEvent
+        ? event.timestamp
+        : existing.startedAt || event.timestamp;
+
+      // Track completedAt from completion events
+      const completedAt = isEndEvent ? event.timestamp : existing.completedAt;
+
+      // Calculate durationMs when we have both timestamps
+      let durationMs = existing.durationMs;
+      if (isEndEvent && startedAt && event.timestamp) {
+        durationMs = new Date(event.timestamp).getTime() - new Date(startedAt).getTime();
+      }
+
       agentStatuses[event.agent] = {
-        status: event.event_kind,
+        status: eventKind,
         message: event.message,
         data: event.data,
         timestamp: event.timestamp,
+        startedAt,
+        completedAt,
+        durationMs,
       };
     }
 

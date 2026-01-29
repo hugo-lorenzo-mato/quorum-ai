@@ -38,7 +38,18 @@ function getAgentColor(agentName) {
 }
 
 // Format elapsed time like TUI (e.g., "45s", "2m30s")
-function formatElapsed(startTime) {
+// If durationMs is provided (agent completed), use fixed duration instead of calculating from current time
+function formatElapsed(startTime, durationMs = null) {
+  // Use fixed duration for completed agents
+  if (durationMs !== null && durationMs !== undefined) {
+    const elapsed = Math.floor(durationMs / 1000);
+    if (elapsed < 60) return `${elapsed}s`;
+    const mins = Math.floor(elapsed / 60);
+    const secs = elapsed % 60;
+    return `${mins}m${secs.toString().padStart(2, '0')}s`;
+  }
+
+  // Calculate live elapsed time for active agents
   if (!startTime) return '';
   const elapsed = Math.floor((Date.now() - new Date(startTime).getTime()) / 1000);
   if (elapsed < 60) return `${elapsed}s`;
@@ -77,11 +88,14 @@ function AgentProgressBar({ agent }) {
   const isDone = agent.status === 'completed';
   const isError = agent.status === 'error';
 
-  const progress = estimateProgress(agent.timestamp, isDone);
+  // Use startedAt for progress calculation, fall back to timestamp for backwards compatibility
+  const startTime = agent.startedAt || agent.timestamp;
+  const progress = estimateProgress(startTime, isDone);
   const filledBars = Math.floor(progress / 10);
 
   const activityIcon = getActivityIcon(agent.status);
-  const elapsed = agent.timestamp ? formatElapsed(agent.timestamp) : '';
+  // For completed agents, use fixed durationMs; for active agents, calculate live elapsed
+  const elapsed = startTime ? formatElapsed(startTime, agent.durationMs) : '';
 
   return (
     <div className="flex items-center gap-3 py-1.5 font-mono text-xs">
@@ -182,7 +196,7 @@ export default function AgentActivity({ activity = [], activeAgents = [], expand
   // Calculate total elapsed time
   const totalElapsed = workflowStartTime ? formatElapsed(workflowStartTime) : null;
 
-  // Build agent progress data from activity
+  // Build agent progress data from activity with proper timestamp handling
   const agentProgress = useMemo(() => {
     const agents = new Map();
 
@@ -193,11 +207,36 @@ export default function AgentActivity({ activity = [], activeAgents = [], expand
         status: 'idle',
         message: '',
         timestamp: null,
+        startedAt: null,
+        completedAt: null,
+        durationMs: null,
       };
 
+      const eventKind = entry.eventKind;
+      const isStartEvent = eventKind === 'started';
+      const isEndEvent = eventKind === 'completed' || eventKind === 'error';
+
       // Update with latest event
-      existing.status = entry.eventKind;
+      existing.status = eventKind;
       existing.message = entry.message;
+      existing.data = entry.data;
+
+      // Track startedAt from first 'started' event
+      if (isStartEvent) {
+        existing.startedAt = entry.timestamp;
+      } else if (!existing.startedAt) {
+        existing.startedAt = entry.timestamp;
+      }
+
+      // Track completedAt and calculate duration when completed
+      if (isEndEvent) {
+        existing.completedAt = entry.timestamp;
+        if (existing.startedAt && entry.timestamp) {
+          existing.durationMs = new Date(entry.timestamp).getTime() - new Date(existing.startedAt).getTime();
+        }
+      }
+
+      // Keep timestamp for backwards compatibility
       if (!existing.timestamp) {
         existing.timestamp = entry.timestamp;
       }
@@ -205,16 +244,24 @@ export default function AgentActivity({ activity = [], activeAgents = [], expand
       agents.set(entry.agent, existing);
     });
 
-    // Also add any active agents not in activity
+    // Also add any active agents not in activity (these come from the store with proper timestamps)
     activeAgents.forEach(agent => {
       const existing = agents.get(agent.name) || {
         name: agent.name,
         status: agent.status,
         message: agent.message,
         timestamp: agent.timestamp,
+        startedAt: agent.startedAt,
+        completedAt: agent.completedAt,
+        durationMs: agent.durationMs,
       };
       existing.status = agent.status;
       existing.message = agent.message;
+      existing.data = agent.data;
+      // Use store values which have proper timestamp tracking
+      if (agent.startedAt) existing.startedAt = agent.startedAt;
+      if (agent.completedAt) existing.completedAt = agent.completedAt;
+      if (agent.durationMs) existing.durationMs = agent.durationMs;
       if (agent.timestamp) existing.timestamp = agent.timestamp;
       agents.set(agent.name, existing);
     });

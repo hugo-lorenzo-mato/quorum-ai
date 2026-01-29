@@ -94,6 +94,17 @@ func (a *Analyzer) Run(ctx context.Context, wctx *Context) error {
 			"See: %s#phases-settings", DocsConfigURL)
 	}
 
+	// CRITICAL: Report writing is required for moderator consensus evaluation.
+	// The moderator reads analysis files from disk to evaluate consensus.
+	// Without report writing, analyses are never persisted and consensus always fails (0%).
+	if wctx.Report == nil || !wctx.Report.IsEnabled() {
+		return fmt.Errorf("FATAL: moderator requires report writing to be enabled. "+
+			"The moderator reads analysis files from disk to evaluate consensus. "+
+			"Without report writing, analyses cannot be persisted and consensus will always be 0%%. "+
+			"Set 'report.enabled: true' in your configuration. "+
+			"See: %s#report-settings", DocsConfigURL)
+	}
+
 	wctx.Logger.Info("using semantic moderator for consensus evaluation",
 		"threshold", a.moderator.Threshold(),
 		"min_rounds", a.moderator.MinRounds(),
@@ -382,6 +393,7 @@ func (a *Analyzer) runModeratorRound(ctx context.Context, wctx *Context, round i
 		"round":           round,
 		"consensus_score": evalResult.Score,
 		"outputs":         serializeAnalysisOutputs(currentOutputs),
+		"raw_output":      evalResult.RawOutput,
 	}); cpErr != nil {
 		wctx.Logger.Warn("failed to create moderator round checkpoint", "round", round, "error", cpErr)
 	}
@@ -457,6 +469,21 @@ func (a *Analyzer) shouldStopForStagnation(wctx *Context, round int, previousSco
 	if round <= 2 {
 		return false
 	}
+
+	// CRITICAL: Consecutive zero scores indicate a parsing or configuration failure,
+	// not actual stagnation. The moderator likely can't read analysis files or
+	// is failing to parse its own output. Don't treat this as convergence.
+	if evalResult.Score == 0 && previousScore == 0 {
+		wctx.Logger.Warn("consecutive zero scores detected - likely parsing or configuration failure, continuing refinement",
+			"round", round,
+			"note", "This usually means analysis files are not being written or moderator output parsing failed",
+		)
+		if wctx.Output != nil {
+			wctx.Output.Log("warn", "analyzer", "Consecutive 0% scores detected - possible configuration issue. Continuing refinement...")
+		}
+		return false // Continue trying, don't consolidate with invalid data
+	}
+
 	improvement := evalResult.Score - previousScore
 	if improvement >= a.moderator.StagnationThreshold() {
 		return false
@@ -1337,6 +1364,7 @@ func (a *Analyzer) continueFromCheckpoint(ctx context.Context, wctx *Context, sa
 			"round":           round,
 			"consensus_score": evalResult.Score,
 			"outputs":         serializeAnalysisOutputs(currentOutputs),
+			"raw_output":      evalResult.RawOutput,
 		}); cpErr != nil {
 			wctx.Logger.Warn("failed to create moderator round checkpoint", "round", round, "error", cpErr)
 		}
