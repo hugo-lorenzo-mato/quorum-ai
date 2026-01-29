@@ -37,7 +37,7 @@ func (s *Server) handleGetConfig(w http.ResponseWriter, r *http.Request) {
 
 	// Set ETag header
 	if etag != "" {
-		w.Header().Set("ETag", fmt.Sprintf(`"%s"`, etag))
+		w.Header().Set("ETag", fmt.Sprintf("%q", etag))
 	}
 
 	// Check If-None-Match for conditional GET
@@ -114,7 +114,7 @@ func (s *Server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
-			w.Header().Set("ETag", fmt.Sprintf(`"%s"`, currentETag))
+			w.Header().Set("ETag", fmt.Sprintf("%q", currentETag))
 			respondJSON(w, http.StatusPreconditionFailed, map[string]interface{}{
 				"error":          "Configuration was modified externally",
 				"code":           "CONFLICT",
@@ -150,7 +150,7 @@ func (s *Server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 
 	// Calculate new ETag
 	newETag, _ := calculateETag(cfg)
-	w.Header().Set("ETag", fmt.Sprintf(`"%s"`, newETag))
+	w.Header().Set("ETag", fmt.Sprintf("%q", newETag))
 
 	response := ConfigResponseWithMeta{
 		Config: configToFullResponse(cfg),
@@ -194,7 +194,7 @@ func (s *Server) handleResetConfig(w http.ResponseWriter, _ *http.Request) {
 	// Calculate ETag for the new config
 	etag, _ := calculateETag(cfg)
 	if etag != "" {
-		w.Header().Set("ETag", fmt.Sprintf(`"%s"`, etag))
+		w.Header().Set("ETag", fmt.Sprintf("%q", etag))
 	}
 
 	response := ConfigResponseWithMeta{
@@ -309,11 +309,6 @@ func (s *Server) loadConfig() (*config.Config, error) {
 
 	// Load using config loader for consistency
 	return config.NewLoader().WithConfigFile(configPath).Load()
-}
-
-// saveConfig saves configuration atomically.
-func (s *Server) saveConfig(cfg *config.Config) error {
-	return atomicWriteConfig(cfg, s.getConfigPath())
 }
 
 // getConfigPath returns the config file path.

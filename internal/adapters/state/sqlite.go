@@ -84,7 +84,7 @@ func NewSQLiteStateManager(dbPath string, opts ...SQLiteStateManagerOption) (*SQ
 	// mode=ro ensures this connection cannot write, avoiding lock contention
 	readDB, err := sql.Open("sqlite", dbPath+"?_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)&mode=ro&_pragma=busy_timeout(1000)")
 	if err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("opening read database: %w", err)
 	}
 
@@ -96,8 +96,8 @@ func NewSQLiteStateManager(dbPath string, opts ...SQLiteStateManagerOption) (*SQ
 
 	// Run migrations (uses write connection)
 	if err := m.migrate(); err != nil {
-		db.Close()
-		readDB.Close()
+		_ = db.Close()
+		_ = readDB.Close()
 		return nil, fmt.Errorf("running migrations: %w", err)
 	}
 
@@ -709,7 +709,7 @@ func (m *SQLiteStateManager) SetActiveWorkflowID(ctx context.Context, id core.Wo
 // AcquireLock obtains an exclusive lock on the state.
 // Uses SQLite's built-in locking with a mutex for in-process coordination.
 // The transaction is stored and reused by Save() to avoid nested transactions.
-func (m *SQLiteStateManager) AcquireLock(ctx context.Context) error {
+func (m *SQLiteStateManager) AcquireLock(_ context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -779,7 +779,7 @@ func (m *SQLiteStateManager) AcquireLock(ctx context.Context) error {
 }
 
 // ReleaseLock releases the exclusive lock.
-func (m *SQLiteStateManager) ReleaseLock(ctx context.Context) error {
+func (m *SQLiteStateManager) ReleaseLock(_ context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -918,7 +918,7 @@ func (m *SQLiteStateManager) Restore(ctx context.Context) (*core.WorkflowState, 
 	// Reopen read connection
 	readDB, err := sql.Open("sqlite", m.dbPath+"?_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)&mode=ro&_pragma=busy_timeout(1000)")
 	if err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("reopening read database: %w", err)
 	}
 	readDB.SetMaxOpenConns(10)

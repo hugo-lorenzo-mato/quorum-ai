@@ -47,6 +47,7 @@ export function MapInputSetting({
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
           <label
+            htmlFor={inputId}
             className={`text-sm font-medium ${
               disabled ? 'text-muted-foreground' : 'text-foreground'
             }`}
@@ -112,6 +113,7 @@ export function MapInputSetting({
       <div className="flex items-center gap-2">
         {keyOptions ? (
           <select
+            id={inputId}
             value={newKey}
             onChange={(e) => setNewKey(e.target.value)}
             disabled={disabled}
@@ -128,6 +130,7 @@ export function MapInputSetting({
           </select>
         ) : (
           <input
+            id={inputId}
             type="text"
             value={newKey}
             onChange={(e) => setNewKey(e.target.value)}

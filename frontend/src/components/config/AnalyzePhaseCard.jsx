@@ -18,12 +18,6 @@ export function AnalyzePhaseCard() {
   const config = useConfigStore((state) => state.config);
   const setField = useConfigStore((state) => state.setField);
 
-  // Helper to get nested values safely
-  const getValue = (path) => {
-    if (!config) return undefined;
-    return path.split('.').reduce((obj, key) => obj?.[key], config);
-  };
-
   const analyzeConfig = config?.phases?.analyze;
   if (!analyzeConfig) {
     return (

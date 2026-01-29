@@ -26,7 +26,19 @@ func calculateETag(cfg *config.Config) (string, error) {
 
 // calculateETagFromFile generates an ETag from file content.
 func calculateETagFromFile(path string) (string, error) {
-	data, err := os.ReadFile(path)
+	dir := filepath.Dir(path)
+	name := filepath.Base(path)
+
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil // No dir/file = no ETag
+		}
+		return "", fmt.Errorf("failed to open config dir for ETag: %w", err)
+	}
+	defer func() { _ = root.Close() }()
+
+	data, err := root.ReadFile(name)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return "", nil // No file = no ETag
@@ -63,19 +75,19 @@ func atomicWriteConfig(cfg *config.Config, path string) error {
 	// Clean up temp file on any error
 	defer func() {
 		if tempPath != "" {
-			os.Remove(tempPath)
+			_ = os.Remove(tempPath)
 		}
 	}()
 
 	// Write data to temp file
 	if _, err := tempFile.Write(data); err != nil {
-		tempFile.Close()
+		_ = tempFile.Close()
 		return fmt.Errorf("failed to write temp file: %w", err)
 	}
 
 	// Sync to disk to ensure data is persisted
 	if err := tempFile.Sync(); err != nil {
-		tempFile.Close()
+		_ = tempFile.Close()
 		return fmt.Errorf("failed to sync temp file: %w", err)
 	}
 
@@ -98,10 +110,12 @@ func atomicWriteConfig(cfg *config.Config, path string) error {
 	tempPath = ""
 
 	// Sync directory to ensure rename is persisted
-	dirFile, err := os.Open(dir)
-	if err == nil {
-		dirFile.Sync()
-		dirFile.Close()
+	if root, err := os.OpenRoot(dir); err == nil {
+		if dirFile, err := root.Open("."); err == nil {
+			_ = dirFile.Sync()
+			_ = dirFile.Close()
+		}
+		_ = root.Close()
 	}
 
 	return nil
@@ -109,8 +123,8 @@ func atomicWriteConfig(cfg *config.Config, path string) error {
 
 // ETagMatch compares provided ETag with current file ETag.
 // Returns (matches, currentETag, error).
-func ETagMatch(providedETag, configPath string) (bool, string, error) {
-	currentETag, err := calculateETagFromFile(configPath)
+func ETagMatch(providedETag, configPath string) (matches bool, currentETag string, err error) {
+	currentETag, err = calculateETagFromFile(configPath)
 	if err != nil {
 		return false, "", err
 	}

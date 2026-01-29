@@ -136,7 +136,7 @@ func (e *SafeExecutor) PrepareCommand(cmd *exec.Cmd) (*PipeSet, error) {
 	stderrPipe, err = cmd.StderrPipe()
 	if err != nil {
 		// Cleanup stdout pipe since stderr failed
-		stdoutPipe.Close()
+		_ = stdoutPipe.Close()
 		if e.monitor != nil {
 			e.monitor.DecrementActiveCommands()
 		}

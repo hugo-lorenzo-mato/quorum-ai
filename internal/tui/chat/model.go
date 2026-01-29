@@ -1845,23 +1845,25 @@ func (m Model) copyLastResponse() (tea.Model, tea.Cmd, bool) {
 	msgs := m.history.All()
 	// Find last agent message
 	for i := len(msgs) - 1; i >= 0; i-- {
-		if msgs[i].Role == RoleAgent {
-			res, err := clip.WriteAll(msgs[i].Content)
-			if err != nil {
-				m.logsPanel.AddError("system", "Failed to copy: "+err.Error())
-				return m, nil, true
-			}
-			agent := msgs[i].Agent
-			switch res.Method {
-			case clip.MethodFile:
-				m.logsPanel.AddWarn("system", fmt.Sprintf("Clipboard unavailable; wrote %s response to %s (%d chars)", agent, res.FilePath, len(msgs[i].Content)))
-			case clip.MethodOSC52:
-				m.logsPanel.AddSuccess("system", fmt.Sprintf("Copied %s response to clipboard via OSC52 (%d chars)", agent, len(msgs[i].Content)))
-			default:
-				m.logsPanel.AddSuccess("system", fmt.Sprintf("Copied %s response to clipboard (%d chars)", agent, len(msgs[i].Content)))
-			}
+		if msgs[i].Role != RoleAgent {
+			continue
+		}
+
+		res, err := clip.WriteAll(msgs[i].Content)
+		if err != nil {
+			m.logsPanel.AddError("system", "Failed to copy: "+err.Error())
 			return m, nil, true
 		}
+		agent := msgs[i].Agent
+		switch res.Method {
+		case clip.MethodFile:
+			m.logsPanel.AddWarn("system", fmt.Sprintf("Clipboard unavailable; wrote %s response to %s (%d chars)", agent, res.FilePath, len(msgs[i].Content)))
+		case clip.MethodOSC52:
+			m.logsPanel.AddSuccess("system", fmt.Sprintf("Copied %s response to clipboard via OSC52 (%d chars)", agent, len(msgs[i].Content)))
+		default:
+			m.logsPanel.AddSuccess("system", fmt.Sprintf("Copied %s response to clipboard (%d chars)", agent, len(msgs[i].Content)))
+		}
+		return m, nil, true
 	}
 	m.logsPanel.AddWarn("system", "No response to copy")
 	return m, nil, true

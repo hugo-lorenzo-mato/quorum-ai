@@ -61,7 +61,7 @@ export function AgentCard({ agentKey }) {
   const reasoningEffortPhases = useConfigField(`${prefix}.reasoning_effort_phases`);
 
   const phaseKeys = useConfigStore((state) => state.enums?.phase_model_keys) || FALLBACK_PHASE_KEYS;
-  const reasoningEfforts = useConfigStore((state) => state.enums?.reasoning_efforts) || [];
+  const reasoningEfforts = useConfigStore((state) => state.enums?.reasoning_efforts);
   const agentsMetadata = useConfigStore((state) => state.agents) || [];
 
   const [showOverrides, setShowOverrides] = useState(false);
@@ -76,7 +76,7 @@ export function AgentCard({ agentKey }) {
   // Check if this agent supports reasoning effort
   const hasReasoningEffort = agentMeta?.hasReasoningEffort === true || agentKey === 'codex';
   const reasoningEffortOptions = useMemo(() => {
-    return reasoningEfforts.map((e) => ({ value: e, label: e.charAt(0).toUpperCase() + e.slice(1) }));
+    return (reasoningEfforts || []).map((e) => ({ value: e, label: e.charAt(0).toUpperCase() + e.slice(1) }));
   }, [reasoningEfforts]);
 
   const rawPhases = useMemo(

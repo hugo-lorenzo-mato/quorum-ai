@@ -11,8 +11,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/hugo-lorenzo-mato/quorum-ai/internal/attachments"
 	webadapters "github.com/hugo-lorenzo-mato/quorum-ai/internal/adapters/web"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/attachments"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/control"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service/workflow"
@@ -20,21 +20,21 @@ import (
 
 // WorkflowResponse is the API response for a workflow.
 type WorkflowResponse struct {
-	ID              string              `json:"id"`
-	Title           string              `json:"title,omitempty"`
-	Status          string              `json:"status"`
-	CurrentPhase    string              `json:"current_phase"`
-	Prompt          string              `json:"prompt"`
-	OptimizedPrompt string              `json:"optimized_prompt,omitempty"`
-	Attachments     []core.Attachment   `json:"attachments,omitempty"`
-	Error           string              `json:"error,omitempty"`
-	ReportPath      string              `json:"report_path,omitempty"`
-	CreatedAt       time.Time           `json:"created_at"`
-	UpdatedAt       time.Time           `json:"updated_at"`
-	IsActive        bool                `json:"is_active"`
-	TaskCount       int                 `json:"task_count"`
-	Metrics         *Metrics            `json:"metrics,omitempty"`
-	AgentEvents     []core.AgentEvent   `json:"agent_events,omitempty"` // Persisted agent activity
+	ID              string            `json:"id"`
+	Title           string            `json:"title,omitempty"`
+	Status          string            `json:"status"`
+	CurrentPhase    string            `json:"current_phase"`
+	Prompt          string            `json:"prompt"`
+	OptimizedPrompt string            `json:"optimized_prompt,omitempty"`
+	Attachments     []core.Attachment `json:"attachments,omitempty"`
+	Error           string            `json:"error,omitempty"`
+	ReportPath      string            `json:"report_path,omitempty"`
+	CreatedAt       time.Time         `json:"created_at"`
+	UpdatedAt       time.Time         `json:"updated_at"`
+	IsActive        bool              `json:"is_active"`
+	TaskCount       int               `json:"task_count"`
+	Metrics         *Metrics          `json:"metrics,omitempty"`
+	AgentEvents     []core.AgentEvent `json:"agent_events,omitempty"` // Persisted agent activity
 }
 
 // Metrics represents workflow metrics in API responses.
@@ -568,6 +568,7 @@ func (s *Server) HandleRunWorkflow(w http.ResponseWriter, r *http.Request) {
 	state.UpdatedAt = time.Now()
 	if err := s.stateManager.Save(r.Context(), state); err != nil {
 		s.logger.Error("failed to update workflow status to running", "workflow_id", workflowID, "error", err)
+		cancel()
 		s.unregisterControlPlane(workflowID)
 		markFinished(workflowID)
 		respondError(w, http.StatusInternalServerError, "failed to start workflow: "+err.Error())

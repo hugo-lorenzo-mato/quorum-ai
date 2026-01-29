@@ -280,8 +280,8 @@ func TestResumePoint_Fields(t *testing.T) {
 
 func TestRunnerConfig_Fields(t *testing.T) {
 	cfg := &RunnerConfig{
-		Timeout:            2 * time.Hour,
-		MaxRetries:         5,
+		Timeout:           2 * time.Hour,
+		MaxRetries:        5,
 		DryRun:            true,
 		Sandbox:           false,
 		DenyTools:         []string{"rm", "sudo", "mkfs"},

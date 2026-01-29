@@ -334,8 +334,8 @@ type AgentsConfigUpdate struct {
 	Default  *string                `json:"default,omitempty"`
 	Claude   *FullAgentConfigUpdate `json:"claude,omitempty"`
 	Gemini   *FullAgentConfigUpdate `json:"gemini,omitempty"`
-	Codex   *FullAgentConfigUpdate `json:"codex,omitempty"`
-	Copilot *FullAgentConfigUpdate `json:"copilot,omitempty"`
+	Codex    *FullAgentConfigUpdate `json:"codex,omitempty"`
+	Copilot  *FullAgentConfigUpdate `json:"copilot,omitempty"`
 	OpenCode *FullAgentConfigUpdate `json:"opencode,omitempty"`
 }
 
@@ -394,10 +394,10 @@ type ReportConfigUpdate struct {
 
 // DiagnosticsConfigUpdate represents diagnostics configuration update.
 type DiagnosticsConfigUpdate struct {
-	Enabled            *bool                            `json:"enabled,omitempty"`
-	ResourceMonitoring *ResourceMonitoringConfigUpdate  `json:"resource_monitoring,omitempty"`
-	CrashDump          *CrashDumpConfigUpdate           `json:"crash_dump,omitempty"`
-	PreflightChecks    *PreflightConfigUpdate           `json:"preflight_checks,omitempty"`
+	Enabled            *bool                           `json:"enabled,omitempty"`
+	ResourceMonitoring *ResourceMonitoringConfigUpdate `json:"resource_monitoring,omitempty"`
+	CrashDump          *CrashDumpConfigUpdate          `json:"crash_dump,omitempty"`
+	PreflightChecks    *PreflightConfigUpdate          `json:"preflight_checks,omitempty"`
 }
 
 // ResourceMonitoringConfigUpdate represents resource monitoring update.

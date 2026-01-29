@@ -369,9 +369,6 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 
 			lastErr = validationErr
 			lastAgentName = agentName
-			lastModel = model
-			lastRetryCount = retryCount
-			lastDurationMS = durationMS
 
 			// If there are more agents to try, continue with fallback
 			if agentIdx < len(agentsToTry)-1 {
@@ -583,35 +580,6 @@ func (e *Executor) handleExecutionFailure(wctx *Context, task *core.Task, taskSt
 	}
 	e.setTaskFailed(wctx, taskState, err)
 	return err
-}
-
-func (e *Executor) handleExecutionSuccess(ctx context.Context, wctx *Context, task *core.Task, taskState *core.TaskState, agentName string, result *core.ExecuteResult, workDir string, durationMS int64) error {
-	validation := e.validateTaskOutput(result, task)
-	if !validation.Valid {
-		validationErr := fmt.Errorf("task output validation failed: %s", validation.Warning)
-		wctx.Logger.Error("executor: task output validation failed",
-			"task_id", task.ID,
-			"task_name", task.Name,
-			"agent", agentName,
-			"tokens_out", result.TokensOut,
-			"tool_calls", len(result.ToolCalls),
-			"has_file_ops", validation.HasFileOps,
-			"warning", validation.Warning,
-		)
-		if wctx.Output != nil {
-			wctx.Output.AgentEvent("error", agentName, validation.Warning, map[string]interface{}{
-				"task_id":      string(task.ID),
-				"task_name":    task.Name,
-				"tokens_out":   result.TokensOut,
-				"tool_calls":   len(result.ToolCalls),
-				"has_file_ops": validation.HasFileOps,
-				"duration_ms":  durationMS,
-			})
-		}
-		e.setTaskFailed(wctx, taskState, validationErr)
-		return validationErr
-	}
-	return e.handleExecutionSuccessValidated(ctx, wctx, task, taskState, agentName, result, workDir, durationMS, validation)
 }
 
 // handleExecutionSuccessValidated handles successful execution when validation has already been performed.

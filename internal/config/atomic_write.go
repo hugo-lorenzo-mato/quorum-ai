@@ -59,5 +59,5 @@ func AtomicWrite(path string, data []byte) error {
 // CalculateETag returns a quoted strong ETag for content.
 func CalculateETag(content []byte) string {
 	sum := sha256.Sum256(content)
-	return fmt.Sprintf("\"%s\"", hex.EncodeToString(sum[:]))
+	return fmt.Sprintf("%q", hex.EncodeToString(sum[:]))
 }

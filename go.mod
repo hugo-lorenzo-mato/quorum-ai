@@ -2,6 +2,8 @@ module github.com/hugo-lorenzo-mato/quorum-ai
 
 go 1.24.2
 
+toolchain go1.25.6
+
 require (
 	github.com/atotto/clipboard v0.1.4
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1

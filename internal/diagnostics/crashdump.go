@@ -342,8 +342,13 @@ func LoadLatestCrashDump(dir string) (*CrashDump, error) {
 		return nil, fmt.Errorf("no crash dumps found")
 	}
 
-	path := filepath.Join(dir, newest.Name())
-	data, err := os.ReadFile(path)
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return nil, fmt.Errorf("opening crash dump dir: %w", err)
+	}
+	defer func() { _ = root.Close() }()
+
+	data, err := root.ReadFile(newest.Name())
 	if err != nil {
 		return nil, fmt.Errorf("reading crash dump: %w", err)
 	}

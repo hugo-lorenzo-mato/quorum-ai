@@ -41,37 +41,37 @@ type AgentInfo struct {
 
 // Default agent colors
 var agentColors = map[string]lipgloss.Color{
-	"claude":  lipgloss.Color("#a855f7"), // purple
-	"gemini":  lipgloss.Color("#3b82f6"), // blue
-	"codex":   lipgloss.Color("#22c55e"), // green
-	"copilot": lipgloss.Color("#06b6d4"), // cyan
+	"claude":   lipgloss.Color("#a855f7"), // purple
+	"gemini":   lipgloss.Color("#3b82f6"), // blue
+	"codex":    lipgloss.Color("#22c55e"), // green
+	"copilot":  lipgloss.Color("#06b6d4"), // cyan
 	"opencode": lipgloss.Color("#f43f5e"), // rose/pink
-	"llama":   lipgloss.Color("#f97316"), // orange
-	"mistral": lipgloss.Color("#ec4899"), // pink
-	"gpt":     lipgloss.Color("#10b981"), // emerald
+	"llama":    lipgloss.Color("#f97316"), // orange
+	"mistral":  lipgloss.Color("#ec4899"), // pink
+	"gpt":      lipgloss.Color("#10b981"), // emerald
 }
 
 // Muted agent colors for subtle UI accents (bubble borders)
 var agentBorderColorsDark = map[string]lipgloss.Color{
-	"claude":  lipgloss.Color("#6b5a86"),
-	"gemini":  lipgloss.Color("#4f6f8f"),
-	"codex":   lipgloss.Color("#4f7f63"),
-	"copilot": lipgloss.Color("#4b7a80"),
+	"claude":   lipgloss.Color("#6b5a86"),
+	"gemini":   lipgloss.Color("#4f6f8f"),
+	"codex":    lipgloss.Color("#4f7f63"),
+	"copilot":  lipgloss.Color("#4b7a80"),
 	"opencode": lipgloss.Color("#8b4b5a"),
-	"llama":   lipgloss.Color("#9b6b35"),
-	"mistral": lipgloss.Color("#9b6077"),
-	"gpt":     lipgloss.Color("#4f7f6d"),
+	"llama":    lipgloss.Color("#9b6b35"),
+	"mistral":  lipgloss.Color("#9b6077"),
+	"gpt":      lipgloss.Color("#4f7f6d"),
 }
 
 var agentBorderColorsLight = map[string]lipgloss.Color{
-	"claude":  lipgloss.Color("#c4b2d6"),
-	"gemini":  lipgloss.Color("#b7c4d8"),
-	"codex":   lipgloss.Color("#b7d1c4"),
-	"copilot": lipgloss.Color("#b5ccd1"),
+	"claude":   lipgloss.Color("#c4b2d6"),
+	"gemini":   lipgloss.Color("#b7c4d8"),
+	"codex":    lipgloss.Color("#b7d1c4"),
+	"copilot":  lipgloss.Color("#b5ccd1"),
 	"opencode": lipgloss.Color("#d6b2ba"),
-	"llama":   lipgloss.Color("#d0b990"),
-	"mistral": lipgloss.Color("#d1b3c1"),
-	"gpt":     lipgloss.Color("#b7d1c8"),
+	"llama":    lipgloss.Color("#d0b990"),
+	"mistral":  lipgloss.Color("#d1b3c1"),
+	"gpt":      lipgloss.Color("#b7d1c8"),
 }
 
 var agentBorderColors = agentBorderColorsDark

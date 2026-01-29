@@ -22,24 +22,29 @@ function GitAutomationSection() {
   const autoPr = useConfigField('git.auto_pr');
   const autoMerge = useConfigField('git.auto_merge');
 
+  const autoCommitValue = autoCommit.value;
+  const { value: autoPushValue, onChange: setAutoPush } = autoPush;
+  const { value: autoPrValue, onChange: setAutoPr } = autoPr;
+  const { value: autoMergeValue, onChange: setAutoMerge } = autoMerge;
+
   // Handle dependency chain: when a toggle is disabled, disable all dependents
   useEffect(() => {
-    if (!autoCommit.value && autoPush.value) {
-      autoPush.onChange(false);
+    if (!autoCommitValue && autoPushValue) {
+      setAutoPush(false);
     }
-  }, [autoCommit.value]);
+  }, [autoCommitValue, autoPushValue, setAutoPush]);
 
   useEffect(() => {
-    if (!autoPush.value && autoPr.value) {
-      autoPr.onChange(false);
+    if (!autoPushValue && autoPrValue) {
+      setAutoPr(false);
     }
-  }, [autoPush.value]);
+  }, [autoPushValue, autoPrValue, setAutoPr]);
 
   useEffect(() => {
-    if (!autoPr.value && autoMerge.value) {
-      autoMerge.onChange(false);
+    if (!autoPrValue && autoMergeValue) {
+      setAutoMerge(false);
     }
-  }, [autoPr.value]);
+  }, [autoPrValue, autoMergeValue, setAutoMerge]);
 
   return (
     <SettingSection

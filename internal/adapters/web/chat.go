@@ -588,26 +588,33 @@ func (h *ChatHandler) loadFileContent(filePath, projectRoot string) (string, err
 		}
 	}
 
-	// Resolve the file path
-	var absPath string
-	if filepath.IsAbs(filePath) {
-		absPath = filepath.Clean(filePath)
-	} else {
-		absPath = filepath.Clean(filepath.Join(projectRoot, filePath))
-	}
-
 	// Security check: ensure the file is within the project root
 	absProjectRoot, err := filepath.Abs(projectRoot)
 	if err != nil {
 		return "", fmt.Errorf("failed to resolve project root: %w", err)
 	}
 
-	if !strings.HasPrefix(absPath, absProjectRoot) {
+	// Resolve the file path
+	var absPath string
+	if filepath.IsAbs(filePath) {
+		absPath = filepath.Clean(filePath)
+	} else {
+		absPath = filepath.Clean(filepath.Join(absProjectRoot, filePath))
+	}
+
+	relPath, err := filepath.Rel(absProjectRoot, absPath)
+	if err != nil || relPath == ".." || strings.HasPrefix(relPath, ".."+string(os.PathSeparator)) {
 		return "", fmt.Errorf("file path is outside project directory")
 	}
 
+	root, err := os.OpenRoot(absProjectRoot)
+	if err != nil {
+		return "", fmt.Errorf("failed to open project root: %w", err)
+	}
+	defer func() { _ = root.Close() }()
+
 	// Check if file exists and is a regular file
-	info, err := os.Stat(absPath)
+	info, err := root.Stat(relPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return "", fmt.Errorf("file not found: %s", filePath)
@@ -626,7 +633,7 @@ func (h *ChatHandler) loadFileContent(filePath, projectRoot string) (string, err
 	}
 
 	// Read file content
-	content, err := os.ReadFile(absPath)
+	content, err := root.ReadFile(relPath)
 	if err != nil {
 		return "", fmt.Errorf("failed to read file: %w", err)
 	}

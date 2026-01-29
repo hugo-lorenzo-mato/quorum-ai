@@ -210,4 +210,3 @@ func (s *Server) handleDeleteWorkflowAttachment(w http.ResponseWriter, r *http.R
 
 	w.WriteHeader(http.StatusNoContent)
 }
-
