@@ -6,7 +6,7 @@ import VoiceInputButton from './VoiceInputButton';
 /**
  * EditWorkflowModal - Clean modal for editing workflow title and prompt
  */
-export default function EditWorkflowModal({ isOpen, onClose, workflow, onSave }) {
+export default function EditWorkflowModal({ isOpen, onClose, workflow, onSave, canEditPrompt = true }) {
   const [title, setTitle] = useState('');
   const [prompt, setPrompt] = useState('');
   const [saving, setSaving] = useState(false);
@@ -48,7 +48,8 @@ export default function EditWorkflowModal({ isOpen, onClose, workflow, onSave })
   }, [isOpen, onClose]);
 
   const handleSave = async () => {
-    if (!prompt.trim()) {
+    // Only validate prompt if it can be edited
+    if (canEditPrompt && !prompt.trim()) {
       setError('Prompt is required');
       return;
     }
@@ -61,9 +62,10 @@ export default function EditWorkflowModal({ isOpen, onClose, workflow, onSave })
       if (title.trim() !== (workflow.title || '')) {
         updates.title = title.trim();
       }
+      // Only include prompt changes if prompt editing is allowed
       // Preserve prompt formatting exactly as entered (do NOT trim),
       // but still use trim() only for validation and change detection.
-      if (prompt !== (workflow.prompt || '')) {
+      if (canEditPrompt && prompt !== (workflow.prompt || '')) {
         updates.prompt = prompt;
       }
 
@@ -180,6 +182,9 @@ export default function EditWorkflowModal({ isOpen, onClose, workflow, onSave })
           <div>
             <label htmlFor={promptInputId} className="block text-sm font-medium text-foreground mb-1.5">
               Prompt
+              {!canEditPrompt && (
+                <span className="text-muted-foreground font-normal ml-1">(locked after execution)</span>
+              )}
             </label>
             <div className="relative">
               <textarea
@@ -190,13 +195,16 @@ export default function EditWorkflowModal({ isOpen, onClose, workflow, onSave })
                 placeholder="Describe what you want the AI agents to accomplish..."
                 rows={8}
                 spellCheck={false}
-                className="w-full px-3 py-2 pr-12 rounded-lg border border-input bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background resize-none transition-shadow font-mono text-sm leading-6"
+                disabled={!canEditPrompt}
+                className={`w-full px-3 py-2 pr-12 rounded-lg border border-input bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background resize-none transition-shadow font-mono text-sm leading-6 ${!canEditPrompt ? 'opacity-60 cursor-not-allowed' : ''}`}
               />
-              <VoiceInputButton
-                onTranscript={(text) => setPrompt((prev) => (prev ? prev + ' ' + text : text))}
-                disabled={saving}
-                className="absolute top-2 right-2"
-              />
+              {canEditPrompt && (
+                <VoiceInputButton
+                  onTranscript={(text) => setPrompt((prev) => (prev ? prev + ' ' + text : text))}
+                  disabled={saving}
+                  className="absolute top-2 right-2"
+                />
+              )}
             </div>
             <p className="mt-1 text-xs text-muted-foreground text-right">
               {prompt.length.toLocaleString()} characters
@@ -227,7 +235,7 @@ export default function EditWorkflowModal({ isOpen, onClose, workflow, onSave })
             </button>
             <button
               onClick={handleSave}
-              disabled={saving || !prompt.trim()}
+              disabled={saving || (canEditPrompt && !prompt.trim())}
               className="px-4 py-2 rounded-lg text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
             >
               {saving ? 'Saving...' : 'Save Changes'}

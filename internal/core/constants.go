@@ -109,12 +109,12 @@ var PhaseModelKeys = []string{
 
 // ValidPhaseModelKeys is a map for O(1) phase model key validation.
 var ValidPhaseModelKeys = map[string]bool{
-	string(PhaseRefine):   true,
-	string(PhaseAnalyze):  true,
-	TaskModerate:          true,
-	TaskSynthesize:        true,
-	string(PhasePlan):     true,
-	string(PhaseExecute):  true,
+	string(PhaseRefine):  true,
+	string(PhaseAnalyze): true,
+	TaskModerate:         true,
+	TaskSynthesize:       true,
+	string(PhasePlan):    true,
+	string(PhaseExecute): true,
 }
 
 // IsValidPhaseModelKey checks if the given phase model key is valid.

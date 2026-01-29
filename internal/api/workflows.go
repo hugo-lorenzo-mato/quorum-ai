@@ -52,6 +52,7 @@ type Metrics struct {
 // CreateWorkflowRequest is the request body for creating a workflow.
 type CreateWorkflowRequest struct {
 	Prompt string          `json:"prompt"`
+	Title  string          `json:"title,omitempty"`
 	Config *WorkflowConfig `json:"config,omitempty"`
 }
 
@@ -257,6 +258,7 @@ func (s *Server) handleCreateWorkflow(w http.ResponseWriter, r *http.Request) {
 	state := &core.WorkflowState{
 		Version:      core.CurrentStateVersion,
 		WorkflowID:   workflowID,
+		Title:        req.Title,
 		Status:       core.WorkflowStatusPending,
 		CurrentPhase: core.PhaseAnalyze,
 		Prompt:       req.Prompt,
@@ -317,12 +319,15 @@ func (s *Server) handleUpdateWorkflow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Only allow editing title and prompt when workflow is pending
-	if req.Title != "" || req.Prompt != "" {
-		if state.Status != core.WorkflowStatusPending {
-			respondError(w, http.StatusConflict, "cannot edit title or prompt after workflow has started")
-			return
-		}
+	// Only allow editing prompt when workflow is pending
+	// Title can be edited anytime (except when running)
+	if req.Prompt != "" && state.Status != core.WorkflowStatusPending {
+		respondError(w, http.StatusConflict, "cannot edit prompt after workflow has started")
+		return
+	}
+	if req.Title != "" && state.Status == core.WorkflowStatusRunning {
+		respondError(w, http.StatusConflict, "cannot edit title while workflow is running")
+		return
 	}
 
 	if req.Title != "" {

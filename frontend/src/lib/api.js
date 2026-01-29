@@ -36,7 +36,7 @@ export const workflowApi = {
 
   create: (prompt, config = {}) => request('/workflows/', {
     method: 'POST',
-    body: JSON.stringify({ prompt, config }),
+    body: JSON.stringify({ prompt, title: config.title, config }),
   }),
 
   update: (id, data) => request(`/workflows/${id}/`, {

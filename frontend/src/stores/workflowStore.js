@@ -240,11 +240,14 @@ const useWorkflowStore = create((set, get) => ({
   // SSE event handlers
   handleWorkflowStarted: (data) => {
     const { workflows } = get();
+    // Find existing workflow to preserve fields like title
+    const existing = workflows.find(w => w.id === data.workflow_id);
     const workflow = {
+      ...existing, // Preserve existing fields (title, etc.)
       id: data.workflow_id,
       status: 'running',
       prompt: data.prompt,
-      created_at: data.timestamp,
+      created_at: existing?.created_at || data.timestamp,
       updated_at: data.timestamp,
     };
     set({
