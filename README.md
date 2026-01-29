@@ -1,8 +1,11 @@
 # quorum-ai
 
-[![CI](https://github.com/hugo-lorenzo-mato/quorum-ai/actions/workflows/test.yml/badge.svg)](https://github.com/hugo-lorenzo-mato/quorum-ai/actions/workflows/test.yml)
+[![Tests](https://github.com/hugo-lorenzo-mato/quorum-ai/actions/workflows/test.yml/badge.svg)](https://github.com/hugo-lorenzo-mato/quorum-ai/actions/workflows/test.yml)
+[![Lint](https://github.com/hugo-lorenzo-mato/quorum-ai/actions/workflows/lint.yml/badge.svg)](https://github.com/hugo-lorenzo-mato/quorum-ai/actions/workflows/lint.yml)
+[![Security](https://github.com/hugo-lorenzo-mato/quorum-ai/actions/workflows/security.yml/badge.svg)](https://github.com/hugo-lorenzo-mato/quorum-ai/actions/workflows/security.yml)
+[![Build](https://github.com/hugo-lorenzo-mato/quorum-ai/actions/workflows/build.yml/badge.svg)](https://github.com/hugo-lorenzo-mato/quorum-ai/actions/workflows/build.yml)
 [![Coverage](https://codecov.io/gh/hugo-lorenzo-mato/quorum-ai/branch/main/graph/badge.svg)](https://codecov.io/gh/hugo-lorenzo-mato/quorum-ai)
-[![Go Version](https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat&logo=go)](https://go.dev/)
+[![Go Version](https://img.shields.io/badge/Go-1.23+-00ADD8?style=flat&logo=go)](https://go.dev/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 **Multi-agent LLM orchestrator with consensus-based validation for reliable software engineering workflows.**
