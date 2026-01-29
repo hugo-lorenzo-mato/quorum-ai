@@ -707,3 +707,72 @@ type ChatMessageState struct {
 	TokensOut int       `json:"tokens_out,omitempty"`
 	CostUSD   float64   `json:"cost_usd,omitempty"`
 }
+
+// =============================================================================
+// WorkflowWorktreeManager Port (T004)
+// =============================================================================
+
+// WorkflowWorktreeManager manages Git isolation at the workflow level.
+type WorkflowWorktreeManager interface {
+	// InitializeWorkflow creates a workflow branch and worktree root directory.
+	// Returns WorkflowGitInfo with branch and path information.
+	// The workflow branch is created from baseBranch (e.g., "main").
+	InitializeWorkflow(ctx context.Context, workflowID string, baseBranch string) (*WorkflowGitInfo, error)
+
+	// FinalizeWorkflow completes the workflow Git operations.
+	// If merge is true, merges the workflow branch to the base branch.
+	// Cleans up task branches and worktrees.
+	FinalizeWorkflow(ctx context.Context, workflowID string, merge bool) error
+
+	// CleanupWorkflow removes all Git artifacts for a workflow.
+	// Removes worktrees, task branches, and optionally the workflow branch.
+	CleanupWorkflow(ctx context.Context, workflowID string, removeWorkflowBranch bool) error
+
+	// CreateTaskWorktree creates a worktree for a task within the workflow.
+	// The task worktree is created in the workflow's worktree root.
+	// The task branch is created from the workflow branch.
+	CreateTaskWorktree(ctx context.Context, workflowID string, task *Task) (*WorktreeInfo, error)
+
+	// RemoveTaskWorktree removes a task's worktree.
+	// Optionally removes the task branch as well.
+	RemoveTaskWorktree(ctx context.Context, workflowID string, taskID TaskID, removeBranch bool) error
+
+	// MergeTaskToWorkflow merges a task branch into the workflow branch.
+	// Uses the specified strategy: "sequential", "parallel", "rebase"
+	MergeTaskToWorkflow(ctx context.Context, workflowID string, taskID TaskID, strategy string) error
+
+	// MergeAllTasksToWorkflow merges all completed task branches to workflow branch.
+	MergeAllTasksToWorkflow(ctx context.Context, workflowID string, taskIDs []TaskID, strategy string) error
+
+	// GetWorkflowStatus returns the current Git status of the workflow.
+	GetWorkflowStatus(ctx context.Context, workflowID string) (*WorkflowGitStatus, error)
+
+	// ListActiveWorkflows returns information about all active workflow worktrees.
+	ListActiveWorkflows(ctx context.Context) ([]*WorkflowGitInfo, error)
+
+	// GetWorkflowBranch returns the workflow branch name for a workflow ID.
+	GetWorkflowBranch(workflowID string) string
+
+	// GetTaskBranch returns the task branch name for a workflow and task.
+	GetTaskBranch(workflowID string, taskID TaskID) string
+}
+
+// WorkflowGitInfo contains information about a workflow's Git state.
+type WorkflowGitInfo struct {
+	WorkflowID     string
+	WorkflowBranch string
+	BaseBranch     string
+	WorktreeRoot   string
+	CreatedAt      time.Time
+	TaskCount      int
+	PendingMerges  int
+}
+
+// WorkflowGitStatus contains the current status of a workflow's Git state.
+type WorkflowGitStatus struct {
+	HasConflicts    bool
+	AheadOfBase     int
+	BehindBase      int
+	UnmergedTasks   []TaskID
+	LastMergeCommit string
+}
