@@ -384,7 +384,7 @@ func createWorkflowRunner(
 	// Create service components
 	checkpointManager := service.NewCheckpointManager(stateManager, logger)
 	retryPolicy := service.NewRetryPolicy(service.WithMaxAttempts(3))
-	rateLimiterRegistry := service.NewRateLimiterRegistry()
+	rateLimiterRegistry := service.GetGlobalRateLimiter()
 	dagBuilder := service.NewDAGBuilder()
 
 	// Create worktree manager
@@ -715,7 +715,7 @@ func createWorkflowRunnerWithTrace(
 	// Create service components
 	checkpointManager := service.NewCheckpointManager(stateManager, logger)
 	retryPolicy := service.NewRetryPolicy(service.WithMaxAttempts(3))
-	rateLimiterRegistry := service.NewRateLimiterRegistry()
+	rateLimiterRegistry := service.GetGlobalRateLimiter()
 	dagBuilder := service.NewDAGBuilder()
 
 	// Create worktree manager

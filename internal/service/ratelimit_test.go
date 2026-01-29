@@ -156,6 +156,15 @@ func TestRateLimiterRegistry_Get(t *testing.T) {
 	}
 }
 
+func TestGetGlobalRateLimiter_Singleton(t *testing.T) {
+	r1 := GetGlobalRateLimiter()
+	r2 := GetGlobalRateLimiter()
+
+	if r1 != r2 {
+		t.Fatal("GetGlobalRateLimiter should return same instance")
+	}
+}
+
 func TestRateLimiterRegistry_SetConfig(t *testing.T) {
 	registry := NewRateLimiterRegistry()
 
@@ -179,6 +188,30 @@ func TestRateLimiterRegistry_SetConfig(t *testing.T) {
 	}
 }
 
+func TestRateLimiterRegistry_SetConfigUpdatesLimiter(t *testing.T) {
+	registry := NewRateLimiterRegistry()
+
+	registry.SetConfig("test-agent", RateLimiterConfig{
+		MaxTokens:  2,
+		RefillRate: 0.1,
+	})
+
+	limiter := registry.Get("test-agent")
+	initial := limiter.RefillRate()
+
+	registry.SetConfig("test-agent", RateLimiterConfig{
+		MaxTokens:  4,
+		RefillRate: 2,
+	})
+
+	if limiter.RefillRate() == initial {
+		t.Error("SetConfig should update existing limiter")
+	}
+	if limiter.MaxTokens() != 4 {
+		t.Errorf("MaxTokens = %v, want 4", limiter.MaxTokens())
+	}
+}
+
 func TestRateLimiterRegistry_Status(t *testing.T) {
 	registry := NewRateLimiterRegistry()
 
@@ -197,6 +230,60 @@ func TestRateLimiterRegistry_Status(t *testing.T) {
 	}
 	if claudeStatus.MaxTokens != 5 {
 		t.Errorf("claude MaxTokens = %v, want 5", claudeStatus.MaxTokens)
+	}
+}
+
+func TestRateLimiterRegistry_Wait(t *testing.T) {
+	registry := NewRateLimiterRegistry()
+	registry.SetConfig("test-agent", RateLimiterConfig{
+		MaxTokens:  1,
+		RefillRate: 2, // 1 token per 500ms
+	})
+
+	ctx := context.Background()
+
+	start := time.Now()
+	if err := registry.Wait(ctx, "test-agent"); err != nil {
+		t.Fatalf("Wait() error = %v", err)
+	}
+	if err := registry.Wait(ctx, "test-agent"); err != nil {
+		t.Fatalf("Wait() error = %v", err)
+	}
+	elapsed := time.Since(start)
+	if elapsed < 300*time.Millisecond {
+		t.Errorf("Wait should block for refill, elapsed = %v", elapsed)
+	}
+}
+
+func TestRateLimiterRegistry_Allow(t *testing.T) {
+	registry := NewRateLimiterRegistry()
+	registry.SetConfig("test-agent", RateLimiterConfig{
+		MaxTokens:  2,
+		RefillRate: 0.01,
+	})
+
+	if !registry.Allow("test-agent") {
+		t.Error("first Allow should succeed")
+	}
+	if !registry.Allow("test-agent") {
+		t.Error("second Allow should succeed")
+	}
+	if registry.Allow("test-agent") {
+		t.Error("third Allow should fail")
+	}
+}
+
+func TestRateLimiterRegistry_Reset(t *testing.T) {
+	registry := NewRateLimiterRegistry()
+
+	registry.Get("claude")
+	if len(registry.Status()) == 0 {
+		t.Fatal("expected limiter status before reset")
+	}
+
+	registry.Reset()
+	if len(registry.Status()) != 0 {
+		t.Error("Reset should clear limiters")
 	}
 }
 

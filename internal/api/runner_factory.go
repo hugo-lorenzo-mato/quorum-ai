@@ -94,7 +94,7 @@ func (f *RunnerFactory) CreateRunner(ctx context.Context, workflowID string, cp 
 	// Create service components
 	checkpointManager := service.NewCheckpointManager(f.stateManager, f.logger)
 	retryPolicy := service.NewRetryPolicy(service.WithMaxAttempts(runnerConfig.MaxRetries))
-	rateLimiterRegistry := service.NewRateLimiterRegistry()
+	rateLimiterRegistry := service.GetGlobalRateLimiter()
 	dagBuilder := service.NewDAGBuilder()
 
 	// Create prompt renderer

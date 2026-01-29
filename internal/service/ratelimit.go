@@ -110,6 +110,18 @@ func (r *RateLimiter) RefillRate() float64 {
 	return r.refillRate
 }
 
+func (r *RateLimiter) updateConfig(cfg RateLimiterConfig) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.refill()
+	r.maxTokens = cfg.MaxTokens
+	if r.tokens > r.maxTokens {
+		r.tokens = r.maxTokens
+	}
+	r.refillRate = cfg.RefillRate
+}
+
 // refill adds tokens based on elapsed time.
 func (r *RateLimiter) refill() {
 	now := time.Now()
@@ -132,6 +144,22 @@ type RateLimiterRegistry struct {
 	limiters map[string]*RateLimiter
 	configs  map[string]RateLimiterConfig
 	mu       sync.RWMutex
+}
+
+var (
+	globalRateLimiterRegistry     *RateLimiterRegistry
+	globalRateLimiterRegistryOnce sync.Once
+)
+
+// GetGlobalRateLimiter returns the global rate limiter registry.
+func GetGlobalRateLimiter() *RateLimiterRegistry {
+	globalRateLimiterRegistryOnce.Do(func() {
+		globalRateLimiterRegistry = &RateLimiterRegistry{
+			limiters: make(map[string]*RateLimiter),
+			configs:  defaultAdapterConfigs(),
+		}
+	})
+	return globalRateLimiterRegistry
 }
 
 // NewRateLimiterRegistry creates a new registry.
@@ -170,10 +198,17 @@ func defaultAdapterConfigs() map[string]RateLimiterConfig {
 
 // Get returns the rate limiter for an adapter.
 func (r *RateLimiterRegistry) Get(adapter string) *RateLimiter {
+	r.mu.RLock()
+	limiter, ok := r.limiters[adapter]
+	r.mu.RUnlock()
+	if ok {
+		return limiter
+	}
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if limiter, ok := r.limiters[adapter]; ok {
+	if limiter, ok = r.limiters[adapter]; ok {
 		return limiter
 	}
 
@@ -183,7 +218,7 @@ func (r *RateLimiterRegistry) Get(adapter string) *RateLimiter {
 		cfg = DefaultRateLimiterConfig()
 	}
 
-	limiter := NewRateLimiter(cfg)
+	limiter = NewRateLimiter(cfg)
 	r.limiters[adapter] = limiter
 	return limiter
 }
@@ -194,8 +229,9 @@ func (r *RateLimiterRegistry) SetConfig(adapter string, cfg RateLimiterConfig) {
 	defer r.mu.Unlock()
 
 	r.configs[adapter] = cfg
-	// Recreate limiter with new config
-	r.limiters[adapter] = NewRateLimiter(cfg)
+	if limiter, ok := r.limiters[adapter]; ok {
+		limiter.updateConfig(cfg)
+	}
 }
 
 // Status returns rate limiter status for all adapters.
@@ -214,6 +250,11 @@ func (r *RateLimiterRegistry) Status() map[string]RateLimiterStatus {
 	return status
 }
 
+// GetStatus returns rate limiter status for all adapters.
+func (r *RateLimiterRegistry) GetStatus() map[string]RateLimiterStatus {
+	return r.Status()
+}
+
 // List returns all adapter names with configured limiters.
 func (r *RateLimiterRegistry) List() []string {
 	r.mu.RLock()
@@ -226,11 +267,28 @@ func (r *RateLimiterRegistry) List() []string {
 	return names
 }
 
+// Wait blocks until the rate limit allows a request.
+func (r *RateLimiterRegistry) Wait(ctx context.Context, adapter string) error {
+	return r.Get(adapter).Acquire(ctx)
+}
+
+// Allow checks if a request is allowed without blocking.
+func (r *RateLimiterRegistry) Allow(adapter string) bool {
+	return r.Get(adapter).TryAcquire()
+}
+
 // RateLimiterStatus contains status information.
 type RateLimiterStatus struct {
 	Available  float64
 	MaxTokens  float64
 	RefillRate float64
+}
+
+// Reset clears all rate limiters (useful for testing).
+func (r *RateLimiterRegistry) Reset() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.limiters = make(map[string]*RateLimiter)
 }
 
 // AdaptiveRateLimiter adjusts rate based on error feedback.
