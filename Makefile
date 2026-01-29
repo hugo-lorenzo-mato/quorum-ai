@@ -32,7 +32,7 @@ help: ## Show this help
 all: lint test build ## Run lint, test, and build
 
 .PHONY: check
-check: lint test security analyze ## Run all checks (lint, test, security, analyze)
+check: lint test security frontend-check ## Run all checks (Go + frontend)
 
 # Build targets
 .PHONY: build
@@ -108,30 +108,54 @@ vet: ## Run go vet
 security: ## Run security checks
 	govulncheck ./...
 	gosec -quiet -exclude-dir=.gomodcache -exclude-dir=vendor -exclude-dir=testdata -exclude-dir=.worktrees ./...
+	@$(MAKE) trivy
 
 # Analysis targets (complementary to SonarCloud)
 .PHONY: analyze
 analyze: ## Run local analysis (struct alignment, performance hints)
 	@echo "=== Local Analysis (SonarCloud complement) ==="
 	@echo ""
-	@echo "[1/3] Struct alignment..."
+	@echo "[1/2] Struct alignment..."
 	@if [ -f $(GOBIN)/betteralign ]; then \
 		$(GOBIN)/betteralign ./internal/... 2>&1 | head -20; \
 	else \
 		echo "  Install: make tools"; \
 	fi
 	@echo ""
-	@echo "[2/3] Performance hints (hugeParam, rangeValCopy)..."
+	@echo "[2/2] Performance hints (hugeParam, rangeValCopy)..."
 	@if [ -f $(GOBIN)/gocritic ]; then \
 		$(GOBIN)/gocritic check -enableAll ./internal/... 2>&1 | grep -E "hugeParam|rangeValCopy|appendCombine" | head -20; \
 	else \
 		echo "  Install: make tools"; \
 	fi
 	@echo ""
-	@echo "[3/3] Dependency vulnerabilities..."
-	@command -v docker >/dev/null && docker run --rm -v $(PWD):/src aquasec/trivy:latest fs /src --scanners vuln --quiet 2>/dev/null | tail -30 || echo "  Requires docker"
-	@echo ""
 	@echo "Full analysis: https://sonarcloud.io/project/overview?id=hugo-lorenzo-mato_quorum-ai"
+
+.PHONY: trivy
+trivy: ## Scan dependencies with Trivy (fails on findings)
+	@echo "Trivy scan..."
+	@if command -v trivy >/dev/null; then \
+		trivy fs . --scanners vuln --quiet --exit-code 1 --severity MEDIUM,HIGH,CRITICAL \
+			--skip-dirs .git \
+			--skip-dirs .worktrees \
+			--skip-dirs .quorum \
+			--skip-dirs .orchestrator \
+			--skip-dirs .gocache \
+			--skip-dirs .gomodcache \
+			--skip-dirs frontend/node_modules; \
+	elif command -v docker >/dev/null; then \
+		docker run --rm -v $(PWD):/src aquasec/trivy:latest fs /src --scanners vuln --quiet --exit-code 1 --severity MEDIUM,HIGH,CRITICAL \
+			--skip-dirs .git \
+			--skip-dirs .worktrees \
+			--skip-dirs .quorum \
+			--skip-dirs .orchestrator \
+			--skip-dirs .gocache \
+			--skip-dirs .gomodcache \
+			--skip-dirs frontend/node_modules; \
+	else \
+		echo "  Requires trivy or docker"; \
+		exit 1; \
+	fi
 
 .PHONY: sonar-report
 sonar-report: ## Download SonarCloud report locally (requires SONAR_TOKEN)
@@ -161,7 +185,9 @@ deps: ## Download dependencies
 tools: ## Install analysis tools
 	go install github.com/dkorunic/betteralign/cmd/betteralign@latest
 	go install github.com/go-critic/go-critic/cmd/gocritic@latest
+	go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8
 	go install github.com/uudashr/gocognit/cmd/gocognit@latest
+	go install github.com/securego/gosec/v2/cmd/gosec@latest
 	go install golang.org/x/vuln/cmd/govulncheck@latest
 
 .PHONY: tidy
@@ -183,7 +209,22 @@ FRONTEND_DIR := frontend
 
 .PHONY: frontend-deps
 frontend-deps: ## Install frontend dependencies
-	cd $(FRONTEND_DIR) && npm install
+	cd $(FRONTEND_DIR) && if [ -n "$$CI" ]; then npm ci; else npm install; fi
+
+.PHONY: frontend-lint
+frontend-lint: ## Run frontend lint
+	cd $(FRONTEND_DIR) && npm run lint
+
+.PHONY: frontend-test
+frontend-test: ## Run frontend tests
+	cd $(FRONTEND_DIR) && npm test -- --run
+
+.PHONY: frontend-audit
+frontend-audit: frontend-deps ## Run frontend security audit
+	cd $(FRONTEND_DIR) && npm audit
+
+.PHONY: frontend-check
+frontend-check: frontend-deps frontend-lint frontend-test build-frontend frontend-audit ## Run all frontend checks
 
 .PHONY: build-frontend
 build-frontend: frontend-deps ## Build frontend for production
