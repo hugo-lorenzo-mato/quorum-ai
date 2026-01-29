@@ -233,6 +233,14 @@ func (m *SQLiteStateManager) migrate() error {
 		}
 	}
 
+	if version < 6 {
+		// Migration V6 adds workflow isolation tables
+		_, err := m.db.Exec(migrationV6)
+		if err != nil && !strings.Contains(err.Error(), "already exists") && !strings.Contains(err.Error(), "duplicate column") {
+			return fmt.Errorf("applying migration v6: %w", err)
+		}
+	}
+
 	return nil
 }
 

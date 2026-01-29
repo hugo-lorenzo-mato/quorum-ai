@@ -55,9 +55,9 @@ func TestOpenCodeAdapter_Capabilities(t *testing.T) {
 	assert.True(t, caps.SupportsJSON)
 	assert.True(t, caps.SupportsStreaming)
 	assert.True(t, caps.SupportsTools)
-	assert.Contains(t, caps.SupportedModels, "qwen2.5-coder")
-	assert.Contains(t, caps.SupportedModels, "llama3.1")
-	assert.Equal(t, "qwen2.5-coder", caps.DefaultModel)
+	assert.Contains(t, caps.SupportedModels, "qwen2.5-coder:32b")
+	assert.Contains(t, caps.SupportedModels, "deepseek-r1:32b")
+	assert.Equal(t, "qwen2.5-coder:32b", caps.DefaultModel)
 }
 
 func TestOpenCodeAdapter_DetectProfile(t *testing.T) {
@@ -230,7 +230,7 @@ func TestOpenCodeAdapter_ResolveModel(t *testing.T) {
 		}
 
 		model := adapter.resolveModel(opts)
-		assert.Equal(t, "qwen2.5-coder", model)
+		assert.Equal(t, "qwen2.5-coder:32b", model)
 	})
 
 	t.Run("profile_based_selection_architect", func(t *testing.T) {
@@ -241,7 +241,7 @@ func TestOpenCodeAdapter_ResolveModel(t *testing.T) {
 		}
 
 		model := adapter.resolveModel(opts)
-		assert.Equal(t, "llama3.1", model)
+		assert.Equal(t, "deepseek-r1:32b", model)
 	})
 }
 

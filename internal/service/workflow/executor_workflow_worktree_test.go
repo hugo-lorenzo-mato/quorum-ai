@@ -59,6 +59,38 @@ func (m *mockWorkflowWorktreeManager) GetWorkflowBranch(workflowID string) strin
 	return "quorum/" + workflowID
 }
 
+func (m *mockWorkflowWorktreeManager) GetTaskBranch(workflowID string, taskID core.TaskID) string {
+	return "quorum/" + workflowID + "/" + string(taskID)
+}
+
+func (m *mockWorkflowWorktreeManager) InitializeWorkflow(_ context.Context, workflowID string, baseBranch string) (*core.WorkflowGitInfo, error) {
+	return &core.WorkflowGitInfo{
+		WorkflowID:     workflowID,
+		WorkflowBranch: "quorum/" + workflowID,
+		BaseBranch:     baseBranch,
+	}, nil
+}
+
+func (m *mockWorkflowWorktreeManager) FinalizeWorkflow(_ context.Context, _ string, _ bool) error {
+	return nil
+}
+
+func (m *mockWorkflowWorktreeManager) CleanupWorkflow(_ context.Context, _ string, _ bool) error {
+	return nil
+}
+
+func (m *mockWorkflowWorktreeManager) MergeAllTasksToWorkflow(_ context.Context, _ string, _ []core.TaskID, _ string) error {
+	return nil
+}
+
+func (m *mockWorkflowWorktreeManager) GetWorkflowStatus(_ context.Context, _ string) (*core.WorkflowGitStatus, error) {
+	return &core.WorkflowGitStatus{}, nil
+}
+
+func (m *mockWorkflowWorktreeManager) ListActiveWorkflows(_ context.Context) ([]*core.WorkflowGitInfo, error) {
+	return nil, nil
+}
+
 // TestContext_UseWorkflowIsolation tests the UseWorkflowIsolation method.
 func TestContext_UseWorkflowIsolation(t *testing.T) {
 	tests := []struct {

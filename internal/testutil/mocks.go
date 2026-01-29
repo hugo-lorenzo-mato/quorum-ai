@@ -355,6 +355,72 @@ func (m *MockStateManager) FindZombieWorkflows(_ context.Context, staleThreshold
 	return nil, nil
 }
 
+// AcquireWorkflowLock mocks workflow-specific lock acquisition.
+func (m *MockStateManager) AcquireWorkflowLock(_ context.Context, _ core.WorkflowID) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.locked {
+		return core.ErrState("LOCK_ACQUIRE_FAILED", "already locked")
+	}
+	m.locked = true
+	return nil
+}
+
+// ReleaseWorkflowLock mocks workflow-specific lock release.
+func (m *MockStateManager) ReleaseWorkflowLock(_ context.Context, _ core.WorkflowID) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.locked = false
+	return nil
+}
+
+// RefreshWorkflowLock mocks lock refresh.
+func (m *MockStateManager) RefreshWorkflowLock(_ context.Context, _ core.WorkflowID) error {
+	return nil
+}
+
+// SetWorkflowRunning mocks marking a workflow as running.
+func (m *MockStateManager) SetWorkflowRunning(_ context.Context, _ core.WorkflowID) error {
+	return nil
+}
+
+// ClearWorkflowRunning mocks clearing the running state.
+func (m *MockStateManager) ClearWorkflowRunning(_ context.Context, _ core.WorkflowID) error {
+	return nil
+}
+
+// ListRunningWorkflows mocks listing running workflows.
+func (m *MockStateManager) ListRunningWorkflows(_ context.Context) ([]core.WorkflowID, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.state != nil && m.state.Status == core.WorkflowStatusRunning {
+		return []core.WorkflowID{m.state.WorkflowID}, nil
+	}
+	return nil, nil
+}
+
+// IsWorkflowRunning mocks checking if a workflow is running.
+func (m *MockStateManager) IsWorkflowRunning(_ context.Context, id core.WorkflowID) (bool, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.state != nil && m.state.WorkflowID == id && m.state.Status == core.WorkflowStatusRunning {
+		return true, nil
+	}
+	return false, nil
+}
+
+// UpdateWorkflowHeartbeat mocks workflow heartbeat update.
+func (m *MockStateManager) UpdateWorkflowHeartbeat(_ context.Context, id core.WorkflowID) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.state != nil && m.state.WorkflowID == id {
+		now := time.Now().UTC()
+		m.state.HeartbeatAt = &now
+		return nil
+	}
+	return core.ErrNotFound("workflow", string(id))
+}
+
 // MockRegistry implements AgentRegistry for testing.
 type MockRegistry struct {
 	agents map[string]*MockAgent

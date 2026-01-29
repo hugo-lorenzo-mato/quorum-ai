@@ -2,7 +2,6 @@ package git
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -12,9 +11,6 @@ import (
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 )
-
-// ErrMergeConflict indicates a merge conflict occurred.
-var ErrMergeConflict = errors.New("merge conflict")
 
 // WorkflowWorktreeManagerImpl implements core.WorkflowWorktreeManager.
 type WorkflowWorktreeManagerImpl struct {
