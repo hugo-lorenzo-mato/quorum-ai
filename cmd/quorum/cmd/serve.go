@@ -245,8 +245,13 @@ func runServe(_ *cobra.Command, _ []string) error {
 		defer heartbeatManager.Shutdown()
 	}
 
+	// Print clickable URL to terminal (most terminals auto-detect URLs)
+	serverURL := fmt.Sprintf("http://%s", server.Addr())
+	fmt.Printf("\n  Quorum server running at: \033[1;36m%s\033[0m\n\n", serverURL)
+
 	logger.Info("server started",
 		slog.String("addr", server.Addr()),
+		slog.String("url", serverURL),
 		slog.Bool("cors", cfg.EnableCORS),
 	)
 
