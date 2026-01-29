@@ -36,14 +36,20 @@ func NewClaudeAdapter(cfg AgentConfig) (core.Agent, error) {
 			MaxContextTokens:  200000,
 			MaxOutputTokens:   8192,
 			SupportedModels: []string{
-				"claude-opus-4-5-20251101",
-				"claude-sonnet-4-5-20250929",
-				"claude-haiku-4-5-20251001",
-				"claude-sonnet-4-20250514",
+				// Claude 4.5 family (latest)
+				"claude-opus-4-5-20251101",   // Most powerful model
+				"claude-sonnet-4-5-20250929", // Best balance of intelligence, speed, and cost
+				"claude-haiku-4-5-20251001",  // Fastest model with near-frontier performance
+				// Claude 4 family
 				"claude-opus-4-20250514",
 				"claude-opus-4-1-20250805",
+				"claude-sonnet-4-20250514",
+				// Aliases (shortcuts accepted by claude CLI)
+				"opus",   // Maps to latest opus model
+				"sonnet", // Maps to latest sonnet model
+				"haiku",  // Maps to latest haiku model
 			},
-			DefaultModel: "claude-sonnet-4-5-20250929",
+			DefaultModel: "sonnet",
 		},
 	}
 

@@ -35,9 +35,14 @@ func NewGeminiAdapter(cfg AgentConfig) (core.Agent, error) {
 			MaxContextTokens:  1000000, // 1M context window
 			MaxOutputTokens:   8192,
 			SupportedModels: []string{
-				"gemini-2.5-pro",
-				"gemini-2.5-flash",
-				"gemini-2.5-flash-lite",
+				// Gemini 2.5 family (stable, recommended)
+				"gemini-2.5-pro",        // Most powerful, best for coding and agentic tasks
+				"gemini-2.5-flash",      // Best price/performance balance with thinking
+				"gemini-2.5-flash-lite", // Fast, low-cost, 1M context
+				// Gemini 2.0 family (retiring March 2026)
+				"gemini-2.0-flash",
+				"gemini-2.0-flash-lite",
+				// Gemini 3 preview models
 				"gemini-3-pro-preview",
 				"gemini-3-flash-preview",
 			},
