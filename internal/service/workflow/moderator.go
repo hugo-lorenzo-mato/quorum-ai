@@ -226,7 +226,8 @@ func (m *SemanticModerator) EvaluateWithAgent(ctx context.Context, wctx *Context
 			"raw_output_sample", truncateForLog(result.Output, 500),
 		)
 		if wctx.Output != nil {
-			wctx.Output.AgentEvent("warning", moderatorAgentName,
+			// Use "error" instead of "warning" so frontend stops the timer for this agent
+			wctx.Output.AgentEvent("error", moderatorAgentName,
 				fmt.Sprintf("Moderator output validation issue: %v", validationErr),
 				map[string]interface{}{
 					"phase":       "moderator",
