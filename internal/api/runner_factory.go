@@ -56,12 +56,13 @@ func (f *RunnerFactory) WithHeartbeat(hb *workflow.HeartbeatManager) *RunnerFact
 //   - ctx: Context for the runner (should have appropriate timeout)
 //   - workflowID: The ID of the workflow being executed
 //   - cp: Optional ControlPlane for pause/resume/cancel (may be nil)
+//   - wfConfig: Optional workflow-specific configuration overrides (may be nil)
 //
 // Returns:
 //   - *workflow.Runner: Fully configured runner
 //   - *webadapters.WebOutputNotifier: The notifier (for lifecycle events)
 //   - error: Any error during setup
-func (f *RunnerFactory) CreateRunner(ctx context.Context, workflowID string, cp *control.ControlPlane) (*workflow.Runner, *webadapters.WebOutputNotifier, error) {
+func (f *RunnerFactory) CreateRunner(ctx context.Context, workflowID string, cp *control.ControlPlane, wfConfig *core.WorkflowConfig) (*workflow.Runner, *webadapters.WebOutputNotifier, error) {
 	// Validate prerequisites
 	if f.stateManager == nil {
 		return nil, nil, fmt.Errorf("state manager not configured")
@@ -86,15 +87,34 @@ func (f *RunnerFactory) CreateRunner(ctx context.Context, workflowID string, cp 
 	outputNotifier := webadapters.NewWebOutputNotifier(f.eventBus, workflowID)
 
 	// Build runner using RunnerBuilder (Task-6 unification)
-	runner, err := workflow.NewRunnerBuilder().
+	builder := workflow.NewRunnerBuilder().
 		WithConfig(cfg).
 		WithStateManager(f.stateManager).
 		WithAgentRegistry(f.agentRegistry).
 		WithLogger(f.logger).
 		WithOutputNotifier(outputNotifier).
 		WithControlPlane(cp).
-		WithHeartbeat(f.heartbeat).
-		Build(ctx)
+		WithHeartbeat(f.heartbeat)
+
+	// Apply workflow-level overrides if provided
+	if wfConfig != nil {
+		builder.WithWorkflowConfig(&workflow.WorkflowConfigOverride{
+			ExecutionMode:      wfConfig.ExecutionMode,
+			SingleAgentName:    wfConfig.SingleAgentName,
+			SingleAgentModel:   wfConfig.SingleAgentModel,
+			ConsensusThreshold: wfConfig.ConsensusThreshold,
+			MaxRetries:         wfConfig.MaxRetries,
+			Timeout:            wfConfig.Timeout,
+			DryRun:             wfConfig.DryRun,
+			Sandbox:            wfConfig.Sandbox,
+			// Since these come from core.WorkflowConfig which already has resolved values,
+			// we treat them as explicit overrides.
+			HasDryRun:  true,
+			HasSandbox: true,
+		})
+	}
+
+	runner, err := builder.Build(ctx)
 	if err != nil {
 		return nil, nil, fmt.Errorf("building runner: %w", err)
 	}

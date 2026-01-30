@@ -16,7 +16,49 @@ import (
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service/report"
 )
 
+// WorkflowConfigOverride holds per-workflow configuration that can override
+// global application settings. This is a local type to avoid circular imports
+// with the api package. The API layer should convert api.WorkflowConfig to this type.
+type WorkflowConfigOverride struct {
+	// ExecutionMode determines whether to use multi-agent consensus or single-agent mode.
+	// Valid values: "multi_agent" (default), "single_agent"
+	ExecutionMode string
+
+	// SingleAgentName is the name of the agent to use when ExecutionMode is "single_agent".
+	SingleAgentName string
+
+	// SingleAgentModel is an optional model override for the single agent.
+	SingleAgentModel string
+
+	// ConsensusThreshold is the confidence threshold required for multi-agent consensus.
+	ConsensusThreshold float64
+
+	// MaxRetries is the maximum number of times to retry failed tasks.
+	MaxRetries int
+
+	// Timeout is the maximum duration for the entire workflow.
+	Timeout time.Duration
+
+	// DryRun enables simulation mode without making external changes.
+	DryRun bool
+
+	// Sandbox enables isolated execution environment.
+	Sandbox bool
+
+	// HasDryRun indicates if DryRun was explicitly set.
+	HasDryRun bool
+
+	// HasSandbox indicates if Sandbox was explicitly set.
+	HasSandbox bool
+}
+
+// IsSingleAgentMode returns true if the override specifies single-agent execution.
+func (c *WorkflowConfigOverride) IsSingleAgentMode() bool {
+	return c != nil && c.ExecutionMode == "single_agent"
+}
+
 // RunnerBuilder provides a fluent API for constructing workflow runners.
+
 // It unifies the construction logic previously duplicated between CLI and WebUI.
 type RunnerBuilder struct {
 	// Required dependencies
@@ -39,6 +81,9 @@ type RunnerBuilder struct {
 
 	// Git isolation configuration
 	gitIsolation *GitIsolationConfig
+
+	// Workflow-level configuration override (from API)
+	workflowConfig *WorkflowConfigOverride
 
 	// Runner configuration
 	runnerConfig          *RunnerConfig
@@ -224,6 +269,14 @@ func (b *RunnerBuilder) WithWorktreeManager(wm WorktreeManager) *RunnerBuilder {
 	return b
 }
 
+// WithWorkflowConfig sets workflow-specific configuration overrides.
+// When provided, these settings take precedence over global application config.
+// This enables per-workflow execution mode selection (single-agent vs multi-agent).
+func (b *RunnerBuilder) WithWorkflowConfig(wfConfig *WorkflowConfigOverride) *RunnerBuilder {
+	b.workflowConfig = wfConfig
+	return b
+}
+
 // Build constructs the Runner from the builder configuration.
 // It validates all required dependencies and applies defaults for optional ones.
 func (b *RunnerBuilder) Build(ctx context.Context) (*Runner, error) {
@@ -366,8 +419,73 @@ func (b *RunnerBuilder) buildRunnerConfig() *RunnerConfig {
 		return b.runnerConfig
 	}
 
-	// Otherwise, build from application config
-	return BuildRunnerConfigFromConfig(cfg)
+	// Build from application config
+	runnerCfg := BuildRunnerConfigFromConfig(cfg)
+
+	// Apply workflow-level overrides (higher priority than app config)
+	if b.workflowConfig != nil {
+		if b.workflowConfig.ConsensusThreshold > 0 {
+			runnerCfg.Moderator.Threshold = b.workflowConfig.ConsensusThreshold
+		}
+		if b.workflowConfig.MaxRetries > 0 {
+			runnerCfg.MaxRetries = b.workflowConfig.MaxRetries
+		}
+		if b.workflowConfig.Timeout > 0 {
+			runnerCfg.Timeout = b.workflowConfig.Timeout
+		}
+		if b.workflowConfig.HasDryRun {
+			runnerCfg.DryRun = b.workflowConfig.DryRun
+		}
+		if b.workflowConfig.HasSandbox {
+			runnerCfg.Sandbox = b.workflowConfig.Sandbox
+		}
+	}
+
+	runnerCfg.SingleAgent = b.buildSingleAgentConfig(cfg)
+
+	return runnerCfg
+}
+
+// buildSingleAgentConfig constructs SingleAgentConfig with proper precedence:
+//  1. Workflow-specific override (highest priority)
+//  2. Application config (fallback)
+//  3. Disabled (default if nothing configured)
+//
+// This enables per-workflow execution mode selection while maintaining
+// backward compatibility with global configuration.
+func (b *RunnerBuilder) buildSingleAgentConfig(cfg *config.Config) SingleAgentConfig {
+	// Check for workflow-level override first (highest priority)
+	if b.workflowConfig != nil {
+		// Explicit single-agent mode request
+		if b.workflowConfig.IsSingleAgentMode() {
+			return SingleAgentConfig{
+				Enabled: true,
+				Agent:   b.workflowConfig.SingleAgentName,
+				Model:   b.workflowConfig.SingleAgentModel,
+			}
+		}
+
+		// Explicit multi-agent mode request (can override global single-agent)
+		if b.workflowConfig.ExecutionMode == "multi_agent" {
+			return SingleAgentConfig{
+				Enabled: false,
+			}
+		}
+	}
+
+	// Fall back to application config (second priority)
+	if cfg != nil && cfg.Phases.Analyze.SingleAgent.Enabled {
+		return SingleAgentConfig{
+			Enabled: cfg.Phases.Analyze.SingleAgent.Enabled,
+			Agent:   cfg.Phases.Analyze.SingleAgent.Agent,
+			Model:   cfg.Phases.Analyze.SingleAgent.Model,
+		}
+	}
+
+	// Default: disabled (multi-agent mode)
+	return SingleAgentConfig{
+		Enabled: false,
+	}
 }
 
 // BuildRunnerConfigFromConfig creates a RunnerConfig from application config.

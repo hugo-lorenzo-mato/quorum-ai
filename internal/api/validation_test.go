@@ -64,7 +64,8 @@ func TestHandleValidateConfig_ValidConfig(t *testing.T) {
 	reqBody := `{
 		"workflow": {"timeout": "2h"},
 		"log": {"level": "debug"},
-		"agents": {"default": "claude", "claude": {"enabled": true}}
+		"agents": {"default": "claude", "claude": {"enabled": true}},
+		"phases": {"analyze": {"refiner": {"enabled": false}, "moderator": {"enabled": false}}}
 	}`
 
 	req := httptest.NewRequest("POST", "/api/v1/config/validate", bytes.NewReader([]byte(reqBody)))
@@ -168,7 +169,8 @@ func TestHandleUpdateConfig_ValidUpdate(t *testing.T) {
 	// Valid update - includes required agents.default
 	reqBody := `{
 		"log": {"level": "debug"},
-		"agents": {"default": "claude", "claude": {"enabled": true}}
+		"agents": {"default": "claude", "claude": {"enabled": true}},
+		"phases": {"analyze": {"refiner": {"enabled": false}, "moderator": {"enabled": false}}}
 	}`
 
 	req := httptest.NewRequest("PATCH", "/api/v1/config", bytes.NewReader([]byte(reqBody)))

@@ -114,7 +114,7 @@ func (e *WorkflowExecutor) execute(ctx context.Context, workflowID core.Workflow
 	e.controlPlanes.Store(id, cp)
 
 	// Create runner
-	runner, notifier, err := e.runnerFactory.CreateRunner(execCtx, id, cp)
+	runner, notifier, err := e.runnerFactory.CreateRunner(execCtx, id, cp, state.Config)
 	if err != nil {
 		cancel()
 		e.controlPlanes.Delete(id)

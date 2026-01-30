@@ -671,7 +671,7 @@ func (s *Server) HandleRunWorkflow(w http.ResponseWriter, r *http.Request) {
 	cp := control.New()
 	s.registerControlPlane(workflowID, cp)
 
-	runner, notifier, err := factory.CreateRunner(execCtx, workflowID, cp)
+	runner, notifier, err := factory.CreateRunner(execCtx, workflowID, cp, state.Config)
 	if err != nil {
 		cancel()
 		s.unregisterControlPlane(workflowID)
