@@ -70,7 +70,7 @@ phases:
       # Minimum refinement rounds before accepting consensus
       min_rounds: 2
       # Maximum refinement rounds before giving up
-      max_rounds: 5
+      max_rounds: 3
       # Score below which to abort workflow
       abort_threshold: 0.30
       # Score change below which is considered stagnation

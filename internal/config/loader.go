@@ -138,7 +138,7 @@ func (l *Loader) setDefaults() {
 	l.v.SetDefault("phases.analyze.moderator.agent", "")
 	l.v.SetDefault("phases.analyze.moderator.threshold", 0.80)
 	l.v.SetDefault("phases.analyze.moderator.min_rounds", 2)
-	l.v.SetDefault("phases.analyze.moderator.max_rounds", 5)
+	l.v.SetDefault("phases.analyze.moderator.max_rounds", 3)
 	l.v.SetDefault("phases.analyze.moderator.abort_threshold", 0.30)
 	l.v.SetDefault("phases.analyze.moderator.stagnation_threshold", 0.02)
 	l.v.SetDefault("phases.analyze.synthesizer.agent", "")
