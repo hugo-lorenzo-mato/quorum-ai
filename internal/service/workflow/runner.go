@@ -322,15 +322,31 @@ func (r *Runner) RunWithState(ctx context.Context, state *core.WorkflowState) er
 	if state.WorkflowID == "" {
 		return core.ErrValidation("MISSING_WORKFLOW_ID", "workflow state must have a workflow ID")
 	}
-	if err := r.validateRunInput(state.Prompt); err != nil {
+
+	// Helper to mark state as failed before returning validation errors.
+	// This ensures the UI shows the correct status when validation fails early.
+	markFailed := func(err error) error {
+		state.Status = core.WorkflowStatusFailed
+		state.Error = err.Error()
+		state.UpdatedAt = time.Now()
+		if saveErr := r.state.Save(ctx, state); saveErr != nil {
+			r.logger.Warn("failed to save failed state", "error", saveErr)
+		}
+		if r.output != nil {
+			r.output.Log("error", "workflow", fmt.Sprintf("Workflow failed: %s", err.Error()))
+		}
 		return err
+	}
+
+	if err := r.validateRunInput(state.Prompt); err != nil {
+		return markFailed(err)
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, r.config.Timeout)
 	defer cancel()
 
 	if err := r.ValidateAgentAvailability(ctx); err != nil {
-		return err
+		return markFailed(err)
 	}
 
 	if err := r.state.AcquireLock(ctx); err != nil {
