@@ -22,18 +22,34 @@ const useAgentStore = create((set, get) => ({
     const isStartEvent = eventKind === 'started';
     const isEndEvent = eventKind === 'completed' || eventKind === 'error';
 
-    // startedAt: set on first 'started' event, preserve existing
-    const startedAt = isStartEvent
-      ? data.timestamp
-      : existingAgent.startedAt || data.timestamp;
+    // startedAt: set on first 'started' event, preserve existing, or extract from data
+    let startedAt = existingAgent.startedAt;
+    if (isStartEvent) {
+      startedAt = data.timestamp;
+    } else if (existingAgent.startedAt) {
+      // Preserve existing startedAt from previous events
+      startedAt = existingAgent.startedAt;
+    } else if (data.data?.started_at) {
+      // Some events include started_at in their data
+      startedAt = data.data.started_at;
+    } else {
+      // Last resort: use current event timestamp
+      startedAt = data.timestamp;
+    }
 
     // completedAt: set when agent completes or errors
     const completedAt = isEndEvent ? data.timestamp : existingAgent.completedAt;
 
-    // durationMs: calculate fixed duration when completed
+    // durationMs: use from event data if available, otherwise calculate
     let durationMs = existingAgent.durationMs;
-    if (isEndEvent && startedAt && data.timestamp) {
-      durationMs = new Date(data.timestamp).getTime() - new Date(startedAt).getTime();
+    if (isEndEvent) {
+      // Prefer duration_ms from event data if available
+      if (data.data?.duration_ms != null) {
+        durationMs = data.data.duration_ms;
+      } else if (startedAt && data.timestamp && startedAt !== data.timestamp) {
+        // Calculate from timestamps (only if they're different)
+        durationMs = new Date(data.timestamp).getTime() - new Date(startedAt).getTime();
+      }
     }
 
     const updatedAgents = {
@@ -105,6 +121,15 @@ const useAgentStore = create((set, get) => ({
     })).reverse().slice(0, MAX_ACTIVITY_ENTRIES);
 
     // Rebuild current agent statuses from events with proper timestamp handling
+    // First pass: find startedAt timestamp for each agent
+    const agentStartTimes = {};
+    for (const event of events) {
+      if (event.event_kind === 'started' && !agentStartTimes[event.agent]) {
+        agentStartTimes[event.agent] = event.timestamp;
+      }
+    }
+
+    // Second pass: build agent statuses
     const agentStatuses = {};
     for (const event of events) {
       // Events are in chronological order, so we process them sequentially
@@ -113,10 +138,8 @@ const useAgentStore = create((set, get) => ({
       const isStartEvent = eventKind === 'started';
       const isEndEvent = eventKind === 'completed' || eventKind === 'error';
 
-      // Track startedAt from first 'started' event
-      const startedAt = isStartEvent
-        ? event.timestamp
-        : existing.startedAt || event.timestamp;
+      // Use the startedAt from first pass, or event timestamp as fallback
+      const startedAt = agentStartTimes[event.agent] || event.timestamp;
 
       // Track completedAt from completion events
       const completedAt = isEndEvent ? event.timestamp : existing.completedAt;

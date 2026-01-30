@@ -95,7 +95,9 @@ function AgentProgressBar({ agent }) {
 
   const activityIcon = getActivityIcon(agent.status);
   // For completed agents, use fixed durationMs; for active agents, calculate live elapsed
-  const elapsed = startTime ? formatElapsed(startTime, agent.durationMs) : '';
+  // Only use durationMs if agent is actually done (completed or error)
+  const shouldUseDuration = (isDone || isError) && agent.durationMs != null;
+  const elapsed = startTime ? formatElapsed(startTime, shouldUseDuration ? agent.durationMs : null) : '';
 
   return (
     <div className="flex items-center gap-3 py-1.5 font-mono text-xs">
