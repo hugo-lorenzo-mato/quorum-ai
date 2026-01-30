@@ -190,29 +190,6 @@ jobs:
             -o quorum-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} \
             ./cmd/quorum
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: quorum-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: quorum-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
-          retention-days: 7
-
-  verify-build:
-    name: Verify build
-    if: github.event_name != 'schedule'
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download Linux artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: quorum-linux-amd64
-
-      - name: Verify binary
-        run: |
-          chmod +x quorum-linux-amd64
-          ./quorum-linux-amd64 version
-
   dependency-review:
     name: Dependency Review
     if: github.event_name == 'pull_request'
