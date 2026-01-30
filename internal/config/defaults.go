@@ -21,7 +21,7 @@ phases:
     moderator:
       enabled: true
       agent: copilot
-      threshold: 0.90
+      threshold: 0.80
   plan:
     # Plan synthesizer - when enabled, agents propose plans in parallel,
     # then synthesizer consolidates. When disabled, single-agent planning.
