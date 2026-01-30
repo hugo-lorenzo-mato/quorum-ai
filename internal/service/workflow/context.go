@@ -162,6 +162,9 @@ type SingleAgentConfig struct {
 	// Model is an optional override for the agent's default model.
 	// If empty, the agent's configured default model is used.
 	Model string
+	// ReasoningEffort is an optional override for the agent's reasoning effort.
+	// Only supported by certain agents/models (e.g., Codex). Empty means use agent defaults.
+	ReasoningEffort string
 }
 
 // PhaseTimeouts holds timeout durations for each workflow phase.

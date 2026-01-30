@@ -60,4 +60,38 @@ describe('EditWorkflowModal', () => {
 
     expect(onClose).toHaveBeenCalled();
   });
+
+  it('updates execution mode when pending', async () => {
+    const onSave = vi.fn().mockResolvedValue();
+    const onClose = vi.fn();
+
+    render(
+      <EditWorkflowModal
+        isOpen
+        onClose={onClose}
+        onSave={onSave}
+        workflow={{
+          ...workflow,
+          status: 'pending',
+          config: { execution_mode: 'multi_agent' },
+        }}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('radio', { name: /Single Agent/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
+
+    await waitFor(() => {
+      expect(onSave).toHaveBeenCalledWith({
+        config: {
+          execution_mode: 'single_agent',
+          single_agent_name: 'claude',
+          single_agent_model: '',
+          single_agent_reasoning_effort: '',
+        },
+      });
+    });
+
+    expect(onClose).toHaveBeenCalled();
+  });
 });

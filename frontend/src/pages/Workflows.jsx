@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useWorkflowStore, useTaskStore, useUIStore, useAgentStore, useConfigStore } from '../stores';
 import { fileApi, workflowApi } from '../lib/api';
+import { getModelsForAgent, getReasoningLevels, supportsReasoning, useEnums } from '../lib/agents';
 import MarkdownViewer from '../components/MarkdownViewer';
 import AgentActivity, { AgentActivityCompact } from '../components/AgentActivity';
 import EditWorkflowModal from '../components/EditWorkflowModal';
@@ -762,7 +763,7 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
             </p>
             <div className="flex flex-wrap items-center gap-3">
               <StatusBadge status={workflow.status} />
-              <ExecutionModeBadge config={workflow.config} variant="detailed" />
+              <ExecutionModeBadge config={workflow.config} variant="badge" />
             </div>
           </div>
           {canEdit && (
@@ -1055,6 +1056,11 @@ function NewWorkflowForm({ onSubmit, onCancel, loading }) {
   // Execution mode state
   const [executionMode, setExecutionMode] = useState('multi_agent');
   const [singleAgentName, setSingleAgentName] = useState('claude');
+  const [singleAgentModel, setSingleAgentModel] = useState('');
+  const [singleAgentReasoningEffort, setSingleAgentReasoningEffort] = useState('');
+
+  // Subscribe for enums updates (models/reasoning)
+  useEnums();
 
   // Get enabled agents from config store
   const { config } = useConfigStore();
@@ -1063,12 +1069,23 @@ function NewWorkflowForm({ onSubmit, onCancel, loading }) {
     return AGENT_OPTIONS.filter(opt => config.agents[opt.value]?.enabled !== false);
   }, [config]);
 
-  // Ensure selected agent is valid when enabled agents change
-  useEffect(() => {
-    if (enabledAgents.length > 0 && !enabledAgents.some(a => a.value === singleAgentName)) {
-      setSingleAgentName(enabledAgents[0].value);
-    }
-  }, [enabledAgents, singleAgentName]);
+  const effectiveSingleAgentName = enabledAgents.some((a) => a.value === singleAgentName)
+    ? singleAgentName
+    : (enabledAgents[0]?.value || singleAgentName);
+
+  const modelOptions = getModelsForAgent(effectiveSingleAgentName);
+  const reasoningLevels = getReasoningLevels();
+  const agentSupportsReasoning = supportsReasoning(effectiveSingleAgentName);
+
+  const effectiveSingleAgentModel = modelOptions.some((m) => m.value === singleAgentModel)
+    ? singleAgentModel
+    : '';
+  const effectiveSingleAgentReasoningEffort = agentSupportsReasoning && reasoningLevels.some((r) => r.value === singleAgentReasoningEffort)
+    ? singleAgentReasoningEffort
+    : '';
+
+  const selectedModel = modelOptions.find((m) => m.value === effectiveSingleAgentModel);
+  const selectedReasoning = reasoningLevels.find((r) => r.value === effectiveSingleAgentReasoningEffort);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -1078,7 +1095,11 @@ function NewWorkflowForm({ onSubmit, onCancel, loading }) {
     const workflowConfig = executionMode === 'single_agent'
       ? {
           execution_mode: 'single_agent',
-          single_agent_name: singleAgentName,
+          single_agent_name: effectiveSingleAgentName,
+          ...(effectiveSingleAgentModel ? { single_agent_model: effectiveSingleAgentModel } : {}),
+          ...(agentSupportsReasoning && effectiveSingleAgentReasoningEffort
+            ? { single_agent_reasoning_effort: effectiveSingleAgentReasoningEffort }
+            : {}),
         }
       : undefined;
 
@@ -1164,7 +1185,7 @@ function NewWorkflowForm({ onSubmit, onCancel, loading }) {
                 <div className="flex items-center gap-2 mt-1.5 text-xs text-muted-foreground">
                   <span className="px-1.5 py-0.5 bg-muted rounded text-[10px]">Complex tasks</span>
                   <span className="px-1.5 py-0.5 bg-muted rounded text-[10px]">Higher quality</span>
-                  <span>~5-15 min</span>
+                  <span className="px-1.5 py-0.5 bg-muted rounded text-[10px]">x3 faster</span>
                 </div>
               </div>
             </label>
@@ -1193,7 +1214,6 @@ function NewWorkflowForm({ onSubmit, onCancel, loading }) {
                 <div className="flex items-center gap-2 mt-1.5 text-xs text-muted-foreground">
                   <span className="px-1.5 py-0.5 bg-muted rounded text-[10px]">Simple tasks</span>
                   <span className="px-1.5 py-0.5 bg-muted rounded text-[10px]">Faster</span>
-                  <span>~1-3 min</span>
                 </div>
               </div>
             </label>
@@ -1206,8 +1226,13 @@ function NewWorkflowForm({ onSubmit, onCancel, loading }) {
                 Select Agent
               </label>
               <select
-                value={singleAgentName}
-                onChange={(e) => setSingleAgentName(e.target.value)}
+                value={effectiveSingleAgentName}
+                onChange={(e) => {
+                  const nextAgent = e.target.value;
+                  setSingleAgentName(nextAgent);
+                  setSingleAgentModel('');
+                  setSingleAgentReasoningEffort('');
+                }}
                 className="w-full px-3 py-2 border border-input rounded-lg bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background"
               >
                 {enabledAgents.map(agent => (
@@ -1219,6 +1244,53 @@ function NewWorkflowForm({ onSubmit, onCancel, loading }) {
               <p className="mt-1.5 text-xs text-muted-foreground">
                 This agent will handle all workflow phases independently.
               </p>
+
+              <div className="mt-3">
+                <label className="block text-sm font-medium text-foreground mb-1.5">
+                  Model <span className="text-muted-foreground font-normal">(optional)</span>
+                </label>
+                <select
+                  value={effectiveSingleAgentModel}
+                  onChange={(e) => setSingleAgentModel(e.target.value)}
+                  className="w-full px-3 py-2 border border-input rounded-lg bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background"
+                >
+                  {modelOptions.map((model) => (
+                    <option key={`${effectiveSingleAgentName}-${model.value || 'default'}`} value={model.value}>
+                      {model.label}
+                    </option>
+                  ))}
+                </select>
+                {selectedModel?.description && (
+                  <p className="mt-1.5 text-xs text-muted-foreground">
+                    {selectedModel.description}
+                  </p>
+                )}
+              </div>
+
+              {agentSupportsReasoning && (
+                <div className="mt-3">
+                  <label className="block text-sm font-medium text-foreground mb-1.5">
+                    Reasoning effort <span className="text-muted-foreground font-normal">(optional)</span>
+                  </label>
+                  <select
+                    value={effectiveSingleAgentReasoningEffort}
+                    onChange={(e) => setSingleAgentReasoningEffort(e.target.value)}
+                    className="w-full px-3 py-2 border border-input rounded-lg bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background"
+                  >
+                    <option value="">Default</option>
+                    {reasoningLevels.map((level) => (
+                      <option key={level.value} value={level.value}>
+                        {level.label}
+                      </option>
+                    ))}
+                  </select>
+                  {effectiveSingleAgentReasoningEffort && (
+                    <p className="mt-1.5 text-xs text-muted-foreground">
+                      {selectedReasoning?.description || ''}
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>

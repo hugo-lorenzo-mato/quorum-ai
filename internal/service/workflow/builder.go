@@ -30,6 +30,10 @@ type WorkflowConfigOverride struct {
 	// SingleAgentModel is an optional model override for the single agent.
 	SingleAgentModel string
 
+	// SingleAgentReasoningEffort is an optional reasoning effort override for the single agent.
+	// If empty, agent defaults are used.
+	SingleAgentReasoningEffort string
+
 	// ConsensusThreshold is the confidence threshold required for multi-agent consensus.
 	ConsensusThreshold float64
 
@@ -86,8 +90,8 @@ type RunnerBuilder struct {
 	workflowConfig *WorkflowConfigOverride
 
 	// Runner configuration
-	runnerConfig          *RunnerConfig
-	runnerConfigExplicit  bool // true if runnerConfig was explicitly set via WithRunnerConfig
+	runnerConfig         *RunnerConfig
+	runnerConfigExplicit bool // true if runnerConfig was explicitly set via WithRunnerConfig
 
 	// Overrides for runner config fields
 	phase      *core.Phase
@@ -403,26 +407,26 @@ func (b *RunnerBuilder) Build(ctx context.Context) (*Runner, error) {
 
 	// Create runner dependencies
 	deps := RunnerDeps{
-		Config:           runnerConfig,
-		State:            b.stateManager,
-		Agents:           b.agentRegistry,
-		DAG:              dagAdapter,
-		Checkpoint:       checkpointAdapter,
-		ResumeProvider:   resumeAdapter,
-		Prompts:          promptAdapter,
-		Retry:            retryAdapter,
-		RateLimits:       rateLimiterAdapter,
-		Worktrees:        worktreeManager,
+		Config:            runnerConfig,
+		State:             b.stateManager,
+		Agents:            b.agentRegistry,
+		DAG:               dagAdapter,
+		Checkpoint:        checkpointAdapter,
+		ResumeProvider:    resumeAdapter,
+		Prompts:           promptAdapter,
+		Retry:             retryAdapter,
+		RateLimits:        rateLimiterAdapter,
+		Worktrees:         worktreeManager,
 		WorkflowWorktrees: workflowWorktrees,
 		GitIsolation:      gitIsolation,
-		GitClientFactory: gitClientFactory,
-		Git:              gitClient,
-		GitHub:           githubClient,
-		Logger:           logger,
-		Output:           outputNotifier,
-		ModeEnforcer:     modeEnforcerAdapter,
-		Control:          b.controlPlane,
-		Heartbeat:        b.heartbeat,
+		GitClientFactory:  gitClientFactory,
+		Git:               gitClient,
+		GitHub:            githubClient,
+		Logger:            logger,
+		Output:            outputNotifier,
+		ModeEnforcer:      modeEnforcerAdapter,
+		Control:           b.controlPlane,
+		Heartbeat:         b.heartbeat,
 	}
 
 	// Create the runner
@@ -483,9 +487,10 @@ func (b *RunnerBuilder) buildSingleAgentConfig(cfg *config.Config) SingleAgentCo
 		// Explicit single-agent mode request
 		if b.workflowConfig.IsSingleAgentMode() {
 			return SingleAgentConfig{
-				Enabled: true,
-				Agent:   b.workflowConfig.SingleAgentName,
-				Model:   b.workflowConfig.SingleAgentModel,
+				Enabled:         true,
+				Agent:           b.workflowConfig.SingleAgentName,
+				Model:           b.workflowConfig.SingleAgentModel,
+				ReasoningEffort: b.workflowConfig.SingleAgentReasoningEffort,
 			}
 		}
 
@@ -670,10 +675,10 @@ func (b *RunnerBuilder) createGitComponents(logger *logging.Logger) (WorktreeMan
 // These functions are defined to avoid import cycles.
 // They will be implemented using the adapters/git and adapters/github packages.
 var (
-	createGitClient        = defaultCreateGitClient
-	createWorktreeManager  = defaultCreateWorktreeManager
-	createGitHubClient     = defaultCreateGitHubClient
-	createGitClientFactory = defaultCreateGitClientFactory
+	createGitClient               = defaultCreateGitClient
+	createWorktreeManager         = defaultCreateWorktreeManager
+	createGitHubClient            = defaultCreateGitHubClient
+	createGitClientFactory        = defaultCreateGitClientFactory
 	createWorkflowWorktreeManager = defaultCreateWorkflowWorktreeManager
 )
 

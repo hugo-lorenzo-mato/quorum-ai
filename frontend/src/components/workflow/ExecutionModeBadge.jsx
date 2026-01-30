@@ -76,7 +76,7 @@ export function ExecutionModeBadge({ config, variant = 'badge' }) {
       ) : (
         <>
           <Users className="w-3 h-3" />
-          Multi-Agent
+          Multi-Agent Consensus
         </>
       )}
     </span>

@@ -55,6 +55,10 @@ type WorkflowConfig struct {
 
 	// SingleAgentModel is an optional model override for the single agent.
 	SingleAgentModel string
+
+	// SingleAgentReasoningEffort is an optional reasoning effort override for the single agent.
+	// If empty, the agent's configured defaults are used.
+	SingleAgentReasoningEffort string
 }
 
 // NewWorkflow creates a new workflow instance.

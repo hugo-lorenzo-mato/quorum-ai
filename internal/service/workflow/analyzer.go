@@ -183,12 +183,13 @@ func (a *Analyzer) runSingleAgentAnalysis(ctx context.Context, wctx *Context) er
 	err = wctx.Retry.Execute(func() error {
 		var execErr error
 		result, execErr = agent.Execute(ctx, core.ExecuteOptions{
-			Prompt:  prompt,
-			Format:  core.OutputFormatText,
-			Model:   model,
-			Timeout: wctx.Config.PhaseTimeouts.Analyze,
-			Sandbox: wctx.Config.Sandbox,
-			Phase:   core.PhaseAnalyze,
+			Prompt:          prompt,
+			Format:          core.OutputFormatText,
+			Model:           model,
+			Timeout:         wctx.Config.PhaseTimeouts.Analyze,
+			Sandbox:         wctx.Config.Sandbox,
+			Phase:           core.PhaseAnalyze,
+			ReasoningEffort: wctx.Config.SingleAgent.ReasoningEffort,
 		})
 		return execErr
 	})

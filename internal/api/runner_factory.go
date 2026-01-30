@@ -99,14 +99,15 @@ func (f *RunnerFactory) CreateRunner(ctx context.Context, workflowID string, cp 
 	// Apply workflow-level overrides if provided
 	if wfConfig != nil {
 		builder.WithWorkflowConfig(&workflow.WorkflowConfigOverride{
-			ExecutionMode:      wfConfig.ExecutionMode,
-			SingleAgentName:    wfConfig.SingleAgentName,
-			SingleAgentModel:   wfConfig.SingleAgentModel,
-			ConsensusThreshold: wfConfig.ConsensusThreshold,
-			MaxRetries:         wfConfig.MaxRetries,
-			Timeout:            wfConfig.Timeout,
-			DryRun:             wfConfig.DryRun,
-			Sandbox:            wfConfig.Sandbox,
+			ExecutionMode:              wfConfig.ExecutionMode,
+			SingleAgentName:            wfConfig.SingleAgentName,
+			SingleAgentModel:           wfConfig.SingleAgentModel,
+			SingleAgentReasoningEffort: wfConfig.SingleAgentReasoningEffort,
+			ConsensusThreshold:         wfConfig.ConsensusThreshold,
+			MaxRetries:                 wfConfig.MaxRetries,
+			Timeout:                    wfConfig.Timeout,
+			DryRun:                     wfConfig.DryRun,
+			Sandbox:                    wfConfig.Sandbox,
 			// Since these come from core.WorkflowConfig which already has resolved values,
 			// we treat them as explicit overrides.
 			HasDryRun:  true,

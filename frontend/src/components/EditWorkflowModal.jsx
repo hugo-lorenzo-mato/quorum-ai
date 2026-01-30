@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { X, Pencil } from 'lucide-react';
 import TurndownService from 'turndown';
 import VoiceInputButton from './VoiceInputButton';
+import { getModelsForAgent, getReasoningLevels, supportsReasoning, useEnums } from '../lib/agents';
 
 /**
  * EditWorkflowModal - Clean modal for editing workflow title and prompt
@@ -9,11 +10,26 @@ import VoiceInputButton from './VoiceInputButton';
 export default function EditWorkflowModal({ isOpen, onClose, workflow, onSave, canEditPrompt = true }) {
   const [title, setTitle] = useState('');
   const [prompt, setPrompt] = useState('');
+  const [executionMode, setExecutionMode] = useState('multi_agent');
+  const [singleAgentName, setSingleAgentName] = useState('claude');
+  const [singleAgentModel, setSingleAgentModel] = useState('');
+  const [singleAgentReasoningEffort, setSingleAgentReasoningEffort] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const titleRef = useRef(null);
   const titleInputId = 'edit-workflow-title';
   const promptInputId = 'edit-workflow-prompt';
+
+  // Subscribe for enums updates (models/reasoning)
+  useEnums();
+
+  const canEditConfig = workflow?.status === 'pending';
+
+  const AGENT_OPTIONS = [
+    { value: 'claude', label: 'Claude' },
+    { value: 'gemini', label: 'Gemini' },
+    { value: 'codex', label: 'Codex' },
+  ];
 
   const turndown = useMemo(() => {
     const service = new TurndownService({
@@ -30,6 +46,11 @@ export default function EditWorkflowModal({ isOpen, onClose, workflow, onSave, c
     if (isOpen && workflow) {
       setTitle(workflow.title || '');
       setPrompt(workflow.prompt || '');
+      const mode = workflow.config?.execution_mode === 'single_agent' ? 'single_agent' : 'multi_agent';
+      setExecutionMode(mode);
+      setSingleAgentName(workflow.config?.single_agent_name || 'claude');
+      setSingleAgentModel(workflow.config?.single_agent_model || '');
+      setSingleAgentReasoningEffort(workflow.config?.single_agent_reasoning_effort || '');
       setError(null);
       // Focus title input after a short delay for animation
       setTimeout(() => titleRef.current?.focus(), 100);
@@ -67,6 +88,52 @@ export default function EditWorkflowModal({ isOpen, onClose, workflow, onSave, c
       // but still use trim() only for validation and change detection.
       if (canEditPrompt && prompt !== (workflow.prompt || '')) {
         updates.prompt = prompt;
+      }
+
+      // Allow editing execution mode + single-agent config only when pending.
+      if (canEditConfig) {
+        const originalMode = workflow.config?.execution_mode === 'single_agent' ? 'single_agent' : 'multi_agent';
+        const nextMode = executionMode === 'single_agent' ? 'single_agent' : 'multi_agent';
+
+        const effectiveSingleAgentName = AGENT_OPTIONS.some((a) => a.value === singleAgentName)
+          ? singleAgentName
+          : (AGENT_OPTIONS[0]?.value || singleAgentName);
+
+        const modelOptions = getModelsForAgent(effectiveSingleAgentName);
+        const effectiveSingleAgentModel = modelOptions.some((m) => m.value === singleAgentModel)
+          ? singleAgentModel
+          : '';
+
+        const reasoningLevels = getReasoningLevels();
+        const agentSupportsReasoning = supportsReasoning(effectiveSingleAgentName);
+        const effectiveSingleAgentReasoningEffort = agentSupportsReasoning && reasoningLevels.some((r) => r.value === singleAgentReasoningEffort)
+          ? singleAgentReasoningEffort
+          : '';
+
+        const originalAgent = workflow.config?.single_agent_name || '';
+        const originalModel = workflow.config?.single_agent_model || '';
+        const originalEffort = workflow.config?.single_agent_reasoning_effort || '';
+
+        const configChanged = (() => {
+          if (originalMode !== nextMode) return true;
+          if (nextMode !== 'single_agent') return false;
+          return (
+            originalAgent !== effectiveSingleAgentName ||
+            originalModel !== effectiveSingleAgentModel ||
+            originalEffort !== effectiveSingleAgentReasoningEffort
+          );
+        })();
+
+        if (configChanged) {
+          updates.config = nextMode === 'single_agent'
+            ? {
+                execution_mode: 'single_agent',
+                single_agent_name: effectiveSingleAgentName,
+                single_agent_model: effectiveSingleAgentModel,
+                single_agent_reasoning_effort: effectiveSingleAgentReasoningEffort,
+              }
+            : { execution_mode: 'multi_agent' };
+        }
       }
 
       if (Object.keys(updates).length > 0) {
@@ -210,6 +277,122 @@ export default function EditWorkflowModal({ isOpen, onClose, workflow, onSave, c
               {prompt.length.toLocaleString()} characters
             </p>
           </div>
+
+          {canEditConfig && (
+            <div className="p-3 rounded-lg border border-border bg-muted/20">
+              <p className="text-sm font-medium text-foreground mb-2">
+                Execution mode
+              </p>
+
+              <div className="space-y-2">
+                <label className={`flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-all ${
+                  executionMode !== 'single_agent'
+                    ? 'border-primary bg-primary/5'
+                    : 'border-border hover:bg-muted/50'
+                }`}
+                >
+                  <input
+                    type="radio"
+                    name="editExecutionMode"
+                    value="multi_agent"
+                    checked={executionMode !== 'single_agent'}
+                    onChange={() => setExecutionMode('multi_agent')}
+                    className="mt-0.5 w-4 h-4 text-primary"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-foreground text-sm">Multi-Agent Consensus</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">
+                      Multiple agents analyze and iterate to reach agreement
+                    </div>
+                  </div>
+                </label>
+
+                <label className={`flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-all ${
+                  executionMode === 'single_agent'
+                    ? 'border-primary bg-primary/5'
+                    : 'border-border hover:bg-muted/50'
+                }`}
+                >
+                  <input
+                    type="radio"
+                    name="editExecutionMode"
+                    value="single_agent"
+                    checked={executionMode === 'single_agent'}
+                    onChange={() => setExecutionMode('single_agent')}
+                    className="mt-0.5 w-4 h-4 text-primary"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-foreground text-sm">Single Agent</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">
+                      One agent handles everything without iteration
+                    </div>
+                  </div>
+                </label>
+              </div>
+
+              {executionMode === 'single_agent' && (
+                <div className="mt-3 space-y-3">
+                  <div>
+                    <label className="block text-sm font-medium text-foreground mb-1.5">
+                      Agent
+                    </label>
+                    <select
+                      value={singleAgentName}
+                      onChange={(e) => {
+                        setSingleAgentName(e.target.value);
+                        setSingleAgentModel('');
+                        setSingleAgentReasoningEffort('');
+                      }}
+                      className="w-full px-3 py-2 border border-input rounded-lg bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background"
+                    >
+                      {AGENT_OPTIONS.map((agent) => (
+                        <option key={agent.value} value={agent.value}>
+                          {agent.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-foreground mb-1.5">
+                      Model <span className="text-muted-foreground font-normal">(optional)</span>
+                    </label>
+                    <select
+                      value={singleAgentModel}
+                      onChange={(e) => setSingleAgentModel(e.target.value)}
+                      className="w-full px-3 py-2 border border-input rounded-lg bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background"
+                    >
+                      {getModelsForAgent(singleAgentName).map((model) => (
+                        <option key={`${singleAgentName}-${model.value || 'default'}`} value={model.value}>
+                          {model.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {supportsReasoning(singleAgentName) && (
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-1.5">
+                        Reasoning effort <span className="text-muted-foreground font-normal">(optional)</span>
+                      </label>
+                      <select
+                        value={singleAgentReasoningEffort}
+                        onChange={(e) => setSingleAgentReasoningEffort(e.target.value)}
+                        className="w-full px-3 py-2 border border-input rounded-lg bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background"
+                      >
+                        <option value="">Default</option>
+                        {getReasoningLevels().map((level) => (
+                          <option key={level.value} value={level.value}>
+                            {level.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Error */}
           {error && (

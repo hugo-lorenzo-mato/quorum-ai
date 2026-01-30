@@ -9,7 +9,9 @@ export default [
     languageOptions: {
       globals: {
         ...globals.browser,
+        ...globals.node,
         ...globals.es2021,
+        ...globals.vitest,
       },
       parserOptions: {
         ecmaVersion: 'latest',

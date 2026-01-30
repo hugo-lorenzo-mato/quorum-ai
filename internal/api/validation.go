@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/config"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 )
 
 // ValidationErrorResponse represents validation errors for the API.
@@ -241,6 +242,27 @@ func validateSingleAgentConfig(wfConfig *WorkflowConfig, agents config.AgentsCon
 			Value:   agentName,
 			Message: msg,
 			Code:    ErrCodeAgentNotEnabled,
+		}
+	}
+
+	// Validate optional reasoning effort override
+	effort := strings.TrimSpace(wfConfig.SingleAgentReasoningEffort)
+	if effort != "" {
+		if !core.SupportsReasoning(agentName) {
+			return &ValidationFieldError{
+				Field:   "single_agent_reasoning_effort",
+				Value:   effort,
+				Message: "agent does not support reasoning effort",
+				Code:    ErrCodeInvalidEnum,
+			}
+		}
+		if !core.IsValidReasoningEffort(effort) {
+			return &ValidationFieldError{
+				Field:   "single_agent_reasoning_effort",
+				Value:   effort,
+				Message: "invalid value: must be minimal, low, medium, high, or xhigh",
+				Code:    ErrCodeInvalidEnum,
+			}
 		}
 	}
 

@@ -441,11 +441,12 @@ func TestWorkflowConfig_GetExecutionMode(t *testing.T) {
 
 func TestWorkflowConfig_JSON_Roundtrip(t *testing.T) {
 	original := WorkflowConfig{
-		ConsensusThreshold: 0.8,
-		DryRun:             true,
-		ExecutionMode:      "single_agent",
-		SingleAgentName:    "claude",
-		SingleAgentModel:   "claude-3-sonnet",
+		ConsensusThreshold:         0.8,
+		DryRun:                     true,
+		ExecutionMode:              "single_agent",
+		SingleAgentName:            "claude",
+		SingleAgentModel:           "claude-3-sonnet",
+		SingleAgentReasoningEffort: "high",
 	}
 
 	data, err := json.Marshal(original)
@@ -466,6 +467,9 @@ func TestWorkflowConfig_JSON_Roundtrip(t *testing.T) {
 	}
 	if decoded.SingleAgentModel != original.SingleAgentModel {
 		t.Errorf("SingleAgentModel = %q, want %q", decoded.SingleAgentModel, original.SingleAgentModel)
+	}
+	if decoded.SingleAgentReasoningEffort != original.SingleAgentReasoningEffort {
+		t.Errorf("SingleAgentReasoningEffort = %q, want %q", decoded.SingleAgentReasoningEffort, original.SingleAgentReasoningEffort)
 	}
 	if decoded.ConsensusThreshold != original.ConsensusThreshold {
 		t.Errorf("ConsensusThreshold = %v, want %v", decoded.ConsensusThreshold, original.ConsensusThreshold)
@@ -498,6 +502,9 @@ func TestWorkflowConfig_Backward_Compatibility(t *testing.T) {
 	}
 	if cfg.SingleAgentModel != "" {
 		t.Errorf("SingleAgentModel = %q, want empty", cfg.SingleAgentModel)
+	}
+	if cfg.SingleAgentReasoningEffort != "" {
+		t.Errorf("SingleAgentReasoningEffort = %q, want empty", cfg.SingleAgentReasoningEffort)
 	}
 	if cfg.IsSingleAgentMode() {
 		t.Errorf("IsSingleAgentMode() = true, want false")
@@ -627,5 +634,186 @@ func TestGetWorkflow_IncludesConfig(t *testing.T) {
 
 	if resp.Config.SingleAgentName != "gemini" {
 		t.Errorf("expected single_agent_name 'gemini', got '%s'", resp.Config.SingleAgentName)
+	}
+}
+
+func TestUpdateWorkflow_AllowsConfigEditWhenPending(t *testing.T) {
+	tmpDir := t.TempDir()
+	configDir := filepath.Join(tmpDir, ".quorum")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatalf("failed to create config dir: %v", err)
+	}
+	configContent := `
+agents:
+  default: codex
+  codex:
+    enabled: true
+    path: codex
+    model: gpt-5.2-codex
+`
+	if err := os.WriteFile(filepath.Join(configDir, "config.yaml"), []byte(configContent), 0o644); err != nil {
+		t.Fatalf("failed to write config file: %v", err)
+	}
+
+	originalDir, _ := os.Getwd()
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("failed to change to temp dir: %v", err)
+	}
+	t.Cleanup(func() { os.Chdir(originalDir) })
+
+	sm := newMockStateManager()
+	eb := events.New(100)
+	srv := NewServer(sm, eb)
+
+	wfID := core.WorkflowID("wf-edit-config")
+	sm.workflows[wfID] = &core.WorkflowState{
+		WorkflowID: wfID,
+		Status:     core.WorkflowStatusPending,
+		Prompt:     "Test prompt",
+		Config: &core.WorkflowConfig{
+			ExecutionMode: "multi_agent",
+		},
+		Tasks:     make(map[core.TaskID]*core.TaskState),
+		TaskOrder: []core.TaskID{},
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+
+	reqBody := map[string]interface{}{
+		"config": map[string]interface{}{
+			"execution_mode":                "single_agent",
+			"single_agent_name":             "codex",
+			"single_agent_model":            "gpt-5.2-codex",
+			"single_agent_reasoning_effort": "high",
+		},
+	}
+	body, _ := json.Marshal(reqBody)
+
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/workflows/"+string(wfID)+"/", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
+	}
+
+	var resp WorkflowResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if resp.Config == nil {
+		t.Fatal("expected config in response, got nil")
+	}
+	if resp.Config.ExecutionMode != "single_agent" {
+		t.Errorf("expected execution_mode 'single_agent', got '%s'", resp.Config.ExecutionMode)
+	}
+	if resp.Config.SingleAgentName != "codex" {
+		t.Errorf("expected single_agent_name 'codex', got '%s'", resp.Config.SingleAgentName)
+	}
+	if resp.Config.SingleAgentModel != "gpt-5.2-codex" {
+		t.Errorf("expected single_agent_model 'gpt-5.2-codex', got '%s'", resp.Config.SingleAgentModel)
+	}
+	if resp.Config.SingleAgentReasoningEffort != "high" {
+		t.Errorf("expected single_agent_reasoning_effort 'high', got '%s'", resp.Config.SingleAgentReasoningEffort)
+	}
+}
+
+func TestUpdateWorkflow_RejectsConfigEditWhenNotPending(t *testing.T) {
+	sm := newMockStateManager()
+	eb := events.New(100)
+	srv := NewServer(sm, eb)
+
+	wfID := core.WorkflowID("wf-edit-config-running")
+	sm.workflows[wfID] = &core.WorkflowState{
+		WorkflowID: wfID,
+		Status:     core.WorkflowStatusRunning,
+		Prompt:     "Test prompt",
+		Config: &core.WorkflowConfig{
+			ExecutionMode: "multi_agent",
+		},
+		Tasks:     make(map[core.TaskID]*core.TaskState),
+		TaskOrder: []core.TaskID{},
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+
+	reqBody := map[string]interface{}{
+		"config": map[string]interface{}{
+			"execution_mode":    "single_agent",
+			"single_agent_name": "claude",
+		},
+	}
+	body, _ := json.Marshal(reqBody)
+
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/workflows/"+string(wfID)+"/", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusConflict {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusConflict, w.Code, w.Body.String())
+	}
+}
+
+func TestUpdateWorkflow_ValidatesConfigEdits(t *testing.T) {
+	tmpDir := t.TempDir()
+	configDir := filepath.Join(tmpDir, ".quorum")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatalf("failed to create config dir: %v", err)
+	}
+	configContent := `
+agents:
+  default: claude
+  claude:
+    enabled: true
+    path: claude
+    model: claude-3-sonnet
+`
+	if err := os.WriteFile(filepath.Join(configDir, "config.yaml"), []byte(configContent), 0o644); err != nil {
+		t.Fatalf("failed to write config file: %v", err)
+	}
+
+	originalDir, _ := os.Getwd()
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("failed to change to temp dir: %v", err)
+	}
+	t.Cleanup(func() { os.Chdir(originalDir) })
+
+	sm := newMockStateManager()
+	eb := events.New(100)
+	srv := NewServer(sm, eb)
+
+	wfID := core.WorkflowID("wf-edit-config-invalid")
+	sm.workflows[wfID] = &core.WorkflowState{
+		WorkflowID: wfID,
+		Status:     core.WorkflowStatusPending,
+		Prompt:     "Test prompt",
+		Config: &core.WorkflowConfig{
+			ExecutionMode: "multi_agent",
+		},
+		Tasks:     make(map[core.TaskID]*core.TaskState),
+		TaskOrder: []core.TaskID{},
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+
+	reqBody := map[string]interface{}{
+		"config": map[string]interface{}{
+			"execution_mode": "single_agent",
+		},
+	}
+	body, _ := json.Marshal(reqBody)
+
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/workflows/"+string(wfID)+"/", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusBadRequest, w.Code, w.Body.String())
 	}
 }

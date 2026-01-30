@@ -78,6 +78,17 @@ type WorkflowConfig struct {
 	// SingleAgentModel is an optional model override for the single agent.
 	// If empty, the agent's default phase model is used.
 	SingleAgentModel string `json:"single_agent_model,omitempty"`
+
+	// SingleAgentReasoningEffort is an optional reasoning effort override for the single agent.
+	// If empty, the agent's configured defaults are used.
+	SingleAgentReasoningEffort string `json:"single_agent_reasoning_effort,omitempty"`
+}
+
+type workflowConfigPatch struct {
+	ExecutionMode              *string `json:"execution_mode,omitempty"`
+	SingleAgentName            *string `json:"single_agent_name,omitempty"`
+	SingleAgentModel           *string `json:"single_agent_model,omitempty"`
+	SingleAgentReasoningEffort *string `json:"single_agent_reasoning_effort,omitempty"`
 }
 
 // IsSingleAgentMode returns true if the workflow is configured for single-agent execution.
@@ -307,6 +318,7 @@ func (s *Server) handleCreateWorkflow(w http.ResponseWriter, r *http.Request) {
 		config.ExecutionMode = req.Config.ExecutionMode
 		config.SingleAgentName = req.Config.SingleAgentName
 		config.SingleAgentModel = req.Config.SingleAgentModel
+		config.SingleAgentReasoningEffort = req.Config.SingleAgentReasoningEffort
 	}
 
 	// Create workflow state
@@ -364,10 +376,11 @@ func (s *Server) handleUpdateWorkflow(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Title  string `json:"title,omitempty"`
-		Prompt string `json:"prompt,omitempty"`
-		Status string `json:"status,omitempty"`
-		Phase  string `json:"phase,omitempty"`
+		Title  string               `json:"title,omitempty"`
+		Prompt string               `json:"prompt,omitempty"`
+		Status string               `json:"status,omitempty"`
+		Phase  string               `json:"phase,omitempty"`
+		Config *workflowConfigPatch `json:"config,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, "invalid request body")
@@ -384,12 +397,63 @@ func (s *Server) handleUpdateWorkflow(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusConflict, "cannot edit title while workflow is running")
 		return
 	}
+	if req.Config != nil && state.Status != core.WorkflowStatusPending {
+		respondError(w, http.StatusConflict, "cannot edit workflow config after workflow has started")
+		return
+	}
 
 	if req.Title != "" {
 		state.Title = req.Title
 	}
 	if req.Prompt != "" {
 		state.Prompt = req.Prompt
+	}
+	if req.Config != nil {
+		if state.Config == nil {
+			state.Config = &core.WorkflowConfig{
+				ConsensusThreshold: 0.75,
+				MaxRetries:         3,
+				Timeout:            time.Hour,
+			}
+		}
+
+		merged := &WorkflowConfig{
+			ExecutionMode:              state.Config.ExecutionMode,
+			SingleAgentName:            state.Config.SingleAgentName,
+			SingleAgentModel:           state.Config.SingleAgentModel,
+			SingleAgentReasoningEffort: state.Config.SingleAgentReasoningEffort,
+		}
+		if req.Config.ExecutionMode != nil {
+			merged.ExecutionMode = *req.Config.ExecutionMode
+		}
+		if req.Config.SingleAgentName != nil {
+			merged.SingleAgentName = *req.Config.SingleAgentName
+		}
+		if req.Config.SingleAgentModel != nil {
+			merged.SingleAgentModel = *req.Config.SingleAgentModel
+		}
+		if req.Config.SingleAgentReasoningEffort != nil {
+			merged.SingleAgentReasoningEffort = *req.Config.SingleAgentReasoningEffort
+		}
+
+		cfg, err := s.loadConfig()
+		if err != nil {
+			s.logger.Error("failed to load config for validation", "error", err)
+			respondError(w, http.StatusInternalServerError, "failed to load configuration")
+			return
+		}
+		if validationErr := ValidateWorkflowConfig(merged, cfg.Agents); validationErr != nil {
+			respondJSON(w, http.StatusBadRequest, ValidationErrorResponse{
+				Message: "Workflow configuration validation failed",
+				Errors:  []ValidationFieldError{*validationErr},
+			})
+			return
+		}
+
+		state.Config.ExecutionMode = merged.ExecutionMode
+		state.Config.SingleAgentName = merged.SingleAgentName
+		state.Config.SingleAgentModel = merged.SingleAgentModel
+		state.Config.SingleAgentReasoningEffort = merged.SingleAgentReasoningEffort
 	}
 	if req.Status != "" {
 		state.Status = core.WorkflowStatus(req.Status)
@@ -529,14 +593,15 @@ func stateToWorkflowResponse(state *core.WorkflowState, activeID core.WorkflowID
 
 	if state.Config != nil {
 		resp.Config = &WorkflowConfig{
-			ConsensusThreshold: state.Config.ConsensusThreshold,
-			MaxRetries:         state.Config.MaxRetries,
-			TimeoutSeconds:     int(state.Config.Timeout.Seconds()),
-			DryRun:             state.Config.DryRun,
-			Sandbox:            state.Config.Sandbox,
-			ExecutionMode:      state.Config.ExecutionMode,
-			SingleAgentName:    state.Config.SingleAgentName,
-			SingleAgentModel:   state.Config.SingleAgentModel,
+			ConsensusThreshold:         state.Config.ConsensusThreshold,
+			MaxRetries:                 state.Config.MaxRetries,
+			TimeoutSeconds:             int(state.Config.Timeout.Seconds()),
+			DryRun:                     state.Config.DryRun,
+			Sandbox:                    state.Config.Sandbox,
+			ExecutionMode:              state.Config.ExecutionMode,
+			SingleAgentName:            state.Config.SingleAgentName,
+			SingleAgentModel:           state.Config.SingleAgentModel,
+			SingleAgentReasoningEffort: state.Config.SingleAgentReasoningEffort,
 		}
 	}
 
