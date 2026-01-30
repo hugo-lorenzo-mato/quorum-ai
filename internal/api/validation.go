@@ -151,3 +151,98 @@ func (s *Server) handleValidateConfig(w http.ResponseWriter, r *http.Request) {
 		Errors: []ValidationFieldError{},
 	})
 }
+
+// ValidateWorkflowConfig validates the execution mode configuration in WorkflowConfig.
+// It checks:
+// 1. execution_mode is a valid value ("multi_agent", "single_agent", or empty)
+// 2. single_agent_name is provided when execution_mode is "single_agent"
+// 3. The specified agent exists and is enabled in the application config
+//
+// Parameters:
+//   - wfConfig: The workflow configuration to validate (can be nil)
+//   - agents: The agents configuration from the application config
+//
+// Returns nil if valid, or a ValidationFieldError describing the validation failure.
+func ValidateWorkflowConfig(wfConfig *WorkflowConfig, agents config.AgentsConfig) *ValidationFieldError {
+	// Nil config is valid (uses defaults)
+	if wfConfig == nil {
+		return nil
+	}
+
+	// Validate execution_mode value
+	mode := strings.TrimSpace(wfConfig.ExecutionMode)
+	validModes := map[string]bool{
+		"":             true, // Empty defaults to multi-agent
+		"multi_agent":  true,
+		"single_agent": true,
+	}
+
+	if !validModes[mode] {
+		return &ValidationFieldError{
+			Field:   "execution_mode",
+			Value:   mode,
+			Message: "invalid value: must be 'multi_agent', 'single_agent', or empty",
+			Code:    ErrCodeInvalidEnum,
+		}
+	}
+
+	// If single-agent mode, validate agent configuration
+	if mode == "single_agent" {
+		if err := validateSingleAgentConfig(wfConfig, agents); err != nil {
+			return err
+		}
+	}
+
+	// Multi-agent mode: single_agent_name is ignored if provided
+	// No validation needed for multi-agent specific fields
+
+	return nil
+}
+
+// validateSingleAgentConfig validates the agent configuration for single-agent mode.
+func validateSingleAgentConfig(wfConfig *WorkflowConfig, agents config.AgentsConfig) *ValidationFieldError {
+	agentName := strings.TrimSpace(wfConfig.SingleAgentName)
+
+	// Agent name is required for single-agent mode
+	if agentName == "" {
+		return &ValidationFieldError{
+			Field:   "single_agent_name",
+			Value:   agentName,
+			Message: "required when execution_mode is 'single_agent'",
+			Code:    ErrCodeRequired,
+		}
+	}
+
+	// Verify agent exists in configuration
+	agentConfig := agents.GetAgentConfig(agentName)
+	if agentConfig == nil {
+		availableAgents := agents.EnabledAgentNames()
+		msg := "agent is not configured"
+		if len(availableAgents) > 0 {
+			msg = "agent is not configured. Available agents: " + strings.Join(availableAgents, ", ")
+		}
+		return &ValidationFieldError{
+			Field:   "single_agent_name",
+			Value:   agentName,
+			Message: msg,
+			Code:    ErrCodeUnknownAgent,
+		}
+	}
+
+	// Verify agent is enabled
+	if !agentConfig.Enabled {
+		enabledAgents := agents.EnabledAgentNames()
+		msg := "agent is disabled"
+		if len(enabledAgents) > 0 {
+			msg = "agent is disabled. Enable it in config or use one of: " + strings.Join(enabledAgents, ", ")
+		}
+		return &ValidationFieldError{
+			Field:   "single_agent_name",
+			Value:   agentName,
+			Message: msg,
+			Code:    ErrCodeAgentNotEnabled,
+		}
+	}
+
+	return nil
+}

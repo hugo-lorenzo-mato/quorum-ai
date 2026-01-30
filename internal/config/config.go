@@ -316,6 +316,24 @@ func (c AgentsConfig) ListEnabledForPhase(phase string) []string {
 	return result
 }
 
+// EnabledAgentNames returns a slice of all enabled agent names.
+func (c AgentsConfig) EnabledAgentNames() []string {
+	var names []string
+	agents := map[string]AgentConfig{
+		"claude":   c.Claude,
+		"gemini":   c.Gemini,
+		"codex":    c.Codex,
+		"copilot":  c.Copilot,
+		"opencode": c.OpenCode,
+	}
+	for name, cfg := range agents {
+		if cfg.Enabled {
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
 // AgentConfig configures a single AI agent.
 //
 // Agent names (the key in the agents map) are aliases - you can use any name.

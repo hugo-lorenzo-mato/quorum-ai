@@ -201,3 +201,178 @@ func TestValidationErrorCodes(t *testing.T) {
 		assert.NotEmpty(t, code, "error code should not be empty")
 	}
 }
+
+func TestValidateWorkflowConfig(t *testing.T) {
+	// Setup agents config with enabled and disabled agents
+	agents := config.AgentsConfig{
+		Claude: config.AgentConfig{Enabled: true},
+		Gemini: config.AgentConfig{Enabled: true},
+		Codex:  config.AgentConfig{Enabled: false}, // Disabled
+	}
+
+	tests := []struct {
+		name          string
+		config        *WorkflowConfig
+		expectError   bool
+		errorField    string
+		errorCode     string
+		errorContains string
+	}{
+		{
+			name:        "nil config is valid",
+			config:      nil,
+			expectError: false,
+		},
+		{
+			name:        "empty config is valid",
+			config:      &WorkflowConfig{},
+			expectError: false,
+		},
+		{
+			name: "multi_agent mode is valid",
+			config: &WorkflowConfig{
+				ExecutionMode: "multi_agent",
+			},
+			expectError: false,
+		},
+		{
+			name: "single_agent with valid agent is valid",
+			config: &WorkflowConfig{
+				ExecutionMode:   "single_agent",
+				SingleAgentName: "claude",
+			},
+			expectError: false,
+		},
+		{
+			name: "single_agent with model override is valid",
+			config: &WorkflowConfig{
+				ExecutionMode:    "single_agent",
+				SingleAgentName:  "gemini",
+				SingleAgentModel: "gemini-pro",
+			},
+			expectError: false,
+		},
+		{
+			name: "invalid execution_mode value",
+			config: &WorkflowConfig{
+				ExecutionMode: "invalid_mode",
+			},
+			expectError:   true,
+			errorField:    "execution_mode",
+			errorCode:     ErrCodeInvalidEnum,
+			errorContains: "invalid value",
+		},
+		{
+			name: "single_agent without agent name",
+			config: &WorkflowConfig{
+				ExecutionMode: "single_agent",
+			},
+			expectError:   true,
+			errorField:    "single_agent_name",
+			errorCode:     ErrCodeRequired,
+			errorContains: "required",
+		},
+		{
+			name: "single_agent with empty agent name",
+			config: &WorkflowConfig{
+				ExecutionMode:   "single_agent",
+				SingleAgentName: "   ", // Whitespace only
+			},
+			expectError:   true,
+			errorField:    "single_agent_name",
+			errorCode:     ErrCodeRequired,
+			errorContains: "required",
+		},
+		{
+			name: "single_agent with non-existent agent",
+			config: &WorkflowConfig{
+				ExecutionMode:   "single_agent",
+				SingleAgentName: "nonexistent",
+			},
+			expectError:   true,
+			errorField:    "single_agent_name",
+			errorCode:     ErrCodeUnknownAgent,
+			errorContains: "not configured",
+		},
+		{
+			name: "single_agent with disabled agent",
+			config: &WorkflowConfig{
+				ExecutionMode:   "single_agent",
+				SingleAgentName: "codex", // Disabled in test config
+			},
+			expectError:   true,
+			errorField:    "single_agent_name",
+			errorCode:     ErrCodeAgentNotEnabled,
+			errorContains: "disabled",
+		},
+		{
+			name: "multi_agent ignores single_agent_name",
+			config: &WorkflowConfig{
+				ExecutionMode:   "multi_agent",
+				SingleAgentName: "nonexistent", // Should be ignored
+			},
+			expectError: false,
+		},
+		{
+			name: "empty execution_mode defaults to multi_agent behavior",
+			config: &WorkflowConfig{
+				ExecutionMode:   "",
+				SingleAgentName: "nonexistent", // Should be ignored
+			},
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateWorkflowConfig(tt.config, agents)
+
+			if tt.expectError {
+				require.NotNil(t, err, "expected validation error")
+				assert.Equal(t, tt.errorField, err.Field)
+				assert.Equal(t, tt.errorCode, err.Code)
+				assert.Contains(t, err.Message, tt.errorContains)
+			} else {
+				assert.Nil(t, err)
+			}
+		})
+	}
+}
+
+func TestAgentsConfig_EnabledAgentNames(t *testing.T) {
+	tests := []struct {
+		name     string
+		agents   config.AgentsConfig
+		expected []string
+	}{
+		{
+			name: "some enabled",
+			agents: config.AgentsConfig{
+				Claude: config.AgentConfig{Enabled: true},
+				Gemini: config.AgentConfig{Enabled: false},
+				Codex:  config.AgentConfig{Enabled: true},
+			},
+			expected: []string{"claude", "codex"},
+		},
+		{
+			name: "none enabled",
+			agents: config.AgentsConfig{
+				Claude: config.AgentConfig{Enabled: false},
+				Gemini: config.AgentConfig{Enabled: false},
+				Codex:  config.AgentConfig{Enabled: false},
+			},
+			expected: []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			names := tt.agents.EnabledAgentNames()
+			if len(tt.expected) == 0 {
+				assert.Empty(t, names)
+			} else {
+				assert.ElementsMatch(t, tt.expected, names)
+			}
+		})
+	}
+}

@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -503,6 +505,30 @@ func TestWorkflowConfig_Backward_Compatibility(t *testing.T) {
 }
 
 func TestCreateWorkflow_WithSingleAgentMode(t *testing.T) {
+	// Create a temp directory with config file that has claude enabled
+	tmpDir := t.TempDir()
+	configDir := filepath.Join(tmpDir, ".quorum")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatalf("failed to create config dir: %v", err)
+	}
+	configContent := `
+agents:
+  default: claude
+  claude:
+    enabled: true
+    path: claude
+`
+	if err := os.WriteFile(filepath.Join(configDir, "config.yaml"), []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write config file: %v", err)
+	}
+
+	// Change to temp directory for test
+	originalDir, _ := os.Getwd()
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("failed to change to temp dir: %v", err)
+	}
+	t.Cleanup(func() { os.Chdir(originalDir) })
+
 	sm := newMockStateManager()
 	eb := events.New(100)
 	srv := NewServer(sm, eb)

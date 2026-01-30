@@ -265,6 +265,23 @@ func (s *Server) handleCreateWorkflow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Validate execution mode configuration
+	if req.Config != nil {
+		cfg, err := s.loadConfig()
+		if err != nil {
+			s.logger.Error("failed to load config for validation", "error", err)
+			respondError(w, http.StatusInternalServerError, "failed to load configuration")
+			return
+		}
+		if validationErr := ValidateWorkflowConfig(req.Config, cfg.Agents); validationErr != nil {
+			respondJSON(w, http.StatusBadRequest, ValidationErrorResponse{
+				Message: "Workflow configuration validation failed",
+				Errors:  []ValidationFieldError{*validationErr},
+			})
+			return
+		}
+	}
+
 	// Generate workflow ID
 	workflowID := generateWorkflowID()
 
