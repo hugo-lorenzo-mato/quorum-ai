@@ -1418,3 +1418,163 @@ func TestSQLiteStateManager_WorkflowIsolationFieldsPersistence(t *testing.T) {
 		t.Errorf("task-3.MergeCommit = %q, want empty", task3.MergeCommit)
 	}
 }
+
+func TestSQLiteStateManager_AgentEvents(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "state.db")
+
+	manager, err := NewSQLiteStateManager(dbPath)
+	if err != nil {
+		t.Fatalf("NewSQLiteStateManager() error = %v", err)
+	}
+	defer manager.Close()
+
+	ctx := context.Background()
+
+	// Create state with agent events
+	state := newTestStateSQLite()
+	state.WorkflowID = "wf-agent-events-test"
+	now := time.Now().Truncate(time.Second)
+	state.AgentEvents = []core.AgentEvent{
+		{
+			ID:        "evt-1",
+			Timestamp: now,
+			Type:      core.AgentEventStarted,
+			Agent:     "analyzer",
+			Message:   "Starting analysis...",
+			Data: map[string]interface{}{
+				"phase": "analyze",
+				"step":  float64(1),
+			},
+		},
+		{
+			ID:        "evt-2",
+			Timestamp: now.Add(time.Second),
+			Type:      core.AgentEventThinking,
+			Agent:     "analyzer",
+			Message:   "Processing input...",
+			Data:      nil,
+		},
+		{
+			ID:        "evt-3",
+			Timestamp: now.Add(2 * time.Second),
+			Type:      core.AgentEventToolUse,
+			Agent:     "executor",
+			Message:   "Running tests",
+			Data: map[string]interface{}{
+				"tool":   "bash",
+				"result": "success",
+			},
+		},
+	}
+
+	// Save state
+	if err := manager.Save(ctx, state); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	// Load state and verify agent events are persisted
+	loaded, err := manager.LoadByID(ctx, state.WorkflowID)
+	if err != nil {
+		t.Fatalf("LoadByID() error = %v", err)
+	}
+	if loaded == nil {
+		t.Fatal("LoadByID() returned nil")
+	}
+
+	// Verify agent events count
+	if len(loaded.AgentEvents) != 3 {
+		t.Errorf("Expected 3 agent events, got %d", len(loaded.AgentEvents))
+	}
+
+	// Verify first event
+	if len(loaded.AgentEvents) > 0 {
+		event := loaded.AgentEvents[0]
+		if event.Type != core.AgentEventStarted {
+			t.Errorf("Expected event type 'started', got %q", event.Type)
+		}
+		if event.Agent != "analyzer" {
+			t.Errorf("Expected event agent 'analyzer', got %q", event.Agent)
+		}
+		if event.Message != "Starting analysis..." {
+			t.Errorf("Expected event message 'Starting analysis...', got %q", event.Message)
+		}
+		if event.Data == nil {
+			t.Error("Expected event data to be non-nil")
+		} else {
+			if phase, ok := event.Data["phase"].(string); !ok || phase != "analyze" {
+				t.Errorf("Expected event data phase 'analyze', got %v", event.Data["phase"])
+			}
+		}
+	}
+
+	// Verify third event (tool_use)
+	if len(loaded.AgentEvents) > 2 {
+		event := loaded.AgentEvents[2]
+		if event.Type != core.AgentEventToolUse {
+			t.Errorf("Expected event type 'tool_use', got %q", event.Type)
+		}
+		if event.Agent != "executor" {
+			t.Errorf("Expected event agent 'executor', got %q", event.Agent)
+		}
+	}
+
+	// Update state with more events and verify persistence
+	state.AgentEvents = append(state.AgentEvents, core.AgentEvent{
+		ID:        "evt-4",
+		Timestamp: now.Add(3 * time.Second),
+		Type:      core.AgentEventCompleted,
+		Agent:     "analyzer",
+		Message:   "Analysis complete",
+	})
+
+	if err := manager.Save(ctx, state); err != nil {
+		t.Fatalf("Save() after update error = %v", err)
+	}
+
+	// Load again and verify update
+	loaded2, err := manager.LoadByID(ctx, state.WorkflowID)
+	if err != nil {
+		t.Fatalf("LoadByID() after update error = %v", err)
+	}
+	if len(loaded2.AgentEvents) != 4 {
+		t.Errorf("Expected 4 agent events after update, got %d", len(loaded2.AgentEvents))
+	}
+}
+
+func TestSQLiteStateManager_AgentEventsEmpty(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "state.db")
+
+	manager, err := NewSQLiteStateManager(dbPath)
+	if err != nil {
+		t.Fatalf("NewSQLiteStateManager() error = %v", err)
+	}
+	defer manager.Close()
+
+	ctx := context.Background()
+
+	// Create state without agent events
+	state := newTestStateSQLite()
+	state.WorkflowID = "wf-no-events"
+	state.AgentEvents = nil
+
+	// Save state
+	if err := manager.Save(ctx, state); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	// Load state and verify empty agent events
+	loaded, err := manager.LoadByID(ctx, state.WorkflowID)
+	if err != nil {
+		t.Fatalf("LoadByID() error = %v", err)
+	}
+	if loaded == nil {
+		t.Fatal("LoadByID() returned nil")
+	}
+
+	// AgentEvents should be nil or empty slice
+	if len(loaded.AgentEvents) != 0 {
+		t.Errorf("Expected 0 agent events, got %d", len(loaded.AgentEvents))
+	}
+}
