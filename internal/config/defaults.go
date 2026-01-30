@@ -26,7 +26,7 @@ phases:
     # Plan synthesizer - when enabled, agents propose plans in parallel,
     # then synthesizer consolidates. When disabled, single-agent planning.
     synthesizer:
-      enabled: true
+      enabled: false
       agent: claude
 
 # Agent configuration
