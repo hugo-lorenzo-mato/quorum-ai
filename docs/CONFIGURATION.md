@@ -468,7 +468,7 @@ git:
   auto_push: true
   auto_pr: true
   pr_base_branch: ""
-  auto_merge: false
+  auto_merge: true
   merge_strategy: squash
 ```
 
@@ -496,7 +496,7 @@ git:
 | `auto_push` | bool | `true` | Push branch to remote |
 | `auto_pr` | bool | `true` | Create pull request |
 | `pr_base_branch` | string | `""` | PR target branch (empty = repo default) |
-| `auto_merge` | bool | `false` | Merge PR immediately |
+| `auto_merge` | bool | `true` | Merge PR immediately |
 | `merge_strategy` | string | `squash` | Merge method: `merge`, `squash`, `rebase` |
 
 **Finalization flow:**
@@ -507,7 +507,7 @@ git:
 4. `auto_pr` → create PR targeting `pr_base_branch`
 5. `auto_merge` → merge using `merge_strategy`
 
-> **Warning:** `auto_merge` is disabled by default. Enable only for automated pipelines.
+> **Caution:** `auto_merge` merges PRs automatically. Disable it if you want manual review.
 
 ---
 

@@ -115,7 +115,7 @@ git:
   auto_pr: true
   # PR target branch (empty = repository default)
   pr_base_branch: ""
-  # Auto-merge disabled by default for safety
-  auto_merge: false
+  # Auto-merge enabled by default (disable if you want manual review)
+  auto_merge: true
   merge_strategy: squash
 `
