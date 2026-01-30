@@ -178,7 +178,7 @@ func TestHandleValidateConfig(t *testing.T) {
 	}{
 		{
 			name:      "valid config",
-			body:      `{"log": {"level": "info"}, "agents": {"default": "claude", "claude": {"enabled": true}}}`,
+			body:      `{"log": {"level": "info"}, "agents": {"default": "claude", "claude": {"enabled": true}}, "phases": {"analyze": {"refiner": {"enabled": false}, "moderator": {"enabled": false}}}}`,
 			wantValid: true,
 		},
 	}
@@ -234,6 +234,8 @@ func TestHandleResetConfig(t *testing.T) {
 		},
 		"phases": {
 			"analyze": {
+				"refiner": {"enabled": false},
+				"moderator": {"enabled": false},
 				"synthesizer": {"agent": "claude"}
 			}
 		}
@@ -299,7 +301,7 @@ func TestHandleResetConfig(t *testing.T) {
 	if !response.Config.Phases.Analyze.Refiner.Enabled {
 		t.Error("expected phases.analyze.refiner.enabled to be true")
 	}
-	if response.Config.Phases.Analyze.Moderator.Threshold != 0.90 {
-		t.Errorf("expected phases.analyze.moderator.threshold 0.90, got %v", response.Config.Phases.Analyze.Moderator.Threshold)
+	if response.Config.Phases.Analyze.Moderator.Threshold != 0.80 {
+		t.Errorf("expected phases.analyze.moderator.threshold 0.80, got %v", response.Config.Phases.Analyze.Moderator.Threshold)
 	}
 }

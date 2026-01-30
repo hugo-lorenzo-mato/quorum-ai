@@ -41,7 +41,8 @@ type RunnerBuilder struct {
 	gitIsolation *GitIsolationConfig
 
 	// Runner configuration
-	runnerConfig *RunnerConfig
+	runnerConfig          *RunnerConfig
+	runnerConfigExplicit  bool // true if runnerConfig was explicitly set via WithRunnerConfig
 
 	// Overrides for runner config fields
 	phase      *core.Phase
@@ -77,8 +78,8 @@ func DefaultGitIsolationConfig() *GitIsolationConfig {
 // NewRunnerBuilder creates a new RunnerBuilder with defaults.
 func NewRunnerBuilder() *RunnerBuilder {
 	return &RunnerBuilder{
-		runnerConfig: DefaultRunnerConfig(),
-		errors:       make([]error, 0),
+		errors: make([]error, 0),
+		// runnerConfig is nil - will be built from application config in Build()
 	}
 }
 
@@ -163,6 +164,7 @@ func (b *RunnerBuilder) WithRunnerConfig(rc *RunnerConfig) *RunnerBuilder {
 		return b
 	}
 	b.runnerConfig = rc
+	b.runnerConfigExplicit = true
 	return b
 }
 
@@ -359,11 +361,12 @@ func (b *RunnerBuilder) Build(ctx context.Context) (*Runner, error) {
 func (b *RunnerBuilder) buildRunnerConfig() *RunnerConfig {
 	cfg := b.config
 
-	// If a runner config was explicitly set, use it as base
-	if b.runnerConfig != nil && b.runnerConfig != DefaultRunnerConfig() {
+	// If a runner config was explicitly set via WithRunnerConfig, use it
+	if b.runnerConfigExplicit && b.runnerConfig != nil {
 		return b.runnerConfig
 	}
 
+	// Otherwise, build from application config
 	return BuildRunnerConfigFromConfig(cfg)
 }
 
