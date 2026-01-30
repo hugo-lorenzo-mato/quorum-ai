@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { useWorkflowStore, useTaskStore, useUIStore, useAgentStore } from '../stores';
+import { useWorkflowStore, useTaskStore, useUIStore, useAgentStore, useConfigStore } from '../stores';
 import { fileApi, workflowApi } from '../lib/api';
 import MarkdownViewer from '../components/MarkdownViewer';
 import AgentActivity, { AgentActivityCompact } from '../components/AgentActivity';
@@ -1040,15 +1040,49 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
   );
 }
 
+const AGENT_OPTIONS = [
+  { value: 'claude', label: 'Claude' },
+  { value: 'gemini', label: 'Gemini' },
+  { value: 'codex', label: 'Codex' },
+];
+
 function NewWorkflowForm({ onSubmit, onCancel, loading }) {
   const [title, setTitle] = useState('');
   const [prompt, setPrompt] = useState('');
   const [files, setFiles] = useState([]);
   const fileInputRef = useRef(null);
 
+  // Execution mode state
+  const [executionMode, setExecutionMode] = useState('multi_agent');
+  const [singleAgentName, setSingleAgentName] = useState('claude');
+
+  // Get enabled agents from config store
+  const { config } = useConfigStore();
+  const enabledAgents = useMemo(() => {
+    if (!config?.agents) return AGENT_OPTIONS;
+    return AGENT_OPTIONS.filter(opt => config.agents[opt.value]?.enabled !== false);
+  }, [config]);
+
+  // Ensure selected agent is valid when enabled agents change
+  useEffect(() => {
+    if (enabledAgents.length > 0 && !enabledAgents.some(a => a.value === singleAgentName)) {
+      setSingleAgentName(enabledAgents[0].value);
+    }
+  }, [enabledAgents, singleAgentName]);
+
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (prompt.trim()) onSubmit(prompt, files, title.trim() || undefined);
+    if (!prompt.trim()) return;
+
+    // Build config based on execution mode
+    const workflowConfig = executionMode === 'single_agent'
+      ? {
+          execution_mode: 'single_agent',
+          single_agent_name: singleAgentName,
+        }
+      : undefined;
+
+    onSubmit(prompt, files, title.trim() || undefined, workflowConfig);
   };
 
   const handleFilesSelected = (e) => {
@@ -1097,6 +1131,96 @@ function NewWorkflowForm({ onSubmit, onCancel, loading }) {
               className="absolute top-2 right-2"
             />
           </div>
+        </div>
+
+        {/* Execution Mode Selection */}
+        <div className="space-y-3">
+          <label className="block text-sm font-medium text-foreground">
+            Execution Mode
+          </label>
+
+          <div className="space-y-2">
+            {/* Multi-Agent Option */}
+            <label
+              className={`flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-all ${
+                executionMode === 'multi_agent'
+                  ? 'border-primary bg-primary/5'
+                  : 'border-border hover:bg-muted/50'
+              }`}
+            >
+              <input
+                type="radio"
+                name="executionMode"
+                value="multi_agent"
+                checked={executionMode === 'multi_agent'}
+                onChange={(e) => setExecutionMode(e.target.value)}
+                className="mt-0.5 w-4 h-4 text-primary"
+              />
+              <div className="flex-1 min-w-0">
+                <div className="font-medium text-foreground text-sm">Multi-Agent Consensus</div>
+                <div className="text-xs text-muted-foreground mt-0.5">
+                  Multiple agents analyze and iterate to reach agreement
+                </div>
+                <div className="flex items-center gap-2 mt-1.5 text-xs text-muted-foreground">
+                  <span className="px-1.5 py-0.5 bg-muted rounded text-[10px]">Complex tasks</span>
+                  <span className="px-1.5 py-0.5 bg-muted rounded text-[10px]">Higher quality</span>
+                  <span>~5-15 min</span>
+                </div>
+              </div>
+            </label>
+
+            {/* Single-Agent Option */}
+            <label
+              className={`flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-all ${
+                executionMode === 'single_agent'
+                  ? 'border-primary bg-primary/5'
+                  : 'border-border hover:bg-muted/50'
+              }`}
+            >
+              <input
+                type="radio"
+                name="executionMode"
+                value="single_agent"
+                checked={executionMode === 'single_agent'}
+                onChange={(e) => setExecutionMode(e.target.value)}
+                className="mt-0.5 w-4 h-4 text-primary"
+              />
+              <div className="flex-1 min-w-0">
+                <div className="font-medium text-foreground text-sm">Single Agent</div>
+                <div className="text-xs text-muted-foreground mt-0.5">
+                  One agent handles everything without iteration
+                </div>
+                <div className="flex items-center gap-2 mt-1.5 text-xs text-muted-foreground">
+                  <span className="px-1.5 py-0.5 bg-muted rounded text-[10px]">Simple tasks</span>
+                  <span className="px-1.5 py-0.5 bg-muted rounded text-[10px]">Faster</span>
+                  <span>~1-3 min</span>
+                </div>
+              </div>
+            </label>
+          </div>
+
+          {/* Agent Selection (shown when single-agent is selected) */}
+          {executionMode === 'single_agent' && (
+            <div className="ml-7 p-3 border-l-2 border-primary/30 bg-muted/30 rounded-r-lg">
+              <label className="block text-sm font-medium text-foreground mb-1.5">
+                Select Agent
+              </label>
+              <select
+                value={singleAgentName}
+                onChange={(e) => setSingleAgentName(e.target.value)}
+                className="w-full px-3 py-2 border border-input rounded-lg bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background"
+              >
+                {enabledAgents.map(agent => (
+                  <option key={agent.value} value={agent.value}>
+                    {agent.label}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1.5 text-xs text-muted-foreground">
+                This agent will handle all workflow phases independently.
+              </p>
+            </div>
+          )}
         </div>
 
         <div>
@@ -1210,8 +1334,8 @@ export default function Workflows() {
   const selectedWorkflow = workflows.find(w => w.id === id);
   const workflowTasks = id ? getTasksForWorkflow(id) : [];
 
-  const handleCreate = async (prompt, files = [], title) => {
-    const workflow = await createWorkflow(prompt, { title });
+  const handleCreate = async (prompt, files = [], title, workflowConfig) => {
+    const workflow = await createWorkflow(prompt, { title, ...workflowConfig });
     if (!workflow) return;
 
     if (files.length > 0) {
