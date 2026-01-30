@@ -117,6 +117,13 @@ func runAnalyze(_ *cobra.Command, args []string) error {
 	// Initialize workflow state
 	workflowState := InitializeWorkflowState(prompt, wfConfig)
 
+	// Initialize workflow-level git isolation (best-effort; analysis does not require git)
+	if changed, isoErr := EnsureWorkflowGitIsolation(ctx, deps, workflowState); isoErr != nil {
+		deps.Logger.Warn("failed to initialize workflow git isolation", "error", isoErr)
+	} else if changed {
+		deps.Logger.Info("workflow git isolation initialized", "workflow_branch", workflowState.WorkflowBranch)
+	}
+
 	// Save initial state
 	if err := deps.StateAdapter.Save(ctx, workflowState); err != nil {
 		return fmt.Errorf("saving initial state: %w", err)

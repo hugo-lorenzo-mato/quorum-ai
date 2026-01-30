@@ -148,6 +148,8 @@ type Runner struct {
 	retry          RetryExecutor
 	rateLimits     RateLimiterGetter
 	worktrees      WorktreeManager
+	workflowWorktrees core.WorkflowWorktreeManager
+	gitIsolation      *GitIsolationConfig
 	git            core.GitClient
 	github         core.GitHubClient
 	logger         *logging.Logger
@@ -172,6 +174,8 @@ type RunnerDeps struct {
 	Retry            RetryExecutor
 	RateLimits       RateLimiterGetter
 	Worktrees        WorktreeManager
+	WorkflowWorktrees core.WorkflowWorktreeManager
+	GitIsolation      *GitIsolationConfig
 	GitClientFactory GitClientFactory
 	Git              core.GitClient
 	GitHub           core.GitHubClient
@@ -216,6 +220,8 @@ func NewRunner(deps RunnerDeps) *Runner {
 		retry:          deps.Retry,
 		rateLimits:     deps.RateLimits,
 		worktrees:      deps.Worktrees,
+		workflowWorktrees: deps.WorkflowWorktrees,
+		gitIsolation:      deps.GitIsolation,
 		git:            deps.Git,
 		github:         deps.GitHub,
 		logger:         deps.Logger,
@@ -250,6 +256,11 @@ func (r *Runner) Run(ctx context.Context, prompt string) error {
 
 	// Initialize state
 	workflowState := r.initializeState(prompt)
+
+	// Ensure workflow-level Git isolation (creates workflow branch/worktree namespace).
+	if _, err := r.ensureWorkflowGitIsolation(ctx, workflowState); err != nil {
+		return r.handleError(ctx, workflowState, err)
+	}
 
 	r.logger.Info("starting workflow",
 		"workflow_id", workflowState.WorkflowID,
@@ -288,6 +299,9 @@ func (r *Runner) Run(ctx context.Context, prompt string) error {
 	if err := r.executor.Run(ctx, wctx); err != nil {
 		return r.handleError(ctx, workflowState, err)
 	}
+
+	// Workflow-level finalization for Git isolation (push/PR/cleanup).
+	r.finalizeWorkflowIsolation(ctx, workflowState)
 
 	// Finalize metrics
 	r.finalizeMetrics(workflowState)
@@ -376,6 +390,11 @@ func (r *Runner) RunWithState(ctx context.Context, state *core.WorkflowState) er
 	}
 	workflowState.UpdatedAt = time.Now()
 
+	// Ensure workflow-level Git isolation (API-created state may not have it persisted).
+	if _, err := r.ensureWorkflowGitIsolation(ctx, workflowState); err != nil {
+		return r.handleError(ctx, workflowState, err)
+	}
+
 	r.logger.Info("starting workflow with existing state",
 		"workflow_id", workflowState.WorkflowID,
 		"prompt_length", len(workflowState.Prompt),
@@ -412,6 +431,9 @@ func (r *Runner) RunWithState(ctx context.Context, state *core.WorkflowState) er
 	if err := r.executor.Run(ctx, wctx); err != nil {
 		return r.handleError(ctx, workflowState, err)
 	}
+
+	// Workflow-level finalization for Git isolation (push/PR/cleanup).
+	r.finalizeWorkflowIsolation(ctx, workflowState)
 
 	r.finalizeMetrics(workflowState)
 	workflowState.Status = core.WorkflowStatusCompleted
@@ -451,6 +473,15 @@ func (r *Runner) Resume(ctx context.Context) error {
 
 	if workflowState == nil {
 		return core.ErrState("NO_STATE", "no workflow state found to resume")
+	}
+
+	// Ensure workflow-level Git isolation branch exists (older workflows may not have it persisted).
+	if changed, err := r.ensureWorkflowGitIsolation(ctx, workflowState); err != nil {
+		return r.handleError(ctx, workflowState, err)
+	} else if changed {
+		if saveErr := r.state.Save(ctx, workflowState); saveErr != nil {
+			return fmt.Errorf("saving state after git isolation init: %w", saveErr)
+		}
 	}
 
 	// Get resume point
@@ -505,6 +536,9 @@ func (r *Runner) Resume(ctx context.Context) error {
 		}
 	}
 
+	// Workflow-level finalization for Git isolation (push/PR/cleanup).
+	r.finalizeWorkflowIsolation(ctx, workflowState)
+
 	// Finalize metrics
 	r.finalizeMetrics(workflowState)
 
@@ -539,6 +573,15 @@ func (r *Runner) ResumeWithState(ctx context.Context, state *core.WorkflowState)
 		return fmt.Errorf("acquiring lock: %w", err)
 	}
 	defer func() { _ = r.state.ReleaseLock(ctx) }()
+
+	// Ensure workflow-level Git isolation branch exists when resuming.
+	if changed, err := r.ensureWorkflowGitIsolation(ctx, state); err != nil {
+		return r.handleError(ctx, state, err)
+	} else if changed {
+		if saveErr := r.state.Save(ctx, state); saveErr != nil {
+			return fmt.Errorf("saving state after git isolation init: %w", saveErr)
+		}
+	}
 
 	resumePoint, err := r.resumeProvider.GetResumePoint(state)
 	if err != nil {
@@ -596,6 +639,9 @@ func (r *Runner) ResumeWithState(ctx context.Context, state *core.WorkflowState)
 		}
 	}
 
+	// Workflow-level finalization for Git isolation (push/PR/cleanup).
+	r.finalizeWorkflowIsolation(ctx, state)
+
 	r.finalizeMetrics(state)
 	state.Status = core.WorkflowStatusCompleted
 	state.UpdatedAt = time.Now()
@@ -646,6 +692,68 @@ func (r *Runner) initializeState(prompt string) *core.WorkflowState {
 	}
 }
 
+// ensureWorkflowGitIsolation initializes workflow-level Git isolation if configured.
+// It creates a workflow branch and worktree namespace and stores the workflow branch in state.
+//
+// Returns changed=true if the workflow branch was set on state.
+func (r *Runner) ensureWorkflowGitIsolation(ctx context.Context, state *core.WorkflowState) (changed bool, _ error) {
+	// Avoid side effects in dry-run mode.
+	if r.config != nil && r.config.DryRun {
+		return false, nil
+	}
+
+	if state == nil || state.WorkflowID == "" {
+		return false, nil
+	}
+
+	if r.gitIsolation == nil || !r.gitIsolation.Enabled {
+		return false, nil
+	}
+	if r.workflowWorktrees == nil {
+		return false, nil
+	}
+	if state.WorkflowBranch != "" {
+		return false, nil
+	}
+
+	// Safety: don't enable workflow isolation mid-workflow if tasks already executed or have
+	// git artifacts from legacy execution (that work wouldn't be present in the new workflow branch).
+	for _, ts := range state.Tasks {
+		if ts == nil {
+			continue
+		}
+		if ts.Status != "" && ts.Status != core.TaskStatusPending {
+			r.logger.Info("skipping workflow git isolation init: workflow already has executed tasks",
+				"workflow_id", state.WorkflowID,
+				"task_id", ts.ID,
+				"task_status", ts.Status,
+			)
+			return false, nil
+		}
+		if ts.Branch != "" || ts.LastCommit != "" || ts.WorktreePath != "" {
+			r.logger.Info("skipping workflow git isolation init: workflow already has git artifacts",
+				"workflow_id", state.WorkflowID,
+				"task_id", ts.ID,
+				"branch", ts.Branch,
+				"worktree_path", ts.WorktreePath,
+				"last_commit", ts.LastCommit,
+			)
+			return false, nil
+		}
+	}
+
+	info, err := r.workflowWorktrees.InitializeWorkflow(ctx, string(state.WorkflowID), r.gitIsolation.BaseBranch)
+	if err != nil {
+		return false, err
+	}
+	if info == nil || info.WorkflowBranch == "" {
+		return false, fmt.Errorf("workflow isolation init returned empty branch")
+	}
+
+	state.WorkflowBranch = info.WorkflowBranch
+	return true, nil
+}
+
 // createContext creates a workflow context for phase runners.
 func (r *Runner) createContext(state *core.WorkflowState) *Context {
 	var reportWriter *report.WorkflowReportWriter
@@ -667,6 +775,17 @@ func (r *Runner) createContext(state *core.WorkflowState) *Context {
 		}
 	}
 
+	// In workflow isolation mode, task branches are merged into the workflow branch locally.
+	// We create a single workflow-level PR to the base branch on completion (optional),
+	// so per-task PRs are disabled to avoid noisy/incorrect targets.
+	finalizationCfg := r.config.Finalization
+	useWorkflowIsolation := r.gitIsolation != nil && r.gitIsolation.Enabled &&
+		r.workflowWorktrees != nil && state != nil && state.WorkflowBranch != ""
+	if useWorkflowIsolation {
+		finalizationCfg.AutoPR = false
+		finalizationCfg.AutoMerge = false
+	}
+
 	return &Context{
 		State:        state,
 		Agents:       r.agents,
@@ -675,6 +794,8 @@ func (r *Runner) createContext(state *core.WorkflowState) *Context {
 		Retry:        r.retry,
 		RateLimits:   r.rateLimits,
 		Worktrees:    r.worktrees,
+		WorkflowWorktrees: r.workflowWorktrees,
+		GitIsolation:      r.gitIsolation,
 		Git:          r.git,
 		GitHub:       r.github,
 		Logger:       r.logger,
@@ -696,7 +817,7 @@ func (r *Runner) createContext(state *core.WorkflowState) *Context {
 			PhaseTimeouts:          r.config.PhaseTimeouts,
 			Moderator:              r.config.Moderator,
 			SingleAgent:            r.config.SingleAgent,
-			Finalization:           r.config.Finalization,
+			Finalization:           finalizationCfg,
 		},
 	}
 }

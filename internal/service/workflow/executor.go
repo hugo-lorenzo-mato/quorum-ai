@@ -670,15 +670,17 @@ func (e *Executor) handleExecutionSuccessValidated(ctx context.Context, wctx *Co
 	// This happens after finalization so that the task's commits are merged
 	if wctx.UseWorkflowIsolation() {
 		if err := e.mergeTaskToWorkflow(ctx, wctx, task); err != nil {
-			// Log but don't fail the task - merge can be retried
-			wctx.Logger.Warn("task completed but merge failed",
+			// Merge is required for correctness when using workflow isolation.
+			wctx.Logger.Error("task completed but merge failed",
 				"task_id", task.ID,
 				"error", err,
 			)
 			if wctx.Output != nil {
-				wctx.Output.Log("warn", "executor", fmt.Sprintf("Task %s completed but merge to workflow branch failed: %s", task.Name, err.Error()))
+				wctx.Output.Log("error", "executor", fmt.Sprintf("Task %s merge to workflow branch failed: %s", task.Name, err.Error()))
 			}
 			// MergePending is already set by mergeTaskToWorkflow
+			e.setTaskFailed(wctx, taskState, err)
+			return err
 		}
 	}
 
@@ -1065,23 +1067,7 @@ func (e *Executor) finalizeTask(ctx context.Context, wctx *Context, task *core.T
 		return nil
 	}
 
-	// Get the branch name from the worktree path (stored in taskState)
-	branch := ""
-	if taskState.WorktreePath != "" {
-		// Extract branch from worktree info
-		if wctx.Worktrees != nil {
-			wtInfo, err := wctx.Worktrees.Get(ctx, task)
-			if err == nil && wtInfo != nil {
-				branch = wtInfo.Branch
-			}
-		}
-	}
-	if branch == "" {
-		// Fall back to current branch in the working directory
-		if wctx.Git != nil {
-			branch, _ = wctx.Git.CurrentBranch(ctx)
-		}
-	}
+	branch := strings.TrimSpace(taskState.Branch)
 
 	// Create a git client for the specific path
 	var gitClient core.GitClient
@@ -1095,6 +1081,21 @@ func (e *Executor) finalizeTask(ctx context.Context, wctx *Context, task *core.T
 		gitClient = wctx.Git
 	} else {
 		return nil
+	}
+
+	// Resolve branch from the worktree git client when not already known.
+	if branch == "" && gitClient != nil {
+		if b, err := gitClient.CurrentBranch(ctx); err == nil {
+			branch = strings.TrimSpace(b)
+		}
+	}
+	if branch == "" && wctx.Git != nil {
+		if b, err := wctx.Git.CurrentBranch(ctx); err == nil {
+			branch = strings.TrimSpace(b)
+		}
+	}
+	if branch == "" && (cfg.AutoPush || cfg.AutoPR) {
+		return fmt.Errorf("could not determine current git branch for task finalization")
 	}
 
 	// Get modified files before commit for recovery metadata

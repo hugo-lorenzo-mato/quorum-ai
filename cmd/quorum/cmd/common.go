@@ -51,6 +51,8 @@ type PhaseRunnerDeps struct {
 	ResumeAdapter     *workflow.ResumePointAdapter
 	DAGAdapter        *workflow.DAGAdapter
 	WorktreeManager   workflow.WorktreeManager
+	WorkflowWorktrees core.WorkflowWorktreeManager
+	GitIsolation      *workflow.GitIsolationConfig
 	GitClientFactory  workflow.GitClientFactory
 	GitClient         core.GitClient
 	GitHubClient      core.GitHubClient
@@ -222,6 +224,7 @@ func InitPhaseRunner(ctx context.Context, phase core.Phase, maxRetries int, dryR
 			AutoMerge:     cfg.Git.AutoMerge,
 			PRBaseBranch:  cfg.Git.PRBaseBranch,
 			MergeStrategy: cfg.Git.MergeStrategy,
+			Remote:        cfg.GitHub.Remote,
 		},
 	}
 
@@ -243,8 +246,21 @@ func InitPhaseRunner(ctx context.Context, phase core.Phase, maxRetries int, dryR
 	}
 
 	var worktreeManager workflow.WorktreeManager
+	var workflowWorktrees core.WorkflowWorktreeManager
 	if gitClient != nil {
 		worktreeManager = git.NewTaskWorktreeManager(gitClient, cfg.Git.WorktreeDir).WithLogger(logger)
+
+		repoRoot, rootErr := gitClient.RepoRoot(ctx)
+		if rootErr != nil {
+			logger.Warn("failed to detect repo root, workflow git isolation disabled", "error", rootErr)
+		} else {
+			wtMgr, wtErr := git.NewWorkflowWorktreeManager(repoRoot, cfg.Git.WorktreeDir, gitClient, logger.Logger)
+			if wtErr != nil {
+				logger.Warn("failed to create workflow worktree manager, workflow git isolation disabled", "error", wtErr)
+			} else {
+				workflowWorktrees = wtMgr
+			}
+		}
 	}
 
 	// Create git client factory for task finalization (commit, push, PR)
@@ -287,6 +303,8 @@ func InitPhaseRunner(ctx context.Context, phase core.Phase, maxRetries int, dryR
 		ResumeAdapter:     resumeAdapter,
 		DAGAdapter:        dagAdapter,
 		WorktreeManager:   worktreeManager,
+		WorkflowWorktrees: workflowWorktrees,
+		GitIsolation:      workflow.DefaultGitIsolationConfig(),
 		GitClientFactory:  gitClientFactory,
 		GitClient:         gitClient,
 		GitHubClient:      githubClient,
@@ -297,6 +315,14 @@ func InitPhaseRunner(ctx context.Context, phase core.Phase, maxRetries int, dryR
 
 // CreateWorkflowContext creates a workflow context from dependencies and state.
 func CreateWorkflowContext(deps *PhaseRunnerDeps, state *core.WorkflowState) *workflow.Context {
+	finalizationCfg := deps.RunnerConfig.Finalization
+	useWorkflowIsolation := deps.GitIsolation != nil && deps.GitIsolation.Enabled &&
+		deps.WorkflowWorktrees != nil && state != nil && state.WorkflowBranch != ""
+	if useWorkflowIsolation {
+		finalizationCfg.AutoPR = false
+		finalizationCfg.AutoMerge = false
+	}
+
 	return &workflow.Context{
 		State:      state,
 		Agents:     deps.Registry,
@@ -305,6 +331,8 @@ func CreateWorkflowContext(deps *PhaseRunnerDeps, state *core.WorkflowState) *wo
 		Retry:      deps.RetryAdapter,
 		RateLimits: deps.RateLimiterAdapt,
 		Worktrees:  deps.WorktreeManager,
+		WorkflowWorktrees: deps.WorkflowWorktrees,
+		GitIsolation:      deps.GitIsolation,
 		Git:        deps.GitClient,
 		GitHub:     deps.GitHubClient,
 		Logger:     deps.Logger,
@@ -318,9 +346,54 @@ func CreateWorkflowContext(deps *PhaseRunnerDeps, state *core.WorkflowState) *wo
 			WorktreeMode:      deps.RunnerConfig.WorktreeMode,
 			PhaseTimeouts:     deps.RunnerConfig.PhaseTimeouts,
 			Moderator:         deps.ModeratorConfig,
-			Finalization:      deps.RunnerConfig.Finalization,
+			Finalization:      finalizationCfg,
 		},
 	}
+}
+
+// EnsureWorkflowGitIsolation initializes workflow-level git isolation for phase-based commands.
+// It is intentionally conservative: it will not enable isolation mid-workflow if there is evidence
+// that tasks already ran without a workflow branch.
+func EnsureWorkflowGitIsolation(ctx context.Context, deps *PhaseRunnerDeps, state *core.WorkflowState) (bool, error) {
+	if deps == nil || state == nil || state.WorkflowID == "" {
+		return false, nil
+	}
+	if deps.RunnerConfig != nil && deps.RunnerConfig.DryRun {
+		return false, nil
+	}
+	if deps.GitIsolation == nil || !deps.GitIsolation.Enabled {
+		return false, nil
+	}
+	if deps.WorkflowWorktrees == nil {
+		return false, nil
+	}
+	if state.WorkflowBranch != "" {
+		return false, nil
+	}
+
+	// Safety: if tasks already executed (or have git artifacts), don't switch modes.
+	for _, ts := range state.Tasks {
+		if ts == nil {
+			continue
+		}
+		if ts.Status != "" && ts.Status != core.TaskStatusPending {
+			return false, nil
+		}
+		if ts.Branch != "" || ts.LastCommit != "" || ts.WorktreePath != "" {
+			return false, nil
+		}
+	}
+
+	info, err := deps.WorkflowWorktrees.InitializeWorkflow(ctx, string(state.WorkflowID), deps.GitIsolation.BaseBranch)
+	if err != nil {
+		return false, err
+	}
+	if info == nil || info.WorkflowBranch == "" {
+		return false, fmt.Errorf("workflow isolation init returned empty branch")
+	}
+
+	state.WorkflowBranch = info.WorkflowBranch
+	return true, nil
 }
 
 // InitializeWorkflowState creates a new workflow state for a fresh run.

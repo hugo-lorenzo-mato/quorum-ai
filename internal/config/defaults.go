@@ -104,7 +104,8 @@ agents:
       execute: true
 
 # Git configuration
-# Tasks run in isolated worktrees on branch quorum/<task-id>.
+# By default, workflows run on an isolated workflow branch quorum/<workflow-id>,
+# and each task runs in its own worktree/branch quorum/<workflow-id>__<task-id>.
 # After completion: commit -> push -> PR (configurable).
 git:
   # When to create worktrees: always | parallel | disabled

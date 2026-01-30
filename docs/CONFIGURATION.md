@@ -501,6 +501,18 @@ git:
 
 **Finalization flow:**
 
+**Workflow isolation (default, recommended):**
+
+1. Workflow starts on branch `quorum/<workflow-id>` (created from base branch)
+2. Each task runs on `quorum/<workflow-id>__<task-id>` in an isolated worktree
+3. `auto_commit` → commit changes on task branch
+4. `auto_push` → push task branch to remote (optional, for backup/audit)
+5. Task branch is merged into `quorum/<workflow-id>` locally after success
+6. `auto_pr` → create a single PR from `quorum/<workflow-id>` to `pr_base_branch`
+7. `auto_merge` → merge that workflow PR using `merge_strategy`
+
+**Legacy mode (no workflow isolation):**
+
 1. Task completes on branch `quorum/<task-id>`
 2. `auto_commit` → commit changes
 3. `auto_push` → push to remote

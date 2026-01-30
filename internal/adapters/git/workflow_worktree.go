@@ -462,7 +462,8 @@ func (m *WorkflowWorktreeManagerImpl) cleanupWorkflowLocked(ctx context.Context,
 	}
 
 	// Remove task branches
-	workflowBranchPrefix := m.GetWorkflowBranch(workflowID) + "/"
+	// Task branches are named: quorum/<workflow-id>__<task-id>
+	workflowBranchPrefix := m.GetWorkflowBranch(workflowID) + "__"
 	branches, err := m.listBranchesWithPrefix(ctx, workflowBranchPrefix)
 	if err == nil {
 		for _, branch := range branches {

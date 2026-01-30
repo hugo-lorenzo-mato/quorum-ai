@@ -142,6 +142,16 @@ func runExecute(_ *cobra.Command, _ []string) error {
 		"task_count", len(workflowState.Tasks),
 	)
 
+	// Ensure workflow-level git isolation is initialized before creating task worktrees/branches.
+	// This no-ops for legacy workflows with prior execution artifacts to avoid switching modes mid-run.
+	if changed, err := EnsureWorkflowGitIsolation(ctx, deps, workflowState); err != nil {
+		return fmt.Errorf("initializing workflow git isolation: %w", err)
+	} else if changed {
+		if err := deps.StateAdapter.Save(ctx, workflowState); err != nil {
+			return fmt.Errorf("saving state after git isolation init: %w", err)
+		}
+	}
+
 	// Rebuild DAG from existing tasks
 	for _, id := range workflowState.TaskOrder {
 		taskState := workflowState.Tasks[id]
@@ -191,6 +201,17 @@ func runExecute(_ *cobra.Command, _ []string) error {
 		output.Log("error", fmt.Sprintf("execute phase failed: %v", err))
 		return err
 	}
+
+	// Workflow-level finalization for git isolation (push/PR/cleanup).
+	// Best-effort: failures here should not mark the workflow as failed.
+	(&workflow.WorkflowIsolationFinalizer{
+		Finalization:     deps.RunnerConfig.Finalization,
+		GitIsolation:      deps.GitIsolation,
+		WorkflowWorktrees: deps.WorkflowWorktrees,
+		Git:              deps.GitClient,
+		GitHub:           deps.GitHubClient,
+		Logger:           deps.Logger,
+	}).Finalize(ctx, workflowState)
 
 	// Mark workflow completed
 	workflowState.Status = core.WorkflowStatusCompleted

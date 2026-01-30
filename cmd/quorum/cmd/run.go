@@ -358,8 +358,21 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 		logger.Warn("failed to create git client, worktree isolation disabled", "error", err)
 	}
 	var worktreeManager workflow.WorktreeManager
+	var workflowWorktrees core.WorkflowWorktreeManager
 	if gitClient != nil {
 		worktreeManager = git.NewTaskWorktreeManager(gitClient, cfg.Git.WorktreeDir).WithLogger(logger)
+
+		repoRoot, rootErr := gitClient.RepoRoot(ctx)
+		if rootErr != nil {
+			logger.Warn("failed to detect repo root, workflow git isolation disabled", "error", rootErr)
+		} else {
+			wtMgr, wtErr := git.NewWorkflowWorktreeManager(repoRoot, cfg.Git.WorktreeDir, gitClient, logger.Logger)
+			if wtErr != nil {
+				logger.Warn("failed to create workflow worktree manager, workflow git isolation disabled", "error", wtErr)
+			} else {
+				workflowWorktrees = wtMgr
+			}
+		}
 	}
 
 	// Create GitHub client for PR creation (only if auto_pr is enabled)
@@ -417,6 +430,8 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 		Retry:            retryAdapter,
 		RateLimits:       rateLimiterAdapter,
 		Worktrees:        worktreeManager,
+		WorkflowWorktrees: workflowWorktrees,
+		GitIsolation:      workflow.DefaultGitIsolationConfig(),
 		GitClientFactory: git.NewClientFactory(),
 		Git:              gitClient,
 		GitHub:           githubClient,

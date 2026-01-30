@@ -2,6 +2,8 @@
 package workflow
 
 import (
+	"log/slog"
+
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/adapters/git"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/adapters/github"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
@@ -30,6 +32,21 @@ func init() {
 		// GitClientFactory factory
 		func() GitClientFactory {
 			return git.NewClientFactory()
+		},
+		// WorkflowWorktreeManager factory (workflow-level Git isolation)
+		func(gc core.GitClient, repoRoot, worktreeDir string, logger *logging.Logger) (core.WorkflowWorktreeManager, error) {
+			// Type assert to get the concrete git.Client
+			gitClient, ok := gc.(*git.Client)
+			if !ok {
+				return nil, nil
+			}
+
+			var slogger *slog.Logger
+			if logger != nil {
+				slogger = logger.Logger
+			}
+
+			return git.NewWorkflowWorktreeManager(repoRoot, worktreeDir, gitClient, slogger)
 		},
 	)
 }

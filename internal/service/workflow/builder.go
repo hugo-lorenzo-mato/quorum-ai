@@ -379,6 +379,28 @@ func (b *RunnerBuilder) Build(ctx context.Context) (*Runner, error) {
 		worktreeManager, gitClient, githubClient, gitClientFactory = b.createGitComponents(logger)
 	}
 
+	// Resolve Git isolation config (default-enabled)
+	gitIsolation := b.gitIsolation
+	if gitIsolation == nil {
+		gitIsolation = DefaultGitIsolationConfig()
+	}
+
+	// Create workflow-level worktree manager when isolation is enabled
+	var workflowWorktrees core.WorkflowWorktreeManager
+	if gitIsolation.Enabled && gitClient != nil {
+		repoRoot, err := gitClient.RepoRoot(ctx)
+		if err != nil {
+			logger.Warn("failed to detect repo root, workflow isolation disabled", "error", err)
+		} else {
+			wtMgr, wtErr := createWorkflowWorktreeManager(gitClient, repoRoot, b.config.Git.WorktreeDir, logger)
+			if wtErr != nil {
+				logger.Warn("failed to create workflow worktree manager, workflow isolation disabled", "error", wtErr)
+			} else {
+				workflowWorktrees = wtMgr
+			}
+		}
+	}
+
 	// Create runner dependencies
 	deps := RunnerDeps{
 		Config:           runnerConfig,
@@ -391,6 +413,8 @@ func (b *RunnerBuilder) Build(ctx context.Context) (*Runner, error) {
 		Retry:            retryAdapter,
 		RateLimits:       rateLimiterAdapter,
 		Worktrees:        worktreeManager,
+		WorkflowWorktrees: workflowWorktrees,
+		GitIsolation:      gitIsolation,
 		GitClientFactory: gitClientFactory,
 		Git:              gitClient,
 		GitHub:           githubClient,
@@ -650,6 +674,7 @@ var (
 	createWorktreeManager  = defaultCreateWorktreeManager
 	createGitHubClient     = defaultCreateGitHubClient
 	createGitClientFactory = defaultCreateGitClientFactory
+	createWorkflowWorktreeManager = defaultCreateWorkflowWorktreeManager
 )
 
 func defaultCreateGitClient(cwd string) (core.GitClient, error) {
@@ -668,6 +693,10 @@ func defaultCreateGitClientFactory() GitClientFactory {
 	return nil
 }
 
+func defaultCreateWorkflowWorktreeManager(_ core.GitClient, _ string, _ string, _ *logging.Logger) (core.WorkflowWorktreeManager, error) {
+	return nil, fmt.Errorf("workflow worktree manager factory not configured")
+}
+
 // SetGitFactories sets the factory functions for creating Git components.
 // This should be called during application initialization to wire up the git adapters.
 func SetGitFactories(
@@ -675,6 +704,7 @@ func SetGitFactories(
 	worktreeMgrFn func(gc core.GitClient, worktreeDir string, logger *logging.Logger) WorktreeManager,
 	githubClientFn func() (core.GitHubClient, error),
 	gitClientFactoryFn func() GitClientFactory,
+	workflowWorktreeMgrFn func(gc core.GitClient, repoRoot, worktreeDir string, logger *logging.Logger) (core.WorkflowWorktreeManager, error),
 ) {
 	if gitClientFn != nil {
 		createGitClient = gitClientFn
@@ -687,5 +717,8 @@ func SetGitFactories(
 	}
 	if gitClientFactoryFn != nil {
 		createGitClientFactory = gitClientFactoryFn
+	}
+	if workflowWorktreeMgrFn != nil {
+		createWorkflowWorktreeManager = workflowWorktreeMgrFn
 	}
 }

@@ -139,6 +139,16 @@ func runPlan(_ *cobra.Command, _ []string) error {
 		"workflow_id", workflowState.WorkflowID,
 	)
 
+	// Ensure workflow-level git isolation is initialized before planning persists tasks.
+	// This is conservative and will no-op for legacy workflows with existing execution artifacts.
+	if changed, err := EnsureWorkflowGitIsolation(ctx, deps, workflowState); err != nil {
+		return fmt.Errorf("initializing workflow git isolation: %w", err)
+	} else if changed {
+		if err := deps.StateAdapter.Save(ctx, workflowState); err != nil {
+			return fmt.Errorf("saving state after git isolation init: %w", err)
+		}
+	}
+
 	// Create workflow context
 	wctx := CreateWorkflowContext(deps, workflowState)
 
