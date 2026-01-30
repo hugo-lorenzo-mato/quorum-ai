@@ -300,13 +300,22 @@ func (m *SQLiteStateManager) Save(ctx context.Context, state *core.WorkflowState
 		}
 	}
 
+	// Serialize agent events
+	var agentEventsJSON []byte
+	if len(state.AgentEvents) > 0 {
+		agentEventsJSON, err = json.Marshal(state.AgentEvents)
+		if err != nil {
+			return fmt.Errorf("marshaling agent events: %w", err)
+		}
+	}
+
 	// Upsert workflow
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO workflows (
 			id, version, title, status, current_phase, prompt, optimized_prompt,
 			task_order, config, metrics, checksum, created_at, updated_at, report_path,
-			workflow_branch
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			agent_events, workflow_branch
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			version = excluded.version,
 			title = excluded.title,
@@ -320,6 +329,7 @@ func (m *SQLiteStateManager) Save(ctx context.Context, state *core.WorkflowState
 			checksum = excluded.checksum,
 			updated_at = excluded.updated_at,
 			report_path = excluded.report_path,
+			agent_events = excluded.agent_events,
 			workflow_branch = excluded.workflow_branch
 	`,
 		state.WorkflowID, state.Version, state.Title, state.Status, state.CurrentPhase,
@@ -327,6 +337,7 @@ func (m *SQLiteStateManager) Save(ctx context.Context, state *core.WorkflowState
 		nullableString(configJSON), nullableString(metricsJSON),
 		checksum, state.CreatedAt, state.UpdatedAt,
 		nullableString([]byte(state.ReportPath)),
+		nullableString(agentEventsJSON),
 		nullableString([]byte(state.WorkflowBranch)),
 	)
 	if err != nil {
@@ -480,17 +491,18 @@ func (m *SQLiteStateManager) loadWorkflowByID(ctx context.Context, id core.Workf
 	var checksum sql.NullString
 	var reportPath sql.NullString
 	var title sql.NullString
+	var agentEventsJSON sql.NullString
 	var workflowBranch sql.NullString
 
 	err := m.readDB.QueryRowContext(ctx, `
 		SELECT id, version, title, status, current_phase, prompt, optimized_prompt,
 		       task_order, config, metrics, checksum, created_at, updated_at, report_path,
-		       workflow_branch
+		       agent_events, workflow_branch
 		FROM workflows WHERE id = ?
 	`, id).Scan(
 		&state.WorkflowID, &state.Version, &title, &state.Status, &state.CurrentPhase,
 		&state.Prompt, &optimizedPrompt, &taskOrderJSON, &configJSON, &metricsJSON,
-		&checksum, &state.CreatedAt, &state.UpdatedAt, &reportPath, &workflowBranch,
+		&checksum, &state.CreatedAt, &state.UpdatedAt, &reportPath, &agentEventsJSON, &workflowBranch,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil // Workflow doesn't exist
@@ -531,6 +543,11 @@ func (m *SQLiteStateManager) loadWorkflowByID(ctx context.Context, id core.Workf
 		state.Metrics = &core.StateMetrics{}
 		if err := json.Unmarshal([]byte(metricsJSON.String), state.Metrics); err != nil {
 			return nil, fmt.Errorf("unmarshaling metrics: %w", err)
+		}
+	}
+	if agentEventsJSON.Valid && agentEventsJSON.String != "" {
+		if err := json.Unmarshal([]byte(agentEventsJSON.String), &state.AgentEvents); err != nil {
+			return nil, fmt.Errorf("unmarshaling agent events: %w", err)
 		}
 	}
 
