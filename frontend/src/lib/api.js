@@ -34,10 +34,32 @@ export const workflowApi = {
 
   getActive: () => request('/workflows/active'),
 
-  create: (prompt, config = {}) => request('/workflows/', {
-    method: 'POST',
-    body: JSON.stringify({ prompt, title: config.title, config }),
-  }),
+  /**
+   * Create a new workflow with optional configuration.
+   * @param {string} prompt - The workflow prompt
+   * @param {Object} options - Additional options
+   * @param {string} [options.title] - Optional workflow title
+   * @param {string[]} [options.files] - Optional file paths
+   * @param {Object} [options.config] - Optional workflow configuration
+   * @param {string} [options.config.execution_mode] - 'multi_agent' or 'single_agent'
+   * @param {string} [options.config.single_agent_name] - Agent name for single-agent mode
+   * @param {string} [options.config.single_agent_model] - Optional model override
+   */
+  create: (prompt, options = {}) => {
+    const { title, files, config } = options;
+
+    const body = { prompt };
+
+    // Add optional fields only if they have values
+    if (title) body.title = title;
+    if (files && files.length > 0) body.files = files;
+    if (config && Object.keys(config).length > 0) body.config = config;
+
+    return request('/workflows/', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  },
 
   update: (id, data) => request(`/workflows/${id}/`, {
     method: 'PATCH',

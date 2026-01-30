@@ -1335,7 +1335,7 @@ export default function Workflows() {
   const workflowTasks = id ? getTasksForWorkflow(id) : [];
 
   const handleCreate = async (prompt, files = [], title, workflowConfig) => {
-    const workflow = await createWorkflow(prompt, { title, ...workflowConfig });
+    const workflow = await createWorkflow(prompt, { title, config: workflowConfig });
     if (!workflow) return;
 
     if (files.length > 0) {

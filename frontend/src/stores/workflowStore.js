@@ -73,10 +73,18 @@ const useWorkflowStore = create((set, get) => ({
     }
   },
 
-  createWorkflow: async (prompt, config = {}) => {
+  /**
+   * Create a new workflow.
+   * @param {string} prompt - The workflow prompt
+   * @param {Object} options - Additional options
+   * @param {string} [options.title] - Optional title
+   * @param {string[]} [options.files] - Optional files
+   * @param {Object} [options.config] - Optional config with execution_mode
+   */
+  createWorkflow: async (prompt, options = {}) => {
     set({ loading: true, error: null });
     try {
-      const workflow = await workflowApi.create(prompt, config);
+      const workflow = await workflowApi.create(prompt, options);
       const { workflows } = get();
       set({
         workflows: [...workflows, workflow],
