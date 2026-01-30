@@ -81,7 +81,8 @@ Evaluate the **semantic consensus** among the previous analyses with an **ultra-
 
 ⚠️ **YOUR RESPONSE MUST START WITH YAML FRONTMATTER** ⚠️
 
-Your response MUST begin with a YAML frontmatter block containing the consensus metrics:
+Your response MUST begin with a YAML frontmatter block containing the consensus metrics.
+**IMPORTANT:** Output the YAML frontmatter **RAW**. Do **NOT** wrap it in markdown code blocks (```yaml). Start your response immediately with `---`.
 
 ```yaml
 ---
@@ -120,9 +121,11 @@ The agents show good agreement on...
 Here is my evaluation:          ❌ (text before frontmatter)
 ---
 
+```yaml                         ❌ (markdown code block)
 ---
 consensus_score: 78%            ❌ (% symbol not allowed)
 ---
+```
 
 ---
 consensus_score: 78.5           ❌ (decimal not allowed)
@@ -207,6 +210,12 @@ low_impact_divergences: 0
 agreements_count: 4
 ---
 ```
+
+**BACKUP VALIDATION**:
+Additionally, as a backup measure in case formatting fails, you MUST end your response with this exact line:
+`>> FINAL SCORE: <integer> <<`
+
+Example: `>> FINAL SCORE: 78 <<`
 {{if .OutputFilePath}}
 
 ---
@@ -223,6 +232,7 @@ Write your consensus evaluation to the following file:
 - Include all required fields: consensus_score, high/medium/low_impact_divergences, agreements_count
 - DO NOT add any text before the opening `---`
 - DO NOT include markers like `# File:` or file comments
+- END the file with `>> FINAL SCORE: XX <<`
 
 Use your file writing tool to create this markdown document.
 {{end}}

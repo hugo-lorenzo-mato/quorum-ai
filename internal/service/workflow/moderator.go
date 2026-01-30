@@ -17,6 +17,9 @@ import (
 type ModeratorEvaluationResult struct {
 	// Score is the semantic consensus score (0.0-1.0).
 	Score float64
+	// ScoreFound indicates if a score was successfully extracted.
+	// If false, Score will be 0 but it means "not found" rather than "zero".
+	ScoreFound bool
 	// RawOutput is the full moderator response.
 	RawOutput string
 	// Agreements are points where all analyses converge.
@@ -55,7 +58,7 @@ type SemanticModerator struct {
 func NewSemanticModerator(config ModeratorConfig) (*SemanticModerator, error) {
 	// Validate agent is set when enabled (model is resolved from agent config)
 	if config.Enabled && config.Agent == "" {
-		return nil, fmt.Errorf("missing moderator agent: set 'phases.analyze.moderator.agent' to one of your configured agents (e.g., 'claude', 'gemini'). "+
+		return nil, fmt.Errorf("missing moderator agent: set 'phases.analyze.moderator.agent' to one of your configured agents (e.g., 'claude', 'gemini'). " +
 			"See: %s#phases-settings", DocsConfigURL)
 	}
 
@@ -66,20 +69,22 @@ func NewSemanticModerator(config ModeratorConfig) (*SemanticModerator, error) {
 
 	return &SemanticModerator{
 		config: config,
-	}, nil
+	},
+	nil
 }
 
 // Evaluate runs semantic consensus evaluation on the given analyses.
 // Uses the configured moderator agent.
 func (m *SemanticModerator) Evaluate(ctx context.Context, wctx *Context, round int, outputs []AnalysisOutput) (*ModeratorEvaluationResult, error) {
-	return m.EvaluateWithAgent(ctx, wctx, round, outputs, m.config.Agent)
+	return m.EvaluateWithAgent(ctx, wctx, round, 1, outputs, m.config.Agent)
 }
 
 // EvaluateWithAgent runs semantic consensus evaluation using a specific agent.
 // This allows fallback to alternative agents if the primary moderator fails.
-func (m *SemanticModerator) EvaluateWithAgent(ctx context.Context, wctx *Context, round int, outputs []AnalysisOutput, agentName string) (*ModeratorEvaluationResult, error) {
+// The attempt parameter tracks which attempt this is (1-based) for file naming and traceability.
+func (m *SemanticModerator) EvaluateWithAgent(ctx context.Context, wctx *Context, round, attempt int, outputs []AnalysisOutput, agentName string) (*ModeratorEvaluationResult, error) {
 	if !m.config.Enabled {
-		return nil, fmt.Errorf("semantic moderator is not enabled. "+
+		return nil, fmt.Errorf("semantic moderator is not enabled. " +
 			"Set 'phases.analyze.moderator.enabled: true' in your config. See: %s#phases-settings", DocsConfigURL)
 	}
 
@@ -90,7 +95,7 @@ func (m *SemanticModerator) EvaluateWithAgent(ctx context.Context, wctx *Context
 	}
 	agent, err := wctx.Agents.Get(moderatorAgentName)
 	if err != nil {
-		return nil, fmt.Errorf("moderator agent '%s' not available: %w. "+
+		return nil, fmt.Errorf("moderator agent '%s' not available: %w. " +
 			"Ensure this agent is configured and responding (run 'quorum doctor' to verify). See: %s#agents", moderatorAgentName, err, DocsConfigURL)
 	}
 
@@ -135,9 +140,10 @@ func (m *SemanticModerator) EvaluateWithAgent(ctx context.Context, wctx *Context
 	}
 
 	// Get output file path for LLM to write directly
+	// Each attempt writes to its own file for traceability
 	var outputFilePath string
 	if wctx.Report != nil && wctx.Report.IsEnabled() {
-		outputFilePath = wctx.Report.ModeratorReportPath(round)
+		outputFilePath = wctx.Report.ModeratorAttemptPath(round, attempt, moderatorAgentName)
 	}
 
 	// Render moderator prompt
@@ -251,7 +257,20 @@ func (m *SemanticModerator) EvaluateWithAgent(ctx context.Context, wctx *Context
 		})
 	}
 
-	// Write moderator report
+	// Promote successful attempt to official location
+	// This ensures round-X.md only exists when validation passes
+	if wctx.Report != nil && wctx.Report.IsEnabled() {
+		if promoteErr := wctx.Report.PromoteModeratorAttempt(round, attempt, moderatorAgentName); promoteErr != nil {
+			wctx.Logger.Warn("failed to promote moderator attempt",
+				"round", round,
+				"attempt", attempt,
+				"agent", moderatorAgentName,
+				"error", promoteErr,
+			)
+		}
+	}
+
+	// Write moderator report (kept for backward compatibility with metadata)
 	if wctx.Report != nil {
 		if reportErr := wctx.Report.WriteModeratorReport(report.ModeratorData{
 			Agent:            moderatorAgentName,
@@ -275,86 +294,123 @@ func (m *SemanticModerator) EvaluateWithAgent(ctx context.Context, wctx *Context
 
 // moderatorFrontmatter represents the YAML frontmatter structure for moderator output.
 type moderatorFrontmatter struct {
-	ConsensusScore          int `yaml:"consensus_score"`
-	HighImpactDivergences   int `yaml:"high_impact_divergences"`
-	MediumImpactDivergences int `yaml:"medium_impact_divergences"`
-	LowImpactDivergences    int `yaml:"low_impact_divergences"`
-	AgreementsCount         int `yaml:"agreements_count"`
+	// ConsensusScore uses interface{} to handle int, float, or string (robustness)
+	ConsensusScore          interface{} `yaml:"consensus_score"`
+	HighImpactDivergences   int         `yaml:"high_impact_divergences"`
+	MediumImpactDivergences int         `yaml:"medium_impact_divergences"`
+	LowImpactDivergences    int         `yaml:"low_impact_divergences"`
+	AgreementsCount         int         `yaml:"agreements_count"`
 }
 
 // parseModeratorResponse parses the moderator's response to extract the consensus score and details.
 func (m *SemanticModerator) parseModeratorResponse(output string) *ModeratorEvaluationResult {
 	result := &ModeratorEvaluationResult{
-		RawOutput: output,
-		Score:     0,
+		RawOutput:  output,
+		Score:      0,
+		ScoreFound: false,
 	}
 
-	// Primary method: Parse YAML frontmatter
-	// Format: ---\nconsensus_score: XX\n...\n---
-	if frontmatter, body, ok := parseYAMLFrontmatter(output); ok {
+	// 1. Sanitization: Detect and remove markdown code blocks wrapping YAML
+	cleanOutput := sanitizeRawOutput(output)
+
+	// 2. Primary method: Robust YAML Frontmatter Extraction
+	// Looks for the first valid-looking frontmatter block anywhere in text
+	if frontmatter, body, ok := parseYAMLFrontmatterRobust(cleanOutput); ok {
 		var fm moderatorFrontmatter
-		if err := yaml.Unmarshal([]byte(frontmatter), &fm); err == nil && fm.ConsensusScore > 0 {
-			result.Score = float64(fm.ConsensusScore) / 100.0
-			// Use body (content after frontmatter) for section extraction
-			output = body
+		if err := yaml.Unmarshal([]byte(frontmatter), &fm); err == nil {
+			// Extract robust score from interface{}
+			score, found := extractScoreFromInterface(fm.ConsensusScore)
+			if found {
+				result.Score = score
+				result.ScoreFound = true
+				// Use body (content after frontmatter) for section extraction
+				output = body
+			}
 		}
 	}
 
-	// Fallback patterns for backwards compatibility with older format
-	if result.Score == 0 {
-		// Pattern 1: CONSENSUS_SCORE: XX% (primary, with flexible whitespace and optional markdown)
-		// Handles: "CONSENSUS_SCORE: 78%", "**CONSENSUS_SCORE:** 78%", "CONSENSUS_SCORE:78%"
-		scorePattern := regexp.MustCompile(`(?im)^\**CONSENSUS[_\s]?SCORE[*:]*\s*(\d+)\s*%`)
+	// 3. Backup Method: Double Anchoring (End of file)
+	// Looks for ">> FINAL SCORE: XX <<" pattern mandated in prompt
+	if !result.ScoreFound {
+		anchorPattern := regexp.MustCompile(`>>\s*FINAL\s*SCORE\s*:\s*(\d+)\s*<<`)
+		match := anchorPattern.FindStringSubmatch(output)
+		if match != nil && len(match) > 1 {
+			if score, err := strconv.ParseFloat(match[1], 64); err == nil {
+				result.Score = score / 100.0
+				result.ScoreFound = true
+			}
+		}
+	}
+
+	// 4. Fallback patterns (relaxed regexes)
+	if !result.ScoreFound {
+		// Pattern 1: Flexible key-value with optional percent
+		// Matches: "Consensus Score: 80", "Semantic Score = 85%", "Score: 90/100"
+		scorePattern := regexp.MustCompile(`(?im)(?:consensus|semantic|overall)\s*_?\s*score\s*[:=]\s*(\d+(?:\.\d+)?)(?:\s*%|\s*/\s*100)?`)
 		match := scorePattern.FindStringSubmatch(output)
 		if match != nil && len(match) > 1 {
-			if score, err := strconv.Atoi(match[1]); err == nil {
-				result.Score = float64(score) / 100.0
+			if score, err := strconv.ParseFloat(match[1], 64); err == nil {
+				// Normalize: if > 1.0, assume percentage (0-100), otherwise assume ratio (0.0-1.0)
+				if score > 1.0 {
+					result.Score = score / 100.0
+				} else {
+					result.Score = score
+				}
+				result.ScoreFound = true
 			}
 		}
 	}
 
-	// Pattern 2: Look for score in markdown code blocks (model might wrap in ```)
-	if result.Score == 0 {
-		codeBlockPattern := regexp.MustCompile("(?m)`?CONSENSUS[_\\s]?SCORE:?\\s*(\\d+)\\s*%`?")
+	// Pattern 2: Look for score in markdown code blocks or bold format
+	// Matches: `CONSENSUS_SCORE: 78%`, **CONSENSUS_SCORE:** 78%
+	if !result.ScoreFound {
+		codeBlockPattern := regexp.MustCompile(`(?im)(?:\*\*)?CONSENSUS[_\s]?SCORE(?:\*\*)?[:\s*]+(\d+)(?:\s*%)?`)
 		match := codeBlockPattern.FindStringSubmatch(output)
 		if match != nil && len(match) > 1 {
-			if score, err := strconv.Atoi(match[1]); err == nil {
-				result.Score = float64(score) / 100.0
+			if score, err := strconv.ParseFloat(match[1], 64); err == nil {
+				result.Score = score / 100.0
+				result.ScoreFound = true
 			}
 		}
 	}
 
-	// Pattern 3: =-=-=-=XX%=-=-=-=-= (fallback for deep reasoning models)
-	// Some models with extended thinking may embed the score in this distinctive pattern
-	if result.Score == 0 {
-		fallbackPattern := regexp.MustCompile(`=-=-=-=(\d+)%=-=-=-=-=`)
-		match := fallbackPattern.FindStringSubmatch(output)
+	// Pattern 3: Deep reasoning pattern (for extended thinking models)
+	// Matches: =-=-=-=75%=-=-=-=-=
+	if !result.ScoreFound {
+		deepPattern := regexp.MustCompile(`=-=-=-=(\d+)%?=-=-=-=-=`)
+		match := deepPattern.FindStringSubmatch(output)
 		if match != nil && len(match) > 1 {
-			if score, err := strconv.Atoi(match[1]); err == nil {
-				result.Score = float64(score) / 100.0
+			if score, err := strconv.ParseFloat(match[1], 64); err == nil {
+				result.Score = score / 100.0
+				result.ScoreFound = true
 			}
 		}
 	}
 
-	// Pattern 4: "consensus score" or "overall score" followed by percentage
-	// Handles: "consensus score: 78%", "overall consensus score of 78%", "score is 78%"
-	if result.Score == 0 {
-		genericScorePattern := regexp.MustCompile(`(?i)(?:consensus|overall|semantic)\s+score[:\s]+(?:is\s+)?(?:of\s+)?(\d+)\s*%`)
-		match := genericScorePattern.FindStringSubmatch(output)
+	// Pattern 4: "overall/semantic/consensus score is XX%" with 'is' keyword
+	if !result.ScoreFound {
+		isPattern := regexp.MustCompile(`(?i)(?:overall|semantic|consensus)\s+score\s+is\s+(\d+(?:\.\d+)?)\s*%?`)
+		match := isPattern.FindStringSubmatch(output)
 		if match != nil && len(match) > 1 {
-			if score, err := strconv.Atoi(match[1]); err == nil {
-				result.Score = float64(score) / 100.0
+			if score, err := strconv.ParseFloat(match[1], 64); err == nil {
+				if score > 1.0 {
+					result.Score = score / 100.0
+				} else {
+					result.Score = score
+				}
+				result.ScoreFound = true
 			}
 		}
 	}
 
-	// Pattern 5: Score as decimal (0.XX) - some models output 0.78 instead of 78%
-	if result.Score == 0 {
-		decimalPattern := regexp.MustCompile(`(?i)(?:consensus|overall|semantic)\s+score[:\s]+(?:is\s+)?(?:of\s+)?(0\.\d+)`)
+	// Pattern 5: Decimal format "semantic score is 0.XX"
+	if !result.ScoreFound {
+		decimalPattern := regexp.MustCompile(`(?i)(?:semantic|consensus|overall)\s+score\s+(?:is\s+)?(0\.\d+)`)
 		match := decimalPattern.FindStringSubmatch(output)
 		if match != nil && len(match) > 1 {
 			if score, err := strconv.ParseFloat(match[1], 64); err == nil && score <= 1.0 {
 				result.Score = score
+				result.ScoreFound = true
 			}
 		}
 	}
@@ -377,6 +433,80 @@ func (m *SemanticModerator) parseModeratorResponse(output string) *ModeratorEval
 	result.Recommendations = extractModeratorSection(output, "Recommendations for Next Round")
 
 	return result
+}
+
+// sanitizeRawOutput removes markdown code blocks that might wrap YAML.
+func sanitizeRawOutput(text string) string {
+	lines := strings.Split(text, "\n")
+	var cleanLines []string
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		// Skip opening/closing code blocks
+		if strings.HasPrefix(trimmed, "```") {
+			continue
+		}
+		cleanLines = append(cleanLines, line)
+	}
+	return strings.Join(cleanLines, "\n")
+}
+
+// parseYAMLFrontmatterRobust searches for YAML-like blocks anywhere in text.
+// It is more aggressive than the standard parser.
+func parseYAMLFrontmatterRobust(text string) (frontmatter, body string, ok bool) {
+	// Look for block delimited by ---
+	// Use regex to find the first block that looks like frontmatter
+	// (?s) enables dot matching newlines
+	re := regexp.MustCompile(`(?s)(?:^|\n)---\s*\n(.*?)\n---\s*(?:\n|$)`)
+	match := re.FindStringSubmatchIndex(text)
+
+	if match == nil {
+		return "", text, false
+	}
+
+	// Extract content between delimiters
+	start, end := match[2], match[3]
+	frontmatter = text[start:end]
+	
+	// Body is everything after the closing ---
+	fullMatchEnd := match[1]
+	if fullMatchEnd < len(text) {
+		body = text[fullMatchEnd:]
+	} else {
+		body = ""
+	}
+
+	return frontmatter, body, true
+}
+
+// extractScoreFromInterface handles robust type conversion for score.
+func extractScoreFromInterface(val interface{}) (float64, bool) {
+	if val == nil {
+		return 0, false
+	}
+
+	switch v := val.(type) {
+	case int:
+		return float64(v) / 100.0, true
+	case float64:
+		// If small (<=1), assume ratio. If large (>1), assume percentage.
+		if v <= 1.0 {
+			return v, true
+		}
+		return v / 100.0, true
+	case string:
+		// Clean string: remove %, spaces, /100
+		cleaned := strings.ReplaceAll(v, "%", "")
+		cleaned = strings.ReplaceAll(cleaned, " ", "")
+		cleaned = strings.TrimSuffix(cleaned, "/100")
+		
+		if s, err := strconv.ParseFloat(cleaned, 64); err == nil {
+			if s <= 1.0 {
+				return s, true
+			}
+			return s / 100.0, true
+		}
+	}
+	return 0, false
 }
 
 // extractModeratorSection extracts bullet points from a named section in the moderator output.
@@ -412,52 +542,6 @@ func extractModeratorSection(text, sectionName string) []string {
 	}
 
 	return items
-}
-
-// parseYAMLFrontmatter extracts YAML frontmatter from a markdown document.
-// Returns the frontmatter content, the body (content after frontmatter), and whether parsing succeeded.
-// Frontmatter must start with "---" on the first line and end with "---" on its own line.
-func parseYAMLFrontmatter(text string) (frontmatter, body string, ok bool) {
-	text = strings.TrimSpace(text)
-
-	// Must start with ---
-	if !strings.HasPrefix(text, "---") {
-		return "", text, false
-	}
-
-	// Find the closing ---
-	// Skip the first line (opening ---)
-	afterOpen := text[3:]
-	if afterOpen != "" && afterOpen[0] == '\n' {
-		afterOpen = afterOpen[1:]
-	} else if len(afterOpen) > 1 && afterOpen[0] == '\r' && afterOpen[1] == '\n' {
-		afterOpen = afterOpen[2:]
-	} else {
-		return "", text, false
-	}
-
-	// Find closing ---
-	closeIdx := strings.Index(afterOpen, "\n---")
-	if closeIdx == -1 {
-		// Try with \r\n
-		closeIdx = strings.Index(afterOpen, "\r\n---")
-		if closeIdx == -1 {
-			return "", text, false
-		}
-	}
-
-	frontmatter = strings.TrimSpace(afterOpen[:closeIdx])
-
-	// Body starts after the closing ---
-	remaining := afterOpen[closeIdx+4:] // skip \n---
-	if remaining != "" && remaining[0] == '\n' {
-		remaining = remaining[1:]
-	} else if len(remaining) > 1 && remaining[0] == '\r' && remaining[1] == '\n' {
-		remaining = remaining[2:]
-	}
-	body = remaining
-
-	return frontmatter, body, true
 }
 
 // Threshold returns the configured consensus threshold.
@@ -623,33 +707,26 @@ func (m *SemanticModerator) validateModeratorOutput(result *ModeratorEvaluationR
 		return fmt.Errorf("output too short (%d chars, minimum 100)", len(rawOutput))
 	}
 
-	// Check 2: Score must be parseable (non-zero unless explicitly set)
-	// A score of exactly 0.0 with no agreements/divergences is suspicious
-	if result.Score == 0.0 && len(result.Agreements) == 0 && len(result.Divergences) == 0 {
-		// Check if the output actually contains a score pattern
-		if !strings.Contains(strings.ToUpper(rawOutput), "CONSENSUS") {
-			return fmt.Errorf("no consensus score found in output")
+	// Check 2: Score must be found
+	if !result.ScoreFound {
+		// Detect refusal keywords to provide better error context
+		refusalKeywords := []string{"cannot evaluate", "refuse to score", "unable to assess", "insufficient information"}
+		rawLower := strings.ToLower(rawOutput)
+		for _, kw := range refusalKeywords {
+			if strings.Contains(rawLower, kw) {
+				return fmt.Errorf("moderator refused to score: detected phrase %q", kw)
+			}
 		}
-		// If it contains CONSENSUS but score is 0, the parsing might have failed
-		if !strings.Contains(rawOutput, "0%") && !strings.Contains(rawOutput, ": 0") {
-			return fmt.Errorf("consensus score parsing failed (score=0 but no '0%%' in output)")
-		}
+		return fmt.Errorf("no numeric consensus score found in output (checked YAML, anchors, and patterns)")
 	}
 
-	// Check 3: Token count sanity check
-	// If reported tokens are suspiciously low but output is long, it's suspicious but not a failure
-	// (the LLM might have written to file, or token counting may be inaccurate)
-	// Note: This is informational only - token discrepancy detection handles correction
-
-	// Check 4: Output should contain expected sections for a valid evaluation
-	hasScore := strings.Contains(strings.ToUpper(rawOutput), "CONSENSUS") ||
-		strings.Contains(strings.ToUpper(rawOutput), "SCORE")
+	// Check 3: Output should contain expected sections for a valid evaluation
 	hasContent := strings.Contains(rawOutput, "##") || // Markdown headers
 		strings.Contains(rawOutput, "Agreement") ||
 		strings.Contains(rawOutput, "Divergen")
 
-	if !hasScore && !hasContent {
-		return fmt.Errorf("output lacks expected structure (no score or content sections)")
+	if !hasContent {
+		return fmt.Errorf("output lacks expected structure (no content sections found)")
 	}
 
 	return nil

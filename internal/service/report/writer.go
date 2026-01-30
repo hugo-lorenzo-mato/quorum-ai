@@ -2,6 +2,7 @@ package report
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -181,6 +182,47 @@ func (w *WorkflowReportWriter) ModeratorReportPath(round int) string {
 	return filepath.Join(w.AnalyzePhasePath(), "consensus", fmt.Sprintf("round-%d.md", round))
 }
 
+// ModeratorAttemptPath returns path for a specific moderator attempt.
+// Each attempt by a moderator (primary or fallback) writes to its own file for traceability.
+func (w *WorkflowReportWriter) ModeratorAttemptPath(round, attempt int, agentName string) string {
+	return filepath.Join(w.AnalyzePhasePath(), "consensus", "attempts",
+		fmt.Sprintf("round-%d", round),
+		fmt.Sprintf("attempt-%d-%s.md", attempt, agentName))
+}
+
+// PromoteModeratorAttempt copies a successful attempt to the official location.
+// This ensures the official round-X.md file only exists when validation passes.
+func (w *WorkflowReportWriter) PromoteModeratorAttempt(round, attempt int, agentName string) error {
+	src := w.ModeratorAttemptPath(round, attempt, agentName)
+	dst := w.ModeratorReportPath(round)
+
+	// Ensure destination directory exists
+	if err := os.MkdirAll(filepath.Dir(dst), 0o750); err != nil {
+		return fmt.Errorf("creating consensus directory: %w", err)
+	}
+
+	// Open source file
+	srcFile, err := os.Open(src)
+	if err != nil {
+		return fmt.Errorf("opening attempt file %s: %w", src, err)
+	}
+	defer srcFile.Close()
+
+	// Create destination file
+	dstFile, err := os.Create(dst)
+	if err != nil {
+		return fmt.Errorf("creating promoted file %s: %w", dst, err)
+	}
+	defer dstFile.Close()
+
+	// Copy content
+	if _, err := io.Copy(dstFile, srcFile); err != nil {
+		return fmt.Errorf("copying attempt to promoted location: %w", err)
+	}
+
+	return nil
+}
+
 // ========================================
 // Analyze Phase Writers
 // ========================================
@@ -348,7 +390,9 @@ type ModeratorData struct {
 	DurationMS       int64
 }
 
-// WriteModeratorReport writes a semantic moderator evaluation report
+// WriteModeratorReport writes a semantic moderator evaluation report with metadata.
+// This writes to the same location as ModeratorReportPath (consensus/round-X.md)
+// but includes structured metadata in the frontmatter.
 func (w *WorkflowReportWriter) WriteModeratorReport(data ModeratorData) error {
 	if !w.config.Enabled {
 		return nil
@@ -357,14 +401,11 @@ func (w *WorkflowReportWriter) WriteModeratorReport(data ModeratorData) error {
 		return err
 	}
 
-	// Create moderator directory if needed
-	moderatorDir := filepath.Join(w.AnalyzePhasePath(), "moderator")
-	if err := os.MkdirAll(moderatorDir, 0o750); err != nil {
-		return fmt.Errorf("creating moderator directory: %w", err)
+	// Use the same path as ModeratorReportPath for consistency
+	path := w.ModeratorReportPath(data.Round)
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+		return fmt.Errorf("creating consensus directory: %w", err)
 	}
-
-	filename := fmt.Sprintf("round-%d.md", data.Round)
-	path := filepath.Join(moderatorDir, filename)
 
 	fm := NewFrontmatter()
 	fm.Set("type", "moderator_evaluation")

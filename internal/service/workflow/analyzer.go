@@ -1492,6 +1492,7 @@ func (a *Analyzer) runModeratorWithFallback(ctx context.Context, wctx *Context, 
 	var triedAgents []string
 	var lastAgent string
 	var lastAttempt int
+	globalAttempt := 0 // Global attempt counter for unique file naming
 
 	for agentIdx, agentName := range fallbackAgents {
 		isPrimary := agentIdx == 0
@@ -1499,7 +1500,8 @@ func (a *Analyzer) runModeratorWithFallback(ctx context.Context, wctx *Context, 
 
 		// Try up to 2 attempts with each agent
 		for attempt := 1; attempt <= 2; attempt++ {
-			lastAttempt = attempt
+			globalAttempt++ // Increment global counter for each attempt
+			lastAttempt = globalAttempt
 
 			if !isPrimary || attempt > 1 {
 				wctx.Logger.Info("trying moderator evaluation",
@@ -1507,6 +1509,7 @@ func (a *Analyzer) runModeratorWithFallback(ctx context.Context, wctx *Context, 
 					"agent", agentName,
 					"is_fallback", !isPrimary,
 					"attempt", attempt,
+					"global_attempt", globalAttempt,
 				)
 				if wctx.Output != nil {
 					if isPrimary {
@@ -1514,13 +1517,14 @@ func (a *Analyzer) runModeratorWithFallback(ctx context.Context, wctx *Context, 
 							fmt.Sprintf("Round %d: Retrying moderator with %s (attempt %d)", round, agentName, attempt))
 					} else {
 						wctx.Output.Log("info", "analyzer",
-							fmt.Sprintf("Round %d: Trying fallback moderator %s", round, agentName))
+							fmt.Sprintf("Round %d: Trying fallback moderator %s (attempt %d)", round, agentName, globalAttempt))
 					}
 				}
 			}
 
 			// Use EvaluateWithAgent to allow fallback to alternative agents
-			evalResult, evalErr := a.moderator.EvaluateWithAgent(ctx, wctx, round, outputs, agentName)
+			// Pass globalAttempt for unique file naming per attempt
+			evalResult, evalErr := a.moderator.EvaluateWithAgent(ctx, wctx, round, globalAttempt, outputs, agentName)
 			if evalErr == nil {
 				// Success - log if we used a fallback
 				if !isPrimary {
@@ -1596,14 +1600,13 @@ func (a *Analyzer) buildModeratorFallbackChain(wctx *Context) []string {
 
 	// Get all available agents that have moderate phase enabled
 	// These can serve as fallbacks if the primary fails
-	allAgents := wctx.Agents.List()
-	for _, agentName := range allAgents {
+	// Use ListEnabledForPhase to ensure we only get agents that are explicitly enabled
+	// in the configuration and have the "moderate" phase active.
+	fallbackCandidates := wctx.Agents.ListEnabledForPhase("moderate")
+	for _, agentName := range fallbackCandidates {
 		if agentName == primaryAgent {
 			continue // Skip primary, already first
 		}
-		// Check if this agent has moderate phase enabled in config
-		// For now, we add all enabled agents as potential fallbacks
-		// The moderator will use its own agent resolution logic
 		agents = append(agents, agentName)
 	}
 
