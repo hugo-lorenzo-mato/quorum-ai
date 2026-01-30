@@ -1,0 +1,9 @@
+{
+  "prompt": "Test workflow for single-agent mode",
+  "title": "Single Agent Test Fixture",
+  "config": {
+    "execution_mode": "single_agent",
+    "single_agent_name": "claude",
+    "single_agent_model": "claude-3-haiku"
+  }
+}

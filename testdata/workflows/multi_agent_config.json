@@ -1,0 +1,8 @@
+{
+  "prompt": "Test workflow for multi-agent mode",
+  "title": "Multi Agent Test Fixture",
+  "config": {
+    "execution_mode": "multi_agent",
+    "consensus_threshold": 0.85
+  }
+}

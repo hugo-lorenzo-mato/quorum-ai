@@ -420,6 +420,44 @@ func (m *threadSafeMockStateManager) FindZombieWorkflows(_ context.Context, stal
 	return zombies, nil
 }
 
+func (m *threadSafeMockStateManager) AcquireWorkflowLock(_ context.Context, _ core.WorkflowID) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.lockAcquired = true
+	return nil
+}
+
+func (m *threadSafeMockStateManager) ReleaseWorkflowLock(_ context.Context, _ core.WorkflowID) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.lockAcquired = false
+	return nil
+}
+
+func (m *threadSafeMockStateManager) RefreshWorkflowLock(_ context.Context, _ core.WorkflowID) error {
+	return nil
+}
+
+func (m *threadSafeMockStateManager) SetWorkflowRunning(_ context.Context, _ core.WorkflowID) error {
+	return nil
+}
+
+func (m *threadSafeMockStateManager) ClearWorkflowRunning(_ context.Context, _ core.WorkflowID) error {
+	return nil
+}
+
+func (m *threadSafeMockStateManager) ListRunningWorkflows(_ context.Context) ([]core.WorkflowID, error) {
+	return nil, nil
+}
+
+func (m *threadSafeMockStateManager) IsWorkflowRunning(_ context.Context, _ core.WorkflowID) (bool, error) {
+	return false, nil
+}
+
+func (m *threadSafeMockStateManager) UpdateWorkflowHeartbeat(_ context.Context, id core.WorkflowID) error {
+	return m.UpdateHeartbeat(context.Background(), id)
+}
+
 // mockAgentRegistryIntegration for integration tests - separate from unit test mock
 type mockAgentRegistryIntegration struct {
 	agents    map[string]*mockAgent
