@@ -190,6 +190,52 @@ type SynthesizerConfig struct {
 	Agent string `mapstructure:"agent"`
 }
 
+// ExecutionMode defines how workflow phases execute agents.
+// This determines whether the multi-agent consensus mechanism is used
+// or if a single agent handles all phases independently.
+type ExecutionMode string
+
+const (
+	// ExecutionModeMultiAgent uses multiple agents with consensus mechanism.
+	// This is the default mode where agents iterate through V1→V2→...→Vn
+	// with a moderator evaluating consensus and a synthesizer consolidating results.
+	// Best for: Complex features, critical code, architectural decisions.
+	// Typical execution time: 5-15 minutes.
+	ExecutionModeMultiAgent ExecutionMode = "multi_agent"
+
+	// ExecutionModeSingleAgent uses a single agent without iteration.
+	// Bypasses the moderator and synthesizer, running each phase with one agent.
+	// Best for: Simple tasks, bug fixes, documentation, quick iterations.
+	// Typical execution time: 1-3 minutes.
+	ExecutionModeSingleAgent ExecutionMode = "single_agent"
+)
+
+// IsValid checks if the execution mode is a known valid value.
+// An empty string is considered valid and defaults to multi-agent mode.
+func (m ExecutionMode) IsValid() bool {
+	switch m {
+	case ExecutionModeMultiAgent, ExecutionModeSingleAgent, "":
+		return true
+	default:
+		return false
+	}
+}
+
+// IsSingleAgent returns true if this mode represents single-agent execution.
+func (m ExecutionMode) IsSingleAgent() bool {
+	return m == ExecutionModeSingleAgent
+}
+
+// String returns the string representation of the execution mode.
+func (m ExecutionMode) String() string {
+	return string(m)
+}
+
+// DefaultExecutionMode returns the default execution mode (multi-agent).
+func DefaultExecutionMode() ExecutionMode {
+	return ExecutionModeMultiAgent
+}
+
 // SingleAgentConfig configures single-agent execution mode for the analyze phase.
 // When enabled, the analysis phase runs with a single agent, bypassing the
 // multi-agent consensus mechanism. This is useful for simpler tasks that don't
