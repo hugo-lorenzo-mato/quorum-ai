@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
@@ -14,6 +15,7 @@ import (
 
 // WorkflowWorktreeManagerImpl implements core.WorkflowWorktreeManager.
 type WorkflowWorktreeManagerImpl struct {
+	mu       sync.Mutex // Protects concurrent git operations
 	baseDir  string
 	repoPath string
 	git      *Client
@@ -88,6 +90,9 @@ func sanitizeForPath(s string) string {
 
 // InitializeWorkflow creates a workflow branch and worktree root directory.
 func (m *WorkflowWorktreeManagerImpl) InitializeWorkflow(ctx context.Context, workflowID string, baseBranch string) (*core.WorkflowGitInfo, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	m.logger.Info("initializing workflow git isolation",
 		"workflow_id", workflowID,
 		"base_branch", baseBranch)
@@ -133,6 +138,9 @@ func (m *WorkflowWorktreeManagerImpl) InitializeWorkflow(ctx context.Context, wo
 
 // CreateTaskWorktree creates a worktree for a task within the workflow namespace.
 func (m *WorkflowWorktreeManagerImpl) CreateTaskWorktree(ctx context.Context, workflowID string, task *core.Task) (*core.WorktreeInfo, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	m.logger.Info("creating task worktree",
 		"workflow_id", workflowID,
 		"task_id", task.ID)
@@ -184,6 +192,9 @@ func (m *WorkflowWorktreeManagerImpl) CreateTaskWorktree(ctx context.Context, wo
 
 // RemoveTaskWorktree removes a task's worktree and optionally its branch.
 func (m *WorkflowWorktreeManagerImpl) RemoveTaskWorktree(ctx context.Context, workflowID string, taskID core.TaskID, removeBranch bool) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	m.logger.Info("removing task worktree",
 		"workflow_id", workflowID,
 		"task_id", taskID,
@@ -229,6 +240,15 @@ func (m *WorkflowWorktreeManagerImpl) RemoveTaskWorktree(ctx context.Context, wo
 
 // MergeTaskToWorkflow merges a task branch into the workflow branch.
 func (m *WorkflowWorktreeManagerImpl) MergeTaskToWorkflow(ctx context.Context, workflowID string, taskID core.TaskID, strategy string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return m.mergeTaskToWorkflowLocked(ctx, workflowID, taskID, strategy)
+}
+
+// mergeTaskToWorkflowLocked is the internal implementation without mutex.
+// Caller must hold m.mu.
+func (m *WorkflowWorktreeManagerImpl) mergeTaskToWorkflowLocked(ctx context.Context, workflowID string, taskID core.TaskID, strategy string) error {
 	m.logger.Info("merging task to workflow",
 		"workflow_id", workflowID,
 		"task_id", taskID,
@@ -330,6 +350,9 @@ func (m *WorkflowWorktreeManagerImpl) getUniqueCommits(ctx context.Context, base
 
 // MergeAllTasksToWorkflow merges all completed task branches to workflow branch.
 func (m *WorkflowWorktreeManagerImpl) MergeAllTasksToWorkflow(ctx context.Context, workflowID string, taskIDs []core.TaskID, strategy string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	m.logger.Info("merging all tasks to workflow",
 		"workflow_id", workflowID,
 		"task_count", len(taskIDs),
@@ -337,7 +360,7 @@ func (m *WorkflowWorktreeManagerImpl) MergeAllTasksToWorkflow(ctx context.Contex
 
 	var errs []string
 	for _, taskID := range taskIDs {
-		if err := m.MergeTaskToWorkflow(ctx, workflowID, taskID, strategy); err != nil {
+		if err := m.mergeTaskToWorkflowLocked(ctx, workflowID, taskID, strategy); err != nil {
 			errs = append(errs, fmt.Sprintf("task %s: %v", taskID, err))
 			// Continue with other tasks unless we have a critical failure
 		}
@@ -352,6 +375,9 @@ func (m *WorkflowWorktreeManagerImpl) MergeAllTasksToWorkflow(ctx context.Contex
 
 // FinalizeWorkflow completes workflow Git operations and optionally merges to base.
 func (m *WorkflowWorktreeManagerImpl) FinalizeWorkflow(ctx context.Context, workflowID string, merge bool) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	m.logger.Info("finalizing workflow",
 		"workflow_id", workflowID,
 		"merge_to_base", merge)
@@ -393,7 +419,7 @@ func (m *WorkflowWorktreeManagerImpl) FinalizeWorkflow(ctx context.Context, work
 	}
 
 	// Cleanup task worktrees (but keep branches for history)
-	if err := m.CleanupWorkflow(ctx, workflowID, false); err != nil {
+	if err := m.cleanupWorkflowLocked(ctx, workflowID, false); err != nil {
 		m.logger.Warn("failed to cleanup workflow", "error", err)
 	}
 
@@ -402,6 +428,15 @@ func (m *WorkflowWorktreeManagerImpl) FinalizeWorkflow(ctx context.Context, work
 
 // CleanupWorkflow removes all Git artifacts for a workflow.
 func (m *WorkflowWorktreeManagerImpl) CleanupWorkflow(ctx context.Context, workflowID string, removeWorkflowBranch bool) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return m.cleanupWorkflowLocked(ctx, workflowID, removeWorkflowBranch)
+}
+
+// cleanupWorkflowLocked is the internal implementation without mutex.
+// Caller must hold m.mu.
+func (m *WorkflowWorktreeManagerImpl) cleanupWorkflowLocked(ctx context.Context, workflowID string, removeWorkflowBranch bool) error {
 	m.logger.Info("cleaning up workflow",
 		"workflow_id", workflowID,
 		"remove_workflow_branch", removeWorkflowBranch)

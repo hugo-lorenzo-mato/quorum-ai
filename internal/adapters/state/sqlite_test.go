@@ -1192,3 +1192,229 @@ func TestSQLiteStateManager_UpdateWorkflowHeartbeat(t *testing.T) {
 		t.Error("Expected wf-heartbeat-002 to be running after heartbeat update")
 	}
 }
+
+func TestSQLiteStateManager_WorkflowBranchPersistence(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "state.db")
+
+	manager, err := NewSQLiteStateManager(dbPath)
+	if err != nil {
+		t.Fatalf("NewSQLiteStateManager() error = %v", err)
+	}
+	defer manager.Close()
+
+	ctx := context.Background()
+
+	// Create workflow with WorkflowBranch
+	state := newTestStateSQLite()
+	state.WorkflowID = "wf-branch-test"
+	state.WorkflowBranch = "quorum/wf-branch-test"
+
+	// Save
+	if err := manager.Save(ctx, state); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	// Load and verify
+	loaded, err := manager.LoadByID(ctx, "wf-branch-test")
+	if err != nil {
+		t.Fatalf("LoadByID() error = %v", err)
+	}
+	if loaded == nil {
+		t.Fatal("LoadByID() returned nil")
+	}
+
+	if loaded.WorkflowBranch != "quorum/wf-branch-test" {
+		t.Errorf("WorkflowBranch = %q, want %q", loaded.WorkflowBranch, "quorum/wf-branch-test")
+	}
+}
+
+func TestSQLiteStateManager_TaskMergeFieldsPersistence(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "state.db")
+
+	manager, err := NewSQLiteStateManager(dbPath)
+	if err != nil {
+		t.Fatalf("NewSQLiteStateManager() error = %v", err)
+	}
+	defer manager.Close()
+
+	ctx := context.Background()
+
+	// Create workflow with tasks that have merge fields
+	state := newTestStateSQLite()
+	state.WorkflowID = "wf-merge-test"
+	state.Tasks = map[core.TaskID]*core.TaskState{
+		"task-merge-pending": {
+			ID:           "task-merge-pending",
+			Phase:        core.PhaseAnalyze,
+			Name:         "Task with merge pending",
+			Status:       core.TaskStatusCompleted,
+			MergePending: true,
+			MergeCommit:  "",
+		},
+		"task-merged": {
+			ID:           "task-merged",
+			Phase:        core.PhaseAnalyze,
+			Name:         "Task that was merged",
+			Status:       core.TaskStatusCompleted,
+			MergePending: false,
+			MergeCommit:  "abc123def456",
+		},
+	}
+	state.TaskOrder = []core.TaskID{"task-merge-pending", "task-merged"}
+
+	// Save
+	if err := manager.Save(ctx, state); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	// Load and verify
+	loaded, err := manager.LoadByID(ctx, "wf-merge-test")
+	if err != nil {
+		t.Fatalf("LoadByID() error = %v", err)
+	}
+	if loaded == nil {
+		t.Fatal("LoadByID() returned nil")
+	}
+
+	// Verify task with MergePending=true
+	taskPending := loaded.Tasks["task-merge-pending"]
+	if taskPending == nil {
+		t.Fatal("task-merge-pending not found")
+	}
+	if !taskPending.MergePending {
+		t.Error("task-merge-pending.MergePending = false, want true")
+	}
+	if taskPending.MergeCommit != "" {
+		t.Errorf("task-merge-pending.MergeCommit = %q, want empty", taskPending.MergeCommit)
+	}
+
+	// Verify task with MergeCommit
+	taskMerged := loaded.Tasks["task-merged"]
+	if taskMerged == nil {
+		t.Fatal("task-merged not found")
+	}
+	if taskMerged.MergePending {
+		t.Error("task-merged.MergePending = true, want false")
+	}
+	if taskMerged.MergeCommit != "abc123def456" {
+		t.Errorf("task-merged.MergeCommit = %q, want %q", taskMerged.MergeCommit, "abc123def456")
+	}
+}
+
+func TestSQLiteStateManager_WorkflowIsolationFieldsPersistence(t *testing.T) {
+	// Comprehensive test for all workflow isolation fields
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "state.db")
+
+	manager, err := NewSQLiteStateManager(dbPath)
+	if err != nil {
+		t.Fatalf("NewSQLiteStateManager() error = %v", err)
+	}
+	defer manager.Close()
+
+	ctx := context.Background()
+
+	// Create workflow with all isolation fields populated
+	state := newTestStateSQLite()
+	state.WorkflowID = "wf-isolation-test"
+	state.WorkflowBranch = "quorum/wf-isolation-test"
+	state.Tasks = map[core.TaskID]*core.TaskState{
+		"task-1": {
+			ID:           "task-1",
+			Phase:        core.PhaseAnalyze,
+			Name:         "Task with worktree",
+			Status:       core.TaskStatusRunning,
+			WorktreePath: "/tmp/worktrees/task-1",
+			Branch:       "quorum/wf-isolation-test__task-1",
+			LastCommit:   "commit123",
+			MergePending: false,
+			MergeCommit:  "",
+		},
+		"task-2": {
+			ID:           "task-2",
+			Phase:        core.PhaseAnalyze,
+			Name:         "Completed task with merge",
+			Status:       core.TaskStatusCompleted,
+			WorktreePath: "",
+			Branch:       "quorum/wf-isolation-test__task-2",
+			LastCommit:   "commit456",
+			MergePending: false,
+			MergeCommit:  "merge789",
+		},
+		"task-3": {
+			ID:           "task-3",
+			Phase:        core.PhaseAnalyze,
+			Name:         "Task with merge conflict",
+			Status:       core.TaskStatusCompleted,
+			WorktreePath: "",
+			Branch:       "quorum/wf-isolation-test__task-3",
+			LastCommit:   "commitabc",
+			MergePending: true,
+			MergeCommit:  "",
+		},
+	}
+	state.TaskOrder = []core.TaskID{"task-1", "task-2", "task-3"}
+
+	// Save
+	if err := manager.Save(ctx, state); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	// Load and verify all fields
+	loaded, err := manager.LoadByID(ctx, "wf-isolation-test")
+	if err != nil {
+		t.Fatalf("LoadByID() error = %v", err)
+	}
+	if loaded == nil {
+		t.Fatal("LoadByID() returned nil")
+	}
+
+	// Verify workflow-level fields
+	if loaded.WorkflowBranch != "quorum/wf-isolation-test" {
+		t.Errorf("WorkflowBranch = %q, want %q", loaded.WorkflowBranch, "quorum/wf-isolation-test")
+	}
+
+	// Verify task-1 (running with worktree)
+	task1 := loaded.Tasks["task-1"]
+	if task1 == nil {
+		t.Fatal("task-1 not found")
+	}
+	if task1.WorktreePath != "/tmp/worktrees/task-1" {
+		t.Errorf("task-1.WorktreePath = %q, want %q", task1.WorktreePath, "/tmp/worktrees/task-1")
+	}
+	if task1.Branch != "quorum/wf-isolation-test__task-1" {
+		t.Errorf("task-1.Branch = %q, want %q", task1.Branch, "quorum/wf-isolation-test__task-1")
+	}
+	if task1.LastCommit != "commit123" {
+		t.Errorf("task-1.LastCommit = %q, want %q", task1.LastCommit, "commit123")
+	}
+	if task1.MergePending {
+		t.Error("task-1.MergePending = true, want false")
+	}
+
+	// Verify task-2 (completed with merge commit)
+	task2 := loaded.Tasks["task-2"]
+	if task2 == nil {
+		t.Fatal("task-2 not found")
+	}
+	if task2.MergeCommit != "merge789" {
+		t.Errorf("task-2.MergeCommit = %q, want %q", task2.MergeCommit, "merge789")
+	}
+	if task2.MergePending {
+		t.Error("task-2.MergePending = true, want false")
+	}
+
+	// Verify task-3 (merge pending due to conflict)
+	task3 := loaded.Tasks["task-3"]
+	if task3 == nil {
+		t.Fatal("task-3 not found")
+	}
+	if !task3.MergePending {
+		t.Error("task-3.MergePending = false, want true")
+	}
+	if task3.MergeCommit != "" {
+		t.Errorf("task-3.MergeCommit = %q, want empty", task3.MergeCommit)
+	}
+}

@@ -40,6 +40,9 @@ var migrationV5 string
 //go:embed migrations/006_workflow_isolation.sql
 var migrationV6 string
 
+//go:embed migrations/007_task_merge_fields.sql
+var migrationV7 string
+
 // SQLiteStateManager implements StateManager with SQLite storage.
 type SQLiteStateManager struct {
 	dbPath     string
@@ -241,6 +244,14 @@ func (m *SQLiteStateManager) migrate() error {
 		}
 	}
 
+	if version < 7 {
+		// Migration V7 adds merge tracking fields to tasks table
+		_, err := m.db.Exec(migrationV7)
+		if err != nil && !strings.Contains(err.Error(), "already exists") && !strings.Contains(err.Error(), "duplicate column") {
+			return fmt.Errorf("applying migration v7: %w", err)
+		}
+	}
+
 	return nil
 }
 
@@ -293,8 +304,9 @@ func (m *SQLiteStateManager) Save(ctx context.Context, state *core.WorkflowState
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO workflows (
 			id, version, title, status, current_phase, prompt, optimized_prompt,
-			task_order, config, metrics, checksum, created_at, updated_at, report_path
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			task_order, config, metrics, checksum, created_at, updated_at, report_path,
+			workflow_branch
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			version = excluded.version,
 			title = excluded.title,
@@ -307,13 +319,15 @@ func (m *SQLiteStateManager) Save(ctx context.Context, state *core.WorkflowState
 			metrics = excluded.metrics,
 			checksum = excluded.checksum,
 			updated_at = excluded.updated_at,
-			report_path = excluded.report_path
+			report_path = excluded.report_path,
+			workflow_branch = excluded.workflow_branch
 	`,
 		state.WorkflowID, state.Version, state.Title, state.Status, state.CurrentPhase,
 		state.Prompt, state.OptimizedPrompt, string(taskOrderJSON),
 		nullableString(configJSON), nullableString(metricsJSON),
 		checksum, state.CreatedAt, state.UpdatedAt,
 		nullableString([]byte(state.ReportPath)),
+		nullableString([]byte(state.WorkflowBranch)),
 	)
 	if err != nil {
 		return fmt.Errorf("upserting workflow: %w", err)
@@ -385,10 +399,14 @@ func (m *SQLiteStateManager) insertTask(ctx context.Context, tx *sql.Tx, workflo
 		}
 	}
 
-	// Convert bool to SQLite integer (0/1)
+	// Convert bools to SQLite integer (0/1)
 	resumableInt := 0
 	if task.Resumable {
 		resumableInt = 1
+	}
+	mergePendingInt := 0
+	if task.MergePending {
+		mergePendingInt = 1
 	}
 
 	_, err = tx.ExecContext(ctx, `
@@ -397,8 +415,9 @@ func (m *SQLiteStateManager) insertTask(ctx context.Context, tx *sql.Tx, workflo
 			dependencies, tokens_in, tokens_out, cost_usd, retries,
 			error, worktree_path, started_at, completed_at,
 			output, output_file, model_used, finish_reason, tool_calls,
-			last_commit, files_modified, branch, resumable, resume_hint
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			last_commit, files_modified, branch, resumable, resume_hint,
+			merge_pending, merge_commit
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
 		task.ID, workflowID, task.Phase, task.Name, task.Status,
 		task.CLI, task.Model, string(depsJSON),
@@ -410,6 +429,7 @@ func (m *SQLiteStateManager) insertTask(ctx context.Context, tx *sql.Tx, workflo
 		nullableString(toolCallsJSON),
 		nullableString([]byte(task.LastCommit)), nullableString(filesModifiedJSON),
 		nullableString([]byte(task.Branch)), resumableInt, nullableString([]byte(task.ResumeHint)),
+		mergePendingInt, nullableString([]byte(task.MergeCommit)),
 	)
 	return err
 }
@@ -460,15 +480,17 @@ func (m *SQLiteStateManager) loadWorkflowByID(ctx context.Context, id core.Workf
 	var checksum sql.NullString
 	var reportPath sql.NullString
 	var title sql.NullString
+	var workflowBranch sql.NullString
 
 	err := m.readDB.QueryRowContext(ctx, `
 		SELECT id, version, title, status, current_phase, prompt, optimized_prompt,
-		       task_order, config, metrics, checksum, created_at, updated_at, report_path
+		       task_order, config, metrics, checksum, created_at, updated_at, report_path,
+		       workflow_branch
 		FROM workflows WHERE id = ?
 	`, id).Scan(
 		&state.WorkflowID, &state.Version, &title, &state.Status, &state.CurrentPhase,
 		&state.Prompt, &optimizedPrompt, &taskOrderJSON, &configJSON, &metricsJSON,
-		&checksum, &state.CreatedAt, &state.UpdatedAt, &reportPath,
+		&checksum, &state.CreatedAt, &state.UpdatedAt, &reportPath, &workflowBranch,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil // Workflow doesn't exist
@@ -488,6 +510,9 @@ func (m *SQLiteStateManager) loadWorkflowByID(ctx context.Context, id core.Workf
 	}
 	if reportPath.Valid {
 		state.ReportPath = reportPath.String
+	}
+	if workflowBranch.Valid {
+		state.WorkflowBranch = workflowBranch.String
 	}
 
 	// Parse JSON fields
@@ -516,7 +541,8 @@ func (m *SQLiteStateManager) loadWorkflowByID(ctx context.Context, id core.Workf
 		       tokens_in, tokens_out, cost_usd, retries, error,
 		       worktree_path, started_at, completed_at, output,
 		       output_file, model_used, finish_reason, tool_calls,
-		       last_commit, files_modified, branch, resumable, resume_hint
+		       last_commit, files_modified, branch, resumable, resume_hint,
+		       merge_pending, merge_commit
 		FROM tasks WHERE workflow_id = ?
 	`, id)
 	if err != nil {
@@ -567,6 +593,8 @@ func (m *SQLiteStateManager) scanTask(rows *sql.Rows) (*core.TaskState, error) {
 	var output, outputFile, modelUsed, finishReason sql.NullString
 	var lastCommit, filesModifiedJSON, branch, resumeHint sql.NullString
 	var resumable int
+	var mergePending sql.NullInt64
+	var mergeCommit sql.NullString
 
 	err := rows.Scan(
 		&task.ID, &task.Phase, &task.Name, &task.Status,
@@ -575,6 +603,7 @@ func (m *SQLiteStateManager) scanTask(rows *sql.Rows) (*core.TaskState, error) {
 		&errorStr, &worktreePath, &startedAt, &completedAt,
 		&output, &outputFile, &modelUsed, &finishReason, &toolCallsJSON,
 		&lastCommit, &filesModifiedJSON, &branch, &resumable, &resumeHint,
+		&mergePending, &mergeCommit,
 	)
 	if err != nil {
 		return nil, err
@@ -620,6 +649,12 @@ func (m *SQLiteStateManager) scanTask(rows *sql.Rows) (*core.TaskState, error) {
 		task.ResumeHint = resumeHint.String
 	}
 	task.Resumable = resumable != 0
+	if mergePending.Valid {
+		task.MergePending = mergePending.Int64 != 0
+	}
+	if mergeCommit.Valid {
+		task.MergeCommit = mergeCommit.String
+	}
 
 	if depsJSON.Valid && depsJSON.String != "" {
 		if err := json.Unmarshal([]byte(depsJSON.String), &task.Dependencies); err != nil {
@@ -1226,10 +1261,18 @@ func (m *SQLiteStateManager) Restore(ctx context.Context) (*core.WorkflowState, 
 	readDB.SetConnMaxLifetime(5 * time.Minute)
 	m.readDB = readDB
 
-	// Load active workflow
-	m.mu.Unlock() // Temporarily unlock for Load
-	defer m.mu.Lock()
-	return m.Load(ctx)
+	// Load active workflow - query active ID and load directly without lock dance
+	// (we already hold the write lock, so calling Load() would deadlock on RLock)
+	var activeID string
+	err = m.readDB.QueryRowContext(ctx, "SELECT workflow_id FROM active_workflow WHERE id = 1").Scan(&activeID)
+	if err == sql.ErrNoRows {
+		return nil, nil // No active workflow
+	}
+	if err != nil {
+		return nil, fmt.Errorf("getting active workflow ID after restore: %w", err)
+	}
+
+	return m.loadWorkflowByID(ctx, core.WorkflowID(activeID))
 }
 
 // Helper functions for nullable values
