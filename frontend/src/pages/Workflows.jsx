@@ -28,6 +28,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { ConfirmDialog } from '../components/config/ConfirmDialog';
+import { ExecutionModeBadge } from '../components/workflow';
 
 function normalizeWhitespace(s) {
   return String(s || '').replace(/\s+/g, ' ').trim();
@@ -145,6 +146,7 @@ function WorkflowCard({ workflow, onClick, onDelete }) {
       <div className="flex items-center gap-4 text-xs text-muted-foreground">
         <span>Phase: {workflow.current_phase || 'N/A'}</span>
         <span>Tasks: {workflow.task_count || 0}</span>
+        <ExecutionModeBadge config={workflow.config} variant="inline" />
       </div>
       <ChevronRight className="absolute right-4 bottom-4 w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
     </div>
@@ -652,7 +654,10 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
               </button>
             )}
           </div>
-          <p className="text-sm text-muted-foreground">{workflow.id}</p>
+          <div className="flex items-center gap-3 mt-1">
+            <p className="text-sm text-muted-foreground">{workflow.id}</p>
+            <ExecutionModeBadge config={workflow.config} variant="inline" />
+          </div>
         </div>
         <div className="flex items-center gap-3">
           {workflow.status === 'running' && (
@@ -755,7 +760,10 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
             <p className="text-sm text-muted-foreground mb-2 line-clamp-3">
               {workflow.prompt || 'No prompt'}
             </p>
-            <StatusBadge status={workflow.status} />
+            <div className="flex flex-wrap items-center gap-3">
+              <StatusBadge status={workflow.status} />
+              <ExecutionModeBadge config={workflow.config} variant="detailed" />
+            </div>
           </div>
           {canEdit && (
             <button
