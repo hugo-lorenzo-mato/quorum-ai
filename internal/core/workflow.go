@@ -46,6 +46,15 @@ type WorkflowConfig struct {
 	Timeout            time.Duration
 	DryRun             bool
 	Sandbox            bool
+
+	// ExecutionMode determines whether to use multi-agent consensus or single-agent mode.
+	ExecutionMode string
+
+	// SingleAgentName is the name of the agent to use when execution_mode is "single_agent".
+	SingleAgentName string
+
+	// SingleAgentModel is an optional model override for the single agent.
+	SingleAgentModel string
 }
 
 // NewWorkflow creates a new workflow instance.

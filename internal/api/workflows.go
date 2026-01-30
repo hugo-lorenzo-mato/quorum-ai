@@ -39,6 +39,7 @@ type WorkflowResponse struct {
 	Metrics         *Metrics          `json:"metrics,omitempty"`
 	AgentEvents     []core.AgentEvent `json:"agent_events,omitempty"` // Persisted agent activity
 	Tasks           []TaskResponse    `json:"tasks,omitempty"`        // Persisted task state for reload
+	Config          *WorkflowConfig   `json:"config,omitempty"`       // NEW: Workflow configuration
 }
 
 // Metrics represents workflow metrics in API responses.
@@ -63,6 +64,33 @@ type WorkflowConfig struct {
 	TimeoutSeconds     int     `json:"timeout_seconds,omitempty"`
 	DryRun             bool    `json:"dry_run,omitempty"`
 	Sandbox            bool    `json:"sandbox,omitempty"`
+
+	// ExecutionMode determines whether to use multi-agent consensus or single-agent mode.
+	// Valid values: "multi_agent" (default), "single_agent"
+	// When empty, defaults to multi-agent mode (existing behavior).
+	ExecutionMode string `json:"execution_mode,omitempty"`
+
+	// SingleAgentName is the name of the agent to use when execution_mode is "single_agent".
+	// Required when execution_mode is "single_agent".
+	// Must be a configured and enabled agent (e.g., "claude", "gemini", "codex").
+	SingleAgentName string `json:"single_agent_name,omitempty"`
+
+	// SingleAgentModel is an optional model override for the single agent.
+	// If empty, the agent's default phase model is used.
+	SingleAgentModel string `json:"single_agent_model,omitempty"`
+}
+
+// IsSingleAgentMode returns true if the workflow is configured for single-agent execution.
+func (c *WorkflowConfig) IsSingleAgentMode() bool {
+	return c != nil && c.ExecutionMode == "single_agent"
+}
+
+// GetExecutionMode returns the execution mode, defaulting to "multi_agent" if not specified.
+func (c *WorkflowConfig) GetExecutionMode() string {
+	if c == nil || c.ExecutionMode == "" {
+		return "multi_agent"
+	}
+	return c.ExecutionMode
 }
 
 // RunWorkflowResponse is the response for starting a workflow.
@@ -259,6 +287,9 @@ func (s *Server) handleCreateWorkflow(w http.ResponseWriter, r *http.Request) {
 		}
 		config.DryRun = req.Config.DryRun
 		config.Sandbox = req.Config.Sandbox
+		config.ExecutionMode = req.Config.ExecutionMode
+		config.SingleAgentName = req.Config.SingleAgentName
+		config.SingleAgentModel = req.Config.SingleAgentModel
 	}
 
 	// Create workflow state
@@ -476,6 +507,19 @@ func stateToWorkflowResponse(state *core.WorkflowState, activeID core.WorkflowID
 			if task, ok := state.Tasks[taskID]; ok {
 				resp.Tasks = append(resp.Tasks, taskStateToResponse(task))
 			}
+		}
+	}
+
+	if state.Config != nil {
+		resp.Config = &WorkflowConfig{
+			ConsensusThreshold: state.Config.ConsensusThreshold,
+			MaxRetries:         state.Config.MaxRetries,
+			TimeoutSeconds:     int(state.Config.Timeout.Seconds()),
+			DryRun:             state.Config.DryRun,
+			Sandbox:            state.Config.Sandbox,
+			ExecutionMode:      state.Config.ExecutionMode,
+			SingleAgentName:    state.Config.SingleAgentName,
+			SingleAgentModel:   state.Config.SingleAgentModel,
 		}
 	}
 

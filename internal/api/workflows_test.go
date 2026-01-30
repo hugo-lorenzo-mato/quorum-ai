@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"log/slog"
@@ -359,5 +360,246 @@ func TestHandleGetWorkflow_IncludesReportPathAndOptimizedPrompt(t *testing.T) {
 	}
 	if resp.OptimizedPrompt != "optimized prompt" {
 		t.Errorf("expected optimized_prompt %q, got %q", "optimized prompt", resp.OptimizedPrompt)
+	}
+}
+
+func TestWorkflowConfig_IsSingleAgentMode(t *testing.T) {
+	tests := []struct {
+		name     string
+		config   *WorkflowConfig
+		expected bool
+	}{
+		{
+			name:     "nil config returns false",
+			config:   nil,
+			expected: false,
+		},
+		{
+			name:     "empty execution_mode returns false",
+			config:   &WorkflowConfig{},
+			expected: false,
+		},
+		{
+			name:     "multi_agent returns false",
+			config:   &WorkflowConfig{ExecutionMode: "multi_agent"},
+			expected: false,
+		},
+		{
+			name:     "single_agent returns true",
+			config:   &WorkflowConfig{ExecutionMode: "single_agent"},
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.config.IsSingleAgentMode(); got != tt.expected {
+				t.Errorf("IsSingleAgentMode() = %v, want %v", got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestWorkflowConfig_GetExecutionMode(t *testing.T) {
+	tests := []struct {
+		name     string
+		config   *WorkflowConfig
+		expected string
+	}{
+		{
+			name:     "nil config returns multi_agent",
+			config:   nil,
+			expected: "multi_agent",
+		},
+		{
+			name:     "empty returns multi_agent",
+			config:   &WorkflowConfig{},
+			expected: "multi_agent",
+		},
+		{
+			name:     "single_agent returns single_agent",
+			config:   &WorkflowConfig{ExecutionMode: "single_agent"},
+			expected: "single_agent",
+		},
+		{
+			name:     "multi_agent returns multi_agent",
+			config:   &WorkflowConfig{ExecutionMode: "multi_agent"},
+			expected: "multi_agent",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.config.GetExecutionMode(); got != tt.expected {
+				t.Errorf("GetExecutionMode() = %v, want %v", got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestWorkflowConfig_JSON_Roundtrip(t *testing.T) {
+	original := WorkflowConfig{
+		ConsensusThreshold: 0.8,
+		DryRun:             true,
+		ExecutionMode:      "single_agent",
+		SingleAgentName:    "claude",
+		SingleAgentModel:   "claude-3-sonnet",
+	}
+
+	data, err := json.Marshal(original)
+	if err != nil {
+		t.Fatalf("failed to marshal: %v", err)
+	}
+
+	var decoded WorkflowConfig
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("failed to unmarshal: %v", err)
+	}
+
+	if decoded.ExecutionMode != original.ExecutionMode {
+		t.Errorf("ExecutionMode = %q, want %q", decoded.ExecutionMode, original.ExecutionMode)
+	}
+	if decoded.SingleAgentName != original.SingleAgentName {
+		t.Errorf("SingleAgentName = %q, want %q", decoded.SingleAgentName, original.SingleAgentName)
+	}
+	if decoded.SingleAgentModel != original.SingleAgentModel {
+		t.Errorf("SingleAgentModel = %q, want %q", decoded.SingleAgentModel, original.SingleAgentModel)
+	}
+	if decoded.ConsensusThreshold != original.ConsensusThreshold {
+		t.Errorf("ConsensusThreshold = %v, want %v", decoded.ConsensusThreshold, original.ConsensusThreshold)
+	}
+	if decoded.DryRun != original.DryRun {
+		t.Errorf("DryRun = %v, want %v", decoded.DryRun, original.DryRun)
+	}
+}
+
+func TestWorkflowConfig_Backward_Compatibility(t *testing.T) {
+	// JSON without new fields should deserialize correctly
+	oldJSON := `{"consensus_threshold": 0.75, "dry_run": true}`
+
+	var cfg WorkflowConfig
+	if err := json.Unmarshal([]byte(oldJSON), &cfg); err != nil {
+		t.Fatalf("failed to unmarshal: %v", err)
+	}
+
+	if cfg.ConsensusThreshold != 0.75 {
+		t.Errorf("ConsensusThreshold = %v, want %v", cfg.ConsensusThreshold, 0.75)
+	}
+	if !cfg.DryRun {
+		t.Errorf("DryRun = %v, want %v", cfg.DryRun, true)
+	}
+	if cfg.ExecutionMode != "" {
+		t.Errorf("ExecutionMode = %q, want empty", cfg.ExecutionMode)
+	}
+	if cfg.SingleAgentName != "" {
+		t.Errorf("SingleAgentName = %q, want empty", cfg.SingleAgentName)
+	}
+	if cfg.SingleAgentModel != "" {
+		t.Errorf("SingleAgentModel = %q, want empty", cfg.SingleAgentModel)
+	}
+	if cfg.IsSingleAgentMode() {
+		t.Errorf("IsSingleAgentMode() = true, want false")
+	}
+}
+
+func TestCreateWorkflow_WithSingleAgentMode(t *testing.T) {
+	sm := newMockStateManager()
+	eb := events.New(100)
+	srv := NewServer(sm, eb)
+
+	reqBody := CreateWorkflowRequest{
+		Prompt: "Test single agent workflow",
+		Title:  "Single Agent Test",
+		Config: &WorkflowConfig{
+			ExecutionMode:    "single_agent",
+			SingleAgentName:  "claude",
+			SingleAgentModel: "claude-3-haiku",
+		},
+	}
+	body, _ := json.Marshal(reqBody)
+
+	// Use chi router to handle the request properly
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/workflows/", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusCreated, w.Code, w.Body.String())
+	}
+
+	var resp WorkflowResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp.Config == nil {
+		t.Fatal("expected config in response, got nil")
+	}
+
+	if resp.Config.ExecutionMode != "single_agent" {
+		t.Errorf("expected execution_mode 'single_agent', got '%s'", resp.Config.ExecutionMode)
+	}
+
+	if resp.Config.SingleAgentName != "claude" {
+		t.Errorf("expected single_agent_name 'claude', got '%s'", resp.Config.SingleAgentName)
+	}
+
+	if resp.Config.SingleAgentModel != "claude-3-haiku" {
+		t.Errorf("expected single_agent_model 'claude-3-haiku', got '%s'", resp.Config.SingleAgentModel)
+	}
+
+	// Verify it was saved in state manager correctly
+	wfID := core.WorkflowID(resp.ID)
+	state, _ := sm.LoadByID(context.Background(), wfID)
+	if state.Config.ExecutionMode != "single_agent" {
+		t.Errorf("expected saved execution_mode 'single_agent', got '%s'", state.Config.ExecutionMode)
+	}
+}
+
+func TestGetWorkflow_IncludesConfig(t *testing.T) {
+	sm := newMockStateManager()
+	eb := events.New(100)
+	srv := NewServer(sm, eb)
+
+	wfID := core.WorkflowID("wf-config-test")
+	state := &core.WorkflowState{
+		WorkflowID: wfID,
+		Status:     core.WorkflowStatusPending,
+		Prompt:     "Test prompt",
+		Config: &core.WorkflowConfig{
+			ExecutionMode:   "single_agent",
+			SingleAgentName: "gemini",
+		},
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	sm.workflows[wfID] = state
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/workflows/"+string(wfID)+"/", nil)
+	w := httptest.NewRecorder()
+
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
+	}
+
+	var resp WorkflowResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp.Config == nil {
+		t.Fatal("expected config in response, got nil")
+	}
+
+	if resp.Config.ExecutionMode != "single_agent" {
+		t.Errorf("expected execution_mode 'single_agent', got '%s'", resp.Config.ExecutionMode)
+	}
+
+	if resp.Config.SingleAgentName != "gemini" {
+		t.Errorf("expected single_agent_name 'gemini', got '%s'", resp.Config.SingleAgentName)
 	}
 }
