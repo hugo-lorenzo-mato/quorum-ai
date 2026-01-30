@@ -132,9 +132,9 @@ func (l *Loader) setDefaults() {
 	// Phase defaults
 	// Analyze phase
 	l.v.SetDefault("phases.analyze.timeout", "2h")
-	l.v.SetDefault("phases.analyze.refiner.enabled", false)
+	l.v.SetDefault("phases.analyze.refiner.enabled", true)
 	l.v.SetDefault("phases.analyze.refiner.agent", "")
-	l.v.SetDefault("phases.analyze.moderator.enabled", false)
+	l.v.SetDefault("phases.analyze.moderator.enabled", true)
 	l.v.SetDefault("phases.analyze.moderator.agent", "")
 	l.v.SetDefault("phases.analyze.moderator.threshold", 0.80)
 	l.v.SetDefault("phases.analyze.moderator.min_rounds", 2)

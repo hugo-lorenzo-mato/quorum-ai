@@ -345,9 +345,9 @@ func TestLoader_ModeratorDefaults(t *testing.T) {
 	}
 
 	// Verify moderator defaults
-	// Moderator is disabled by default - user must enable and configure in config file
-	if cfg.Phases.Analyze.Moderator.Enabled {
-		t.Error("Phases.Analyze.Moderator.Enabled = true, want false (default)")
+	// Moderator is enabled by default for multi-agent consensus
+	if !cfg.Phases.Analyze.Moderator.Enabled {
+		t.Error("Phases.Analyze.Moderator.Enabled = false, want true (default)")
 	}
 	// Agent has NO default - user must configure it explicitly in config file
 	// Model is resolved from agent's phase_models.analyze at runtime
