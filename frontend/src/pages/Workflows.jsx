@@ -1185,7 +1185,6 @@ function NewWorkflowForm({ onSubmit, onCancel, loading }) {
                 <div className="flex items-center gap-2 mt-1.5 text-xs text-muted-foreground">
                   <span className="px-1.5 py-0.5 bg-muted rounded text-[10px]">Complex tasks</span>
                   <span className="px-1.5 py-0.5 bg-muted rounded text-[10px]">Higher quality</span>
-                  <span className="px-1.5 py-0.5 bg-muted rounded text-[10px]">x3 faster</span>
                 </div>
               </div>
             </label>
