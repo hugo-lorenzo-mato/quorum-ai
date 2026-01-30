@@ -231,7 +231,7 @@ func TestAnalyzeCmd_Flags(t *testing.T) {
 	}
 
 	// Test flags exist
-	flags := []string{"file", "dry-run", "max-retries", "output"}
+	flags := []string{"file", "dry-run", "max-retries", "output", "single-agent", "agent", "model"}
 	for _, flagName := range flags {
 		if analyzeCmd.Flags().Lookup(flagName) == nil {
 			t.Errorf("analyze command missing flag: %s", flagName)
@@ -253,7 +253,7 @@ func TestPlanCmd_Flags(t *testing.T) {
 	}
 
 	// Test flags exist
-	flags := []string{"dry-run", "max-retries", "output"}
+	flags := []string{"dry-run", "max-retries", "output", "single-agent", "agent", "model"}
 	for _, flagName := range flags {
 		if planCmd.Flags().Lookup(flagName) == nil {
 			t.Errorf("plan command missing flag: %s", flagName)
@@ -275,7 +275,7 @@ func TestExecuteCmd_Flags(t *testing.T) {
 	}
 
 	// Test flags exist
-	flags := []string{"dry-run", "max-retries", "output", "sandbox"}
+	flags := []string{"dry-run", "max-retries", "output", "sandbox", "single-agent", "agent", "model"}
 	for _, flagName := range flags {
 		if executeCmd.Flags().Lookup(flagName) == nil {
 			t.Errorf("execute command missing flag: %s", flagName)
@@ -312,7 +312,8 @@ func TestCountCompletedTasks_Empty(t *testing.T) {
 
 func TestInitializeWorkflowState(t *testing.T) {
 	prompt := "test prompt"
-	state := InitializeWorkflowState(prompt)
+	config := &core.WorkflowConfig{ExecutionMode: "single_agent", SingleAgentName: "claude"}
+	state := InitializeWorkflowState(prompt, config)
 
 	if state.Prompt != prompt {
 		t.Errorf("expected prompt '%s', got '%s'", prompt, state.Prompt)
@@ -328,6 +329,9 @@ func TestInitializeWorkflowState(t *testing.T) {
 	}
 	if state.Version != core.CurrentStateVersion {
 		t.Errorf("expected version %d, got %d", core.CurrentStateVersion, state.Version)
+	}
+	if state.Config != config {
+		t.Errorf("expected config %v, got %v", config, state.Config)
 	}
 }
 

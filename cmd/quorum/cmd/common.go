@@ -24,6 +24,13 @@ import (
 // cmdIDCounter provides additional uniqueness for workflow IDs generated from cmd.
 var cmdIDCounter uint64
 
+var (
+	// Shared single-agent mode flags
+	singleAgent bool   // --single-agent
+	agentName   string // --agent
+	agentModel  string // --model
+)
+
 const (
 	defaultWorkflowTimeout = 12 * time.Hour
 	defaultPhaseTimeout    = 2 * time.Hour
@@ -202,11 +209,7 @@ func InitPhaseRunner(ctx context.Context, phase core.Phase, maxRetries int, dryR
 			AbortThreshold:      cfg.Phases.Analyze.Moderator.AbortThreshold,
 			StagnationThreshold: cfg.Phases.Analyze.Moderator.StagnationThreshold,
 		},
-		SingleAgent: workflow.SingleAgentConfig{
-			Enabled: cfg.Phases.Analyze.SingleAgent.Enabled,
-			Agent:   cfg.Phases.Analyze.SingleAgent.Agent,
-			Model:   cfg.Phases.Analyze.SingleAgent.Model,
-		},
+		SingleAgent: buildSingleAgentConfig(cfg),
 		PhaseTimeouts: workflow.PhaseTimeouts{
 			Analyze: analyzeTimeout,
 			Plan:    planTimeout,
@@ -321,7 +324,7 @@ func CreateWorkflowContext(deps *PhaseRunnerDeps, state *core.WorkflowState) *wo
 }
 
 // InitializeWorkflowState creates a new workflow state for a fresh run.
-func InitializeWorkflowState(prompt string) *core.WorkflowState {
+func InitializeWorkflowState(prompt string, config *core.WorkflowConfig) *core.WorkflowState {
 	return &core.WorkflowState{
 		Version:      core.CurrentStateVersion,
 		WorkflowID:   core.WorkflowID(generateCmdWorkflowID()),
@@ -330,10 +333,30 @@ func InitializeWorkflowState(prompt string) *core.WorkflowState {
 		Prompt:       prompt,
 		Tasks:        make(map[core.TaskID]*core.TaskState),
 		TaskOrder:    make([]core.TaskID, 0),
+		Config:       config,
 		Checkpoints:  make([]core.Checkpoint, 0),
 		Metrics:      &core.StateMetrics{},
 		CreatedAt:    time.Now(),
 		UpdatedAt:    time.Now(),
+	}
+}
+
+// buildCoreWorkflowConfig creates a core.WorkflowConfig from RunnerConfig.
+func buildCoreWorkflowConfig(runnerCfg *workflow.RunnerConfig) *core.WorkflowConfig {
+	mode := "multi_agent"
+	if runnerCfg.SingleAgent.Enabled {
+		mode = "single_agent"
+	}
+
+	return &core.WorkflowConfig{
+		ConsensusThreshold: runnerCfg.Moderator.Threshold,
+		MaxRetries:         runnerCfg.MaxRetries,
+		Timeout:            runnerCfg.Timeout,
+		DryRun:             runnerCfg.DryRun,
+		Sandbox:            runnerCfg.Sandbox,
+		ExecutionMode:      mode,
+		SingleAgentName:    runnerCfg.SingleAgent.Agent,
+		SingleAgentModel:   runnerCfg.SingleAgent.Model,
 	}
 }
 
@@ -366,4 +389,45 @@ func phaseTimeoutValue(cfg *config.PhasesConfig, phase core.Phase) string {
 	default:
 		return ""
 	}
+}
+
+// buildSingleAgentConfig creates the SingleAgentConfig with CLI flag override.
+// CLI flags take precedence over config file settings.
+func buildSingleAgentConfig(cfg *config.Config) workflow.SingleAgentConfig {
+	// CLI flags override config file
+	if singleAgent {
+		return workflow.SingleAgentConfig{
+			Enabled: true,
+			Agent:   agentName,
+			Model:   agentModel,
+		}
+	}
+
+	// Fall back to config file settings
+	return workflow.SingleAgentConfig{
+		Enabled: cfg.Phases.Analyze.SingleAgent.Enabled,
+		Agent:   cfg.Phases.Analyze.SingleAgent.Agent,
+		Model:   cfg.Phases.Analyze.SingleAgent.Model,
+	}
+}
+
+// validateSingleAgentFlags validates the single-agent mode flag combinations.
+func validateSingleAgentFlags() error {
+	if singleAgent {
+		if agentName == "" {
+			return fmt.Errorf("--agent is required when using --single-agent flag\n" +
+				"Example: quorum run \"Fix bug\" --single-agent --agent claude")
+		}
+	} else {
+		// If not in single-agent mode, these flags shouldn't be used
+		if agentName != "" {
+			return fmt.Errorf("--agent requires --single-agent flag\n" +
+				"Example: quorum run \"Fix bug\" --single-agent --agent claude")
+		}
+		if agentModel != "" {
+			return fmt.Errorf("--model requires --single-agent flag\n" +
+				"Example: quorum run \"Fix bug\" --single-agent --agent claude --model claude-3-haiku")
+		}
+	}
+	return nil
 }

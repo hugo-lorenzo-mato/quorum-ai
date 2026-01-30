@@ -46,6 +46,14 @@ func init() {
 	analyzeCmd.Flags().BoolVar(&analyzeDryRun, "dry-run", false, "Simulate without executing")
 	analyzeCmd.Flags().IntVar(&analyzeMaxRetries, "max-retries", 3, "Maximum retry attempts")
 	analyzeCmd.Flags().StringVarP(&analyzeOutput, "output", "o", "", "Output mode (tui, plain, json, quiet)")
+
+	// Single-agent mode flags
+	analyzeCmd.Flags().BoolVar(&singleAgent, "single-agent", false,
+		"Run in single-agent mode (faster execution, no multi-agent consensus)")
+	analyzeCmd.Flags().StringVar(&agentName, "agent", "",
+		"Agent to use for single-agent mode (e.g., 'claude', 'gemini', 'codex')")
+	analyzeCmd.Flags().StringVar(&agentModel, "model", "",
+		"Override the agent's default model (optional, requires --single-agent)")
 }
 
 func runAnalyze(_ *cobra.Command, args []string) error {
@@ -61,6 +69,11 @@ func runAnalyze(_ *cobra.Command, args []string) error {
 		fmt.Println("\nReceived interrupt, stopping...")
 		cancel()
 	}()
+
+	// Validate single-agent flags
+	if err := validateSingleAgentFlags(); err != nil {
+		return err
+	}
 
 	// Detect output mode
 	detector := tui.NewDetector()
@@ -98,8 +111,11 @@ func runAnalyze(_ *cobra.Command, args []string) error {
 	}
 	defer func() { _ = deps.StateAdapter.ReleaseLock(ctx) }()
 
+	// Build workflow config for state
+	wfConfig := buildCoreWorkflowConfig(deps.RunnerConfig)
+
 	// Initialize workflow state
-	workflowState := InitializeWorkflowState(prompt)
+	workflowState := InitializeWorkflowState(prompt, wfConfig)
 
 	// Save initial state
 	if err := deps.StateAdapter.Save(ctx, workflowState); err != nil {

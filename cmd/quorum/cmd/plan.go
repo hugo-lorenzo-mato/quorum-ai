@@ -44,6 +44,14 @@ func init() {
 	planCmd.Flags().IntVar(&planMaxRetries, "max-retries", 3, "Maximum retry attempts")
 	planCmd.Flags().StringVarP(&planOutput, "output", "o", "", "Output mode (tui, plain, json, quiet)")
 	planCmd.Flags().StringVarP(&planWorkflowID, "workflow", "w", "", "Resume specific workflow by ID")
+
+	// Single-agent mode flags
+	planCmd.Flags().BoolVar(&singleAgent, "single-agent", false,
+		"Run in single-agent mode (faster execution, no multi-agent consensus)")
+	planCmd.Flags().StringVar(&agentName, "agent", "",
+		"Agent to use for single-agent mode (e.g., 'claude', 'gemini', 'codex')")
+	planCmd.Flags().StringVar(&agentModel, "model", "",
+		"Override the agent's default model (optional, requires --single-agent)")
 }
 
 func runPlan(_ *cobra.Command, _ []string) error {
@@ -59,6 +67,11 @@ func runPlan(_ *cobra.Command, _ []string) error {
 		fmt.Println("\nReceived interrupt, stopping...")
 		cancel()
 	}()
+
+	// Validate single-agent flags
+	if err := validateSingleAgentFlags(); err != nil {
+		return err
+	}
 
 	// Detect output mode
 	detector := tui.NewDetector()

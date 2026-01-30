@@ -67,6 +67,11 @@ func init() {
 	chatCmd.Flags().StringVar(&chatAgent, "agent", "", "Default agent (claude, gemini, codex, copilot)")
 	chatCmd.Flags().StringVar(&chatModel, "model", "", "Default model override")
 	chatCmd.Flags().StringVar(&chatTrace, "trace", "", "Trace mode override (off, summary, full)")
+
+	// Single-agent mode flags
+	chatCmd.Flags().BoolVar(&singleAgent, "single-agent", false,
+		"Run in single-agent mode (faster execution, no multi-agent consensus)")
+	// Note: chat already has --agent and --model, we'll reuse them if provided
 }
 
 func runChat(_ *cobra.Command, _ []string) error {
@@ -81,6 +86,19 @@ func runChat(_ *cobra.Command, _ []string) error {
 		<-sigCh
 		cancel()
 	}()
+
+	// Reconcile chat-specific flags with shared single-agent variables
+	if chatAgent != "" && agentName == "" {
+		agentName = chatAgent
+	}
+	if chatModel != "" && agentModel == "" {
+		agentModel = chatModel
+	}
+
+	// Validate single-agent flags
+	if err := validateSingleAgentFlags(); err != nil {
+		return err
+	}
 
 	// Load configuration
 	loader := config.NewLoaderWithViper(viper.GetViper())
@@ -369,11 +387,7 @@ func createWorkflowRunner(
 			AbortThreshold:      cfg.Phases.Analyze.Moderator.AbortThreshold,
 			StagnationThreshold: cfg.Phases.Analyze.Moderator.StagnationThreshold,
 		},
-		SingleAgent: workflow.SingleAgentConfig{
-			Enabled: cfg.Phases.Analyze.SingleAgent.Enabled,
-			Agent:   cfg.Phases.Analyze.SingleAgent.Agent,
-			Model:   cfg.Phases.Analyze.SingleAgent.Model,
-		},
+		SingleAgent: buildSingleAgentConfig(cfg),
 		PhaseTimeouts: workflow.PhaseTimeouts{
 			Analyze: analyzeTimeout,
 			Plan:    planTimeout,
@@ -700,11 +714,7 @@ func createWorkflowRunnerWithTrace(
 			AbortThreshold:      cfg.Phases.Analyze.Moderator.AbortThreshold,
 			StagnationThreshold: cfg.Phases.Analyze.Moderator.StagnationThreshold,
 		},
-		SingleAgent: workflow.SingleAgentConfig{
-			Enabled: cfg.Phases.Analyze.SingleAgent.Enabled,
-			Agent:   cfg.Phases.Analyze.SingleAgent.Agent,
-			Model:   cfg.Phases.Analyze.SingleAgent.Model,
-		},
+		SingleAgent: buildSingleAgentConfig(cfg),
 		PhaseTimeouts: workflow.PhaseTimeouts{
 			Analyze: analyzeTimeout,
 			Plan:    planTimeout,

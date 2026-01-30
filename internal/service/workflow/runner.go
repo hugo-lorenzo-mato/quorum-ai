@@ -616,6 +616,11 @@ func (r *Runner) ResumeWithState(ctx context.Context, state *core.WorkflowState)
 
 // initializeState creates initial workflow state.
 func (r *Runner) initializeState(prompt string) *core.WorkflowState {
+	mode := "multi_agent"
+	if r.config.SingleAgent.Enabled {
+		mode = "single_agent"
+	}
+
 	return &core.WorkflowState{
 		Version:      core.CurrentStateVersion,
 		WorkflowID:   core.WorkflowID(generateWorkflowID()),
@@ -624,10 +629,20 @@ func (r *Runner) initializeState(prompt string) *core.WorkflowState {
 		Prompt:       prompt,
 		Tasks:        make(map[core.TaskID]*core.TaskState),
 		TaskOrder:    make([]core.TaskID, 0),
-		Checkpoints:  make([]core.Checkpoint, 0),
-		Metrics:      &core.StateMetrics{},
-		CreatedAt:    time.Now(),
-		UpdatedAt:    time.Now(),
+		Config: &core.WorkflowConfig{
+			ConsensusThreshold: r.config.Moderator.Threshold,
+			MaxRetries:         r.config.MaxRetries,
+			Timeout:            r.config.Timeout,
+			DryRun:             r.config.DryRun,
+			Sandbox:            r.config.Sandbox,
+			ExecutionMode:      mode,
+			SingleAgentName:    r.config.SingleAgent.Agent,
+			SingleAgentModel:   r.config.SingleAgent.Model,
+		},
+		Checkpoints: make([]core.Checkpoint, 0),
+		Metrics:     &core.StateMetrics{},
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
 	}
 }
 

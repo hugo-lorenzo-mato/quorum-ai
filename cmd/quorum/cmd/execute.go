@@ -47,6 +47,14 @@ func init() {
 	executeCmd.Flags().StringVarP(&executeOutput, "output", "o", "", "Output mode (tui, plain, json, quiet)")
 	executeCmd.Flags().BoolVar(&executeSandbox, "sandbox", false, "Run in sandboxed mode")
 	executeCmd.Flags().StringVarP(&executeWorkflowID, "workflow", "w", "", "Resume specific workflow by ID")
+
+	// Single-agent mode flags
+	executeCmd.Flags().BoolVar(&singleAgent, "single-agent", false,
+		"Run in single-agent mode (faster execution, no multi-agent consensus)")
+	executeCmd.Flags().StringVar(&agentName, "agent", "",
+		"Agent to use for single-agent mode (e.g., 'claude', 'gemini', 'codex')")
+	executeCmd.Flags().StringVar(&agentModel, "model", "",
+		"Override the agent's default model (optional, requires --single-agent)")
 }
 
 func runExecute(_ *cobra.Command, _ []string) error {
@@ -62,6 +70,11 @@ func runExecute(_ *cobra.Command, _ []string) error {
 		fmt.Println("\nReceived interrupt, stopping...")
 		cancel()
 	}()
+
+	// Validate single-agent flags
+	if err := validateSingleAgentFlags(); err != nil {
+		return err
+	}
 
 	// Detect output mode
 	detector := tui.NewDetector()

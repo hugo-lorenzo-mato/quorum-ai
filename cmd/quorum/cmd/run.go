@@ -29,7 +29,22 @@ var runCmd = &cobra.Command{
 	Use:   "run [prompt]",
 	Short: "Run a complete workflow",
 	Long: `Execute a complete workflow including analyze, plan, and execute phases.
-The prompt can be provided as an argument or via --file flag.`,
+The prompt can be provided as an argument or via --file flag.
+
+By default, workflows use multi-agent consensus mode where multiple agents
+analyze the task and reach agreement through moderated discussion.
+
+For simpler tasks, use --single-agent mode for faster execution with a single agent.`,
+	Example: `  # Multi-agent mode (default) - best for complex tasks
+  quorum run "Implement user authentication with JWT"
+
+  # Single-agent mode - faster for simple tasks
+  quorum run "Fix the null pointer in auth.go" --single-agent --agent claude
+
+  # Single-agent with specific model
+  quorum run "Add docstrings" --single-agent --agent claude --model claude-3-haiku
+
+  # Available agents: claude, gemini, codex (if enabled in config)`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: runWorkflow,
 }
@@ -59,6 +74,14 @@ func init() {
 	}
 	runCmd.Flags().StringVarP(&runOutput, "output", "o", "", "Output mode (tui, plain, json, quiet)")
 	runCmd.Flags().BoolVar(&runSkipOptimize, "skip-refine", false, "Skip prompt refinement phase")
+
+	// Single-agent mode flags (using shared variables from common.go)
+	runCmd.Flags().BoolVar(&singleAgent, "single-agent", false,
+		"Run in single-agent mode (faster execution, no multi-agent consensus)")
+	runCmd.Flags().StringVar(&agentName, "agent", "",
+		"Agent to use for single-agent mode (e.g., 'claude', 'gemini', 'codex')")
+	runCmd.Flags().StringVar(&agentModel, "model", "",
+		"Override the agent's default model (optional, requires --single-agent)")
 }
 
 func parseLogLevel(level string) slog.Level {
@@ -88,6 +111,11 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 		fmt.Println("\nReceived interrupt, stopping...")
 		cancel()
 	}()
+
+	// Validate single-agent flags
+	if err := validateSingleAgentFlags(); err != nil {
+		return err
+	}
 
 	// Detect output mode
 	detector := tui.NewDetector()
@@ -270,11 +298,7 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 			AbortThreshold:      cfg.Phases.Analyze.Moderator.AbortThreshold,
 			StagnationThreshold: cfg.Phases.Analyze.Moderator.StagnationThreshold,
 		},
-		SingleAgent: workflow.SingleAgentConfig{
-			Enabled: cfg.Phases.Analyze.SingleAgent.Enabled,
-			Agent:   cfg.Phases.Analyze.SingleAgent.Agent,
-			Model:   cfg.Phases.Analyze.SingleAgent.Model,
-		},
+		SingleAgent: buildSingleAgentConfig(cfg),
 		PhaseTimeouts: workflow.PhaseTimeouts{
 			Analyze: analyzeTimeout,
 			Plan:    planTimeout,
