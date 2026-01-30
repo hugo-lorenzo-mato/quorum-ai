@@ -164,6 +164,54 @@ func (m *mockStateManager) FindZombieWorkflows(_ context.Context, staleThreshold
 	return zombies, nil
 }
 
+func (m *mockStateManager) AcquireWorkflowLock(_ context.Context, _ core.WorkflowID) error {
+	m.lockAcquired = true
+	return nil
+}
+
+func (m *mockStateManager) ReleaseWorkflowLock(_ context.Context, _ core.WorkflowID) error {
+	m.lockAcquired = false
+	return nil
+}
+
+func (m *mockStateManager) RefreshWorkflowLock(_ context.Context, _ core.WorkflowID) error {
+	return nil
+}
+
+func (m *mockStateManager) SetWorkflowRunning(_ context.Context, _ core.WorkflowID) error {
+	return nil
+}
+
+func (m *mockStateManager) ClearWorkflowRunning(_ context.Context, _ core.WorkflowID) error {
+	return nil
+}
+
+func (m *mockStateManager) ListRunningWorkflows(_ context.Context) ([]core.WorkflowID, error) {
+	var running []core.WorkflowID
+	for id, wf := range m.workflows {
+		if wf.Status == core.WorkflowStatusRunning {
+			running = append(running, id)
+		}
+	}
+	return running, nil
+}
+
+func (m *mockStateManager) IsWorkflowRunning(_ context.Context, id core.WorkflowID) (bool, error) {
+	if wf, exists := m.workflows[id]; exists {
+		return wf.Status == core.WorkflowStatusRunning, nil
+	}
+	return false, nil
+}
+
+func (m *mockStateManager) UpdateWorkflowHeartbeat(_ context.Context, id core.WorkflowID) error {
+	if wf, exists := m.workflows[id]; exists {
+		now := time.Now().UTC()
+		wf.HeartbeatAt = &now
+		return nil
+	}
+	return fmt.Errorf("workflow not found: %s", id)
+}
+
 func TestHealthEndpoint(t *testing.T) {
 	sm := newMockStateManager()
 	eb := events.New(100)

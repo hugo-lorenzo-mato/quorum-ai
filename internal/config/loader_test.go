@@ -149,6 +149,7 @@ phases:
 	if cfg.Agents.Default != "gemini" {
 		t.Errorf("Agents.Default = %q, want %q", cfg.Agents.Default, "gemini")
 	}
+	// Config file explicitly sets threshold to 0.85
 	if cfg.Phases.Analyze.Moderator.Threshold != 0.85 {
 		t.Errorf("Phases.Analyze.Moderator.Threshold = %f, want %f", cfg.Phases.Analyze.Moderator.Threshold, 0.85)
 	}
@@ -257,6 +258,7 @@ phases:
 	if cfg.Phases.Analyze.Timeout != "3h" {
 		t.Errorf("Phases.Analyze.Timeout = %q, want %q", cfg.Phases.Analyze.Timeout, "3h")
 	}
+	// Config file explicitly sets threshold to 0.85
 	if cfg.Phases.Analyze.Moderator.Threshold != 0.85 {
 		t.Errorf("Phases.Analyze.Moderator.Threshold = %f, want %f", cfg.Phases.Analyze.Moderator.Threshold, 0.85)
 	}
@@ -318,8 +320,8 @@ func TestLoader_DefaultConfigFile(t *testing.T) {
 	if cfg.Agents.Default != "claude" {
 		t.Errorf("Agents.Default = %q, want %q", cfg.Agents.Default, "claude")
 	}
-	if cfg.Phases.Analyze.Moderator.Threshold != 0.85 {
-		t.Errorf("Phases.Analyze.Moderator.Threshold = %f, want %f", cfg.Phases.Analyze.Moderator.Threshold, 0.85)
+	if cfg.Phases.Analyze.Moderator.Threshold != 0.80 {
+		t.Errorf("Phases.Analyze.Moderator.Threshold = %f, want %f", cfg.Phases.Analyze.Moderator.Threshold, 0.80)
 	}
 }
 

@@ -21,6 +21,16 @@ jobs:
           go-version: '1.23'
           cache: true
 
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build frontend
+        run: make build-frontend
+
       - name: Run gosec
         uses: securego/gosec@master
         with:
@@ -61,6 +71,16 @@ jobs:
       security-events: write
     steps:
       - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build frontend
+        run: make build-frontend
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3

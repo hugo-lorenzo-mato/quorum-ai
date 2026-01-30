@@ -527,29 +527,6 @@ const (
 	WorktreeStatusCleaned WorktreeStatus = "cleaned"
 )
 
-// WorkflowWorktreeManager provides workflow-scoped worktree management.
-// Unlike WorktreeManager which operates at the task level, this manager
-// creates task worktrees within a workflow namespace and handles merging
-// task branches back to the workflow branch.
-type WorkflowWorktreeManager interface {
-	// CreateTaskWorktree creates a worktree for a task within the workflow namespace.
-	// The worktree is created from the workflow branch, allowing tasks to inherit
-	// workflow-level changes.
-	CreateTaskWorktree(ctx context.Context, workflowID string, task *Task) (*WorktreeInfo, error)
-
-	// MergeTaskToWorkflow merges the task branch back to the workflow branch.
-	// The strategy parameter controls how the merge is performed:
-	// - "sequential": Merge one task at a time (default)
-	// - "parallel": Attempt to merge multiple tasks
-	MergeTaskToWorkflow(ctx context.Context, workflowID string, taskID TaskID, strategy string) error
-
-	// RemoveTaskWorktree removes the task worktree.
-	// If removeBranch is true, the task branch is also deleted.
-	RemoveTaskWorktree(ctx context.Context, workflowID string, taskID TaskID, removeBranch bool) error
-
-	// GetWorkflowBranch returns the workflow branch name for a given workflow ID.
-	GetWorkflowBranch(workflowID string) string
-}
 
 // =============================================================================
 // GitHubClient Port (T030)

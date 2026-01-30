@@ -189,17 +189,6 @@ type FinalizationConfig struct {
 	Remote string
 }
 
-// GitIsolationConfig configures workflow-level Git isolation.
-type GitIsolationConfig struct {
-	// Enabled activates workflow-level Git isolation.
-	// When enabled, each workflow gets its own branch and tasks are
-	// executed in worktrees branched from the workflow branch.
-	Enabled bool
-	// MergeStrategy controls how task branches are merged to the workflow branch.
-	// Options: "sequential" (default), "parallel".
-	MergeStrategy string
-}
-
 // PromptRenderer renders prompts for different phases.
 type PromptRenderer interface {
 	RenderRefinePrompt(params RefinePromptParams) (string, error)

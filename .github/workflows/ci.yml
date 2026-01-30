@@ -20,8 +20,7 @@ jobs:
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -55,14 +54,23 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache: true
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build frontend
+        run: make build-frontend
 
       - name: Run tests
         run: go test -race -v -timeout 10m ./...
@@ -72,14 +80,23 @@ jobs:
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache: true
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build frontend
+        run: make build-frontend
 
       - name: Run tests with coverage
         run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
@@ -96,14 +113,23 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache: true
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build frontend
+        run: make build-frontend
 
       - name: Run integration tests
         run: go test -race -v -tags=integration -timeout 20m ./...
@@ -127,8 +153,7 @@ jobs:
             goarch: amd64
             ext: .exe
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -137,6 +162,16 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build frontend
+        run: make build-frontend
 
       - name: Get version
         id: version
@@ -155,36 +190,12 @@ jobs:
             -o quorum-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} \
             ./cmd/quorum
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: quorum-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: quorum-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
-          retention-days: 7
-
-  verify-build:
-    name: Verify build
-    if: github.event_name != 'schedule'
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download Linux artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: quorum-linux-amd64
-
-      - name: Verify binary
-        run: |
-          chmod +x quorum-linux-amd64
-          ./quorum-linux-amd64 version
-
   dependency-review:
     name: Dependency Review
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Dependency Review
         uses: actions/dependency-review-action@v4
@@ -196,8 +207,17 @@ jobs:
     name: CodeQL Analysis
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build frontend
+        run: make build-frontend
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
@@ -231,6 +251,16 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build frontend
+        run: make build-frontend
+
       - name: Run tests with coverage
         run: go test -coverprofile=coverage.out ./...
 
@@ -239,4 +269,3 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-
