@@ -364,8 +364,8 @@ func TestLoader_ModeratorDefaults(t *testing.T) {
 	if cfg.Phases.Analyze.Moderator.MaxRounds != 3 {
 		t.Errorf("Phases.Analyze.Moderator.MaxRounds = %d, want %d", cfg.Phases.Analyze.Moderator.MaxRounds, 3)
 	}
-	if cfg.Phases.Analyze.Moderator.AbortThreshold != 0.30 {
-		t.Errorf("Phases.Analyze.Moderator.AbortThreshold = %f, want %f", cfg.Phases.Analyze.Moderator.AbortThreshold, 0.30)
+	if cfg.Phases.Analyze.Moderator.WarningThreshold != 0.30 {
+		t.Errorf("Phases.Analyze.Moderator.WarningThreshold = %f, want %f", cfg.Phases.Analyze.Moderator.WarningThreshold, 0.30)
 	}
 	if cfg.Phases.Analyze.Moderator.StagnationThreshold != 0.02 {
 		t.Errorf("Phases.Analyze.Moderator.StagnationThreshold = %f, want %f", cfg.Phases.Analyze.Moderator.StagnationThreshold, 0.02)

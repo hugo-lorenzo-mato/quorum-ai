@@ -122,13 +122,13 @@ export function AnalyzePhaseCard() {
               onChange={(val) => setField('phases.analyze.moderator.max_rounds', val)}
             />
             <NumberInputSetting
-              label="Abort Threshold"
-              tooltip="Disagreement level that triggers abort (0.0 - 1.0)"
+              label="Warning Threshold"
+              tooltip="Consensus level below which a warning is logged (0.0 - 1.0)"
               min={0}
               max={1}
               step={0.05}
-              value={analyzeConfig.moderator?.abort_threshold ?? 0.3}
-              onChange={(val) => setField('phases.analyze.moderator.abort_threshold', val)}
+              value={analyzeConfig.moderator?.warning_threshold ?? 0.3}
+              onChange={(val) => setField('phases.analyze.moderator.warning_threshold', val)}
             />
           </>
         )}

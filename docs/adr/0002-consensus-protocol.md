@@ -29,7 +29,7 @@ determines when consensus has been reached.
 - `threshold`: Minimum consensus score to proceed (default: 0.90)
 - `min_rounds`: Minimum refinement rounds before consensus can be declared (default: 2)
 - `max_rounds`: Maximum refinement rounds before aborting (default: 5)
-- `abort_threshold`: Score below this aborts workflow (default: 0.30)
+- `warning_threshold`: Score below this logs a warning (default: 0.30)
 - `stagnation_threshold`: Minimum improvement required between rounds (default: 0.02)
 
 ## Consequences

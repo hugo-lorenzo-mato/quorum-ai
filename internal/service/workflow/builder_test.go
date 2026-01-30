@@ -98,7 +98,7 @@ func TestBuildRunnerConfigFromConfig_ModeratorConfig(t *testing.T) {
 					Threshold:           0.75,
 					MinRounds:           1,
 					MaxRounds:           5,
-					AbortThreshold:      0.3,
+					WarningThreshold:    0.3,
 					StagnationThreshold: 0.1,
 				},
 			},

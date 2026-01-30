@@ -15,7 +15,7 @@ func TestNewSemanticModerator_UsesConfigValues(t *testing.T) {
 		Threshold:           0.90,
 		MinRounds:           2,
 		MaxRounds:           5,
-		AbortThreshold:      0.30,
+		WarningThreshold:    0.30,
 		StagnationThreshold: 0.02,
 	}
 	moderator, err := NewSemanticModerator(config)
@@ -32,8 +32,8 @@ func TestNewSemanticModerator_UsesConfigValues(t *testing.T) {
 	if moderator.MaxRounds() != 5 {
 		t.Errorf("MaxRounds() = %v, want 5", moderator.MaxRounds())
 	}
-	if moderator.AbortThreshold() != 0.30 {
-		t.Errorf("AbortThreshold() = %v, want 0.30", moderator.AbortThreshold())
+	if moderator.WarningThreshold() != 0.30 {
+		t.Errorf("WarningThreshold() = %v, want 0.30", moderator.WarningThreshold())
 	}
 	if moderator.StagnationThreshold() != 0.02 {
 		t.Errorf("StagnationThreshold() = %v, want 0.02", moderator.StagnationThreshold())
@@ -51,7 +51,7 @@ func TestNewSemanticModerator_CustomConfig(t *testing.T) {
 		Threshold:           0.85,
 		MinRounds:           3,
 		MaxRounds:           8,
-		AbortThreshold:      0.25,
+		WarningThreshold:    0.25,
 		StagnationThreshold: 0.05,
 	}
 	moderator, err := NewSemanticModerator(config)
@@ -68,8 +68,8 @@ func TestNewSemanticModerator_CustomConfig(t *testing.T) {
 	if moderator.MaxRounds() != 8 {
 		t.Errorf("MaxRounds() = %v, want 8", moderator.MaxRounds())
 	}
-	if moderator.AbortThreshold() != 0.25 {
-		t.Errorf("AbortThreshold() = %v, want 0.25", moderator.AbortThreshold())
+	if moderator.WarningThreshold() != 0.25 {
+		t.Errorf("WarningThreshold() = %v, want 0.25", moderator.WarningThreshold())
 	}
 	if moderator.StagnationThreshold() != 0.05 {
 		t.Errorf("StagnationThreshold() = %v, want 0.05", moderator.StagnationThreshold())

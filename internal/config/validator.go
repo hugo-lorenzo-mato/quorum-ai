@@ -458,8 +458,8 @@ func (v *Validator) validateModerator(cfg *ModeratorConfig, agents *AgentsConfig
 	if cfg.Threshold < 0 || cfg.Threshold > 1 {
 		v.addError("phases.analyze.moderator.threshold", cfg.Threshold, "must be between 0 and 1")
 	}
-	if cfg.AbortThreshold < 0 || cfg.AbortThreshold > 1 {
-		v.addError("phases.analyze.moderator.abort_threshold", cfg.AbortThreshold, "must be between 0 and 1")
+	if cfg.WarningThreshold < 0 || cfg.WarningThreshold > 1 {
+		v.addError("phases.analyze.moderator.warning_threshold", cfg.WarningThreshold, "must be between 0 and 1")
 	}
 	if cfg.StagnationThreshold < 0 || cfg.StagnationThreshold > 1 {
 		v.addError("phases.analyze.moderator.stagnation_threshold", cfg.StagnationThreshold, "must be between 0 and 1")

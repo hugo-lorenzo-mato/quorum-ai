@@ -125,7 +125,7 @@ func DefaultRunnerConfig() *RunnerConfig {
 			Threshold:           0.90,
 			MinRounds:           2,
 			MaxRounds:           5,
-			AbortThreshold:      0.30,
+			WarningThreshold:    0.30,
 			StagnationThreshold: 0.02,
 		},
 	}

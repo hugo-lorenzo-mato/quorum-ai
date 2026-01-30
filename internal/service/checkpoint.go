@@ -28,14 +28,15 @@ func NewCheckpointManager(state core.StateManager, logger *logging.Logger) *Chec
 type CheckpointType string
 
 const (
-	CheckpointPhaseStart     CheckpointType = "phase_start"
-	CheckpointPhaseComplete  CheckpointType = "phase_complete"
-	CheckpointTaskStart      CheckpointType = "task_start"
-	CheckpointTaskComplete   CheckpointType = "task_complete"
-	CheckpointConsensus      CheckpointType = "consensus"
-	CheckpointError          CheckpointType = "error"
-	CheckpointModeratorRound CheckpointType = "moderator_round" // Checkpoint after each moderator evaluation
-	CheckpointAnalysisRound  CheckpointType = "analysis_round"  // Checkpoint after each V(n) refinement
+	CheckpointPhaseStart       CheckpointType = "phase_start"
+	CheckpointPhaseComplete    CheckpointType = "phase_complete"
+	CheckpointTaskStart        CheckpointType = "task_start"
+	CheckpointTaskComplete     CheckpointType = "task_complete"
+	CheckpointConsensus        CheckpointType = "consensus"
+	CheckpointError            CheckpointType = "error"
+	CheckpointModeratorRound   CheckpointType = "moderator_round"   // Checkpoint after each moderator evaluation
+	CheckpointAnalysisRound    CheckpointType = "analysis_round"    // Checkpoint after each V(n) refinement
+	CheckpointAnalysisComplete CheckpointType = "analysis_complete" // Per-agent analysis completion with metrics
 )
 
 // CreateCheckpoint saves a checkpoint at the current state.

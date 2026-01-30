@@ -129,7 +129,7 @@ func InitPhaseRunner(ctx context.Context, phase core.Phase, maxRetries int, dryR
 		Threshold:           cfg.Phases.Analyze.Moderator.Threshold,
 		MinRounds:           cfg.Phases.Analyze.Moderator.MinRounds,
 		MaxRounds:           cfg.Phases.Analyze.Moderator.MaxRounds,
-		AbortThreshold:      cfg.Phases.Analyze.Moderator.AbortThreshold,
+		WarningThreshold:    cfg.Phases.Analyze.Moderator.WarningThreshold,
 		StagnationThreshold: cfg.Phases.Analyze.Moderator.StagnationThreshold,
 	}
 
@@ -208,7 +208,7 @@ func InitPhaseRunner(ctx context.Context, phase core.Phase, maxRetries int, dryR
 			Threshold:           cfg.Phases.Analyze.Moderator.Threshold,
 			MinRounds:           cfg.Phases.Analyze.Moderator.MinRounds,
 			MaxRounds:           cfg.Phases.Analyze.Moderator.MaxRounds,
-			AbortThreshold:      cfg.Phases.Analyze.Moderator.AbortThreshold,
+			WarningThreshold:    cfg.Phases.Analyze.Moderator.WarningThreshold,
 			StagnationThreshold: cfg.Phases.Analyze.Moderator.StagnationThreshold,
 		},
 		SingleAgent: buildSingleAgentConfig(cfg),

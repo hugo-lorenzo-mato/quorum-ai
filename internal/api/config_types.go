@@ -90,7 +90,7 @@ type ModeratorConfigResponse struct {
 	Threshold           float64 `json:"threshold"`
 	MinRounds           int     `json:"min_rounds"`
 	MaxRounds           int     `json:"max_rounds"`
-	AbortThreshold      float64 `json:"abort_threshold"`
+	WarningThreshold    float64 `json:"warning_threshold"`
 	StagnationThreshold float64 `json:"stagnation_threshold"`
 }
 
@@ -296,7 +296,7 @@ type ModeratorConfigUpdate struct {
 	Threshold           *float64 `json:"threshold,omitempty"`
 	MinRounds           *int     `json:"min_rounds,omitempty"`
 	MaxRounds           *int     `json:"max_rounds,omitempty"`
-	AbortThreshold      *float64 `json:"abort_threshold,omitempty"`
+	WarningThreshold    *float64 `json:"warning_threshold,omitempty"`
 	StagnationThreshold *float64 `json:"stagnation_threshold,omitempty"`
 }
 

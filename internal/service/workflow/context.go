@@ -146,8 +146,8 @@ type ModeratorConfig struct {
 	MinRounds int
 	// MaxRounds limits the number of V(n) refinement rounds (default: 5).
 	MaxRounds int
-	// AbortThreshold triggers human review if score drops below this (default: 0.30).
-	AbortThreshold float64
+	// WarningThreshold logs a warning if consensus score drops below this (default: 0.30).
+	WarningThreshold float64
 	// StagnationThreshold triggers early exit if score improvement is below this (default: 0.02).
 	StagnationThreshold float64
 }

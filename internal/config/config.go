@@ -177,8 +177,8 @@ type ModeratorConfig struct {
 	MinRounds int `mapstructure:"min_rounds"`
 	// MaxRounds limits the number of refinement rounds (default: 5).
 	MaxRounds int `mapstructure:"max_rounds"`
-	// AbortThreshold triggers human review if score drops below this (default: 0.30).
-	AbortThreshold float64 `mapstructure:"abort_threshold"`
+	// WarningThreshold logs a warning if consensus score drops below this (default: 0.30).
+	WarningThreshold float64 `mapstructure:"warning_threshold"`
 	// StagnationThreshold triggers early exit if score improvement is below this (default: 0.02).
 	StagnationThreshold float64 `mapstructure:"stagnation_threshold"`
 }

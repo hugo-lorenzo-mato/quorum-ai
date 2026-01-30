@@ -126,7 +126,7 @@ V(n+1) Refinement
     ↓
 Arbiter Evaluation -> Repeat until consensus or max rounds
     ↓
-Score < abort_threshold -> Human Review Required
+Score < warning_threshold -> Warning Logged
 ```
 
 ### 3.4 Consensus Algorithm: Semantic Arbiter Evaluation
@@ -140,7 +140,7 @@ Agreement is measured using a semantic arbiter that evaluates the conceptual ali
 | `threshold` | 0.90 | Minimum consensus score to proceed |
 | `min_rounds` | 2 | Minimum refinement rounds |
 | `max_rounds` | 5 | Maximum refinement rounds |
-| `abort_threshold` | 0.30 | Score below which workflow aborts |
+| `warning_threshold` | 0.30 | Score below which a warning is logged |
 | `stagnation_threshold` | 0.02 | Minimum improvement between rounds |
 
 **Consensus Score:**

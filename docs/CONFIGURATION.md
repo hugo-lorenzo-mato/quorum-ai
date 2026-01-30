@@ -156,7 +156,7 @@ phases:
       threshold: 0.90
       min_rounds: 2
       max_rounds: 5
-      abort_threshold: 0.30
+      warning_threshold: 0.30
       stagnation_threshold: 0.02
     single_agent:
       enabled: false
@@ -184,7 +184,7 @@ phases:
 | `moderator.threshold` | float | `0.85` | Consensus score to proceed (0.0-1.0) |
 | `moderator.min_rounds` | int | `2` | Minimum refinement rounds |
 | `moderator.max_rounds` | int | `5` | Maximum refinement rounds |
-| `moderator.abort_threshold` | float | `0.30` | Score below this aborts workflow |
+| `moderator.warning_threshold` | float | `0.30` | Score below this logs a warning |
 | `moderator.stagnation_threshold` | float | `0.02` | Minimum improvement between rounds |
 | `single_agent.enabled` | bool | `false` | Bypass multi-agent consensus |
 | `single_agent.agent` | string | - | Agent for single-agent mode |

@@ -2,8 +2,11 @@ package workflow
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"os"
 	"regexp"
 	"strings"
 	"sync"
@@ -451,18 +454,18 @@ func (a *Analyzer) shouldStopForConsensus(wctx *Context, round int, evalResult *
 }
 
 func (a *Analyzer) logLowConsensusWarning(wctx *Context, round int, evalResult *ModeratorEvaluationResult) {
-	if evalResult.Score >= a.moderator.AbortThreshold() {
+	if evalResult.Score >= a.moderator.WarningThreshold() {
 		return
 	}
 	wctx.Logger.Warn("consensus score is low, continuing refinement",
 		"score", evalResult.Score,
-		"warning_threshold", a.moderator.AbortThreshold(),
+		"warning_threshold", a.moderator.WarningThreshold(),
 		"round", round,
 		"max_rounds", a.moderator.MaxRounds(),
 	)
 	if wctx.Output != nil {
 		wctx.Output.Log("warn", "analyzer", fmt.Sprintf("Low consensus %.0f%% (below %.0f%%), continuing refinement to improve agreement",
-			evalResult.Score*100, a.moderator.AbortThreshold()*100))
+			evalResult.Score*100, a.moderator.WarningThreshold()*100))
 	}
 }
 
@@ -638,6 +641,55 @@ func (a *Analyzer) runVnRefinementWithAgent(ctx context.Context, wctx *Context, 
 		return AnalysisOutput{}, fmt.Errorf("getting agent %s: %w", agentName, err)
 	}
 
+	// Resolve model FIRST (needed for cache lookup)
+	model := ResolvePhaseModel(wctx.Config, agentName, core.PhaseAnalyze, "")
+
+	// Get output file path FIRST (needed for cache lookup)
+	var outputFilePath string
+	if wctx.Report != nil && wctx.Report.IsEnabled() {
+		outputFilePath = wctx.Report.VnAnalysisPath(agentName, model, round)
+	}
+
+	// Compute prompt hash for cache validation
+	promptHash := computePromptHash(wctx.State)
+
+	// === CACHE CHECK: BEFORE rate limiter ===
+
+	// 1. Check checkpoint (with metrics restoration)
+	if meta := getAnalysisCheckpoint(wctx.State, agentName, round, promptHash); meta != nil {
+		if output, err := restoreAnalysisFromCheckpoint(meta); err == nil {
+			wctx.Logger.Info("restored Vn analysis from checkpoint",
+				"agent", agentName,
+				"round", round,
+				"tokens_in", output.TokensIn,
+				"cost_usd", output.CostUSD,
+			)
+			if wctx.Output != nil {
+				wctx.Output.Log("info", "analyzer", fmt.Sprintf("Restored V%d analysis for %s from checkpoint (cached)", round, agentName))
+			}
+			return *output, nil
+		}
+		// Checkpoint exists but file invalid - continue to re-execute
+		wctx.Logger.Debug("checkpoint found but file invalid, re-executing", "agent", agentName, "round", round)
+	}
+
+	// 2. Backward compatibility: file exists but no checkpoint
+	if outputFilePath != "" {
+		if output, err := loadExistingAnalysis(outputFilePath, agentName, model); err == nil {
+			wctx.Logger.Info("using existing Vn analysis (no checkpoint, metrics unavailable)",
+				"agent", agentName,
+				"round", round,
+				"path", outputFilePath,
+			)
+			if wctx.Output != nil {
+				wctx.Output.Log("info", "analyzer", fmt.Sprintf("Using existing V%d analysis for %s (legacy cache)", round, agentName))
+			}
+			return *output, nil
+		}
+	}
+
+	// === NO CACHE: Acquire rate limit and execute ===
+
 	limiter := wctx.RateLimits.Get(agentName)
 	if err := limiter.Acquire(); err != nil {
 		return AnalysisOutput{}, fmt.Errorf("rate limit: %w", err)
@@ -658,14 +710,6 @@ func (a *Analyzer) runVnRefinementWithAgent(ctx context.Context, wctx *Context, 
 		}
 		consensusScore = evalResult.Score * 100
 		missingPerspectives = evalResult.MissingPerspectives
-	}
-
-	model := ResolvePhaseModel(wctx.Config, agentName, core.PhaseAnalyze, "")
-
-	// Get output file path for LLM to write directly
-	var outputFilePath string
-	if wctx.Report != nil && wctx.Report.IsEnabled() {
-		outputFilePath = wctx.Report.VnAnalysisPath(agentName, model, round)
 	}
 
 	// Build summary of previous analysis to avoid context overflow
@@ -751,6 +795,13 @@ func (a *Analyzer) runVnRefinementWithAgent(ctx context.Context, wctx *Context, 
 
 	outputName := fmt.Sprintf("v%d-%s", round, agentName)
 	output := parseAnalysisOutputWithMetrics(outputName, model, result, durationMS)
+
+	// Create checkpoint for future resume with full metrics
+	if outputFilePath != "" {
+		if cpErr := createAnalysisCheckpoint(wctx, agentName, model, round, outputFilePath, output, promptHash); cpErr != nil {
+			wctx.Logger.Warn("failed to create Vn analysis checkpoint", "agent", agentName, "round", round, "error", cpErr)
+		}
+	}
 
 	return output, nil
 }
@@ -842,19 +893,56 @@ func (a *Analyzer) runAnalysisWithAgent(ctx context.Context, wctx *Context, agen
 		return AnalysisOutput{}, fmt.Errorf("getting agent %s: %w", agentName, err)
 	}
 
-	// Acquire rate limit
-	limiter := wctx.RateLimits.Get(agentName)
-	if err := limiter.Acquire(); err != nil {
-		return AnalysisOutput{}, fmt.Errorf("rate limit: %w", err)
-	}
-
-	// Resolve model
+	// Resolve model FIRST (needed for cache lookup)
 	model := ResolvePhaseModel(wctx.Config, agentName, core.PhaseAnalyze, "")
 
-	// Get output file path for LLM to write directly
+	// Get output file path FIRST (needed for cache lookup)
 	var outputFilePath string
 	if wctx.Report != nil && wctx.Report.IsEnabled() {
 		outputFilePath = wctx.Report.V1AnalysisPath(agentName, model)
+	}
+
+	// Compute prompt hash for cache validation
+	promptHash := computePromptHash(wctx.State)
+
+	// === CACHE CHECK: BEFORE rate limiter ===
+
+	// 1. Check checkpoint (with metrics restoration)
+	if meta := getAnalysisCheckpoint(wctx.State, agentName, 1, promptHash); meta != nil {
+		if output, err := restoreAnalysisFromCheckpoint(meta); err == nil {
+			wctx.Logger.Info("restored V1 analysis from checkpoint",
+				"agent", agentName,
+				"tokens_in", output.TokensIn,
+				"cost_usd", output.CostUSD,
+			)
+			if wctx.Output != nil {
+				wctx.Output.Log("info", "analyzer", fmt.Sprintf("Restored V1 analysis for %s from checkpoint (cached)", agentName))
+			}
+			return *output, nil
+		}
+		// Checkpoint exists but file invalid - continue to re-execute
+		wctx.Logger.Debug("checkpoint found but file invalid, re-executing", "agent", agentName)
+	}
+
+	// 2. Backward compatibility: file exists but no checkpoint
+	if outputFilePath != "" {
+		if output, err := loadExistingAnalysis(outputFilePath, agentName, model); err == nil {
+			wctx.Logger.Info("using existing V1 analysis (no checkpoint, metrics unavailable)",
+				"agent", agentName,
+				"path", outputFilePath,
+			)
+			if wctx.Output != nil {
+				wctx.Output.Log("info", "analyzer", fmt.Sprintf("Using existing V1 analysis for %s (legacy cache)", agentName))
+			}
+			return *output, nil
+		}
+	}
+
+	// === NO CACHE: Acquire rate limit and execute ===
+
+	limiter := wctx.RateLimits.Get(agentName)
+	if err := limiter.Acquire(); err != nil {
+		return AnalysisOutput{}, fmt.Errorf("rate limit: %w", err)
 	}
 
 	// Render prompt (use optimized prompt if available)
@@ -925,6 +1013,13 @@ func (a *Analyzer) runAnalysisWithAgent(ctx context.Context, wctx *Context, agen
 	// Use v1-{agent} naming convention for V1 outputs
 	outputName := fmt.Sprintf("v1-%s", agentName)
 	output := parseAnalysisOutputWithMetrics(outputName, model, result, durationMS)
+
+	// Create checkpoint for future resume with full metrics
+	if outputFilePath != "" {
+		if cpErr := createAnalysisCheckpoint(wctx, agentName, model, 1, outputFilePath, output, promptHash); cpErr != nil {
+			wctx.Logger.Warn("failed to create analysis checkpoint", "agent", agentName, "error", cpErr)
+		}
+	}
 
 	return output, nil
 }
@@ -1402,16 +1497,16 @@ func (a *Analyzer) continueFromCheckpoint(ctx context.Context, wctx *Context, sa
 
 		// Log warning if consensus is very low, but continue iterating
 		// Low consensus indicates divergence - we should keep refining rather than abort
-		if evalResult.Score < a.moderator.AbortThreshold() {
+		if evalResult.Score < a.moderator.WarningThreshold() {
 			wctx.Logger.Warn("consensus score is low (resumed), continuing refinement",
 				"score", evalResult.Score,
-				"warning_threshold", a.moderator.AbortThreshold(),
+				"warning_threshold", a.moderator.WarningThreshold(),
 				"round", round,
 				"max_rounds", a.moderator.MaxRounds(),
 			)
 			if wctx.Output != nil {
 				wctx.Output.Log("warn", "analyzer", fmt.Sprintf("Low consensus %.0f%% (below %.0f%%), continuing refinement to improve agreement",
-					evalResult.Score*100, a.moderator.AbortThreshold()*100))
+					evalResult.Score*100, a.moderator.WarningThreshold()*100))
 			}
 			// Continue to next round instead of aborting
 		}
@@ -1694,4 +1789,141 @@ func getModeratorRoundCheckpoint(state *core.WorkflowState) (int, []AnalysisOutp
 		}
 	}
 	return 0, nil
+}
+
+// loadExistingAnalysis attempts to load a previously generated analysis from disk.
+// This supports resuming partial runs without re-executing LLM calls.
+func loadExistingAnalysis(path, agentName, model string) (*AnalysisOutput, error) {
+	if path == "" {
+		return nil, fmt.Errorf("empty path")
+	}
+
+	info, err := os.Stat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, err
+		}
+		return nil, fmt.Errorf("stat file: %w", err)
+	}
+
+	if info.Size() == 0 {
+		return nil, fmt.Errorf("file is empty")
+	}
+
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read file: %w", err)
+	}
+
+	// Construct result wrapper to reuse parsing logic
+	result := &core.ExecuteResult{
+		Output: string(content),
+		Model:  model,
+		// Note: We lose exact token/cost metrics when reloading from raw markdown,
+		// but preserving the content is more important for resume.
+	}
+
+	output := parseAnalysisOutputWithMetrics(agentName, model, result, 0)
+	return &output, nil
+}
+
+// AnalysisCheckpointMetadata stores metadata for analysis_complete checkpoints.
+// This enables cache validation and metrics restoration on resume.
+type AnalysisCheckpointMetadata struct {
+	AgentName   string  `json:"agent_name"`
+	Model       string  `json:"model"`
+	Round       int     `json:"round"`        // 1 for V1, 2 for V2, etc.
+	FilePath    string  `json:"file_path"`    // Path to analysis file on disk
+	PromptHash  string  `json:"prompt_hash"`  // SHA256 of effective prompt for cache invalidation
+	TokensIn    int     `json:"tokens_in"`
+	TokensOut   int     `json:"tokens_out"`
+	CostUSD     float64 `json:"cost_usd"`
+	DurationMS  int64   `json:"duration_ms"`
+	ContentHash string  `json:"content_hash"` // SHA256 of file content for integrity
+}
+
+// computePromptHash returns SHA256 hash of effective prompt for cache invalidation.
+func computePromptHash(state *core.WorkflowState) string {
+	prompt := GetEffectivePrompt(state)
+	h := sha256.Sum256([]byte(prompt))
+	return hex.EncodeToString(h[:])
+}
+
+// computeContentHash returns SHA256 hash of content for integrity validation.
+func computeContentHash(content string) string {
+	h := sha256.Sum256([]byte(content))
+	return hex.EncodeToString(h[:])
+}
+
+// getAnalysisCheckpoint looks for a valid analysis_complete checkpoint for agent/round.
+// Returns nil if no valid checkpoint exists or if prompt hash doesn't match.
+func getAnalysisCheckpoint(state *core.WorkflowState, agentName string, round int, expectedPromptHash string) *AnalysisCheckpointMetadata {
+	for i := len(state.Checkpoints) - 1; i >= 0; i-- {
+		cp := state.Checkpoints[i]
+		if cp.Type != string(service.CheckpointAnalysisComplete) || cp.Phase != core.PhaseAnalyze {
+			continue
+		}
+
+		var meta AnalysisCheckpointMetadata
+		if err := json.Unmarshal(cp.Data, &meta); err != nil {
+			continue
+		}
+
+		// Match agent and round
+		if meta.AgentName != agentName || meta.Round != round {
+			continue
+		}
+
+		// Validate prompt hash (cache invalidation if prompt changed)
+		if meta.PromptHash != expectedPromptHash {
+			continue
+		}
+
+		return &meta
+	}
+	return nil
+}
+
+// restoreAnalysisFromCheckpoint reconstructs AnalysisOutput from checkpoint + file.
+// Returns error if file doesn't exist or content hash doesn't match.
+func restoreAnalysisFromCheckpoint(meta *AnalysisCheckpointMetadata) (*AnalysisOutput, error) {
+	content, err := os.ReadFile(meta.FilePath)
+	if err != nil {
+		return nil, fmt.Errorf("reading cached file: %w", err)
+	}
+
+	// Validate content integrity
+	if computeContentHash(string(content)) != meta.ContentHash {
+		return nil, fmt.Errorf("content hash mismatch - file was modified")
+	}
+
+	// Construct result wrapper with restored metrics
+	result := &core.ExecuteResult{
+		Output:    string(content),
+		Model:     meta.Model,
+		TokensIn:  meta.TokensIn,
+		TokensOut: meta.TokensOut,
+		CostUSD:   meta.CostUSD,
+	}
+
+	output := parseAnalysisOutputWithMetrics(meta.AgentName, meta.Model, result, meta.DurationMS)
+	return &output, nil
+}
+
+// createAnalysisCheckpoint creates a checkpoint after successful analysis execution.
+func createAnalysisCheckpoint(wctx *Context, agentName, model string, round int, filePath string, output AnalysisOutput, promptHash string) error {
+	meta := map[string]interface{}{
+		"agent_name":   agentName,
+		"model":        model,
+		"round":        round,
+		"file_path":    filePath,
+		"prompt_hash":  promptHash,
+		"tokens_in":    output.TokensIn,
+		"tokens_out":   output.TokensOut,
+		"cost_usd":     output.CostUSD,
+		"duration_ms":  output.DurationMS,
+		"content_hash": computeContentHash(output.RawOutput),
+	}
+
+	return wctx.Checkpoint.CreateCheckpoint(wctx.State, string(service.CheckpointAnalysisComplete), meta)
 }

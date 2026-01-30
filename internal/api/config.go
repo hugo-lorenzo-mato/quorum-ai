@@ -406,7 +406,7 @@ func configToFullResponse(cfg *config.Config) FullConfigResponse {
 					Threshold:           cfg.Phases.Analyze.Moderator.Threshold,
 					MinRounds:           cfg.Phases.Analyze.Moderator.MinRounds,
 					MaxRounds:           cfg.Phases.Analyze.Moderator.MaxRounds,
-					AbortThreshold:      cfg.Phases.Analyze.Moderator.AbortThreshold,
+					WarningThreshold:    cfg.Phases.Analyze.Moderator.WarningThreshold,
 					StagnationThreshold: cfg.Phases.Analyze.Moderator.StagnationThreshold,
 				},
 				Synthesizer: SynthesizerConfigResponse{
@@ -656,8 +656,8 @@ func applyAnalyzePhaseUpdates(cfg *config.AnalyzePhaseConfig, update *AnalyzePha
 		if update.Moderator.MaxRounds != nil {
 			cfg.Moderator.MaxRounds = *update.Moderator.MaxRounds
 		}
-		if update.Moderator.AbortThreshold != nil {
-			cfg.Moderator.AbortThreshold = *update.Moderator.AbortThreshold
+		if update.Moderator.WarningThreshold != nil {
+			cfg.Moderator.WarningThreshold = *update.Moderator.WarningThreshold
 		}
 		if update.Moderator.StagnationThreshold != nil {
 			cfg.Moderator.StagnationThreshold = *update.Moderator.StagnationThreshold

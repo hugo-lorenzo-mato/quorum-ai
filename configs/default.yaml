@@ -71,8 +71,8 @@ phases:
       min_rounds: 2
       # Maximum refinement rounds before giving up
       max_rounds: 3
-      # Score below which to abort workflow
-      abort_threshold: 0.30
+      # Score below which to log a warning
+      warning_threshold: 0.30
       # Score change below which is considered stagnation
       stagnation_threshold: 0.02
   # Plan phase settings

@@ -576,7 +576,7 @@ func BuildRunnerConfigFromConfig(cfg *config.Config) *RunnerConfig {
 			Threshold:           cfg.Phases.Analyze.Moderator.Threshold,
 			MinRounds:           cfg.Phases.Analyze.Moderator.MinRounds,
 			MaxRounds:           cfg.Phases.Analyze.Moderator.MaxRounds,
-			AbortThreshold:      cfg.Phases.Analyze.Moderator.AbortThreshold,
+			WarningThreshold:    cfg.Phases.Analyze.Moderator.WarningThreshold,
 			StagnationThreshold: cfg.Phases.Analyze.Moderator.StagnationThreshold,
 		},
 		SingleAgent: SingleAgentConfig{

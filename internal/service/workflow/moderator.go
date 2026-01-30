@@ -559,9 +559,9 @@ func (m *SemanticModerator) MaxRounds() int {
 	return m.config.MaxRounds
 }
 
-// AbortThreshold returns the configured abort threshold.
-func (m *SemanticModerator) AbortThreshold() float64 {
-	return m.config.AbortThreshold
+// WarningThreshold returns the configured warning threshold.
+func (m *SemanticModerator) WarningThreshold() float64 {
+	return m.config.WarningThreshold
 }
 
 // StagnationThreshold returns the configured stagnation threshold.
