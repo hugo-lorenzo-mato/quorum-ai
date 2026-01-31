@@ -16,7 +16,7 @@ import tsx from 'react-syntax-highlighter/dist/esm/languages/prism/tsx';
 import typescript from 'react-syntax-highlighter/dist/esm/languages/prism/typescript';
 import yaml from 'react-syntax-highlighter/dist/esm/languages/prism/yaml';
 import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronRight, Copy, CheckCircle2 } from 'lucide-react';
 import { useUIStore } from '../stores';
 
 SyntaxHighlighter.registerLanguage('bash', bash);
@@ -62,7 +62,18 @@ function splitFrontmatter(markdown) {
 export default function MarkdownViewer({ markdown }) {
   const { frontmatter, body } = useMemo(() => splitFrontmatter(markdown), [markdown]);
   const [showFrontmatter, setShowFrontmatter] = useState(false);
+  const [copied, setCopied] = useState(false);
   const theme = useUIStore((s) => s.theme);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(markdown || '');
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Silent fail - copy button is a convenience feature
+    }
+  };
   const isDark = useMemo(() => {
     if (theme === 'dark' || theme === 'midnight') return true;
     if (theme === 'light') return false;
@@ -71,13 +82,25 @@ export default function MarkdownViewer({ markdown }) {
   }, [theme]);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 relative">
+      <button
+        type="button"
+        onClick={handleCopy}
+        className={`absolute top-0 right-0 p-2 rounded-lg hover:bg-accent/50 transition-colors ${copied ? 'text-green-500' : 'text-muted-foreground'}`}
+        title={copied ? 'Copied!' : 'Copy content'}
+      >
+        {copied ? (
+          <CheckCircle2 className="w-4 h-4" />
+        ) : (
+          <Copy className="w-4 h-4" />
+        )}
+      </button>
       {frontmatter && (
         <div className="rounded-lg border border-border bg-card">
           <button
             type="button"
             onClick={() => setShowFrontmatter((v) => !v)}
-            className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left text-sm font-medium text-foreground hover:bg-accent/40 rounded-lg"
+            className="w-full flex items-center justify-between gap-2 px-3 py-2 pr-12 text-left text-sm font-medium text-foreground hover:bg-accent/40 rounded-lg"
           >
             <span>Metadata</span>
             {showFrontmatter ? (
@@ -94,7 +117,7 @@ export default function MarkdownViewer({ markdown }) {
         </div>
       )}
 
-      <div className="min-w-0">
+      <div className="min-w-0 pr-12">
         <ReactMarkdown
           remarkPlugins={[remarkGfm, remarkBreaks]}
           components={{

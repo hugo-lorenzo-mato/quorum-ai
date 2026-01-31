@@ -1,0 +1,11 @@
+{
+  "status": "completed",
+  "changes": [
+    {
+      "file": "frontend/src/components/MarkdownViewer.jsx",
+      "action": "modify",
+      "description": "Added right padding to Metadata toggle and Markdown content container to prevent overlap with the Copy button."
+    }
+  ],
+  "notes": "The Copy Content button was already present but had layout issues (overlapping content). Fixed the layout and verified functionality with tests."
+}

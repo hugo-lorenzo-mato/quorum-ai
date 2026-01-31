@@ -1,5 +1,5 @@
-import { render, screen, fireEvent } from '@testing-library/react';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import MarkdownViewer from '../MarkdownViewer';
 import { useUIStore } from '../../stores';
 
@@ -27,5 +27,24 @@ describe('MarkdownViewer', () => {
 
     expect(screen.queryByRole('button', { name: 'Metadata' })).not.toBeInTheDocument();
     expect(screen.getByText('Just text')).toBeInTheDocument();
+  });
+
+  it('copies content to clipboard and shows visual feedback', async () => {
+    const mockClipboard = { writeText: vi.fn().mockResolvedValue() };
+    Object.assign(navigator, { clipboard: mockClipboard });
+
+    const markdown = '# Test Content\n\nSome text here.';
+    render(<MarkdownViewer markdown={markdown} />);
+
+    const copyButton = screen.getByRole('button', { name: 'Copy content' });
+    expect(copyButton).toBeInTheDocument();
+
+    fireEvent.click(copyButton);
+
+    expect(mockClipboard.writeText).toHaveBeenCalledWith(markdown);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Copied!' })).toBeInTheDocument();
+    });
   });
 });
