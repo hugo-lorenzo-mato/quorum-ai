@@ -197,10 +197,32 @@ export const healthApi = {
   check: () => fetch('/health').then(r => r.json()),
 };
 
+// Kanban API
+export const kanbanApi = {
+  // Get full board state
+  getBoard: () => request('/kanban/board'),
+
+  // Move workflow to a different column
+  moveWorkflow: (workflowId, toColumn, position = 0) => request(`/kanban/workflows/${workflowId}/move`, {
+    method: 'POST',
+    body: JSON.stringify({ to_column: toColumn, position }),
+  }),
+
+  // Engine control
+  getEngineState: () => request('/kanban/engine'),
+
+  enableEngine: () => request('/kanban/engine/enable', { method: 'POST' }),
+
+  disableEngine: () => request('/kanban/engine/disable', { method: 'POST' }),
+
+  resetCircuitBreaker: () => request('/kanban/engine/reset-circuit-breaker', { method: 'POST' }),
+};
+
 export default {
   workflow: workflowApi,
   chat: chatApi,
   config: configApi,
   files: fileApi,
   health: healthApi,
+  kanban: kanbanApi,
 };

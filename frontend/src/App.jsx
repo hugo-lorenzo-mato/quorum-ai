@@ -5,6 +5,7 @@ import Dashboard from './pages/Dashboard';
 import Workflows from './pages/Workflows';
 import Chat from './pages/Chat';
 import Settings from './pages/Settings';
+import Kanban from './pages/Kanban';
 import useSSE from './hooks/useSSE';
 import { useUIStore } from './stores';
 import { loadEnums } from './lib/agents';
@@ -31,6 +32,7 @@ function AppContent() {
         <Route path="/" element={<Dashboard />} />
         <Route path="/workflows" element={<Workflows />} />
         <Route path="/workflows/:id" element={<Workflows />} />
+        <Route path="/kanban" element={<Kanban />} />
         <Route path="/chat" element={<Chat />} />
         <Route path="/settings" element={<Settings />} />
       </Routes>

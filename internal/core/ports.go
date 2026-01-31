@@ -271,6 +271,16 @@ type WorkflowState struct {
 
 	// Workflow Git isolation
 	WorkflowBranch string `json:"workflow_branch,omitempty"` // Git branch for this workflow (e.g., quorum/wf-xxx)
+
+	// Kanban board tracking
+	KanbanColumn         string     `json:"kanban_column,omitempty"`          // refinement, todo, in_progress, to_verify, done
+	KanbanPosition       int        `json:"kanban_position,omitempty"`        // Order within column (lower = higher in list)
+	PRURL                string     `json:"pr_url,omitempty"`                 // GitHub PR URL
+	PRNumber             int        `json:"pr_number,omitempty"`              // GitHub PR number
+	KanbanStartedAt      *time.Time `json:"kanban_started_at,omitempty"`      // When Kanban engine started execution
+	KanbanCompletedAt    *time.Time `json:"kanban_completed_at,omitempty"`    // When execution completed in Kanban context
+	KanbanExecutionCount int        `json:"kanban_execution_count,omitempty"` // How many times Kanban engine executed this
+	KanbanLastError      string     `json:"kanban_last_error,omitempty"`      // Last error from Kanban execution
 }
 
 // Attachment represents a user-provided file associated with a chat session or workflow.

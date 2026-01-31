@@ -193,8 +193,9 @@ func (l *Loader) setDefaults() {
 
 	// Git defaults
 	l.v.SetDefault("git.worktree_dir", ".worktrees")
-	l.v.SetDefault("git.auto_clean", true)
+	l.v.SetDefault("git.auto_clean", false)    // Must be false when auto_commit is false to preserve changes
 	l.v.SetDefault("git.worktree_mode", "always")
+	l.v.SetDefault("git.auto_commit", true)    // Commit changes after task completion
 
 	// GitHub defaults
 	l.v.SetDefault("github.remote", "origin")

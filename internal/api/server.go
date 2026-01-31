@@ -21,6 +21,7 @@ import (
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/diagnostics"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/events"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/kanban"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service/workflow"
 )
 
@@ -47,6 +48,9 @@ type Server struct {
 
 	// Heartbeat manager for zombie workflow detection
 	heartbeat *workflow.HeartbeatManager
+
+	// Kanban engine for sequential workflow execution
+	kanbanEngine *kanban.Engine
 }
 
 // ServerOption configures the server.
@@ -105,6 +109,13 @@ func WithHeartbeatManager(hb *workflow.HeartbeatManager) ServerOption {
 func WithChatStore(store core.ChatStore) ServerOption {
 	return func(s *Server) {
 		s.chatStore = store
+	}
+}
+
+// WithKanbanEngine sets the Kanban engine for sequential workflow execution.
+func WithKanbanEngine(engine *kanban.Engine) ServerOption {
+	return func(s *Server) {
+		s.kanbanEngine = engine
 	}
 }
 
@@ -260,6 +271,10 @@ func (s *Server) setupRouter() chi.Router {
 			r.Get("/schema", s.handleGetConfigSchema)
 			r.Get("/enums", s.handleGetEnums)
 		})
+
+		// Kanban board endpoints
+		kanbanServer := NewKanbanServer(s, s.kanbanEngine, s.eventBus)
+		kanbanServer.RegisterRoutes(r)
 	})
 
 	return r

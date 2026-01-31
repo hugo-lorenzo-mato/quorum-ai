@@ -211,6 +211,58 @@ func (s *Server) sendEventToClient(w http.ResponseWriter, flusher http.Flusher, 
 			"timestamp":   e.Timestamp(),
 		}
 
+	// Kanban events
+	case events.KanbanWorkflowMovedEvent:
+		payload = map[string]interface{}{
+			"workflow_id":    e.WorkflowID(),
+			"from_column":    e.FromColumn,
+			"to_column":      e.ToColumn,
+			"new_position":   e.NewPosition,
+			"user_initiated": e.UserInitiated,
+			"timestamp":      e.Timestamp(),
+		}
+
+	case events.KanbanExecutionStartedEvent:
+		payload = map[string]interface{}{
+			"workflow_id":    e.WorkflowID(),
+			"queue_position": e.QueuePosition,
+			"timestamp":      e.Timestamp(),
+		}
+
+	case events.KanbanExecutionCompletedEvent:
+		payload = map[string]interface{}{
+			"workflow_id": e.WorkflowID(),
+			"pr_url":      e.PRURL,
+			"pr_number":   e.PRNumber,
+			"timestamp":   e.Timestamp(),
+		}
+
+	case events.KanbanExecutionFailedEvent:
+		payload = map[string]interface{}{
+			"workflow_id":          e.WorkflowID(),
+			"error":                e.Error,
+			"consecutive_failures": e.ConsecutiveFailures,
+			"timestamp":            e.Timestamp(),
+		}
+
+	case events.KanbanEngineStateChangedEvent:
+		payload = map[string]interface{}{
+			"workflow_id":          e.WorkflowID(),
+			"enabled":              e.Enabled,
+			"current_workflow_id":  e.CurrentWorkflowID,
+			"circuit_breaker_open": e.CircuitBreakerOpen,
+			"timestamp":            e.Timestamp(),
+		}
+
+	case events.KanbanCircuitBreakerOpenedEvent:
+		payload = map[string]interface{}{
+			"workflow_id":          e.WorkflowID(),
+			"consecutive_failures": e.ConsecutiveFailures,
+			"threshold":            e.Threshold,
+			"last_failure_at":      e.LastFailureAt,
+			"timestamp":            e.Timestamp(),
+		}
+
 	default:
 		// Generic event handling
 		payload = map[string]interface{}{

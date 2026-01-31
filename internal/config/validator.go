@@ -284,6 +284,12 @@ func (v *Validator) validateGit(cfg *GitConfig) {
 	if cfg.AutoMerge && !cfg.AutoPR {
 		v.addError("git.auto_merge", cfg.AutoMerge, "auto_merge requires auto_pr to be enabled")
 	}
+
+	// CRITICAL: Prevent data loss - auto_clean=true with auto_commit=false would delete uncommitted changes
+	if cfg.AutoClean && !cfg.AutoCommit {
+		v.addError("git.auto_clean", cfg.AutoClean,
+			"auto_clean cannot be true when auto_commit is false (uncommitted changes would be lost)")
+	}
 }
 
 func (v *Validator) validateGitHub(cfg *GitHubConfig) {

@@ -19,6 +19,7 @@ import (
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/fsutil"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/kanban"
 	_ "modernc.org/sqlite"
 )
 
@@ -42,6 +43,9 @@ var migrationV6 string
 
 //go:embed migrations/007_task_merge_fields.sql
 var migrationV7 string
+
+//go:embed migrations/008_kanban_support.sql
+var migrationV8 string
 
 // SQLiteStateManager implements StateManager with SQLite storage.
 type SQLiteStateManager struct {
@@ -252,6 +256,14 @@ func (m *SQLiteStateManager) migrate() error {
 		}
 	}
 
+	if version < 8 {
+		// Migration V8 adds Kanban board support
+		_, err := m.db.Exec(migrationV8)
+		if err != nil && !strings.Contains(err.Error(), "already exists") && !strings.Contains(err.Error(), "duplicate column") {
+			return fmt.Errorf("applying migration v8: %w", err)
+		}
+	}
+
 	return nil
 }
 
@@ -314,8 +326,10 @@ func (m *SQLiteStateManager) Save(ctx context.Context, state *core.WorkflowState
 		INSERT INTO workflows (
 			id, version, title, status, current_phase, prompt, optimized_prompt,
 			task_order, config, metrics, checksum, created_at, updated_at, report_path,
-			agent_events, workflow_branch
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			agent_events, workflow_branch,
+			kanban_column, kanban_position, pr_url, pr_number,
+			kanban_started_at, kanban_completed_at, kanban_execution_count, kanban_last_error
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			version = excluded.version,
 			title = excluded.title,
@@ -330,7 +344,15 @@ func (m *SQLiteStateManager) Save(ctx context.Context, state *core.WorkflowState
 			updated_at = excluded.updated_at,
 			report_path = excluded.report_path,
 			agent_events = excluded.agent_events,
-			workflow_branch = excluded.workflow_branch
+			workflow_branch = excluded.workflow_branch,
+			kanban_column = excluded.kanban_column,
+			kanban_position = excluded.kanban_position,
+			pr_url = excluded.pr_url,
+			pr_number = excluded.pr_number,
+			kanban_started_at = excluded.kanban_started_at,
+			kanban_completed_at = excluded.kanban_completed_at,
+			kanban_execution_count = excluded.kanban_execution_count,
+			kanban_last_error = excluded.kanban_last_error
 	`,
 		state.WorkflowID, state.Version, state.Title, state.Status, state.CurrentPhase,
 		state.Prompt, state.OptimizedPrompt, string(taskOrderJSON),
@@ -339,6 +361,10 @@ func (m *SQLiteStateManager) Save(ctx context.Context, state *core.WorkflowState
 		nullableString([]byte(state.ReportPath)),
 		nullableString(agentEventsJSON),
 		nullableString([]byte(state.WorkflowBranch)),
+		nullableString([]byte(state.KanbanColumn)), state.KanbanPosition,
+		nullableString([]byte(state.PRURL)), state.PRNumber,
+		nullableTime(state.KanbanStartedAt), nullableTime(state.KanbanCompletedAt),
+		state.KanbanExecutionCount, nullableString([]byte(state.KanbanLastError)),
 	)
 	if err != nil {
 		return fmt.Errorf("upserting workflow: %w", err)
@@ -493,16 +519,24 @@ func (m *SQLiteStateManager) loadWorkflowByID(ctx context.Context, id core.Workf
 	var title sql.NullString
 	var agentEventsJSON sql.NullString
 	var workflowBranch sql.NullString
+	// Kanban fields
+	var kanbanColumn, prURL, kanbanLastError sql.NullString
+	var kanbanPosition, prNumber, kanbanExecutionCount sql.NullInt64
+	var kanbanStartedAt, kanbanCompletedAt sql.NullTime
 
 	err := m.readDB.QueryRowContext(ctx, `
 		SELECT id, version, title, status, current_phase, prompt, optimized_prompt,
 		       task_order, config, metrics, checksum, created_at, updated_at, report_path,
-		       agent_events, workflow_branch
+		       agent_events, workflow_branch,
+		       kanban_column, kanban_position, pr_url, pr_number,
+		       kanban_started_at, kanban_completed_at, kanban_execution_count, kanban_last_error
 		FROM workflows WHERE id = ?
 	`, id).Scan(
 		&state.WorkflowID, &state.Version, &title, &state.Status, &state.CurrentPhase,
 		&state.Prompt, &optimizedPrompt, &taskOrderJSON, &configJSON, &metricsJSON,
 		&checksum, &state.CreatedAt, &state.UpdatedAt, &reportPath, &agentEventsJSON, &workflowBranch,
+		&kanbanColumn, &kanbanPosition, &prURL, &prNumber,
+		&kanbanStartedAt, &kanbanCompletedAt, &kanbanExecutionCount, &kanbanLastError,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil // Workflow doesn't exist
@@ -525,6 +559,25 @@ func (m *SQLiteStateManager) loadWorkflowByID(ctx context.Context, id core.Workf
 	}
 	if workflowBranch.Valid {
 		state.WorkflowBranch = workflowBranch.String
+	}
+	// Kanban fields
+	if kanbanColumn.Valid {
+		state.KanbanColumn = kanbanColumn.String
+	}
+	state.KanbanPosition = int(kanbanPosition.Int64)
+	if prURL.Valid {
+		state.PRURL = prURL.String
+	}
+	state.PRNumber = int(prNumber.Int64)
+	if kanbanStartedAt.Valid {
+		state.KanbanStartedAt = &kanbanStartedAt.Time
+	}
+	if kanbanCompletedAt.Valid {
+		state.KanbanCompletedAt = &kanbanCompletedAt.Time
+	}
+	state.KanbanExecutionCount = int(kanbanExecutionCount.Int64)
+	if kanbanLastError.Valid {
+		state.KanbanLastError = kanbanLastError.String
 	}
 
 	// Parse JSON fields
@@ -1605,3 +1658,231 @@ func (m *SQLiteStateManager) FindZombieWorkflows(ctx context.Context, staleThres
 
 // Verify that SQLiteStateManager implements core.StateManager.
 var _ core.StateManager = (*SQLiteStateManager)(nil)
+
+// ============================================================================
+// Kanban State Management Methods
+// ============================================================================
+
+// GetNextKanbanWorkflow returns the next workflow from the "todo" column
+// ordered by position (lowest first). Returns nil if no workflows in todo.
+func (m *SQLiteStateManager) GetNextKanbanWorkflow(ctx context.Context) (*core.WorkflowState, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	// Get the workflow ID with the lowest position in the "todo" column
+	var workflowID string
+	err := m.readDB.QueryRowContext(ctx, `
+		SELECT id FROM workflows
+		WHERE kanban_column = 'todo'
+		ORDER BY kanban_position ASC, created_at ASC
+		LIMIT 1
+	`).Scan(&workflowID)
+
+	if err == sql.ErrNoRows {
+		return nil, nil // No workflows in todo
+	}
+	if err != nil {
+		return nil, fmt.Errorf("querying next kanban workflow: %w", err)
+	}
+
+	return m.loadWorkflowByID(ctx, core.WorkflowID(workflowID))
+}
+
+// MoveWorkflow moves a workflow to a new column with a new position.
+func (m *SQLiteStateManager) MoveWorkflow(ctx context.Context, workflowID, toColumn string, position int) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return m.retryWrite(ctx, "move_workflow", func() error {
+		// Update the workflow's kanban column and position
+		result, err := m.db.ExecContext(ctx, `
+			UPDATE workflows
+			SET kanban_column = ?, kanban_position = ?, updated_at = ?
+			WHERE id = ?
+		`, toColumn, position, time.Now(), workflowID)
+
+		if err != nil {
+			return fmt.Errorf("moving workflow: %w", err)
+		}
+
+		rows, _ := result.RowsAffected()
+		if rows == 0 {
+			return fmt.Errorf("workflow not found: %s", workflowID)
+		}
+
+		return nil
+	})
+}
+
+// UpdateKanbanStatus updates the Kanban-specific fields on a workflow.
+func (m *SQLiteStateManager) UpdateKanbanStatus(ctx context.Context, workflowID, column, prURL string, prNumber int, lastError string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return m.retryWrite(ctx, "update_kanban_status", func() error {
+		now := time.Now()
+
+		// Build the update query dynamically based on which fields are set
+		result, err := m.db.ExecContext(ctx, `
+			UPDATE workflows
+			SET kanban_column = ?,
+			    pr_url = CASE WHEN ? != '' THEN ? ELSE pr_url END,
+			    pr_number = CASE WHEN ? > 0 THEN ? ELSE pr_number END,
+			    kanban_last_error = ?,
+			    kanban_completed_at = CASE WHEN ? IN ('to_verify', 'done') THEN ? ELSE kanban_completed_at END,
+			    kanban_execution_count = kanban_execution_count + CASE WHEN ? IN ('to_verify', 'refinement') THEN 1 ELSE 0 END,
+			    updated_at = ?
+			WHERE id = ?
+		`, column, prURL, prURL, prNumber, prNumber, lastError, column, now, column, now, workflowID)
+
+		if err != nil {
+			return fmt.Errorf("updating kanban status: %w", err)
+		}
+
+		rows, _ := result.RowsAffected()
+		if rows == 0 {
+			return fmt.Errorf("workflow not found: %s", workflowID)
+		}
+
+		return nil
+	})
+}
+
+// GetKanbanEngineState retrieves the persisted engine state from the singleton table.
+func (m *SQLiteStateManager) GetKanbanEngineState(ctx context.Context) (*kanban.KanbanEngineState, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	var enabled, circuitBreakerOpen int
+	var currentWorkflowID sql.NullString
+	var consecutiveFailures int
+	var lastFailureAt sql.NullTime
+
+	err := m.readDB.QueryRowContext(ctx, `
+		SELECT enabled, current_workflow_id, consecutive_failures, last_failure_at, circuit_breaker_open
+		FROM kanban_engine_state
+		WHERE id = 1
+	`).Scan(&enabled, &currentWorkflowID, &consecutiveFailures, &lastFailureAt, &circuitBreakerOpen)
+
+	if err == sql.ErrNoRows {
+		// No state exists yet, return nil (use defaults)
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("querying kanban engine state: %w", err)
+	}
+
+	state := &kanban.KanbanEngineState{
+		Enabled:             enabled == 1,
+		ConsecutiveFailures: consecutiveFailures,
+		CircuitBreakerOpen:  circuitBreakerOpen == 1,
+	}
+
+	if currentWorkflowID.Valid {
+		state.CurrentWorkflowID = &currentWorkflowID.String
+	}
+	if lastFailureAt.Valid {
+		state.LastFailureAt = &lastFailureAt.Time
+	}
+
+	return state, nil
+}
+
+// SaveKanbanEngineState persists the engine state to the singleton table.
+func (m *SQLiteStateManager) SaveKanbanEngineState(ctx context.Context, state *kanban.KanbanEngineState) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return m.retryWrite(ctx, "save_kanban_engine_state", func() error {
+		enabled := 0
+		if state.Enabled {
+			enabled = 1
+		}
+
+		circuitBreakerOpen := 0
+		if state.CircuitBreakerOpen {
+			circuitBreakerOpen = 1
+		}
+
+		_, err := m.db.ExecContext(ctx, `
+			INSERT INTO kanban_engine_state (id, enabled, current_workflow_id, consecutive_failures, last_failure_at, circuit_breaker_open, updated_at)
+			VALUES (1, ?, ?, ?, ?, ?, ?)
+			ON CONFLICT(id) DO UPDATE SET
+				enabled = excluded.enabled,
+				current_workflow_id = excluded.current_workflow_id,
+				consecutive_failures = excluded.consecutive_failures,
+				last_failure_at = excluded.last_failure_at,
+				circuit_breaker_open = excluded.circuit_breaker_open,
+				updated_at = excluded.updated_at
+		`, enabled, nullableString([]byte(ptrToString(state.CurrentWorkflowID))), state.ConsecutiveFailures,
+			nullableTime(state.LastFailureAt), circuitBreakerOpen, time.Now())
+
+		if err != nil {
+			return fmt.Errorf("saving kanban engine state: %w", err)
+		}
+
+		return nil
+	})
+}
+
+// ListWorkflowsByKanbanColumn returns all workflows in a specific Kanban column, ordered by position.
+func (m *SQLiteStateManager) ListWorkflowsByKanbanColumn(ctx context.Context, column string) ([]*core.WorkflowState, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	rows, err := m.readDB.QueryContext(ctx, `
+		SELECT id FROM workflows
+		WHERE kanban_column = ?
+		ORDER BY kanban_position ASC, created_at ASC
+	`, column)
+	if err != nil {
+		return nil, fmt.Errorf("querying workflows by kanban column: %w", err)
+	}
+	defer rows.Close()
+
+	var workflows []*core.WorkflowState
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scanning workflow id: %w", err)
+		}
+
+		wf, err := m.loadWorkflowByID(ctx, core.WorkflowID(id))
+		if err != nil {
+			return nil, fmt.Errorf("loading workflow %s: %w", id, err)
+		}
+		if wf != nil {
+			workflows = append(workflows, wf)
+		}
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating workflows: %w", err)
+	}
+
+	return workflows, nil
+}
+
+// GetKanbanBoard returns all workflows grouped by their Kanban column.
+func (m *SQLiteStateManager) GetKanbanBoard(ctx context.Context) (map[string][]*core.WorkflowState, error) {
+	columns := []string{"refinement", "todo", "in_progress", "to_verify", "done"}
+	board := make(map[string][]*core.WorkflowState)
+
+	for _, col := range columns {
+		workflows, err := m.ListWorkflowsByKanbanColumn(ctx, col)
+		if err != nil {
+			return nil, fmt.Errorf("getting workflows for column %s: %w", col, err)
+		}
+		board[col] = workflows
+	}
+
+	return board, nil
+}
+
+// ptrToString safely converts a string pointer to string (empty if nil).
+func ptrToString(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}

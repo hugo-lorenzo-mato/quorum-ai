@@ -3,6 +3,7 @@ import useWorkflowStore from '../stores/workflowStore';
 import useTaskStore from '../stores/taskStore';
 import useUIStore from '../stores/uiStore';
 import useAgentStore from '../stores/agentStore';
+import useKanbanStore from '../stores/kanbanStore';
 import { workflowApi } from '../lib/api';
 
 const SSE_URL = '/api/v1/sse/events';
@@ -57,6 +58,14 @@ export default function useSSE() {
 
   // Agent event handler
   const handleAgentEvent = useAgentStore(state => state.handleAgentEvent);
+
+  // Kanban event handlers
+  const handleKanbanWorkflowMoved = useKanbanStore(state => state.handleWorkflowMoved);
+  const handleKanbanExecutionStarted = useKanbanStore(state => state.handleExecutionStarted);
+  const handleKanbanExecutionCompleted = useKanbanStore(state => state.handleExecutionCompleted);
+  const handleKanbanExecutionFailed = useKanbanStore(state => state.handleExecutionFailed);
+  const handleKanbanEngineStateChanged = useKanbanStore(state => state.handleEngineStateChanged);
+  const handleKanbanCircuitBreakerOpened = useKanbanStore(state => state.handleCircuitBreakerOpened);
 
   // Polling function
   const poll = useCallback(async () => {
@@ -144,6 +153,27 @@ export default function useSSE() {
         handleAgentEvent(data);
         break;
 
+      // Kanban events
+      case 'kanban_workflow_moved':
+        handleKanbanWorkflowMoved(data);
+        break;
+      case 'kanban_execution_started':
+        handleKanbanExecutionStarted(data);
+        break;
+      case 'kanban_execution_completed':
+        handleKanbanExecutionCompleted(data);
+        break;
+      case 'kanban_execution_failed':
+        handleKanbanExecutionFailed(data);
+        break;
+      case 'kanban_engine_state_changed':
+        handleKanbanEngineStateChanged(data);
+        break;
+      case 'kanban_circuit_breaker_opened':
+        handleKanbanCircuitBreakerOpened(data);
+        notifyError('Kanban engine circuit breaker opened - too many failures');
+        break;
+
       // Connection events
       case 'connected':
         setSSEConnected(true);
@@ -170,6 +200,12 @@ export default function useSSE() {
     handleTaskSkipped,
     handleTaskRetry,
     handleAgentEvent,
+    handleKanbanWorkflowMoved,
+    handleKanbanExecutionStarted,
+    handleKanbanExecutionCompleted,
+    handleKanbanExecutionFailed,
+    handleKanbanEngineStateChanged,
+    handleKanbanCircuitBreakerOpened,
     setSSEConnected,
     setConnectionMode,
     stopPolling,
@@ -238,6 +274,12 @@ export default function useSSE() {
       'task_skipped',
       'task_retry',
       'agent_event',
+      'kanban_workflow_moved',
+      'kanban_execution_started',
+      'kanban_execution_completed',
+      'kanban_execution_failed',
+      'kanban_engine_state_changed',
+      'kanban_circuit_breaker_opened',
     ];
 
     eventTypes.forEach(eventType => {
