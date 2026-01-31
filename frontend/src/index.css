@@ -4,7 +4,7 @@
 @import "tailwindcss";
 
 /* Tailwind v4: align `dark:` variant with our `.dark`/`.midnight` theme classes */
-@custom-variant dark (&:where(.dark, .dark *, .midnight, .midnight *));
+@custom-variant dark (:is(.dark, .midnight) &);
 
 /* Tailwind v4 Theme Configuration - Shadcn/Vercel Style */
 @theme {
@@ -114,41 +114,40 @@
   --ring-color: #d4d4d8;
 }
 
-/* Base styles */
-* {
-  border-color: var(--border-color);
-}
+@layer base {
+  /* Base styles */
+  * {
+    border-color: var(--border-color);
+    scrollbar-width: thin;
+    scrollbar-color: var(--muted-bg) transparent;
+  }
 
-body {
-  background-color: var(--bg);
-  color: var(--fg);
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
+  body {
+    background-color: var(--bg);
+    color: var(--fg);
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
 
-/* Scrollbar styling */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: var(--muted-bg) transparent;
-}
+  /* Scrollbar styling */
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
 
-*::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
 
-*::-webkit-scrollbar-track {
-  background: transparent;
-}
+  *::-webkit-scrollbar-thumb {
+    background: var(--muted-bg);
+    border-radius: 4px;
+  }
 
-*::-webkit-scrollbar-thumb {
-  background: var(--muted-bg);
-  border-radius: 4px;
-}
-
-*::-webkit-scrollbar-thumb:hover {
-  background: var(--muted-fg);
+  *::-webkit-scrollbar-thumb:hover {
+    background: var(--muted-fg);
+  }
 }
 
 /* Glass effect utility */
