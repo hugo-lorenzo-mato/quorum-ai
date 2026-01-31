@@ -298,6 +298,7 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
   const [docLoading, setDocLoading] = useState(false);
   const [docError, setDocError] = useState(null);
   const [docContent, setDocContent] = useState('');
+  const [copied, setCopied] = useState(false);
 
   const inferReportPath = useCallback(async (workflowId) => {
     try {
@@ -615,7 +616,9 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
     if (!docContent) return;
     try {
       await navigator.clipboard.writeText(docContent);
+      setCopied(true);
       notifyInfo('Copied to clipboard');
+      setTimeout(() => setCopied(false), 2000);
     } catch {
       notifyError('Failed to copy');
     }
@@ -982,10 +985,14 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
                 type="button"
                 onClick={handleCopy}
                 disabled={!docContent}
-                className="p-2 rounded-lg hover:bg-accent disabled:opacity-50 transition-colors"
-                title="Copy raw markdown"
+                className={`p-2 rounded-lg hover:bg-accent disabled:opacity-50 transition-colors ${copied ? 'text-green-500' : ''}`}
+                title={copied ? 'Copied!' : 'Copy raw markdown'}
               >
-                <Copy className="w-4 h-4 text-muted-foreground" />
+                {copied ? (
+                  <CheckCircle2 className="w-4 h-4" />
+                ) : (
+                  <Copy className="w-4 h-4 text-muted-foreground" />
+                )}
               </button>
               <button
                 type="button"

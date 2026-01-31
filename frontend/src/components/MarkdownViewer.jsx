@@ -15,7 +15,7 @@ import tsx from 'react-syntax-highlighter/dist/esm/languages/prism/tsx';
 import typescript from 'react-syntax-highlighter/dist/esm/languages/prism/typescript';
 import yaml from 'react-syntax-highlighter/dist/esm/languages/prism/yaml';
 import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronRight, Copy, CheckCircle2 } from 'lucide-react';
 import { useUIStore } from '../stores';
 
 SyntaxHighlighter.registerLanguage('bash', bash);
@@ -58,10 +58,50 @@ function splitFrontmatter(markdown) {
   };
 }
 
+function CopyButton({ text }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Silent fail
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      className="absolute top-2 right-2 p-1.5 rounded-md bg-background/50 hover:bg-background shadow-sm border border-border text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-all z-10"
+      title={copied ? 'Copied!' : 'Copy code'}
+    >
+      {copied ? (
+        <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
+      ) : (
+        <Copy className="w-3.5 h-3.5" />
+      )}
+    </button>
+  );
+}
+
 export default function MarkdownViewer({ markdown }) {
   const { frontmatter, body } = useMemo(() => splitFrontmatter(markdown), [markdown]);
   const [showFrontmatter, setShowFrontmatter] = useState(false);
+  const [copied, setCopied] = useState(false);
   const theme = useUIStore((s) => s.theme);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(markdown || '');
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Silent fail - copy button is a convenience feature
+    }
+  };
   const isDark = useMemo(() => {
     if (theme === 'dark' || theme === 'midnight') return true;
     if (theme === 'light') return false;
@@ -70,13 +110,25 @@ export default function MarkdownViewer({ markdown }) {
   }, [theme]);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 relative">
+      <button
+        type="button"
+        onClick={handleCopy}
+        className={`absolute top-0 right-0 p-2 rounded-lg hover:bg-accent/50 transition-colors ${copied ? 'text-green-500' : 'text-muted-foreground'}`}
+        title={copied ? 'Copied!' : 'Copy content'}
+      >
+        {copied ? (
+          <CheckCircle2 className="w-4 h-4" />
+        ) : (
+          <Copy className="w-4 h-4" />
+        )}
+      </button>
       {frontmatter && (
         <div className="rounded-lg border border-border bg-card">
           <button
             type="button"
             onClick={() => setShowFrontmatter((v) => !v)}
-            className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left text-sm font-medium text-foreground hover:bg-accent/40 rounded-lg"
+            className="w-full flex items-center justify-between gap-2 px-3 py-2 pr-12 text-left text-sm font-medium text-foreground hover:bg-accent/40 rounded-lg"
           >
             <span>Metadata</span>
             {showFrontmatter ? (
@@ -93,7 +145,7 @@ export default function MarkdownViewer({ markdown }) {
         </div>
       )}
 
-      <div className="min-w-0">
+      <div className="min-w-0 pr-12">
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
           components={{
@@ -155,24 +207,34 @@ export default function MarkdownViewer({ markdown }) {
 
               if (!inline && match) {
                 return (
-                  <SyntaxHighlighter
-                    language={match[1]}
-                    style={isDark ? oneDark : oneLight}
-                    PreTag="div"
-                    customStyle={{ margin: 0, background: 'transparent' }}
-                    codeTagProps={{ style: { background: 'transparent' } }}
-                    {...props}
-                  >
-                    {content}
-                  </SyntaxHighlighter>
+                  <>
+                    <CopyButton text={content} />
+                    <div className="p-4 overflow-x-auto">
+                      <SyntaxHighlighter
+                        language={match[1]}
+                        style={isDark ? oneDark : oneLight}
+                        PreTag="div"
+                        customStyle={{ margin: 0, background: 'transparent' }}
+                        codeTagProps={{ style: { background: 'transparent' } }}
+                        {...props}
+                      >
+                        {content}
+                      </SyntaxHighlighter>
+                    </div>
+                  </>
                 );
               }
 
               if (!inline) {
                 return (
-                  <code className="block whitespace-pre font-mono text-xs" {...props}>
-                    {content}
-                  </code>
+                  <>
+                    <CopyButton text={content} />
+                    <div className="p-4 overflow-x-auto">
+                      <code className="block whitespace-pre font-mono text-xs" {...props}>
+                        {content}
+                      </code>
+                    </div>
+                  </>
                 );
               }
 
@@ -183,7 +245,7 @@ export default function MarkdownViewer({ markdown }) {
               );
             },
             pre: ({ children, ...props }) => (
-              <div className="my-4 p-4 rounded-lg bg-muted overflow-x-auto border border-border text-xs" {...props}>
+              <div className="my-4 rounded-lg bg-muted border border-border text-xs relative group" {...props}>
                 {children}
               </div>
             ),
