@@ -160,9 +160,9 @@ function KanbanCard({ workflow, isExecuting, onDragStart, onDragEnd, onClick }) 
       onDragStart={handleDragStart}
       onDragEnd={onDragEnd}
       onClick={onClick}
-      className={`group relative rounded-xl border border-border bg-background p-3 shadow-sm cursor-pointer transition-all hover:bg-accent/30 hover:border-muted-foreground/30 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 ${
-        isExecuting ? 'ring-2 ring-info/30' : ''
-      }`}
+      className={`group relative overflow-hidden rounded-xl border border-border bg-card p-3 shadow-sm shadow-black/5 dark:shadow-black/40 cursor-pointer transition-all hover:border-muted-foreground/30 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 ${
+        isExecuting ? 'ring-2 ring-info/30 dark:ring-info/40' : ''
+      } before:pointer-events-none before:absolute before:inset-0 before:rounded-xl before:content-[''] before:bg-gradient-to-b before:from-white/0 before:to-transparent dark:before:from-white/10`}
       role="button"
       tabIndex={0}
       onKeyDown={(e) => {
