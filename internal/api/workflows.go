@@ -137,9 +137,9 @@ func markFinished(id string) {
 	delete(runningWorkflows.ids, id)
 }
 
-// isWorkflowActuallyRunning checks if a workflow marked as "running"
-// has an active execution in this process. Useful for detecting zombies.
-// DEPRECATED: Use Server.isWorkflowRunning for unified tracking.
+// isWorkflowActuallyRunning checks if a workflow is tracked in the direct
+// execution map (runningWorkflows). This is an internal function - external
+// callers should use Server.isWorkflowRunning for unified tracking.
 func isWorkflowActuallyRunning(workflowID string) bool {
 	runningWorkflows.Lock()
 	defer runningWorkflows.Unlock()
@@ -147,16 +147,16 @@ func isWorkflowActuallyRunning(workflowID string) bool {
 }
 
 // isWorkflowRunning checks if a workflow is running in EITHER tracking system:
-// - The WorkflowExecutor (used by Kanban engine and preferred API path)
-// - The legacy runningWorkflows map (fallback when executor is nil)
+// - The WorkflowExecutor (used by Kanban engine and API with executor)
+// - The runningWorkflows map (used by direct execution when executor is nil)
 // This unified check prevents false negatives when a workflow is tracked in
-// the executor but not the legacy map (or vice versa).
+// one system but not the other.
 func (s *Server) isWorkflowRunning(workflowID string) bool {
-	// Check executor first (preferred, used by Kanban)
+	// Check executor first (used by Kanban and API when available)
 	if s.executor != nil && s.executor.IsRunning(workflowID) {
 		return true
 	}
-	// Fallback to legacy tracking
+	// Check direct execution tracking
 	return isWorkflowActuallyRunning(workflowID)
 }
 
@@ -735,7 +735,7 @@ func (s *Server) HandleRunWorkflow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Fallback to legacy execution path (without executor)
+	// Direct execution path (when executor is not available)
 	// Validate workflow state for execution
 	switch state.Status {
 	case core.WorkflowStatusRunning:
@@ -792,7 +792,7 @@ func (s *Server) HandleRunWorkflow(w http.ResponseWriter, r *http.Request) {
 	state.Status = core.WorkflowStatusRunning
 	state.Error = "" // Clear previous error on restart
 	state.UpdatedAt = time.Now()
-	// Initialize heartbeat for zombie detection - CRITICAL for legacy execution path
+	// Initialize heartbeat for zombie detection - CRITICAL for direct execution path
 	now := time.Now().UTC()
 	state.HeartbeatAt = &now
 	if err := s.stateManager.Save(r.Context(), state); err != nil {
