@@ -140,7 +140,7 @@ export default function MarkdownViewer({ markdown }) {
               </ol>
             ),
             li: ({ children, ...props }) => (
-              <li className="text-foreground/90" {...props}>
+              <li className="text-sm text-foreground/90" {...props}>
                 {children}
               </li>
             ),
