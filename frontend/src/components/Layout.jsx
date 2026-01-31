@@ -124,10 +124,19 @@ export default function Layout({ children }) {
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Mobile overlay */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-40 md:hidden"
+          onClick={toggleSidebar}
+          aria-hidden="true"
+        />
+      )}
+
       {/* Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex flex-col border-r border-border bg-card/50 glass transition-all duration-300 ease-in-out ${
-          sidebarOpen ? 'w-64' : 'w-16'
+        className={`fixed inset-y-0 left-0 z-50 flex flex-col border-r border-border bg-card/50 glass transition-all duration-300 ease-in-out md:translate-x-0 ${
+          sidebarOpen ? 'w-64 translate-x-0' : 'w-16 -translate-x-full md:translate-x-0'
         }`}
       >
         {/* Logo */}
@@ -198,15 +207,23 @@ export default function Layout({ children }) {
 
       {/* Main content */}
       <main
-        className={`min-h-screen transition-all duration-300 ease-in-out ${
+        className={`min-h-screen transition-all duration-300 ease-in-out md:${
           sidebarOpen ? 'pl-64' : 'pl-16'
-        }`}
+        } pl-0`}
       >
         {/* Top bar */}
         <header className="sticky top-0 z-40 h-14 border-b border-border bg-background/80 glass">
-          <div className="flex items-center justify-between h-full px-6">
-            <div className="flex items-center gap-4">
-              <h1 className="text-sm font-medium text-muted-foreground">
+          <div className="flex items-center justify-between h-full px-3 sm:px-6">
+            <div className="flex items-center gap-3 sm:gap-4">
+              {/* Mobile menu button */}
+              <button
+                onClick={toggleSidebar}
+                className="md:hidden p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                aria-label="Toggle sidebar"
+              >
+                <PanelLeft className="w-5 h-5" />
+              </button>
+              <h1 className="text-xs sm:text-sm font-medium text-muted-foreground">
                 {navItems.find(item =>
                   location.pathname === item.path ||
                   (item.path !== '/' && location.pathname.startsWith(item.path))
@@ -220,7 +237,7 @@ export default function Layout({ children }) {
         </header>
 
         {/* Page content */}
-        <div className="p-6">
+        <div className="p-3 sm:p-6">
           {children}
         </div>
       </main>

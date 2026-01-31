@@ -37,18 +37,18 @@ export default function Settings() {
   const ActiveComponent = TABS.find((t) => t.id === activeTab)?.component;
 
   return (
-    <div className="space-y-6 pb-32">
+    <div className="space-y-4 sm:space-y-6 pb-32 sm:pb-32">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-semibold text-foreground tracking-tight">Settings</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
+        <h1 className="text-xl sm:text-2xl font-semibold text-foreground tracking-tight">Settings</h1>
+        <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
           Configure Quorum behavior and preferences
         </p>
       </div>
 
       {/* Tab Navigation */}
-      <div className="sticky top-14 z-30 -mx-6 px-6 py-3 border-b border-border bg-background/80 glass">
-        <div className="flex items-center gap-1 p-1 rounded-lg bg-secondary border border-border overflow-x-auto">
+      <div className="sticky top-14 z-30 -mx-3 sm:-mx-6 px-3 sm:px-6 py-2 sm:py-3 border-b border-border bg-background/80 glass">
+        <div className="flex items-center gap-0.5 sm:gap-1 p-0.5 sm:p-1 rounded-lg bg-secondary border border-border overflow-x-auto">
           {TABS.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -56,7 +56,7 @@ export default function Settings() {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md transition-all whitespace-nowrap ${
+                className={`flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm font-medium rounded-md transition-all whitespace-nowrap ${
                   isActive
                     ? 'bg-background text-foreground shadow-sm'
                     : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
@@ -65,7 +65,7 @@ export default function Settings() {
                 role="tab"
                 aria-selected={isActive}
               >
-                <Icon className="w-4 h-4" />
+                <Icon className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
                 {tab.label}
               </button>
             );
