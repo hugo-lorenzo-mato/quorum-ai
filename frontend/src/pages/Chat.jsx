@@ -12,6 +12,8 @@ import {
   Loader2,
   Pencil,
   Check,
+  Copy,
+  CheckCircle2,
 } from 'lucide-react';
 import {
   AgentSelector,
@@ -36,8 +38,19 @@ function TypingIndicator() {
 }
 
 function MessageBubble({ message, isLast }) {
+  const [copied, setCopied] = useState(false);
   const isUser = message.role === 'user';
   const agentName = message.agent ? message.agent.charAt(0).toUpperCase() + message.agent.slice(1) : 'Assistant';
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(message.content);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Silent fail - copy button is a convenience feature
+    }
+  };
 
   return (
     <div className={`flex gap-3 ${isUser ? 'flex-row-reverse' : ''} ${isLast ? 'animate-fade-up' : ''}`}>
@@ -59,9 +72,23 @@ function MessageBubble({ message, isLast }) {
           <p className="text-xs font-medium text-primary mb-1">{agentName}</p>
         )}
         <p className="text-sm whitespace-pre-wrap leading-relaxed">{message.content}</p>
-        <p className={`text-xs mt-2 ${isUser ? 'text-primary-foreground/60' : 'text-muted-foreground'}`}>
-          {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-        </p>
+        <div className="flex items-center justify-between mt-2">
+          <p className={`text-xs ${isUser ? 'text-primary-foreground/60' : 'text-muted-foreground'}`}>
+            {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </p>
+          <button
+            type="button"
+            onClick={handleCopy}
+            className={`p-1 rounded hover:bg-accent/50 transition-colors ${copied ? 'text-green-500' : ''}`}
+            title={copied ? 'Copied!' : 'Copy message'}
+          >
+            {copied ? (
+              <CheckCircle2 className="w-3.5 h-3.5" />
+            ) : (
+              <Copy className={`w-3.5 h-3.5 ${isUser ? 'text-primary-foreground/60' : 'text-muted-foreground'}`} />
+            )}
+          </button>
+        </div>
       </div>
     </div>
   );
