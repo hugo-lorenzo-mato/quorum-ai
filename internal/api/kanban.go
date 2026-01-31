@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strconv"
@@ -17,13 +18,13 @@ import (
 // Implementations should embed SQLiteStateManager or provide these methods.
 type KanbanStateManagerAdapter interface {
 	core.StateManager
-	GetNextKanbanWorkflow(ctx interface{}) (*core.WorkflowState, error)
-	MoveWorkflow(ctx interface{}, workflowID, toColumn string, position int) error
-	UpdateKanbanStatus(ctx interface{}, workflowID, column, prURL string, prNumber int, lastError string) error
-	GetKanbanEngineState(ctx interface{}) (*kanban.KanbanEngineState, error)
-	SaveKanbanEngineState(ctx interface{}, state *kanban.KanbanEngineState) error
-	ListWorkflowsByKanbanColumn(ctx interface{}, column string) ([]*core.WorkflowState, error)
-	GetKanbanBoard(ctx interface{}) (map[string][]*core.WorkflowState, error)
+	GetNextKanbanWorkflow(ctx context.Context) (*core.WorkflowState, error)
+	MoveWorkflow(ctx context.Context, workflowID, toColumn string, position int) error
+	UpdateKanbanStatus(ctx context.Context, workflowID, column, prURL string, prNumber int, lastError string) error
+	GetKanbanEngineState(ctx context.Context) (*kanban.KanbanEngineState, error)
+	SaveKanbanEngineState(ctx context.Context, state *kanban.KanbanEngineState) error
+	ListWorkflowsByKanbanColumn(ctx context.Context, column string) ([]*core.WorkflowState, error)
+	GetKanbanBoard(ctx context.Context) (map[string][]*core.WorkflowState, error)
 }
 
 // KanbanBoardResponse represents the full Kanban board state.
@@ -105,7 +106,7 @@ func (ks *KanbanServer) handleGetBoard(w http.ResponseWriter, r *http.Request) {
 
 	// Type assert to get Kanban-specific methods
 	kanbanMgr, ok := ks.server.stateManager.(interface {
-		GetKanbanBoard(ctx interface{}) (map[string][]*core.WorkflowState, error)
+		GetKanbanBoard(ctx context.Context) (map[string][]*core.WorkflowState, error)
 	})
 	if !ok {
 		respondError(w, http.StatusServiceUnavailable, "Kanban features not available")
@@ -184,8 +185,8 @@ func (ks *KanbanServer) handleMoveWorkflow(w http.ResponseWriter, r *http.Reques
 
 	// Type assert to get Kanban-specific methods
 	kanbanMgr, ok := ks.server.stateManager.(interface {
-		MoveWorkflow(ctx interface{}, workflowID, toColumn string, position int) error
-		LoadByID(ctx interface{}, id core.WorkflowID) (*core.WorkflowState, error)
+		MoveWorkflow(ctx context.Context, workflowID, toColumn string, position int) error
+		LoadByID(ctx context.Context, id core.WorkflowID) (*core.WorkflowState, error)
 	})
 	if !ok {
 		respondError(w, http.StatusServiceUnavailable, "Kanban features not available")
