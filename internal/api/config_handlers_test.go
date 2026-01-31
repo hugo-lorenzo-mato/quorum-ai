@@ -178,7 +178,7 @@ func TestHandleValidateConfig(t *testing.T) {
 	}{
 		{
 			name:      "valid config",
-			body:      `{"log": {"level": "info"}, "agents": {"default": "claude", "claude": {"enabled": true}}, "phases": {"analyze": {"refiner": {"enabled": false}, "moderator": {"enabled": false}}}}`,
+			body:      `{"log": {"level": "info"}, "agents": {"default": "claude", "claude": {"enabled": true}}, "phases": {"analyze": {"refiner": {"enabled": false}, "moderator": {"enabled": false}}}, "git": {"worktree": {"dir": ".worktrees"}}}`,
 			wantValid: true,
 		},
 	}
@@ -238,6 +238,10 @@ func TestHandleResetConfig(t *testing.T) {
 				"moderator": {"enabled": false},
 				"synthesizer": {"agent": "claude"}
 			}
+		},
+		"git": {
+			"worktree": {"dir": ".worktrees", "mode": "parallel"},
+			"task": {"auto_commit": true}
 		}
 	}`
 	updateReq := httptest.NewRequest(http.MethodPatch, "/api/v1/config?force=true", bytes.NewBufferString(validConfig))

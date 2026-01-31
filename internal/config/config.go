@@ -429,20 +429,46 @@ func (s *StateConfig) EffectiveBackend() string {
 	return backend
 }
 
-// GitConfig configures git operations.
+// GitConfig configures git operations with semantic grouping.
+// Fields are organized by their lifecycle and scope:
+// - Worktree: temporary environment during task execution
+// - Task: incremental progress saving (per-task commits)
+// - Finalization: final workflow delivery (push, PR, merge)
 type GitConfig struct {
-	WorktreeDir  string `mapstructure:"worktree_dir"`
-	AutoClean    bool   `mapstructure:"auto_clean"`
-	WorktreeMode string `mapstructure:"worktree_mode"`
+	Worktree     WorktreeConfig        `mapstructure:"worktree"`
+	Task         GitTaskConfig         `mapstructure:"task"`
+	Finalization GitFinalizationConfig `mapstructure:"finalization"`
+}
+
+// WorktreeConfig configures temporary worktree management during execution.
+type WorktreeConfig struct {
+	// Dir is the directory where worktrees are created.
+	Dir string `mapstructure:"dir"`
+	// Mode controls when worktrees are created: always, parallel, or disabled.
+	Mode string `mapstructure:"mode"`
+	// AutoClean removes worktrees after task completion.
+	// IMPORTANT: Requires Task.AutoCommit=true to prevent data loss.
+	AutoClean bool `mapstructure:"auto_clean"`
+}
+
+// GitTaskConfig configures per-task progress saving.
+type GitTaskConfig struct {
 	// AutoCommit commits changes after each task completes.
+	// This ensures work is saved even if the workflow crashes.
 	AutoCommit bool `mapstructure:"auto_commit"`
-	// AutoPush pushes the task branch to remote after commit.
+}
+
+// GitFinalizationConfig configures workflow result delivery.
+// These settings control how the final workflow branch is pushed and merged.
+// Note: Different from FinalizationConfig in context.go which is a runtime struct.
+type GitFinalizationConfig struct {
+	// AutoPush pushes the workflow branch to remote after all tasks complete.
 	AutoPush bool `mapstructure:"auto_push"`
-	// AutoPR creates a pull request for each task branch.
+	// AutoPR creates a single pull request for the entire workflow.
 	AutoPR bool `mapstructure:"auto_pr"`
 	// AutoMerge merges the PR automatically after creation.
 	AutoMerge bool `mapstructure:"auto_merge"`
-	// PRBaseBranch is the target branch for PRs (default: current branch).
+	// PRBaseBranch is the target branch for PRs (empty = repository default).
 	PRBaseBranch string `mapstructure:"pr_base_branch"`
 	// MergeStrategy for auto-merge: merge, squash, rebase (default: squash).
 	MergeStrategy string `mapstructure:"merge_strategy"`

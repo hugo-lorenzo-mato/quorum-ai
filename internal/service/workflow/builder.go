@@ -396,7 +396,7 @@ func (b *RunnerBuilder) Build(ctx context.Context) (*Runner, error) {
 		if err != nil {
 			logger.Warn("failed to detect repo root, workflow isolation disabled", "error", err)
 		} else {
-			wtMgr, wtErr := createWorkflowWorktreeManager(gitClient, repoRoot, b.config.Git.WorktreeDir, logger)
+			wtMgr, wtErr := createWorkflowWorktreeManager(gitClient, repoRoot, b.config.Git.Worktree.Dir, logger)
 			if wtErr != nil {
 				logger.Warn("failed to create workflow worktree manager, workflow isolation disabled", "error", wtErr)
 			} else {
@@ -561,8 +561,8 @@ func BuildRunnerConfigFromConfig(cfg *config.Config) *RunnerConfig {
 		DenyTools:         cfg.Workflow.DenyTools,
 		DefaultAgent:      cfg.Agents.Default,
 		AgentPhaseModels:  buildAgentPhaseModels(cfg.Agents),
-		WorktreeAutoClean: cfg.Git.AutoClean,
-		WorktreeMode:      cfg.Git.WorktreeMode,
+		WorktreeAutoClean: cfg.Git.Worktree.AutoClean,
+		WorktreeMode:      cfg.Git.Worktree.Mode,
 		Refiner: RefinerConfig{
 			Enabled: cfg.Phases.Analyze.Refiner.Enabled,
 			Agent:   cfg.Phases.Analyze.Refiner.Agent,
@@ -594,12 +594,12 @@ func BuildRunnerConfigFromConfig(cfg *config.Config) *RunnerConfig {
 			Execute: executeTimeout,
 		},
 		Finalization: FinalizationConfig{
-			AutoCommit:    cfg.Git.AutoCommit,
-			AutoPush:      cfg.Git.AutoPush,
-			AutoPR:        cfg.Git.AutoPR,
-			AutoMerge:     cfg.Git.AutoMerge,
-			PRBaseBranch:  cfg.Git.PRBaseBranch,
-			MergeStrategy: cfg.Git.MergeStrategy,
+			AutoCommit:    cfg.Git.Task.AutoCommit,
+			AutoPush:      cfg.Git.Finalization.AutoPush,
+			AutoPR:        cfg.Git.Finalization.AutoPR,
+			AutoMerge:     cfg.Git.Finalization.AutoMerge,
+			PRBaseBranch:  cfg.Git.Finalization.PRBaseBranch,
+			MergeStrategy: cfg.Git.Finalization.MergeStrategy,
 		},
 		Report: report.Config{
 			Enabled:    cfg.Report.Enabled,
@@ -644,7 +644,7 @@ func (b *RunnerBuilder) createGitComponents(logger *logging.Logger) (WorktreeMan
 		gc, gitErr := createGitClient(cwd)
 		if gitErr == nil && gc != nil {
 			gitClient = gc
-			worktreeManager = createWorktreeManager(gc, cfg.Git.WorktreeDir, logger)
+			worktreeManager = createWorktreeManager(gc, cfg.Git.Worktree.Dir, logger)
 		} else if logger != nil {
 			logger.Warn("git client unavailable, worktree isolation disabled", "error", gitErr)
 		}
@@ -652,7 +652,7 @@ func (b *RunnerBuilder) createGitComponents(logger *logging.Logger) (WorktreeMan
 
 	// Create GitHub client for PR creation (only if auto_pr is enabled)
 	var githubClient core.GitHubClient
-	if cfg.Git.AutoPR {
+	if cfg.Git.Finalization.AutoPR {
 		ghClient, ghErr := createGitHubClient()
 		if ghErr != nil {
 			if logger != nil {

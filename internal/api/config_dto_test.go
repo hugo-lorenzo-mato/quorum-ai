@@ -27,9 +27,20 @@ func TestFullConfigResponse_Marshaling(t *testing.T) {
 			},
 		},
 		Git: GitConfigResponse{
-			AutoCommit:   false,
-			AutoPush:     false,
-			WorktreeMode: "parallel",
+			Worktree: WorktreeConfigResponse{
+				Dir:       ".worktrees",
+				Mode:      "parallel",
+				AutoClean: false,
+			},
+			Task: GitTaskConfigResponse{
+				AutoCommit: false,
+			},
+			Finalization: GitFinalizationConfigResponse{
+				AutoPush:      false,
+				AutoPR:        false,
+				AutoMerge:     false,
+				MergeStrategy: "squash",
+			},
 		},
 		Log: LogConfigResponse{
 			Level:  "info",
@@ -84,7 +95,7 @@ func TestFullConfigUpdate_PointerFields(t *testing.T) {
 		},
 		{
 			name:         "empty string is set",
-			jsonBody:     `{"git": {"worktree_mode": ""}}`,
+			jsonBody:     `{"git": {"worktree": {"mode": ""}}}`,
 			wantLog:      false,
 			wantLevelSet: false,
 			wantFormat:   false,
@@ -129,8 +140,8 @@ func TestFullConfigUpdate_PointerFields(t *testing.T) {
 			}
 
 			if tt.wantGit {
-				if req.Git == nil || req.Git.WorktreeMode == nil {
-					t.Error("expected Git.WorktreeMode to be set")
+				if req.Git == nil || req.Git.Worktree == nil || req.Git.Worktree.Mode == nil {
+					t.Error("expected Git.Worktree.Mode to be set")
 				}
 			} else if req.Git != nil {
 				t.Error("expected Git to be nil")

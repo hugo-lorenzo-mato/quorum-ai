@@ -359,8 +359,8 @@ func createWorkflowRunner(
 			"copilot":  cfg.Agents.Copilot.PhaseModels,
 			"opencode": cfg.Agents.OpenCode.PhaseModels,
 		},
-		WorktreeAutoClean: cfg.Git.AutoClean,
-		WorktreeMode:      cfg.Git.WorktreeMode,
+		WorktreeAutoClean: cfg.Git.Worktree.AutoClean,
+		WorktreeMode:      cfg.Git.Worktree.Mode,
 		Refiner: workflow.RefinerConfig{
 			Enabled: cfg.Phases.Analyze.Refiner.Enabled,
 			Agent:   cfg.Phases.Analyze.Refiner.Agent,
@@ -412,7 +412,7 @@ func createWorkflowRunner(
 	}
 	var worktreeManager workflow.WorktreeManager
 	if gitClient != nil {
-		worktreeManager = git.NewTaskWorktreeManager(gitClient, cfg.Git.WorktreeDir).WithLogger(logger)
+		worktreeManager = git.NewTaskWorktreeManager(gitClient, cfg.Git.Worktree.Dir).WithLogger(logger)
 	}
 
 	// Create adapters
@@ -686,8 +686,8 @@ func createWorkflowRunnerWithTrace(
 			"copilot":  cfg.Agents.Copilot.PhaseModels,
 			"opencode": cfg.Agents.OpenCode.PhaseModels,
 		},
-		WorktreeAutoClean: cfg.Git.AutoClean,
-		WorktreeMode:      cfg.Git.WorktreeMode,
+		WorktreeAutoClean: cfg.Git.Worktree.AutoClean,
+		WorktreeMode:      cfg.Git.Worktree.Mode,
 		Refiner: workflow.RefinerConfig{
 			Enabled: cfg.Phases.Analyze.Refiner.Enabled,
 			Agent:   cfg.Phases.Analyze.Refiner.Agent,
@@ -739,7 +739,7 @@ func createWorkflowRunnerWithTrace(
 	}
 	var worktreeManager workflow.WorktreeManager
 	if gitClient != nil {
-		worktreeManager = git.NewTaskWorktreeManager(gitClient, cfg.Git.WorktreeDir).WithLogger(logger)
+		worktreeManager = git.NewTaskWorktreeManager(gitClient, cfg.Git.Worktree.Dir).WithLogger(logger)
 	}
 
 	// Create adapters

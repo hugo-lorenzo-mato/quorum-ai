@@ -457,28 +457,40 @@ Extensions are automatically adjusted when switching backends:
 
 ### git
 
-Configures git integration and task finalization.
+Configures git integration and task finalization. Settings are organized by lifecycle:
+
+- **worktree**: Temporary environment during task execution
+- **task**: Incremental progress saving (per-task commits)
+- **finalization**: Final workflow delivery (push, PR, merge)
 
 ```yaml
 git:
-  worktree_dir: .worktrees
-  auto_clean: true
-  worktree_mode: parallel
-  auto_commit: true
-  auto_push: true
-  auto_pr: true
-  pr_base_branch: ""
-  auto_merge: true
-  merge_strategy: squash
+  # Worktree management - temporary environment during execution
+  worktree:
+    dir: .worktrees              # Directory where worktrees are created
+    mode: parallel               # always | parallel | disabled
+    auto_clean: true             # Remove worktrees after completion
+
+  # Task progress - incremental saving
+  task:
+    auto_commit: true            # Commit after each task completes
+
+  # Finalization - workflow result delivery
+  finalization:
+    auto_push: true              # Push workflow branch to remote
+    auto_pr: true                # Create single PR for workflow
+    auto_merge: false            # Merge PR automatically
+    pr_base_branch: ""           # Target branch (empty = repo default)
+    merge_strategy: squash       # merge | squash | rebase
 ```
 
-#### Worktree Settings
+#### Worktree Settings (`git.worktree`)
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `worktree_dir` | string | `.worktrees` | Worktree directory |
+| `dir` | string | `.worktrees` | Directory where worktrees are created |
+| `mode` | string | `parallel` | When to create worktrees |
 | `auto_clean` | bool | `true` | Remove worktrees after completion |
-| `worktree_mode` | string | `parallel` | When to create worktrees |
 
 **Worktree modes:**
 
@@ -488,38 +500,41 @@ git:
 | `parallel` | Only when 2+ tasks run concurrently (recommended) |
 | `disabled` | All tasks share main working directory |
 
-#### Post-Task Finalization
+> **Important:** `auto_clean: true` requires `task.auto_commit: true` to prevent data loss.
+
+#### Task Progress (`git.task`)
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `auto_commit` | bool | `true` | Commit changes after task |
-| `auto_push` | bool | `true` | Push branch to remote |
-| `auto_pr` | bool | `true` | Create pull request |
+| `auto_commit` | bool | `true` | Commit changes after each task completes |
+
+This ensures work is saved even if the workflow crashes mid-execution.
+
+#### Workflow Finalization (`git.finalization`)
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `auto_push` | bool | `true` | Push workflow branch to remote |
+| `auto_pr` | bool | `true` | Create pull request for workflow |
+| `auto_merge` | bool | `false` | Merge PR immediately (disabled by default) |
 | `pr_base_branch` | string | `""` | PR target branch (empty = repo default) |
-| `auto_merge` | bool | `true` | Merge PR immediately |
 | `merge_strategy` | string | `squash` | Merge method: `merge`, `squash`, `rebase` |
 
-**Finalization flow:**
+**Dependency chain:**
+- `auto_pr: true` requires `auto_push: true`
+- `auto_merge: true` requires `auto_pr: true`
 
-**Workflow isolation (default, recommended):**
+**Finalization flow (Workflow Isolation):**
 
 1. Workflow starts on branch `quorum/<workflow-id>` (created from base branch)
 2. Each task runs on `quorum/<workflow-id>__<task-id>` in an isolated worktree
-3. `auto_commit` → commit changes on task branch
-4. `auto_push` → push task branch to remote (optional, for backup/audit)
-5. Task branch is merged into `quorum/<workflow-id>` locally after success
-6. `auto_pr` → create a single PR from `quorum/<workflow-id>` to `pr_base_branch`
-7. `auto_merge` → merge that workflow PR using `merge_strategy`
+3. `task.auto_commit` → commit changes on task branch
+4. Task branch is merged into `quorum/<workflow-id>` locally after success
+5. `finalization.auto_push` → push workflow branch to remote
+6. `finalization.auto_pr` → create a single PR from `quorum/<workflow-id>` to `pr_base_branch`
+7. `finalization.auto_merge` → merge that workflow PR using `merge_strategy`
 
-**Legacy mode (no workflow isolation):**
-
-1. Task completes on branch `quorum/<task-id>`
-2. `auto_commit` → commit changes
-3. `auto_push` → push to remote
-4. `auto_pr` → create PR targeting `pr_base_branch`
-5. `auto_merge` → merge using `merge_strategy`
-
-> **Caution:** `auto_merge` merges PRs automatically. Disable it if you want manual review.
+> **Caution:** `auto_merge` merges PRs automatically without human review. Keep it disabled (default) for production workflows.
 
 ---
 

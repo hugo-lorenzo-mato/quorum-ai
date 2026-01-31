@@ -104,19 +104,23 @@ agents:
       execute: true
 
 # Git configuration
-# By default, workflows run on an isolated workflow branch quorum/<workflow-id>,
-# and each task runs in its own worktree/branch quorum/<workflow-id>__<task-id>.
-# After completion: commit -> push -> PR (configurable).
+# Organized by lifecycle: worktree (during execution), task (progress), finalization (delivery)
 git:
-  # When to create worktrees: always | parallel | disabled
-  worktree_mode: parallel
-  # Post-task finalization
-  auto_commit: true
-  auto_push: true
-  auto_pr: true
-  # PR target branch (empty = repository default)
-  pr_base_branch: ""
-  # Auto-merge enabled by default (disable if you want manual review)
-  auto_merge: true
-  merge_strategy: squash
+  # Worktree management - temporary environment during execution
+  worktree:
+    dir: .worktrees
+    mode: parallel    # always | parallel | disabled
+    auto_clean: true  # Remove worktrees after completion
+
+  # Task progress - incremental saving
+  task:
+    auto_commit: true  # Commit after each task completes
+
+  # Finalization - workflow result delivery
+  finalization:
+    auto_push: true       # Push workflow branch to remote
+    auto_pr: true         # Create single PR for workflow
+    auto_merge: true      # Merge PR automatically (disable for manual review)
+    pr_base_branch: ""    # Target branch (empty = repository default)
+    merge_strategy: squash  # merge | squash | rebase
 `

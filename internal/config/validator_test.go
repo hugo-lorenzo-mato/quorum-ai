@@ -49,8 +49,20 @@ func validConfig() *Config {
 			LockTTL:    "1h",
 		},
 		Git: GitConfig{
-			WorktreeDir: ".worktrees",
-			AutoClean:   true,
+			Worktree: WorktreeConfig{
+				Dir:       ".worktrees",
+				Mode:      "parallel",
+				AutoClean: true,
+			},
+			Task: GitTaskConfig{
+				AutoCommit: true, // Required when Worktree.AutoClean is true
+			},
+			Finalization: GitFinalizationConfig{
+				AutoPush:      false,
+				AutoPR:        false,
+				AutoMerge:     false,
+				MergeStrategy: "squash",
+			},
 		},
 		GitHub: GitHubConfig{
 			Remote: "origin",
@@ -304,12 +316,12 @@ func TestValidator_InvalidLockTTL(t *testing.T) {
 
 func TestValidator_EmptyWorktreeDir(t *testing.T) {
 	cfg := validConfig()
-	cfg.Git.WorktreeDir = ""
+	cfg.Git.Worktree.Dir = ""
 
 	v := NewValidator()
 	err := v.Validate(cfg)
 	if err == nil {
-		t.Error("Validate() error = nil, want error for empty worktree_dir")
+		t.Error("Validate() error = nil, want error for empty worktree.dir")
 	}
 }
 

@@ -444,15 +444,21 @@ func configToFullResponse(cfg *config.Config) FullConfigResponse {
 			LockTTL:    cfg.State.LockTTL,
 		},
 		Git: GitConfigResponse{
-			WorktreeDir:   cfg.Git.WorktreeDir,
-			AutoClean:     cfg.Git.AutoClean,
-			WorktreeMode:  cfg.Git.WorktreeMode,
-			AutoCommit:    cfg.Git.AutoCommit,
-			AutoPush:      cfg.Git.AutoPush,
-			AutoPR:        cfg.Git.AutoPR,
-			AutoMerge:     cfg.Git.AutoMerge,
-			PRBaseBranch:  cfg.Git.PRBaseBranch,
-			MergeStrategy: cfg.Git.MergeStrategy,
+			Worktree: WorktreeConfigResponse{
+				Dir:       cfg.Git.Worktree.Dir,
+				Mode:      cfg.Git.Worktree.Mode,
+				AutoClean: cfg.Git.Worktree.AutoClean,
+			},
+			Task: GitTaskConfigResponse{
+				AutoCommit: cfg.Git.Task.AutoCommit,
+			},
+			Finalization: GitFinalizationConfigResponse{
+				AutoPush:      cfg.Git.Finalization.AutoPush,
+				AutoPR:        cfg.Git.Finalization.AutoPR,
+				AutoMerge:     cfg.Git.Finalization.AutoMerge,
+				PRBaseBranch:  cfg.Git.Finalization.PRBaseBranch,
+				MergeStrategy: cfg.Git.Finalization.MergeStrategy,
+			},
 		},
 		GitHub: GitHubConfigResponse{
 			Remote: cfg.GitHub.Remote,
@@ -765,32 +771,41 @@ func applyStateUpdates(cfg *config.StateConfig, update *StateConfigUpdate) {
 }
 
 func applyGitUpdates(cfg *config.GitConfig, update *GitConfigUpdate) {
-	if update.WorktreeDir != nil {
-		cfg.WorktreeDir = *update.WorktreeDir
+	// Worktree updates
+	if update.Worktree != nil {
+		if update.Worktree.Dir != nil {
+			cfg.Worktree.Dir = *update.Worktree.Dir
+		}
+		if update.Worktree.Mode != nil {
+			cfg.Worktree.Mode = *update.Worktree.Mode
+		}
+		if update.Worktree.AutoClean != nil {
+			cfg.Worktree.AutoClean = *update.Worktree.AutoClean
+		}
 	}
-	if update.AutoClean != nil {
-		cfg.AutoClean = *update.AutoClean
+	// Task updates
+	if update.Task != nil {
+		if update.Task.AutoCommit != nil {
+			cfg.Task.AutoCommit = *update.Task.AutoCommit
+		}
 	}
-	if update.WorktreeMode != nil {
-		cfg.WorktreeMode = *update.WorktreeMode
-	}
-	if update.AutoCommit != nil {
-		cfg.AutoCommit = *update.AutoCommit
-	}
-	if update.AutoPush != nil {
-		cfg.AutoPush = *update.AutoPush
-	}
-	if update.AutoPR != nil {
-		cfg.AutoPR = *update.AutoPR
-	}
-	if update.AutoMerge != nil {
-		cfg.AutoMerge = *update.AutoMerge
-	}
-	if update.PRBaseBranch != nil {
-		cfg.PRBaseBranch = *update.PRBaseBranch
-	}
-	if update.MergeStrategy != nil {
-		cfg.MergeStrategy = *update.MergeStrategy
+	// Finalization updates
+	if update.Finalization != nil {
+		if update.Finalization.AutoPush != nil {
+			cfg.Finalization.AutoPush = *update.Finalization.AutoPush
+		}
+		if update.Finalization.AutoPR != nil {
+			cfg.Finalization.AutoPR = *update.Finalization.AutoPR
+		}
+		if update.Finalization.AutoMerge != nil {
+			cfg.Finalization.AutoMerge = *update.Finalization.AutoMerge
+		}
+		if update.Finalization.PRBaseBranch != nil {
+			cfg.Finalization.PRBaseBranch = *update.Finalization.PRBaseBranch
+		}
+		if update.Finalization.MergeStrategy != nil {
+			cfg.Finalization.MergeStrategy = *update.Finalization.MergeStrategy
+		}
 	}
 }
 

@@ -60,12 +60,13 @@ func TestHandleValidateConfig_ValidConfig(t *testing.T) {
 	eventBus := events.New(100)
 	server := NewServer(stateManager, eventBus)
 
-	// Valid config update - includes required agents.default
+	// Valid config update - includes required agents.default and git.worktree.dir
 	reqBody := `{
 		"workflow": {"timeout": "2h"},
 		"log": {"level": "debug"},
 		"agents": {"default": "claude", "claude": {"enabled": true}},
-		"phases": {"analyze": {"refiner": {"enabled": false}, "moderator": {"enabled": false}}}
+		"phases": {"analyze": {"refiner": {"enabled": false}, "moderator": {"enabled": false}}},
+		"git": {"worktree": {"dir": ".worktrees"}}
 	}`
 
 	req := httptest.NewRequest("POST", "/api/v1/config/validate", bytes.NewReader([]byte(reqBody)))

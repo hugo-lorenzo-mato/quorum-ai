@@ -276,8 +276,8 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 			"copilot":  cfg.Agents.Copilot.PhaseModels,
 			"opencode": cfg.Agents.OpenCode.PhaseModels,
 		},
-		WorktreeAutoClean: cfg.Git.AutoClean,
-		WorktreeMode:      cfg.Git.WorktreeMode,
+		WorktreeAutoClean: cfg.Git.Worktree.AutoClean,
+		WorktreeMode:      cfg.Git.Worktree.Mode,
 		Refiner: workflow.RefinerConfig{
 			Enabled: refinerEnabled,
 			Agent:   cfg.Phases.Analyze.Refiner.Agent,
@@ -305,12 +305,12 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 			Execute: executeTimeout,
 		},
 		Finalization: workflow.FinalizationConfig{
-			AutoCommit:    cfg.Git.AutoCommit,
-			AutoPush:      cfg.Git.AutoPush,
-			AutoPR:        cfg.Git.AutoPR,
-			AutoMerge:     cfg.Git.AutoMerge,
-			PRBaseBranch:  cfg.Git.PRBaseBranch,
-			MergeStrategy: cfg.Git.MergeStrategy,
+			AutoCommit:    cfg.Git.Task.AutoCommit,
+			AutoPush:      cfg.Git.Finalization.AutoPush,
+			AutoPR:        cfg.Git.Finalization.AutoPR,
+			AutoMerge:     cfg.Git.Finalization.AutoMerge,
+			PRBaseBranch:  cfg.Git.Finalization.PRBaseBranch,
+			MergeStrategy: cfg.Git.Finalization.MergeStrategy,
 			Remote:        cfg.GitHub.Remote,
 		},
 	}
@@ -360,13 +360,13 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 	var worktreeManager workflow.WorktreeManager
 	var workflowWorktrees core.WorkflowWorktreeManager
 	if gitClient != nil {
-		worktreeManager = git.NewTaskWorktreeManager(gitClient, cfg.Git.WorktreeDir).WithLogger(logger)
+		worktreeManager = git.NewTaskWorktreeManager(gitClient, cfg.Git.Worktree.Dir).WithLogger(logger)
 
 		repoRoot, rootErr := gitClient.RepoRoot(ctx)
 		if rootErr != nil {
 			logger.Warn("failed to detect repo root, workflow git isolation disabled", "error", rootErr)
 		} else {
-			wtMgr, wtErr := git.NewWorkflowWorktreeManager(repoRoot, cfg.Git.WorktreeDir, gitClient, logger.Logger)
+			wtMgr, wtErr := git.NewWorkflowWorktreeManager(repoRoot, cfg.Git.Worktree.Dir, gitClient, logger.Logger)
 			if wtErr != nil {
 				logger.Warn("failed to create workflow worktree manager, workflow git isolation disabled", "error", wtErr)
 			} else {
@@ -377,7 +377,7 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 
 	// Create GitHub client for PR creation (only if auto_pr is enabled)
 	var githubClient core.GitHubClient
-	if cfg.Git.AutoPR {
+	if cfg.Git.Finalization.AutoPR {
 		ghClient, ghErr := github.NewClientFromRepo()
 		if ghErr != nil {
 			logger.Warn("failed to create GitHub client, PR creation disabled", "error", ghErr)

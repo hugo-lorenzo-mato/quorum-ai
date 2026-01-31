@@ -204,34 +204,39 @@ state:
   lock_ttl: 1h
 
 # Git configuration
-# Quorum executes tasks in isolated git worktrees, each on its own branch.
-# After task completion, changes can be automatically committed, pushed, and PRs created.
+# Organized by lifecycle: worktree (during execution), task (progress), finalization (delivery)
 git:
-  # Directory where worktrees are created
-  worktree_dir: .worktrees
-  # Remove worktrees after task completion
-  auto_clean: true
-  # When to create worktrees: always | parallel | disabled
-  #   always:   every task gets its own worktree
-  #   parallel: only when 2+ tasks can run concurrently (recommended)
-  #   disabled: all tasks run in the main working directory (no isolation)
-  worktree_mode: parallel
+  # Worktree management - temporary environment during task execution
+  worktree:
+    # Directory where worktrees are created
+    dir: .worktrees
+    # When to create worktrees: always | parallel | disabled
+    #   always:   every task gets its own worktree
+    #   parallel: only when 2+ tasks can run concurrently (recommended)
+    #   disabled: all tasks run in the main working directory (no isolation)
+    mode: parallel
+    # Remove worktrees after task completion
+    # IMPORTANT: Requires task.auto_commit=true to prevent data loss
+    auto_clean: true
 
-  # Post-task finalization (commit, push, PR)
-  # Each task runs on branch: quorum/<task-id>
-  auto_commit: true   # Commit changes after task completes
-  auto_push: true     # Push task branch to remote
-  auto_pr: true       # Create pull request for task branch
+  # Task progress - incremental saving after each task completes
+  task:
+    # Commit changes after task completes (saves work even if workflow crashes)
+    auto_commit: true
 
-  # PR target branch. Empty string uses repository default (main/master).
-  # Example: "develop" to target all PRs against develop branch.
-  pr_base_branch: ""
-
-  # Auto-merge: disabled by default for safety (requires human review).
-  # When enabled, PRs are merged immediately after creation.
-  auto_merge: false
-  # Merge method when auto_merge is enabled: merge | squash | rebase
-  merge_strategy: squash
+  # Finalization - workflow result delivery
+  # Controls how the final workflow branch is pushed and merged
+  finalization:
+    # Push workflow branch to remote
+    auto_push: true
+    # Create single pull request for the entire workflow
+    auto_pr: true
+    # Auto-merge: disabled by default for safety (requires human review)
+    auto_merge: false
+    # PR target branch. Empty string uses repository default (main/master)
+    pr_base_branch: ""
+    # Merge method when auto_merge is enabled: merge | squash | rebase
+    merge_strategy: squash
 
 # GitHub integration
 # Note: GitHub token should be provided via GITHUB_TOKEN or GH_TOKEN environment variable

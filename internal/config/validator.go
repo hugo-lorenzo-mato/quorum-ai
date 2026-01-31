@@ -255,40 +255,41 @@ func (v *Validator) validateState(cfg *StateConfig) {
 }
 
 func (v *Validator) validateGit(cfg *GitConfig) {
-	if cfg.WorktreeDir == "" {
-		v.addError("git.worktree_dir", cfg.WorktreeDir, "worktree directory required")
+	// Worktree validation
+	if cfg.Worktree.Dir == "" {
+		v.addError("git.worktree.dir", cfg.Worktree.Dir, "worktree directory required")
 	}
-	if strings.TrimSpace(cfg.WorktreeMode) != "" {
-		switch strings.ToLower(strings.TrimSpace(cfg.WorktreeMode)) {
+	if strings.TrimSpace(cfg.Worktree.Mode) != "" {
+		switch strings.ToLower(strings.TrimSpace(cfg.Worktree.Mode)) {
 		case core.WorktreeModeAlways, core.WorktreeModeParallel, core.WorktreeModeDisabled:
 			// ok
 		default:
-			v.addError("git.worktree_mode", cfg.WorktreeMode, "must be always, parallel, or disabled")
+			v.addError("git.worktree.mode", cfg.Worktree.Mode, "must be always, parallel, or disabled")
 		}
 	}
 
-	// Validate merge strategy
-	if cfg.MergeStrategy != "" {
-		switch strings.ToLower(cfg.MergeStrategy) {
+	// CRITICAL: Prevent data loss - auto_clean=true with auto_commit=false would delete uncommitted changes
+	if cfg.Worktree.AutoClean && !cfg.Task.AutoCommit {
+		v.addError("git.worktree.auto_clean", cfg.Worktree.AutoClean,
+			"auto_clean cannot be true when task.auto_commit is false (uncommitted changes would be lost)")
+	}
+
+	// Finalization validation
+	if cfg.Finalization.MergeStrategy != "" {
+		switch strings.ToLower(cfg.Finalization.MergeStrategy) {
 		case core.MergeStrategyMerge, core.MergeStrategySquash, core.MergeStrategyRebase:
 			// ok
 		default:
-			v.addError("git.merge_strategy", cfg.MergeStrategy, "must be merge, squash, or rebase")
+			v.addError("git.finalization.merge_strategy", cfg.Finalization.MergeStrategy, "must be merge, squash, or rebase")
 		}
 	}
 
 	// Validate dependency chain: auto_pr requires auto_push, auto_merge requires auto_pr
-	if cfg.AutoPR && !cfg.AutoPush {
-		v.addError("git.auto_pr", cfg.AutoPR, "auto_pr requires auto_push to be enabled")
+	if cfg.Finalization.AutoPR && !cfg.Finalization.AutoPush {
+		v.addError("git.finalization.auto_pr", cfg.Finalization.AutoPR, "auto_pr requires auto_push to be enabled")
 	}
-	if cfg.AutoMerge && !cfg.AutoPR {
-		v.addError("git.auto_merge", cfg.AutoMerge, "auto_merge requires auto_pr to be enabled")
-	}
-
-	// CRITICAL: Prevent data loss - auto_clean=true with auto_commit=false would delete uncommitted changes
-	if cfg.AutoClean && !cfg.AutoCommit {
-		v.addError("git.auto_clean", cfg.AutoClean,
-			"auto_clean cannot be true when auto_commit is false (uncommitted changes would be lost)")
+	if cfg.Finalization.AutoMerge && !cfg.Finalization.AutoPR {
+		v.addError("git.finalization.auto_merge", cfg.Finalization.AutoMerge, "auto_merge requires auto_pr to be enabled")
 	}
 }
 

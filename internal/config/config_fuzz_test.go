@@ -51,7 +51,15 @@ state:
   path: .quorum/state
   lock_ttl: 5m
 git:
-  worktree_dir: .quorum/worktrees
+  worktree:
+    dir: .quorum/worktrees
+    mode: parallel
+    auto_clean: false
+  task:
+    auto_commit: false
+  finalization:
+    auto_push: false
+    auto_pr: false
 github:
   remote: origin
 phases:
@@ -119,7 +127,10 @@ func FuzzModeratorThreshold(f *testing.F) {
 				LockTTL: "5m",
 			},
 			Git: config.GitConfig{
-				WorktreeDir: ".quorum/worktrees",
+				Worktree: config.WorktreeConfig{
+					Dir:  ".quorum/worktrees",
+					Mode: "parallel",
+				},
 			},
 			GitHub: config.GitHubConfig{
 				Remote: "origin",
@@ -181,7 +192,10 @@ func FuzzConfigMaxRetries(f *testing.F) {
 				LockTTL: "5m",
 			},
 			Git: config.GitConfig{
-				WorktreeDir: ".quorum/worktrees",
+				Worktree: config.WorktreeConfig{
+					Dir:  ".quorum/worktrees",
+					Mode: "parallel",
+				},
 			},
 			GitHub: config.GitHubConfig{
 				Remote: "origin",
@@ -234,7 +248,10 @@ func FuzzConfigAgentModel(f *testing.F) {
 				LockTTL: "5m",
 			},
 			Git: config.GitConfig{
-				WorktreeDir: ".quorum/worktrees",
+				Worktree: config.WorktreeConfig{
+					Dir:  ".quorum/worktrees",
+					Mode: "parallel",
+				},
 			},
 			GitHub: config.GitHubConfig{
 				Remote: "origin",

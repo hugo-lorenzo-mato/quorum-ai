@@ -153,12 +153,27 @@ type StateConfigResponse struct {
 	LockTTL    string `json:"lock_ttl"`
 }
 
-// GitConfigResponse represents git configuration.
+// GitConfigResponse represents git configuration with semantic grouping.
 type GitConfigResponse struct {
-	WorktreeDir   string `json:"worktree_dir"`
-	AutoClean     bool   `json:"auto_clean"`
-	WorktreeMode  string `json:"worktree_mode"`
-	AutoCommit    bool   `json:"auto_commit"`
+	Worktree     WorktreeConfigResponse        `json:"worktree"`
+	Task         GitTaskConfigResponse         `json:"task"`
+	Finalization GitFinalizationConfigResponse `json:"finalization"`
+}
+
+// WorktreeConfigResponse represents worktree management configuration.
+type WorktreeConfigResponse struct {
+	Dir       string `json:"dir"`
+	Mode      string `json:"mode"`
+	AutoClean bool   `json:"auto_clean"`
+}
+
+// GitTaskConfigResponse represents per-task progress configuration.
+type GitTaskConfigResponse struct {
+	AutoCommit bool `json:"auto_commit"`
+}
+
+// GitFinalizationConfigResponse represents workflow finalization configuration.
+type GitFinalizationConfigResponse struct {
 	AutoPush      bool   `json:"auto_push"`
 	AutoPR        bool   `json:"auto_pr"`
 	AutoMerge     bool   `json:"auto_merge"`
@@ -359,12 +374,27 @@ type StateConfigUpdate struct {
 	LockTTL    *string `json:"lock_ttl,omitempty"`
 }
 
-// GitConfigUpdate represents git configuration update.
+// GitConfigUpdate represents git configuration update with semantic grouping.
 type GitConfigUpdate struct {
-	WorktreeDir   *string `json:"worktree_dir,omitempty"`
-	AutoClean     *bool   `json:"auto_clean,omitempty"`
-	WorktreeMode  *string `json:"worktree_mode,omitempty"`
-	AutoCommit    *bool   `json:"auto_commit,omitempty"`
+	Worktree     *WorktreeConfigUpdate        `json:"worktree,omitempty"`
+	Task         *GitTaskConfigUpdate         `json:"task,omitempty"`
+	Finalization *GitFinalizationConfigUpdate `json:"finalization,omitempty"`
+}
+
+// WorktreeConfigUpdate represents worktree configuration update.
+type WorktreeConfigUpdate struct {
+	Dir       *string `json:"dir,omitempty"`
+	Mode      *string `json:"mode,omitempty"`
+	AutoClean *bool   `json:"auto_clean,omitempty"`
+}
+
+// GitTaskConfigUpdate represents task configuration update.
+type GitTaskConfigUpdate struct {
+	AutoCommit *bool `json:"auto_commit,omitempty"`
+}
+
+// GitFinalizationConfigUpdate represents finalization configuration update.
+type GitFinalizationConfigUpdate struct {
 	AutoPush      *bool   `json:"auto_push,omitempty"`
 	AutoPR        *bool   `json:"auto_pr,omitempty"`
 	AutoMerge     *bool   `json:"auto_merge,omitempty"`
