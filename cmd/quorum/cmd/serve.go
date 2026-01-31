@@ -268,6 +268,9 @@ func runServe(_ *cobra.Command, _ []string) error {
 	if heartbeatManager != nil {
 		serverOpts = append(serverOpts, web.WithHeartbeatManager(heartbeatManager))
 	}
+	if workflowExecutor != nil {
+		serverOpts = append(serverOpts, web.WithWorkflowExecutor(workflowExecutor))
+	}
 	if kanbanEngine != nil {
 		serverOpts = append(serverOpts, web.WithKanbanEngine(kanbanEngine))
 	}
@@ -299,32 +302,39 @@ func runServe(_ *cobra.Command, _ []string) error {
 
 	// Start Kanban engine (runs in background, processes workflows from todo column)
 	if kanbanEngine != nil {
-		kanbanEngine.Start(ctx)
-		defer func() {
-			stopCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			if err := kanbanEngine.Stop(stopCtx); err != nil {
-				logger.Warn("failed to stop Kanban engine", slog.String("error", err.Error()))
-			}
-		}()
-		logger.Info("Kanban engine started")
+		if err := kanbanEngine.Start(ctx); err != nil {
+			logger.Error("failed to start kanban engine", slog.String("error", err.Error()))
+		} else {
+			defer func() {
+				stopCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				if err := kanbanEngine.Stop(stopCtx); err != nil {
+					logger.Warn("failed to stop kanban engine", slog.String("error", err.Error()))
+				}
+			}()
+		}
 	}
 
 	// Start zombie detector if heartbeat is enabled
 	if heartbeatManager != nil {
 		heartbeatManager.StartZombieDetector(func(state *core.WorkflowState) {
-			// Log zombie detection - auto-resume is handled by HandleZombie if enabled
 			logger.Warn("zombie workflow detected by heartbeat manager",
 				slog.String("workflow_id", string(state.WorkflowID)),
-				slog.String("phase", string(state.CurrentPhase)))
-			// Mark as failed since we don't have executor reference here
-			// The HandleZombie method requires an executor interface, which we don't have in serve.go
-			// For now, just mark failed - auto-resume would need tighter integration
-			state.Status = core.WorkflowStatusFailed
-			state.Error = "Zombie workflow detected (stale heartbeat)"
-			state.UpdatedAt = time.Now()
-			if err := stateManager.Save(ctx, state); err != nil {
-				logger.Error("failed to save zombie state", slog.String("error", err.Error()))
+				slog.String("phase", string(state.CurrentPhase)),
+				slog.Int("resume_count", state.ResumeCount),
+				slog.Int("max_resumes", state.MaxResumes))
+
+			// Use HandleZombie for proper auto-resume support when executor is available
+			if workflowExecutor != nil {
+				heartbeatManager.HandleZombie(state, workflowExecutor)
+			} else {
+				// Fallback: mark as failed when executor is not available
+				state.Status = core.WorkflowStatusFailed
+				state.Error = "Zombie workflow detected (stale heartbeat, executor unavailable)"
+				state.UpdatedAt = time.Now()
+				if err := stateManager.Save(ctx, state); err != nil {
+					logger.Error("failed to save zombie state", slog.String("error", err.Error()))
+				}
 			}
 		})
 		defer heartbeatManager.Shutdown()

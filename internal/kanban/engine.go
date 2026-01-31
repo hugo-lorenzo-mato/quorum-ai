@@ -233,9 +233,22 @@ func (e *Engine) startExecution(ctx context.Context, workflow *core.WorkflowStat
 		execCtx := context.Background() // Independent context for execution
 		err := e.executor.Run(execCtx, core.WorkflowID(workflowID))
 		if err != nil {
+			// executor.Run() can fail in two ways:
+			// 1. "Early failure" - validation errors before execution starts (no event published)
+			// 2. "Execution failure" - failure during execution (WorkflowFailedEvent published by executor)
+			//
+			// For early failures, we must handle state cleanup here because the executor
+			// won't publish a WorkflowFailedEvent. We detect early failures by checking
+			// if the executor immediately returned an error (like "already running", "not found", etc.)
 			e.logger.Error("workflow execution error", "workflow_id", workflowID, "error", err)
-			// The WorkflowFailed event will be published by the executor
+
+			// Handle early failure: update state directly since no event will be published
+			// This covers cases like validation errors, missing config, etc.
+			errMsg := err.Error()
+			e.handleWorkflowFailed(execCtx, workflowID, errMsg)
 		}
+		// Note: For successful async execution, WorkflowCompletedEvent/WorkflowFailedEvent
+		// will be published by the executor and handled in handleWorkflowEvent()
 	}()
 }
 

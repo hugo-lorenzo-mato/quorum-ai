@@ -139,10 +139,25 @@ func markFinished(id string) {
 
 // isWorkflowActuallyRunning checks if a workflow marked as "running"
 // has an active execution in this process. Useful for detecting zombies.
+// DEPRECATED: Use Server.isWorkflowRunning for unified tracking.
 func isWorkflowActuallyRunning(workflowID string) bool {
 	runningWorkflows.Lock()
 	defer runningWorkflows.Unlock()
 	return runningWorkflows.ids[workflowID]
+}
+
+// isWorkflowRunning checks if a workflow is running in EITHER tracking system:
+// - The WorkflowExecutor (used by Kanban engine and preferred API path)
+// - The legacy runningWorkflows map (fallback when executor is nil)
+// This unified check prevents false negatives when a workflow is tracked in
+// the executor but not the legacy map (or vice versa).
+func (s *Server) isWorkflowRunning(workflowID string) bool {
+	// Check executor first (preferred, used by Kanban)
+	if s.executor != nil && s.executor.IsRunning(workflowID) {
+		return true
+	}
+	// Fallback to legacy tracking
+	return isWorkflowActuallyRunning(workflowID)
 }
 
 // handleListWorkflows returns all workflows.
@@ -208,7 +223,7 @@ func (s *Server) handleGetWorkflow(w http.ResponseWriter, r *http.Request) {
 
 	activeID, _ := s.stateManager.GetActiveWorkflowID(ctx)
 
-	response := stateToWorkflowResponse(state, activeID)
+	response := s.stateToWorkflowResponse(state, activeID)
 	respondJSON(w, http.StatusOK, response)
 }
 
@@ -252,7 +267,7 @@ func (s *Server) handleGetActiveWorkflow(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	response := stateToWorkflowResponse(state, activeID)
+	response := s.stateToWorkflowResponse(state, activeID)
 	respondJSON(w, http.StatusOK, response)
 }
 
@@ -323,19 +338,23 @@ func (s *Server) handleCreateWorkflow(w http.ResponseWriter, r *http.Request) {
 
 	// Create workflow state
 	state := &core.WorkflowState{
-		Version:      core.CurrentStateVersion,
-		WorkflowID:   workflowID,
-		Title:        req.Title,
-		Status:       core.WorkflowStatusPending,
-		CurrentPhase: core.PhaseAnalyze,
-		Prompt:       req.Prompt,
-		Tasks:        make(map[core.TaskID]*core.TaskState),
-		TaskOrder:    make([]core.TaskID, 0),
-		Config:       config,
-		Metrics:      &core.StateMetrics{},
-		Checkpoints:  make([]core.Checkpoint, 0),
-		CreatedAt:    time.Now(),
-		UpdatedAt:    time.Now(),
+		Version:       core.CurrentStateVersion,
+		WorkflowID:    workflowID,
+		Title:         req.Title,
+		Status:        core.WorkflowStatusPending,
+		CurrentPhase:  core.PhaseAnalyze,
+		Prompt:        req.Prompt,
+		Tasks:         make(map[core.TaskID]*core.TaskState),
+		TaskOrder:     make([]core.TaskID, 0),
+		Config:        config,
+		Metrics:       &core.StateMetrics{},
+		Checkpoints:   make([]core.Checkpoint, 0),
+		CreatedAt:     time.Now(),
+		UpdatedAt:     time.Now(),
+		ResumeCount:   0,
+		MaxResumes:    3, // Enable auto-resume with default max 3 attempts
+		KanbanColumn:  "refinement",
+		KanbanPosition: 0,
 	}
 
 	if err := s.stateManager.Save(ctx, state); err != nil {
@@ -344,7 +363,7 @@ func (s *Server) handleCreateWorkflow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response := stateToWorkflowResponse(state, workflowID)
+	response := s.stateToWorkflowResponse(state, workflowID)
 	respondJSON(w, http.StatusCreated, response)
 }
 
@@ -470,7 +489,7 @@ func (s *Server) handleUpdateWorkflow(w http.ResponseWriter, r *http.Request) {
 	}
 
 	activeID, _ := s.stateManager.GetActiveWorkflowID(ctx)
-	response := stateToWorkflowResponse(state, activeID)
+	response := s.stateToWorkflowResponse(state, activeID)
 	respondJSON(w, http.StatusOK, response)
 }
 
@@ -547,12 +566,13 @@ func (s *Server) handleActivateWorkflow(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	response := stateToWorkflowResponse(state, core.WorkflowID(workflowID))
+	response := s.stateToWorkflowResponse(state, core.WorkflowID(workflowID))
 	respondJSON(w, http.StatusOK, response)
 }
 
 // stateToWorkflowResponse converts a WorkflowState to a WorkflowResponse.
-func stateToWorkflowResponse(state *core.WorkflowState, activeID core.WorkflowID) WorkflowResponse {
+// This is a Server method to access the unified workflow running check.
+func (s *Server) stateToWorkflowResponse(state *core.WorkflowState, activeID core.WorkflowID) WorkflowResponse {
 	resp := WorkflowResponse{
 		ID:              string(state.WorkflowID),
 		Title:           state.Title,
@@ -567,7 +587,7 @@ func stateToWorkflowResponse(state *core.WorkflowState, activeID core.WorkflowID
 		UpdatedAt:       state.UpdatedAt,
 		HeartbeatAt:     state.HeartbeatAt,
 		IsActive:        state.WorkflowID == activeID,
-		ActuallyRunning: isWorkflowActuallyRunning(string(state.WorkflowID)),
+		ActuallyRunning: s.isWorkflowRunning(string(state.WorkflowID)),
 		TaskCount:       len(state.Tasks),
 		AgentEvents:     state.AgentEvents,
 	}
@@ -772,6 +792,9 @@ func (s *Server) HandleRunWorkflow(w http.ResponseWriter, r *http.Request) {
 	state.Status = core.WorkflowStatusRunning
 	state.Error = "" // Clear previous error on restart
 	state.UpdatedAt = time.Now()
+	// Initialize heartbeat for zombie detection - CRITICAL for legacy execution path
+	now := time.Now().UTC()
+	state.HeartbeatAt = &now
 	if err := s.stateManager.Save(r.Context(), state); err != nil {
 		s.logger.Error("failed to update workflow status to running", "workflow_id", workflowID, "error", err)
 		cancel()
