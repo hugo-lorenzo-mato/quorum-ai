@@ -3,6 +3,9 @@
 
 @import "tailwindcss";
 
+/* Tailwind v4: align `dark:` variant with our `.dark`/`.midnight` theme classes */
+@custom-variant dark (&:where(.dark, .dark *, .midnight, .midnight *));
+
 /* Tailwind v4 Theme Configuration - Shadcn/Vercel Style */
 @theme {
   /* Font family */

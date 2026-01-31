@@ -160,9 +160,9 @@ function KanbanCard({ workflow, isExecuting, onDragStart, onDragEnd, onClick }) 
       onDragStart={handleDragStart}
       onDragEnd={onDragEnd}
       onClick={onClick}
-      className={`group relative overflow-hidden rounded-xl border border-border bg-card dark:bg-secondary p-3 shadow-sm shadow-black/5 cursor-pointer transition-all hover:bg-accent/20 hover:border-muted-foreground/30 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 ${
+      className={`group relative overflow-hidden rounded-xl border border-border bg-card p-3 shadow-sm shadow-black/5 cursor-pointer transition-all hover:bg-accent hover:border-muted-foreground/30 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 dark:bg-secondary dark:border-white/10 dark:shadow-md dark:shadow-black/60 dark:ring-1 dark:ring-white/10 ${
         isExecuting ? 'ring-2 ring-info/30 dark:ring-info/40' : ''
-      } before:pointer-events-none before:absolute before:inset-0 before:rounded-xl before:content-[''] before:bg-gradient-to-b before:from-white/0 before:to-transparent dark:before:from-white/10 after:pointer-events-none after:absolute after:inset-0 after:rounded-xl after:ring-1 after:ring-transparent dark:after:ring-white/10`}
+      } before:pointer-events-none before:absolute before:inset-0 before:rounded-xl before:content-[''] before:bg-gradient-to-b before:from-white/0 before:to-transparent dark:before:from-white/10`}
       role="button"
       tabIndex={0}
       onKeyDown={(e) => {
