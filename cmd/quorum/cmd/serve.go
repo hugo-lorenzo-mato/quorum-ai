@@ -288,6 +288,15 @@ func runServe(_ *cobra.Command, _ []string) error {
 		}
 	}
 
+	// Migrate existing workflows to Kanban board (assign to refinement column if not set)
+	if stateManager != nil {
+		if migrated, err := migrateWorkflowsToKanban(ctx, stateManager, logger.Logger); err != nil {
+			logger.Warn("failed to migrate workflows to Kanban", slog.String("error", err.Error()))
+		} else if migrated > 0 {
+			logger.Info("migrated workflows to Kanban board", slog.Int("count", migrated))
+		}
+	}
+
 	// Start Kanban engine (runs in background, processes workflows from todo column)
 	if kanbanEngine != nil {
 		kanbanEngine.Start(ctx)
@@ -450,4 +459,68 @@ func buildHeartbeatConfig(cfg config.HeartbeatConfig) workflow.HeartbeatConfig {
 	}
 
 	return result
+}
+
+// migrateWorkflowsToKanban assigns existing workflows without a Kanban column to the appropriate column.
+// Completed workflows go to "done", failed to "refinement", running to "in_progress", others to "refinement".
+func migrateWorkflowsToKanban(ctx context.Context, stateManager core.StateManager, logger *slog.Logger) (int, error) {
+	// Check if state manager supports Kanban operations
+	kanbanSM, ok := stateManager.(kanban.KanbanStateManager)
+	if !ok {
+		return 0, nil // State manager doesn't support Kanban, skip migration
+	}
+
+	workflows, err := stateManager.ListWorkflows(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("listing workflows: %w", err)
+	}
+
+	migrated := 0
+	for _, summary := range workflows {
+		// Load full workflow state to check Kanban column
+		state, err := stateManager.LoadByID(ctx, summary.WorkflowID)
+		if err != nil {
+			logger.Warn("failed to load workflow for Kanban migration",
+				slog.String("workflow_id", string(summary.WorkflowID)),
+				slog.String("error", err.Error()))
+			continue
+		}
+		if state == nil {
+			continue
+		}
+
+		// Skip if already has a Kanban column assigned
+		if state.KanbanColumn != "" {
+			continue
+		}
+
+		// Determine appropriate column based on workflow status
+		var targetColumn string
+		switch state.Status {
+		case core.WorkflowStatusCompleted:
+			targetColumn = "done"
+		case core.WorkflowStatusRunning:
+			targetColumn = "in_progress"
+		case core.WorkflowStatusFailed:
+			targetColumn = "refinement"
+		default:
+			targetColumn = "refinement"
+		}
+
+		// Move workflow to the target column
+		if err := kanbanSM.MoveWorkflow(ctx, string(state.WorkflowID), targetColumn, 0); err != nil {
+			logger.Warn("failed to migrate workflow to Kanban",
+				slog.String("workflow_id", string(summary.WorkflowID)),
+				slog.String("target_column", targetColumn),
+				slog.String("error", err.Error()))
+			continue
+		}
+
+		logger.Debug("migrated workflow to Kanban",
+			slog.String("workflow_id", string(summary.WorkflowID)),
+			slog.String("column", targetColumn))
+		migrated++
+	}
+
+	return migrated, nil
 }
