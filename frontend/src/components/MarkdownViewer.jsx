@@ -59,6 +59,35 @@ function splitFrontmatter(markdown) {
   };
 }
 
+function CopyButton({ text }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Silent fail
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      className="absolute top-2 right-2 p-1.5 rounded-md bg-background/50 hover:bg-background shadow-sm border border-border text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-all z-10"
+      title={copied ? 'Copied!' : 'Copy code'}
+    >
+      {copied ? (
+        <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
+      ) : (
+        <Copy className="w-3.5 h-3.5" />
+      )}
+    </button>
+  );
+}
+
 export default function MarkdownViewer({ markdown }) {
   const { frontmatter, body } = useMemo(() => splitFrontmatter(markdown), [markdown]);
   const [showFrontmatter, setShowFrontmatter] = useState(false);
@@ -179,24 +208,34 @@ export default function MarkdownViewer({ markdown }) {
 
               if (!inline && match) {
                 return (
-                  <SyntaxHighlighter
-                    language={match[1]}
-                    style={isDark ? oneDark : oneLight}
-                    PreTag="div"
-                    customStyle={{ margin: 0, background: 'transparent' }}
-                    codeTagProps={{ style: { background: 'transparent' } }}
-                    {...props}
-                  >
-                    {content}
-                  </SyntaxHighlighter>
+                  <>
+                    <CopyButton text={content} />
+                    <div className="p-4 overflow-x-auto">
+                      <SyntaxHighlighter
+                        language={match[1]}
+                        style={isDark ? oneDark : oneLight}
+                        PreTag="div"
+                        customStyle={{ margin: 0, background: 'transparent' }}
+                        codeTagProps={{ style: { background: 'transparent' } }}
+                        {...props}
+                      >
+                        {content}
+                      </SyntaxHighlighter>
+                    </div>
+                  </>
                 );
               }
 
               if (!inline) {
                 return (
-                  <code className="block whitespace-pre font-mono text-xs" {...props}>
-                    {content}
-                  </code>
+                  <>
+                    <CopyButton text={content} />
+                    <div className="p-4 overflow-x-auto">
+                      <code className="block whitespace-pre font-mono text-xs" {...props}>
+                        {content}
+                      </code>
+                    </div>
+                  </>
                 );
               }
 
@@ -207,7 +246,7 @@ export default function MarkdownViewer({ markdown }) {
               );
             },
             pre: ({ children, ...props }) => (
-              <div className="my-4 p-4 rounded-lg bg-muted overflow-x-auto border border-border text-xs" {...props}>
+              <div className="my-4 rounded-lg bg-muted border border-border text-xs relative group" {...props}>
                 {children}
               </div>
             ),

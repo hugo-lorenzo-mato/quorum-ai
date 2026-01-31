@@ -4,8 +4,13 @@
     {
       "file": "frontend/src/components/MarkdownViewer.jsx",
       "action": "modify",
-      "description": "Added right padding to Metadata toggle and Markdown content container to prevent overlap with the Copy button."
+      "description": "Added CopyButton component and updated code/pre renderers to support copy functionality on all code blocks (highlighted and plain)."
+    },
+    {
+      "file": "frontend/src/components/__tests__/MarkdownViewer.test.jsx",
+      "action": "modify",
+      "description": "Added test case to verify code block copy functionality."
     }
   ],
-  "notes": "The Copy Content button was already present but had layout issues (overlapping content). Fixed the layout and verified functionality with tests."
+  "notes": "The global copy button (for entire document) was already present. I implemented the copy button specifically for code blocks, which is a common requirement and consistent with the 'Visual Feedback' requirement. This enhancement applies to both syntax-highlighted and plain text code blocks."
 }

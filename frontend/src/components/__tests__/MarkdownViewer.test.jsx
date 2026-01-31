@@ -47,4 +47,26 @@ describe('MarkdownViewer', () => {
       expect(screen.getByRole('button', { name: 'Copied!' })).toBeInTheDocument();
     });
   });
+
+  it('copies code block content to clipboard', async () => {
+    const mockClipboard = { writeText: vi.fn().mockResolvedValue() };
+    Object.assign(navigator, { clipboard: mockClipboard });
+
+    const codeContent = 'const x = 1;';
+    const markdown = '```javascript\n' + codeContent + '\n```';
+    render(<MarkdownViewer markdown={markdown} />);
+
+    const copyButton = screen.getByRole('button', { name: 'Copy code' });
+    expect(copyButton).toBeInTheDocument();
+
+    fireEvent.click(copyButton);
+
+    expect(mockClipboard.writeText).toHaveBeenCalledWith(codeContent);
+
+    await waitFor(() => {
+      // We look for the button that changed state. 
+      // Note: The global button is still "Copy content", so "Copied!" should be unique if we only clicked one.
+      expect(screen.getByRole('button', { name: 'Copied!' })).toBeInTheDocument();
+    });
+  });
 });
