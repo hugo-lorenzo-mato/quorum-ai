@@ -17,6 +17,7 @@ import (
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/diagnostics"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/events"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/kanban"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service/workflow"
 )
 
@@ -34,6 +35,7 @@ type Server struct {
 	configLoader     *config.Loader             // for workflow execution configuration
 	workflowExecutor *api.WorkflowExecutor      // for centralized workflow execution
 	heartbeatManager *workflow.HeartbeatManager // for zombie workflow detection
+	kanbanEngine     *kanban.Engine             // for Kanban board workflow execution
 	apiServer        *api.Server
 }
 
@@ -124,6 +126,13 @@ func WithChatStore(store core.ChatStore) ServerOption {
 	}
 }
 
+// WithKanbanEngine sets the Kanban engine for sequential workflow execution.
+func WithKanbanEngine(engine *kanban.Engine) ServerOption {
+	return func(s *Server) {
+		s.kanbanEngine = engine
+	}
+}
+
 // New creates a new Server instance with the given configuration.
 func New(cfg Config, logger *slog.Logger, opts ...ServerOption) *Server {
 	if logger == nil {
@@ -157,6 +166,9 @@ func New(cfg Config, logger *slog.Logger, opts ...ServerOption) *Server {
 		}
 		if s.chatStore != nil {
 			apiOpts = append(apiOpts, api.WithChatStore(s.chatStore))
+		}
+		if s.kanbanEngine != nil {
+			apiOpts = append(apiOpts, api.WithKanbanEngine(s.kanbanEngine))
 		}
 		s.apiServer = api.NewServer(s.stateManager, s.eventBus, apiOpts...)
 		if s.agentRegistry != nil && s.stateManager != nil {

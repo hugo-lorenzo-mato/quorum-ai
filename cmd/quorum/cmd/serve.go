@@ -16,10 +16,12 @@ import (
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/adapters/chat"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/adapters/cli"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/adapters/state"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/api"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/config"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/diagnostics"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/events"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/kanban"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/logging"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service/workflow"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/web"
@@ -221,6 +223,31 @@ func runServe(_ *cobra.Command, _ []string) error {
 			slog.Bool("auto_resume", heartbeatCfg.AutoResume))
 	}
 
+	// Create workflow executor for Kanban engine (needs agent registry and state manager)
+	var workflowExecutor *api.WorkflowExecutor
+	if registry != nil && stateManager != nil && quorumCfg != nil {
+		runnerFactory := api.NewRunnerFactory(stateManager, registry, eventBus, loader, logger)
+		workflowExecutor = api.NewWorkflowExecutor(runnerFactory, stateManager, eventBus, logger.Logger)
+		logger.Info("workflow executor initialized for Kanban engine")
+	}
+
+	// Create Kanban engine if we have the required dependencies
+	var kanbanEngine *kanban.Engine
+	if workflowExecutor != nil && stateManager != nil {
+		// Check if state manager implements KanbanStateManager
+		if kanbanSM, ok := stateManager.(kanban.KanbanStateManager); ok {
+			kanbanEngine = kanban.NewEngine(kanban.EngineConfig{
+				Executor:     workflowExecutor,
+				StateManager: kanbanSM,
+				EventBus:     eventBus,
+				Logger:       logger.Logger,
+			})
+			logger.Info("Kanban engine initialized")
+		} else {
+			logger.Warn("state manager does not implement KanbanStateManager, Kanban engine disabled")
+		}
+	}
+
 	// Create server options
 	serverOpts := []web.ServerOption{web.WithEventBus(eventBus)}
 	if registry != nil {
@@ -241,6 +268,9 @@ func runServe(_ *cobra.Command, _ []string) error {
 	if heartbeatManager != nil {
 		serverOpts = append(serverOpts, web.WithHeartbeatManager(heartbeatManager))
 	}
+	if kanbanEngine != nil {
+		serverOpts = append(serverOpts, web.WithKanbanEngine(kanbanEngine))
+	}
 
 	// Create and start server with event bus and agent registry
 	server := web.New(cfg, logger.Logger, serverOpts...)
@@ -256,6 +286,19 @@ func runServe(_ *cobra.Command, _ []string) error {
 		} else if recovered > 0 {
 			logger.Info("recovered zombie workflows", slog.Int("count", recovered))
 		}
+	}
+
+	// Start Kanban engine (runs in background, processes workflows from todo column)
+	if kanbanEngine != nil {
+		kanbanEngine.Start(ctx)
+		defer func() {
+			stopCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if err := kanbanEngine.Stop(stopCtx); err != nil {
+				logger.Warn("failed to stop Kanban engine", slog.String("error", err.Error()))
+			}
+		}()
+		logger.Info("Kanban engine started")
 	}
 
 	// Start zombie detector if heartbeat is enabled
