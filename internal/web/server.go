@@ -36,6 +36,7 @@ type Server struct {
 	workflowExecutor *api.WorkflowExecutor      // for centralized workflow execution
 	heartbeatManager *workflow.HeartbeatManager // for zombie workflow detection
 	kanbanEngine     *kanban.Engine             // for Kanban board workflow execution
+	unifiedTracker   *api.UnifiedTracker        // for centralized workflow tracking
 	apiServer        *api.Server
 }
 
@@ -133,6 +134,13 @@ func WithKanbanEngine(engine *kanban.Engine) ServerOption {
 	}
 }
 
+// WithUnifiedTracker sets the unified tracker for workflow state synchronization.
+func WithUnifiedTracker(tracker *api.UnifiedTracker) ServerOption {
+	return func(s *Server) {
+		s.unifiedTracker = tracker
+	}
+}
+
 // New creates a new Server instance with the given configuration.
 func New(cfg Config, logger *slog.Logger, opts ...ServerOption) *Server {
 	if logger == nil {
@@ -169,6 +177,9 @@ func New(cfg Config, logger *slog.Logger, opts ...ServerOption) *Server {
 		}
 		if s.kanbanEngine != nil {
 			apiOpts = append(apiOpts, api.WithKanbanEngine(s.kanbanEngine))
+		}
+		if s.unifiedTracker != nil {
+			apiOpts = append(apiOpts, api.WithUnifiedTracker(s.unifiedTracker))
 		}
 		s.apiServer = api.NewServer(s.stateManager, s.eventBus, apiOpts...)
 		if s.agentRegistry != nil && s.stateManager != nil {

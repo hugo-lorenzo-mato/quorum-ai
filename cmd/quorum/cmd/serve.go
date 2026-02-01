@@ -223,11 +223,18 @@ func runServe(_ *cobra.Command, _ []string) error {
 			slog.Bool("auto_resume", heartbeatCfg.AutoResume))
 	}
 
+	// Create unified tracker for centralized workflow state synchronization
+	var unifiedTracker *api.UnifiedTracker
+	if stateManager != nil {
+		unifiedTracker = api.NewUnifiedTracker(stateManager, heartbeatManager, logger.Logger, api.DefaultUnifiedTrackerConfig())
+		logger.Info("unified tracker initialized")
+	}
+
 	// Create workflow executor for Kanban engine (needs agent registry and state manager)
 	var workflowExecutor *api.WorkflowExecutor
 	if registry != nil && stateManager != nil && quorumCfg != nil {
 		runnerFactory := api.NewRunnerFactory(stateManager, registry, eventBus, loader, logger)
-		workflowExecutor = api.NewWorkflowExecutor(runnerFactory, stateManager, eventBus, logger.Logger)
+		workflowExecutor = api.NewWorkflowExecutor(runnerFactory, stateManager, eventBus, logger.Logger, unifiedTracker)
 		logger.Info("workflow executor initialized for Kanban engine")
 	}
 
@@ -273,6 +280,9 @@ func runServe(_ *cobra.Command, _ []string) error {
 	}
 	if kanbanEngine != nil {
 		serverOpts = append(serverOpts, web.WithKanbanEngine(kanbanEngine))
+	}
+	if unifiedTracker != nil {
+		serverOpts = append(serverOpts, web.WithUnifiedTracker(unifiedTracker))
 	}
 
 	// Create and start server with event bus and agent registry

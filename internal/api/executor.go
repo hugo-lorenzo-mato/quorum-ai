@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"sync"
 	"time"
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/control"
@@ -22,11 +21,8 @@ type WorkflowExecutor struct {
 	eventBus      *events.EventBus
 	logger        *slog.Logger
 
-	// Track running workflows to prevent double-execution
-	running sync.Map // map[string]bool
-
-	// Track control planes for pause/resume/cancel
-	controlPlanes sync.Map // map[string]*control.ControlPlane
+	// Unified tracker for workflow state synchronization
+	unifiedTracker *UnifiedTracker
 
 	// Execution timeout
 	executionTimeout time.Duration
@@ -38,12 +34,14 @@ func NewWorkflowExecutor(
 	stateManager core.StateManager,
 	eventBus *events.EventBus,
 	logger *slog.Logger,
+	unifiedTracker *UnifiedTracker,
 ) *WorkflowExecutor {
 	return &WorkflowExecutor{
 		runnerFactory:    runnerFactory,
 		stateManager:     stateManager,
 		eventBus:         eventBus,
 		logger:           logger,
+		unifiedTracker:   unifiedTracker,
 		executionTimeout: 4 * time.Hour,
 	}
 }
@@ -56,8 +54,10 @@ func (e *WorkflowExecutor) WithExecutionTimeout(timeout time.Duration) *Workflow
 
 // IsRunning checks if a workflow is currently executing.
 func (e *WorkflowExecutor) IsRunning(workflowID string) bool {
-	_, exists := e.running.Load(workflowID)
-	return exists
+	if e.unifiedTracker == nil {
+		return false
+	}
+	return e.unifiedTracker.IsRunning(context.Background(), core.WorkflowID(workflowID))
 }
 
 // Run starts a workflow from its initial state.
@@ -73,6 +73,11 @@ func (e *WorkflowExecutor) Resume(ctx context.Context, workflowID core.WorkflowI
 // execute handles both run and resume operations.
 func (e *WorkflowExecutor) execute(ctx context.Context, workflowID core.WorkflowID, isResume bool) error {
 	id := string(workflowID)
+
+	// Require unified tracker for proper state synchronization
+	if e.unifiedTracker == nil {
+		return fmt.Errorf("workflow execution not available: missing tracker")
+	}
 
 	// Load workflow state
 	state, err := e.stateManager.LoadByID(ctx, workflowID)
@@ -95,30 +100,25 @@ func (e *WorkflowExecutor) execute(ctx context.Context, workflowID core.Workflow
 		return fmt.Errorf("workflow is in invalid state: %s", state.Status)
 	}
 
-	// Prevent double-execution
-	if _, loaded := e.running.LoadOrStore(id, true); loaded {
-		return fmt.Errorf("workflow execution already in progress")
-	}
-
 	// Check runner factory
 	if e.runnerFactory == nil {
-		e.running.Delete(id)
 		return fmt.Errorf("workflow execution not available: missing configuration")
+	}
+
+	// Start execution atomically via UnifiedTracker
+	handle, err := e.unifiedTracker.StartExecution(ctx, workflowID)
+	if err != nil {
+		return fmt.Errorf("starting execution: %w", err)
 	}
 
 	// Create execution context
 	execCtx, cancel := context.WithTimeout(context.Background(), e.executionTimeout)
 
-	// Create ControlPlane for this workflow
-	cp := control.New()
-	e.controlPlanes.Store(id, cp)
-
-	// Create runner
-	runner, notifier, err := e.runnerFactory.CreateRunner(execCtx, id, cp, state.Config)
+	// Create runner using the ControlPlane from the handle
+	runner, notifier, err := e.runnerFactory.CreateRunner(execCtx, id, handle.ControlPlane, state.Config)
 	if err != nil {
 		cancel()
-		e.controlPlanes.Delete(id)
-		e.running.Delete(id)
+		e.unifiedTracker.RollbackExecution(ctx, workflowID, err.Error())
 		return fmt.Errorf("creating runner: %w", err)
 	}
 
@@ -126,22 +126,23 @@ func (e *WorkflowExecutor) execute(ctx context.Context, workflowID core.Workflow
 	notifier.SetState(state)
 	notifier.SetStateSaver(e.stateManager)
 
-	// Update status to running
-	state.Status = core.WorkflowStatusRunning
-	state.Error = ""
-	state.UpdatedAt = time.Now()
-	now := time.Now().UTC()
-	state.HeartbeatAt = &now
-
-	if err := e.stateManager.Save(ctx, state); err != nil {
+	// Reload state to get atomic updates from StartExecution
+	state, err = e.stateManager.LoadByID(ctx, workflowID)
+	if err != nil {
 		cancel()
-		e.controlPlanes.Delete(id)
-		e.running.Delete(id)
-		return fmt.Errorf("saving workflow state: %w", err)
+		e.unifiedTracker.RollbackExecution(ctx, workflowID, err.Error())
+		return fmt.Errorf("reloading workflow state: %w", err)
 	}
 
 	// Start execution in background
-	go e.executeAsync(execCtx, cancel, runner, notifier, state, isResume, id)
+	go e.executeAsync(execCtx, cancel, runner, notifier, state, isResume, id, handle)
+
+	// Wait for confirmation from the goroutine
+	if err := handle.WaitForConfirmation(5 * time.Second); err != nil {
+		// Goroutine failed to start or timed out - rollback
+		e.unifiedTracker.RollbackExecution(ctx, workflowID, err.Error())
+		return fmt.Errorf("workflow failed to start: %w", err)
+	}
 
 	return nil
 }
@@ -160,11 +161,19 @@ func (e *WorkflowExecutor) executeAsync(
 	state *core.WorkflowState,
 	isResume bool,
 	workflowID string,
+	handle *ExecutionHandle,
 ) {
 	defer cancel()
-	defer e.running.Delete(workflowID)
-	defer e.controlPlanes.Delete(workflowID)
+	defer func() {
+		// Clean up via UnifiedTracker
+		if e.unifiedTracker != nil {
+			e.unifiedTracker.FinishExecution(context.Background(), core.WorkflowID(workflowID))
+		}
+	}()
 	defer notifier.FlushState()
+
+	// Confirm that we've started (unblocks the caller waiting on handle.WaitForConfirmation)
+	handle.ConfirmStarted()
 
 	// Emit workflow started event
 	notifier.WorkflowStarted(state.Prompt)
@@ -216,36 +225,32 @@ func (e *WorkflowExecutor) executeAsync(
 
 // GetControlPlane returns the control plane for a running workflow.
 func (e *WorkflowExecutor) GetControlPlane(workflowID string) (*control.ControlPlane, bool) {
-	if cp, ok := e.controlPlanes.Load(workflowID); ok {
-		return cp.(*control.ControlPlane), true
+	if e.unifiedTracker == nil {
+		return nil, false
 	}
-	return nil, false
+	return e.unifiedTracker.GetControlPlane(core.WorkflowID(workflowID))
 }
 
 // Cancel cancels a running workflow.
 func (e *WorkflowExecutor) Cancel(workflowID string) error {
-	cp, ok := e.GetControlPlane(workflowID)
-	if !ok {
-		return fmt.Errorf("workflow is not running")
+	if e.unifiedTracker == nil {
+		return fmt.Errorf("workflow execution not available: missing tracker")
 	}
-	if cp.IsCancelled() {
-		return fmt.Errorf("workflow is already being cancelled")
+	if err := e.unifiedTracker.Cancel(core.WorkflowID(workflowID)); err != nil {
+		return err
 	}
-	cp.Cancel()
 	e.logger.Info("workflow cancellation requested", "workflow_id", workflowID)
 	return nil
 }
 
 // Pause pauses a running workflow.
 func (e *WorkflowExecutor) Pause(workflowID string) error {
-	cp, ok := e.GetControlPlane(workflowID)
-	if !ok {
-		return fmt.Errorf("workflow is not running")
+	if e.unifiedTracker == nil {
+		return fmt.Errorf("workflow execution not available: missing tracker")
 	}
-	if cp.IsPaused() {
-		return fmt.Errorf("workflow is already paused")
+	if err := e.unifiedTracker.Pause(core.WorkflowID(workflowID)); err != nil {
+		return err
 	}
-	cp.Pause()
 	e.logger.Info("workflow pause requested", "workflow_id", workflowID)
 	return nil
 }

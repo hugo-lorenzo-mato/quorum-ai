@@ -295,6 +295,123 @@ func (m *mockStateManager) DeleteWorkflow(_ context.Context, id core.WorkflowID)
 	return fmt.Errorf("workflow not found: %s", id)
 }
 
+func (m *mockStateManager) Exists() bool {
+	return m.state != nil
+}
+
+func (m *mockStateManager) Backup(_ context.Context) error {
+	return nil
+}
+
+func (m *mockStateManager) Restore(_ context.Context) (*core.WorkflowState, error) {
+	return m.state, nil
+}
+
+func (m *mockStateManager) ListWorkflows(_ context.Context) ([]core.WorkflowSummary, error) {
+	if m.state != nil {
+		return []core.WorkflowSummary{{WorkflowID: m.state.WorkflowID}}, nil
+	}
+	return nil, nil
+}
+
+func (m *mockStateManager) GetActiveWorkflowID(_ context.Context) (core.WorkflowID, error) {
+	if m.state != nil {
+		return m.state.WorkflowID, nil
+	}
+	return "", nil
+}
+
+func (m *mockStateManager) SetActiveWorkflowID(_ context.Context, _ core.WorkflowID) error {
+	return nil
+}
+
+func (m *mockStateManager) UpdateHeartbeat(_ context.Context, _ core.WorkflowID) error {
+	return nil
+}
+
+func (m *mockStateManager) FindZombieWorkflows(_ context.Context, _ time.Duration) ([]*core.WorkflowState, error) {
+	return nil, nil
+}
+
+func (m *mockStateManager) AcquireWorkflowLock(_ context.Context, _ core.WorkflowID) error {
+	return nil
+}
+
+func (m *mockStateManager) ReleaseWorkflowLock(_ context.Context, _ core.WorkflowID) error {
+	return nil
+}
+
+func (m *mockStateManager) RefreshWorkflowLock(_ context.Context, _ core.WorkflowID) error {
+	return nil
+}
+
+func (m *mockStateManager) SetWorkflowRunning(_ context.Context, _ core.WorkflowID) error {
+	return nil
+}
+
+func (m *mockStateManager) ClearWorkflowRunning(_ context.Context, _ core.WorkflowID) error {
+	return nil
+}
+
+func (m *mockStateManager) ListRunningWorkflows(_ context.Context) ([]core.WorkflowID, error) {
+	if m.state != nil && m.state.Status == core.WorkflowStatusRunning {
+		return []core.WorkflowID{m.state.WorkflowID}, nil
+	}
+	return nil, nil
+}
+
+func (m *mockStateManager) IsWorkflowRunning(_ context.Context, id core.WorkflowID) (bool, error) {
+	if m.state != nil && m.state.WorkflowID == id && m.state.Status == core.WorkflowStatusRunning {
+		return true, nil
+	}
+	return false, nil
+}
+
+func (m *mockStateManager) UpdateWorkflowHeartbeat(_ context.Context, id core.WorkflowID) error {
+	if m.state != nil && m.state.WorkflowID == id {
+		now := time.Now().UTC()
+		m.state.HeartbeatAt = &now
+		return nil
+	}
+	return nil
+}
+
+func (m *mockStateManager) ExecuteAtomically(_ context.Context, fn func(core.AtomicStateContext) error) error {
+	atomicCtx := &mockAtomicCtx{m: m}
+	return fn(atomicCtx)
+}
+
+type mockAtomicCtx struct {
+	m *mockStateManager
+}
+
+func (a *mockAtomicCtx) LoadByID(id core.WorkflowID) (*core.WorkflowState, error) {
+	if a.m.state != nil && a.m.state.WorkflowID == id {
+		return a.m.state, nil
+	}
+	return nil, nil
+}
+
+func (a *mockAtomicCtx) Save(state *core.WorkflowState) error {
+	a.m.state = state
+	return nil
+}
+
+func (a *mockAtomicCtx) SetWorkflowRunning(_ core.WorkflowID) error {
+	return nil
+}
+
+func (a *mockAtomicCtx) ClearWorkflowRunning(_ core.WorkflowID) error {
+	return nil
+}
+
+func (a *mockAtomicCtx) IsWorkflowRunning(id core.WorkflowID) (bool, error) {
+	if a.m.state != nil && a.m.state.WorkflowID == id && a.m.state.Status == core.WorkflowStatusRunning {
+		return true, nil
+	}
+	return false, nil
+}
+
 func TestRunner_SetDryRun(t *testing.T) {
 	runner := &Runner{
 		config: DefaultRunnerConfig(),

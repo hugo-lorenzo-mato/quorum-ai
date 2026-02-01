@@ -7,14 +7,12 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 
 	webadapters "github.com/hugo-lorenzo-mato/quorum-ai/internal/adapters/web"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/attachments"
-	"github.com/hugo-lorenzo-mato/quorum-ai/internal/control"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service/workflow"
 )
@@ -113,51 +111,18 @@ type RunWorkflowResponse struct {
 	Message      string `json:"message"`
 }
 
-// runningWorkflows tracks workflows currently being executed to prevent double-execution.
-var runningWorkflows = struct {
-	sync.Mutex
-	ids map[string]bool
-}{ids: make(map[string]bool)}
-
-// markRunning marks a workflow as running. Returns false if already running.
-func markRunning(id string) bool {
-	runningWorkflows.Lock()
-	defer runningWorkflows.Unlock()
-	if runningWorkflows.ids[id] {
-		return false
+// isWorkflowRunning checks if a workflow is currently running using the UnifiedTracker.
+// This provides a single source of truth for workflow execution status.
+func (s *Server) isWorkflowRunning(ctx context.Context, workflowID string) bool {
+	// Use UnifiedTracker as the single source of truth
+	if s.unifiedTracker != nil {
+		return s.unifiedTracker.IsRunning(ctx, core.WorkflowID(workflowID))
 	}
-	runningWorkflows.ids[id] = true
-	return true
-}
-
-// markFinished marks a workflow as no longer running.
-func markFinished(id string) {
-	runningWorkflows.Lock()
-	defer runningWorkflows.Unlock()
-	delete(runningWorkflows.ids, id)
-}
-
-// isWorkflowActuallyRunning checks if a workflow is tracked in the direct
-// execution map (runningWorkflows). This is an internal function - external
-// callers should use Server.isWorkflowRunning for unified tracking.
-func isWorkflowActuallyRunning(workflowID string) bool {
-	runningWorkflows.Lock()
-	defer runningWorkflows.Unlock()
-	return runningWorkflows.ids[workflowID]
-}
-
-// isWorkflowRunning checks if a workflow is running in EITHER tracking system:
-// - The WorkflowExecutor (used by Kanban engine and API with executor)
-// - The runningWorkflows map (used by direct execution when executor is nil)
-// This unified check prevents false negatives when a workflow is tracked in
-// one system but not the other.
-func (s *Server) isWorkflowRunning(workflowID string) bool {
-	// Check executor first (used by Kanban and API when available)
-	if s.executor != nil && s.executor.IsRunning(workflowID) {
-		return true
+	// Fallback to executor if tracker not available
+	if s.executor != nil {
+		return s.executor.IsRunning(workflowID)
 	}
-	// Check direct execution tracking
-	return isWorkflowActuallyRunning(workflowID)
+	return false
 }
 
 // handleListWorkflows returns all workflows.
@@ -223,7 +188,7 @@ func (s *Server) handleGetWorkflow(w http.ResponseWriter, r *http.Request) {
 
 	activeID, _ := s.stateManager.GetActiveWorkflowID(ctx)
 
-	response := s.stateToWorkflowResponse(state, activeID)
+	response := s.stateToWorkflowResponse(ctx, state, activeID)
 	respondJSON(w, http.StatusOK, response)
 }
 
@@ -267,7 +232,7 @@ func (s *Server) handleGetActiveWorkflow(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	response := s.stateToWorkflowResponse(state, activeID)
+	response := s.stateToWorkflowResponse(ctx, state, activeID)
 	respondJSON(w, http.StatusOK, response)
 }
 
@@ -363,7 +328,7 @@ func (s *Server) handleCreateWorkflow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response := s.stateToWorkflowResponse(state, workflowID)
+	response := s.stateToWorkflowResponse(ctx, state, workflowID)
 	respondJSON(w, http.StatusCreated, response)
 }
 
@@ -489,7 +454,7 @@ func (s *Server) handleUpdateWorkflow(w http.ResponseWriter, r *http.Request) {
 	}
 
 	activeID, _ := s.stateManager.GetActiveWorkflowID(ctx)
-	response := s.stateToWorkflowResponse(state, activeID)
+	response := s.stateToWorkflowResponse(ctx, state, activeID)
 	respondJSON(w, http.StatusOK, response)
 }
 
@@ -566,13 +531,13 @@ func (s *Server) handleActivateWorkflow(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	response := s.stateToWorkflowResponse(state, core.WorkflowID(workflowID))
+	response := s.stateToWorkflowResponse(ctx, state, core.WorkflowID(workflowID))
 	respondJSON(w, http.StatusOK, response)
 }
 
 // stateToWorkflowResponse converts a WorkflowState to a WorkflowResponse.
 // This is a Server method to access the unified workflow running check.
-func (s *Server) stateToWorkflowResponse(state *core.WorkflowState, activeID core.WorkflowID) WorkflowResponse {
+func (s *Server) stateToWorkflowResponse(ctx context.Context, state *core.WorkflowState, activeID core.WorkflowID) WorkflowResponse {
 	resp := WorkflowResponse{
 		ID:              string(state.WorkflowID),
 		Title:           state.Title,
@@ -587,7 +552,7 @@ func (s *Server) stateToWorkflowResponse(state *core.WorkflowState, activeID cor
 		UpdatedAt:       state.UpdatedAt,
 		HeartbeatAt:     state.HeartbeatAt,
 		IsActive:        state.WorkflowID == activeID,
-		ActuallyRunning: s.isWorkflowRunning(string(state.WorkflowID)),
+		ActuallyRunning: s.isWorkflowRunning(ctx, string(state.WorkflowID)),
 		TaskCount:       len(state.Tasks),
 		AgentEvents:     state.AgentEvents,
 	}
@@ -735,8 +700,8 @@ func (s *Server) HandleRunWorkflow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Direct execution path (when executor is not available)
-	// Validate workflow state for execution
+	// Validate workflow state for execution first (before checking tracker)
+	// This ensures proper error codes for invalid states
 	switch state.Status {
 	case core.WorkflowStatusRunning:
 		respondError(w, http.StatusConflict, "workflow is already running")
@@ -751,16 +716,31 @@ func (s *Server) HandleRunWorkflow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Prevent double-execution race condition
-	if !markRunning(workflowID) {
-		respondError(w, http.StatusConflict, "workflow execution already in progress")
+	// Direct execution path using UnifiedTracker
+	// Require UnifiedTracker for proper state synchronization
+	if s.unifiedTracker == nil {
+		respondError(w, http.StatusServiceUnavailable, "workflow execution not available: missing tracker")
+		return
+	}
+
+	// Start execution atomically using UnifiedTracker
+	// This marks the workflow as running in DB and creates ControlPlane
+	handle, err := s.unifiedTracker.StartExecution(ctx, core.WorkflowID(workflowID))
+	if err != nil {
+		if strings.Contains(err.Error(), "already running") {
+			respondError(w, http.StatusConflict, "workflow execution already in progress")
+		} else {
+			s.logger.Error("failed to start execution", "workflow_id", workflowID, "error", err)
+			respondError(w, http.StatusInternalServerError, "failed to start workflow: "+err.Error())
+		}
 		return
 	}
 
 	// Get runner factory
 	factory := s.RunnerFactory()
 	if factory == nil {
-		markFinished(workflowID)
+		// Rollback the execution start
+		_ = s.unifiedTracker.RollbackExecution(ctx, core.WorkflowID(workflowID), "missing configuration")
 		respondError(w, http.StatusServiceUnavailable, "workflow execution not available: missing configuration")
 		return
 	}
@@ -769,15 +749,19 @@ func (s *Server) HandleRunWorkflow(w http.ResponseWriter, r *http.Request) {
 	// Use background context since the HTTP request will complete before workflow finishes
 	execCtx, cancel := context.WithTimeout(context.Background(), 4*time.Hour)
 
-	// Create ControlPlane for this workflow (enables pause/resume/cancel)
-	cp := control.New()
-	s.registerControlPlane(workflowID, cp)
-
-	runner, notifier, err := factory.CreateRunner(execCtx, workflowID, cp, state.Config)
+	// Reload state (it was updated by StartExecution)
+	state, err = s.stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
 	if err != nil {
 		cancel()
-		s.unregisterControlPlane(workflowID)
-		markFinished(workflowID)
+		_ = s.unifiedTracker.RollbackExecution(ctx, core.WorkflowID(workflowID), "failed to reload state")
+		respondError(w, http.StatusInternalServerError, "failed to reload workflow state")
+		return
+	}
+
+	runner, notifier, err := factory.CreateRunner(execCtx, workflowID, handle.ControlPlane, state.Config)
+	if err != nil {
+		cancel()
+		_ = s.unifiedTracker.RollbackExecution(ctx, core.WorkflowID(workflowID), "failed to create runner: "+err.Error())
 		s.logger.Error("failed to create runner", "workflow_id", workflowID, "error", err)
 		respondError(w, http.StatusServiceUnavailable, "workflow execution not available: "+err.Error())
 		return
@@ -787,31 +771,24 @@ func (s *Server) HandleRunWorkflow(w http.ResponseWriter, r *http.Request) {
 	notifier.SetState(state)
 	notifier.SetStateSaver(s.stateManager)
 
-	// Update status to "running" BEFORE responding to ensure DB consistency
-	// This way, any subsequent GET will return the correct status
-	state.Status = core.WorkflowStatusRunning
-	state.Error = "" // Clear previous error on restart
-	state.UpdatedAt = time.Now()
-	// Initialize heartbeat for zombie detection - CRITICAL for direct execution path
-	now := time.Now().UTC()
-	state.HeartbeatAt = &now
-	if err := s.stateManager.Save(r.Context(), state); err != nil {
-		s.logger.Error("failed to update workflow status to running", "workflow_id", workflowID, "error", err)
-		cancel()
-		s.unregisterControlPlane(workflowID)
-		markFinished(workflowID)
-		respondError(w, http.StatusInternalServerError, "failed to start workflow: "+err.Error())
-		return
-	}
-
 	// Start execution in background
 	go func() {
+		// Confirm that the goroutine has started
+		handle.ConfirmStarted()
+
 		// Emit workflow started event
 		notifier.WorkflowStarted(state.Prompt)
 
-		// Execute the workflow (unregisters ControlPlane on completion)
-		s.executeWorkflowAsync(execCtx, cancel, runner, notifier, state, isResume, workflowID)
+		// Execute the workflow (tracker cleanup happens in defer)
+		s.executeWorkflowAsync(execCtx, cancel, runner, notifier, state, isResume, workflowID, handle)
 	}()
+
+	// Wait for confirmation that goroutine started (with timeout)
+	if err := handle.WaitForConfirmation(s.unifiedTracker.ConfirmTimeout()); err != nil {
+		s.logger.Error("workflow start confirmation timeout", "workflow_id", workflowID, "error", err)
+		// Don't rollback - the goroutine might have started but confirmation was slow
+		// The heartbeat system will detect if it's actually dead
+	}
 
 	// Return 202 Accepted with "running" status
 	// DB is already updated, so any GET will return consistent state
@@ -839,11 +816,17 @@ func (s *Server) executeWorkflowAsync(
 	state *core.WorkflowState,
 	isResume bool,
 	workflowID string,
+	handle *ExecutionHandle,
 ) {
 	defer cancel()
-	defer markFinished(workflowID)
-	defer s.unregisterControlPlane(workflowID)
 	defer notifier.FlushState() // Ensure all pending agent events are saved
+
+	// Cleanup tracking when done
+	if s.unifiedTracker != nil && handle != nil {
+		defer func() {
+			_ = s.unifiedTracker.FinishExecution(context.Background(), core.WorkflowID(workflowID))
+		}()
+	}
 
 	startTime := time.Now()
 	var runErr error
@@ -897,23 +880,34 @@ func (s *Server) handleCancelWorkflow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get the ControlPlane for this workflow
-	cp, ok := s.getControlPlane(workflowID)
-	if !ok {
-		// No ControlPlane means workflow is not running
+	// Use UnifiedTracker for cancel operation
+	if s.unifiedTracker != nil {
+		if err := s.unifiedTracker.Cancel(core.WorkflowID(workflowID)); err != nil {
+			if strings.Contains(err.Error(), "not running") {
+				respondError(w, http.StatusConflict, "workflow is not running")
+			} else if strings.Contains(err.Error(), "already being cancelled") {
+				respondError(w, http.StatusConflict, "workflow is already being cancelled")
+			} else {
+				respondError(w, http.StatusInternalServerError, err.Error())
+			}
+			return
+		}
+	} else if s.executor != nil {
+		// Fallback to executor if tracker not available
+		if err := s.executor.Cancel(workflowID); err != nil {
+			if strings.Contains(err.Error(), "not running") {
+				respondError(w, http.StatusConflict, "workflow is not running")
+			} else if strings.Contains(err.Error(), "already being cancelled") {
+				respondError(w, http.StatusConflict, "workflow is already being cancelled")
+			} else {
+				respondError(w, http.StatusInternalServerError, err.Error())
+			}
+			return
+		}
+	} else {
 		respondError(w, http.StatusConflict, "workflow is not running")
 		return
 	}
-
-	// Check if already cancelled
-	if cp.IsCancelled() {
-		respondError(w, http.StatusConflict, "workflow is already being cancelled")
-		return
-	}
-
-	// Cancel the workflow
-	cp.Cancel()
-	s.logger.Info("workflow cancellation requested", "workflow_id", workflowID)
 
 	// Return success response (actual state change happens asynchronously)
 	respondJSON(w, http.StatusAccepted, WorkflowControlResponse{
@@ -932,28 +926,34 @@ func (s *Server) handlePauseWorkflow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get the ControlPlane for this workflow
-	cp, ok := s.getControlPlane(workflowID)
-	if !ok {
+	// Use UnifiedTracker for pause operation
+	if s.unifiedTracker != nil {
+		if err := s.unifiedTracker.Pause(core.WorkflowID(workflowID)); err != nil {
+			if strings.Contains(err.Error(), "not running") {
+				respondError(w, http.StatusConflict, "workflow is not running")
+			} else if strings.Contains(err.Error(), "already paused") {
+				respondError(w, http.StatusConflict, "workflow is already paused")
+			} else {
+				respondError(w, http.StatusInternalServerError, err.Error())
+			}
+			return
+		}
+	} else if s.executor != nil {
+		// Fallback to executor if tracker not available
+		if err := s.executor.Pause(workflowID); err != nil {
+			if strings.Contains(err.Error(), "not running") {
+				respondError(w, http.StatusConflict, "workflow is not running")
+			} else if strings.Contains(err.Error(), "already paused") {
+				respondError(w, http.StatusConflict, "workflow is already paused")
+			} else {
+				respondError(w, http.StatusInternalServerError, err.Error())
+			}
+			return
+		}
+	} else {
 		respondError(w, http.StatusConflict, "workflow is not running")
 		return
 	}
-
-	// Check if already paused
-	if cp.IsPaused() {
-		respondError(w, http.StatusConflict, "workflow is already paused")
-		return
-	}
-
-	// Check if cancelled
-	if cp.IsCancelled() {
-		respondError(w, http.StatusConflict, "workflow is being cancelled")
-		return
-	}
-
-	// Pause the workflow
-	cp.Pause()
-	s.logger.Info("workflow paused", "workflow_id", workflowID)
 
 	// Update persisted state
 	ctx := r.Context()
@@ -982,28 +982,23 @@ func (s *Server) handleResumeWorkflow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get the ControlPlane for this workflow
-	cp, ok := s.getControlPlane(workflowID)
-	if !ok {
+	// Use UnifiedTracker for resume operation
+	if s.unifiedTracker != nil {
+		if err := s.unifiedTracker.Resume(core.WorkflowID(workflowID)); err != nil {
+			if strings.Contains(err.Error(), "not running") {
+				respondError(w, http.StatusConflict, "workflow is not running")
+			} else if strings.Contains(err.Error(), "not paused") {
+				respondError(w, http.StatusConflict, "workflow is not paused")
+			} else {
+				respondError(w, http.StatusInternalServerError, err.Error())
+			}
+			return
+		}
+	} else {
+		// Without UnifiedTracker, cannot resume
 		respondError(w, http.StatusConflict, "workflow is not running")
 		return
 	}
-
-	// Check if not paused
-	if !cp.IsPaused() {
-		respondError(w, http.StatusConflict, "workflow is not paused")
-		return
-	}
-
-	// Check if cancelled
-	if cp.IsCancelled() {
-		respondError(w, http.StatusConflict, "workflow is being cancelled")
-		return
-	}
-
-	// Resume the workflow
-	cp.Resume()
-	s.logger.Info("workflow resumed", "workflow_id", workflowID)
 
 	// Update persisted state
 	ctx := r.Context()

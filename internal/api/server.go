@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -17,7 +16,6 @@ import (
 	webadapters "github.com/hugo-lorenzo-mato/quorum-ai/internal/adapters/web"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/attachments"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/config"
-	"github.com/hugo-lorenzo-mato/quorum-ai/internal/control"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/diagnostics"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/events"
@@ -39,9 +37,8 @@ type Server struct {
 	configLoader    *config.Loader // for workflow execution configuration
 	root            string         // root directory for file operations
 
-	// Control planes for running workflows (enables pause/resume/cancel)
-	controlPlanesMu sync.RWMutex
-	controlPlanes   map[string]*control.ControlPlane
+	// Unified tracker for workflow execution (replaces controlPlanes map)
+	unifiedTracker *UnifiedTracker
 
 	// Workflow executor for centralized execution management
 	executor *WorkflowExecutor
@@ -119,15 +116,21 @@ func WithKanbanEngine(engine *kanban.Engine) ServerOption {
 	}
 }
 
+// WithUnifiedTracker sets the unified tracker for workflow execution tracking.
+func WithUnifiedTracker(tracker *UnifiedTracker) ServerOption {
+	return func(s *Server) {
+		s.unifiedTracker = tracker
+	}
+}
+
 // NewServer creates a new API server.
 func NewServer(stateManager core.StateManager, eventBus *events.EventBus, opts ...ServerOption) *Server {
 	wd, _ := os.Getwd() // Best effort default
 	s := &Server{
-		stateManager:  stateManager,
-		eventBus:      eventBus,
-		logger:        slog.Default(),
-		root:          wd,
-		controlPlanes: make(map[string]*control.ControlPlane),
+		stateManager: stateManager,
+		eventBus:     eventBus,
+		logger:       slog.Default(),
+		root:         wd,
 	}
 
 	for _, opt := range opts {
@@ -143,27 +146,6 @@ func NewServer(stateManager core.StateManager, eventBus *events.EventBus, opts .
 	return s
 }
 
-// registerControlPlane registers a ControlPlane for a running workflow.
-func (s *Server) registerControlPlane(workflowID string, cp *control.ControlPlane) {
-	s.controlPlanesMu.Lock()
-	defer s.controlPlanesMu.Unlock()
-	s.controlPlanes[workflowID] = cp
-}
-
-// unregisterControlPlane removes a ControlPlane when workflow finishes.
-func (s *Server) unregisterControlPlane(workflowID string) {
-	s.controlPlanesMu.Lock()
-	defer s.controlPlanesMu.Unlock()
-	delete(s.controlPlanes, workflowID)
-}
-
-// getControlPlane retrieves a ControlPlane for a workflow.
-func (s *Server) getControlPlane(workflowID string) (*control.ControlPlane, bool) {
-	s.controlPlanesMu.RLock()
-	defer s.controlPlanesMu.RUnlock()
-	cp, ok := s.controlPlanes[workflowID]
-	return cp, ok
-}
 
 // Handler returns the HTTP handler for the server.
 func (s *Server) Handler() http.Handler {

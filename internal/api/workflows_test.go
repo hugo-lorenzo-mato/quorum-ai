@@ -196,11 +196,8 @@ func TestHandleRunWorkflow_DoubleExecution(t *testing.T) {
 		UpdatedAt:    time.Now(),
 	}
 
-	// Manually mark as running using internal tracking
-	if !markRunning("wf-double") {
-		t.Fatal("failed to mark workflow as running")
-	}
-	defer markFinished("wf-double")
+	// Set workflow status to running to simulate already running state
+	sm.workflows["wf-double"].Status = core.WorkflowStatusRunning
 
 	eb := events.New(100)
 	srv := NewServer(sm, eb, WithLogger(slog.Default()))
@@ -219,7 +216,7 @@ func TestHandleRunWorkflow_DoubleExecution(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
-	if resp["error"] != "workflow execution already in progress" {
+	if resp["error"] != "workflow is already running" {
 		t.Errorf("unexpected error: %s", resp["error"])
 	}
 }

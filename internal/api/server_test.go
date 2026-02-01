@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 
 // mockStateManager implements core.StateManager for testing.
 type mockStateManager struct {
+	mu           sync.Mutex
 	workflows    map[core.WorkflowID]*core.WorkflowState
 	activeID     core.WorkflowID
 	saveErr      error
@@ -210,6 +212,44 @@ func (m *mockStateManager) UpdateWorkflowHeartbeat(_ context.Context, id core.Wo
 		return nil
 	}
 	return fmt.Errorf("workflow not found: %s", id)
+}
+
+func (m *mockStateManager) ExecuteAtomically(_ context.Context, fn func(core.AtomicStateContext) error) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	atomicCtx := &mockAtomicStateContext{m: m}
+	return fn(atomicCtx)
+}
+
+type mockAtomicStateContext struct {
+	m *mockStateManager
+}
+
+func (a *mockAtomicStateContext) LoadByID(id core.WorkflowID) (*core.WorkflowState, error) {
+	if wf, exists := a.m.workflows[id]; exists {
+		return wf, nil
+	}
+	return nil, nil
+}
+
+func (a *mockAtomicStateContext) Save(state *core.WorkflowState) error {
+	a.m.workflows[state.WorkflowID] = state
+	return nil
+}
+
+func (a *mockAtomicStateContext) SetWorkflowRunning(_ core.WorkflowID) error {
+	return nil
+}
+
+func (a *mockAtomicStateContext) ClearWorkflowRunning(_ core.WorkflowID) error {
+	return nil
+}
+
+func (a *mockAtomicStateContext) IsWorkflowRunning(id core.WorkflowID) (bool, error) {
+	if wf, exists := a.m.workflows[id]; exists {
+		return wf.Status == core.WorkflowStatusRunning, nil
+	}
+	return false, nil
 }
 
 func TestHealthEndpoint(t *testing.T) {

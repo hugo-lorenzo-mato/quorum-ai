@@ -903,3 +903,61 @@ func (m *JSONStateManager) UpdateWorkflowHeartbeat(_ context.Context, _ core.Wor
 
 // Verify that JSONStateManager implements core.StateManager.
 var _ core.StateManager = (*JSONStateManager)(nil)
+
+// ============================================================================
+// Atomic Transaction Support
+// ============================================================================
+
+// jsonAtomicContext implements core.AtomicStateContext for JSON state manager.
+// Since JSON doesn't support real transactions, this provides a simple wrapper
+// that executes operations sequentially with file-based locking.
+type jsonAtomicContext struct {
+	m   *JSONStateManager
+	ctx context.Context
+}
+
+// ExecuteAtomically runs operations with file-based locking for JSON state manager.
+// Note: This is not truly atomic like SQLite transactions, but provides best-effort
+// consistency through file locking.
+func (m *JSONStateManager) ExecuteAtomically(ctx context.Context, fn func(core.AtomicStateContext) error) error {
+	// Use file lock for concurrency control
+	if err := m.AcquireLock(ctx); err != nil {
+		return fmt.Errorf("acquiring lock: %w", err)
+	}
+	defer func() { _ = m.ReleaseLock(ctx) }()
+
+	atomicCtx := &jsonAtomicContext{
+		m:   m,
+		ctx: ctx,
+	}
+
+	return fn(atomicCtx)
+}
+
+// LoadByID retrieves a workflow state.
+func (a *jsonAtomicContext) LoadByID(id core.WorkflowID) (*core.WorkflowState, error) {
+	return a.m.LoadByID(a.ctx, id)
+}
+
+// Save persists workflow state.
+func (a *jsonAtomicContext) Save(state *core.WorkflowState) error {
+	return a.m.Save(a.ctx, state)
+}
+
+// SetWorkflowRunning marks a workflow as running.
+// For JSON state manager, this is a no-op.
+func (a *jsonAtomicContext) SetWorkflowRunning(_ core.WorkflowID) error {
+	return nil
+}
+
+// ClearWorkflowRunning removes a workflow from running state.
+// For JSON state manager, this is a no-op.
+func (a *jsonAtomicContext) ClearWorkflowRunning(_ core.WorkflowID) error {
+	return nil
+}
+
+// IsWorkflowRunning checks if a workflow is running.
+// For JSON state manager, this always returns false.
+func (a *jsonAtomicContext) IsWorkflowRunning(_ core.WorkflowID) (bool, error) {
+	return false, nil
+}

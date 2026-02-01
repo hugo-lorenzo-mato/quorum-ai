@@ -407,11 +407,8 @@ func (r *Runner) RunWithState(ctx context.Context, state *core.WorkflowState) er
 		return fmt.Errorf("saving state: %w", err)
 	}
 
-	// Start heartbeat tracking if available
-	if r.heartbeat != nil {
-		r.heartbeat.Start(workflowState.WorkflowID)
-		defer r.heartbeat.Stop(workflowState.WorkflowID)
-	}
+	// Note: Heartbeat tracking is managed by UnifiedTracker when using the API path.
+	// Direct runner usage (CLI) doesn't require heartbeat tracking.
 
 	wctx := r.createContext(workflowState)
 
@@ -598,11 +595,8 @@ func (r *Runner) ResumeWithState(ctx context.Context, state *core.WorkflowState)
 		r.output.Log("info", "workflow", fmt.Sprintf("Resuming workflow from %s phase", resumePoint.Phase))
 	}
 
-	// Start heartbeat tracking if available
-	if r.heartbeat != nil {
-		r.heartbeat.Start(state.WorkflowID)
-		defer r.heartbeat.Stop(state.WorkflowID)
-	}
+	// Note: Heartbeat tracking is managed by UnifiedTracker when using the API path.
+	// Direct runner usage (CLI) doesn't require heartbeat tracking.
 
 	wctx := r.createContext(state)
 

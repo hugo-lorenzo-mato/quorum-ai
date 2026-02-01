@@ -228,6 +228,30 @@ type StateManager interface {
 	// FindZombieWorkflows returns workflows with status "running" but stale heartbeats.
 	// A workflow is considered a zombie if its heartbeat is older than the threshold.
 	FindZombieWorkflows(ctx context.Context, staleThreshold time.Duration) ([]*WorkflowState, error)
+
+	// ExecuteAtomically runs operations atomically within a database transaction.
+	// The callback receives an AtomicStateContext that provides transactional versions
+	// of state operations. If the callback returns an error, the transaction is rolled back.
+	ExecuteAtomically(ctx context.Context, fn func(AtomicStateContext) error) error
+}
+
+// AtomicStateContext provides transactional access to state operations.
+// Operations within this context are part of the same database transaction.
+type AtomicStateContext interface {
+	// LoadByID retrieves a workflow state within the transaction.
+	LoadByID(id WorkflowID) (*WorkflowState, error)
+
+	// Save persists workflow state within the transaction.
+	Save(state *WorkflowState) error
+
+	// SetWorkflowRunning marks a workflow as running within the transaction.
+	SetWorkflowRunning(workflowID WorkflowID) error
+
+	// ClearWorkflowRunning removes a workflow from running state within the transaction.
+	ClearWorkflowRunning(workflowID WorkflowID) error
+
+	// IsWorkflowRunning checks if a workflow is running within the transaction.
+	IsWorkflowRunning(workflowID WorkflowID) (bool, error)
 }
 
 // WorkflowSummary provides a lightweight summary of a workflow for listing.

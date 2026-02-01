@@ -1886,3 +1886,360 @@ func ptrToString(s *string) string {
 	}
 	return *s
 }
+
+// ============================================================================
+// Atomic Transaction Support
+// ============================================================================
+
+// sqliteAtomicContext implements core.AtomicStateContext for SQLite transactions.
+type sqliteAtomicContext struct {
+	tx  *sql.Tx
+	ctx context.Context
+	m   *SQLiteStateManager
+}
+
+// ExecuteAtomically runs operations atomically within a database transaction.
+func (m *SQLiteStateManager) ExecuteAtomically(ctx context.Context, fn func(core.AtomicStateContext) error) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	tx, err := m.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("beginning transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	atomicCtx := &sqliteAtomicContext{
+		tx:  tx,
+		ctx: ctx,
+		m:   m,
+	}
+
+	if err := fn(atomicCtx); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("committing transaction: %w", err)
+	}
+
+	return nil
+}
+
+// LoadByID retrieves a workflow state within the transaction.
+func (a *sqliteAtomicContext) LoadByID(id core.WorkflowID) (*core.WorkflowState, error) {
+	var state core.WorkflowState
+	var taskOrderJSON, configJSON, metricsJSON sql.NullString
+	var optimizedPrompt sql.NullString
+	var checksum sql.NullString
+	var reportPath sql.NullString
+	var title sql.NullString
+	var agentEventsJSON sql.NullString
+	var workflowBranch sql.NullString
+	var kanbanColumn, prURL, kanbanLastError sql.NullString
+	var kanbanPosition, prNumber, kanbanExecutionCount sql.NullInt64
+	var kanbanStartedAt, kanbanCompletedAt sql.NullTime
+
+	err := a.tx.QueryRowContext(a.ctx, `
+		SELECT id, version, title, status, current_phase, prompt, optimized_prompt,
+		       task_order, config, metrics, checksum, created_at, updated_at, report_path,
+		       agent_events, workflow_branch,
+		       kanban_column, kanban_position, pr_url, pr_number,
+		       kanban_started_at, kanban_completed_at, kanban_execution_count, kanban_last_error
+		FROM workflows WHERE id = ?
+	`, id).Scan(
+		&state.WorkflowID, &state.Version, &title, &state.Status, &state.CurrentPhase,
+		&state.Prompt, &optimizedPrompt, &taskOrderJSON, &configJSON, &metricsJSON,
+		&checksum, &state.CreatedAt, &state.UpdatedAt, &reportPath, &agentEventsJSON, &workflowBranch,
+		&kanbanColumn, &kanbanPosition, &prURL, &prNumber,
+		&kanbanStartedAt, &kanbanCompletedAt, &kanbanExecutionCount, &kanbanLastError,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("loading workflow: %w", err)
+	}
+
+	if title.Valid {
+		state.Title = title.String
+	}
+	if optimizedPrompt.Valid {
+		state.OptimizedPrompt = optimizedPrompt.String
+	}
+	if checksum.Valid {
+		state.Checksum = checksum.String
+	}
+	if reportPath.Valid {
+		state.ReportPath = reportPath.String
+	}
+	if workflowBranch.Valid {
+		state.WorkflowBranch = workflowBranch.String
+	}
+	if kanbanColumn.Valid {
+		state.KanbanColumn = kanbanColumn.String
+	}
+	state.KanbanPosition = int(kanbanPosition.Int64)
+	if prURL.Valid {
+		state.PRURL = prURL.String
+	}
+	state.PRNumber = int(prNumber.Int64)
+	if kanbanStartedAt.Valid {
+		state.KanbanStartedAt = &kanbanStartedAt.Time
+	}
+	if kanbanCompletedAt.Valid {
+		state.KanbanCompletedAt = &kanbanCompletedAt.Time
+	}
+	state.KanbanExecutionCount = int(kanbanExecutionCount.Int64)
+	if kanbanLastError.Valid {
+		state.KanbanLastError = kanbanLastError.String
+	}
+
+	if taskOrderJSON.Valid {
+		if err := json.Unmarshal([]byte(taskOrderJSON.String), &state.TaskOrder); err != nil {
+			return nil, fmt.Errorf("unmarshaling task order: %w", err)
+		}
+	}
+	if configJSON.Valid && configJSON.String != "" {
+		state.Config = &core.WorkflowConfig{}
+		if err := json.Unmarshal([]byte(configJSON.String), state.Config); err != nil {
+			return nil, fmt.Errorf("unmarshaling config: %w", err)
+		}
+	}
+	if metricsJSON.Valid && metricsJSON.String != "" {
+		state.Metrics = &core.StateMetrics{}
+		if err := json.Unmarshal([]byte(metricsJSON.String), state.Metrics); err != nil {
+			return nil, fmt.Errorf("unmarshaling metrics: %w", err)
+		}
+	}
+	if agentEventsJSON.Valid && agentEventsJSON.String != "" {
+		if err := json.Unmarshal([]byte(agentEventsJSON.String), &state.AgentEvents); err != nil {
+			return nil, fmt.Errorf("unmarshaling agent events: %w", err)
+		}
+	}
+
+	// Load tasks within transaction
+	state.Tasks = make(map[core.TaskID]*core.TaskState)
+	rows, err := a.tx.QueryContext(a.ctx, `
+		SELECT id, phase, name, status, cli, model, dependencies,
+		       tokens_in, tokens_out, cost_usd, retries, error,
+		       worktree_path, started_at, completed_at, output,
+		       output_file, model_used, finish_reason, tool_calls,
+		       last_commit, files_modified, branch, resumable, resume_hint,
+		       merge_pending, merge_commit
+		FROM tasks WHERE workflow_id = ?
+	`, id)
+	if err != nil {
+		return nil, fmt.Errorf("loading tasks: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		task, err := a.m.scanTask(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scanning task: %w", err)
+		}
+		state.Tasks[task.ID] = task
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating tasks: %w", err)
+	}
+
+	// Load checkpoints within transaction
+	cpRows, err := a.tx.QueryContext(a.ctx, `
+		SELECT id, type, phase, task_id, timestamp, message, data
+		FROM checkpoints WHERE workflow_id = ?
+	`, id)
+	if err != nil {
+		return nil, fmt.Errorf("loading checkpoints: %w", err)
+	}
+	defer cpRows.Close()
+
+	for cpRows.Next() {
+		cp, err := a.m.scanCheckpoint(cpRows)
+		if err != nil {
+			return nil, fmt.Errorf("scanning checkpoint: %w", err)
+		}
+		state.Checkpoints = append(state.Checkpoints, *cp)
+	}
+	if err := cpRows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating checkpoints: %w", err)
+	}
+
+	return &state, nil
+}
+
+// Save persists workflow state within the transaction.
+func (a *sqliteAtomicContext) Save(state *core.WorkflowState) error {
+	state.UpdatedAt = time.Now()
+
+	// Calculate checksum
+	state.Checksum = ""
+	stateBytes, err := json.Marshal(state)
+	if err != nil {
+		return fmt.Errorf("marshaling state for checksum: %w", err)
+	}
+	hash := sha256.Sum256(stateBytes)
+	checksum := hex.EncodeToString(hash[:])
+
+	taskOrderJSON, err := json.Marshal(state.TaskOrder)
+	if err != nil {
+		return fmt.Errorf("marshaling task order: %w", err)
+	}
+
+	var configJSON, metricsJSON []byte
+	if state.Config != nil {
+		configJSON, err = json.Marshal(state.Config)
+		if err != nil {
+			return fmt.Errorf("marshaling config: %w", err)
+		}
+	}
+	if state.Metrics != nil {
+		metricsJSON, err = json.Marshal(state.Metrics)
+		if err != nil {
+			return fmt.Errorf("marshaling metrics: %w", err)
+		}
+	}
+
+	var agentEventsJSON []byte
+	if len(state.AgentEvents) > 0 {
+		agentEventsJSON, err = json.Marshal(state.AgentEvents)
+		if err != nil {
+			return fmt.Errorf("marshaling agent events: %w", err)
+		}
+	}
+
+	_, err = a.tx.ExecContext(a.ctx, `
+		INSERT INTO workflows (
+			id, version, title, status, current_phase, prompt, optimized_prompt,
+			task_order, config, metrics, checksum, created_at, updated_at, report_path,
+			agent_events, workflow_branch,
+			kanban_column, kanban_position, pr_url, pr_number,
+			kanban_started_at, kanban_completed_at, kanban_execution_count, kanban_last_error
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET
+			version = excluded.version,
+			title = excluded.title,
+			status = excluded.status,
+			current_phase = excluded.current_phase,
+			prompt = excluded.prompt,
+			optimized_prompt = excluded.optimized_prompt,
+			task_order = excluded.task_order,
+			config = excluded.config,
+			metrics = excluded.metrics,
+			checksum = excluded.checksum,
+			updated_at = excluded.updated_at,
+			report_path = excluded.report_path,
+			agent_events = excluded.agent_events,
+			workflow_branch = excluded.workflow_branch,
+			kanban_column = excluded.kanban_column,
+			kanban_position = excluded.kanban_position,
+			pr_url = excluded.pr_url,
+			pr_number = excluded.pr_number,
+			kanban_started_at = excluded.kanban_started_at,
+			kanban_completed_at = excluded.kanban_completed_at,
+			kanban_execution_count = excluded.kanban_execution_count,
+			kanban_last_error = excluded.kanban_last_error
+	`,
+		state.WorkflowID, state.Version, state.Title, state.Status, state.CurrentPhase,
+		state.Prompt, state.OptimizedPrompt, string(taskOrderJSON),
+		nullableString(configJSON), nullableString(metricsJSON),
+		checksum, state.CreatedAt, state.UpdatedAt,
+		nullableString([]byte(state.ReportPath)),
+		nullableString(agentEventsJSON),
+		nullableString([]byte(state.WorkflowBranch)),
+		nullableString([]byte(state.KanbanColumn)), state.KanbanPosition,
+		nullableString([]byte(state.PRURL)), state.PRNumber,
+		nullableTime(state.KanbanStartedAt), nullableTime(state.KanbanCompletedAt),
+		state.KanbanExecutionCount, nullableString([]byte(state.KanbanLastError)),
+	)
+	if err != nil {
+		return fmt.Errorf("upserting workflow: %w", err)
+	}
+
+	// Delete existing tasks
+	_, err = a.tx.ExecContext(a.ctx, "DELETE FROM tasks WHERE workflow_id = ?", state.WorkflowID)
+	if err != nil {
+		return fmt.Errorf("deleting existing tasks: %w", err)
+	}
+
+	// Insert tasks
+	for _, task := range state.Tasks {
+		if err := a.m.insertTask(a.ctx, a.tx, state.WorkflowID, task); err != nil {
+			return fmt.Errorf("inserting task %s: %w", task.ID, err)
+		}
+	}
+
+	// Delete existing checkpoints
+	_, err = a.tx.ExecContext(a.ctx, "DELETE FROM checkpoints WHERE workflow_id = ?", state.WorkflowID)
+	if err != nil {
+		return fmt.Errorf("deleting existing checkpoints: %w", err)
+	}
+
+	// Insert checkpoints
+	for _, cp := range state.Checkpoints {
+		if err := a.m.insertCheckpoint(a.ctx, a.tx, state.WorkflowID, &cp); err != nil {
+			return fmt.Errorf("inserting checkpoint %s: %w", cp.ID, err)
+		}
+	}
+
+	// Set as active workflow
+	_, err = a.tx.ExecContext(a.ctx, `
+		INSERT INTO active_workflow (id, workflow_id, updated_at)
+		VALUES (1, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET
+			workflow_id = excluded.workflow_id,
+			updated_at = excluded.updated_at
+	`, state.WorkflowID, time.Now())
+	if err != nil {
+		return fmt.Errorf("setting active workflow: %w", err)
+	}
+
+	return nil
+}
+
+// SetWorkflowRunning marks a workflow as running within the transaction.
+func (a *sqliteAtomicContext) SetWorkflowRunning(workflowID core.WorkflowID) error {
+	pid := os.Getpid()
+	hostname, _ := os.Hostname()
+	now := time.Now().UTC()
+
+	_, err := a.tx.ExecContext(a.ctx, `
+		INSERT OR REPLACE INTO running_workflows
+		(workflow_id, started_at, lock_holder_pid, lock_holder_host, heartbeat_at)
+		VALUES (?, ?, ?, ?, ?)
+	`, string(workflowID), now, pid, hostname, now)
+
+	if err != nil {
+		return fmt.Errorf("setting workflow running: %w", err)
+	}
+
+	return nil
+}
+
+// ClearWorkflowRunning removes a workflow from running state within the transaction.
+func (a *sqliteAtomicContext) ClearWorkflowRunning(workflowID core.WorkflowID) error {
+	_, err := a.tx.ExecContext(a.ctx, `
+		DELETE FROM running_workflows WHERE workflow_id = ?
+	`, string(workflowID))
+
+	if err != nil {
+		return fmt.Errorf("clearing workflow running: %w", err)
+	}
+
+	return nil
+}
+
+// IsWorkflowRunning checks if a workflow is running within the transaction.
+func (a *sqliteAtomicContext) IsWorkflowRunning(workflowID core.WorkflowID) (bool, error) {
+	var count int
+	err := a.tx.QueryRowContext(a.ctx, `
+		SELECT COUNT(*) FROM running_workflows WHERE workflow_id = ?
+	`, string(workflowID)).Scan(&count)
+
+	if err != nil {
+		return false, fmt.Errorf("checking if workflow running: %w", err)
+	}
+
+	return count > 0, nil
+}
