@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { useConfigField } from '../../../hooks/useConfigField';
+import { useConfigField, useConfigSelect } from '../../../hooks/useConfigField';
 import { useConfigStore } from '../../../stores/configStore';
 import {
   SettingSection,
   TextInputSetting,
-  NumberInputSetting,
+  SelectSetting,
   ToggleSetting,
+  ArrayInputSetting,
   ConfirmDialog,
 } from '../index';
 
@@ -19,145 +20,183 @@ export function AdvancedTab() {
       </div>
 
       <TraceSection />
-      <ServerSection />
       <DangerZone />
     </div>
   );
 }
 
 function TraceSection() {
-  const enabled = useConfigField('trace.enabled');
-  const path = useConfigField('trace.path');
-  const maxSize = useConfigField('trace.max_size');
-  const maxAge = useConfigField('trace.max_age');
-  const maxBackups = useConfigField('trace.max_backups');
-  const compress = useConfigField('trace.compress');
+  const mode = useConfigSelect('trace.mode', 'trace_modes');
+  const dir = useConfigField('trace.dir');
+  const redact = useConfigField('trace.redact');
+  const redactPatterns = useConfigField('trace.redact_patterns');
+  const redactAllowlist = useConfigField('trace.redact_allowlist');
+  const maxBytes = useConfigField('trace.max_bytes');
+  const totalMaxBytes = useConfigField('trace.total_max_bytes');
+  const maxFiles = useConfigField('trace.max_files');
+  const includePhases = useConfigField('trace.include_phases');
 
-  const isDisabled = !enabled.value;
+  const isDisabled = mode.value === 'off';
+
+  // Format bytes for display (convert to KB/MB)
+  const formatBytes = (bytes) => {
+    if (!bytes) return '';
+    if (bytes >= 1048576) return `${Math.round(bytes / 1048576)} MB`;
+    if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`;
+    return `${bytes} bytes`;
+  };
 
   return (
     <SettingSection
       title="Trace Logging"
-      description="Detailed logging for debugging and troubleshooting"
+      description="Detailed logging for debugging and troubleshooting workflow execution"
     >
-      <ToggleSetting
-        label="Enable Tracing"
-        description="Create detailed trace log files"
-        tooltip="When enabled, creates verbose log files useful for debugging issues. May impact performance."
-        checked={enabled.value}
-        onChange={enabled.onChange}
-        error={enabled.error}
-        disabled={enabled.disabled}
+      <SelectSetting
+        label="Trace Mode"
+        description="Control the level of trace output"
+        tooltip="off: No tracing. summary: High-level execution traces. full: Detailed traces including all tool calls and agent responses."
+        value={mode.value || 'off'}
+        onChange={mode.onChange}
+        options={mode.options.length > 0 ? mode.options : [
+          { value: 'off', label: 'Off' },
+          { value: 'summary', label: 'Summary' },
+          { value: 'full', label: 'Full' },
+        ]}
+        error={mode.error}
+        disabled={mode.disabled}
       />
 
       <TextInputSetting
         label="Trace Directory"
-        tooltip="Directory where trace files are stored."
+        description="Directory where trace files are stored"
+        tooltip="Relative path from project root. Default: .quorum/traces"
         placeholder=".quorum/traces"
-        value={path.value}
-        onChange={path.onChange}
-        error={path.error}
-        disabled={path.disabled || isDisabled}
+        value={dir.value || ''}
+        onChange={dir.onChange}
+        error={dir.error}
+        disabled={dir.disabled || isDisabled}
       />
-
-      <div className="grid grid-cols-3 gap-4">
-        <NumberInputSetting
-          label="Max Size (MB)"
-          tooltip="Maximum size of each trace file before rotation. Range: 1-1000 MB."
-          min={1}
-          max={1000}
-          value={maxSize.value}
-          onChange={maxSize.onChange}
-          error={maxSize.error}
-          disabled={maxSize.disabled || isDisabled}
-        />
-
-        <NumberInputSetting
-          label="Max Age (days)"
-          tooltip="Trace files older than this will be deleted. Range: 1-365 days."
-          min={1}
-          max={365}
-          value={maxAge.value}
-          onChange={maxAge.onChange}
-          error={maxAge.error}
-          disabled={maxAge.disabled || isDisabled}
-        />
-
-        <NumberInputSetting
-          label="Max Backups"
-          tooltip="Number of old trace files to keep. Range: 0-100."
-          min={0}
-          max={100}
-          value={maxBackups.value}
-          onChange={maxBackups.onChange}
-          error={maxBackups.error}
-          disabled={maxBackups.disabled || isDisabled}
-        />
-      </div>
 
       <ToggleSetting
-        label="Compress Old Files"
-        description="Gzip compress rotated trace files"
-        tooltip="Compresses old trace files to save disk space. Recommended."
-        checked={compress.value}
-        onChange={compress.onChange}
-        error={compress.error}
-        disabled={compress.disabled || isDisabled}
-      />
-    </SettingSection>
-  );
-}
-
-function ServerSection() {
-  const enabled = useConfigField('server.enabled');
-  const port = useConfigField('server.port');
-  const host = useConfigField('server.host');
-
-  const isDisabled = !enabled.value;
-
-  return (
-    <SettingSection
-      title="WebUI Server"
-      description="Configure the built-in web server"
-    >
-      <ToggleSetting
-        label="Enable WebUI Server"
-        description="Start the web interface server"
-        tooltip="When enabled, starts an HTTP server for the web interface. Disable if using CLI only."
-        checked={enabled.value}
-        onChange={enabled.onChange}
-        error={enabled.error}
-        disabled={enabled.disabled}
+        label="Redact Sensitive Data"
+        description="Automatically redact API keys, tokens, and other sensitive values"
+        tooltip="When enabled, trace files will have sensitive patterns replaced with [REDACTED]. Recommended for security."
+        checked={redact.value}
+        onChange={redact.onChange}
+        error={redact.error}
+        disabled={redact.disabled || isDisabled}
       />
 
-      <div className="grid grid-cols-2 gap-4">
-        <TextInputSetting
-          label="Host"
-          tooltip="Host address to bind. Use '127.0.0.1' for local only, '0.0.0.0' for all interfaces (security risk)."
-          placeholder="127.0.0.1"
-          value={host.value}
-          onChange={host.onChange}
-          error={host.error}
-          disabled={host.disabled || isDisabled}
-        />
+      <ArrayInputSetting
+        label="Redact Patterns"
+        description="Additional regex patterns to redact (beyond built-in defaults)"
+        tooltip="Add custom regex patterns to match sensitive data. Leave empty to use only built-in patterns."
+        value={redactPatterns.value || []}
+        onChange={redactPatterns.onChange}
+        error={redactPatterns.error}
+        disabled={redactPatterns.disabled || isDisabled || !redact.value}
+        placeholder="Add regex pattern..."
+      />
 
-        <NumberInputSetting
-          label="Port"
-          tooltip="Port number for the WebUI server. Range: 1024-65535."
-          min={1024}
-          max={65535}
-          value={port.value}
-          onChange={port.onChange}
-          error={port.error}
-          disabled={port.disabled || isDisabled}
-        />
-      </div>
+      <ArrayInputSetting
+        label="Redact Allowlist"
+        description="Patterns to skip from redaction"
+        tooltip="Regex patterns that match values which should NOT be redacted, even if they match a redact pattern."
+        value={redactAllowlist.value || []}
+        onChange={redactAllowlist.onChange}
+        error={redactAllowlist.error}
+        disabled={redactAllowlist.disabled || isDisabled || !redact.value}
+        placeholder="Add allowlist pattern..."
+      />
 
-      {host.value === '0.0.0.0' && (
-        <div className="p-3 rounded-lg bg-warning/10 border border-warning/20 text-sm text-foreground">
-          <strong className="text-warning">Security warning:</strong> Binding to 0.0.0.0 exposes the server to all network interfaces.
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="py-3">
+          <label className={`text-sm font-medium ${isDisabled ? 'text-muted-foreground' : 'text-foreground'}`}>
+            Max Bytes per File
+          </label>
+          <p className="text-xs text-muted-foreground mb-2">
+            Maximum size per trace file {maxBytes.value ? `(${formatBytes(maxBytes.value)})` : ''}
+          </p>
+          <input
+            type="number"
+            value={maxBytes.value || ''}
+            onChange={(e) => maxBytes.onChange(e.target.value ? parseInt(e.target.value, 10) : null)}
+            disabled={maxBytes.disabled || isDisabled}
+            placeholder="262144"
+            min={1024}
+            className={`
+              w-full px-3 py-2
+              border rounded-lg bg-background text-foreground
+              transition-colors
+              focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent
+              disabled:opacity-50 disabled:cursor-not-allowed
+              ${maxBytes.error ? 'border-error' : 'border-input hover:border-muted-foreground'}
+            `}
+          />
         </div>
-      )}
+
+        <div className="py-3">
+          <label className={`text-sm font-medium ${isDisabled ? 'text-muted-foreground' : 'text-foreground'}`}>
+            Total Max Bytes
+          </label>
+          <p className="text-xs text-muted-foreground mb-2">
+            Max total trace size per run {totalMaxBytes.value ? `(${formatBytes(totalMaxBytes.value)})` : ''}
+          </p>
+          <input
+            type="number"
+            value={totalMaxBytes.value || ''}
+            onChange={(e) => totalMaxBytes.onChange(e.target.value ? parseInt(e.target.value, 10) : null)}
+            disabled={totalMaxBytes.disabled || isDisabled}
+            placeholder="10485760"
+            min={1024}
+            className={`
+              w-full px-3 py-2
+              border rounded-lg bg-background text-foreground
+              transition-colors
+              focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent
+              disabled:opacity-50 disabled:cursor-not-allowed
+              ${totalMaxBytes.error ? 'border-error' : 'border-input hover:border-muted-foreground'}
+            `}
+          />
+        </div>
+
+        <div className="py-3">
+          <label className={`text-sm font-medium ${isDisabled ? 'text-muted-foreground' : 'text-foreground'}`}>
+            Max Files
+          </label>
+          <p className="text-xs text-muted-foreground mb-2">
+            Maximum trace files per run
+          </p>
+          <input
+            type="number"
+            value={maxFiles.value || ''}
+            onChange={(e) => maxFiles.onChange(e.target.value ? parseInt(e.target.value, 10) : null)}
+            disabled={maxFiles.disabled || isDisabled}
+            placeholder="500"
+            min={1}
+            max={10000}
+            className={`
+              w-full px-3 py-2
+              border rounded-lg bg-background text-foreground
+              transition-colors
+              focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent
+              disabled:opacity-50 disabled:cursor-not-allowed
+              ${maxFiles.error ? 'border-error' : 'border-input hover:border-muted-foreground'}
+            `}
+          />
+        </div>
+      </div>
+
+      <ArrayInputSetting
+        label="Include Phases"
+        description="Which workflow phases to include in traces"
+        tooltip="Select phases to trace: refine, analyze, plan, execute. Leave empty to trace all phases."
+        value={includePhases.value || []}
+        onChange={includePhases.onChange}
+        error={includePhases.error}
+        disabled={includePhases.disabled || isDisabled}
+        placeholder="Add phase (refine, analyze, plan, execute)..."
+      />
     </SettingSection>
   );
 }

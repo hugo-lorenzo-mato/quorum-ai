@@ -13,6 +13,7 @@ export function WorkflowTab() {
   return (
     <div className="space-y-6">
       <WorkflowSection />
+      <HeartbeatSection />
       <StateSection />
     </div>
   );
@@ -79,6 +80,92 @@ function WorkflowSection() {
         error={denyTools.error}
         disabled={denyTools.disabled}
         suggestions={['Bash', 'Write', 'Edit', 'Read', 'Glob', 'Grep', 'WebFetch', 'WebSearch']}
+      />
+    </SettingSection>
+  );
+}
+
+function HeartbeatSection() {
+  const enabled = useConfigField('workflow.heartbeat.enabled');
+  const interval = useConfigField('workflow.heartbeat.interval');
+  const staleThreshold = useConfigField('workflow.heartbeat.stale_threshold');
+  const checkInterval = useConfigField('workflow.heartbeat.check_interval');
+  const autoResume = useConfigField('workflow.heartbeat.auto_resume');
+  const maxResumes = useConfigField('workflow.heartbeat.max_resumes');
+
+  const isDisabled = !enabled.value;
+
+  return (
+    <SettingSection
+      title="Heartbeat Monitoring"
+      description="Detect and recover from zombie workflows that stop responding"
+    >
+      <ToggleSetting
+        label="Enable Heartbeat"
+        description="Monitor workflow health and detect zombies"
+        tooltip="When enabled, workflows periodically write heartbeats. If heartbeats stop, the workflow is considered a zombie."
+        checked={enabled.value}
+        onChange={enabled.onChange}
+        error={enabled.error}
+        disabled={enabled.disabled}
+      />
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <DurationInputSetting
+          label="Heartbeat Interval"
+          tooltip="How often the workflow writes a heartbeat. Example: '30s'."
+          value={interval.value || ''}
+          onChange={interval.onChange}
+          error={interval.error}
+          disabled={interval.disabled || isDisabled}
+        />
+
+        <DurationInputSetting
+          label="Stale Threshold"
+          tooltip="How long without a heartbeat before considering workflow a zombie. Example: '2m'."
+          value={staleThreshold.value || ''}
+          onChange={staleThreshold.onChange}
+          error={staleThreshold.error}
+          disabled={staleThreshold.disabled || isDisabled}
+        />
+
+        <DurationInputSetting
+          label="Check Interval"
+          tooltip="How often to check for zombie workflows. Example: '60s'."
+          value={checkInterval.value || ''}
+          onChange={checkInterval.onChange}
+          error={checkInterval.error}
+          disabled={checkInterval.disabled || isDisabled}
+        />
+      </div>
+
+      <ToggleSetting
+        label="Auto Resume"
+        description="Automatically resume zombie workflows"
+        tooltip="When enabled, zombie workflows will be automatically resumed. Use with caution - ensure your workflows are idempotent."
+        checked={autoResume.value}
+        onChange={autoResume.onChange}
+        error={autoResume.error}
+        disabled={autoResume.disabled || isDisabled}
+      />
+
+      {autoResume.value && (
+        <div className="p-3 bg-warning/10 border border-warning/20 rounded-lg">
+          <p className="text-sm text-foreground">
+            <strong className="text-warning">Caution:</strong> Auto resume may cause issues if workflows are not idempotent. Tasks may be re-executed.
+          </p>
+        </div>
+      )}
+
+      <NumberInputSetting
+        label="Max Resumes"
+        tooltip="Maximum number of auto-resume attempts per workflow before giving up."
+        min={1}
+        max={10}
+        value={maxResumes.value}
+        onChange={maxResumes.onChange}
+        error={maxResumes.error}
+        disabled={maxResumes.disabled || isDisabled || !autoResume.value}
       />
     </SettingSection>
   );

@@ -55,11 +55,22 @@ type TraceConfigResponse struct {
 
 // WorkflowConfigResponse represents workflow configuration.
 type WorkflowConfigResponse struct {
-	Timeout    string   `json:"timeout"`
-	MaxRetries int      `json:"max_retries"`
-	DryRun     bool     `json:"dry_run"`
-	Sandbox    bool     `json:"sandbox"`
-	DenyTools  []string `json:"deny_tools"`
+	Timeout    string                    `json:"timeout"`
+	MaxRetries int                       `json:"max_retries"`
+	DryRun     bool                      `json:"dry_run"`
+	Sandbox    bool                      `json:"sandbox"`
+	DenyTools  []string                  `json:"deny_tools"`
+	Heartbeat  HeartbeatConfigResponse   `json:"heartbeat"`
+}
+
+// HeartbeatConfigResponse represents heartbeat configuration for zombie workflow detection.
+type HeartbeatConfigResponse struct {
+	Enabled        bool   `json:"enabled"`
+	Interval       string `json:"interval"`
+	StaleThreshold string `json:"stale_threshold"`
+	CheckInterval  string `json:"check_interval"`
+	AutoResume     bool   `json:"auto_resume"`
+	MaxResumes     int    `json:"max_resumes"`
 }
 
 // PhasesConfigResponse represents all phase configurations.
@@ -315,11 +326,22 @@ type TraceConfigUpdate struct {
 
 // WorkflowConfigUpdate represents workflow configuration update.
 type WorkflowConfigUpdate struct {
-	Timeout    *string   `json:"timeout,omitempty"`
-	MaxRetries *int      `json:"max_retries,omitempty"`
-	DryRun     *bool     `json:"dry_run,omitempty"`
-	Sandbox    *bool     `json:"sandbox,omitempty"`
-	DenyTools  *[]string `json:"deny_tools,omitempty"`
+	Timeout    *string                  `json:"timeout,omitempty"`
+	MaxRetries *int                     `json:"max_retries,omitempty"`
+	DryRun     *bool                    `json:"dry_run,omitempty"`
+	Sandbox    *bool                    `json:"sandbox,omitempty"`
+	DenyTools  *[]string                `json:"deny_tools,omitempty"`
+	Heartbeat  *HeartbeatConfigUpdate   `json:"heartbeat,omitempty"`
+}
+
+// HeartbeatConfigUpdate represents heartbeat configuration update.
+type HeartbeatConfigUpdate struct {
+	Enabled        *bool   `json:"enabled,omitempty"`
+	Interval       *string `json:"interval,omitempty"`
+	StaleThreshold *string `json:"stale_threshold,omitempty"`
+	CheckInterval  *string `json:"check_interval,omitempty"`
+	AutoResume     *bool   `json:"auto_resume,omitempty"`
+	MaxResumes     *int    `json:"max_resumes,omitempty"`
 }
 
 // PhasesConfigUpdate represents phases configuration update.

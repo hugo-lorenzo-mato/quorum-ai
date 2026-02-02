@@ -16,6 +16,10 @@ import (
 
 // handleGetConfig returns the current configuration.
 func (s *Server) handleGetConfig(w http.ResponseWriter, r *http.Request) {
+	// Use read lock to allow concurrent reads
+	s.configMu.RLock()
+	defer s.configMu.RUnlock()
+
 	cfg, err := s.loadConfig()
 	if err != nil {
 		s.logger.Error("failed to load config", "error", err)
@@ -74,6 +78,10 @@ func (s *Server) determineConfigSource(configPath string) string {
 
 // handleUpdateConfig updates configuration values.
 func (s *Server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
+	// Use write lock to prevent concurrent modifications
+	s.configMu.Lock()
+	defer s.configMu.Unlock()
+
 	var req FullConfigUpdate
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, "invalid request body")
@@ -161,6 +169,10 @@ func (s *Server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 
 // handleResetConfig resets configuration to defaults.
 func (s *Server) handleResetConfig(w http.ResponseWriter, _ *http.Request) {
+	// Use write lock to prevent concurrent modifications
+	s.configMu.Lock()
+	defer s.configMu.Unlock()
+
 	configPath := s.getConfigPath()
 
 	// Ensure .quorum directory exists
@@ -388,6 +400,14 @@ func configToFullResponse(cfg *config.Config) FullConfigResponse {
 			DryRun:     cfg.Workflow.DryRun,
 			Sandbox:    cfg.Workflow.Sandbox,
 			DenyTools:  denyTools,
+			Heartbeat: HeartbeatConfigResponse{
+				Enabled:        cfg.Workflow.Heartbeat.Enabled,
+				Interval:       cfg.Workflow.Heartbeat.Interval,
+				StaleThreshold: cfg.Workflow.Heartbeat.StaleThreshold,
+				CheckInterval:  cfg.Workflow.Heartbeat.CheckInterval,
+				AutoResume:     cfg.Workflow.Heartbeat.AutoResume,
+				MaxResumes:     cfg.Workflow.Heartbeat.MaxResumes,
+			},
 		},
 		Phases: PhasesConfigResponse{
 			Analyze: AnalyzePhaseConfigResponse{
@@ -659,6 +679,30 @@ func applyWorkflowUpdates(cfg *config.WorkflowConfig, update *WorkflowConfigUpda
 	}
 	if update.DenyTools != nil {
 		cfg.DenyTools = *update.DenyTools
+	}
+	if update.Heartbeat != nil {
+		applyHeartbeatUpdates(&cfg.Heartbeat, update.Heartbeat)
+	}
+}
+
+func applyHeartbeatUpdates(cfg *config.HeartbeatConfig, update *HeartbeatConfigUpdate) {
+	if update.Enabled != nil {
+		cfg.Enabled = *update.Enabled
+	}
+	if update.Interval != nil {
+		cfg.Interval = *update.Interval
+	}
+	if update.StaleThreshold != nil {
+		cfg.StaleThreshold = *update.StaleThreshold
+	}
+	if update.CheckInterval != nil {
+		cfg.CheckInterval = *update.CheckInterval
+	}
+	if update.AutoResume != nil {
+		cfg.AutoResume = *update.AutoResume
+	}
+	if update.MaxResumes != nil {
+		cfg.MaxResumes = *update.MaxResumes
 	}
 }
 

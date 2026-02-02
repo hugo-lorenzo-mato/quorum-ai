@@ -1,39 +1,116 @@
 import { useEffect } from 'react';
-import { useConfigField } from '../../../hooks/useConfigField';
+import { useConfigField, useConfigSelect } from '../../../hooks/useConfigField';
 import {
   SettingSection,
   TextInputSetting,
+  SelectSetting,
   ToggleSetting,
 } from '../index';
 
 export function GitTab() {
   return (
     <div className="space-y-6">
-      <GitAutomationSection />
-      <GitNamingSection />
+      <WorktreeSection />
+      <TaskProgressSection />
+      <FinalizationSection />
       <GitHubSection />
     </div>
   );
 }
 
-function GitAutomationSection() {
-  const autoCommit = useConfigField('git.auto_commit');
-  const autoPush = useConfigField('git.auto_push');
-  const autoPr = useConfigField('git.auto_pr');
-  const autoMerge = useConfigField('git.auto_merge');
+function WorktreeSection() {
+  const dir = useConfigField('git.worktree.dir');
+  const mode = useConfigSelect('git.worktree.mode', 'worktree_modes');
+  const autoClean = useConfigField('git.worktree.auto_clean');
 
-  const autoCommitValue = autoCommit.value;
+  const isDisabled = mode.value === 'disabled';
+
+  return (
+    <SettingSection
+      title="Worktree Management"
+      description="Configure temporary worktrees for task isolation during execution"
+    >
+      <SelectSetting
+        label="Worktree Mode"
+        description="When to create isolated worktrees for task execution"
+        tooltip="always: Every task gets its own worktree. parallel: Only when 2+ tasks can run concurrently (recommended). disabled: All tasks run in the main working directory."
+        value={mode.value || 'parallel'}
+        onChange={mode.onChange}
+        options={mode.options.length > 0 ? mode.options : [
+          { value: 'always', label: 'Always' },
+          { value: 'parallel', label: 'Parallel (Recommended)' },
+          { value: 'disabled', label: 'Disabled' },
+        ]}
+        error={mode.error}
+        disabled={mode.disabled}
+      />
+
+      <TextInputSetting
+        label="Worktree Directory"
+        description="Directory where worktrees are created"
+        tooltip="Relative path from project root. Default: .worktrees"
+        placeholder=".worktrees"
+        value={dir.value || ''}
+        onChange={dir.onChange}
+        error={dir.error}
+        disabled={dir.disabled || isDisabled}
+      />
+
+      <ToggleSetting
+        label="Auto Clean"
+        description="Remove worktrees after task completion"
+        tooltip="When enabled, worktrees are automatically deleted after the task completes. Requires auto_commit to be enabled to prevent data loss."
+        checked={autoClean.value}
+        onChange={autoClean.onChange}
+        error={autoClean.error}
+        disabled={autoClean.disabled || isDisabled}
+      />
+
+      {autoClean.value && !isDisabled && (
+        <div className="p-3 bg-warning/10 border border-warning/20 rounded-lg">
+          <p className="text-sm text-foreground">
+            <strong className="text-warning">Important:</strong> Auto Clean requires Task Auto Commit to be enabled to prevent data loss.
+          </p>
+        </div>
+      )}
+    </SettingSection>
+  );
+}
+
+function TaskProgressSection() {
+  const autoCommit = useConfigField('git.task.auto_commit');
+
+  return (
+    <SettingSection
+      title="Task Progress"
+      description="Configure how task progress is saved during workflow execution"
+    >
+      <ToggleSetting
+        label="Auto Commit"
+        description="Commit changes after each task completes"
+        tooltip="When enabled, automatically creates a git commit after each successful task completion. This saves work even if the workflow crashes later."
+        checked={autoCommit.value}
+        onChange={autoCommit.onChange}
+        error={autoCommit.error}
+        disabled={autoCommit.disabled}
+      />
+    </SettingSection>
+  );
+}
+
+function FinalizationSection() {
+  const autoCommit = useConfigField('git.task.auto_commit');
+  const autoPush = useConfigField('git.finalization.auto_push');
+  const autoPr = useConfigField('git.finalization.auto_pr');
+  const autoMerge = useConfigField('git.finalization.auto_merge');
+  const prBaseBranch = useConfigField('git.finalization.pr_base_branch');
+  const mergeStrategy = useConfigSelect('git.finalization.merge_strategy', 'merge_strategies');
+
   const { value: autoPushValue, onChange: setAutoPush } = autoPush;
   const { value: autoPrValue, onChange: setAutoPr } = autoPr;
   const { value: autoMergeValue, onChange: setAutoMerge } = autoMerge;
 
   // Handle dependency chain: when a toggle is disabled, disable all dependents
-  useEffect(() => {
-    if (!autoCommitValue && autoPushValue) {
-      setAutoPush(false);
-    }
-  }, [autoCommitValue, autoPushValue, setAutoPush]);
-
   useEffect(() => {
     if (!autoPushValue && autoPrValue) {
       setAutoPr(false);
@@ -48,8 +125,8 @@ function GitAutomationSection() {
 
   return (
     <SettingSection
-      title="Git Automation"
-      description="Configure automatic git operations after task completion"
+      title="Workflow Finalization"
+      description="Configure how completed workflows are delivered to the remote repository"
     >
       {/* Dependency Chain Visualization */}
       <div className="mb-4 p-3 bg-muted border border-border rounded-lg">
@@ -76,30 +153,19 @@ function GitAutomationSection() {
       </div>
 
       <ToggleSetting
-        label="Auto Commit"
-        description="Commit changes after successful task execution"
-        tooltip="When enabled, automatically creates a git commit after each successful task completion."
-        checked={autoCommit.value}
-        onChange={autoCommit.onChange}
-        error={autoCommit.error}
-        disabled={autoCommit.disabled}
-      />
-
-      <ToggleSetting
         label="Auto Push"
-        description="Push commits to remote repository"
-        tooltip="When enabled, automatically pushes commits to the remote after committing. Requires auto_commit."
+        description="Push workflow branch to remote"
+        tooltip="When enabled, automatically pushes the workflow branch to the remote repository after all tasks complete."
         checked={autoPush.value}
         onChange={autoPush.onChange}
         error={autoPush.error}
-        disabled={autoPush.disabled || !autoCommit.value}
-        helperText={!autoCommit.value ? "Enable 'Auto Commit' first" : undefined}
+        disabled={autoPush.disabled}
       />
 
       <ToggleSetting
         label="Auto PR"
-        description="Create pull request after push"
-        tooltip="When enabled, automatically creates a pull request after pushing. Requires auto_push."
+        description="Create pull request for the workflow"
+        tooltip="When enabled, automatically creates a single pull request containing all workflow changes. Requires auto_push."
         checked={autoPr.value}
         onChange={autoPr.onChange}
         error={autoPr.error}
@@ -107,107 +173,78 @@ function GitAutomationSection() {
         helperText={!autoPush.value ? "Enable 'Auto Push' first" : undefined}
       />
 
+      <TextInputSetting
+        label="PR Base Branch"
+        description="Target branch for pull requests"
+        tooltip="The branch to merge into. Leave empty to use the repository's default branch (main/master)."
+        placeholder="(repository default)"
+        value={prBaseBranch.value || ''}
+        onChange={prBaseBranch.onChange}
+        error={prBaseBranch.error}
+        disabled={prBaseBranch.disabled || !autoPr.value}
+      />
+
       <ToggleSetting
         label="Auto Merge"
-        description="Merge PR if all checks pass"
-        tooltip="When enabled, automatically merges the PR once all status checks pass. Requires auto_pr."
+        description="Automatically merge PR when checks pass"
+        tooltip="When enabled, automatically merges the PR once all status checks pass. Disabled by default for safety (requires human review). Requires auto_pr."
         checked={autoMerge.value}
         onChange={autoMerge.onChange}
         error={autoMerge.error}
         disabled={autoMerge.disabled || !autoPr.value}
         helperText={!autoPr.value ? "Enable 'Auto PR' first" : undefined}
       />
-    </SettingSection>
-  );
-}
 
-function GitNamingSection() {
-  const commitPrefix = useConfigField('git.commit_prefix');
-  const branchPrefix = useConfigField('git.branch_prefix');
+      {autoMerge.value && (
+        <div className="p-3 bg-warning/10 border border-warning/20 rounded-lg">
+          <p className="text-sm text-foreground">
+            <strong className="text-warning">Caution:</strong> Auto merge bypasses human review. Use with care in production environments.
+          </p>
+        </div>
+      )}
 
-  return (
-    <SettingSection
-      title="Naming Conventions"
-      description="Configure prefixes for commits and branches"
-    >
-      <TextInputSetting
-        label="Commit Prefix"
-        tooltip="Prefix added to all auto-generated commit messages. Leave empty for no prefix."
-        placeholder="[quorum]"
-        value={commitPrefix.value}
-        onChange={commitPrefix.onChange}
-        error={commitPrefix.error}
-        disabled={commitPrefix.disabled}
-      />
-
-      <TextInputSetting
-        label="Branch Prefix"
-        tooltip="Prefix for auto-created branches. Example: 'quorum/' creates branches like 'quorum/task-123'."
-        placeholder="quorum/"
-        value={branchPrefix.value}
-        onChange={branchPrefix.onChange}
-        error={branchPrefix.error}
-        disabled={branchPrefix.disabled}
+      <SelectSetting
+        label="Merge Strategy"
+        description="How to merge PRs when auto merge is enabled"
+        tooltip="merge: Create a merge commit. squash: Squash all commits into one. rebase: Rebase commits onto base branch."
+        value={mergeStrategy.value || 'squash'}
+        onChange={mergeStrategy.onChange}
+        options={mergeStrategy.options.length > 0 ? mergeStrategy.options : [
+          { value: 'merge', label: 'Merge Commit' },
+          { value: 'squash', label: 'Squash (Recommended)' },
+          { value: 'rebase', label: 'Rebase' },
+        ]}
+        error={mergeStrategy.error}
+        disabled={mergeStrategy.disabled || !autoMerge.value}
       />
     </SettingSection>
   );
 }
 
 function GitHubSection() {
-  const owner = useConfigField('github.owner');
-  const repo = useConfigField('github.repo');
-
-  // These are typically read from git remote and may be read-only
-  const hasGitHub = owner.value && repo.value;
+  const remote = useConfigField('github.remote');
 
   return (
     <SettingSection
-      title="GitHub Repository"
-      description="GitHub repository information (detected from git remote)"
+      title="GitHub Integration"
+      description="Configure GitHub remote settings"
     >
-      {hasGitHub ? (
-        <div className="p-3 bg-muted border border-border rounded-lg">
-          <div className="flex items-center gap-2">
-            <svg className="w-5 h-5 text-muted-foreground" fill="currentColor" viewBox="0 0 24 24">
-              <path fillRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" clipRule="evenodd" />
-            </svg>
-            <a
-              href={`https://github.com/${owner.value}/${repo.value}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-info hover:underline font-medium"
-            >
-              {owner.value}/{repo.value}
-            </a>
-          </div>
-        </div>
-      ) : (
-        <div className="p-3 bg-warning/10 border border-warning/20 rounded-lg">
-          <p className="text-sm text-foreground">
-            No GitHub repository detected. Make sure you have a remote named origin pointing to GitHub.
-          </p>
-        </div>
-      )}
-
       <TextInputSetting
-        label="Owner"
-        tooltip="GitHub repository owner (username or organization)."
-        placeholder="owner"
-        value={owner.value}
-        onChange={owner.onChange}
-        error={owner.error}
-        disabled={owner.disabled}
+        label="Remote Name"
+        description="Git remote name for GitHub operations"
+        tooltip="The name of the git remote pointing to GitHub. Default is 'origin'."
+        placeholder="origin"
+        value={remote.value || ''}
+        onChange={remote.onChange}
+        error={remote.error}
+        disabled={remote.disabled}
       />
 
-      <TextInputSetting
-        label="Repository"
-        tooltip="GitHub repository name."
-        placeholder="repo"
-        value={repo.value}
-        onChange={repo.onChange}
-        error={repo.error}
-        disabled={repo.disabled}
-      />
+      <div className="p-3 bg-muted/50 border border-border rounded-lg">
+        <p className="text-sm text-muted-foreground">
+          <strong>Note:</strong> GitHub authentication is configured via the <code className="px-1 py-0.5 bg-muted rounded text-xs">GITHUB_TOKEN</code> or <code className="px-1 py-0.5 bg-muted rounded text-xs">GH_TOKEN</code> environment variable.
+        </p>
+      </div>
     </SettingSection>
   );
 }

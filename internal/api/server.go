@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -48,6 +49,9 @@ type Server struct {
 
 	// Kanban engine for sequential workflow execution
 	kanbanEngine *kanban.Engine
+
+	// Mutex for config file operations to prevent race conditions
+	configMu sync.RWMutex
 }
 
 // ServerOption configures the server.

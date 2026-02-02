@@ -159,6 +159,8 @@ function TemplateSection() {
   const language = useConfigSelect('issues.template.language', 'template_languages');
   const tone = useConfigSelect('issues.template.tone', 'template_tones');
   const titleFormat = useConfigField('issues.template.title_format');
+  const bodyTemplateFile = useConfigField('issues.template.body_template_file');
+  const convention = useConfigField('issues.template.convention');
   const includeDiagrams = useConfigField('issues.template.include_diagrams');
   const customInstructions = useConfigField('issues.template.custom_instructions');
 
@@ -213,6 +215,28 @@ function TemplateSection() {
         onChange={titleFormat.onChange}
         error={titleFormat.error}
         disabled={titleFormat.disabled || isDisabled}
+      />
+
+      <TextInputSetting
+        label="Body Template File"
+        description="Path to custom issue body template file"
+        tooltip="Optional path to a markdown template file for issue bodies. Leave empty to use the built-in template."
+        placeholder="(use default template)"
+        value={bodyTemplateFile.value || ''}
+        onChange={bodyTemplateFile.onChange}
+        error={bodyTemplateFile.error}
+        disabled={bodyTemplateFile.disabled || isDisabled}
+      />
+
+      <TextInputSetting
+        label="Convention"
+        description="Issue convention to follow"
+        tooltip="Optional convention name (e.g., 'conventional-issues'). The AI will format issues following this convention."
+        placeholder="(no convention)"
+        value={convention.value || ''}
+        onChange={convention.onChange}
+        error={convention.error}
+        disabled={convention.disabled || isDisabled}
       />
 
       <ToggleSetting
