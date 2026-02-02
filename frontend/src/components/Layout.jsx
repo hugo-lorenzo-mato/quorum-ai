@@ -11,12 +11,12 @@ import {
   Sun,
   Moon,
   Monitor,
-  Sparkles,
   Wifi,
   WifiOff,
   RefreshCw,
   KanbanSquare,
   ChevronRight,
+  Command,
 } from 'lucide-react';
 
 const navItems = [
@@ -191,27 +191,28 @@ export default function Layout({ children }) {
         }`}
       >
         {/* Logo */}
-        <div className="flex items-center justify-between h-14 px-4 border-b border-border">
-          <Link to="/" className="flex items-center gap-2">
-            <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary">
-              <Sparkles className="w-4 h-4 text-primary-foreground" />
+        <div className={`flex items-center h-14 border-b border-border ${sidebarOpen ? 'justify-between px-4' : 'justify-center px-2'}`}>
+          <Link to="/" className="flex items-center gap-3 group">
+            <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-primary/70 shadow-sm transition-transform group-hover:scale-105">
+              <Command className="w-4 h-4 text-primary-foreground" />
             </div>
             {sidebarOpen && (
-              <span className="font-semibold text-foreground animate-fade-in">
-                Quorum AI
+              <span className="font-bold text-foreground tracking-tight animate-fade-in text-lg">
+                Quorum
               </span>
             )}
           </Link>
-          <button
-            onClick={toggleSidebar}
-            className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-          >
-            {sidebarOpen ? (
+          
+          {/* Toggle Button - Only visible in sidebar when expanded */}
+          {sidebarOpen && (
+            <button
+              onClick={toggleSidebar}
+              className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+              title="Collapse sidebar"
+            >
               <PanelLeftClose className="w-4 h-4" />
-            ) : (
-              <PanelLeft className="w-4 h-4" />
-            )}
-          </button>
+            </button>
+          )}
         </div>
 
         {/* Navigation */}
@@ -267,7 +268,18 @@ export default function Layout({ children }) {
           <div className="flex items-center justify-between h-full px-3 sm:px-6">
             <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
               
-              {/* Breadcrumbs - Always visible now, adapted for mobile */}
+              {/* Expand Toggle - Only visible when sidebar is collapsed */}
+              {!sidebarOpen && (
+                <button
+                  onClick={toggleSidebar}
+                  className="hidden md:flex p-2 -ml-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                  title="Expand sidebar"
+                >
+                  <PanelLeft className="w-5 h-5" />
+                </button>
+              )}
+
+              {/* Breadcrumbs */}
               <div className="flex-1 min-w-0">
                 <Breadcrumbs />
               </div>
