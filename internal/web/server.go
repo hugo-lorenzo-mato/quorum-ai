@@ -59,7 +59,7 @@ func DefaultConfig() Config {
 		Host:            "localhost",
 		Port:            8080,
 		ReadTimeout:     15 * time.Second,
-		WriteTimeout:    30 * time.Second,
+		WriteTimeout:    5 * time.Minute, // Increased for long-running AI operations (issue generation, etc.)
 		IdleTimeout:     60 * time.Second,
 		ShutdownTimeout: 10 * time.Second,
 		CORSOrigins:     []string{"http://localhost:5173"},

@@ -14,6 +14,7 @@ import (
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/config"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service"
 )
 
 // Generator creates GitHub/GitLab issues from workflow artifacts.
@@ -21,7 +22,8 @@ type Generator struct {
 	client    core.IssueClient
 	config    config.IssuesConfig
 	reportDir string
-	agents    core.AgentRegistry // Optional: for LLM-based generation
+	agents    core.AgentRegistry          // Optional: for LLM-based generation
+	prompts   *service.PromptRenderer     // Lazy-initialized prompt renderer
 }
 
 // NewGenerator creates a new issue generator.
@@ -33,6 +35,20 @@ func NewGenerator(client core.IssueClient, cfg config.IssuesConfig, reportDir st
 		reportDir: reportDir,
 		agents:    agents,
 	}
+}
+
+// getPromptRenderer returns the prompt renderer, initializing it lazily if needed.
+func (g *Generator) getPromptRenderer() (*service.PromptRenderer, error) {
+	if g.prompts != nil {
+		return g.prompts, nil
+	}
+
+	renderer, err := service.NewPromptRenderer()
+	if err != nil {
+		return nil, fmt.Errorf("creating prompt renderer: %w", err)
+	}
+	g.prompts = renderer
+	return renderer, nil
 }
 
 // GenerateOptions configures issue generation.
@@ -498,10 +514,12 @@ func (g *Generator) GetIssueSet(ctx context.Context, workflowID string) (*core.I
 }
 
 // =============================================================================
-// LLM-based Issue Generation (Markdown Files Approach)
+// LLM-based Issue Generation (Path-Based Approach)
 // =============================================================================
 
 // GenerateIssueFiles generates markdown files for all issues using AI.
+// This uses a path-based approach where Claude reads source files and writes
+// issue files directly to disk, avoiding embedding large content in the prompt.
 // Files are saved to .quorum/issues/{workflowID}/ directory.
 // Returns the list of generated file paths.
 func (g *Generator) GenerateIssueFiles(ctx context.Context, workflowID string) ([]string, error) {
@@ -514,59 +532,257 @@ func (g *Generator) GenerateIssueFiles(ctx context.Context, workflowID string) (
 		return nil, fmt.Errorf("getting agent %s: %w", g.config.Generator.Agent, err)
 	}
 
-	// Create output directory
-	issuesDir := filepath.Join(".quorum", "issues", workflowID)
+	// Get prompt renderer
+	prompts, err := g.getPromptRenderer()
+	if err != nil {
+		return nil, fmt.Errorf("getting prompt renderer: %w", err)
+	}
+
+	// Create output directory with absolute path
+	cwd, err := os.Getwd()
+	if err != nil {
+		return nil, fmt.Errorf("getting working directory: %w", err)
+	}
+	issuesDir := filepath.Join(cwd, ".quorum", "issues", workflowID)
 	if err := os.MkdirAll(issuesDir, 0755); err != nil {
 		return nil, fmt.Errorf("creating issues directory: %w", err)
 	}
 
-	// Read consolidated analysis
-	consolidated, err := g.readConsolidatedAnalysis()
+	// Get consolidated analysis path (not content)
+	consolidatedPath, err := g.getConsolidatedAnalysisPath()
 	if err != nil {
-		return nil, fmt.Errorf("reading consolidated analysis: %w", err)
+		return nil, fmt.Errorf("finding consolidated analysis: %w", err)
 	}
 
-	// Read task files
-	tasks, err := g.readTaskFiles()
+	// Get task file paths (not content)
+	taskFiles, err := g.getTaskFilePaths()
 	if err != nil {
-		return nil, fmt.Errorf("reading task files: %w", err)
+		return nil, fmt.Errorf("getting task file paths: %w", err)
 	}
 
-	// Build the master prompt for AI to generate all issues
-	prompt := g.buildMasterPrompt(consolidated, tasks, workflowID, issuesDir)
+	// Build template parameters
+	cfg := g.config.Template
+	params := service.IssueGenerateParams{
+		ConsolidatedAnalysisPath: consolidatedPath,
+		TaskFiles:                taskFiles,
+		IssuesDir:                issuesDir,
+		Language:                 cfg.Language,
+		Tone:                     cfg.Tone,
+		Summarize:                g.config.Generator.Summarize,
+		IncludeDiagrams:          cfg.IncludeDiagrams,
+		IncludeTestingSection:    true, // Always include testing section
+		CustomInstructions:       cfg.CustomInstructions,
+		Convention:               cfg.Convention,
+	}
+
+	// Render the prompt using the template
+	prompt, err := prompts.RenderIssueGenerate(params)
+	if err != nil {
+		return nil, fmt.Errorf("rendering issue generation prompt: %w", err)
+	}
+
+	// Debug: Log prompt size and first/last 200 chars
+	slog.Info("rendered issue generation prompt",
+		"prompt_size_bytes", len(prompt),
+		"consolidated_path", consolidatedPath,
+		"task_count", len(taskFiles),
+		"issues_dir", issuesDir,
+	)
+	if len(prompt) > 400 {
+		slog.Debug("prompt preview",
+			"first_200", prompt[:200],
+			"last_200", prompt[len(prompt)-200:],
+		)
+	}
 
 	slog.Info("starting AI issue generation",
 		"agent", g.config.Generator.Agent,
 		"model", g.config.Generator.Model,
 		"output_dir", issuesDir,
-		"task_count", len(tasks))
+		"task_count", len(taskFiles),
+		"prompt_size", len(prompt))
 
-	// Execute the agent
+	// Execute the agent - Claude will read source files and write issue files directly
 	result, err := agent.Execute(ctx, core.ExecuteOptions{
 		Prompt:  prompt,
 		Model:   g.config.Generator.Model,
 		Format:  core.OutputFormatText,
 		Timeout: 10 * time.Minute,
 		Sandbox: false,
-		WorkDir: ".",
+		WorkDir: cwd, // Work from project root so paths resolve correctly
 	})
 	if err != nil {
 		return nil, fmt.Errorf("executing agent: %w", err)
 	}
 
-	slog.Info("AI generation completed", "output_length", len(result.Output))
+	slog.Info("AI issue generation completed", "output_length", len(result.Output))
 
-	// Parse the AI output and write files
-	files, err := g.parseAndWriteIssueFiles(result.Output, issuesDir)
+	// Scan the filesystem for generated issue files
+	// (Claude wrote them directly, so we just need to find them)
+	files, err := g.scanGeneratedIssueFiles(issuesDir)
 	if err != nil {
-		return nil, fmt.Errorf("parsing AI output: %w", err)
+		return nil, fmt.Errorf("scanning generated issue files: %w", err)
 	}
 
 	if len(files) == 0 {
-		return nil, fmt.Errorf("AI did not generate any issue files (check output format)")
+		// Fallback: try the legacy parsing approach in case Claude didn't use Write tool
+		slog.Warn("no files found in issues directory, trying output parsing fallback")
+		files, err = g.parseAndWriteIssueFiles(result.Output, issuesDir)
+		if err != nil {
+			return nil, fmt.Errorf("parsing AI output (fallback): %w", err)
+		}
 	}
 
-	slog.Info("wrote issue files from AI output", "count", len(files))
+	if len(files) == 0 {
+		return nil, fmt.Errorf("AI did not generate any issue files")
+	}
+
+	slog.Info("found generated issue files", "count", len(files))
+
+	return files, nil
+}
+
+// getConsolidatedAnalysisPath returns the absolute path to the consolidated analysis file.
+func (g *Generator) getConsolidatedAnalysisPath() (string, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", fmt.Errorf("getting working directory: %w", err)
+	}
+
+	// Try analyze-phase/consolidated.md first
+	path := filepath.Join(g.reportDir, "analyze-phase", "consolidated.md")
+	absPath := path
+	if !filepath.IsAbs(path) {
+		absPath = filepath.Join(cwd, path)
+	}
+	if _, err := os.Stat(absPath); err == nil {
+		return absPath, nil
+	}
+
+	// Fallback to consensus directory
+	consensusPath := filepath.Join(g.reportDir, "analyze-phase", "consensus", "consolidated.md")
+	absConsensusPath := consensusPath
+	if !filepath.IsAbs(consensusPath) {
+		absConsensusPath = filepath.Join(cwd, consensusPath)
+	}
+	if _, err := os.Stat(absConsensusPath); err == nil {
+		return absConsensusPath, nil
+	}
+
+	return "", fmt.Errorf("consolidated analysis not found at %s or %s", absPath, absConsensusPath)
+}
+
+// getTaskFilePaths returns information about task files (paths, not content).
+func (g *Generator) getTaskFilePaths() ([]service.IssueTaskFile, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return nil, fmt.Errorf("getting working directory: %w", err)
+	}
+
+	var taskFiles []service.IssueTaskFile
+	taskPattern := regexp.MustCompile(`^task-(\d+)-(.+)\.md$`)
+
+	// Directories to search for task files
+	tasksDirs := []string{
+		filepath.Join(g.reportDir, "plan-phase", "tasks"),
+	}
+
+	// Also check global .quorum/tasks directory
+	if strings.Contains(g.reportDir, ".quorum/runs/") {
+		quorumRoot := filepath.Dir(filepath.Dir(g.reportDir))
+		globalTasksDir := filepath.Join(quorumRoot, "tasks")
+		tasksDirs = append(tasksDirs, globalTasksDir)
+	}
+
+	seen := make(map[string]bool)
+
+	for _, tasksDir := range tasksDirs {
+		absTasksDir := tasksDir
+		if !filepath.IsAbs(tasksDir) {
+			absTasksDir = filepath.Join(cwd, tasksDir)
+		}
+
+		entries, err := os.ReadDir(absTasksDir)
+		if err != nil {
+			continue // Skip non-existent directories
+		}
+
+		for _, entry := range entries {
+			if entry.IsDir() {
+				continue
+			}
+
+			matches := taskPattern.FindStringSubmatch(entry.Name())
+			if matches == nil {
+				continue
+			}
+
+			taskID := fmt.Sprintf("task-%s", matches[1])
+			if seen[taskID] {
+				continue
+			}
+
+			absPath := filepath.Join(absTasksDir, entry.Name())
+			taskName := strings.ReplaceAll(matches[2], "-", " ")
+			slug := matches[2] // Already kebab-case
+
+			taskFiles = append(taskFiles, service.IssueTaskFile{
+				Path: absPath,
+				ID:   taskID,
+				Name: taskName,
+				Slug: slug,
+			})
+			seen[taskID] = true
+		}
+	}
+
+	if len(taskFiles) == 0 {
+		return nil, fmt.Errorf("no task files found in any location")
+	}
+
+	// Sort by task ID
+	sort.Slice(taskFiles, func(i, j int) bool {
+		return taskFiles[i].ID < taskFiles[j].ID
+	})
+
+	return taskFiles, nil
+}
+
+// scanGeneratedIssueFiles scans the issues directory for generated markdown files.
+func (g *Generator) scanGeneratedIssueFiles(issuesDir string) ([]string, error) {
+	entries, err := os.ReadDir(issuesDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil // Directory doesn't exist yet
+		}
+		return nil, fmt.Errorf("reading issues directory: %w", err)
+	}
+
+	var files []string
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		if !strings.HasSuffix(entry.Name(), ".md") {
+			continue
+		}
+
+		filePath := filepath.Join(issuesDir, entry.Name())
+		info, err := os.Stat(filePath)
+		if err != nil {
+			continue
+		}
+
+		// Only consider recently created/modified files (within last 10 minutes)
+		if time.Since(info.ModTime()) < 10*time.Minute {
+			files = append(files, filePath)
+		}
+	}
+
+	// Sort files numerically
+	sort.Slice(files, func(i, j int) bool {
+		return extractFileNumber(filepath.Base(files[i])) < extractFileNumber(filepath.Base(files[j]))
+	})
 
 	return files, nil
 }

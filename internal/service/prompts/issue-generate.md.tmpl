@@ -1,0 +1,135 @@
+# GitHub/GitLab Issue Generation
+
+## CRITICAL INSTRUCTIONS - READ CAREFULLY
+
+You are generating GitHub/GitLab issues from workflow artifacts.
+
+**YOU MUST**:
+1. **READ** the source files using your Read tool
+2. **WRITE** issue markdown files directly to disk using your Write tool
+3. Each issue must be clean, actionable, and ready for GitHub/GitLab
+
+**DO NOT include in issues:**
+- Model names or versions
+- Agent names (Claude, Gemini, etc.)
+- Generation timestamps
+- Internal IDs or workflow IDs
+- Technical metadata about the generation process
+
+---
+
+## Source Files to Read
+
+You MUST read these files to understand the work:
+
+### Consolidated Analysis
+**Path**: `{{.ConsolidatedAnalysisPath}}`
+
+### Task Specification Files
+{{range .TaskFiles}}
+- `{{.Path}}` ({{.ID}}: {{.Name}})
+{{end}}
+
+---
+
+## Output Configuration
+
+### Output Directory
+**Issues Directory**: `{{.IssuesDir}}`
+
+### File Naming Convention
+- `00-consolidated-analysis.md` - Issue summarizing the overall analysis
+{{range $i, $task := .TaskFiles}}
+- `{{printf "%02d" (add $i 1)}}-{{$task.Slug}}.md` - Issue for {{$task.ID}}
+{{end}}
+
+---
+
+## Issue Format Requirements
+
+Each issue file MUST have this structure:
+
+```markdown
+# [Concise Issue Title]
+
+## Summary
+[Brief description of what this issue addresses]
+
+## Details
+[Detailed technical content from the source file]
+
+## Acceptance Criteria
+- [ ] [Specific, verifiable criterion 1]
+- [ ] [Specific, verifiable criterion 2]
+...
+
+{{if .IncludeTestingSection}}
+## Testing Requirements
+[How to verify this issue is resolved]
+{{end}}
+```
+
+---
+
+## Style Requirements
+
+{{if eq .Language "spanish"}}
+- Write ALL content in **Spanish**
+{{else if eq .Language "french"}}
+- Write ALL content in **French**
+{{else if eq .Language "german"}}
+- Write ALL content in **German**
+{{else if eq .Language "portuguese"}}
+- Write ALL content in **Portuguese**
+{{else}}
+- Write in **English**
+{{end}}
+
+{{if eq .Tone "technical"}}
+- Use technical, detailed tone with precise terminology
+{{else if eq .Tone "concise"}}
+- Be extremely concise, use bullet points
+{{else if eq .Tone "casual"}}
+- Use casual, friendly tone
+{{else}}
+- Use professional tone
+{{end}}
+
+{{if .Summarize}}
+- Summarize content concisely while keeping key technical details
+{{else}}
+- Preserve all technical details from the source files
+{{end}}
+
+{{if .IncludeDiagrams}}
+- Include Mermaid diagrams where helpful for architecture/flow
+{{end}}
+
+{{if .CustomInstructions}}
+## Custom Instructions (HIGH PRIORITY)
+
+{{.CustomInstructions}}
+{{end}}
+
+{{if .Convention}}
+## Convention to Follow
+
+{{.Convention}}
+{{end}}
+
+---
+
+## YOUR MISSION
+
+1. **READ** the consolidated analysis file
+2. **READ** each task specification file
+3. **WRITE** one issue markdown file for each source file to the issues directory
+4. Ensure each issue is self-contained and actionable
+
+**IMPORTANT**: Use your Read tool to read the source files, then use your Write tool to create the issue files. Do NOT output the content in your response - write it directly to files.
+
+---
+
+## BEGIN
+
+Read the source files and generate the issue files now.

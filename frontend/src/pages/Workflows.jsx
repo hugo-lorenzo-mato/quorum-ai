@@ -1210,7 +1210,7 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <h3 className="text-sm font-semibold text-foreground">Tasks ({tasks.length})</h3>
-                {workflow.status === 'completed' && workflow.current_phase === 'done' && (
+                {['execute', 'done'].includes(workflow.current_phase) && (
                   <button
                     onClick={() => setShowIssuesModal(true)}
                     disabled={issuesGenerating}

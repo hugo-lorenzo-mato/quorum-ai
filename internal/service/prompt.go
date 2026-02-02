@@ -322,3 +322,32 @@ type VnRefineParams struct {
 func (r *PromptRenderer) RenderVnRefine(params VnRefineParams) (string, error) {
 	return r.render("vn-refine", params)
 }
+
+// IssueTaskFile contains information about a task file for issue generation.
+type IssueTaskFile struct {
+	Path string // Absolute path to the task file
+	ID   string // Task ID (e.g., "task-1")
+	Name string // Task name
+	Slug string // URL-safe name for filename
+}
+
+// IssueGenerateParams contains parameters for issue generation template.
+// This uses a path-based approach where Claude reads source files and writes issue files directly.
+type IssueGenerateParams struct {
+	ConsolidatedAnalysisPath string          // Path to consolidated analysis file
+	TaskFiles                []IssueTaskFile // List of task files with paths
+	IssuesDir                string          // Directory where issue files should be written
+	Language                 string          // Output language (english, spanish, etc.)
+	Tone                     string          // Output tone (professional, technical, concise, casual)
+	Summarize                bool            // Whether to summarize content
+	IncludeDiagrams          bool            // Whether to include Mermaid diagrams
+	IncludeTestingSection    bool            // Whether to include testing section
+	CustomInstructions       string          // User-provided custom instructions
+	Convention               string          // Convention to follow
+}
+
+// RenderIssueGenerate renders the issue generation prompt.
+// This prompt instructs Claude to read source files and write issue markdown files directly.
+func (r *PromptRenderer) RenderIssueGenerate(params IssueGenerateParams) (string, error) {
+	return r.render("issue-generate", params)
+}
