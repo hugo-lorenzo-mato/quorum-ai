@@ -250,6 +250,7 @@ type IssuesConfigResponse struct {
 	Enabled      bool                           `json:"enabled"`
 	Provider     string                         `json:"provider"`
 	AutoGenerate bool                           `json:"auto_generate"`
+	Timeout      string                         `json:"timeout"`
 	Template     IssueTemplateConfigResponse    `json:"template"`
 	Labels       []string                       `json:"default_labels"`
 	Assignees    []string                       `json:"default_assignees"`
@@ -521,6 +522,7 @@ type IssuesConfigUpdate struct {
 	Enabled      *bool                         `json:"enabled,omitempty"`
 	Provider     *string                       `json:"provider,omitempty"`
 	AutoGenerate *bool                         `json:"auto_generate,omitempty"`
+	Timeout      *string                       `json:"timeout,omitempty"`
 	Template     *IssueTemplateConfigUpdate    `json:"template,omitempty"`
 	Labels       *[]string                     `json:"default_labels,omitempty"`
 	Assignees    *[]string                     `json:"default_assignees,omitempty"`

@@ -535,6 +535,7 @@ func issuesToResponse(cfg *config.IssuesConfig) IssuesConfigResponse {
 		Enabled:      cfg.Enabled,
 		Provider:     cfg.Provider,
 		AutoGenerate: cfg.AutoGenerate,
+		Timeout:      cfg.Timeout,
 		Template: IssueTemplateConfigResponse{
 			Language:           cfg.Template.Language,
 			Tone:               cfg.Template.Tone,
@@ -1000,6 +1001,9 @@ func applyIssuesUpdates(cfg *config.IssuesConfig, update *IssuesConfigUpdate) {
 	}
 	if update.AutoGenerate != nil {
 		cfg.AutoGenerate = *update.AutoGenerate
+	}
+	if update.Timeout != nil {
+		cfg.Timeout = *update.Timeout
 	}
 	if update.Labels != nil {
 		cfg.Labels = *update.Labels
