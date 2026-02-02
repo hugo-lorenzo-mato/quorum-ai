@@ -33,7 +33,7 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import { ConfirmDialog } from '../components/config/ConfirmDialog';
-import { ExecutionModeBadge, PhaseStepper, ReplanModal } from '../components/workflow';
+import { ExecutionModeBadge, PhaseStepper, ReplanModal, IssuesPanel } from '../components/workflow';
 
 function normalizeWhitespace(s) {
   return String(s || '').replace(/\s+/g, ' ').trim();
@@ -1016,6 +1016,9 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
               </div>
             )}
           </div>
+
+          {/* Issues */}
+          <IssuesPanel workflow={workflow} />
 
           {/* Artifacts */}
           <div className="p-4 rounded-xl border border-border bg-card">

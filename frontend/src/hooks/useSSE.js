@@ -45,6 +45,8 @@ export default function useSSE() {
   const handleWorkflowFailed = useWorkflowStore(state => state.handleWorkflowFailed);
   const handleWorkflowPaused = useWorkflowStore(state => state.handleWorkflowPaused);
   const handleWorkflowResumed = useWorkflowStore(state => state.handleWorkflowResumed);
+  const handlePhaseStarted = useWorkflowStore(state => state.handlePhaseStarted);
+  const handlePhaseCompleted = useWorkflowStore(state => state.handlePhaseCompleted);
   const setWorkflows = useWorkflowStore(state => state.setWorkflows);
 
   // Task event handlers
@@ -125,6 +127,14 @@ export default function useSSE() {
         notifyInfo(`Workflow ${data.workflow_id} resumed`);
         break;
 
+      // Phase events
+      case 'phase_started':
+        handlePhaseStarted(data);
+        break;
+      case 'phase_completed':
+        handlePhaseCompleted(data);
+        break;
+
       // Task events
       case 'task_created':
         handleTaskCreated(data);
@@ -192,6 +202,8 @@ export default function useSSE() {
     handleWorkflowFailed,
     handleWorkflowPaused,
     handleWorkflowResumed,
+    handlePhaseStarted,
+    handlePhaseCompleted,
     handleTaskCreated,
     handleTaskStarted,
     handleTaskProgress,
@@ -266,6 +278,8 @@ export default function useSSE() {
       'workflow_failed',
       'workflow_paused',
       'workflow_resumed',
+      'phase_started',
+      'phase_completed',
       'task_created',
       'task_started',
       'task_progress',

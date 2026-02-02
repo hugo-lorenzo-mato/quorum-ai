@@ -20,6 +20,7 @@ import (
 // WorkflowResponse is the API response for a workflow.
 type WorkflowResponse struct {
 	ID              string            `json:"id"`
+	ExecutionID     int               `json:"execution_id"`
 	Title           string            `json:"title,omitempty"`
 	Status          string            `json:"status"`
 	CurrentPhase    string            `json:"current_phase"`
@@ -108,6 +109,19 @@ type RunWorkflowResponse struct {
 	Status       string `json:"status"`
 	CurrentPhase string `json:"current_phase"`
 	Prompt       string `json:"prompt"`
+	Message      string `json:"message"`
+}
+
+// ReplanRequest is the request body for replanning with additional context.
+type ReplanRequest struct {
+	Context string `json:"context,omitempty"` // Additional context to prepend to analysis
+}
+
+// PhaseResponse is the response for phase-specific execution endpoints.
+type PhaseResponse struct {
+	ID           string `json:"id"`
+	Status       string `json:"status"`
+	CurrentPhase string `json:"current_phase"`
 	Message      string `json:"message"`
 }
 
@@ -540,6 +554,7 @@ func (s *Server) handleActivateWorkflow(w http.ResponseWriter, r *http.Request) 
 func (s *Server) stateToWorkflowResponse(ctx context.Context, state *core.WorkflowState, activeID core.WorkflowID) WorkflowResponse {
 	resp := WorkflowResponse{
 		ID:              string(state.WorkflowID),
+		ExecutionID:     state.ExecutionID,
 		Title:           state.Title,
 		Status:          string(state.Status),
 		CurrentPhase:    string(state.CurrentPhase),
@@ -1017,4 +1032,592 @@ func (s *Server) handleResumeWorkflow(w http.ResponseWriter, r *http.Request) {
 		Status:  "running",
 		Message: "Workflow resumed. Execution will continue.",
 	})
+}
+
+// HandleAnalyzeWorkflow executes only the analyze phase of a workflow.
+// POST /api/v1/workflows/{workflowID}/analyze
+//
+// This endpoint runs the refine (if enabled) and analyze phases without
+// proceeding to plan or execute. After completion, CurrentPhase will be "plan".
+//
+// Returns:
+//   - 202 Accepted: Analyze phase execution started
+//   - 400 Bad Request: Invalid workflow ID
+//   - 404 Not Found: Workflow not found
+//   - 409 Conflict: Workflow already running, already analyzed, or in invalid state
+//   - 503 Service Unavailable: Execution not available
+func (s *Server) HandleAnalyzeWorkflow(w http.ResponseWriter, r *http.Request) {
+	workflowID := chi.URLParam(r, "workflowID")
+	if workflowID == "" {
+		respondError(w, http.StatusBadRequest, "workflow ID is required")
+		return
+	}
+
+	ctx := r.Context()
+
+	if s.stateManager == nil {
+		respondError(w, http.StatusServiceUnavailable, "workflow management not available")
+		return
+	}
+
+	// Load workflow state
+	state, err := s.stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
+	if err != nil {
+		s.logger.Error("failed to load workflow", "workflow_id", workflowID, "error", err)
+		respondError(w, http.StatusInternalServerError, "failed to load workflow")
+		return
+	}
+	if state == nil {
+		respondError(w, http.StatusNotFound, "workflow not found")
+		return
+	}
+
+	// Validate workflow state for analyze phase
+	switch state.Status {
+	case core.WorkflowStatusRunning:
+		respondError(w, http.StatusConflict, "workflow is already running")
+		return
+	case core.WorkflowStatusCompleted:
+		// Check if analyze already done
+		if state.CurrentPhase != core.PhaseRefine && state.CurrentPhase != core.PhaseAnalyze && state.CurrentPhase != "" {
+			respondError(w, http.StatusConflict, "analyze phase already completed; use /plan to continue")
+			return
+		}
+	case core.WorkflowStatusPending:
+		// Valid for starting analyze
+	case core.WorkflowStatusFailed:
+		// Allow retry of analyze phase
+	default:
+		respondError(w, http.StatusConflict, "workflow is in invalid state for analyze: "+string(state.Status))
+		return
+	}
+
+	// Use UnifiedTracker for execution
+	if s.unifiedTracker == nil {
+		respondError(w, http.StatusServiceUnavailable, "workflow execution not available: missing tracker")
+		return
+	}
+
+	// Start execution atomically using UnifiedTracker
+	handle, err := s.unifiedTracker.StartExecution(ctx, core.WorkflowID(workflowID))
+	if err != nil {
+		if strings.Contains(err.Error(), "already running") {
+			respondError(w, http.StatusConflict, "workflow execution already in progress")
+		} else {
+			s.logger.Error("failed to start execution", "workflow_id", workflowID, "error", err)
+			respondError(w, http.StatusInternalServerError, "failed to start workflow: "+err.Error())
+		}
+		return
+	}
+
+	// Get runner factory
+	factory := s.RunnerFactory()
+	if factory == nil {
+		_ = s.unifiedTracker.RollbackExecution(ctx, core.WorkflowID(workflowID), "missing configuration")
+		respondError(w, http.StatusServiceUnavailable, "workflow execution not available: missing configuration")
+		return
+	}
+
+	// Create execution context with timeout
+	execCtx, cancel := context.WithTimeout(context.Background(), 4*time.Hour)
+
+	// Reload state (it was updated by StartExecution)
+	state, err = s.stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
+	if err != nil {
+		cancel()
+		_ = s.unifiedTracker.RollbackExecution(ctx, core.WorkflowID(workflowID), "failed to reload state")
+		respondError(w, http.StatusInternalServerError, "failed to reload workflow state")
+		return
+	}
+
+	runner, notifier, err := factory.CreateRunner(execCtx, workflowID, handle.ControlPlane, state.Config)
+	if err != nil {
+		cancel()
+		_ = s.unifiedTracker.RollbackExecution(ctx, core.WorkflowID(workflowID), "failed to create runner: "+err.Error())
+		s.logger.Error("failed to create runner", "workflow_id", workflowID, "error", err)
+		respondError(w, http.StatusServiceUnavailable, "workflow execution not available: "+err.Error())
+		return
+	}
+
+	notifier.SetState(state)
+	notifier.SetStateSaver(s.stateManager)
+
+	// Execute analyze phase in background
+	go func() {
+		defer cancel()
+		defer notifier.FlushState()
+		defer func() {
+			_ = s.unifiedTracker.FinishExecution(context.Background(), core.WorkflowID(workflowID))
+		}()
+
+		handle.ConfirmStarted()
+		notifier.WorkflowStarted(state.Prompt)
+
+		err := runner.Analyze(execCtx, state.Prompt)
+		if err != nil {
+			s.logger.Error("analyze phase failed", "workflow_id", workflowID, "error", err)
+			notifier.WorkflowFailed(string(core.PhaseAnalyze), err)
+			return
+		}
+
+		// Load final state and emit completion
+		finalState, _ := s.stateManager.LoadByID(context.Background(), core.WorkflowID(workflowID))
+		if finalState != nil {
+			notifier.PhaseCompleted(string(core.PhaseAnalyze), time.Since(state.UpdatedAt))
+		}
+	}()
+
+	// Wait for confirmation
+	if err := handle.WaitForConfirmation(s.unifiedTracker.ConfirmTimeout()); err != nil {
+		s.logger.Error("workflow start confirmation timeout", "workflow_id", workflowID, "error", err)
+	}
+
+	response := PhaseResponse{
+		ID:           workflowID,
+		Status:       string(core.WorkflowStatusRunning),
+		CurrentPhase: string(core.PhaseAnalyze),
+		Message:      "Analyze phase execution started",
+	}
+	respondJSON(w, http.StatusAccepted, response)
+}
+
+// HandlePlanWorkflow executes only the plan phase of a workflow.
+// POST /api/v1/workflows/{workflowID}/plan
+//
+// Requires a completed analyze phase with consolidated analysis.
+// After completion, CurrentPhase will be "execute".
+//
+// Returns:
+//   - 202 Accepted: Plan phase execution started
+//   - 400 Bad Request: Invalid workflow ID
+//   - 404 Not Found: Workflow not found
+//   - 409 Conflict: Workflow running, missing analysis, or in invalid state
+//   - 503 Service Unavailable: Execution not available
+func (s *Server) HandlePlanWorkflow(w http.ResponseWriter, r *http.Request) {
+	workflowID := chi.URLParam(r, "workflowID")
+	if workflowID == "" {
+		respondError(w, http.StatusBadRequest, "workflow ID is required")
+		return
+	}
+
+	ctx := r.Context()
+
+	if s.stateManager == nil {
+		respondError(w, http.StatusServiceUnavailable, "workflow management not available")
+		return
+	}
+
+	state, err := s.stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
+	if err != nil {
+		s.logger.Error("failed to load workflow", "workflow_id", workflowID, "error", err)
+		respondError(w, http.StatusInternalServerError, "failed to load workflow")
+		return
+	}
+	if state == nil {
+		respondError(w, http.StatusNotFound, "workflow not found")
+		return
+	}
+
+	// Validate state for plan phase
+	switch state.Status {
+	case core.WorkflowStatusRunning:
+		respondError(w, http.StatusConflict, "workflow is already running")
+		return
+	case core.WorkflowStatusCompleted:
+		// Valid if CurrentPhase is plan (analyze done) or already at execute
+		if state.CurrentPhase == core.PhaseExecute {
+			respondError(w, http.StatusConflict, "plan phase already completed; use /execute to continue")
+			return
+		}
+		if state.CurrentPhase != core.PhasePlan {
+			respondError(w, http.StatusConflict, "workflow must complete analyze phase first; use /analyze")
+			return
+		}
+	case core.WorkflowStatusPending:
+		respondError(w, http.StatusConflict, "workflow must complete analyze phase first; use /analyze")
+		return
+	case core.WorkflowStatusFailed:
+		// Allow retry if analyze was completed
+		if state.CurrentPhase != core.PhasePlan {
+			respondError(w, http.StatusConflict, "analyze phase not completed; use /analyze first")
+			return
+		}
+	default:
+		respondError(w, http.StatusConflict, "workflow is in invalid state: "+string(state.Status))
+		return
+	}
+
+	// Use UnifiedTracker for execution
+	if s.unifiedTracker == nil {
+		respondError(w, http.StatusServiceUnavailable, "workflow execution not available: missing tracker")
+		return
+	}
+
+	handle, err := s.unifiedTracker.StartExecution(ctx, core.WorkflowID(workflowID))
+	if err != nil {
+		if strings.Contains(err.Error(), "already running") {
+			respondError(w, http.StatusConflict, "workflow execution already in progress")
+		} else {
+			respondError(w, http.StatusInternalServerError, "failed to start workflow: "+err.Error())
+		}
+		return
+	}
+
+	factory := s.RunnerFactory()
+	if factory == nil {
+		_ = s.unifiedTracker.RollbackExecution(ctx, core.WorkflowID(workflowID), "missing configuration")
+		respondError(w, http.StatusServiceUnavailable, "workflow execution not available: missing configuration")
+		return
+	}
+
+	execCtx, cancel := context.WithTimeout(context.Background(), 2*time.Hour)
+
+	state, err = s.stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
+	if err != nil {
+		cancel()
+		_ = s.unifiedTracker.RollbackExecution(ctx, core.WorkflowID(workflowID), "failed to reload state")
+		respondError(w, http.StatusInternalServerError, "failed to reload workflow state")
+		return
+	}
+
+	runner, notifier, err := factory.CreateRunner(execCtx, workflowID, handle.ControlPlane, state.Config)
+	if err != nil {
+		cancel()
+		_ = s.unifiedTracker.RollbackExecution(ctx, core.WorkflowID(workflowID), "failed to create runner: "+err.Error())
+		respondError(w, http.StatusServiceUnavailable, "workflow execution not available: "+err.Error())
+		return
+	}
+
+	notifier.SetState(state)
+	notifier.SetStateSaver(s.stateManager)
+
+	go func() {
+		defer cancel()
+		defer notifier.FlushState()
+		defer func() {
+			_ = s.unifiedTracker.FinishExecution(context.Background(), core.WorkflowID(workflowID))
+		}()
+
+		handle.ConfirmStarted()
+		notifier.PhaseStarted(core.PhasePlan)
+
+		err := runner.Plan(execCtx)
+		if err != nil {
+			s.logger.Error("plan phase failed", "workflow_id", workflowID, "error", err)
+			notifier.WorkflowFailed(string(core.PhasePlan), err)
+			return
+		}
+
+		notifier.PhaseCompleted(string(core.PhasePlan), time.Since(state.UpdatedAt))
+	}()
+
+	if err := handle.WaitForConfirmation(s.unifiedTracker.ConfirmTimeout()); err != nil {
+		s.logger.Error("workflow start confirmation timeout", "workflow_id", workflowID, "error", err)
+	}
+
+	response := PhaseResponse{
+		ID:           workflowID,
+		Status:       string(core.WorkflowStatusRunning),
+		CurrentPhase: string(core.PhasePlan),
+		Message:      "Plan phase execution started",
+	}
+	respondJSON(w, http.StatusAccepted, response)
+}
+
+// HandleReplanWorkflow clears existing plan and regenerates with optional context.
+// POST /api/v1/workflows/{workflowID}/replan
+//
+// Request Body (optional):
+//
+//	{ "context": "Additional context to prepend to analysis" }
+//
+// Requires a completed analyze phase. Clears existing tasks and regenerates.
+//
+// Returns:
+//   - 202 Accepted: Replan execution started
+//   - 400 Bad Request: Invalid request
+//   - 404 Not Found: Workflow not found
+//   - 409 Conflict: Workflow running or missing analysis
+//   - 503 Service Unavailable: Execution not available
+func (s *Server) HandleReplanWorkflow(w http.ResponseWriter, r *http.Request) {
+	workflowID := chi.URLParam(r, "workflowID")
+	if workflowID == "" {
+		respondError(w, http.StatusBadRequest, "workflow ID is required")
+		return
+	}
+
+	// Parse optional request body
+	var req ReplanRequest
+	if r.ContentLength > 0 {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			respondError(w, http.StatusBadRequest, "invalid request body: "+err.Error())
+			return
+		}
+	}
+
+	ctx := r.Context()
+
+	if s.stateManager == nil {
+		respondError(w, http.StatusServiceUnavailable, "workflow management not available")
+		return
+	}
+
+	state, err := s.stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "failed to load workflow")
+		return
+	}
+	if state == nil {
+		respondError(w, http.StatusNotFound, "workflow not found")
+		return
+	}
+
+	// Validate state - must have completed analyze
+	switch state.Status {
+	case core.WorkflowStatusRunning:
+		respondError(w, http.StatusConflict, "workflow is already running")
+		return
+	case core.WorkflowStatusCompleted:
+		// Valid if analyze was done (CurrentPhase is plan or execute)
+		if state.CurrentPhase != core.PhasePlan && state.CurrentPhase != core.PhaseExecute {
+			respondError(w, http.StatusConflict, "analyze phase must be completed first")
+			return
+		}
+	case core.WorkflowStatusFailed:
+		// Allow replan if analyze was completed
+		if state.CurrentPhase != core.PhasePlan && state.CurrentPhase != core.PhaseExecute {
+			respondError(w, http.StatusConflict, "analyze phase must be completed first")
+			return
+		}
+	default:
+		respondError(w, http.StatusConflict, "workflow must complete analyze phase first")
+		return
+	}
+
+	if s.unifiedTracker == nil {
+		respondError(w, http.StatusServiceUnavailable, "workflow execution not available: missing tracker")
+		return
+	}
+
+	handle, err := s.unifiedTracker.StartExecution(ctx, core.WorkflowID(workflowID))
+	if err != nil {
+		if strings.Contains(err.Error(), "already running") {
+			respondError(w, http.StatusConflict, "workflow execution already in progress")
+		} else {
+			respondError(w, http.StatusInternalServerError, "failed to start workflow: "+err.Error())
+		}
+		return
+	}
+
+	factory := s.RunnerFactory()
+	if factory == nil {
+		_ = s.unifiedTracker.RollbackExecution(ctx, core.WorkflowID(workflowID), "missing configuration")
+		respondError(w, http.StatusServiceUnavailable, "workflow execution not available")
+		return
+	}
+
+	execCtx, cancel := context.WithTimeout(context.Background(), 2*time.Hour)
+
+	state, err = s.stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
+	if err != nil {
+		cancel()
+		_ = s.unifiedTracker.RollbackExecution(ctx, core.WorkflowID(workflowID), "failed to reload state")
+		respondError(w, http.StatusInternalServerError, "failed to reload workflow state")
+		return
+	}
+
+	runner, notifier, err := factory.CreateRunner(execCtx, workflowID, handle.ControlPlane, state.Config)
+	if err != nil {
+		cancel()
+		_ = s.unifiedTracker.RollbackExecution(ctx, core.WorkflowID(workflowID), "failed to create runner: "+err.Error())
+		respondError(w, http.StatusServiceUnavailable, "workflow execution not available: "+err.Error())
+		return
+	}
+
+	notifier.SetState(state)
+	notifier.SetStateSaver(s.stateManager)
+
+	additionalContext := req.Context
+
+	go func() {
+		defer cancel()
+		defer notifier.FlushState()
+		defer func() {
+			_ = s.unifiedTracker.FinishExecution(context.Background(), core.WorkflowID(workflowID))
+		}()
+
+		handle.ConfirmStarted()
+		notifier.PhaseStarted(core.PhasePlan)
+
+		err := runner.Replan(execCtx, additionalContext)
+		if err != nil {
+			s.logger.Error("replan failed", "workflow_id", workflowID, "error", err)
+			notifier.WorkflowFailed(string(core.PhasePlan), err)
+			return
+		}
+
+		notifier.PhaseCompleted(string(core.PhasePlan), time.Since(state.UpdatedAt))
+	}()
+
+	if err := handle.WaitForConfirmation(s.unifiedTracker.ConfirmTimeout()); err != nil {
+		s.logger.Error("workflow start confirmation timeout", "workflow_id", workflowID, "error", err)
+	}
+
+	response := PhaseResponse{
+		ID:           workflowID,
+		Status:       string(core.WorkflowStatusRunning),
+		CurrentPhase: string(core.PhasePlan),
+		Message:      "Replan execution started",
+	}
+	if additionalContext != "" {
+		response.Message = "Replan execution started with additional context"
+	}
+	respondJSON(w, http.StatusAccepted, response)
+}
+
+// HandleExecuteWorkflow executes only the execute phase of a workflow.
+// POST /api/v1/workflows/{workflowID}/execute
+//
+// Requires a completed plan phase with tasks defined.
+// This is essentially a resume from the plan phase to execution.
+//
+// Returns:
+//   - 202 Accepted: Execute phase started
+//   - 400 Bad Request: Invalid workflow ID
+//   - 404 Not Found: Workflow not found
+//   - 409 Conflict: Workflow running, no plan, or in invalid state
+//   - 503 Service Unavailable: Execution not available
+func (s *Server) HandleExecuteWorkflow(w http.ResponseWriter, r *http.Request) {
+	workflowID := chi.URLParam(r, "workflowID")
+	if workflowID == "" {
+		respondError(w, http.StatusBadRequest, "workflow ID is required")
+		return
+	}
+
+	ctx := r.Context()
+
+	if s.stateManager == nil {
+		respondError(w, http.StatusServiceUnavailable, "workflow management not available")
+		return
+	}
+
+	state, err := s.stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "failed to load workflow")
+		return
+	}
+	if state == nil {
+		respondError(w, http.StatusNotFound, "workflow not found")
+		return
+	}
+
+	// Validate state for execute phase
+	switch state.Status {
+	case core.WorkflowStatusRunning:
+		respondError(w, http.StatusConflict, "workflow is already running")
+		return
+	case core.WorkflowStatusCompleted:
+		// Check if there are tasks to execute
+		if state.CurrentPhase != core.PhaseExecute {
+			if state.CurrentPhase == "" {
+				respondError(w, http.StatusConflict, "workflow already fully completed")
+				return
+			}
+			respondError(w, http.StatusConflict, "plan phase must be completed first; use /plan")
+			return
+		}
+		if len(state.Tasks) == 0 {
+			respondError(w, http.StatusConflict, "no tasks to execute; run /plan first")
+			return
+		}
+	case core.WorkflowStatusPaused:
+		// Allow resume from paused state
+	case core.WorkflowStatusFailed:
+		// Allow retry if plan was completed
+		if state.CurrentPhase != core.PhaseExecute && len(state.Tasks) == 0 {
+			respondError(w, http.StatusConflict, "plan phase not completed; use /plan first")
+			return
+		}
+	default:
+		respondError(w, http.StatusConflict, "workflow must complete plan phase first")
+		return
+	}
+
+	if s.unifiedTracker == nil {
+		respondError(w, http.StatusServiceUnavailable, "workflow execution not available: missing tracker")
+		return
+	}
+
+	handle, err := s.unifiedTracker.StartExecution(ctx, core.WorkflowID(workflowID))
+	if err != nil {
+		if strings.Contains(err.Error(), "already running") {
+			respondError(w, http.StatusConflict, "workflow execution already in progress")
+		} else {
+			respondError(w, http.StatusInternalServerError, "failed to start workflow: "+err.Error())
+		}
+		return
+	}
+
+	factory := s.RunnerFactory()
+	if factory == nil {
+		_ = s.unifiedTracker.RollbackExecution(ctx, core.WorkflowID(workflowID), "missing configuration")
+		respondError(w, http.StatusServiceUnavailable, "workflow execution not available")
+		return
+	}
+
+	execCtx, cancel := context.WithTimeout(context.Background(), 8*time.Hour)
+
+	state, err = s.stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
+	if err != nil {
+		cancel()
+		_ = s.unifiedTracker.RollbackExecution(ctx, core.WorkflowID(workflowID), "failed to reload state")
+		respondError(w, http.StatusInternalServerError, "failed to reload workflow state")
+		return
+	}
+
+	runner, notifier, err := factory.CreateRunner(execCtx, workflowID, handle.ControlPlane, state.Config)
+	if err != nil {
+		cancel()
+		_ = s.unifiedTracker.RollbackExecution(ctx, core.WorkflowID(workflowID), "failed to create runner: "+err.Error())
+		respondError(w, http.StatusServiceUnavailable, "workflow execution not available: "+err.Error())
+		return
+	}
+
+	notifier.SetState(state)
+	notifier.SetStateSaver(s.stateManager)
+
+	go func() {
+		defer cancel()
+		defer notifier.FlushState()
+		defer func() {
+			_ = s.unifiedTracker.FinishExecution(context.Background(), core.WorkflowID(workflowID))
+		}()
+
+		handle.ConfirmStarted()
+		notifier.PhaseStarted(core.PhaseExecute)
+
+		err := runner.Resume(execCtx)
+		if err != nil {
+			s.logger.Error("execute phase failed", "workflow_id", workflowID, "error", err)
+			notifier.WorkflowFailed(string(core.PhaseExecute), err)
+			return
+		}
+
+		finalState, _ := s.stateManager.LoadByID(context.Background(), core.WorkflowID(workflowID))
+		if finalState != nil && finalState.Status == core.WorkflowStatusCompleted {
+			notifier.WorkflowCompleted(time.Since(state.UpdatedAt), finalState.Metrics.TotalCostUSD)
+		}
+	}()
+
+	if err := handle.WaitForConfirmation(s.unifiedTracker.ConfirmTimeout()); err != nil {
+		s.logger.Error("workflow start confirmation timeout", "workflow_id", workflowID, "error", err)
+	}
+
+	response := PhaseResponse{
+		ID:           workflowID,
+		Status:       string(core.WorkflowStatusRunning),
+		CurrentPhase: string(core.PhaseExecute),
+		Message:      "Execute phase started",
+	}
+	respondJSON(w, http.StatusAccepted, response)
 }

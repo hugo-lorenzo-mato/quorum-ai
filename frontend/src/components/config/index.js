@@ -29,4 +29,5 @@ export { default as WorkflowTab } from './tabs/WorkflowTab';
 export { default as AgentsTab } from './tabs/AgentsTab';
 export { default as PhasesTab } from './tabs/PhasesTab';
 export { default as GitTab } from './tabs/GitTab';
+export { default as IssuesTab } from './tabs/IssuesTab';
 export { default as AdvancedTab } from './tabs/AdvancedTab';

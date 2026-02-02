@@ -9,6 +9,7 @@ import {
   AgentsTab,
   PhasesTab,
   GitTab,
+  IssuesTab,
   AdvancedTab,
 } from '../components/config';
 
@@ -41,19 +42,26 @@ const TABS = [
     component: PhasesTab,
     keywords: ['step', 'order', 'execution'] 
   },
-  { 
-    id: 'git', 
-    label: 'Git', 
-    icon: GitIcon, 
+  {
+    id: 'git',
+    label: 'Git',
+    icon: GitIcon,
     component: GitTab,
-    keywords: ['commit', 'push', 'pr', 'pull request', 'merge', 'github', 'branch'] 
+    keywords: ['commit', 'push', 'pr', 'pull request', 'merge', 'github', 'branch']
   },
-  { 
-    id: 'advanced', 
-    label: 'Advanced', 
-    icon: AdvancedIcon, 
+  {
+    id: 'issues',
+    label: 'Issues',
+    icon: IssuesIcon,
+    component: IssuesTab,
+    keywords: ['github', 'gitlab', 'issue', 'ticket', 'label', 'assignee', 'template']
+  },
+  {
+    id: 'advanced',
+    label: 'Advanced',
+    icon: AdvancedIcon,
     component: AdvancedTab,
-    keywords: ['trace', 'debug', 'server', 'port', 'host', 'reset', 'danger'] 
+    keywords: ['trace', 'debug', 'server', 'port', 'host', 'reset', 'danger']
   },
 ];
 
@@ -68,6 +76,7 @@ const getTabDirty = (tabId, localChanges) => {
     agents: ['agents'],
     phases: ['phases'],
     git: ['git', 'github'],
+    issues: ['issues'],
     advanced: ['trace', 'server'],
   };
 
@@ -311,6 +320,14 @@ function GitIcon({ className }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+    </svg>
+  );
+}
+
+function IssuesIcon({ className }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
     </svg>
   );
 }

@@ -225,6 +225,22 @@ func (l *Loader) setDefaults() {
 	l.v.SetDefault("diagnostics.preflight_checks.enabled", true)
 	l.v.SetDefault("diagnostics.preflight_checks.min_free_fd_percent", 20)
 	l.v.SetDefault("diagnostics.preflight_checks.min_free_memory_mb", 256)
+
+	// Issue generation defaults
+	l.v.SetDefault("issues.enabled", true)
+	l.v.SetDefault("issues.provider", "github")
+	l.v.SetDefault("issues.auto_generate", false)
+	l.v.SetDefault("issues.template.language", "en")
+	l.v.SetDefault("issues.template.tone", "technical")
+	l.v.SetDefault("issues.template.include_diagrams", true)
+	l.v.SetDefault("issues.template.title_format", "[quorum] {task_name}")
+	l.v.SetDefault("issues.template.body_template_file", "")
+	l.v.SetDefault("issues.template.convention", "")
+	l.v.SetDefault("issues.template.custom_instructions", "")
+	l.v.SetDefault("issues.labels", []string{"quorum-generated"})
+	l.v.SetDefault("issues.assignees", []string{})
+	l.v.SetDefault("issues.gitlab.use_epics", false)
+	l.v.SetDefault("issues.gitlab.project_id", "")
 }
 
 // ConfigFile returns the config file path if one was used.

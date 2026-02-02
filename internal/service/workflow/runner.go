@@ -306,8 +306,9 @@ func (r *Runner) Run(ctx context.Context, prompt string) error {
 	// Finalize metrics
 	r.finalizeMetrics(workflowState)
 
-	// Mark completed
+	// Mark completed - clear CurrentPhase to indicate all phases done
 	workflowState.Status = core.WorkflowStatusCompleted
+	workflowState.CurrentPhase = "" // Empty means fully completed
 	workflowState.UpdatedAt = time.Now()
 
 	r.logger.Info("workflow completed",
@@ -388,7 +389,9 @@ func (r *Runner) RunWithState(ctx context.Context, state *core.WorkflowState) er
 	if workflowState.Metrics == nil {
 		workflowState.Metrics = &core.StateMetrics{}
 	}
-	workflowState.UpdatedAt = time.Now()
+
+	// Prepare new execution - increment ExecutionID and clear old events
+	r.prepareExecution(workflowState, false)
 
 	// Ensure workflow-level Git isolation (API-created state may not have it persisted).
 	if _, err := r.ensureWorkflowGitIsolation(ctx, workflowState); err != nil {
@@ -434,6 +437,7 @@ func (r *Runner) RunWithState(ctx context.Context, state *core.WorkflowState) er
 
 	r.finalizeMetrics(workflowState)
 	workflowState.Status = core.WorkflowStatusCompleted
+	workflowState.CurrentPhase = "" // Empty means fully completed
 	workflowState.UpdatedAt = time.Now()
 
 	r.logger.Info("workflow completed",
@@ -480,6 +484,9 @@ func (r *Runner) Resume(ctx context.Context) error {
 			return fmt.Errorf("saving state after git isolation init: %w", saveErr)
 		}
 	}
+
+	// Prepare resume execution - increment ExecutionID but keep events for history
+	r.prepareExecution(workflowState, true)
 
 	// Get resume point
 	resumePoint, err := r.resumeProvider.GetResumePoint(workflowState)
@@ -540,6 +547,7 @@ func (r *Runner) Resume(ctx context.Context) error {
 	r.finalizeMetrics(workflowState)
 
 	workflowState.Status = core.WorkflowStatusCompleted
+	workflowState.CurrentPhase = "" // Empty means fully completed
 	workflowState.UpdatedAt = time.Now()
 
 	r.logger.Info("workflow resumed and completed",
@@ -579,6 +587,9 @@ func (r *Runner) ResumeWithState(ctx context.Context, state *core.WorkflowState)
 			return fmt.Errorf("saving state after git isolation init: %w", saveErr)
 		}
 	}
+
+	// Prepare resume execution - increment ExecutionID but keep events for history
+	r.prepareExecution(state, true)
 
 	resumePoint, err := r.resumeProvider.GetResumePoint(state)
 	if err != nil {
@@ -638,6 +649,7 @@ func (r *Runner) ResumeWithState(ctx context.Context, state *core.WorkflowState)
 
 	r.finalizeMetrics(state)
 	state.Status = core.WorkflowStatusCompleted
+	state.CurrentPhase = "" // Empty means fully completed
 	state.UpdatedAt = time.Now()
 
 	r.logger.Info("workflow resumed and completed",
@@ -664,6 +676,7 @@ func (r *Runner) initializeState(prompt string) *core.WorkflowState {
 	return &core.WorkflowState{
 		Version:      core.CurrentStateVersion,
 		WorkflowID:   core.WorkflowID(generateWorkflowID()),
+		ExecutionID:  1, // First execution
 		Status:       core.WorkflowStatusRunning,
 		CurrentPhase: core.PhaseRefine,
 		Prompt:       prompt,
@@ -684,6 +697,18 @@ func (r *Runner) initializeState(prompt string) *core.WorkflowState {
 		CreatedAt:   time.Now(),
 		UpdatedAt:   time.Now(),
 	}
+}
+
+// prepareExecution increments ExecutionID and optionally clears old events.
+// Call this at the start of RunWithState or ResumeWithState to distinguish event sets.
+func (r *Runner) prepareExecution(state *core.WorkflowState, isResume bool) {
+	state.ExecutionID++
+	if !isResume {
+		// New execution: clear previous events
+		state.AgentEvents = nil
+	}
+	// Resume: keep events but new execution is distinguished by ExecutionID
+	state.UpdatedAt = time.Now()
 }
 
 // ensureWorkflowGitIsolation initializes workflow-level Git isolation if configured.

@@ -6,10 +6,10 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
-	"golang.org/x/sync/errgroup"
 )
 
 // TaskDAG provides task scheduling based on dependencies.
@@ -147,18 +147,48 @@ func (e *Executor) Run(ctx context.Context, wctx *Context) error {
 			wctx.Output.Log("info", "executor", fmt.Sprintf("Executing batch: %d ready, %d/%d completed", len(ready), len(completed), len(wctx.State.Tasks)))
 		}
 
-		// Execute ready tasks in parallel
+		// Execute ready tasks in parallel with isolated contexts
+		// Each task gets its own context to prevent cascade cancellation when one fails.
+		// This allows fallback agents to work properly and other tasks to complete independently.
 		useWorktrees := shouldUseWorktrees(wctx.Config.WorktreeMode, len(ready))
-		g, taskCtx := errgroup.WithContext(ctx)
+
+		var wg sync.WaitGroup
+		var mu sync.Mutex
+		var firstErr error
+		var failedTasks []core.TaskID
+
 		for _, task := range ready {
-			task := task
-			g.Go(func() error {
-				return e.executeTaskSafe(taskCtx, wctx, task, useWorktrees)
-			})
+			task := task // Capture for closure
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+
+				// Each task gets its own context with timeout
+				// Parent ctx cancellation still propagates (workflow-level cancel)
+				taskCtx, taskCancel := context.WithTimeout(ctx, wctx.Config.PhaseTimeouts.Execute)
+				defer taskCancel()
+
+				err := e.executeTaskSafe(taskCtx, wctx, task, useWorktrees)
+				if err != nil {
+					mu.Lock()
+					if firstErr == nil {
+						firstErr = err
+					}
+					failedTasks = append(failedTasks, task.ID)
+					mu.Unlock()
+				}
+			}()
 		}
 
-		if err := g.Wait(); err != nil {
-			return err
+		wg.Wait()
+
+		if firstErr != nil {
+			wctx.Logger.Error("batch execution had failures",
+				"failed_count", len(failedTasks),
+				"failed_tasks", failedTasks,
+				"first_error", firstErr,
+			)
+			return firstErr
 		}
 
 		// Update completed set
@@ -663,13 +693,17 @@ func (e *Executor) handleExecutionSuccessValidated(ctx context.Context, wctx *Co
 	wctx.Unlock()
 
 	if finalizeErr := e.finalizeTask(ctx, wctx, task, taskState, workDir); finalizeErr != nil {
-		wctx.Logger.Warn("task finalization failed",
+		// CR-2 FIX: Finalization errors (git commit, timeout, etc.) should mark task as failed.
+		// Previously this only logged a warning, leaving status as "completed" with an error.
+		wctx.Logger.Error("task finalization failed - marking task as failed",
 			"task_id", task.ID,
 			"error", finalizeErr,
 		)
 		if wctx.Output != nil {
-			wctx.Output.Log("warn", "executor", fmt.Sprintf("Task finalization failed: %s", finalizeErr.Error()))
+			wctx.Output.Log("error", "executor", fmt.Sprintf("Task finalization failed: %s", finalizeErr.Error()))
 		}
+		e.setTaskFailed(wctx, taskState, fmt.Errorf("finalization failed: %w", finalizeErr))
+		return finalizeErr
 	}
 
 	// Merge task to workflow branch if using workflow isolation
@@ -939,13 +973,13 @@ func (e *Executor) mergeTaskToWorkflow(ctx context.Context, wctx *Context, task 
 
 	if err := wctx.WorkflowWorktrees.MergeTaskToWorkflow(ctx, workflowID, task.ID, strategy); err != nil {
 		// Update task state with merge failure info
+		// Note: The actual status change to Failed is done by the caller (setTaskFailed)
+		// Here we only set the recovery metadata (Resumable, MergePending)
 		wctx.Lock()
 		if taskState, ok := wctx.State.Tasks[task.ID]; ok {
 			taskState.Resumable = true
 			taskState.MergePending = true
-			if taskState.Error == "" {
-				taskState.Error = fmt.Sprintf("merge failed: %v", err)
-			}
+			// Don't set Error here - let setTaskFailed do it consistently
 		}
 		wctx.Unlock()
 

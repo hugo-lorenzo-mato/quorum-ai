@@ -270,6 +270,7 @@ type WorkflowSummary struct {
 type WorkflowState struct {
 	Version         int                   `json:"version"`
 	WorkflowID      WorkflowID            `json:"workflow_id"`
+	ExecutionID     int                   `json:"execution_id"`     // Increments on each Run/Resume to distinguish event sets
 	Title           string                `json:"title,omitempty"`
 	Status          WorkflowStatus        `json:"status"`
 	CurrentPhase    Phase                 `json:"current_phase"`

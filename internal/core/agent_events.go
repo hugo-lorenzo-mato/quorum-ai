@@ -56,6 +56,10 @@ type AgentEvent struct {
 	// For completed: {"tokens_in": 1000, "tokens_out": 500, "cost_usd": 0.01}
 	// For error: {"code": "TIMEOUT", "details": "..."}
 	Data map[string]any `json:"data,omitempty"`
+
+	// ExecutionID identifies which workflow execution this event belongs to.
+	// Used to filter events when resuming - only show events from current execution.
+	ExecutionID int `json:"execution_id,omitempty"`
 }
 
 // NewAgentEvent creates a new agent event with the current timestamp.

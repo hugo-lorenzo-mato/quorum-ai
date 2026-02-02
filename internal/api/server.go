@@ -196,6 +196,12 @@ func (s *Server) setupRouter() chi.Router {
 				r.Post("/pause", s.handlePauseWorkflow)
 				r.Post("/resume", s.handleResumeWorkflow)
 
+				// Phase-specific execution endpoints
+				r.Post("/analyze", s.HandleAnalyzeWorkflow)
+				r.Post("/plan", s.HandlePlanWorkflow)
+				r.Post("/replan", s.HandleReplanWorkflow)
+				r.Post("/execute", s.HandleExecuteWorkflow)
+
 				// Task endpoints nested under workflow
 				r.Route("/tasks", func(r chi.Router) {
 					r.Get("/", s.handleListTasks)
@@ -208,6 +214,12 @@ func (s *Server) setupRouter() chi.Router {
 					r.Post("/", s.handleUploadWorkflowAttachments)
 					r.Get("/{attachmentID}/download", s.handleDownloadWorkflowAttachment)
 					r.Delete("/{attachmentID}", s.handleDeleteWorkflowAttachment)
+				})
+
+				// Issue generation endpoints
+				r.Route("/issues", func(r chi.Router) {
+					r.Post("/", s.handleGenerateIssues)
+					r.Get("/preview", s.handlePreviewIssues)
 				})
 			})
 		})
@@ -252,6 +264,7 @@ func (s *Server) setupRouter() chi.Router {
 			r.Get("/agents", s.handleGetAgents)
 			r.Get("/schema", s.handleGetConfigSchema)
 			r.Get("/enums", s.handleGetEnums)
+			r.Get("/issues", s.handleGetIssuesConfig)
 		})
 
 		// Kanban board endpoints

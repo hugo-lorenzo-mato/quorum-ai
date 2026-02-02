@@ -1,6 +1,9 @@
 package config
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 // Config holds all application configuration.
 type Config struct {
@@ -15,6 +18,7 @@ type Config struct {
 	GitHub      GitHubConfig      `mapstructure:"github"`
 	Chat        ChatConfig        `mapstructure:"chat"`
 	Report      ReportConfig      `mapstructure:"report"`
+	Issues      IssuesConfig      `mapstructure:"issues"`
 }
 
 // ChatConfig configures chat behavior in the TUI.
@@ -478,6 +482,89 @@ type GitFinalizationConfig struct {
 // Note: GitHub token should be provided via GITHUB_TOKEN or GH_TOKEN environment variable.
 type GitHubConfig struct {
 	Remote string `mapstructure:"remote"`
+}
+
+// IssuesConfig configures GitHub/GitLab issue generation.
+type IssuesConfig struct {
+	// Enabled activates issue generation feature.
+	Enabled bool `mapstructure:"enabled"`
+
+	// Provider specifies the issue tracking system: github or gitlab.
+	Provider string `mapstructure:"provider"`
+
+	// AutoGenerate creates issues automatically after planning phase.
+	AutoGenerate bool `mapstructure:"auto_generate"`
+
+	// Template configures issue content generation.
+	Template IssueTemplateConfig `mapstructure:"template"`
+
+	// Labels to apply to all generated issues.
+	Labels []string `mapstructure:"labels"`
+
+	// Assignees for generated issues.
+	Assignees []string `mapstructure:"assignees"`
+
+	// GitLab contains GitLab-specific configuration.
+	GitLab GitLabIssueConfig `mapstructure:"gitlab"`
+}
+
+// IssueTemplateConfig configures issue content formatting.
+type IssueTemplateConfig struct {
+	// Language for generated content (ISO 639-1 code, e.g., "en", "es", "fr").
+	Language string `mapstructure:"language"`
+
+	// Tone of writing: formal, informal, technical, friendly.
+	Tone string `mapstructure:"tone"`
+
+	// IncludeDiagrams adds ASCII diagrams to issue body when available.
+	IncludeDiagrams bool `mapstructure:"include_diagrams"`
+
+	// TitleFormat specifies the issue title template.
+	// Supports variables: {workflow_id}, {workflow_title}, {task_id}, {task_name}
+	TitleFormat string `mapstructure:"title_format"`
+
+	// BodyTemplateFile path to custom body template (relative to config directory).
+	BodyTemplateFile string `mapstructure:"body_template_file"`
+
+	// Convention name for style reference (e.g., "conventional-commits", "angular").
+	Convention string `mapstructure:"convention"`
+
+	// CustomInstructions are free-form instructions for LLM when generating content.
+	// Users can specify tone, formatting preferences, diagram usage, conventions, etc.
+	// Example: "Use bullet points, include code snippets, write in Spanish"
+	CustomInstructions string `mapstructure:"custom_instructions"`
+}
+
+// GitLabIssueConfig contains GitLab-specific options.
+type GitLabIssueConfig struct {
+	// UseEpics groups sub-issues under an epic instead of linking.
+	UseEpics bool `mapstructure:"use_epics"`
+
+	// ProjectID is the GitLab project identifier (required for GitLab).
+	ProjectID string `mapstructure:"project_id"`
+}
+
+// Validate validates the issues configuration.
+func (c *IssuesConfig) Validate() error {
+	// Validate provider
+	if c.Enabled && c.Provider != "github" && c.Provider != "gitlab" && c.Provider != "" {
+		return fmt.Errorf("issues.provider must be 'github' or 'gitlab'")
+	}
+
+	// Validate tone
+	validTones := map[string]bool{
+		"formal": true, "informal": true, "technical": true, "friendly": true, "": true,
+	}
+	if !validTones[c.Template.Tone] {
+		return fmt.Errorf("issues.template.tone must be one of: formal, informal, technical, friendly")
+	}
+
+	// GitLab requires project_id
+	if c.Enabled && c.Provider == "gitlab" && c.GitLab.ProjectID == "" {
+		return fmt.Errorf("issues.gitlab.project_id is required when provider is 'gitlab'")
+	}
+
+	return nil
 }
 
 // ReportConfig configures markdown report generation.

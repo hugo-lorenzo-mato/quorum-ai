@@ -107,6 +107,12 @@ func (n *WebOutputNotifier) PhaseStarted(phase core.Phase) {
 	n.eventBus.Publish(events.NewPhaseStartedEvent(n.workflowID, string(phase)))
 }
 
+// PhaseCompleted emits a phase_completed event.
+// NOTE: This is NOT part of the OutputNotifier interface but is needed for web context.
+func (n *WebOutputNotifier) PhaseCompleted(phase string, duration time.Duration) {
+	n.eventBus.Publish(events.NewPhaseCompletedEvent(n.workflowID, phase, duration))
+}
+
 // TaskStarted is called when a task begins.
 func (n *WebOutputNotifier) TaskStarted(task *core.Task) {
 	n.eventBus.Publish(events.NewTaskStartedEvent(n.workflowID, string(task.ID), ""))
@@ -173,12 +179,13 @@ func (n *WebOutputNotifier) AgentEvent(kind, agent, message string, data map[str
 	defer n.stateMu.Unlock()
 	if n.state != nil {
 		event := core.AgentEvent{
-			ID:        fmt.Sprintf("%d-%s", time.Now().UnixNano(), agent),
-			Type:      core.AgentEventType(kind),
-			Agent:     agent,
-			Message:   message,
-			Data:      data,
-			Timestamp: time.Now(),
+			ID:          fmt.Sprintf("%d-%s", time.Now().UnixNano(), agent),
+			Type:        core.AgentEventType(kind),
+			Agent:       agent,
+			Message:     message,
+			Data:        data,
+			Timestamp:   time.Now(),
+			ExecutionID: n.state.ExecutionID,
 		}
 		n.state.AgentEvents = append(n.state.AgentEvents, event)
 		// Limit to last MaxAgentEvents

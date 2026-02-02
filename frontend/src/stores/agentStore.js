@@ -105,13 +105,22 @@ const useAgentStore = create((set, get) => ({
   },
 
   // Load persisted agent events from workflow API response (for page reload recovery)
-  loadPersistedEvents: (workflowId, events) => {
+  // currentExecutionId filters events to only show those from the current execution
+  loadPersistedEvents: (workflowId, events, currentExecutionId) => {
     if (!events || events.length === 0) return;
+
+    // Filter events by execution ID if provided
+    // Events without execution_id are included for backwards compatibility
+    const filteredEvents = currentExecutionId
+      ? events.filter(e => e.execution_id === currentExecutionId || !e.execution_id)
+      : events;
+
+    if (filteredEvents.length === 0) return;
 
     const { agentActivity, currentAgents } = get();
 
     // Convert persisted events to activity entries (reverse to maintain newest-first order)
-    const activityEntries = events.map(event => ({
+    const activityEntries = filteredEvents.map(event => ({
       id: event.id || `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
       agent: event.agent,
       eventKind: event.event_kind,
@@ -123,7 +132,7 @@ const useAgentStore = create((set, get) => ({
     // Rebuild current agent statuses from events with proper timestamp handling
     // First pass: find startedAt timestamp for each agent
     const agentStartTimes = {};
-    for (const event of events) {
+    for (const event of filteredEvents) {
       if (event.event_kind === 'started' && !agentStartTimes[event.agent]) {
         agentStartTimes[event.agent] = event.timestamp;
       }
@@ -131,7 +140,7 @@ const useAgentStore = create((set, get) => ({
 
     // Second pass: build agent statuses
     const agentStatuses = {};
-    for (const event of events) {
+    for (const event of filteredEvents) {
       // Events are in chronological order, so we process them sequentially
       const existing = agentStatuses[event.agent] || {};
       const eventKind = event.event_kind;

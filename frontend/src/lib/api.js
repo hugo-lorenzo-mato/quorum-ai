@@ -82,7 +82,77 @@ export const workflowApi = {
 
   resume: (id) => request(`/workflows/${id}/resume`, { method: 'POST' }),
 
+  // Phase-specific execution endpoints
+  /**
+   * Run only the analyze phase of a workflow.
+   * After completion, CurrentPhase will be "plan".
+   * @param {string} id - Workflow ID
+   * @returns {Promise<Object>} - PhaseResponse with id, status, current_phase, message
+   */
+  analyze: (id) => request(`/workflows/${id}/analyze`, { method: 'POST' }),
+
+  /**
+   * Run only the plan phase of a workflow.
+   * Requires completed analyze phase. After completion, CurrentPhase will be "execute".
+   * @param {string} id - Workflow ID
+   * @returns {Promise<Object>} - PhaseResponse with id, status, current_phase, message
+   */
+  plan: (id) => request(`/workflows/${id}/plan`, { method: 'POST' }),
+
+  /**
+   * Regenerate the plan with optional additional context.
+   * Clears existing tasks and regenerates the plan.
+   * @param {string} id - Workflow ID
+   * @param {string} [context] - Optional additional context to prepend to analysis
+   * @returns {Promise<Object>} - PhaseResponse with id, status, current_phase, message
+   */
+  replan: (id, context = '') => {
+    const options = { method: 'POST' };
+    if (context) {
+      options.body = JSON.stringify({ context });
+    }
+    return request(`/workflows/${id}/replan`, options);
+  },
+
+  /**
+   * Run only the execute phase of a workflow.
+   * Requires completed plan phase with tasks defined.
+   * @param {string} id - Workflow ID
+   * @returns {Promise<Object>} - PhaseResponse with id, status, current_phase, message
+   */
+  execute: (id) => request(`/workflows/${id}/execute`, { method: 'POST' }),
+
   delete: (id) => request(`/workflows/${id}/`, { method: 'DELETE' }),
+
+  // Issue generation
+  /**
+   * Generate GitHub/GitLab issues from workflow artifacts.
+   * @param {string} id - Workflow ID
+   * @param {Object} options - Generation options
+   * @param {boolean} [options.dry_run=false] - Preview without creating
+   * @param {boolean} [options.create_main_issue=true] - Create parent issue
+   * @param {boolean} [options.create_sub_issues=true] - Create child issues
+   * @param {boolean} [options.link_issues=true] - Link sub-issues to main
+   * @param {string[]} [options.labels] - Override default labels
+   * @param {string[]} [options.assignees] - Override default assignees
+   */
+  generateIssues: (id, options = {}) => request(`/workflows/${id}/issues`, {
+    method: 'POST',
+    body: JSON.stringify({
+      dry_run: options.dryRun ?? false,
+      create_main_issue: options.createMainIssue ?? true,
+      create_sub_issues: options.createSubIssues ?? true,
+      link_issues: options.linkIssues ?? true,
+      labels: options.labels,
+      assignees: options.assignees,
+    }),
+  }),
+
+  /**
+   * Preview issues without creating them.
+   * @param {string} id - Workflow ID
+   */
+  previewIssues: (id) => request(`/workflows/${id}/issues/preview`),
 
   // Workflow attachments
   listAttachments: (id) => request(`/workflows/${id}/attachments`),
@@ -178,6 +248,8 @@ export const configApi = {
   getAgents: () => request('/config/agents'),
 
   getEnums: () => request('/config/enums'),
+
+  getIssuesConfig: () => request('/config/issues'),
 };
 
 // Files API

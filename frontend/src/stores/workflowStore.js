@@ -29,8 +29,13 @@ const useWorkflowStore = create((set, get) => ({
       set({ activeWorkflow });
 
       // Load persisted agent events for page reload recovery
+      // Pass execution_id to filter events from current execution only
       if (activeWorkflow?.agent_events && activeWorkflow.agent_events.length > 0) {
-        useAgentStore.getState().loadPersistedEvents(activeWorkflow.id, activeWorkflow.agent_events);
+        useAgentStore.getState().loadPersistedEvents(
+          activeWorkflow.id,
+          activeWorkflow.agent_events,
+          activeWorkflow.execution_id
+        );
       }
 
       // Load persisted tasks for page reload recovery
@@ -57,8 +62,13 @@ const useWorkflowStore = create((set, get) => ({
       set({ workflows: updated, loading: false });
 
       // Load persisted agent events for page reload recovery
+      // Pass execution_id to filter events from current execution only
       if (workflow.agent_events && workflow.agent_events.length > 0) {
-        useAgentStore.getState().loadPersistedEvents(id, workflow.agent_events);
+        useAgentStore.getState().loadPersistedEvents(
+          id,
+          workflow.agent_events,
+          workflow.execution_id
+        );
       }
 
       // Load persisted tasks for page reload recovery
@@ -211,6 +221,112 @@ const useWorkflowStore = create((set, get) => ({
     }
   },
 
+  // Phase-specific workflow actions
+  /**
+   * Run only the analyze phase of a workflow.
+   * @param {string} id - Workflow ID
+   */
+  analyzeWorkflow: async (id) => {
+    set({ loading: true, error: null });
+    try {
+      const result = await workflowApi.analyze(id);
+      const { workflows, activeWorkflow } = get();
+      const updated = workflows.map(w =>
+        w.id === id ? { ...w, status: result.status || 'running', current_phase: result.current_phase || 'analyze' } : w
+      );
+      set({
+        workflows: updated,
+        activeWorkflow: activeWorkflow?.id === id
+          ? { ...activeWorkflow, status: result.status || 'running', current_phase: result.current_phase || 'analyze' }
+          : activeWorkflow,
+        loading: false,
+      });
+      return result;
+    } catch (error) {
+      set({ error: error.message, loading: false });
+      return null;
+    }
+  },
+
+  /**
+   * Run only the plan phase of a workflow.
+   * @param {string} id - Workflow ID
+   */
+  planWorkflow: async (id) => {
+    set({ loading: true, error: null });
+    try {
+      const result = await workflowApi.plan(id);
+      const { workflows, activeWorkflow } = get();
+      const updated = workflows.map(w =>
+        w.id === id ? { ...w, status: result.status || 'running', current_phase: result.current_phase || 'plan' } : w
+      );
+      set({
+        workflows: updated,
+        activeWorkflow: activeWorkflow?.id === id
+          ? { ...activeWorkflow, status: result.status || 'running', current_phase: result.current_phase || 'plan' }
+          : activeWorkflow,
+        loading: false,
+      });
+      return result;
+    } catch (error) {
+      set({ error: error.message, loading: false });
+      return null;
+    }
+  },
+
+  /**
+   * Regenerate the plan with optional additional context.
+   * @param {string} id - Workflow ID
+   * @param {string} [context] - Optional additional context
+   */
+  replanWorkflow: async (id, context = '') => {
+    set({ loading: true, error: null });
+    try {
+      const result = await workflowApi.replan(id, context);
+      const { workflows, activeWorkflow } = get();
+      const updated = workflows.map(w =>
+        w.id === id ? { ...w, status: result.status || 'running', current_phase: result.current_phase || 'plan' } : w
+      );
+      set({
+        workflows: updated,
+        activeWorkflow: activeWorkflow?.id === id
+          ? { ...activeWorkflow, status: result.status || 'running', current_phase: result.current_phase || 'plan' }
+          : activeWorkflow,
+        loading: false,
+      });
+      return result;
+    } catch (error) {
+      set({ error: error.message, loading: false });
+      return null;
+    }
+  },
+
+  /**
+   * Run only the execute phase of a workflow.
+   * @param {string} id - Workflow ID
+   */
+  executeWorkflow: async (id) => {
+    set({ loading: true, error: null });
+    try {
+      const result = await workflowApi.execute(id);
+      const { workflows, activeWorkflow } = get();
+      const updated = workflows.map(w =>
+        w.id === id ? { ...w, status: result.status || 'running', current_phase: result.current_phase || 'execute' } : w
+      );
+      set({
+        workflows: updated,
+        activeWorkflow: activeWorkflow?.id === id
+          ? { ...activeWorkflow, status: result.status || 'running', current_phase: result.current_phase || 'execute' }
+          : activeWorkflow,
+        loading: false,
+      });
+      return result;
+    } catch (error) {
+      set({ error: error.message, loading: false });
+      return null;
+    }
+  },
+
   deleteWorkflow: async (id) => {
     set({ loading: true, error: null });
     try {
@@ -343,6 +459,37 @@ const useWorkflowStore = create((set, get) => ({
     if (activeWorkflow?.id === data.workflow_id) {
       set({ activeWorkflow: { ...activeWorkflow, status: 'running' } });
     }
+  },
+
+  // Phase event handlers
+  handlePhaseStarted: (data) => {
+    const { workflows, activeWorkflow } = get();
+    const updated = workflows.map(w => {
+      if (w.id === data.workflow_id) {
+        return { ...w, current_phase: data.phase, status: 'running', updated_at: data.timestamp };
+      }
+      return w;
+    });
+    set({ workflows: updated });
+    if (activeWorkflow?.id === data.workflow_id) {
+      set({ activeWorkflow: { ...activeWorkflow, current_phase: data.phase, status: 'running' } });
+    }
+  },
+
+  handlePhaseCompleted: (data) => {
+    const { workflows, activeWorkflow } = get();
+    // When a phase completes, the workflow might still be running (next phase)
+    // or completed (final phase). We update the phase and let other events
+    // update the status if needed.
+    const updated = workflows.map(w => {
+      if (w.id === data.workflow_id) {
+        return { ...w, updated_at: data.timestamp };
+      }
+      return w;
+    });
+    set({ workflows: updated });
+    // Trigger a refresh to get the latest state including next phase
+    get().fetchWorkflow(data.workflow_id);
   },
 
   clearError: () => set({ error: null }),
