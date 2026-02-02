@@ -31,9 +31,18 @@ import {
   Trash2,
   FastForward,
   RotateCcw,
+  Search,
+  List,
+  FileText,
+  Network,
+  LayoutList,
+  FolderTree,
 } from 'lucide-react';
 import { ConfirmDialog } from '../components/config/ConfirmDialog';
 import { ExecutionModeBadge, PhaseStepper, ReplanModal, IssuesPanel } from '../components/workflow';
+import FileTree from '../components/FileTree';
+import CodeEditor from '../components/CodeEditor';
+import WorkflowGraph from '../components/WorkflowGraph';
 
 function normalizeWhitespace(s) {
   return String(s || '').replace(/\s+/g, ' ').trim();
@@ -269,6 +278,10 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
 
   const handleDownloadAttachment = (attachment) => {
     window.open(`/api/v1/workflows/${workflow.id}/attachments/${attachment.id}/download`, '_blank');
+  };
+
+  const handleDownloadArtifacts = () => {
+    window.open(`/api/v1/workflows/${workflow.id}/download`, '_blank');
   };
 
   const handleDelete = useCallback(async () => {
@@ -659,177 +672,218 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
     { id: 'plan', label: 'Plan', docs: artifactIndex?.docs.plan || [] },
   ]), [artifactIndex]);
 
+  const [activeMobileTab, setActiveMobileTab] = useState('tasks'); // 'tasks', 'preview', 'activity'
+  const [taskView, setTaskView] = useState('list'); // 'list' | 'graph'
+
+  // Contextual Log Filtering
+  const selectedTaskId = useMemo(() => {
+    if (!selectedDoc?.key) return null;
+    // Match task-plan:task-ID or task-output:task-ID
+    const match = selectedDoc.key.match(/^task-(?:plan|output):(.+)$/);
+    return match ? match[1] : null;
+  }, [selectedDoc]);
+
+  const filteredActivity = useMemo(() => {
+    if (!selectedTaskId) return agentActivity;
+    return agentActivity.filter(entry => {
+      // Check if event data contains specific task_id
+      if (entry.data?.task_id === selectedTaskId) return true;
+      // Fallback: check if message mentions task ID (less precise but useful)
+      if (entry.message && entry.message.includes(selectedTaskId)) return true;
+      // Fallback: check if task name is in message (if available)
+      const taskName = tasks.find(t => t.id === selectedTaskId)?.name;
+      if (taskName && entry.message && entry.message.includes(taskName)) return true;
+      
+      return false;
+    });
+  }, [agentActivity, selectedTaskId, tasks]);
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
-      <div className="flex items-center gap-4">
-        <button
-          onClick={onBack}
-          className="p-2 rounded-lg hover:bg-accent transition-colors"
-        >
-          <ArrowLeft className="w-5 h-5 text-muted-foreground" />
-        </button>
-        <div className="min-w-0">
-          <div className="flex items-center gap-2 group">
-            <h1 className="text-xl font-semibold text-foreground line-clamp-1">{displayTitle}</h1>
-            {canEdit && (
+      <div className="sticky top-14 z-30 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 -mx-3 sm:-mx-6 px-3 sm:px-6 py-3 border-b border-border shadow-sm mb-6 transition-all">
+        <div className="flex flex-col md:flex-row md:items-center gap-4">
+          <div className="flex items-center gap-4 w-full md:w-auto">
+            <button
+              onClick={onBack}
+              className="p-2 rounded-lg hover:bg-accent transition-colors shrink-0"
+            >
+              <ArrowLeft className="w-5 h-5 text-muted-foreground" />
+            </button>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 group">
+                <h1 className="text-xl font-semibold text-foreground line-clamp-1">{displayTitle}</h1>
+                {canEdit && (
+                  <button
+                    onClick={() => setEditModalOpen(true)}
+                    className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-accent text-muted-foreground hover:text-foreground transition-all"
+                    title="Edit workflow"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center gap-3 mt-1">
+                <p className="text-sm text-muted-foreground">{workflow.id}</p>
+                <ExecutionModeBadge config={workflow.config} variant="inline" />
+              </div>
+            </div>
+          </div>
+
+          {/* Phase Progress Stepper - inline */}
+          <div className="hidden md:flex flex-1 justify-center">
+            <PhaseStepper workflow={workflow} compact />
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap md:justify-end w-full md:w-auto">
+            {workflow.status === 'running' && (
+              <AgentActivityCompact activeAgents={activeAgents} />
+            )}
+
+            {/* Phase action buttons - inline */}
+            {workflow.status === 'pending' && (
+              <>
+                <button
+                  onClick={() => startWorkflow(workflow.id)}
+                  disabled={loading}
+                  className="flex-1 md:flex-none inline-flex justify-center items-center gap-2 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-all"
+                >
+                  {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <FastForward className="w-4 h-4" />}
+                  Run All
+                </button>
+                <button
+                  onClick={() => analyzeWorkflow(workflow.id)}
+                  disabled={loading}
+                  className="flex-1 md:flex-none inline-flex justify-center items-center gap-2 px-3 py-2 rounded-lg bg-info/10 text-info text-sm font-medium hover:bg-info/20 disabled:opacity-50 transition-all"
+                >
+                  {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+                  Analyze
+                </button>
+              </>
+            )}
+
+            {/* Plan button - after analyze completes */}
+            {workflow.status === 'completed' && workflow.current_phase === 'plan' && (
               <button
-                onClick={() => setEditModalOpen(true)}
-                className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-accent text-muted-foreground hover:text-foreground transition-all"
-                title="Edit workflow"
+                onClick={() => planWorkflow(workflow.id)}
+                disabled={loading}
+                className="flex-1 md:flex-none inline-flex justify-center items-center gap-2 px-3 py-2 rounded-lg bg-info/10 text-info text-sm font-medium hover:bg-info/20 disabled:opacity-50 transition-all"
               >
-                <Pencil className="w-4 h-4" />
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+                Plan
               </button>
             )}
-          </div>
-          <div className="flex items-center gap-3 mt-1">
-            <p className="text-sm text-muted-foreground">{workflow.id}</p>
-            <ExecutionModeBadge config={workflow.config} variant="inline" />
-          </div>
-        </div>
 
-        {/* Phase Progress Stepper - inline */}
-        <div className="flex-1 flex justify-center">
-          <PhaseStepper workflow={workflow} compact />
-        </div>
+            {/* Replan button - when plan or execute phase completed */}
+            {workflow.status === 'completed' && (workflow.current_phase === 'plan' || workflow.current_phase === 'execute') && (
+              <button
+                onClick={() => setReplanModalOpen(true)}
+                disabled={loading}
+                className="flex-1 md:flex-none inline-flex justify-center items-center gap-2 px-3 py-2 rounded-lg bg-warning/10 text-warning text-sm font-medium hover:bg-warning/20 disabled:opacity-50 transition-all"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Replan
+              </button>
+            )}
 
-        <div className="flex items-center gap-2 flex-wrap justify-end">
-          {workflow.status === 'running' && (
-            <AgentActivityCompact activeAgents={activeAgents} />
-          )}
+            {/* Execute button - after plan completes */}
+            {workflow.status === 'completed' && workflow.current_phase === 'execute' && (
+              <button
+                onClick={() => executeWorkflow(workflow.id)}
+                disabled={loading}
+                className="flex-1 md:flex-none inline-flex justify-center items-center gap-2 px-3 py-2 rounded-lg bg-success/10 text-success text-sm font-medium hover:bg-success/20 disabled:opacity-50 transition-all"
+              >
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+                Execute
+              </button>
+            )}
 
-          {/* Phase action buttons - inline */}
-          {workflow.status === 'pending' && (
-            <>
+            {/* Resume button - for paused workflows */}
+            {workflow.status === 'paused' && (
+              <button
+                onClick={() => resumeWorkflow(workflow.id)}
+                disabled={loading}
+                className="flex-1 md:flex-none inline-flex justify-center items-center gap-2 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-all"
+              >
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+                Resume
+              </button>
+            )}
+
+            {/* Retry button - for failed workflows */}
+            {workflow.status === 'failed' && (
               <button
                 onClick={() => startWorkflow(workflow.id)}
                 disabled={loading}
-                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-all"
+                className="flex-1 md:flex-none inline-flex justify-center items-center gap-2 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-all"
               >
-                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <FastForward className="w-4 h-4" />}
-                Run All
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
+                Retry
               </button>
+            )}
+
+            {/* Running indicator */}
+            {workflow.status === 'running' && (
+              <div className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-info/10 text-info text-sm">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                {workflow.current_phase ? `Running ${workflow.current_phase}...` : 'Running...'}
+              </div>
+            )}
+
+            {/* Pause/Stop controls - when running */}
+            {workflow.status === 'running' && (
+              <>
+                <button
+                  onClick={() => pauseWorkflow(workflow.id)}
+                  className="flex-1 md:flex-none inline-flex justify-center items-center gap-2 px-3 py-2 rounded-lg bg-secondary text-secondary-foreground text-sm font-medium hover:bg-secondary/80 transition-colors"
+                >
+                  <Pause className="w-4 h-4" />
+                  Pause
+                </button>
+                <button
+                  onClick={() => stopWorkflow(workflow.id)}
+                  className="flex-1 md:flex-none inline-flex justify-center items-center gap-2 px-3 py-2 rounded-lg bg-destructive text-destructive-foreground text-sm font-medium hover:bg-destructive/90 transition-colors"
+                >
+                  <StopCircle className="w-4 h-4" />
+                  Stop
+                </button>
+              </>
+            )}
+
+                      {/* Stop when paused */}
+                      {workflow.status === 'paused' && (
+                        <button
+                          onClick={() => stopWorkflow(workflow.id)}
+                          className="flex-1 md:flex-none inline-flex justify-center items-center gap-2 px-3 py-2 rounded-lg bg-destructive text-destructive-foreground text-sm font-medium hover:bg-destructive/90 transition-colors"
+                        >
+                          <StopCircle className="w-4 h-4" />
+                          Stop
+                        </button>
+                      )}
+            
+                      {/* Download Artifacts */}
+                      {workflow.status !== 'pending' && (
+                        <button
+                          onClick={handleDownloadArtifacts}
+                          className="flex-1 md:flex-none inline-flex justify-center items-center gap-2 px-3 py-2 rounded-lg bg-secondary text-secondary-foreground text-sm font-medium hover:bg-secondary/80 transition-colors"
+                          title="Download artifacts"
+                        >
+                          <Download className="w-4 h-4" />
+                          Download
+                        </button>
+                      )}
+            
+                      {/* Delete button */}            {canDelete && (
               <button
-                onClick={() => analyzeWorkflow(workflow.id)}
-                disabled={loading}
-                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-info/10 text-info text-sm font-medium hover:bg-info/20 disabled:opacity-50 transition-all"
+                onClick={() => setDeleteDialogOpen(true)}
+                className="flex-1 md:flex-none inline-flex justify-center items-center gap-2 px-3 py-2 rounded-lg bg-destructive/10 text-destructive text-sm font-medium hover:bg-destructive/20 transition-colors"
+                title="Delete workflow"
               >
-                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
-                Analyze
+                <Trash2 className="w-4 h-4" />
+                Delete
               </button>
-            </>
-          )}
-
-          {/* Plan button - after analyze completes */}
-          {workflow.status === 'completed' && workflow.current_phase === 'plan' && (
-            <button
-              onClick={() => planWorkflow(workflow.id)}
-              disabled={loading}
-              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-info/10 text-info text-sm font-medium hover:bg-info/20 disabled:opacity-50 transition-all"
-            >
-              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
-              Plan
-            </button>
-          )}
-
-          {/* Replan button - when plan or execute phase completed */}
-          {workflow.status === 'completed' && (workflow.current_phase === 'plan' || workflow.current_phase === 'execute') && (
-            <button
-              onClick={() => setReplanModalOpen(true)}
-              disabled={loading}
-              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-warning/10 text-warning text-sm font-medium hover:bg-warning/20 disabled:opacity-50 transition-all"
-            >
-              <RefreshCw className="w-4 h-4" />
-              Replan
-            </button>
-          )}
-
-          {/* Execute button - after plan completes */}
-          {workflow.status === 'completed' && workflow.current_phase === 'execute' && (
-            <button
-              onClick={() => executeWorkflow(workflow.id)}
-              disabled={loading}
-              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-success/10 text-success text-sm font-medium hover:bg-success/20 disabled:opacity-50 transition-all"
-            >
-              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
-              Execute
-            </button>
-          )}
-
-          {/* Resume button - for paused workflows */}
-          {workflow.status === 'paused' && (
-            <button
-              onClick={() => resumeWorkflow(workflow.id)}
-              disabled={loading}
-              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-all"
-            >
-              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
-              Resume
-            </button>
-          )}
-
-          {/* Retry button - for failed workflows */}
-          {workflow.status === 'failed' && (
-            <button
-              onClick={() => startWorkflow(workflow.id)}
-              disabled={loading}
-              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-all"
-            >
-              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
-              Retry
-            </button>
-          )}
-
-          {/* Running indicator */}
-          {workflow.status === 'running' && (
-            <div className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-info/10 text-info text-sm">
-              <Loader2 className="w-4 h-4 animate-spin" />
-              {workflow.current_phase ? `Running ${workflow.current_phase}...` : 'Running...'}
-            </div>
-          )}
-
-          {/* Pause/Stop controls - when running */}
-          {workflow.status === 'running' && (
-            <>
-              <button
-                onClick={() => pauseWorkflow(workflow.id)}
-                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-secondary text-secondary-foreground text-sm font-medium hover:bg-secondary/80 transition-colors"
-              >
-                <Pause className="w-4 h-4" />
-                Pause
-              </button>
-              <button
-                onClick={() => stopWorkflow(workflow.id)}
-                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-destructive text-destructive-foreground text-sm font-medium hover:bg-destructive/90 transition-colors"
-              >
-                <StopCircle className="w-4 h-4" />
-                Stop
-              </button>
-            </>
-          )}
-
-          {/* Stop when paused */}
-          {workflow.status === 'paused' && (
-            <button
-              onClick={() => stopWorkflow(workflow.id)}
-              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-destructive text-destructive-foreground text-sm font-medium hover:bg-destructive/90 transition-colors"
-            >
-              <StopCircle className="w-4 h-4" />
-              Stop
-            </button>
-          )}
-
-          {/* Delete button */}
-          {canDelete && (
-            <button
-              onClick={() => setDeleteDialogOpen(true)}
-              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-destructive/10 text-destructive text-sm font-medium hover:bg-destructive/20 transition-colors"
-              title="Delete workflow"
-            >
-              <Trash2 className="w-4 h-4" />
-              Delete
-            </button>
-          )}
+            )}
+          </div>
         </div>
       </div>
 
@@ -857,8 +911,8 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
       )}
 
       {/* Info Card */}
-      <div className="p-6 rounded-xl border border-border bg-card">
-        <div className="flex items-start justify-between mb-4">
+      <div className="p-4 rounded-xl border border-border bg-card">
+        <div className="flex items-start justify-between mb-3">
           <div className="flex-1 min-w-0">
             <p className="text-sm text-muted-foreground mb-2 line-clamp-3">
               {workflow.prompt || 'No prompt'}
@@ -878,7 +932,7 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
             </button>
           )}
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 pt-4 border-t border-border">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3 pt-3 border-t border-border">
           <div>
             <p className="text-xs text-muted-foreground">Phase</p>
             <p className="text-sm font-medium text-foreground">{workflow.current_phase || 'N/A'}</p>
@@ -902,21 +956,76 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
         </div>
       </div>
 
-      {/* Agent Activity Panel - Show when running or when there's persisted activity */}
-      {(agentActivity.length > 0 || activeAgents.length > 0) && (
-        <AgentActivity
-          workflowId={workflow.id}
-          activity={agentActivity}
-          activeAgents={activeAgents}
-          expanded={activityExpanded}
-          onToggle={() => setActivityExpanded(!activityExpanded)}
-          workflowStartTime={workflow.status === 'running' ? workflow.updated_at : null}
-        />
-      )}
+      {/* Mobile Tab Bar */}
+      <div className="md:hidden flex border-b border-border mb-4">
+        <button
+          onClick={() => setActiveMobileTab('tasks')}
+          className={`flex-1 pb-3 text-sm font-medium text-center border-b-2 transition-colors ${
+            activeMobileTab === 'tasks'
+              ? 'border-primary text-primary'
+              : 'border-transparent text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          <div className="flex items-center justify-center gap-2">
+            <List className="w-4 h-4" />
+            Tasks
+          </div>
+        </button>
+        <button
+          onClick={() => setActiveMobileTab('preview')}
+          className={`flex-1 pb-3 text-sm font-medium text-center border-b-2 transition-colors ${
+            activeMobileTab === 'preview'
+              ? 'border-primary text-primary'
+              : 'border-transparent text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          <div className="flex items-center justify-center gap-2">
+            <FileText className="w-4 h-4" />
+            Preview
+          </div>
+        </button>
+        <button
+          onClick={() => setActiveMobileTab('activity')}
+          className={`flex-1 pb-3 text-sm font-medium text-center border-b-2 transition-colors ${
+            activeMobileTab === 'activity'
+              ? 'border-primary text-primary'
+              : 'border-transparent text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          <div className="flex items-center justify-center gap-2">
+            <Activity className="w-4 h-4" />
+            Activity
+          </div>
+        </button>
+      </div>
+
+      {/* Agent Activity Panel - Conditionally visible on mobile */}
+      <div className={`${activeMobileTab === 'activity' ? 'block' : 'hidden'} md:block`}>
+        {(agentActivity.length > 0 || activeAgents.length > 0) && (
+          <>
+            {selectedTaskId && filteredActivity.length !== agentActivity.length && (
+              <div className="mb-2 px-4 py-2 bg-accent/50 rounded-lg flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">
+                  Showing logs for <span className="font-mono font-medium text-foreground">{selectedTaskId}</span> ({filteredActivity.length}/{agentActivity.length} events)
+                </span>
+                {/* Optional: Add a button to disable filtering while keeping doc selected if desired */}
+              </div>
+            )}
+            <AgentActivity
+              workflowId={workflow.id}
+              activity={filteredActivity}
+              activeAgents={activeAgents}
+              expanded={activityExpanded}
+              onToggle={() => setActivityExpanded(!activityExpanded)}
+              workflowStartTime={workflow.status === 'running' ? workflow.updated_at : null}
+            />
+          </>
+        )}
+      </div>
 
       {/* Inspector */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="space-y-6">
+        <div className={`space-y-6 ${activeMobileTab === 'tasks' ? 'block' : 'hidden'} md:block`}>
           {/* Attachments */}
           <div className="p-4 rounded-xl border border-border bg-card">
             <div className="flex items-center justify-between mb-3">
@@ -998,22 +1107,43 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
           <div className="p-4 rounded-xl border border-border bg-card">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-semibold text-foreground">Tasks ({tasks.length})</h3>
+              <div className="flex bg-muted/50 p-0.5 rounded-lg">
+                <button
+                  onClick={() => setTaskView('list')}
+                  className={`p-1.5 rounded-md transition-colors ${taskView === 'list' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                  title="List View"
+                >
+                  <LayoutList className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={() => setTaskView('graph')}
+                  className={`p-1.5 rounded-md transition-colors ${taskView === 'graph' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                  title="Graph View"
+                >
+                  <Network className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
-            {tasks.length > 0 ? (
-              <div className="space-y-2 max-h-[45vh] overflow-y-auto pr-1">
-                {tasks.map((task) => (
-                  <TaskItem
-                    key={task.id}
-                    task={task}
-                    selected={selectedDoc?.key?.includes(`:${task.id}`)}
-                    onClick={() => selectTask(task)}
-                  />
-                ))}
-              </div>
+            
+            {taskView === 'list' ? (
+              tasks.length > 0 ? (
+                <div className="space-y-2 max-h-[45vh] overflow-y-auto pr-1">
+                  {tasks.map((task) => (
+                    <TaskItem
+                      key={task.id}
+                      task={task}
+                      selected={selectedDoc?.key?.includes(`:${task.id}`)}
+                      onClick={() => selectTask(task)}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  <p className="text-sm">No tasks yet</p>
+                </div>
+              )
             ) : (
-              <div className="text-center py-8 text-muted-foreground">
-                <p className="text-sm">No tasks yet</p>
-              </div>
+              <WorkflowGraph tasks={tasks} />
             )}
           </div>
 
@@ -1037,34 +1167,19 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
               </p>
             ) : (
               <div className="space-y-4">
-                <p className="text-xs text-muted-foreground truncate">{artifactIndex.reportPath}</p>
+                <p className="text-xs text-muted-foreground truncate flex items-center gap-1">
+                  <FolderTree className="w-3 h-3" />
+                  {artifactIndex.reportPath}
+                </p>
                 <div className="space-y-4 max-h-[45vh] overflow-y-auto pr-1">
-                  {docGroups.map((group) => (
-                    group.docs.length > 0 && (
-                      <div key={group.id} className="space-y-2">
-                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                          {group.label}
-                        </p>
-                        <div className="space-y-1">
-                          {group.docs.map((doc) => (
-                            <button
-                              key={doc.key}
-                              type="button"
-                              onClick={() => setSelectedDoc(doc)}
-                              className={`w-full px-3 py-2 rounded-lg text-left text-sm transition-colors ${
-                                selectedDoc?.key === doc.key
-                                  ? 'bg-primary/10 text-foreground border border-primary/20'
-                                  : 'hover:bg-accent/40 text-muted-foreground'
-                              }`}
-                              title={doc.path || doc.title}
-                            >
-                              <span className="block truncate">{doc.title}</span>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )
-                  ))}
+                  <FileTree 
+                    items={docGroups.flatMap(g => g.docs.map(d => ({ 
+                      ...d, 
+                      path: `${g.label}/${d.title}` // Artificial path for tree structure based on groups
+                    })))}
+                    onSelect={setSelectedDoc}
+                    selectedKey={selectedDoc?.key}
+                  />
                 </div>
               </div>
             )}
@@ -1072,8 +1187,8 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
         </div>
 
         {/* Preview */}
-        <div className="lg:col-span-2 p-6 rounded-xl border border-border bg-card">
-          <div className="flex items-start justify-between gap-4 mb-4">
+        <div className={`lg:col-span-2 p-6 rounded-xl border border-border bg-card flex flex-col max-h-[80vh] ${activeMobileTab === 'preview' ? 'block' : 'hidden'} md:flex`}>
+          <div className="flex items-start justify-between gap-4 mb-4 flex-none">
             <div className="min-w-0">
               <h3 className="text-lg font-semibold text-foreground truncate">
                 {selectedDoc?.title || 'Preview'}
@@ -1108,22 +1223,32 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
             </div>
           </div>
 
-          {docLoading ? (
-            <div className="space-y-3">
-              <div className="h-4 w-1/3 bg-muted rounded animate-pulse" />
-              <div className="h-4 w-2/3 bg-muted rounded animate-pulse" />
-              <div className="h-4 w-1/2 bg-muted rounded animate-pulse" />
-              <div className="h-4 w-3/4 bg-muted rounded animate-pulse" />
-            </div>
-          ) : docError ? (
-            <div className="text-sm text-error">{docError}</div>
-          ) : selectedDoc ? (
-            <MarkdownViewer markdown={docContent} />
-          ) : (
-            <div className="text-sm text-muted-foreground">
-              Select a task or document to preview.
-            </div>
-          )}
+          <div className="flex-1 overflow-y-auto min-h-0 pr-2 scrollbar-thin">
+            {docLoading ? (
+              <div className="space-y-3">
+                <div className="h-4 w-1/3 bg-muted rounded animate-pulse" />
+                <div className="h-4 w-2/3 bg-muted rounded animate-pulse" />
+                <div className="h-4 w-1/2 bg-muted rounded animate-pulse" />
+                <div className="h-4 w-3/4 bg-muted rounded animate-pulse" />
+              </div>
+            ) : docError ? (
+              <div className="text-sm text-error">{docError}</div>
+            ) : selectedDoc ? (
+              selectedDoc.path && !selectedDoc.path.endsWith('.md') ? (
+                <CodeEditor 
+                  value={docContent} 
+                  language={selectedDoc.path.split('.').pop()} 
+                  readOnly={true} 
+                />
+              ) : (
+                <MarkdownViewer markdown={docContent} />
+              )
+            ) : (
+              <div className="text-sm text-muted-foreground">
+                Select a task or document to preview.
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -1483,6 +1608,22 @@ function NewWorkflowForm({ onSubmit, onCancel, loading }) {
   );
 }
 
+// Filter Component
+function WorkflowFilters({ filter, setFilter }) {
+  return (
+    <div className="relative w-full sm:w-64">
+      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+      <input
+        type="text"
+        placeholder="Filter workflows..."
+        value={filter}
+        onChange={(e) => setFilter(e.target.value)}
+        className="h-9 w-full pl-9 pr-4 rounded-lg border border-border bg-background text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/20 transition-all"
+      />
+    </div>
+  );
+}
+
 export default function Workflows() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -1491,6 +1632,7 @@ export default function Workflows() {
   const notifyInfo = useUIStore((s) => s.notifyInfo);
   const notifyError = useUIStore((s) => s.notifyError);
   const [showNewForm, setShowNewForm] = useState(false);
+  const [filter, setFilter] = useState('');
 
   // Delete from list state
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -1505,6 +1647,18 @@ export default function Workflows() {
       fetchWorkflow(id);
     }
   }, [fetchWorkflow, id]);
+
+  // Filter workflows
+  const filteredWorkflows = useMemo(() => {
+    if (!filter) return workflows;
+    const lowerFilter = filter.toLowerCase();
+    
+    return workflows.filter(w => 
+      (deriveWorkflowTitle(w).toLowerCase().includes(lowerFilter)) ||
+      (w.id && w.id.toLowerCase().includes(lowerFilter)) ||
+      (w.prompt && w.prompt.toLowerCase().includes(lowerFilter))
+    );
+  }, [workflows, filter]);
 
   // Fetch tasks for the selected workflow
   const fetchTasks = useCallback(async (workflowId) => {
@@ -1594,18 +1748,21 @@ export default function Workflows() {
   // Show workflow list
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-foreground tracking-tight">Workflows</h1>
           <p className="text-sm text-muted-foreground mt-1">Manage your AI automation workflows</p>
         </div>
-        <Link
-          to="/workflows/new"
-          className="hidden md:flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          New Workflow
-        </Link>
+        <div className="flex flex-col sm:flex-row gap-3">
+          <WorkflowFilters filter={filter} setFilter={setFilter} />
+          <Link
+            to="/workflows/new"
+            className="hidden md:flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            New Workflow
+          </Link>
+        </div>
       </div>
 
       {loading && workflows.length === 0 ? (
@@ -1614,9 +1771,9 @@ export default function Workflows() {
             <div key={i} className="h-32 rounded-xl bg-muted animate-pulse" />
           ))}
         </div>
-      ) : workflows.length > 0 ? (
+      ) : filteredWorkflows.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {workflows.map((workflow) => (
+          {filteredWorkflows.map((workflow) => (
             <WorkflowCard
               key={workflow.id}
               workflow={workflow}
@@ -1630,15 +1787,19 @@ export default function Workflows() {
           <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-muted flex items-center justify-center">
             <GitBranch className="w-8 h-8 text-muted-foreground" />
           </div>
-          <h3 className="text-lg font-semibold text-foreground mb-2">No workflows yet</h3>
-          <p className="text-sm text-muted-foreground mb-4">Create your first workflow to get started</p>
-          <Link
-            to="/workflows/new"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            Create Workflow
-          </Link>
+          <h3 className="text-lg font-semibold text-foreground mb-2">No workflows found</h3>
+          <p className="text-sm text-muted-foreground mb-4">
+            {filter ? 'Try adjusting your search terms' : 'Create your first workflow to get started'}
+          </p>
+          {!filter && (
+            <Link
+              to="/workflows/new"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              Create Workflow
+            </Link>
+          )}
         </div>
       )}
       

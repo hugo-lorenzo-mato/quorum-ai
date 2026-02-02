@@ -1,11 +1,15 @@
 package api
 
 import (
+	"archive/zip"
 	"context"
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -629,6 +633,79 @@ func randomSuffix(length int) string {
 		b[i] = charset[b[i]%byte(len(charset))]
 	}
 	return string(b)
+}
+
+// handleDownloadWorkflow archives and downloads the workflow report directory.
+// GET /api/v1/workflows/{workflowID}/download
+func (s *Server) handleDownloadWorkflow(w http.ResponseWriter, r *http.Request) {
+	workflowID := chi.URLParam(r, "workflowID")
+	if workflowID == "" {
+		respondError(w, http.StatusBadRequest, "workflow ID required")
+		return
+	}
+
+	ctx := r.Context()
+	state, err := s.stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
+	if err != nil || state == nil {
+		respondError(w, http.StatusNotFound, "workflow not found")
+		return
+	}
+
+	reportPath := state.ReportPath
+	if reportPath == "" {
+		respondError(w, http.StatusNotFound, "no report artifacts found")
+		return
+	}
+
+	// Verify report path exists
+	if _, err := os.Stat(reportPath); os.IsNotExist(err) {
+		respondError(w, http.StatusNotFound, "report directory does not exist")
+		return
+	}
+
+	// Set headers for zip download
+	filename := fmt.Sprintf("%s-artifacts.zip", workflowID)
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
+	w.Header().Set("Content-Type", "application/zip")
+
+	zipWriter := zip.NewWriter(w)
+	defer zipWriter.Close()
+
+	// Walk the report directory and add files to zip
+	err = filepath.Walk(reportPath, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return nil
+		}
+
+		// Create relative path for zip entry
+		relPath, err := filepath.Rel(reportPath, path)
+		if err != nil {
+			return err
+		}
+
+		zipFile, err := zipWriter.Create(relPath)
+		if err != nil {
+			return err
+		}
+
+		fsFile, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer fsFile.Close()
+
+		_, err = io.Copy(zipFile, fsFile)
+		return err
+	})
+
+	if err != nil {
+		s.logger.Error("failed to stream zip", "workflow_id", workflowID, "error", err)
+		// Cannot send error response as headers are already sent
+		return
+	}
 }
 
 // HandleRunWorkflow starts execution of a workflow.
