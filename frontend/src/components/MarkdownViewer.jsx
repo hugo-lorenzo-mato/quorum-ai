@@ -79,7 +79,7 @@ export default function MarkdownViewer({ markdown }) {
   }, [theme]);
 
   return (
-    <div className="space-y-4 relative break-words">
+    <div className="space-y-4 relative">
       <button
         type="button"
         onClick={handleCopy}
@@ -152,7 +152,7 @@ export default function MarkdownViewer({ markdown }) {
                 href={href}
                 target="_blank"
                 rel="noreferrer"
-                className="text-primary underline underline-offset-4 hover:opacity-80"
+                className="text-primary underline underline-offset-4 hover:opacity-80 break-all"
                 {...props}
               >
                 {children}
@@ -179,11 +179,14 @@ export default function MarkdownViewer({ markdown }) {
               </blockquote>
             ),
             hr: (props) => <hr className="my-8 border-border" {...props} />,
-            code: ({ children, className, inline, ...props }) => {
+            code: ({ children, className, ...props }) => {
               const match = /language-([a-zA-Z0-9_-]+)/.exec(className || '');
               const content = String(children || '').replace(/\n$/, '');
+              // In react-markdown v9, inline code has no className and no newlines
+              const isInline = !className && !content.includes('\n');
 
-              if (!inline && match) {
+              if (match) {
+                // Block code with syntax highlighting
                 return (
                   <>
                     <CopyButton text={content} />
@@ -203,7 +206,8 @@ export default function MarkdownViewer({ markdown }) {
                 );
               }
 
-              if (!inline) {
+              if (!isInline) {
+                // Block code without language
                 return (
                   <>
                     <CopyButton text={content} />
@@ -216,8 +220,9 @@ export default function MarkdownViewer({ markdown }) {
                 );
               }
 
+              // Inline code
               return (
-                <code className="px-1.5 py-0.5 rounded-md bg-muted font-mono text-[0.9em] border border-border/50 whitespace-nowrap" {...props}>
+                <code className="px-1.5 py-0.5 rounded-md bg-muted font-mono text-[0.9em] border border-border/50" {...props}>
                   {children}
                 </code>
               );
