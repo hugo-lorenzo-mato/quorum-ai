@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"testing"
 
@@ -86,10 +87,12 @@ func TestAtomicWriteConfig(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Contains(t, string(data), "level: info")
 
-	// Verify permissions
-	info, err := os.Stat(configPath)
-	assert.NoError(t, err)
-	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+	// Verify permissions (Unix only - Windows doesn't support Unix permissions)
+	if runtime.GOOS != "windows" {
+		info, err := os.Stat(configPath)
+		assert.NoError(t, err)
+		assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+	}
 }
 
 func TestAtomicWriteConfig_CreatesDirectory(t *testing.T) {

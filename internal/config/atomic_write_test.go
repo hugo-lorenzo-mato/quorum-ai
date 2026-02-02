@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -55,6 +56,10 @@ func TestAtomicWrite_OverwriteExisting(t *testing.T) {
 }
 
 func TestAtomicWrite_PreservesPermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping permission test on Windows - Unix permissions not supported")
+	}
+
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.yaml")
 
@@ -146,6 +151,9 @@ func TestCalculateETag_DifferentContent(t *testing.T) {
 }
 
 func TestAtomicWrite_FailsOnInvalidPath(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping invalid path test on Windows - path handling differs")
+	}
 	err := AtomicWrite("/nonexistent/directory/config.yaml", []byte("content"))
 	if err == nil {
 		t.Fatal("expected error for invalid path")
