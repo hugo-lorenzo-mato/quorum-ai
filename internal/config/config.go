@@ -7,126 +7,126 @@ import (
 
 // Config holds all application configuration.
 type Config struct {
-	Log         LogConfig         `mapstructure:"log"`
-	Trace       TraceConfig       `mapstructure:"trace"`
-	Diagnostics DiagnosticsConfig `mapstructure:"diagnostics"`
-	Workflow    WorkflowConfig    `mapstructure:"workflow"`
-	Phases      PhasesConfig      `mapstructure:"phases"`
-	Agents      AgentsConfig      `mapstructure:"agents"`
-	State       StateConfig       `mapstructure:"state"`
-	Git         GitConfig         `mapstructure:"git"`
-	GitHub      GitHubConfig      `mapstructure:"github"`
-	Chat        ChatConfig        `mapstructure:"chat"`
-	Report      ReportConfig      `mapstructure:"report"`
-	Issues      IssuesConfig      `mapstructure:"issues"`
+	Log         LogConfig         `mapstructure:"log" yaml:"log"`
+	Trace       TraceConfig       `mapstructure:"trace" yaml:"trace"`
+	Diagnostics DiagnosticsConfig `mapstructure:"diagnostics" yaml:"diagnostics"`
+	Workflow    WorkflowConfig    `mapstructure:"workflow" yaml:"workflow"`
+	Phases      PhasesConfig      `mapstructure:"phases" yaml:"phases"`
+	Agents      AgentsConfig      `mapstructure:"agents" yaml:"agents"`
+	State       StateConfig       `mapstructure:"state" yaml:"state"`
+	Git         GitConfig         `mapstructure:"git" yaml:"git"`
+	GitHub      GitHubConfig      `mapstructure:"github" yaml:"github"`
+	Chat        ChatConfig        `mapstructure:"chat" yaml:"chat"`
+	Report      ReportConfig      `mapstructure:"report" yaml:"report"`
+	Issues      IssuesConfig      `mapstructure:"issues" yaml:"issues"`
 }
 
 // ChatConfig configures chat behavior in the TUI.
 type ChatConfig struct {
-	Timeout          string `mapstructure:"timeout"`           // Timeout for chat messages (e.g., "3m", "5m")
-	ProgressInterval string `mapstructure:"progress_interval"` // Interval for progress logs (e.g., "15s")
-	Editor           string `mapstructure:"editor"`            // Editor for file editing (e.g., "code", "nvim", "vim")
+	Timeout          string `mapstructure:"timeout" yaml:"timeout"`                     // Timeout for chat messages (e.g., "3m", "5m")
+	ProgressInterval string `mapstructure:"progress_interval" yaml:"progress_interval"` // Interval for progress logs (e.g., "15s")
+	Editor           string `mapstructure:"editor" yaml:"editor"`                       // Editor for file editing (e.g., "code", "nvim", "vim")
 }
 
 // LogConfig configures logging behavior.
 type LogConfig struct {
-	Level  string `mapstructure:"level"`
-	Format string `mapstructure:"format"`
+	Level  string `mapstructure:"level" yaml:"level"`
+	Format string `mapstructure:"format" yaml:"format"`
 }
 
 // TraceConfig configures trace mode output.
 type TraceConfig struct {
-	Mode            string   `mapstructure:"mode"`
-	Dir             string   `mapstructure:"dir"`
-	SchemaVersion   int      `mapstructure:"schema_version"`
-	Redact          bool     `mapstructure:"redact"`
-	RedactPatterns  []string `mapstructure:"redact_patterns"`
-	RedactAllowlist []string `mapstructure:"redact_allowlist"`
-	MaxBytes        int64    `mapstructure:"max_bytes"`
-	TotalMaxBytes   int64    `mapstructure:"total_max_bytes"`
-	MaxFiles        int      `mapstructure:"max_files"`
-	IncludePhases   []string `mapstructure:"include_phases"`
+	Mode            string   `mapstructure:"mode" yaml:"mode"`
+	Dir             string   `mapstructure:"dir" yaml:"dir"`
+	SchemaVersion   int      `mapstructure:"schema_version" yaml:"schema_version"`
+	Redact          bool     `mapstructure:"redact" yaml:"redact"`
+	RedactPatterns  []string `mapstructure:"redact_patterns" yaml:"redact_patterns"`
+	RedactAllowlist []string `mapstructure:"redact_allowlist" yaml:"redact_allowlist"`
+	MaxBytes        int64    `mapstructure:"max_bytes" yaml:"max_bytes"`
+	TotalMaxBytes   int64    `mapstructure:"total_max_bytes" yaml:"total_max_bytes"`
+	MaxFiles        int      `mapstructure:"max_files" yaml:"max_files"`
+	IncludePhases   []string `mapstructure:"include_phases" yaml:"include_phases"`
 }
 
 // DiagnosticsConfig configures system diagnostics and crash recovery.
 type DiagnosticsConfig struct {
 	// Enabled activates the diagnostics subsystem.
-	Enabled bool `mapstructure:"enabled"`
+	Enabled bool `mapstructure:"enabled" yaml:"enabled"`
 	// ResourceMonitoring configures periodic resource tracking.
-	ResourceMonitoring ResourceMonitoringConfig `mapstructure:"resource_monitoring"`
+	ResourceMonitoring ResourceMonitoringConfig `mapstructure:"resource_monitoring" yaml:"resource_monitoring"`
 	// CrashDump configures crash dump generation on panic.
-	CrashDump CrashDumpConfig `mapstructure:"crash_dump"`
+	CrashDump CrashDumpConfig `mapstructure:"crash_dump" yaml:"crash_dump"`
 	// PreflightChecks configures pre-execution health checks.
-	PreflightChecks PreflightConfig `mapstructure:"preflight_checks"`
+	PreflightChecks PreflightConfig `mapstructure:"preflight_checks" yaml:"preflight_checks"`
 }
 
 // ResourceMonitoringConfig configures resource usage monitoring.
 type ResourceMonitoringConfig struct {
 	// Interval between resource snapshots (e.g., "30s", "1m").
-	Interval string `mapstructure:"interval"`
+	Interval string `mapstructure:"interval" yaml:"interval"`
 	// FDThresholdPercent triggers warning when FD usage exceeds this percentage (0-100).
-	FDThresholdPercent int `mapstructure:"fd_threshold_percent"`
+	FDThresholdPercent int `mapstructure:"fd_threshold_percent" yaml:"fd_threshold_percent"`
 	// GoroutineThreshold triggers warning when goroutine count exceeds this.
-	GoroutineThreshold int `mapstructure:"goroutine_threshold"`
+	GoroutineThreshold int `mapstructure:"goroutine_threshold" yaml:"goroutine_threshold"`
 	// MemoryThresholdMB triggers warning when heap memory exceeds this (in MB).
-	MemoryThresholdMB int `mapstructure:"memory_threshold_mb"`
+	MemoryThresholdMB int `mapstructure:"memory_threshold_mb" yaml:"memory_threshold_mb"`
 	// HistorySize is the number of snapshots to retain for trend analysis.
-	HistorySize int `mapstructure:"history_size"`
+	HistorySize int `mapstructure:"history_size" yaml:"history_size"`
 }
 
 // CrashDumpConfig configures crash dump generation.
 type CrashDumpConfig struct {
 	// Dir is the directory for crash dump files.
-	Dir string `mapstructure:"dir"`
+	Dir string `mapstructure:"dir" yaml:"dir"`
 	// MaxFiles is the maximum number of crash dumps to retain.
-	MaxFiles int `mapstructure:"max_files"`
+	MaxFiles int `mapstructure:"max_files" yaml:"max_files"`
 	// IncludeStack includes full goroutine stack traces in crash dumps.
-	IncludeStack bool `mapstructure:"include_stack"`
+	IncludeStack bool `mapstructure:"include_stack" yaml:"include_stack"`
 	// IncludeEnv includes environment variables (redacted) in crash dumps.
-	IncludeEnv bool `mapstructure:"include_env"`
+	IncludeEnv bool `mapstructure:"include_env" yaml:"include_env"`
 }
 
 // PreflightConfig configures pre-execution health checks.
 type PreflightConfig struct {
 	// Enabled activates preflight checks before command execution.
-	Enabled bool `mapstructure:"enabled"`
+	Enabled bool `mapstructure:"enabled" yaml:"enabled"`
 	// MinFreeFDPercent aborts execution if free FD percentage is below this.
-	MinFreeFDPercent int `mapstructure:"min_free_fd_percent"`
+	MinFreeFDPercent int `mapstructure:"min_free_fd_percent" yaml:"min_free_fd_percent"`
 	// MinFreeMemoryMB aborts execution if estimated free memory is below this (in MB).
-	MinFreeMemoryMB int `mapstructure:"min_free_memory_mb"`
+	MinFreeMemoryMB int `mapstructure:"min_free_memory_mb" yaml:"min_free_memory_mb"`
 }
 
 // WorkflowConfig configures workflow execution.
 type WorkflowConfig struct {
-	Timeout    string          `mapstructure:"timeout"`
-	MaxRetries int             `mapstructure:"max_retries"`
-	DryRun     bool            `mapstructure:"dry_run"`
-	Sandbox    bool            `mapstructure:"sandbox"`
-	DenyTools  []string        `mapstructure:"deny_tools"`
-	Heartbeat  HeartbeatConfig `mapstructure:"heartbeat"`
+	Timeout    string          `mapstructure:"timeout" yaml:"timeout"`
+	MaxRetries int             `mapstructure:"max_retries" yaml:"max_retries"`
+	DryRun     bool            `mapstructure:"dry_run" yaml:"dry_run"`
+	Sandbox    bool            `mapstructure:"sandbox" yaml:"sandbox"`
+	DenyTools  []string        `mapstructure:"deny_tools" yaml:"deny_tools"`
+	Heartbeat  HeartbeatConfig `mapstructure:"heartbeat" yaml:"heartbeat"`
 }
 
 // HeartbeatConfig configures the heartbeat system for zombie workflow detection.
 type HeartbeatConfig struct {
 	// Enabled activates the heartbeat system.
-	Enabled bool `mapstructure:"enabled"`
+	Enabled bool `mapstructure:"enabled" yaml:"enabled"`
 	// Interval is how often to write heartbeats (e.g., "30s").
-	Interval string `mapstructure:"interval"`
+	Interval string `mapstructure:"interval" yaml:"interval"`
 	// StaleThreshold is when to consider a workflow zombie (e.g., "2m").
-	StaleThreshold string `mapstructure:"stale_threshold"`
+	StaleThreshold string `mapstructure:"stale_threshold" yaml:"stale_threshold"`
 	// CheckInterval is how often to check for zombies (e.g., "60s").
-	CheckInterval string `mapstructure:"check_interval"`
+	CheckInterval string `mapstructure:"check_interval" yaml:"check_interval"`
 	// AutoResume enables automatic resume of zombie workflows.
-	AutoResume bool `mapstructure:"auto_resume"`
+	AutoResume bool `mapstructure:"auto_resume" yaml:"auto_resume"`
 	// MaxResumes is the maximum auto-resume attempts per workflow.
-	MaxResumes int `mapstructure:"max_resumes"`
+	MaxResumes int `mapstructure:"max_resumes" yaml:"max_resumes"`
 }
 
 // PhasesConfig configures each workflow phase.
 type PhasesConfig struct {
-	Analyze AnalyzePhaseConfig `mapstructure:"analyze"`
-	Plan    PlanPhaseConfig    `mapstructure:"plan"`
-	Execute ExecutePhaseConfig `mapstructure:"execute"`
+	Analyze AnalyzePhaseConfig `mapstructure:"analyze" yaml:"analyze"`
+	Plan    PlanPhaseConfig    `mapstructure:"plan" yaml:"plan"`
+	Execute ExecutePhaseConfig `mapstructure:"execute" yaml:"execute"`
 }
 
 // AnalyzePhaseConfig configures the analysis phase.
@@ -134,64 +134,64 @@ type PhasesConfig struct {
 // When SingleAgent.Enabled=true, flow becomes: refiner → single-agent analysis → synthesizer
 type AnalyzePhaseConfig struct {
 	// Timeout for the entire analysis phase (e.g., "2h").
-	Timeout string `mapstructure:"timeout"`
+	Timeout string `mapstructure:"timeout" yaml:"timeout"`
 	// Refiner refines and clarifies the prompt before analysis.
-	Refiner RefinerConfig `mapstructure:"refiner"`
+	Refiner RefinerConfig `mapstructure:"refiner" yaml:"refiner"`
 	// Moderator evaluates consensus between agent analyses.
-	Moderator ModeratorConfig `mapstructure:"moderator"`
+	Moderator ModeratorConfig `mapstructure:"moderator" yaml:"moderator"`
 	// Synthesizer combines all analyses into a unified report.
-	Synthesizer SynthesizerConfig `mapstructure:"synthesizer"`
+	Synthesizer SynthesizerConfig `mapstructure:"synthesizer" yaml:"synthesizer"`
 	// SingleAgent configures single-agent execution mode (bypasses multi-agent consensus).
-	SingleAgent SingleAgentConfig `mapstructure:"single_agent"`
+	SingleAgent SingleAgentConfig `mapstructure:"single_agent" yaml:"single_agent"`
 }
 
 // PlanPhaseConfig configures the planning phase.
 type PlanPhaseConfig struct {
 	// Timeout for the entire planning phase (e.g., "2h").
-	Timeout string `mapstructure:"timeout"`
+	Timeout string `mapstructure:"timeout" yaml:"timeout"`
 	// Synthesizer combines multiple agent plans into one (multi-agent planning).
-	Synthesizer PlanSynthesizerConfig `mapstructure:"synthesizer"`
+	Synthesizer PlanSynthesizerConfig `mapstructure:"synthesizer" yaml:"synthesizer"`
 }
 
 // ExecutePhaseConfig configures the execution phase.
 type ExecutePhaseConfig struct {
 	// Timeout for the entire execution phase (e.g., "2h").
-	Timeout string `mapstructure:"timeout"`
+	Timeout string `mapstructure:"timeout" yaml:"timeout"`
 }
 
 // RefinerConfig configures prompt refinement before analysis.
 type RefinerConfig struct {
 	// Enabled enables/disables prompt refinement.
-	Enabled bool `mapstructure:"enabled"`
+	Enabled bool `mapstructure:"enabled" yaml:"enabled"`
 	// Agent specifies which agent to use for refinement.
 	// Model is resolved from agents.<agent>.phase_models.refine or agents.<agent>.model.
-	Agent string `mapstructure:"agent"`
+	Agent string `mapstructure:"agent" yaml:"agent"`
 }
 
 // ModeratorConfig configures consensus moderation between agents.
 type ModeratorConfig struct {
 	// Enabled activates consensus moderation via an LLM.
-	Enabled bool `mapstructure:"enabled"`
+	Enabled bool `mapstructure:"enabled" yaml:"enabled"`
 	// Agent specifies which agent to use as moderator.
 	// Model is resolved from agents.<agent>.phase_models.analyze or agents.<agent>.model.
-	Agent string `mapstructure:"agent"`
+	Agent string `mapstructure:"agent" yaml:"agent"`
 	// Threshold is the consensus score required to pass (0.0-1.0, default: 0.80).
-	Threshold float64 `mapstructure:"threshold"`
+	Threshold float64 `mapstructure:"threshold" yaml:"threshold"`
 	// MinRounds is the minimum refinement rounds before accepting consensus (default: 2).
-	MinRounds int `mapstructure:"min_rounds"`
+	MinRounds int `mapstructure:"min_rounds" yaml:"min_rounds"`
 	// MaxRounds limits the number of refinement rounds (default: 5).
-	MaxRounds int `mapstructure:"max_rounds"`
+	MaxRounds int `mapstructure:"max_rounds" yaml:"max_rounds"`
 	// WarningThreshold logs a warning if consensus score drops below this (default: 0.30).
-	WarningThreshold float64 `mapstructure:"warning_threshold"`
+	WarningThreshold float64 `mapstructure:"warning_threshold" yaml:"warning_threshold"`
 	// StagnationThreshold triggers early exit if score improvement is below this (default: 0.02).
-	StagnationThreshold float64 `mapstructure:"stagnation_threshold"`
+	StagnationThreshold float64 `mapstructure:"stagnation_threshold" yaml:"stagnation_threshold"`
 }
 
 // SynthesizerConfig configures analysis synthesis.
 type SynthesizerConfig struct {
 	// Agent specifies which agent to use for synthesis.
 	// Model is resolved from agents.<agent>.phase_models.analyze or agents.<agent>.model.
-	Agent string `mapstructure:"agent"`
+	Agent string `mapstructure:"agent" yaml:"agent"`
 }
 
 // ExecutionMode defines how workflow phases execute agents.
@@ -247,12 +247,12 @@ func DefaultExecutionMode() ExecutionMode {
 type SingleAgentConfig struct {
 	// Enabled activates single-agent mode. When true, the moderator is ignored
 	// and only the specified agent is used for analysis.
-	Enabled bool `mapstructure:"enabled"`
+	Enabled bool `mapstructure:"enabled" yaml:"enabled"`
 	// Agent is the name of the agent to use for single-agent analysis.
 	// Required when Enabled is true.
-	Agent string `mapstructure:"agent"`
+	Agent string `mapstructure:"agent" yaml:"agent"`
 	// Model is an optional override for the agent's default model.
-	Model string `mapstructure:"model"`
+	Model string `mapstructure:"model" yaml:"model"`
 }
 
 // IsValid returns true if the SingleAgentConfig is properly configured.
@@ -268,20 +268,20 @@ func (c SingleAgentConfig) IsValid() bool {
 type PlanSynthesizerConfig struct {
 	// Enabled controls whether multi-agent planning is used.
 	// When false (default), uses single-agent planning.
-	Enabled bool `mapstructure:"enabled"`
+	Enabled bool `mapstructure:"enabled" yaml:"enabled"`
 	// Agent specifies which agent to use for plan synthesis.
 	// Model is resolved from agents.<agent>.phase_models.plan or agents.<agent>.model.
-	Agent string `mapstructure:"agent"`
+	Agent string `mapstructure:"agent" yaml:"agent"`
 }
 
 // AgentsConfig configures available AI agents.
 type AgentsConfig struct {
-	Default  string      `mapstructure:"default"`
-	Claude   AgentConfig `mapstructure:"claude"`
-	Gemini   AgentConfig `mapstructure:"gemini"`
-	Codex    AgentConfig `mapstructure:"codex"`
-	Copilot  AgentConfig `mapstructure:"copilot"`
-	OpenCode AgentConfig `mapstructure:"opencode"`
+	Default  string      `mapstructure:"default" yaml:"default"`
+	Claude   AgentConfig `mapstructure:"claude" yaml:"claude"`
+	Gemini   AgentConfig `mapstructure:"gemini" yaml:"gemini"`
+	Codex    AgentConfig `mapstructure:"codex" yaml:"codex"`
+	Copilot  AgentConfig `mapstructure:"copilot" yaml:"copilot"`
+	OpenCode AgentConfig `mapstructure:"opencode" yaml:"opencode"`
 }
 
 // GetAgentConfig returns the config for a named agent, or nil if not found.
@@ -354,24 +354,24 @@ func (c AgentsConfig) EnabledAgentNames() []string {
 //	    path: copilot
 //	    model: gpt-5
 type AgentConfig struct {
-	Enabled     bool              `mapstructure:"enabled"`
-	Path        string            `mapstructure:"path"`
-	Model       string            `mapstructure:"model"`
-	PhaseModels map[string]string `mapstructure:"phase_models"`
+	Enabled     bool              `mapstructure:"enabled" yaml:"enabled"`
+	Path        string            `mapstructure:"path" yaml:"path"`
+	Model       string            `mapstructure:"model" yaml:"model"`
+	PhaseModels map[string]string `mapstructure:"phase_models" yaml:"phase_models"`
 	// Phases controls which workflow phases/roles this agent participates in.
 	// If nil or empty, agent is available for all phases (backward compatible).
 	// Keys: "refine", "analyze", "moderate", "synthesize", "plan", "execute"
-	Phases map[string]bool `mapstructure:"phases"`
+	Phases map[string]bool `mapstructure:"phases" yaml:"phases"`
 	// ReasoningEffort is the default reasoning effort for all phases (Codex-specific).
 	// Valid values: minimal, low, medium, high, xhigh.
-	ReasoningEffort string `mapstructure:"reasoning_effort"`
+	ReasoningEffort string `mapstructure:"reasoning_effort" yaml:"reasoning_effort"`
 	// ReasoningEffortPhases allows per-phase overrides of reasoning effort.
 	// Keys: "refine", "analyze", "moderate", "synthesize", "plan", "execute"
-	ReasoningEffortPhases map[string]string `mapstructure:"reasoning_effort_phases"`
+	ReasoningEffortPhases map[string]string `mapstructure:"reasoning_effort_phases" yaml:"reasoning_effort_phases"`
 	// TokenDiscrepancyThreshold is the ratio for detecting token reporting errors.
 	// If reported tokens differ from estimated by more than this factor, use estimated.
 	// Default: 5 (reported must be within 1/5 to 5x of estimated). Set to 0 to disable.
-	TokenDiscrepancyThreshold float64 `mapstructure:"token_discrepancy_threshold"`
+	TokenDiscrepancyThreshold float64 `mapstructure:"token_discrepancy_threshold" yaml:"token_discrepancy_threshold"`
 }
 
 // IsEnabledForPhase returns true if the agent is enabled for the given phase.
@@ -417,10 +417,10 @@ func (c AgentConfig) GetReasoningEffortForPhase(phase string) string {
 
 // StateConfig configures state persistence.
 type StateConfig struct {
-	Backend    string `mapstructure:"backend"` // Backend type: "sqlite" (default) or "json"
-	Path       string `mapstructure:"path"`
-	BackupPath string `mapstructure:"backup_path"`
-	LockTTL    string `mapstructure:"lock_ttl"`
+	Backend    string `mapstructure:"backend" yaml:"backend"` // Backend type: "sqlite" (default) or "json"
+	Path       string `mapstructure:"path" yaml:"path"`
+	BackupPath string `mapstructure:"backup_path" yaml:"backup_path"`
+	LockTTL    string `mapstructure:"lock_ttl" yaml:"lock_ttl"`
 }
 
 // EffectiveBackend returns the normalized backend value.
@@ -439,27 +439,27 @@ func (s *StateConfig) EffectiveBackend() string {
 // - Task: incremental progress saving (per-task commits)
 // - Finalization: final workflow delivery (push, PR, merge)
 type GitConfig struct {
-	Worktree     WorktreeConfig        `mapstructure:"worktree"`
-	Task         GitTaskConfig         `mapstructure:"task"`
-	Finalization GitFinalizationConfig `mapstructure:"finalization"`
+	Worktree     WorktreeConfig        `mapstructure:"worktree" yaml:"worktree"`
+	Task         GitTaskConfig         `mapstructure:"task" yaml:"task"`
+	Finalization GitFinalizationConfig `mapstructure:"finalization" yaml:"finalization"`
 }
 
 // WorktreeConfig configures temporary worktree management during execution.
 type WorktreeConfig struct {
 	// Dir is the directory where worktrees are created.
-	Dir string `mapstructure:"dir"`
+	Dir string `mapstructure:"dir" yaml:"dir"`
 	// Mode controls when worktrees are created: always, parallel, or disabled.
-	Mode string `mapstructure:"mode"`
+	Mode string `mapstructure:"mode" yaml:"mode"`
 	// AutoClean removes worktrees after task completion.
 	// IMPORTANT: Requires Task.AutoCommit=true to prevent data loss.
-	AutoClean bool `mapstructure:"auto_clean"`
+	AutoClean bool `mapstructure:"auto_clean" yaml:"auto_clean"`
 }
 
 // GitTaskConfig configures per-task progress saving.
 type GitTaskConfig struct {
 	// AutoCommit commits changes after each task completes.
 	// This ensures work is saved even if the workflow crashes.
-	AutoCommit bool `mapstructure:"auto_commit"`
+	AutoCommit bool `mapstructure:"auto_commit" yaml:"auto_commit"`
 }
 
 // GitFinalizationConfig configures workflow result delivery.
@@ -467,103 +467,103 @@ type GitTaskConfig struct {
 // Note: Different from FinalizationConfig in context.go which is a runtime struct.
 type GitFinalizationConfig struct {
 	// AutoPush pushes the workflow branch to remote after all tasks complete.
-	AutoPush bool `mapstructure:"auto_push"`
+	AutoPush bool `mapstructure:"auto_push" yaml:"auto_push"`
 	// AutoPR creates a single pull request for the entire workflow.
-	AutoPR bool `mapstructure:"auto_pr"`
+	AutoPR bool `mapstructure:"auto_pr" yaml:"auto_pr"`
 	// AutoMerge merges the PR automatically after creation.
-	AutoMerge bool `mapstructure:"auto_merge"`
+	AutoMerge bool `mapstructure:"auto_merge" yaml:"auto_merge"`
 	// PRBaseBranch is the target branch for PRs (empty = repository default).
-	PRBaseBranch string `mapstructure:"pr_base_branch"`
+	PRBaseBranch string `mapstructure:"pr_base_branch" yaml:"pr_base_branch"`
 	// MergeStrategy for auto-merge: merge, squash, rebase (default: squash).
-	MergeStrategy string `mapstructure:"merge_strategy"`
+	MergeStrategy string `mapstructure:"merge_strategy" yaml:"merge_strategy"`
 }
 
 // GitHubConfig configures GitHub integration.
 // Note: GitHub token should be provided via GITHUB_TOKEN or GH_TOKEN environment variable.
 type GitHubConfig struct {
-	Remote string `mapstructure:"remote"`
+	Remote string `mapstructure:"remote" yaml:"remote"`
 }
 
 // IssuesConfig configures GitHub/GitLab issue generation.
 type IssuesConfig struct {
 	// Enabled activates issue generation feature.
-	Enabled bool `mapstructure:"enabled"`
+	Enabled bool `mapstructure:"enabled" yaml:"enabled"`
 
 	// Provider specifies the issue tracking system: github or gitlab.
-	Provider string `mapstructure:"provider"`
+	Provider string `mapstructure:"provider" yaml:"provider"`
 
 	// AutoGenerate creates issues automatically after planning phase.
-	AutoGenerate bool `mapstructure:"auto_generate"`
+	AutoGenerate bool `mapstructure:"auto_generate" yaml:"auto_generate"`
 
 	// Template configures issue content generation.
-	Template IssueTemplateConfig `mapstructure:"template"`
+	Template IssueTemplateConfig `mapstructure:"template" yaml:"template"`
 
 	// Labels to apply to all generated issues.
-	Labels []string `mapstructure:"labels"`
+	Labels []string `mapstructure:"labels" yaml:"labels"`
 
 	// Assignees for generated issues.
-	Assignees []string `mapstructure:"assignees"`
+	Assignees []string `mapstructure:"assignees" yaml:"assignees"`
 
 	// GitLab contains GitLab-specific configuration.
-	GitLab GitLabIssueConfig `mapstructure:"gitlab"`
+	GitLab GitLabIssueConfig `mapstructure:"gitlab" yaml:"gitlab"`
 
 	// Generator configures LLM-based issue generation.
-	Generator IssueGeneratorConfig `mapstructure:"generator"`
+	Generator IssueGeneratorConfig `mapstructure:"generator" yaml:"generator"`
 }
 
 // IssueTemplateConfig configures issue content formatting.
 type IssueTemplateConfig struct {
-	// Language for generated content (ISO 639-1 code, e.g., "en", "es", "fr").
-	Language string `mapstructure:"language"`
+	// Language for generated content (english, spanish, french, german, portuguese, chinese, japanese).
+	Language string `mapstructure:"language" yaml:"language"`
 
 	// Tone of writing: formal, informal, technical, friendly.
-	Tone string `mapstructure:"tone"`
+	Tone string `mapstructure:"tone" yaml:"tone"`
 
 	// IncludeDiagrams adds ASCII diagrams to issue body when available.
-	IncludeDiagrams bool `mapstructure:"include_diagrams"`
+	IncludeDiagrams bool `mapstructure:"include_diagrams" yaml:"include_diagrams"`
 
 	// TitleFormat specifies the issue title template.
 	// Supports variables: {workflow_id}, {workflow_title}, {task_id}, {task_name}
-	TitleFormat string `mapstructure:"title_format"`
+	TitleFormat string `mapstructure:"title_format" yaml:"title_format"`
 
 	// BodyTemplateFile path to custom body template (relative to config directory).
-	BodyTemplateFile string `mapstructure:"body_template_file"`
+	BodyTemplateFile string `mapstructure:"body_template_file" yaml:"body_template_file"`
 
 	// Convention name for style reference (e.g., "conventional-commits", "angular").
-	Convention string `mapstructure:"convention"`
+	Convention string `mapstructure:"convention" yaml:"convention"`
 
 	// CustomInstructions are free-form instructions for LLM when generating content.
 	// Users can specify tone, formatting preferences, diagram usage, conventions, etc.
 	// Example: "Use bullet points, include code snippets, write in Spanish"
-	CustomInstructions string `mapstructure:"custom_instructions"`
+	CustomInstructions string `mapstructure:"custom_instructions" yaml:"custom_instructions"`
 }
 
 // GitLabIssueConfig contains GitLab-specific options.
 type GitLabIssueConfig struct {
 	// UseEpics groups sub-issues under an epic instead of linking.
-	UseEpics bool `mapstructure:"use_epics"`
+	UseEpics bool `mapstructure:"use_epics" yaml:"use_epics"`
 
 	// ProjectID is the GitLab project identifier (required for GitLab).
-	ProjectID string `mapstructure:"project_id"`
+	ProjectID string `mapstructure:"project_id" yaml:"project_id"`
 }
 
 // IssueGeneratorConfig configures LLM-based issue generation.
 type IssueGeneratorConfig struct {
 	// Enabled activates LLM-based issue generation.
 	// When false, issues are generated by copying artifacts directly.
-	Enabled bool `mapstructure:"enabled"`
+	Enabled bool `mapstructure:"enabled" yaml:"enabled"`
 
 	// Agent to use for generation (claude, gemini, codex, etc.).
-	Agent string `mapstructure:"agent"`
+	Agent string `mapstructure:"agent" yaml:"agent"`
 
 	// Model to use (optional, uses agent default if empty).
-	Model string `mapstructure:"model"`
+	Model string `mapstructure:"model" yaml:"model"`
 
 	// Summarize content instead of copying verbatim.
-	Summarize bool `mapstructure:"summarize"`
+	Summarize bool `mapstructure:"summarize" yaml:"summarize"`
 
 	// MaxBodyLength limits the generated body length in characters.
-	MaxBodyLength int `mapstructure:"max_body_length"`
+	MaxBodyLength int `mapstructure:"max_body_length" yaml:"max_body_length"`
 }
 
 // Validate validates the issues configuration.
@@ -586,7 +586,8 @@ func (c *IssuesConfig) Validate() error {
 		"english": true, "spanish": true, "french": true, "german": true,
 		"portuguese": true, "chinese": true, "japanese": true, "": true,
 	}
-	if !validLanguages[c.Template.Language] {
+	language := normalizeIssueLanguage(c.Template.Language)
+	if !validLanguages[language] {
 		return fmt.Errorf("issues.template.language must be one of: english, spanish, french, german, portuguese, chinese, japanese")
 	}
 
@@ -600,8 +601,8 @@ func (c *IssuesConfig) Validate() error {
 
 // ReportConfig configures markdown report generation.
 type ReportConfig struct {
-	Enabled    bool   `mapstructure:"enabled"`
-	BaseDir    string `mapstructure:"base_dir"`
-	UseUTC     bool   `mapstructure:"use_utc"`
-	IncludeRaw bool   `mapstructure:"include_raw"`
+	Enabled    bool   `mapstructure:"enabled" yaml:"enabled"`
+	BaseDir    string `mapstructure:"base_dir" yaml:"base_dir"`
+	UseUTC     bool   `mapstructure:"use_utc" yaml:"use_utc"`
+	IncludeRaw bool   `mapstructure:"include_raw" yaml:"include_raw"`
 }

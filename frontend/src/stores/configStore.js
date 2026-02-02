@@ -243,7 +243,14 @@ export const useConfigStore = create(
       const { localChanges, etag, isDirty } = get();
       if (!isDirty) return;
 
-      set({ isSaving: true, error: null });
+      set({ error: null });
+
+      const isValid = await get().validateChanges();
+      if (!isValid) {
+        return false;
+      }
+
+      set({ isSaving: true });
 
       try {
         const result = await configApi.update(localChanges, etag);

@@ -59,6 +59,7 @@ func (v *Validator) Validate(cfg *Config) error {
 	v.validateState(&cfg.State)
 	v.validateGit(&cfg.Git)
 	v.validateGitHub(&cfg.GitHub)
+	v.validateIssues(&cfg.Issues)
 
 	if len(v.errors) > 0 {
 		return v.errors
@@ -297,6 +298,38 @@ func (v *Validator) validateGitHub(cfg *GitHubConfig) {
 	// Token validation is optional - may come from environment
 	if cfg.Remote == "" {
 		v.addError("github.remote", cfg.Remote, "remote name required")
+	}
+}
+
+func (v *Validator) validateIssues(cfg *IssuesConfig) {
+	if !cfg.Enabled {
+		return
+	}
+
+	if cfg.Provider != "" && cfg.Provider != "github" && cfg.Provider != "gitlab" {
+		v.addError("issues.provider", cfg.Provider, "must be one of: github, gitlab")
+	}
+
+	validTones := map[string]bool{
+		"professional": true, "casual": true, "technical": true, "concise": true, "": true,
+	}
+	if !validTones[cfg.Template.Tone] {
+		v.addError("issues.template.tone", cfg.Template.Tone, "must be one of: professional, casual, technical, concise")
+	}
+
+	validLanguages := map[string]bool{
+		"english": true, "spanish": true, "french": true, "german": true,
+		"portuguese": true, "chinese": true, "japanese": true, "": true,
+	}
+	language := normalizeIssueLanguage(cfg.Template.Language)
+	if !validLanguages[language] {
+		v.addError("issues.template.language", cfg.Template.Language,
+			"must be one of: english, spanish, french, german, portuguese, chinese, japanese")
+	}
+
+	if cfg.Provider == "gitlab" && cfg.GitLab.ProjectID == "" {
+		v.addError("issues.gitlab.project_id", cfg.GitLab.ProjectID,
+			"required when provider is 'gitlab'")
 	}
 }
 

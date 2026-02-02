@@ -95,6 +95,33 @@ func TestAtomicWriteConfig(t *testing.T) {
 	}
 }
 
+func TestAtomicWriteConfig_SnakeCaseKeys(t *testing.T) {
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, ".quorum", "config.yaml")
+
+	cfg := &config.Config{
+		Workflow: config.WorkflowConfig{MaxRetries: 9},
+		Git: config.GitConfig{
+			Worktree: config.WorktreeConfig{AutoClean: true},
+		},
+		State: config.StateConfig{LockTTL: "2h"},
+	}
+
+	err := atomicWriteConfig(cfg, configPath)
+	assert.NoError(t, err)
+
+	data, err := os.ReadFile(configPath)
+	assert.NoError(t, err)
+	content := string(data)
+
+	assert.Contains(t, content, "max_retries: 9")
+	assert.Contains(t, content, "auto_clean: true")
+	assert.Contains(t, content, "lock_ttl: 2h")
+	assert.NotContains(t, content, "maxretries:")
+	assert.NotContains(t, content, "autoclean:")
+	assert.NotContains(t, content, "lockttl:")
+}
+
 func TestAtomicWriteConfig_CreatesDirectory(t *testing.T) {
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "nested", "deep", "config.yaml")

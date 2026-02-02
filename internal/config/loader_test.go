@@ -270,6 +270,55 @@ phases:
 	}
 }
 
+func TestLoader_LegacyKeyNormalization(t *testing.T) {
+	// Create a temporary config file with legacy (no underscore) keys
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "legacy-config.yaml")
+
+	configContent := `
+workflow:
+  maxretries: 7
+state:
+  lockttl: "2h"
+git:
+  worktree_dir: ".worktrees"
+  auto_commit: true
+  worktree:
+    autoclean: true
+issues:
+  template:
+    language: en
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0o644); err != nil {
+		t.Fatalf("Failed to write test config: %v", err)
+	}
+
+	loader := NewLoader().WithConfigFile(configPath)
+	cfg, err := loader.Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if cfg.Workflow.MaxRetries != 7 {
+		t.Errorf("Workflow.MaxRetries = %d, want %d (legacy maxretries)", cfg.Workflow.MaxRetries, 7)
+	}
+	if cfg.State.LockTTL != "2h" {
+		t.Errorf("State.LockTTL = %q, want %q (legacy lockttl)", cfg.State.LockTTL, "2h")
+	}
+	if cfg.Git.Worktree.AutoClean != true {
+		t.Errorf("Git.Worktree.AutoClean = %v, want %v (legacy autoclean)", cfg.Git.Worktree.AutoClean, true)
+	}
+	if cfg.Git.Worktree.Dir != ".worktrees" {
+		t.Errorf("Git.Worktree.Dir = %q, want %q", cfg.Git.Worktree.Dir, ".worktrees")
+	}
+	if cfg.Git.Task.AutoCommit != true {
+		t.Errorf("Git.Task.AutoCommit = %v, want %v (legacy auto_commit)", cfg.Git.Task.AutoCommit, true)
+	}
+	if cfg.Issues.Template.Language != "english" {
+		t.Errorf("Issues.Template.Language = %q, want %q (legacy en)", cfg.Issues.Template.Language, "english")
+	}
+}
+
 func TestNewLoader(t *testing.T) {
 	loader := NewLoader()
 	if loader == nil {

@@ -195,6 +195,37 @@ func TestHandleUpdateConfig_ValidUpdate(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rec.Code)
 }
 
+func TestHandleUpdateConfig_InvalidIssuesProvider(t *testing.T) {
+	stateManager := newMockStateManager()
+	eventBus := events.New(100)
+	server := NewServer(stateManager, eventBus)
+
+	reqBody := `{
+		"issues": {"enabled": true, "provider": "jira"}
+	}`
+
+	req := httptest.NewRequest("PATCH", "/api/v1/config", bytes.NewReader([]byte(reqBody)))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	server.handleUpdateConfig(rec, req)
+
+	assert.Equal(t, http.StatusUnprocessableEntity, rec.Code)
+
+	var response ValidationErrorResponse
+	err := json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, err)
+
+	var found bool
+	for _, e := range response.Errors {
+		if e.Field == "issues.provider" {
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "should have issues.provider validation error")
+}
+
 func TestValidationErrorCodes(t *testing.T) {
 	// Test that all error codes are defined correctly
 	codes := []string{

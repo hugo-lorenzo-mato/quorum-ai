@@ -176,8 +176,6 @@ function StateSection() {
   const path = useConfigField('state.path');
   const lockTtl = useConfigField('state.lock_ttl');
 
-  const showPath = backend.value !== 'memory';
-
   return (
     <SettingSection
       title="State Management"
@@ -185,7 +183,7 @@ function StateSection() {
     >
       <SelectSetting
         label="State Backend"
-        tooltip="'memory' for ephemeral state (lost on restart), 'sqlite' for persistent SQLite database, 'file' for JSON file storage."
+        tooltip="'sqlite' for persistent SQLite database or 'json' for JSON file storage."
         value={backend.value}
         onChange={backend.onChange}
         options={backend.options}
@@ -193,17 +191,15 @@ function StateSection() {
         disabled={backend.disabled}
       />
 
-      {showPath && (
-        <TextInputSetting
-          label="State Path"
-          tooltip="Path for state storage. For sqlite: database file path. For file: JSON file path."
-          placeholder=".quorum/state.db"
-          value={path.value}
-          onChange={path.onChange}
-          error={path.error}
-          disabled={path.disabled}
-        />
-      )}
+      <TextInputSetting
+        label="State Path"
+        tooltip="Path for state storage. For sqlite: database file path. For json: JSON file path."
+        placeholder=".quorum/state/state.db"
+        value={path.value}
+        onChange={path.onChange}
+        error={path.error}
+        disabled={path.disabled}
+      />
 
       <DurationInputSetting
         label="Lock TTL"

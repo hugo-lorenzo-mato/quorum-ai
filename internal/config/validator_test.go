@@ -222,6 +222,83 @@ func TestValidator_ModeratorThresholdOutOfRange(t *testing.T) {
 	}
 }
 
+func TestValidator_IssuesInvalidProvider(t *testing.T) {
+	cfg := validConfig()
+	cfg.Issues.Enabled = true
+	cfg.Issues.Provider = "jira"
+
+	v := NewValidator()
+	err := v.Validate(cfg)
+	if err == nil {
+		t.Fatal("Validate() error = nil, want error for invalid issues.provider")
+	}
+
+	errs, ok := err.(ValidationErrors)
+	if !ok {
+		t.Fatalf("error type = %T, want ValidationErrors", err)
+	}
+
+	found := false
+	for _, e := range errs {
+		if e.Field == "issues.provider" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected error for issues.provider field")
+	}
+}
+
+func TestValidator_IssuesInvalidLanguage(t *testing.T) {
+	cfg := validConfig()
+	cfg.Issues.Enabled = true
+	cfg.Issues.Template.Language = "klingon"
+
+	v := NewValidator()
+	err := v.Validate(cfg)
+	if err == nil {
+		t.Fatal("Validate() error = nil, want error for invalid issues.template.language")
+	}
+
+	if !strings.Contains(err.Error(), "issues.template.language") {
+		t.Errorf("error = %v, should mention issues.template.language", err)
+	}
+}
+
+func TestValidator_IssuesInvalidTone(t *testing.T) {
+	cfg := validConfig()
+	cfg.Issues.Enabled = true
+	cfg.Issues.Template.Tone = "funny"
+
+	v := NewValidator()
+	err := v.Validate(cfg)
+	if err == nil {
+		t.Fatal("Validate() error = nil, want error for invalid issues.template.tone")
+	}
+
+	if !strings.Contains(err.Error(), "issues.template.tone") {
+		t.Errorf("error = %v, should mention issues.template.tone", err)
+	}
+}
+
+func TestValidator_IssuesGitLabRequiresProjectID(t *testing.T) {
+	cfg := validConfig()
+	cfg.Issues.Enabled = true
+	cfg.Issues.Provider = "gitlab"
+	cfg.Issues.GitLab.ProjectID = ""
+
+	v := NewValidator()
+	err := v.Validate(cfg)
+	if err == nil {
+		t.Fatal("Validate() error = nil, want error for missing issues.gitlab.project_id")
+	}
+
+	if !strings.Contains(err.Error(), "issues.gitlab.project_id") {
+		t.Errorf("error = %v, should mention issues.gitlab.project_id", err)
+	}
+}
+
 func TestValidator_MultipleErrors(t *testing.T) {
 	cfg := validConfig()
 	cfg.Log.Level = "invalid"

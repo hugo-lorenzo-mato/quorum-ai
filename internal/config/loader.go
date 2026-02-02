@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/spf13/viper"
+	"gopkg.in/yaml.v3"
 )
 
 // Loader handles configuration loading from multiple sources.
@@ -96,6 +97,19 @@ func (l *Loader) Load() (*Config, error) {
 		}
 	}
 
+	// Normalize legacy keys from config file (e.g., maxretries -> max_retries)
+	if configPath := l.v.ConfigFileUsed(); configPath != "" {
+		normalized, err := loadNormalizedConfigMap(configPath)
+		if err != nil {
+			return nil, fmt.Errorf("normalizing config: %w", err)
+		}
+		if len(normalized) > 0 {
+			if err := l.v.MergeConfigMap(normalized); err != nil {
+				return nil, fmt.Errorf("merging normalized config: %w", err)
+			}
+		}
+	}
+
 	// Unmarshal into struct
 	var cfg Config
 	if err := l.v.Unmarshal(&cfg); err != nil {
@@ -103,6 +117,27 @@ func (l *Loader) Load() (*Config, error) {
 	}
 
 	return &cfg, nil
+}
+
+func loadNormalizedConfigMap(path string) (map[string]interface{}, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	if len(data) == 0 {
+		return nil, nil
+	}
+
+	var raw map[string]interface{}
+	if err := yaml.Unmarshal(data, &raw); err != nil {
+		return nil, err
+	}
+	if len(raw) == 0 {
+		return nil, nil
+	}
+
+	normalizeLegacyConfigMap(raw)
+	return raw, nil
 }
 
 // setDefaults configures default values.
@@ -192,10 +227,10 @@ func (l *Loader) setDefaults() {
 	l.v.SetDefault("state.lock_ttl", "1h")
 
 	// Git defaults
-	l.v.SetDefault("git.worktree_dir", ".worktrees")
-	l.v.SetDefault("git.auto_clean", false)    // Must be false when auto_commit is false to preserve changes
-	l.v.SetDefault("git.worktree_mode", "always")
-	l.v.SetDefault("git.auto_commit", true)    // Commit changes after task completion
+	l.v.SetDefault("git.worktree.dir", ".worktrees")
+	l.v.SetDefault("git.worktree.auto_clean", false) // Must be false when task.auto_commit is false to preserve changes
+	l.v.SetDefault("git.worktree.mode", "always")
+	l.v.SetDefault("git.task.auto_commit", true) // Commit changes after task completion
 
 	// GitHub defaults
 	l.v.SetDefault("github.remote", "origin")
@@ -230,7 +265,7 @@ func (l *Loader) setDefaults() {
 	l.v.SetDefault("issues.enabled", true)
 	l.v.SetDefault("issues.provider", "github")
 	l.v.SetDefault("issues.auto_generate", false)
-	l.v.SetDefault("issues.template.language", "en")
+	l.v.SetDefault("issues.template.language", "english")
 	l.v.SetDefault("issues.template.tone", "technical")
 	l.v.SetDefault("issues.template.include_diagrams", true)
 	l.v.SetDefault("issues.template.title_format", "[quorum] {task_name}")
@@ -373,6 +408,11 @@ func Validate(cfg *Config) error {
 		if agent.GetModelForPhase("plan") == "" {
 			return fmt.Errorf("phases.plan.synthesizer.agent %q has no model configured for plan phase", cfg.Phases.Plan.Synthesizer.Agent)
 		}
+	}
+
+	// Validate issues configuration
+	if err := cfg.Issues.Validate(); err != nil {
+		return err
 	}
 
 	return nil
