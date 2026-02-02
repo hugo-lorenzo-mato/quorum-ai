@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useWorkflowStore } from '../stores';
 import { getStatusColor } from '../lib/theme';
@@ -11,14 +11,17 @@ import {
   Clock,
   ArrowUpRight,
   Activity,
-  TrendingUp,
+  Cpu,
+  HardDrive,
+  Timer,
+  Server,
+  RefreshCw,
 } from 'lucide-react';
 
 // Get workflow display title
 function getWorkflowTitle(workflow) {
   if (workflow.title) return workflow.title;
   if (workflow.prompt) {
-    // Extract first meaningful line, skip generic prefixes
     const firstLine = workflow.prompt.split('\n')[0].trim();
     const cleaned = firstLine.replace(/^(analyze|analiza|implement|implementa|create|crea|fix|arregla|update|actualiza|add|añade|you are|eres)\s+/i, '');
     return cleaned.substring(0, 80) || workflow.prompt.substring(0, 80);
@@ -26,136 +29,216 @@ function getWorkflowTitle(workflow) {
   return workflow.id;
 }
 
-// Simple Sparkline Component
-function Sparkline({ data = [], color = "currentColor", height = 32, width = 80 }) {
-  if (!data || data.length < 2) return null;
-  
-  const min = Math.min(...data);
-  const max = Math.max(...data);
-  const range = max - min || 1;
-  const step = width / (data.length - 1);
-  
-  // Create smooth curve using cubic bezier
-  const points = data.map((d, i) => {
-    const x = i * step;
-    const y = height - ((d - min) / range) * height;
-    return { x, y };
-  });
-
-  // Simple line for now (bezier requires more math), but cleaner stroke
-  const pathData = points.map((p, i) => 
-    (i === 0 ? 'M' : 'L') + `${p.x.toFixed(1)},${p.y.toFixed(1)}`
-  ).join(' ');
+// Compact Stats Bar Component
+function StatsBar({ total, completed, running, failed }) {
+  const stats = [
+    { label: 'Total', value: total, icon: GitBranch, color: 'text-primary' },
+    { label: 'Completed', value: completed, icon: CheckCircle2, color: 'text-success' },
+    { label: 'Running', value: running, icon: Activity, color: 'text-info' },
+    { label: 'Failed', value: failed, icon: XCircle, color: 'text-error' },
+  ];
 
   return (
-    <div className="relative group" style={{ width, height }}>
-      <svg width={width} height={height} className="overflow-visible" aria-hidden="true">
-        {/* Fill Area (Optional, maybe for polish) */}
-        <path
-           d={`${pathData} L ${width},${height} L 0,${height} Z`}
-           fill={color}
-           fillOpacity="0.1"
-           className="transition-opacity opacity-50 group-hover:opacity-80"
-        />
-        <path
-          d={pathData}
-          fill="none"
-          stroke={color}
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          className="transition-all opacity-80 group-hover:opacity-100 group-hover:stroke-[2.5px]"
-        />
-        {/* End dot */}
-        <circle 
-          cx={points[points.length-1].x} 
-          cy={points[points.length-1].y} 
-          r="3" 
-          fill={color}
-          className="animate-fade-in"
-        />
-      </svg>
-      {/* Tooltip: Shows last value on hover */}
-      <div className="absolute -top-6 right-0 bg-popover text-popover-foreground text-[10px] font-mono px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity shadow-sm border border-border pointer-events-none">
-        {data[data.length-1]}
+    <div className="flex flex-wrap items-center gap-2 p-3 rounded-xl border border-border bg-card animate-fade-up">
+      {stats.map((stat, index) => (
+        <div key={stat.label} className="flex items-center gap-1.5">
+          {index > 0 && <span className="hidden sm:block text-border mx-1">|</span>}
+          <stat.icon className={`w-4 h-4 ${stat.color}`} />
+          <span className="text-sm font-medium text-foreground">{stat.value}</span>
+          <span className="text-xs text-muted-foreground hidden sm:inline">{stat.label}</span>
+        </div>
+      ))}
+      {total > 0 && (
+        <>
+          <span className="hidden md:block text-border mx-1">|</span>
+          <span className="hidden md:inline text-xs text-muted-foreground">
+            {Math.round((completed / Math.max(total, 1)) * 100)}% success rate
+          </span>
+        </>
+      )}
+    </div>
+  );
+}
+
+// Progress Bar Component
+function ProgressBar({ value, max, color = 'primary', size = 'md' }) {
+  const percent = max > 0 ? Math.min((value / max) * 100, 100) : 0;
+  const heightClass = size === 'sm' ? 'h-1.5' : 'h-2';
+
+  const colorClasses = {
+    primary: 'bg-primary',
+    success: 'bg-success',
+    warning: 'bg-warning',
+    error: 'bg-error',
+    info: 'bg-info',
+  };
+
+  // Dynamic color based on percentage
+  const getAutoColor = () => {
+    if (percent < 50) return colorClasses.success;
+    if (percent < 75) return colorClasses.warning;
+    return colorClasses.error;
+  };
+
+  return (
+    <div className={`w-full ${heightClass} bg-muted rounded-full overflow-hidden`}>
+      <div
+        className={`${heightClass} ${color === 'auto' ? getAutoColor() : colorClasses[color]} rounded-full transition-all duration-500`}
+        style={{ width: `${percent}%` }}
+      />
+    </div>
+  );
+}
+
+// Format uptime duration
+function formatUptime(seconds) {
+  if (!seconds || seconds < 0) return '0s';
+
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  if (minutes > 0) return `${minutes}m`;
+  return `${Math.floor(seconds)}s`;
+}
+
+// System Resources Card
+function SystemResources({ resources, loading, onRefresh }) {
+  if (loading && !resources) {
+    return (
+      <div className="rounded-xl border border-border bg-card p-4 animate-pulse">
+        <div className="h-4 bg-muted rounded w-32 mb-4" />
+        <div className="space-y-3">
+          <div className="h-8 bg-muted rounded" />
+          <div className="h-8 bg-muted rounded" />
+          <div className="h-8 bg-muted rounded" />
+        </div>
       </div>
+    );
+  }
+
+  if (!resources) {
+    return (
+      <div className="rounded-xl border border-border bg-card p-4">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-medium text-foreground flex items-center gap-2">
+            <Server className="w-4 h-4 text-muted-foreground" />
+            System Resources
+          </h3>
+        </div>
+        <p className="text-xs text-muted-foreground">Unable to load system metrics</p>
+      </div>
+    );
+  }
+
+  const { resources: res } = resources;
+  const memoryMB = res?.heap_alloc_mb || 0;
+  const goroutines = res?.goroutines || 0;
+  const uptime = res?.process_uptime ? res.process_uptime / 1e9 : 0; // nanoseconds to seconds
+  const commandsActive = res?.commands_active || 0;
+
+  const metrics = [
+    {
+      label: 'Memory',
+      value: `${memoryMB.toFixed(1)} MB`,
+      icon: HardDrive,
+      progress: memoryMB,
+      max: 512, // Assume 512MB as reference
+      color: 'auto',
+    },
+    {
+      label: 'Goroutines',
+      value: goroutines,
+      icon: Cpu,
+      progress: goroutines,
+      max: 1000,
+      color: 'auto',
+    },
+    {
+      label: 'Uptime',
+      value: formatUptime(uptime),
+      icon: Timer,
+      showProgress: false,
+    },
+    {
+      label: 'Active Tasks',
+      value: commandsActive,
+      icon: Activity,
+      showProgress: false,
+    },
+  ];
+
+  return (
+    <div className="rounded-xl border border-border bg-card p-4 animate-fade-up">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-sm font-medium text-foreground flex items-center gap-2">
+          <Server className="w-4 h-4 text-muted-foreground" />
+          System Resources
+        </h3>
+        <button
+          onClick={onRefresh}
+          className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+          title="Refresh"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+        </button>
+      </div>
+
+      <div className="space-y-3">
+        {metrics.map((metric) => (
+          <div key={metric.label} className="space-y-1">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground flex items-center gap-1.5">
+                <metric.icon className="w-3.5 h-3.5" />
+                {metric.label}
+              </span>
+              <span className="text-xs font-medium text-foreground font-mono">
+                {metric.value}
+              </span>
+            </div>
+            {metric.showProgress !== false && metric.max && (
+              <ProgressBar
+                value={metric.progress}
+                max={metric.max}
+                color={metric.color}
+                size="sm"
+              />
+            )}
+          </div>
+        ))}
+      </div>
+
+      {resources.status && resources.status !== 'healthy' && (
+        <div className={`mt-3 text-xs px-2 py-1 rounded ${
+          resources.status === 'critical'
+            ? 'bg-error/10 text-error'
+            : 'bg-warning/10 text-warning'
+        }`}>
+          Status: {resources.status}
+        </div>
+      )}
     </div>
   );
 }
 
 // Bento Grid Card Component
-function BentoCard({ children, className = '', span = 1 }) {
-  const spanClasses = {
-    1: '',
-    2: 'md:col-span-2',
-    3: 'md:col-span-3',
-  };
-
+function BentoCard({ children, className = '' }) {
   return (
-    <div
-      className={`group relative rounded-xl border border-border bg-card p-6 transition-all hover:border-muted-foreground/30 hover:shadow-lg animate-fade-up ${spanClasses[span]} ${className}`}
-    >
+    <div className={`group relative rounded-xl border border-border bg-card p-4 md:p-6 transition-all hover:border-muted-foreground/30 hover:shadow-lg animate-fade-up ${className}`}>
       {children}
     </div>
-  );
-}
-
-// Stat Card for Bento Grid
-function StatCard({ title, value, subtitle, icon: Icon, trend, color = 'primary', sparklineData, className = '' }) {
-  const colorClasses = {
-    primary: 'bg-primary/10 text-primary',
-    success: 'bg-success/10 text-success',
-    warning: 'bg-warning/10 text-warning',
-    error: 'bg-error/10 text-error',
-    info: 'bg-info/10 text-info',
-  };
-  
-  // Map color prop to CSS color for sparkline
-  const sparklineColors = {
-    primary: 'var(--color-primary)',
-    success: 'var(--color-success)',
-    warning: 'var(--color-warning)',
-    error: 'var(--color-error)',
-    info: 'var(--color-info)',
-  };
-
-  return (
-    <BentoCard className={className}>
-      <div className="flex items-start justify-between mb-4">
-        <div className={`p-3 rounded-xl ${colorClasses[color]}`}>
-          <Icon className="w-5 h-5" />
-        </div>
-        {sparklineData && (
-          <Sparkline 
-            data={sparklineData} 
-            color={sparklineColors[color] || 'currentColor'} 
-          />
-        )}
-      </div>
-      <div className="space-y-1">
-        <p className="text-3xl font-mono font-semibold text-foreground tracking-tight">{value}</p>
-        <p className="text-sm font-medium text-muted-foreground">{title}</p>
-        {subtitle && (
-          <p className="text-xs text-muted-foreground mt-1">{subtitle}</p>
-        )}
-        {trend && (
-          <div className="flex items-center gap-1 text-xs text-success font-mono mt-1">
-            <TrendingUp className="w-3 h-3" />
-            <span>{trend}</span>
-          </div>
-        )}
-      </div>
-    </BentoCard>
   );
 }
 
 // Recent Workflow Item
 function WorkflowItem({ workflow }) {
   const statusConfig = {
-    pending: { color: 'text-muted-foreground', bg: 'bg-muted', icon: Clock },
-    running: { color: 'text-info', bg: 'bg-info/10', icon: Activity },
-    completed: { color: 'text-success', bg: 'bg-success/10', icon: CheckCircle2 },
-    failed: { color: 'text-error', bg: 'bg-error/10', icon: XCircle },
+    pending: { icon: Clock },
+    running: { icon: Activity },
+    completed: { icon: CheckCircle2 },
+    failed: { icon: XCircle },
   };
 
   const config = statusConfig[workflow.status] || statusConfig.pending;
@@ -165,10 +248,10 @@ function WorkflowItem({ workflow }) {
   return (
     <Link
       to={`/workflows/${workflow.id}`}
-      className="group flex items-center gap-4 p-3 -mx-3 rounded-lg transition-colors hover:bg-accent"
+      className="group flex items-center gap-3 p-2.5 -mx-2.5 rounded-lg transition-colors hover:bg-accent"
     >
-      <div className={`p-2 rounded-lg ${statusColor.bg}`}>
-        <StatusIcon className={`w-4 h-4 ${statusColor.text}`} />
+      <div className={`p-1.5 rounded-lg ${statusColor.bg}`}>
+        <StatusIcon className={`w-3.5 h-3.5 ${statusColor.text}`} />
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-foreground truncate">
@@ -179,7 +262,7 @@ function WorkflowItem({ workflow }) {
             {workflow.id.substring(0, 8)}
           </span>
           <span className="text-xs text-muted-foreground">
-             · {workflow.task_count || 0} tasks
+            · {workflow.task_count || 0} tasks
           </span>
         </div>
       </div>
@@ -195,45 +278,45 @@ function ActiveWorkflowBanner({ workflow }) {
   if (!workflow) return null;
 
   return (
-    <BentoCard span={3} className="bg-gradient-to-r from-info/5 to-primary/5 border-info/20">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <div className="relative">
-            <div className="p-3 rounded-xl bg-info/10">
-              <Zap className="w-5 h-5 text-info" />
+    <div className="rounded-xl border border-info/20 bg-gradient-to-r from-info/5 to-primary/5 p-4 animate-fade-up">
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="relative flex-shrink-0">
+            <div className="p-2.5 rounded-xl bg-info/10">
+              <Zap className="w-4 h-4 text-info" />
             </div>
-            <span className="absolute -top-1 -right-1 w-3 h-3 bg-info rounded-full animate-pulse" />
+            <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-info rounded-full animate-pulse" />
           </div>
-          <div>
-            <p className="text-sm font-medium text-muted-foreground">Active Workflow</p>
-            <p className="text-lg font-semibold text-foreground">
+          <div className="min-w-0">
+            <p className="text-xs font-medium text-muted-foreground">Active Workflow</p>
+            <p className="text-sm font-semibold text-foreground truncate">
               {getWorkflowTitle(workflow)}
             </p>
-            <p className="text-sm text-muted-foreground mt-1">
+            <p className="text-xs text-muted-foreground mt-0.5">
               Phase: {workflow.current_phase} · {workflow.task_count || 0} tasks
             </p>
           </div>
         </div>
         <Link
           to={`/workflows/${workflow.id}`}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+          className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors"
         >
-          View Details
-          <ArrowUpRight className="w-4 h-4" />
+          <span className="hidden sm:inline">View</span>
+          <ArrowUpRight className="w-3.5 h-3.5" />
         </Link>
       </div>
-    </BentoCard>
+    </div>
   );
 }
 
 // Empty State
 function EmptyState() {
   return (
-    <div className="flex flex-col items-center justify-center py-12 text-center">
-      <div className="p-4 rounded-2xl bg-muted mb-4">
-        <GitBranch className="w-8 h-8 text-muted-foreground" />
+    <div className="flex flex-col items-center justify-center py-8 text-center">
+      <div className="p-3 rounded-2xl bg-muted mb-3">
+        <GitBranch className="w-6 h-6 text-muted-foreground" />
       </div>
-      <h3 className="text-lg font-semibold text-foreground mb-2">No workflows yet</h3>
+      <h3 className="text-base font-semibold text-foreground mb-1">No workflows yet</h3>
       <p className="text-sm text-muted-foreground mb-4 max-w-sm">
         Create your first workflow to start automating tasks with AI agents.
       </p>
@@ -250,19 +333,49 @@ function EmptyState() {
 // Loading Skeleton
 function LoadingSkeleton() {
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-      {[...Array(6)].map((_, i) => (
-        <div
-          key={i}
-          className="h-32 rounded-xl bg-muted animate-pulse"
-        />
-      ))}
+    <div className="space-y-4">
+      <div className="h-12 rounded-xl bg-muted animate-pulse" />
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="h-40 rounded-xl bg-muted animate-pulse" />
+        <div className="md:col-span-2 h-40 rounded-xl bg-muted animate-pulse" />
+      </div>
     </div>
   );
 }
 
+// Custom hook for system resources
+function useSystemResources() {
+  const [resources, setResources] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  const fetchResources = useCallback(async () => {
+    setLoading(true);
+    try {
+      const response = await fetch('/health/deep');
+      if (response.ok) {
+        const data = await response.json();
+        setResources(data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch system resources:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchResources();
+    // Auto-refresh every 30 seconds
+    const interval = setInterval(fetchResources, 30000);
+    return () => clearInterval(interval);
+  }, [fetchResources]);
+
+  return { resources, loading, refresh: fetchResources };
+}
+
 export default function Dashboard() {
   const { workflows, activeWorkflow, fetchWorkflows, fetchActiveWorkflow, loading } = useWorkflowStore();
+  const { resources, loading: resourcesLoading, refresh: refreshResources } = useSystemResources();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -283,13 +396,13 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-4 animate-fade-in">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-foreground tracking-tight">Dashboard</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Monitor your AI workflows and tasks
+          <h1 className="text-xl md:text-2xl font-semibold text-foreground tracking-tight">Dashboard</h1>
+          <p className="text-xs md:text-sm text-muted-foreground mt-0.5">
+            Monitor your AI workflows and system health
           </p>
         </div>
         <Link
@@ -301,74 +414,60 @@ export default function Dashboard() {
         </Link>
       </div>
 
-      {/* Active Workflow Banner - only show if actually running */}
+      {/* Compact Stats Bar */}
+      <StatsBar
+        total={workflows.length}
+        completed={completedCount}
+        running={runningCount}
+        failed={failedCount}
+      />
+
+      {/* Active Workflow Banner */}
       {activeWorkflow && activeWorkflow.status === 'running' && (
         <ActiveWorkflowBanner workflow={activeWorkflow} />
       )}
 
-      {/* Stats Grid - 2x2 on mobile, 4x1 on lg */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard
-          title="Total Workflows"
-          value={workflows.length}
-          subtitle="All time"
-          icon={GitBranch}
-          color="primary"
-          sparklineData={[5, 8, 12, 15, 20, 25, workflows.length]} // Dummy data for visual
-        />
-        <StatCard
-          title="Completed"
-          value={completedCount}
-          subtitle={`${Math.round((completedCount / Math.max(workflows.length, 1)) * 100)}% success rate`}
-          icon={CheckCircle2}
-          color="success"
-          sparklineData={[2, 5, 8, 10, 15, completedCount]}
-        />
-        <StatCard
-          title="Running"
-          value={runningCount}
-          subtitle="Active now"
-          icon={Activity}
-          color="info"
-          sparklineData={[0, 1, 0, 2, 1, runningCount]} 
-        />
-        <StatCard
-          title="Failed"
-          value={failedCount}
-          subtitle="Needs attention"
-          icon={XCircle}
-          color="error"
-          sparklineData={[0, 0, 1, 0, 1, failedCount]}
-        />
-      </div>
-
-      {/* Recent Workflows */}
-      <BentoCard span={3}>
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h2 className="text-lg font-semibold text-foreground">Recent Workflows</h2>
-            <p className="text-sm text-muted-foreground">Your latest workflow activity</p>
-          </div>
-          <Link
-            to="/workflows"
-            className="text-sm text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
-          >
-            View all
-            <ArrowUpRight className="w-4 h-4" />
-          </Link>
+      {/* Main Grid: System Resources + Recent Workflows */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* System Resources - smaller on desktop */}
+        <div className="md:col-span-1">
+          <SystemResources
+            resources={resources}
+            loading={resourcesLoading}
+            onRefresh={refreshResources}
+          />
         </div>
 
-        {recentWorkflows.length > 0 ? (
-          <div className="space-y-1">
-            {recentWorkflows.map((workflow) => (
-              <WorkflowItem key={workflow.id} workflow={workflow} />
-            ))}
-          </div>
-        ) : (
-          <EmptyState />
-        )}
-      </BentoCard>
-      
+        {/* Recent Workflows - larger on desktop */}
+        <div className="md:col-span-2">
+          <BentoCard>
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-base font-semibold text-foreground">Recent Workflows</h2>
+                <p className="text-xs text-muted-foreground">Your latest workflow activity</p>
+              </div>
+              <Link
+                to="/workflows"
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+              >
+                View all
+                <ArrowUpRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
+
+            {recentWorkflows.length > 0 ? (
+              <div className="space-y-0.5">
+                {recentWorkflows.map((workflow) => (
+                  <WorkflowItem key={workflow.id} workflow={workflow} />
+                ))}
+              </div>
+            ) : (
+              <EmptyState />
+            )}
+          </BentoCard>
+        </div>
+      </div>
+
       {/* Mobile FAB */}
       <FAB onClick={() => navigate('/workflows/new')} icon={Zap} label="New Workflow" />
     </div>

@@ -288,6 +288,15 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
     window.open(`/api/v1/workflows/${workflow.id}/download`, '_blank');
   };
 
+  // Issues store hooks - must be before callbacks that use them
+  const {
+    setWorkflow: setIssuesWorkflow,
+    loadIssues,
+    startGeneration,
+    updateGenerationProgress,
+    cancelGeneration,
+  } = useIssuesStore();
+
   // Handle issues generation mode selection
   const handleIssuesModeSelect = useCallback(async (mode) => {
     setShowIssuesModal(false);
@@ -379,14 +388,7 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
   // Issues generation state
   const [showIssuesModal, setShowIssuesModal] = useState(false);
   const [issuesGenerating, setIssuesGenerating] = useState(false);
-  const {
-    setWorkflow: setIssuesWorkflow,
-    loadIssues,
-    startGeneration,
-    updateGenerationProgress,
-    cancelGeneration,
-  } = useIssuesStore();
-  
+
   const agentActivityMap = useAgentStore((s) => s.agentActivity);
   const currentAgentsMap = useAgentStore((s) => s.currentAgents);
 

@@ -1,9 +1,12 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -153,6 +156,20 @@ func (s *Server) handleGenerateIssues(w http.ResponseWriter, r *http.Request) {
 	// Create generator with agent registry for LLM-based generation
 	generator := issues.NewGenerator(issueClient, issuesCfg, reportDir, s.agentRegistry)
 
+	// Apply timeout from config
+	genCtx := ctx
+	if issuesCfg.Timeout != "" {
+		timeout, err := time.ParseDuration(issuesCfg.Timeout)
+		if err != nil {
+			slog.Warn("invalid issues.timeout in config, using request context",
+				"timeout", issuesCfg.Timeout, "error", err)
+		} else {
+			var cancel context.CancelFunc
+			genCtx, cancel = context.WithTimeout(ctx, timeout)
+			defer cancel()
+		}
+	}
+
 	// Generate issues
 	opts := issues.GenerateOptions{
 		WorkflowID:      workflowID,
@@ -164,7 +181,7 @@ func (s *Server) handleGenerateIssues(w http.ResponseWriter, r *http.Request) {
 		CustomAssignees: req.Assignees,
 	}
 
-	result, err := generator.Generate(ctx, opts)
+	result, err := generator.Generate(genCtx, opts)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, fmt.Sprintf("issue generation failed: %v", err))
 		return

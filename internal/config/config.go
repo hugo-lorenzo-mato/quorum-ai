@@ -499,6 +499,9 @@ type IssuesConfig struct {
 	// AutoGenerate creates issues automatically after planning phase.
 	AutoGenerate bool `mapstructure:"auto_generate" yaml:"auto_generate" json:"auto_generate"`
 
+	// Timeout for issue generation operations (e.g., "3m", "5m").
+	Timeout string `mapstructure:"timeout" yaml:"timeout" json:"timeout"`
+
 	// Template configures issue content generation.
 	Template IssueTemplateConfig `mapstructure:"template" yaml:"template" json:"template"`
 

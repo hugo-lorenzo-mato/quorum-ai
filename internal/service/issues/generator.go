@@ -522,6 +522,11 @@ func (g *Generator) GetIssueSet(ctx context.Context, workflowID string) (*core.I
 // issue files directly to disk, avoiding embedding large content in the prompt.
 // Files are saved to .quorum/issues/{workflowID}/ directory.
 // Returns the list of generated file paths.
+// maxTasksPerBatch is the maximum number of tasks to process in a single Claude CLI call.
+// Claude CLI has context limits, and with large task files (~30-50KB each), 8-10 tasks
+// is the practical maximum before hitting "Prompt is too long" errors.
+const maxTasksPerBatch = 8
+
 func (g *Generator) GenerateIssueFiles(ctx context.Context, workflowID string) ([]string, error) {
 	if g.agents == nil {
 		return nil, fmt.Errorf("agent registry not available")
@@ -538,13 +543,15 @@ func (g *Generator) GenerateIssueFiles(ctx context.Context, workflowID string) (
 		return nil, fmt.Errorf("getting prompt renderer: %w", err)
 	}
 
-	// Create output directory with absolute path
+	// Create output directory
 	cwd, err := os.Getwd()
 	if err != nil {
 		return nil, fmt.Errorf("getting working directory: %w", err)
 	}
-	issuesDir := filepath.Join(cwd, ".quorum", "issues", workflowID)
-	if err := os.MkdirAll(issuesDir, 0755); err != nil {
+	// Use relative path for shorter prompt (Claude will resolve it from cwd)
+	issuesDirRel := filepath.Join(".quorum", "issues", workflowID)
+	issuesDirAbs := filepath.Join(cwd, issuesDirRel)
+	if err := os.MkdirAll(issuesDirAbs, 0755); err != nil {
 		return nil, fmt.Errorf("creating issues directory: %w", err)
 	}
 
@@ -560,81 +567,85 @@ func (g *Generator) GenerateIssueFiles(ctx context.Context, workflowID string) (
 		return nil, fmt.Errorf("getting task file paths: %w", err)
 	}
 
-	// Build template parameters
-	cfg := g.config.Template
-	params := service.IssueGenerateParams{
-		ConsolidatedAnalysisPath: consolidatedPath,
-		TaskFiles:                taskFiles,
-		IssuesDir:                issuesDir,
-		Language:                 cfg.Language,
-		Tone:                     cfg.Tone,
-		Summarize:                g.config.Generator.Summarize,
-		IncludeDiagrams:          cfg.IncludeDiagrams,
-		IncludeTestingSection:    true, // Always include testing section
-		CustomInstructions:       cfg.CustomInstructions,
-		Convention:               cfg.Convention,
-	}
-
-	// Render the prompt using the template
-	prompt, err := prompts.RenderIssueGenerate(params)
-	if err != nil {
-		return nil, fmt.Errorf("rendering issue generation prompt: %w", err)
-	}
-
-	// Debug: Log prompt size and first/last 200 chars
-	slog.Info("rendered issue generation prompt",
-		"prompt_size_bytes", len(prompt),
-		"consolidated_path", consolidatedPath,
-		"task_count", len(taskFiles),
-		"issues_dir", issuesDir,
-	)
-	if len(prompt) > 400 {
-		slog.Debug("prompt preview",
-			"first_200", prompt[:200],
-			"last_200", prompt[len(prompt)-200:],
-		)
-	}
+	// Split tasks into batches to avoid Claude CLI "Prompt is too long" error
+	batches := g.splitIntoBatches(taskFiles, maxTasksPerBatch)
+	totalBatches := len(batches)
 
 	slog.Info("starting AI issue generation",
 		"agent", g.config.Generator.Agent,
 		"model", g.config.Generator.Model,
-		"output_dir", issuesDir,
-		"task_count", len(taskFiles),
-		"prompt_size", len(prompt))
+		"output_dir", issuesDirRel,
+		"total_tasks", len(taskFiles),
+		"batches", totalBatches)
 
-	// Execute the agent - Claude will read source files and write issue files directly
-	result, err := agent.Execute(ctx, core.ExecuteOptions{
-		Prompt:  prompt,
-		Model:   g.config.Generator.Model,
-		Format:  core.OutputFormatText,
-		Timeout: 10 * time.Minute,
-		Sandbox: false,
-		WorkDir: cwd, // Work from project root so paths resolve correctly
-	})
-	if err != nil {
-		return nil, fmt.Errorf("executing agent: %w", err)
+	cfg := g.config.Template
+
+	// Process each batch
+	for batchNum, batch := range batches {
+		// Include consolidated analysis only in the first batch
+		var consolidatedForBatch string
+		if batchNum == 0 {
+			consolidatedForBatch = consolidatedPath
+		}
+
+		params := service.IssueGenerateParams{
+			ConsolidatedAnalysisPath: consolidatedForBatch,
+			TaskFiles:                batch,
+			IssuesDir:                issuesDirRel,
+			Language:                 cfg.Language,
+			Tone:                     cfg.Tone,
+			Summarize:                g.config.Generator.Summarize,
+			IncludeDiagrams:          cfg.IncludeDiagrams,
+			IncludeTestingSection:    true,
+			CustomInstructions:       cfg.CustomInstructions,
+			Convention:               cfg.Convention,
+		}
+
+		prompt, err := prompts.RenderIssueGenerate(params)
+		if err != nil {
+			return nil, fmt.Errorf("rendering issue generation prompt (batch %d): %w", batchNum+1, err)
+		}
+
+		slog.Info("processing issue generation batch",
+			"batch", batchNum+1,
+			"total_batches", totalBatches,
+			"tasks_in_batch", len(batch),
+			"prompt_size", len(prompt),
+			"includes_consolidated", consolidatedForBatch != "")
+
+		if len(prompt) > 100 {
+			slog.Debug("batch prompt preview", "first_100", prompt[:100])
+		}
+
+		result, err := agent.Execute(ctx, core.ExecuteOptions{
+			Prompt:  prompt,
+			Model:   g.config.Generator.Model,
+			Format:  core.OutputFormatText,
+			Timeout: 10 * time.Minute,
+			Sandbox: false,
+			WorkDir: cwd,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("executing agent (batch %d/%d): %w", batchNum+1, totalBatches, err)
+		}
+
+		slog.Info("batch completed",
+			"batch", batchNum+1,
+			"total_batches", totalBatches,
+			"output_length", len(result.Output))
 	}
 
-	slog.Info("AI issue generation completed", "output_length", len(result.Output))
+	slog.Info("AI issue generation completed", "total_batches", totalBatches)
 
 	// Scan the filesystem for generated issue files
 	// (Claude wrote them directly, so we just need to find them)
-	files, err := g.scanGeneratedIssueFiles(issuesDir)
+	files, err := g.scanGeneratedIssueFiles(issuesDirAbs)
 	if err != nil {
 		return nil, fmt.Errorf("scanning generated issue files: %w", err)
 	}
 
 	if len(files) == 0 {
-		// Fallback: try the legacy parsing approach in case Claude didn't use Write tool
-		slog.Warn("no files found in issues directory, trying output parsing fallback")
-		files, err = g.parseAndWriteIssueFiles(result.Output, issuesDir)
-		if err != nil {
-			return nil, fmt.Errorf("parsing AI output (fallback): %w", err)
-		}
-	}
-
-	if len(files) == 0 {
-		return nil, fmt.Errorf("AI did not generate any issue files")
+		return nil, fmt.Errorf("AI did not generate any issue files (all %d batches completed but no files found)", totalBatches)
 	}
 
 	slog.Info("found generated issue files", "count", len(files))
@@ -642,55 +653,90 @@ func (g *Generator) GenerateIssueFiles(ctx context.Context, workflowID string) (
 	return files, nil
 }
 
-// getConsolidatedAnalysisPath returns the absolute path to the consolidated analysis file.
+// splitIntoBatches divides a slice of task files into batches of the specified size.
+func (g *Generator) splitIntoBatches(tasks []service.IssueTaskFile, batchSize int) [][]service.IssueTaskFile {
+	if batchSize <= 0 {
+		batchSize = maxTasksPerBatch
+	}
+
+	var batches [][]service.IssueTaskFile
+	for i := 0; i < len(tasks); i += batchSize {
+		end := i + batchSize
+		if end > len(tasks) {
+			end = len(tasks)
+		}
+		batches = append(batches, tasks[i:end])
+	}
+
+	// If no tasks, return single empty batch to still process consolidated analysis
+	if len(batches) == 0 {
+		batches = append(batches, []service.IssueTaskFile{})
+	}
+
+	return batches
+}
+
+// getConsolidatedAnalysisPath returns the RELATIVE path to the consolidated analysis file.
+// Using relative paths keeps the prompt shorter and avoids Claude CLI prompt size limits.
 func (g *Generator) getConsolidatedAnalysisPath() (string, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return "", fmt.Errorf("getting working directory: %w", err)
 	}
 
-	// Try analyze-phase/consolidated.md first
-	path := filepath.Join(g.reportDir, "analyze-phase", "consolidated.md")
-	absPath := path
-	if !filepath.IsAbs(path) {
-		absPath = filepath.Join(cwd, path)
+	// Get relative reportDir (in case it's absolute)
+	reportDirRel := g.reportDir
+	if filepath.IsAbs(g.reportDir) {
+		if rel, err := filepath.Rel(cwd, g.reportDir); err == nil {
+			reportDirRel = rel
+		}
 	}
+
+	// Try analyze-phase/consolidated.md first
+	relPath := filepath.Join(reportDirRel, "analyze-phase", "consolidated.md")
+	absPath := filepath.Join(cwd, relPath)
 	if _, err := os.Stat(absPath); err == nil {
-		return absPath, nil
+		return relPath, nil
 	}
 
 	// Fallback to consensus directory
-	consensusPath := filepath.Join(g.reportDir, "analyze-phase", "consensus", "consolidated.md")
-	absConsensusPath := consensusPath
-	if !filepath.IsAbs(consensusPath) {
-		absConsensusPath = filepath.Join(cwd, consensusPath)
-	}
+	consensusRelPath := filepath.Join(reportDirRel, "analyze-phase", "consensus", "consolidated.md")
+	absConsensusPath := filepath.Join(cwd, consensusRelPath)
 	if _, err := os.Stat(absConsensusPath); err == nil {
-		return absConsensusPath, nil
+		return consensusRelPath, nil
 	}
 
 	return "", fmt.Errorf("consolidated analysis not found at %s or %s", absPath, absConsensusPath)
 }
 
-// getTaskFilePaths returns information about task files (paths, not content).
+// getTaskFilePaths returns information about task files (RELATIVE paths, not content).
+// Using relative paths keeps the prompt shorter and avoids Claude CLI prompt size limits.
 func (g *Generator) getTaskFilePaths() ([]service.IssueTaskFile, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return nil, fmt.Errorf("getting working directory: %w", err)
 	}
 
+	// Get relative reportDir (in case it's absolute)
+	reportDirRel := g.reportDir
+	if filepath.IsAbs(g.reportDir) {
+		if rel, err := filepath.Rel(cwd, g.reportDir); err == nil {
+			reportDirRel = rel
+		}
+	}
+
 	var taskFiles []service.IssueTaskFile
 	taskPattern := regexp.MustCompile(`^task-(\d+)-(.+)\.md$`)
 
-	// Directories to search for task files
+	// Directories to search for task files (relative paths)
 	tasksDirs := []string{
-		filepath.Join(g.reportDir, "plan-phase", "tasks"),
+		filepath.Join(reportDirRel, "plan-phase", "tasks"),
 	}
 
-	// Also check global .quorum/tasks directory
-	if strings.Contains(g.reportDir, ".quorum/runs/") {
-		quorumRoot := filepath.Dir(filepath.Dir(g.reportDir))
-		globalTasksDir := filepath.Join(quorumRoot, "tasks")
+	// Also check global .quorum/tasks directory (always relative)
+	if strings.Contains(g.reportDir, ".quorum/runs/") || strings.Contains(reportDirRel, ".quorum/runs/") {
+		// Global tasks directory is always .quorum/tasks (relative)
+		globalTasksDir := ".quorum/tasks"
 		tasksDirs = append(tasksDirs, globalTasksDir)
 	}
 
@@ -722,12 +768,13 @@ func (g *Generator) getTaskFilePaths() ([]service.IssueTaskFile, error) {
 				continue
 			}
 
-			absPath := filepath.Join(absTasksDir, entry.Name())
+			// Use RELATIVE path for shorter prompt
+			relPath := filepath.Join(tasksDir, entry.Name())
 			taskName := strings.ReplaceAll(matches[2], "-", " ")
 			slug := matches[2] // Already kebab-case
 
 			taskFiles = append(taskFiles, service.IssueTaskFile{
-				Path: absPath,
+				Path: relPath,
 				ID:   taskID,
 				Name: taskName,
 				Slug: slug,

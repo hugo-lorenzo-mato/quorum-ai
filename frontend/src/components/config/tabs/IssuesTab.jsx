@@ -4,6 +4,7 @@ import {
   SettingSection,
   SelectSetting,
   TextInputSetting,
+  DurationInputSetting,
   ToggleSetting,
   ArrayInputSetting,
 } from '../index';
@@ -24,6 +25,7 @@ function GeneralIssuesSection() {
   const enabled = useConfigField('issues.enabled');
   const provider = useConfigSelect('issues.provider', 'issue_providers');
   const autoGenerate = useConfigField('issues.auto_generate');
+  const timeout = useConfigField('issues.timeout');
 
   return (
     <SettingSection
@@ -52,6 +54,15 @@ function GeneralIssuesSection() {
         ]}
         error={provider.error}
         disabled={provider.disabled || !enabled.value}
+      />
+
+      <DurationInputSetting
+        label="Timeout"
+        tooltip="Maximum time allowed for issue generation. Example: '5m' for 5 minutes. AI-based generation may take longer."
+        value={timeout.value}
+        onChange={timeout.onChange}
+        error={timeout.error}
+        disabled={timeout.disabled || !enabled.value}
       />
 
       <ToggleSetting
