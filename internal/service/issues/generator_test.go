@@ -126,7 +126,7 @@ Another task context.
 		},
 	}
 
-	gen := NewGenerator(client, cfg, tmpDir)
+	gen := NewGenerator(client, cfg, tmpDir, nil)
 
 	// Run in dry-run mode
 	opts := GenerateOptions{
@@ -198,7 +198,7 @@ func TestGenerator_Generate_CreateIssues(t *testing.T) {
 		Labels:   []string{"quorum-generated"},
 	}
 
-	gen := NewGenerator(client, cfg, tmpDir)
+	gen := NewGenerator(client, cfg, tmpDir, nil)
 
 	opts := GenerateOptions{
 		WorkflowID:      "wf-test",

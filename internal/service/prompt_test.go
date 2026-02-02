@@ -11,21 +11,25 @@ import (
 func parseConsensusSchemaExample(t *testing.T, content string) map[string]any {
 	t.Helper()
 
-	const marker = "```yaml"
+	// Look for an actual code block (newline before ```yaml), not prose text
+	const marker = "\n```yaml\n"
 	start := strings.Index(content, marker)
 	if start == -1 {
 		t.Fatalf("yaml example block not found")
 	}
 	rest := content[start+len(marker):]
-	rest = strings.TrimPrefix(rest, "\r\n")
-	rest = strings.TrimPrefix(rest, "\n")
 
-	end := strings.Index(rest, "```")
+	end := strings.Index(rest, "\n```")
 	if end == -1 {
 		t.Fatalf("yaml example block not closed")
 	}
 
 	block := strings.TrimSpace(rest[:end])
+	// Strip YAML document separators if present (---)
+	block = strings.TrimPrefix(block, "---\n")
+	block = strings.TrimSuffix(block, "\n---")
+	block = strings.TrimSpace(block)
+
 	var data map[string]any
 	if err := yaml.Unmarshal([]byte(block), &data); err != nil {
 		t.Fatalf("yaml example parse failed: %v", err)

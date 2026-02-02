@@ -23,6 +23,7 @@ Available Commands:
   status      Show workflow status
   trace       Show trace summaries
   version     Print version information
+  workflow    Manage workflows
   workflows   List available workflows
 
 Flags:

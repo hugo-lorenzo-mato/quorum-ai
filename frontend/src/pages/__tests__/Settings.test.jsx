@@ -62,12 +62,16 @@ describe('Settings', () => {
   it('renders all tabs', () => {
     render(<Settings />);
 
-    expect(screen.getByText('General')).toBeInTheDocument();
-    expect(screen.getByText('Workflow')).toBeInTheDocument();
-    expect(screen.getByText('Agents')).toBeInTheDocument();
-    expect(screen.getByText('Phases')).toBeInTheDocument();
-    expect(screen.getByText('Git')).toBeInTheDocument();
-    expect(screen.getByText('Advanced')).toBeInTheDocument();
+    // Use getAllByRole to find tab buttons specifically
+    const tabs = screen.getAllByRole('tab');
+    const tabNames = tabs.map(tab => tab.textContent);
+
+    expect(tabNames).toContain('General');
+    expect(tabNames).toContain('Workflow');
+    expect(tabNames).toContain('Agents');
+    expect(tabNames).toContain('Phases');
+    expect(tabNames).toContain('Git');
+    expect(tabNames).toContain('Advanced');
   });
 
   it('loads config on mount', () => {
@@ -99,6 +103,7 @@ describe('Settings', () => {
     useConfigStore.mockImplementation((selector) => {
       const state = {
         config: null,
+        localChanges: {},
         isLoading: true,
         error: null,
         hasConflict: false,
@@ -121,6 +126,7 @@ describe('Settings', () => {
     useConfigStore.mockImplementation((selector) => {
       const state = {
         config: null,
+        localChanges: {},
         isLoading: false,
         error: 'Failed to load configuration',
         hasConflict: false,

@@ -83,7 +83,19 @@ bench: ## Run benchmarks
 
 .PHONY: fuzz
 fuzz: ## Run fuzz tests (30s per target)
-	go test -fuzz=Fuzz -fuzztime=30s ./internal/service/...
+	go test -fuzz=Fuzz -fuzztime=30s ./internal/config/...
+	go test -fuzz=Fuzz -fuzztime=30s ./internal/core/...
+
+.PHONY: test-integration
+test-integration: ## Run integration tests
+	go test -race -v -tags=integration -timeout 20m ./...
+
+.PHONY: test-e2e
+test-e2e: build ## Run end-to-end tests
+	go test -race -v -tags=e2e -timeout 30m ./tests/e2e/...
+
+.PHONY: test-all
+test-all: test test-integration test-e2e frontend-test ## Run all tests
 
 # Quality targets
 .PHONY: lint
@@ -217,7 +229,11 @@ frontend-lint: ## Run frontend lint
 
 .PHONY: frontend-test
 frontend-test: ## Run frontend tests
-	cd $(FRONTEND_DIR) && npm test -- --run
+	cd $(FRONTEND_DIR) && npm run test:run
+
+.PHONY: frontend-coverage
+frontend-coverage: ## Run frontend tests with coverage
+	cd $(FRONTEND_DIR) && npm run test:coverage
 
 .PHONY: frontend-audit
 frontend-audit: frontend-deps ## Run frontend security audit

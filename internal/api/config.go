@@ -35,6 +35,11 @@ func (s *Server) handleGetConfig(w http.ResponseWriter, r *http.Request) {
 	// Use file-based ETag for consistency with PATCH validation
 	etag := meta.ETag
 
+	// If no file exists (using defaults), generate ETag from default config content
+	if etag == "" {
+		etag, _ = calculateETag(cfg)
+	}
+
 	// Set ETag header
 	if etag != "" {
 		w.Header().Set("ETag", fmt.Sprintf("%q", etag))
