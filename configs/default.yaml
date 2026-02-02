@@ -305,10 +305,10 @@ issues:
   auto_generate: false
   # Template settings for issue content
   template:
-    # Language for issue content: en, es, etc.
-    language: en
-    # Tone: technical, friendly, formal
-    tone: technical
+    # Language for issue content: english, spanish, french, german, portuguese, chinese, japanese
+    language: english
+    # Tone: professional, casual, technical, concise
+    tone: professional
     # Include mermaid diagrams in issue body
     include_diagrams: true
     # Title format pattern. Placeholders: {task_name}, {task_id}, {workflow_id}
@@ -330,3 +330,15 @@ issues:
     use_epics: false
     # GitLab project ID (required for GitLab, auto-detected from remote otherwise)
     project_id: ""
+  # AI-powered issue generation (uses LLM to generate title/body)
+  generator:
+    # Enable LLM-based generation. When false, issues copy artifacts directly.
+    enabled: false
+    # Agent to use for generation (claude, gemini, codex, etc.)
+    agent: claude
+    # Model to use (optional, uses agent default if empty)
+    model: haiku
+    # Summarize content instead of copying verbatim
+    summarize: true
+    # Maximum body length in characters
+    max_body_length: 8000

@@ -30,6 +30,7 @@ type FullConfigResponse struct {
 	Chat        ChatConfigResponse        `json:"chat"`
 	Report      ReportConfigResponse      `json:"report"`
 	Diagnostics DiagnosticsConfigResponse `json:"diagnostics"`
+	Issues      IssuesConfigResponse      `json:"issues"`
 }
 
 // LogConfigResponse represents logging configuration.
@@ -233,6 +234,44 @@ type PreflightConfigResponse struct {
 	MinFreeMemoryMB  int  `json:"min_free_memory_mb"`
 }
 
+// IssuesConfigResponse represents issues configuration.
+type IssuesConfigResponse struct {
+	Enabled      bool                           `json:"enabled"`
+	Provider     string                         `json:"provider"`
+	AutoGenerate bool                           `json:"auto_generate"`
+	Template     IssueTemplateConfigResponse    `json:"template"`
+	Labels       []string                       `json:"default_labels"`
+	Assignees    []string                       `json:"default_assignees"`
+	GitLab       GitLabIssueConfigResponse      `json:"gitlab"`
+	Generator    IssueGeneratorConfigResponse   `json:"generator"`
+}
+
+// IssueTemplateConfigResponse represents issue template configuration.
+type IssueTemplateConfigResponse struct {
+	Language           string `json:"language"`
+	Tone               string `json:"tone"`
+	IncludeDiagrams    bool   `json:"include_diagrams"`
+	TitleFormat        string `json:"title_format"`
+	BodyTemplateFile   string `json:"body_template_file"`
+	Convention         string `json:"convention"`
+	CustomInstructions string `json:"custom_instructions"`
+}
+
+// GitLabIssueConfigResponse represents GitLab-specific issue configuration.
+type GitLabIssueConfigResponse struct {
+	UseEpics  bool   `json:"use_epics"`
+	ProjectID string `json:"project_id"`
+}
+
+// IssueGeneratorConfigResponse represents LLM-based issue generation configuration.
+type IssueGeneratorConfigResponse struct {
+	Enabled       bool   `json:"enabled"`
+	Agent         string `json:"agent"`
+	Model         string `json:"model"`
+	Summarize     bool   `json:"summarize"`
+	MaxBodyLength int    `json:"max_body_length"`
+}
+
 // ============================================================================
 // UPDATE DTOs (for PATCH /api/v1/config)
 // All fields are pointers to support partial updates (nil = unchanged)
@@ -251,6 +290,7 @@ type FullConfigUpdate struct {
 	Chat        *ChatConfigUpdate        `json:"chat,omitempty"`
 	Report      *ReportConfigUpdate      `json:"report,omitempty"`
 	Diagnostics *DiagnosticsConfigUpdate `json:"diagnostics,omitempty"`
+	Issues      *IssuesConfigUpdate      `json:"issues,omitempty"`
 }
 
 // LogConfigUpdate represents log configuration update.
@@ -452,6 +492,44 @@ type PreflightConfigUpdate struct {
 	Enabled          *bool `json:"enabled,omitempty"`
 	MinFreeFDPercent *int  `json:"min_free_fd_percent,omitempty"`
 	MinFreeMemoryMB  *int  `json:"min_free_memory_mb,omitempty"`
+}
+
+// IssuesConfigUpdate represents issues configuration update.
+type IssuesConfigUpdate struct {
+	Enabled      *bool                         `json:"enabled,omitempty"`
+	Provider     *string                       `json:"provider,omitempty"`
+	AutoGenerate *bool                         `json:"auto_generate,omitempty"`
+	Template     *IssueTemplateConfigUpdate    `json:"template,omitempty"`
+	Labels       *[]string                     `json:"default_labels,omitempty"`
+	Assignees    *[]string                     `json:"default_assignees,omitempty"`
+	GitLab       *GitLabIssueConfigUpdate      `json:"gitlab,omitempty"`
+	Generator    *IssueGeneratorConfigUpdate   `json:"generator,omitempty"`
+}
+
+// IssueTemplateConfigUpdate represents issue template update.
+type IssueTemplateConfigUpdate struct {
+	Language           *string `json:"language,omitempty"`
+	Tone               *string `json:"tone,omitempty"`
+	IncludeDiagrams    *bool   `json:"include_diagrams,omitempty"`
+	TitleFormat        *string `json:"title_format,omitempty"`
+	BodyTemplateFile   *string `json:"body_template_file,omitempty"`
+	Convention         *string `json:"convention,omitempty"`
+	CustomInstructions *string `json:"custom_instructions,omitempty"`
+}
+
+// GitLabIssueConfigUpdate represents GitLab-specific issue update.
+type GitLabIssueConfigUpdate struct {
+	UseEpics  *bool   `json:"use_epics,omitempty"`
+	ProjectID *string `json:"project_id,omitempty"`
+}
+
+// IssueGeneratorConfigUpdate represents issue generator update.
+type IssueGeneratorConfigUpdate struct {
+	Enabled       *bool   `json:"enabled,omitempty"`
+	Agent         *string `json:"agent,omitempty"`
+	Model         *string `json:"model,omitempty"`
+	Summarize     *bool   `json:"summarize,omitempty"`
+	MaxBodyLength *int    `json:"max_body_length,omitempty"`
 }
 
 // ============================================================================

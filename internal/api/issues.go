@@ -140,8 +140,8 @@ func (s *Server) handleGenerateIssues(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create generator
-	generator := issues.NewGenerator(issueClient, issuesCfg, reportDir)
+	// Create generator with agent registry for LLM-based generation
+	generator := issues.NewGenerator(issueClient, issuesCfg, reportDir, s.agentRegistry)
 
 	// Generate issues
 	opts := issues.GenerateOptions{
@@ -245,8 +245,8 @@ func (s *Server) handlePreviewIssues(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create generator (no client needed for preview)
-	generator := issues.NewGenerator(nil, issuesCfg, reportDir)
+	// Create generator (no client needed for preview, but agent registry for LLM)
+	generator := issues.NewGenerator(nil, issuesCfg, reportDir, s.agentRegistry)
 
 	// Generate previews
 	opts := issues.GenerateOptions{

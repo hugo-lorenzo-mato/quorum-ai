@@ -23,17 +23,13 @@ func (s *Server) handleGetConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Calculate ETag
-	etag, err := calculateETag(cfg)
-	if err != nil {
-		s.logger.Error("failed to calculate ETag", "error", err)
-		// Non-fatal, continue without ETag
-		etag = ""
-	}
-
-	// Get file metadata
+	// Get file metadata and ETag from file (not from marshaled config!)
+	// IMPORTANT: ETag must be calculated from file bytes to match PATCH validation
 	configPath := s.getConfigPath()
 	meta, _ := getConfigFileMeta(configPath)
+
+	// Use file-based ETag for consistency with PATCH validation
+	etag := meta.ETag
 
 	// Set ETag header
 	if etag != "" {
@@ -148,8 +144,8 @@ func (s *Server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Calculate new ETag
-	newETag, _ := calculateETag(cfg)
+	// Calculate new ETag from file (must match how PATCH validation calculates it)
+	newETag, _ := calculateETagFromFile(configPath)
 	w.Header().Set("ETag", fmt.Sprintf("%q", newETag))
 
 	response := ConfigResponseWithMeta{
@@ -191,8 +187,8 @@ func (s *Server) handleResetConfig(w http.ResponseWriter, _ *http.Request) {
 		return
 	}
 
-	// Calculate ETag for the new config
-	etag, _ := calculateETag(cfg)
+	// Calculate ETag from file (must match how PATCH validation calculates it)
+	etag, _ := calculateETagFromFile(configPath)
 	if etag != "" {
 		w.Header().Set("ETag", fmt.Sprintf("%q", etag))
 	}
@@ -495,6 +491,47 @@ func configToFullResponse(cfg *config.Config) FullConfigResponse {
 				MinFreeMemoryMB:  cfg.Diagnostics.PreflightChecks.MinFreeMemoryMB,
 			},
 		},
+		Issues: issuesToResponse(&cfg.Issues),
+	}
+}
+
+// issuesToResponse converts IssuesConfig to IssuesConfigResponse.
+func issuesToResponse(cfg *config.IssuesConfig) IssuesConfigResponse {
+	labels := cfg.Labels
+	if labels == nil {
+		labels = []string{}
+	}
+	assignees := cfg.Assignees
+	if assignees == nil {
+		assignees = []string{}
+	}
+
+	return IssuesConfigResponse{
+		Enabled:      cfg.Enabled,
+		Provider:     cfg.Provider,
+		AutoGenerate: cfg.AutoGenerate,
+		Template: IssueTemplateConfigResponse{
+			Language:           cfg.Template.Language,
+			Tone:               cfg.Template.Tone,
+			IncludeDiagrams:    cfg.Template.IncludeDiagrams,
+			TitleFormat:        cfg.Template.TitleFormat,
+			BodyTemplateFile:   cfg.Template.BodyTemplateFile,
+			Convention:         cfg.Template.Convention,
+			CustomInstructions: cfg.Template.CustomInstructions,
+		},
+		Labels:    labels,
+		Assignees: assignees,
+		GitLab: GitLabIssueConfigResponse{
+			UseEpics:  cfg.GitLab.UseEpics,
+			ProjectID: cfg.GitLab.ProjectID,
+		},
+		Generator: IssueGeneratorConfigResponse{
+			Enabled:       cfg.Generator.Enabled,
+			Agent:         cfg.Generator.Agent,
+			Model:         cfg.Generator.Model,
+			Summarize:     cfg.Generator.Summarize,
+			MaxBodyLength: cfg.Generator.MaxBodyLength,
+		},
 	}
 }
 
@@ -559,6 +596,9 @@ func applyFullConfigUpdates(cfg *config.Config, req *FullConfigUpdate) {
 	}
 	if req.Diagnostics != nil {
 		applyDiagnosticsUpdates(&cfg.Diagnostics, req.Diagnostics)
+	}
+	if req.Issues != nil {
+		applyIssuesUpdates(&cfg.Issues, req.Issues)
 	}
 }
 
@@ -899,5 +939,83 @@ func applyPreflightUpdates(cfg *config.PreflightConfig, update *PreflightConfigU
 	}
 	if update.MinFreeMemoryMB != nil {
 		cfg.MinFreeMemoryMB = *update.MinFreeMemoryMB
+	}
+}
+
+func applyIssuesUpdates(cfg *config.IssuesConfig, update *IssuesConfigUpdate) {
+	if update.Enabled != nil {
+		cfg.Enabled = *update.Enabled
+	}
+	if update.Provider != nil {
+		cfg.Provider = *update.Provider
+	}
+	if update.AutoGenerate != nil {
+		cfg.AutoGenerate = *update.AutoGenerate
+	}
+	if update.Labels != nil {
+		cfg.Labels = *update.Labels
+	}
+	if update.Assignees != nil {
+		cfg.Assignees = *update.Assignees
+	}
+	if update.Template != nil {
+		applyIssueTemplateUpdates(&cfg.Template, update.Template)
+	}
+	if update.GitLab != nil {
+		applyGitLabIssueUpdates(&cfg.GitLab, update.GitLab)
+	}
+	if update.Generator != nil {
+		applyIssueGeneratorUpdates(&cfg.Generator, update.Generator)
+	}
+}
+
+func applyIssueTemplateUpdates(cfg *config.IssueTemplateConfig, update *IssueTemplateConfigUpdate) {
+	if update.Language != nil {
+		cfg.Language = *update.Language
+	}
+	if update.Tone != nil {
+		cfg.Tone = *update.Tone
+	}
+	if update.IncludeDiagrams != nil {
+		cfg.IncludeDiagrams = *update.IncludeDiagrams
+	}
+	if update.TitleFormat != nil {
+		cfg.TitleFormat = *update.TitleFormat
+	}
+	if update.BodyTemplateFile != nil {
+		cfg.BodyTemplateFile = *update.BodyTemplateFile
+	}
+	if update.Convention != nil {
+		cfg.Convention = *update.Convention
+	}
+	if update.CustomInstructions != nil {
+		cfg.CustomInstructions = *update.CustomInstructions
+	}
+}
+
+func applyGitLabIssueUpdates(cfg *config.GitLabIssueConfig, update *GitLabIssueConfigUpdate) {
+	if update.UseEpics != nil {
+		cfg.UseEpics = *update.UseEpics
+	}
+	if update.ProjectID != nil {
+		cfg.ProjectID = *update.ProjectID
+	}
+}
+
+func applyIssueGeneratorUpdates(cfg *config.IssueGeneratorConfig, update *IssueGeneratorConfigUpdate) {
+	if update.Enabled != nil {
+		cfg.Enabled = *update.Enabled
+	}
+	if update.Agent != nil {
+		cfg.Agent = *update.Agent
+	}
+	if update.Model != nil {
+		cfg.Model = *update.Model
+	}
+	if update.Summarize != nil {
+		cfg.Summarize = *update.Summarize
+	}
+	if update.MaxBodyLength != nil {
+		cfg.MaxBodyLength = *update.MaxBodyLength
 	}
 }

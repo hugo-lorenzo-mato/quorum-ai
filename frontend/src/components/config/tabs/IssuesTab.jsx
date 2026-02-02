@@ -1,4 +1,5 @@
 import { useConfigField, useConfigSelect } from '../../../hooks/useConfigField';
+import { getModelsForAgent, useEnums } from '../../../lib/agents';
 import {
   SettingSection,
   SelectSetting,
@@ -11,6 +12,7 @@ export function IssuesTab() {
   return (
     <div className="space-y-6">
       <GeneralIssuesSection />
+      <GeneratorSection />
       <TemplateSection />
       <LabelsSection />
       <GitLabSection />
@@ -46,7 +48,7 @@ function GeneralIssuesSection() {
         onChange={provider.onChange}
         options={provider.options.length > 0 ? provider.options : [
           { value: 'github', label: 'GitHub' },
-          { value: 'gitlab', label: 'GitLab' },
+          { value: 'gitlab', label: 'GitLab (Coming Soon)', disabled: true },
         ]}
         error={provider.error}
         disabled={provider.disabled || !enabled.value}
@@ -60,6 +62,93 @@ function GeneralIssuesSection() {
         onChange={autoGenerate.onChange}
         error={autoGenerate.error}
         disabled={autoGenerate.disabled || !enabled.value}
+      />
+    </SettingSection>
+  );
+}
+
+function GeneratorSection() {
+  // Ensure enums are loaded for model options
+  useEnums();
+
+  const issuesEnabled = useConfigField('issues.enabled');
+  const enabled = useConfigField('issues.generator.enabled');
+  const agent = useConfigSelect('issues.generator.agent', 'agents');
+  const model = useConfigField('issues.generator.model');
+  const summarize = useConfigField('issues.generator.summarize');
+  const maxBodyLength = useConfigField('issues.generator.max_body_length');
+
+  const isDisabled = !issuesEnabled.value;
+
+  // Get model options based on selected agent
+  const selectedAgent = agent.value || 'claude';
+  const modelOptions = getModelsForAgent(selectedAgent);
+
+  return (
+    <SettingSection
+      title="AI Generator"
+      description="Use an AI agent to generate intelligent issue titles and descriptions"
+    >
+      <ToggleSetting
+        label="Enable AI Generation"
+        description="Generate issue content using an AI agent instead of copying artifacts"
+        tooltip="When enabled, an LLM will create concise, well-formatted issues. When disabled, issues are created by copying workflow artifacts directly."
+        checked={enabled.value}
+        onChange={enabled.onChange}
+        error={enabled.error}
+        disabled={enabled.disabled || isDisabled}
+      />
+
+      <SelectSetting
+        label="Agent"
+        description="Which agent to use for generation"
+        tooltip="Select the AI agent that will generate issue content. Claude with Haiku model is recommended for fast, cost-effective generation."
+        value={agent.value || 'claude'}
+        onChange={(newAgent) => {
+          agent.onChange(newAgent);
+          // Reset model to default when agent changes
+          model.onChange('');
+        }}
+        options={agent.options.length > 0 ? agent.options : [
+          { value: 'claude', label: 'Claude' },
+          { value: 'gemini', label: 'Gemini' },
+          { value: 'codex', label: 'Codex' },
+        ]}
+        error={agent.error}
+        disabled={agent.disabled || isDisabled || !enabled.value}
+      />
+
+      <SelectSetting
+        label="Model"
+        description="Model to use for generation"
+        tooltip="Select a model or leave as Default to use the agent's configured default. For Claude, 'Haiku' is recommended for fast, cost-effective generation."
+        value={model.value || ''}
+        onChange={model.onChange}
+        options={modelOptions}
+        error={model.error}
+        disabled={model.disabled || isDisabled || !enabled.value}
+      />
+
+      <ToggleSetting
+        label="Summarize Content"
+        description="Create concise summaries instead of copying full text"
+        tooltip="When enabled, the AI will summarize workflow artifacts. When disabled, it will include the full content with improved formatting."
+        checked={summarize.value}
+        onChange={summarize.onChange}
+        error={summarize.error}
+        disabled={summarize.disabled || isDisabled || !enabled.value}
+      />
+
+      <TextInputSetting
+        label="Max Body Length"
+        description="Maximum characters for generated issue body"
+        tooltip="Limits the length of generated issue descriptions. GitHub recommends keeping issues under 65,536 characters."
+        placeholder="8000"
+        value={maxBodyLength.value?.toString() || ''}
+        onChange={(val) => maxBodyLength.onChange(val ? parseInt(val, 10) : null)}
+        error={maxBodyLength.error}
+        disabled={maxBodyLength.disabled || isDisabled || !enabled.value}
+        type="number"
       />
     </SettingSection>
   );

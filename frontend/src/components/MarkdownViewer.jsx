@@ -44,7 +44,7 @@ function CopyButton({ text }) {
     <button
       type="button"
       onClick={handleCopy}
-      className="absolute top-2 right-2 p-1.5 rounded-md bg-background/50 hover:bg-background shadow-sm border border-border text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-all z-10"
+      className="absolute top-2 right-2 p-1.5 rounded-md bg-background/50 hover:bg-background shadow-sm border border-border text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 focus:opacity-100 transition-all z-10"
       title={copied ? 'Copied!' : 'Copy code'}
     >
       {copied ? (
@@ -79,7 +79,7 @@ export default function MarkdownViewer({ markdown }) {
   }, [theme]);
 
   return (
-    <div className="space-y-4 relative">
+    <div className="space-y-4 relative break-words">
       <button
         type="button"
         onClick={handleCopy}
@@ -119,24 +119,33 @@ export default function MarkdownViewer({ markdown }) {
           remarkPlugins={[remarkGfm]}
           components={{
             h1: ({ children, ...props }) => (
-              <h1 className="text-2xl font-semibold tracking-tight mt-2 mb-4" {...props}>
+              <h1 className="text-2xl font-bold tracking-tight mt-2 mb-4 border-b border-border pb-2" {...props}>
                 {children}
               </h1>
             ),
             h2: ({ children, ...props }) => (
-              <h2 className="text-xl font-semibold tracking-tight mt-6 mb-3" {...props}>
+              <h2 className="text-xl font-semibold tracking-tight mt-8 mb-4 border-b border-border/50 pb-1" {...props}>
                 {children}
               </h2>
             ),
             h3: ({ children, ...props }) => (
-              <h3 className="text-lg font-semibold mt-5 mb-2" {...props}>
+              <h3 className="text-lg font-semibold mt-6 mb-2" {...props}>
                 {children}
               </h3>
             ),
             p: ({ children, ...props }) => (
-              <p className="text-sm leading-6 text-foreground/90 my-3" {...props}>
+              <p className="text-sm leading-7 text-foreground/90 my-4" {...props}>
                 {children}
               </p>
+            ),
+            img: ({ src, alt, ...props }) => (
+              <img
+                src={src}
+                alt={alt}
+                className="max-w-full h-auto rounded-lg border border-border my-6 mx-auto"
+                loading="lazy"
+                {...props}
+              />
             ),
             a: ({ children, href, ...props }) => (
               <a
@@ -150,26 +159,26 @@ export default function MarkdownViewer({ markdown }) {
               </a>
             ),
             ul: ({ children, ...props }) => (
-              <ul className="my-3 pl-5 list-disc space-y-1 text-sm" {...props}>
+              <ul className="my-3 pl-5 list-disc space-y-1 text-sm [&_ul]:my-1 [&_ol]:my-1 [&_ul]:space-y-0 [&_ol]:space-y-0" {...props}>
                 {children}
               </ul>
             ),
             ol: ({ children, ...props }) => (
-              <ol className="my-3 pl-5 list-decimal space-y-1 text-sm" {...props}>
+              <ol className="my-3 pl-5 list-decimal space-y-1 text-sm [&_ul]:my-1 [&_ol]:my-1 [&_ul]:space-y-0 [&_ol]:space-y-0" {...props}>
                 {children}
               </ol>
             ),
             li: ({ children, ...props }) => (
-              <li className="text-sm text-foreground/90" {...props}>
+              <li className="text-sm text-foreground/90 pl-1" {...props}>
                 {children}
               </li>
             ),
             blockquote: ({ children, ...props }) => (
-              <blockquote className="my-4 border-l-2 border-border pl-4 text-sm text-muted-foreground" {...props}>
+              <blockquote className="my-4 border-l-4 border-primary/50 pl-4 py-1 bg-muted/30 rounded-r-lg text-sm text-muted-foreground italic" {...props}>
                 {children}
               </blockquote>
             ),
-            hr: (props) => <hr className="my-6 border-border" {...props} />,
+            hr: (props) => <hr className="my-8 border-border" {...props} />,
             code: ({ children, className, inline, ...props }) => {
               const match = /language-([a-zA-Z0-9_-]+)/.exec(className || '');
               const content = String(children || '').replace(/\n$/, '');
@@ -208,7 +217,7 @@ export default function MarkdownViewer({ markdown }) {
               }
 
               return (
-                <code className="px-1 py-0.5 rounded bg-muted text-xs font-mono" {...props}>
+                <code className="px-1.5 py-0.5 rounded-md bg-muted font-mono text-[0.9em] break-all border border-border/50" {...props}>
                   {children}
                 </code>
               );
