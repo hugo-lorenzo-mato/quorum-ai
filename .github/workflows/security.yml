@@ -32,6 +32,7 @@ jobs:
         run: make build-frontend
 
       - name: Run gosec
+        continue-on-error: true  # TODO: Remove when gosec supports Go 1.25
         uses: securego/gosec@v2.22.4
         with:
           args: -exclude=G104,G301,G302,G306 -exclude-dir=.git -exclude-dir=frontend ./...

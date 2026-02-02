@@ -258,9 +258,15 @@ func TestE2E_ConfigSections(t *testing.T) {
 	t.Run("Git Config", func(t *testing.T) {
 		updateReq := api.FullConfigUpdate{
 			Git: &api.GitConfigUpdate{
-				AutoCommit:   boolPtr(true),
-				AutoPush:     boolPtr(true),
-				WorktreeMode: strPtr("shared"),
+				Task: &api.GitTaskConfigUpdate{
+					AutoCommit: boolPtr(true),
+				},
+				Finalization: &api.GitFinalizationConfigUpdate{
+					AutoPush: boolPtr(true),
+				},
+				Worktree: &api.WorktreeConfigUpdate{
+					Mode: strPtr("shared"),
+				},
 			},
 		}
 		status, _, body := request(t, ts, "PATCH", "/api/v1/config", updateReq)
@@ -269,9 +275,9 @@ func TestE2E_ConfigSections(t *testing.T) {
 		var cfg api.ConfigResponseWithMeta
 		err := json.Unmarshal(body, &cfg)
 		testutil.AssertNoError(t, err)
-		testutil.AssertEqual(t, cfg.Config.Git.AutoCommit, true)
-		testutil.AssertEqual(t, cfg.Config.Git.AutoPush, true)
-		testutil.AssertEqual(t, cfg.Config.Git.WorktreeMode, "shared")
+		testutil.AssertEqual(t, cfg.Config.Git.Task.AutoCommit, true)
+		testutil.AssertEqual(t, cfg.Config.Git.Finalization.AutoPush, true)
+		testutil.AssertEqual(t, cfg.Config.Git.Worktree.Mode, "shared")
 	})
 
 	t.Run("Log Config", func(t *testing.T) {
@@ -453,7 +459,7 @@ func TestE2E_ConfigPartialUpdate(t *testing.T) {
 
 	// Verify other sections unchanged
 	testutil.AssertEqual(t, updatedCfg.Config.Agents.Default, initialCfg.Config.Agents.Default)
-	testutil.AssertEqual(t, updatedCfg.Config.Git.AutoCommit, initialCfg.Config.Git.AutoCommit)
+	testutil.AssertEqual(t, updatedCfg.Config.Git.Task.AutoCommit, initialCfg.Config.Git.Task.AutoCommit)
 }
 
 func TestE2E_ConfigInvalidRequest(t *testing.T) {
