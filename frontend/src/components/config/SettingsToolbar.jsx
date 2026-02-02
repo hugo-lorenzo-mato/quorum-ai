@@ -19,7 +19,7 @@ export function SettingsToolbar() {
 
   return (
     <div
-      className={`fixed bottom-0 right-0 z-50 border-t border-border bg-background/80 glass shadow-lg md:${
+      className={`fixed bottom-16 md:bottom-0 right-0 z-50 border-t border-border bg-background/80 glass shadow-lg md:${
         sidebarOpen ? 'left-64' : 'left-16'
       } left-0`}
     >

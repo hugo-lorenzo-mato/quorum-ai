@@ -1364,186 +1364,173 @@ function NewWorkflowForm({ onSubmit, onCancel, loading }) {
 
   return (
     <div className="max-w-2xl mx-auto p-6 rounded-xl border border-border bg-card animate-fade-up">
-      <h2 className="text-xl font-semibold text-foreground mb-4">Create New Workflow</h2>
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-foreground mb-2">
-            Title <span className="text-muted-foreground font-normal">(optional)</span>
-          </label>
-          <input
-            type="text"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Give your workflow a descriptive name..."
-            className="w-full px-3 py-2 border border-input rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-foreground mb-2">
-            Prompt
-          </label>
-          <div className="relative">
-            <textarea
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              placeholder="Describe what you want the AI agents to accomplish..."
-              rows={8}
-              spellCheck={false}
-              className="w-full px-3 py-2 pr-12 border border-input rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background resize-none font-mono text-sm leading-6"
+      <h2 className="text-xl font-semibold text-foreground mb-6">Create New Workflow</h2>
+      <form onSubmit={handleSubmit} className="space-y-8">
+        {/* Step 1: Definition */}
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-2">
+              Title <span className="text-muted-foreground font-normal">(optional)</span>
+            </label>
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Give your workflow a descriptive name..."
+              className="w-full px-3 py-2 border border-input rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background"
             />
-            <VoiceInputButton
-              onTranscript={(text) => setPrompt((prev) => (prev ? prev + ' ' + text : text))}
-              disabled={loading}
-              className="absolute top-2 right-2"
-            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-2">
+              Prompt
+            </label>
+            <div className="relative">
+              <textarea
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                placeholder="Describe what you want the AI agents to accomplish..."
+                rows={6}
+                spellCheck={false}
+                className="w-full px-3 py-2 pr-12 border border-input rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background resize-none font-mono text-sm leading-6"
+              />
+              <VoiceInputButton
+                onTranscript={(text) => setPrompt((prev) => (prev ? prev + ' ' + text : text))}
+                disabled={loading}
+                className="absolute top-2 right-2"
+              />
+            </div>
           </div>
         </div>
 
-        {/* Execution Mode Selection */}
-        <div className="space-y-3">
-          <label className="block text-sm font-medium text-foreground">
-            Execution Mode
-          </label>
-
-          <div className="space-y-2">
-            {/* Multi-Agent Option */}
-            <label
-              className={`flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-all ${
+        {/* Step 2: Strategy */}
+        <div className="space-y-4 pt-4 border-t border-border">
+           <h3 className="text-sm font-medium text-foreground">Execution Strategy</h3>
+           
+           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Multi-Agent Tile */}
+            <button
+              type="button"
+              onClick={() => setExecutionMode('multi_agent')}
+              className={`relative flex flex-col items-start p-4 rounded-xl border-2 transition-all text-left ${
                 executionMode === 'multi_agent'
-                  ? 'border-primary bg-primary/5'
-                  : 'border-border hover:bg-muted/50'
+                  ? 'border-primary bg-primary/5 shadow-sm'
+                  : 'border-border bg-background hover:border-muted-foreground/30 hover:bg-accent'
               }`}
             >
-              <input
-                type="radio"
-                name="executionMode"
-                value="multi_agent"
-                checked={executionMode === 'multi_agent'}
-                onChange={(e) => setExecutionMode(e.target.value)}
-                className="mt-0.5 w-4 h-4 text-primary"
-              />
-              <div className="flex-1 min-w-0">
-                <div className="font-medium text-foreground text-sm">Multi-Agent Consensus</div>
-                <div className="text-xs text-muted-foreground mt-0.5">
-                  Multiple agents analyze and iterate to reach agreement
-                </div>
-                <div className="flex items-center gap-2 mt-1.5 text-xs text-muted-foreground">
-                  <span className="px-1.5 py-0.5 bg-muted rounded text-[10px]">Complex tasks</span>
-                  <span className="px-1.5 py-0.5 bg-muted rounded text-[10px]">Higher quality</span>
-                </div>
-              </div>
-            </label>
-
-            {/* Single-Agent Option */}
-            <label
-              className={`flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-all ${
-                executionMode === 'single_agent'
-                  ? 'border-primary bg-primary/5'
-                  : 'border-border hover:bg-muted/50'
-              }`}
-            >
-              <input
-                type="radio"
-                name="executionMode"
-                value="single_agent"
-                checked={executionMode === 'single_agent'}
-                onChange={(e) => setExecutionMode(e.target.value)}
-                className="mt-0.5 w-4 h-4 text-primary"
-              />
-              <div className="flex-1 min-w-0">
-                <div className="font-medium text-foreground text-sm">Single Agent</div>
-                <div className="text-xs text-muted-foreground mt-0.5">
-                  One agent handles everything without iteration
-                </div>
-                <div className="flex items-center gap-2 mt-1.5 text-xs text-muted-foreground">
-                  <span className="px-1.5 py-0.5 bg-muted rounded text-[10px]">Simple tasks</span>
-                  <span className="px-1.5 py-0.5 bg-muted rounded text-[10px]">Faster</span>
-                </div>
-              </div>
-            </label>
-          </div>
-
-          {/* Agent Selection (shown when single-agent is selected) */}
-          {executionMode === 'single_agent' && (
-            <div className="ml-7 p-3 border-l-2 border-primary/30 bg-muted/30 rounded-r-lg">
-              <label className="block text-sm font-medium text-foreground mb-1.5">
-                Select Agent
-              </label>
-              <select
-                value={effectiveSingleAgentName}
-                onChange={(e) => {
-                  const nextAgent = e.target.value;
-                  setSingleAgentName(nextAgent);
-                  setSingleAgentModel('');
-                  setSingleAgentReasoningEffort('');
-                }}
-                className="w-full px-3 py-2 border border-input rounded-lg bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background"
-              >
-                {enabledAgents.map(agent => (
-                  <option key={agent.value} value={agent.value}>
-                    {agent.label}
-                  </option>
-                ))}
-              </select>
-              <p className="mt-1.5 text-xs text-muted-foreground">
-                This agent will handle all workflow phases independently.
-              </p>
-
-              <div className="mt-3">
-                <label className="block text-sm font-medium text-foreground mb-1.5">
-                  Model <span className="text-muted-foreground font-normal">(optional)</span>
-                </label>
-                <select
-                  value={effectiveSingleAgentModel}
-                  onChange={(e) => setSingleAgentModel(e.target.value)}
-                  className="w-full px-3 py-2 border border-input rounded-lg bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background"
-                >
-                  {modelOptions.map((model) => (
-                    <option key={`${effectiveSingleAgentName}-${model.value || 'default'}`} value={model.value}>
-                      {model.label}
-                    </option>
-                  ))}
-                </select>
-                {selectedModel?.description && (
-                  <p className="mt-1.5 text-xs text-muted-foreground">
-                    {selectedModel.description}
-                  </p>
+              <div className="flex items-center justify-between w-full mb-2">
+                <Network className={`w-6 h-6 ${executionMode === 'multi_agent' ? 'text-primary' : 'text-muted-foreground'}`} />
+                {executionMode === 'multi_agent' && (
+                  <CheckCircle2 className="w-4 h-4 text-primary" />
                 )}
               </div>
+              <span className="font-semibold text-foreground text-sm">Multi-Agent Consensus</span>
+              <span className="text-xs text-muted-foreground mt-1">Iterative refinement and debate between agents. Best for complex tasks.</span>
+            </button>
 
-              {agentSupportsReasoning && (
-                <div className="mt-3">
-                  <label className="block text-sm font-medium text-foreground mb-1.5">
-                    Reasoning effort <span className="text-muted-foreground font-normal">(optional)</span>
+            {/* Single-Agent Tile */}
+            <button
+              type="button"
+              onClick={() => setExecutionMode('single_agent')}
+              className={`relative flex flex-col items-start p-4 rounded-xl border-2 transition-all text-left ${
+                executionMode === 'single_agent'
+                  ? 'border-primary bg-primary/5 shadow-sm'
+                  : 'border-border bg-background hover:border-muted-foreground/30 hover:bg-accent'
+              }`}
+            >
+              <div className="flex items-center justify-between w-full mb-2">
+                <Zap className={`w-6 h-6 ${executionMode === 'single_agent' ? 'text-primary' : 'text-muted-foreground'}`} />
+                {executionMode === 'single_agent' && (
+                  <CheckCircle2 className="w-4 h-4 text-primary" />
+                )}
+              </div>
+              <span className="font-semibold text-foreground text-sm">Single Agent</span>
+              <span className="text-xs text-muted-foreground mt-1">Fast, direct execution by one specialized model. Best for simple tasks.</span>
+            </button>
+           </div>
+
+          {/* Config Panel - Smooth Expand */}
+          <div className={`overflow-hidden transition-all duration-300 ease-in-out ${executionMode === 'single_agent' ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'}`}>
+            <div className="mt-4 p-4 rounded-xl border border-border bg-muted/30 space-y-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Pencil className="w-4 h-4 text-primary" />
+                <h4 className="text-sm font-medium text-foreground">Agent Configuration</h4>
+              </div>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1.5">
+                    Agent Provider
                   </label>
                   <select
-                    value={effectiveSingleAgentReasoningEffort}
-                    onChange={(e) => setSingleAgentReasoningEffort(e.target.value)}
+                    value={effectiveSingleAgentName}
+                    onChange={(e) => {
+                      const nextAgent = e.target.value;
+                      setSingleAgentName(nextAgent);
+                      setSingleAgentModel('');
+                      setSingleAgentReasoningEffort('');
+                    }}
                     className="w-full px-3 py-2 border border-input rounded-lg bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background"
                   >
-                    <option value="">Default</option>
-                    {reasoningLevels.map((level) => (
-                      <option key={level.value} value={level.value}>
-                        {level.label}
+                    {enabledAgents.map(agent => (
+                      <option key={agent.value} value={agent.value}>
+                        {agent.label}
                       </option>
                     ))}
                   </select>
-                  {effectiveSingleAgentReasoningEffort && (
-                    <p className="mt-1.5 text-xs text-muted-foreground">
-                      {selectedReasoning?.description || ''}
-                    </p>
-                  )}
                 </div>
-              )}
+
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1.5">
+                    Model
+                  </label>
+                  <select
+                    value={effectiveSingleAgentModel}
+                    onChange={(e) => setSingleAgentModel(e.target.value)}
+                    className="w-full px-3 py-2 border border-input rounded-lg bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background"
+                  >
+                    {modelOptions.map((model) => (
+                      <option key={`${effectiveSingleAgentName}-${model.value || 'default'}`} value={model.value}>
+                        {model.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {agentSupportsReasoning && (
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-medium text-muted-foreground mb-1.5">
+                      Reasoning Effort
+                    </label>
+                    <select
+                      value={effectiveSingleAgentReasoningEffort}
+                      onChange={(e) => setSingleAgentReasoningEffort(e.target.value)}
+                      className="w-full px-3 py-2 border border-input rounded-lg bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background"
+                    >
+                      <option value="">Default</option>
+                      {reasoningLevels.map((level) => (
+                        <option key={level.value} value={level.value}>
+                          {level.label}
+                        </option>
+                      ))}
+                    </select>
+                    {selectedReasoning?.description && (
+                      <p className="mt-1.5 text-xs text-muted-foreground">
+                        {selectedReasoning.description}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
-          )}
+          </div>
         </div>
 
-        <div>
+        {/* Attachments */}
+        <div className="pt-4 border-t border-border">
           <label className="block text-sm font-medium text-foreground mb-2">
             Attachments (optional)
           </label>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <input
               ref={fileInputRef}
               type="file"
@@ -1556,49 +1543,50 @@ function NewWorkflowForm({ onSubmit, onCancel, loading }) {
               type="button"
               onClick={() => fileInputRef.current?.click()}
               disabled={loading}
-              className="px-3 py-2 rounded-lg bg-secondary text-secondary-foreground text-sm font-medium hover:bg-secondary/80 disabled:opacity-50 transition-colors"
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-input bg-background hover:bg-accent hover:text-accent-foreground text-sm font-medium transition-colors"
             >
-              Add files
+              <Upload className="w-4 h-4" />
+              Upload Files
             </button>
             <p className="text-xs text-muted-foreground">
-              Stored in <span className="font-mono">.quorum/attachments</span>
+              Supports code files, text, and images.
             </p>
           </div>
           {files.length > 0 && (
             <div className="mt-3 flex flex-wrap gap-2">
               {files.map((f, idx) => (
-                <span
+                <div
                   key={`${f.name}-${f.size}-${idx}`}
-                  className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs"
+                  className="inline-flex items-center gap-2 pl-3 pr-1 py-1 rounded-full bg-secondary text-secondary-foreground text-xs border border-border"
                 >
-                  {f.name}
+                  <span className="truncate max-w-[150px]">{f.name}</span>
                   <button
                     type="button"
                     onClick={() => removeFile(idx)}
-                    className="text-primary hover:text-destructive"
+                    className="p-1 hover:bg-destructive/10 hover:text-destructive rounded-full transition-colors"
                     title="Remove"
                   >
-                    ×
+                    <XCircle className="w-3.5 h-3.5" />
                   </button>
-                </span>
+                </div>
               ))}
             </div>
           )}
         </div>
 
-        <div className="flex gap-3">
+        <div className="flex gap-3 pt-4">
           <button
             type="submit"
             disabled={loading || !prompt.trim()}
-            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
+            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors shadow-sm"
           >
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
-            Create Workflow
+            Start Workflow
           </button>
           <button
             type="button"
             onClick={onCancel}
-            className="px-4 py-2.5 rounded-lg bg-secondary text-secondary-foreground text-sm font-medium hover:bg-secondary/80 transition-colors"
+            className="px-4 py-2.5 rounded-lg border border-input bg-background hover:bg-accent hover:text-accent-foreground text-sm font-medium transition-colors"
           >
             Cancel
           </button>

@@ -1,4 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
+import { useState, useEffect, useRef } from 'react';
 import {
   LayoutDashboard,
   GitBranch,
@@ -17,9 +18,37 @@ const navItems = [
 
 export default function MobileBottomNav() {
   const location = useLocation();
+  const [isVisible, setIsVisible] = useState(true);
+  const lastScrollY = useRef(0);
+
+  useEffect(() => {
+    const controlNavbar = () => {
+      if (typeof window !== 'undefined') {
+        const currentScrollY = window.scrollY;
+        
+        // Hide if scrolling down and past 100px, show if scrolling up
+        if (currentScrollY > lastScrollY.current && currentScrollY > 100) {
+          setIsVisible(false);
+        } else {
+          setIsVisible(true);
+        }
+        
+        lastScrollY.current = currentScrollY;
+      }
+    };
+
+    window.addEventListener('scroll', controlNavbar);
+    return () => {
+      window.removeEventListener('scroll', controlNavbar);
+    };
+  }, []);
 
   return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 h-16 border-t border-border bg-card/80 glass backdrop-blur-xl pb-safe">
+    <nav 
+      className={`md:hidden fixed bottom-0 left-0 right-0 z-50 h-16 border-t border-border bg-card/80 glass backdrop-blur-xl pb-safe transition-transform duration-300 ease-in-out ${
+        isVisible ? 'translate-y-0' : 'translate-y-full'
+      }`}
+    >
       <div className="flex h-full items-center justify-around px-2">
         {navItems.map((item) => {
           const isActive = location.pathname === item.path ||

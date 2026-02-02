@@ -27,7 +27,7 @@ function getWorkflowTitle(workflow) {
 }
 
 // Simple Sparkline Component
-function Sparkline({ data = [], color = "currentColor", height = 24, width = 60 }) {
+function Sparkline({ data = [], color = "currentColor", height = 32, width = 80 }) {
   if (!data || data.length < 2) return null;
   
   const min = Math.min(...data);
@@ -35,23 +35,51 @@ function Sparkline({ data = [], color = "currentColor", height = 24, width = 60 
   const range = max - min || 1;
   const step = width / (data.length - 1);
   
+  // Create smooth curve using cubic bezier
   const points = data.map((d, i) => {
     const x = i * step;
     const y = height - ((d - min) / range) * height;
-    return `${x},${y}`;
-  }).join(' ');
+    return { x, y };
+  });
+
+  // Simple line for now (bezier requires more math), but cleaner stroke
+  const pathData = points.map((p, i) => 
+    (i === 0 ? 'M' : 'L') + `${p.x.toFixed(1)},${p.y.toFixed(1)}`
+  ).join(' ');
 
   return (
-    <svg width={width} height={height} className="opacity-50" aria-hidden="true">
-      <polyline
-        points={points}
-        fill="none"
-        stroke={color}
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
+    <div className="relative group" style={{ width, height }}>
+      <svg width={width} height={height} className="overflow-visible" aria-hidden="true">
+        {/* Fill Area (Optional, maybe for polish) */}
+        <path
+           d={`${pathData} L ${width},${height} L 0,${height} Z`}
+           fill={color}
+           fillOpacity="0.1"
+           className="transition-opacity opacity-50 group-hover:opacity-80"
+        />
+        <path
+          d={pathData}
+          fill="none"
+          stroke={color}
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="transition-all opacity-80 group-hover:opacity-100 group-hover:stroke-[2.5px]"
+        />
+        {/* End dot */}
+        <circle 
+          cx={points[points.length-1].x} 
+          cy={points[points.length-1].y} 
+          r="3" 
+          fill={color}
+          className="animate-fade-in"
+        />
+      </svg>
+      {/* Tooltip: Shows last value on hover */}
+      <div className="absolute -top-6 right-0 bg-popover text-popover-foreground text-[10px] font-mono px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity shadow-sm border border-border pointer-events-none">
+        {data[data.length-1]}
+      </div>
+    </div>
   );
 }
 
@@ -278,8 +306,8 @@ export default function Dashboard() {
         <ActiveWorkflowBanner workflow={activeWorkflow} />
       )}
 
-      {/* Bento Grid Stats - Carousel on mobile, Grid on desktop */}
-      <div className="flex overflow-x-auto snap-x snap-mandatory gap-4 pb-4 -mx-4 px-4 md:grid md:grid-cols-2 lg:grid-cols-4 md:overflow-visible md:pb-0 md:mx-0 md:px-0 scrollbar-none">
+      {/* Stats Grid - 2x2 on mobile, 4x1 on lg */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           title="Total Workflows"
           value={workflows.length}
@@ -287,7 +315,6 @@ export default function Dashboard() {
           icon={GitBranch}
           color="primary"
           sparklineData={[5, 8, 12, 15, 20, 25, workflows.length]} // Dummy data for visual
-          className="min-w-[85vw] md:min-w-0 snap-center"
         />
         <StatCard
           title="Completed"
@@ -296,7 +323,6 @@ export default function Dashboard() {
           icon={CheckCircle2}
           color="success"
           sparklineData={[2, 5, 8, 10, 15, completedCount]}
-          className="min-w-[85vw] md:min-w-0 snap-center"
         />
         <StatCard
           title="Running"
@@ -305,7 +331,6 @@ export default function Dashboard() {
           icon={Activity}
           color="info"
           sparklineData={[0, 1, 0, 2, 1, runningCount]} 
-          className="min-w-[85vw] md:min-w-0 snap-center"
         />
         <StatCard
           title="Failed"
@@ -314,7 +339,6 @@ export default function Dashboard() {
           icon={XCircle}
           color="error"
           sparklineData={[0, 0, 1, 0, 1, failedCount]}
-          className="min-w-[85vw] md:min-w-0 snap-center"
         />
       </div>
 
