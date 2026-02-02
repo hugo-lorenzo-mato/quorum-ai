@@ -474,7 +474,7 @@ export default function Kanban() {
             Visualize and manage workflow execution
           </p>
         </div>
-        <div className="flex flex-col sm:flex-row gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
           <KanbanFilters filter={filter} setFilter={setFilter} />
           <EngineControls />
         </div>
