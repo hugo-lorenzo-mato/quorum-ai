@@ -217,7 +217,7 @@ export default function MarkdownViewer({ markdown }) {
               }
 
               return (
-                <code className="px-1.5 py-0.5 rounded-md bg-muted font-mono text-[0.9em] border border-border/50" {...props}>
+                <code className="px-1.5 py-0.5 rounded-md bg-muted font-mono text-[0.9em] border border-border/50 whitespace-nowrap" {...props}>
                   {children}
                 </code>
               );
