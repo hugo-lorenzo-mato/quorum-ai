@@ -237,7 +237,6 @@ jobs:
     name: SonarCloud Analysis
     if: >
       github.event_name != 'schedule' &&
-      secrets.SONAR_TOKEN != '' &&
       (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository))
     runs-on: ubuntu-latest
     steps:
@@ -265,6 +264,7 @@ jobs:
         run: go test -coverprofile=coverage.out ./...
 
       - name: SonarCloud Scan
+        if: env.SONAR_TOKEN != ''
         uses: SonarSource/sonarcloud-github-action@master
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
