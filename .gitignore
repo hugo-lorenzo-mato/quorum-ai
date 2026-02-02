@@ -108,3 +108,4 @@ internal/web/dist/*
 !internal/web/dist/index.html
 frontend/node_modules/
 repro_config.go
+.quorum-backup-*
