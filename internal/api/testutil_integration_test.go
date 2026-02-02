@@ -460,36 +460,36 @@ func (m *threadSafeMockStateManager) UpdateWorkflowHeartbeat(_ context.Context, 
 
 func (m *threadSafeMockStateManager) ExecuteAtomically(_ context.Context, fn func(core.AtomicStateContext) error) error {
 	// For testing, just execute the function with a mock atomic context
-	return fn(&mockAtomicStateContext{sm: m})
+	return fn(&mockAtomicStateContextIntegration{sm: m})
 }
 
-// mockAtomicStateContext provides a mock implementation of core.AtomicStateContext.
-type mockAtomicStateContext struct {
+// mockAtomicStateContextIntegration provides a mock implementation of core.AtomicStateContext.
+type mockAtomicStateContextIntegration struct {
 	sm *threadSafeMockStateManager
 }
 
-func (c *mockAtomicStateContext) LoadByID(id core.WorkflowID) (*core.WorkflowState, error) {
+func (c *mockAtomicStateContextIntegration) LoadByID(id core.WorkflowID) (*core.WorkflowState, error) {
 	c.sm.mu.RLock()
 	defer c.sm.mu.RUnlock()
 	return c.sm.workflows[id], nil
 }
 
-func (c *mockAtomicStateContext) Save(state *core.WorkflowState) error {
+func (c *mockAtomicStateContextIntegration) Save(state *core.WorkflowState) error {
 	c.sm.mu.Lock()
 	defer c.sm.mu.Unlock()
 	c.sm.workflows[state.WorkflowID] = state
 	return nil
 }
 
-func (c *mockAtomicStateContext) SetWorkflowRunning(_ core.WorkflowID) error {
+func (c *mockAtomicStateContextIntegration) SetWorkflowRunning(_ core.WorkflowID) error {
 	return nil
 }
 
-func (c *mockAtomicStateContext) ClearWorkflowRunning(_ core.WorkflowID) error {
+func (c *mockAtomicStateContextIntegration) ClearWorkflowRunning(_ core.WorkflowID) error {
 	return nil
 }
 
-func (c *mockAtomicStateContext) IsWorkflowRunning(_ core.WorkflowID) (bool, error) {
+func (c *mockAtomicStateContextIntegration) IsWorkflowRunning(_ core.WorkflowID) (bool, error) {
 	return false, nil
 }
 
