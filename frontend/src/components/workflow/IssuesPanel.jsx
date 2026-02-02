@@ -1,102 +1,17 @@
 import { useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { workflowApi, configApi } from '../../lib/api';
 import { useUIStore } from '../../stores';
+import useIssuesStore from '../../stores/issuesStore';
 import {
   FileText,
   ExternalLink,
   Loader2,
-  Eye,
   Send,
   CheckCircle2,
   AlertCircle,
-  Tag,
-  Users,
-  ChevronDown,
-  ChevronUp,
-  RefreshCw,
 } from 'lucide-react';
-
-function IssuePreviewCard({ issue, index }) {
-  const [expanded, setExpanded] = useState(index === 0);
-
-  return (
-    <div className="border border-border rounded-xl overflow-hidden bg-background shadow-sm">
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center justify-between p-4 hover:bg-accent/30 active:bg-accent/50 transition-colors text-left"
-      >
-        <div className="flex items-center gap-3 min-w-0">
-          {issue.is_main_issue ? (
-            <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-primary text-primary-foreground tracking-wider uppercase">
-              MAIN
-            </span>
-          ) : (
-            <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-muted text-muted-foreground tracking-wider uppercase">
-              SUB
-            </span>
-          )}
-          <span className="text-sm font-semibold text-foreground truncate">
-            {issue.title}
-          </span>
-        </div>
-        <div className="p-1 rounded-full bg-muted/50">
-          {expanded ? (
-            <ChevronUp className="w-4 h-4 text-muted-foreground shrink-0" />
-          ) : (
-            <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />
-          )}
-        </div>
-      </button>
-
-      {expanded && (
-        <div className="p-4 border-t border-border space-y-4 animate-fade-in bg-card/30">
-          {/* Labels & Assignees */}
-          <div className="flex flex-col gap-2">
-            {issue.labels && issue.labels.length > 0 && (
-              <div className="flex items-center gap-2 flex-wrap">
-                <Tag className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                <div className="flex gap-1 flex-wrap">
-                  {issue.labels.map((label, i) => (
-                    <span
-                      key={i}
-                      className="px-2 py-0.5 rounded-md bg-accent text-[11px] font-medium text-accent-foreground"
-                    >
-                      {label}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {issue.assignees && issue.assignees.length > 0 && (
-              <div className="flex items-center gap-2">
-                <Users className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                <span className="text-xs font-medium text-foreground">
-                  {issue.assignees.join(', ')}
-                </span>
-              </div>
-            )}
-          </div>
-
-          {/* Body preview */}
-          <div className="relative">
-            <div className="absolute top-2 right-2 text-[10px] font-mono text-muted-foreground/50 uppercase">Preview</div>
-            <p className="line-clamp-10 whitespace-pre-wrap font-mono text-[13px] leading-relaxed bg-muted/50 p-3 rounded-lg border border-border/50 text-foreground/80">
-              {issue.body || 'No body content'}
-            </p>
-          </div>
-
-          {issue.task_id && (
-            <div className="flex items-center gap-2 pt-2 border-t border-border/30">
-              <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-tight">Task ID:</span>
-              <span className="text-[11px] font-mono bg-primary/5 text-primary px-1.5 rounded">{issue.task_id}</span>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
+import { GenerationOptionsModal } from '../issues';
 
 function CreatedIssueCard({ issue }) {
   return (
@@ -135,8 +50,19 @@ function CreatedIssueCard({ issue }) {
 }
 
 export default function IssuesPanel({ workflow }) {
+  const navigate = useNavigate();
   const notifyInfo = useUIStore((s) => s.notifyInfo);
   const notifyError = useUIStore((s) => s.notifyError);
+
+  // Issues store actions
+  const {
+    setWorkflow,
+    loadIssues,
+    startGeneration,
+    updateGenerationProgress,
+    finishGeneration,
+    cancelGeneration,
+  } = useIssuesStore();
 
   const [loading, setLoading] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -144,6 +70,9 @@ export default function IssuesPanel({ workflow }) {
   const [createdIssues, setCreatedIssues] = useState(null);
   const [error, setError] = useState(null);
   const [issuesEnabled, setIssuesEnabled] = useState(null);
+
+  // Modal state
+  const [showModal, setShowModal] = useState(false);
 
   // Check if issues are enabled
   const checkIssuesConfig = useCallback(async () => {
@@ -157,7 +86,99 @@ export default function IssuesPanel({ workflow }) {
     }
   }, []);
 
-  // Preview issues (dry run)
+  // Handle generation mode selection from modal
+  const handleModeSelect = useCallback(async (mode) => {
+    setShowModal(false);
+    setError(null);
+
+    const enabled = await checkIssuesConfig();
+    if (!enabled) {
+      setError('Issue generation is disabled in settings');
+      return;
+    }
+
+    // Set workflow context
+    setWorkflow(workflow.id, workflow.title || workflow.id);
+
+    if (mode === 'fast') {
+      // Fast mode: instant generation, then navigate
+      setPreviewLoading(true);
+      try {
+        const response = await workflowApi.previewIssues(workflow.id, true);
+        const issues = response.preview_issues || [];
+
+        if (issues.length > 0) {
+          loadIssues(issues, {
+            ai_used: response.ai_used,
+            ai_errors: response.ai_errors,
+          });
+          navigate(`/workflows/${workflow.id}/issues`);
+        } else {
+          setError('No issues generated from workflow artifacts');
+        }
+      } catch (err) {
+        setError(err.message || 'Failed to generate issues');
+        notifyError(err.message || 'Failed to generate issues');
+      } finally {
+        setPreviewLoading(false);
+      }
+    } else {
+      // AI mode: show loading, start generation with streaming effect
+      startGeneration('ai', 10); // Estimated 10 issues
+      navigate(`/workflows/${workflow.id}/issues`);
+
+      // Generate in background with AI
+      try {
+        const response = await workflowApi.previewIssues(workflow.id, false);
+        const issues = response.preview_issues || [];
+
+        // Show AI status warnings if AI was not used despite being enabled
+        if (response.ai_errors && response.ai_errors.length > 0) {
+          console.warn('AI generation errors:', response.ai_errors);
+        }
+
+        // Simulate streaming by revealing issues progressively
+        for (let i = 0; i < issues.length; i++) {
+          await new Promise(resolve => setTimeout(resolve, 200)); // 200ms delay per issue
+          updateGenerationProgress(i + 1, issues[i]);
+        }
+
+        // Pass AI info to store
+        useIssuesStore.getState().loadIssues(issues, {
+          ai_used: response.ai_used,
+          ai_errors: response.ai_errors,
+        });
+      } catch (err) {
+        cancelGeneration();
+        setError(err.message || 'Failed to generate issues');
+        notifyError(err.message || 'Failed to generate issues');
+        navigate(`/workflows/${workflow.id}`);
+      }
+    }
+  }, [
+    workflow.id,
+    workflow.title,
+    checkIssuesConfig,
+    setWorkflow,
+    loadIssues,
+    startGeneration,
+    updateGenerationProgress,
+    finishGeneration,
+    cancelGeneration,
+    navigate,
+    notifyError,
+  ]);
+
+  // Open editor with existing preview issues
+  const handleOpenEditor = useCallback(() => {
+    if (previewIssues && previewIssues.length > 0) {
+      setWorkflow(workflow.id, workflow.title || workflow.id);
+      loadIssues(previewIssues);
+      navigate(`/workflows/${workflow.id}/issues`);
+    }
+  }, [previewIssues, workflow.id, workflow.title, setWorkflow, loadIssues, navigate]);
+
+  // Preview issues (dry run) - for inline preview
   const handlePreview = useCallback(async () => {
     setPreviewLoading(true);
     setError(null);
@@ -169,7 +190,7 @@ export default function IssuesPanel({ workflow }) {
         return;
       }
 
-      const response = await workflowApi.previewIssues(workflow.id);
+      const response = await workflowApi.previewIssues(workflow.id, true);
       setPreviewIssues(response.preview_issues || []);
       setCreatedIssues(null);
     } catch (err) {
@@ -180,7 +201,7 @@ export default function IssuesPanel({ workflow }) {
     }
   }, [workflow.id, checkIssuesConfig, notifyError]);
 
-  // Generate issues
+  // Generate issues directly (without editor)
   const handleGenerate = useCallback(async (options = {}) => {
     setLoading(true);
     setError(null);
@@ -244,36 +265,19 @@ export default function IssuesPanel({ workflow }) {
           </div>
           <h3 className="text-sm font-semibold text-foreground tracking-tight">Issue Generation</h3>
         </div>
-        <div className="flex items-center gap-2 w-full sm:w-auto">
-          {/* Preview Button */}
-          <button
-            onClick={handlePreview}
-            disabled={previewLoading || loading}
-            className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-secondary text-secondary-foreground text-xs font-medium hover:bg-secondary/80 disabled:opacity-50 transition-colors"
-          >
-            {previewLoading ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            ) : (
-              <Eye className="w-3.5 h-3.5" />
-            )}
-            Preview
-          </button>
-
-          {/* Generate Button */}
-          <button
-            onClick={() => handleGenerate()}
-            disabled={loading || previewLoading || !canGenerateIssues}
-            className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
-            title={!canGenerateIssues ? 'Complete workflow execution first' : 'Generate issues in GitHub/GitLab'}
-          >
-            {loading ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            ) : (
-              <Send className="w-3.5 h-3.5" />
-            )}
-            Generate
-          </button>
-        </div>
+        {/* Create Button - Opens modal */}
+        <button
+          onClick={() => setShowModal(true)}
+          disabled={loading || previewLoading}
+          className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
+        >
+          {loading ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : (
+            <Send className="w-3.5 h-3.5" />
+          )}
+          Create
+        </button>
       </div>
 
       {/* Description */}
@@ -299,42 +303,6 @@ export default function IssuesPanel({ workflow }) {
         </div>
       )}
 
-      {/* Preview Results */}
-      {previewIssues && previewIssues.length > 0 && (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              Preview ({previewIssues.length} issues)
-            </p>
-            <button
-              onClick={handlePreview}
-              disabled={previewLoading}
-              className="p-1 rounded hover:bg-accent transition-colors"
-              title="Refresh preview"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 text-muted-foreground ${previewLoading ? 'animate-spin' : ''}`} />
-            </button>
-          </div>
-          <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-1 scrollbar-thin">
-            {previewIssues.map((issue, index) => (
-              <IssuePreviewCard key={index} issue={issue} index={index} />
-            ))}
-          </div>
-          <button
-            onClick={() => handleGenerate()}
-            disabled={loading}
-            className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-primary text-primary-foreground text-sm font-bold shadow-lg shadow-primary/20 hover:bg-primary/90 active:scale-[0.98] transition-all mt-2"
-          >
-            {loading ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
-            ) : (
-              <Send className="w-5 h-5" />
-            )}
-            Create {previewIssues.length} Issue{previewIssues.length !== 1 ? 's' : ''} Now
-          </button>
-        </div>
-      )}
-
       {/* Created Issues */}
       {createdIssues && createdIssues.length > 0 && (
         <div className="space-y-2">
@@ -349,14 +317,13 @@ export default function IssuesPanel({ workflow }) {
         </div>
       )}
 
-      {/* Empty State */}
-      {!previewIssues && !createdIssues && !error && (
-        <div className="text-center py-4">
-          <p className="text-xs text-muted-foreground">
-            Click Preview to see what issues will be created.
-          </p>
-        </div>
-      )}
+      {/* Generation Options Modal */}
+      <GenerationOptionsModal
+        isOpen={showModal}
+        onClose={() => setShowModal(false)}
+        onSelect={handleModeSelect}
+        loading={previewLoading || loading}
+      />
     </div>
   );
 }

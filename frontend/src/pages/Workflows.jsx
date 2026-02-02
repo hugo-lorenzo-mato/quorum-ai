@@ -21,6 +21,8 @@ import {
   Activity,
   ArrowLeft,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   Loader2,
   Zap,
   Copy,
@@ -39,7 +41,9 @@ import {
   FolderTree,
 } from 'lucide-react';
 import { ConfirmDialog } from '../components/config/ConfirmDialog';
-import { ExecutionModeBadge, PhaseStepper, ReplanModal, IssuesPanel } from '../components/workflow';
+import { ExecutionModeBadge, PhaseStepper, ReplanModal } from '../components/workflow';
+import { GenerationOptionsModal } from '../components/issues';
+import useIssuesStore from '../stores/issuesStore';
 import FileTree from '../components/FileTree';
 import CodeEditor from '../components/CodeEditor';
 import WorkflowGraph from '../components/WorkflowGraph';
@@ -284,6 +288,65 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
     window.open(`/api/v1/workflows/${workflow.id}/download`, '_blank');
   };
 
+  // Handle issues generation mode selection
+  const handleIssuesModeSelect = useCallback(async (mode) => {
+    setShowIssuesModal(false);
+    
+    // Set workflow context
+    setIssuesWorkflow(workflow.id, workflow.title || workflow.id);
+
+    if (mode === 'fast') {
+      // Fast mode: instant generation, then navigate
+      setIssuesGenerating(true);
+      try {
+        const response = await workflowApi.previewIssues(workflow.id, true);
+        const issues = response.preview_issues || [];
+
+        if (issues.length > 0) {
+          loadIssues(issues, {
+            ai_used: response.ai_used,
+            ai_errors: response.ai_errors,
+          });
+          navigate(`/workflows/${workflow.id}/issues`);
+        } else {
+          notifyError('No issues generated from workflow artifacts');
+        }
+      } catch (err) {
+        notifyError(err.message || 'Failed to generate issues');
+      } finally {
+        setIssuesGenerating(false);
+      }
+    } else {
+      // AI mode: show loading, start generation with streaming effect
+      startGeneration('ai', 10);
+      navigate(`/workflows/${workflow.id}/issues`);
+
+      // Generate in background with AI
+      try {
+        const response = await workflowApi.previewIssues(workflow.id, false);
+        const issues = response.preview_issues || [];
+
+        if (response.ai_errors && response.ai_errors.length > 0) {
+          console.warn('AI generation errors:', response.ai_errors);
+        }
+
+        for (let i = 0; i < issues.length; i++) {
+          await new Promise(resolve => setTimeout(resolve, 200));
+          updateGenerationProgress(i + 1, issues[i]);
+        }
+
+        loadIssues(issues, {
+          ai_used: response.ai_used,
+          ai_errors: response.ai_errors,
+        });
+      } catch (err) {
+        cancelGeneration();
+        notifyError(err.message || 'Failed to generate issues');
+        navigate(`/workflows/${workflow.id}`);
+      }
+    }
+  }, [workflow.id, workflow.title, setIssuesWorkflow, loadIssues, startGeneration, updateGenerationProgress, cancelGeneration, navigate, notifyError]);
+
   const handleDelete = useCallback(async () => {
     const success = await deleteWorkflow(workflow.id);
     if (success) {
@@ -311,6 +374,19 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
 
   // Agent activity
   const [activityExpanded, setActivityExpanded] = useState(true);
+  const [attachmentsExpanded, setAttachmentsExpanded] = useState(false);
+  
+  // Issues generation state
+  const [showIssuesModal, setShowIssuesModal] = useState(false);
+  const [issuesGenerating, setIssuesGenerating] = useState(false);
+  const {
+    setWorkflow: setIssuesWorkflow,
+    loadIssues,
+    startGeneration,
+    updateGenerationProgress,
+    cancelGeneration,
+  } = useIssuesStore();
+  
   const agentActivityMap = useAgentStore((s) => s.agentActivity);
   const currentAgentsMap = useAgentStore((s) => s.currentAgents);
 
@@ -534,7 +610,17 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
         planTaskFiles.push(
           ...taskEntries
             .filter((e) => !e.is_dir && /\.md$/i.test(e.name))
-            .sort((a, b) => (a.name || '').localeCompare(b.name || '')),
+            .sort((a, b) => (parseNumber(a.name) || 0) - (parseNumber(b.name) || 0)),
+        );
+      }
+
+      // Also check global .quorum/tasks/ directory for task files
+      if (planTaskFiles.length === 0) {
+        const globalTaskEntries = (await safeList('.quorum/tasks')) || [];
+        planTaskFiles.push(
+          ...globalTaskEntries
+            .filter((e) => !e.is_dir && /\.md$/i.test(e.name))
+            .sort((a, b) => (parseNumber(a.name) || 0) - (parseNumber(b.name) || 0)),
         );
       }
 
@@ -617,6 +703,9 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
   }, [loadDoc, selectedDoc]);
 
   const selectTask = useCallback((task) => {
+    // Collapse activity panel to show task content prominently
+    setActivityExpanded(false);
+
     const planPath = taskPlanById[task.id];
     if (planPath) {
       setSelectedDoc({
@@ -647,7 +736,7 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
         return `# Output\n\n\`\`\`\n${output}\n\`\`\`\n`;
       },
     });
-  }, [taskPlanById, workflow.id]);
+  }, [taskPlanById, workflow.id, setActivityExpanded]);
 
   const handleCopy = useCallback(async () => {
     if (!docContent) return;
@@ -1029,9 +1118,18 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
           {/* Attachments */}
           <div className="p-4 rounded-xl border border-border bg-card">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-foreground">
+              <button
+                type="button"
+                onClick={() => setAttachmentsExpanded(!attachmentsExpanded)}
+                className="flex items-center gap-2 text-sm font-semibold text-foreground hover:text-primary transition-colors"
+              >
+                {attachmentsExpanded ? (
+                  <ChevronUp className="w-4 h-4" />
+                ) : (
+                  <ChevronDown className="w-4 h-4" />
+                )}
                 Attachments ({workflow.attachments?.length || 0})
-              </h3>
+              </button>
               {canModifyAttachments && (
                 <div className="flex items-center gap-2">
                   <input
@@ -1059,54 +1157,75 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
               )}
             </div>
 
-            {workflow.attachments && workflow.attachments.length > 0 ? (
-              <div className="space-y-2">
-                {workflow.attachments.map((a) => (
-                  <div
-                    key={a.id}
-                    className="flex items-center justify-between gap-3 p-2 rounded-lg border border-border bg-background"
-                  >
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-foreground truncate">{a.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {a.size >= 1024 ? `${Math.round(a.size / 1024)} KB` : `${a.size} B`}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => handleDownloadAttachment(a)}
-                        className="p-2 rounded-lg hover:bg-accent transition-colors"
-                        title="Download"
+            {attachmentsExpanded && (
+              <>
+                {workflow.attachments && workflow.attachments.length > 0 ? (
+                  <div className="space-y-2">
+                    {workflow.attachments.map((a) => (
+                      <div
+                        key={a.id}
+                        className="flex items-center justify-between gap-3 p-2 rounded-lg border border-border bg-background"
                       >
-                        <Download className="w-4 h-4 text-muted-foreground" />
-                      </button>
-                      {canModifyAttachments && (
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteAttachment(a)}
-                          className="p-2 rounded-lg hover:bg-destructive/10 transition-colors"
-                          title="Delete"
-                        >
-                          <Trash2 className="w-4 h-4 text-destructive" />
-                        </button>
-                      )}
-                    </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-foreground truncate">{a.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {a.size >= 1024 ? `${Math.round(a.size / 1024)} KB` : `${a.size} B`}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => handleDownloadAttachment(a)}
+                            className="p-2 rounded-lg hover:bg-accent transition-colors"
+                            title="Download"
+                          >
+                            <Download className="w-4 h-4 text-muted-foreground" />
+                          </button>
+                          {canModifyAttachments && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteAttachment(a)}
+                              className="p-2 rounded-lg hover:bg-destructive/10 transition-colors"
+                              title="Delete"
+                            >
+                              <Trash2 className="w-4 h-4 text-destructive" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-8 text-muted-foreground">
-                <p className="text-sm">No attachments</p>
-                <p className="text-xs mt-1">Upload documents to add context</p>
-              </div>
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <p className="text-sm">No attachments</p>
+                    <p className="text-xs mt-1">Upload documents to add context</p>
+                  </div>
+                )}
+              </>
             )}
           </div>
 
           {/* Tasks */}
           <div className="p-4 rounded-xl border border-border bg-card">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-foreground">Tasks ({tasks.length})</h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-semibold text-foreground">Tasks ({tasks.length})</h3>
+                {workflow.status === 'completed' && workflow.current_phase === 'done' && (
+                  <button
+                    onClick={() => setShowIssuesModal(true)}
+                    disabled={issuesGenerating}
+                    className="flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50"
+                    title="Create issues from workflow"
+                  >
+                    {issuesGenerating ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : (
+                      <FileText className="w-3 h-3" />
+                    )}
+                    <span className="hidden sm:inline">Create issues</span>
+                  </button>
+                )}
+              </div>
               <div className="flex bg-muted/50 p-0.5 rounded-lg">
                 <button
                   onClick={() => setTaskView('list')}
@@ -1146,9 +1265,6 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
               <WorkflowGraph tasks={tasks} />
             )}
           </div>
-
-          {/* Issues */}
-          <IssuesPanel workflow={workflow} />
 
           {/* Artifacts */}
           <div className="p-4 rounded-xl border border-border bg-card">
@@ -1281,6 +1397,14 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
           setReplanModalOpen(false);
         }}
         loading={loading}
+      />
+
+      {/* Issues Generation Modal */}
+      <GenerationOptionsModal
+        isOpen={showIssuesModal}
+        onClose={() => setShowIssuesModal(false)}
+        onSelect={handleIssuesModeSelect}
+        loading={issuesGenerating}
       />
     </div>
   );

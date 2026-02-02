@@ -2,28 +2,49 @@ const API_BASE = '/api/v1';
 
 async function request(endpoint, options = {}) {
   const url = `${API_BASE}${endpoint}`;
+  const { timeout, ...restOptions } = options;
+
+  // Create abort controller for timeout
+  const controller = new AbortController();
+  let timeoutId;
+  if (timeout) {
+    timeoutId = setTimeout(() => controller.abort(), timeout);
+  }
+
   const config = {
     headers: {
       'Content-Type': 'application/json',
-      ...options.headers,
+      ...restOptions.headers,
     },
-    ...options,
+    signal: controller.signal,
+    ...restOptions,
   };
 
-  const response = await fetch(url, config);
+  try {
+    const response = await fetch(url, config);
 
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    const message = error.message || error.error || response.statusText;
-    throw new Error(message || 'Request failed');
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      const message = error.message || error.error || response.statusText;
+      throw new Error(message || 'Request failed');
+    }
+
+    // Handle 204 No Content
+    if (response.status === 204) {
+      return null;
+    }
+
+    return response.json();
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      throw new Error('Request timed out');
+    }
+    throw err;
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
   }
-
-  // Handle 204 No Content
-  if (response.status === 204) {
-    return null;
-  }
-
-  return response.json();
 }
 
 // Workflow API
@@ -151,8 +172,30 @@ export const workflowApi = {
   /**
    * Preview issues without creating them.
    * @param {string} id - Workflow ID
+   * @param {boolean} fast - Use fast mode (skip LLM generation for instant response)
+   * @param {Object} options - Additional options
+   * @param {number} [options.timeout] - Request timeout in ms (default: 30s for fast, 180s for AI)
    */
-  previewIssues: (id) => request(`/workflows/${id}/issues/preview`),
+  previewIssues: (id, fast = true, options = {}) => {
+    // AI mode can take 60-120 seconds, so use 3 minute timeout
+    const timeout = options.timeout ?? (fast ? 30000 : 180000);
+    return request(`/workflows/${id}/issues/preview${fast ? '?fast=true' : ''}`, { timeout });
+  },
+
+  /**
+   * Create a single issue directly.
+   * @param {string} workflowId - Workflow ID
+   * @param {Object} issue - Issue data (title, body, labels, assignees)
+   */
+  createSingleIssue: (workflowId, issue) => request(`/workflows/${workflowId}/issues/single`, {
+    method: 'POST',
+    body: JSON.stringify({
+      title: issue.title,
+      body: issue.body,
+      labels: issue.labels || [],
+      assignees: issue.assignees || [],
+    }),
+  }),
 
   // Workflow attachments
   listAttachments: (id) => request(`/workflows/${id}/attachments`),

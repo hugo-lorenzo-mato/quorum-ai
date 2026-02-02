@@ -53,6 +53,12 @@ type GenerateIssuesResponse struct {
 
 	// Errors contains non-fatal errors during generation.
 	Errors []string `json:"errors,omitempty"`
+
+	// AIUsed indicates whether AI generation was used (vs direct copy).
+	AIUsed bool `json:"ai_used"`
+
+	// AIErrors contains AI-specific errors for debugging.
+	AIErrors []string `json:"ai_errors,omitempty"`
 }
 
 // IssueResponse represents a created issue.
@@ -76,15 +82,19 @@ type IssuePreviewResponse struct {
 }
 
 // handleGenerateIssues generates GitHub/GitLab issues from workflow artifacts.
-// POST /api/workflows/{id}/issues
+// POST /api/workflows/{workflowID}/issues
 func (s *Server) handleGenerateIssues(w http.ResponseWriter, r *http.Request) {
-	workflowID := chi.URLParam(r, "id")
+	workflowID := chi.URLParam(r, "workflowID")
 	ctx := r.Context()
 
 	// Get workflow state
 	state, err := s.stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
 	if err != nil {
 		respondError(w, http.StatusNotFound, fmt.Sprintf("workflow not found: %v", err))
+		return
+	}
+	if state == nil {
+		respondError(w, http.StatusNotFound, "workflow not found")
 		return
 	}
 
@@ -208,19 +218,33 @@ func (s *Server) handleGenerateIssues(w http.ResponseWriter, r *http.Request) {
 		response.Errors = append(response.Errors, err.Error())
 	}
 
+	// Add AI generation info for debugging
+	response.AIUsed = result.AIUsed
+	response.AIErrors = result.AIErrors
+
 	respondJSON(w, http.StatusOK, response)
 }
 
-// handlePreviewIssues previews issues without creating them (alias for dry-run).
-// GET /api/workflows/{id}/issues/preview
+// handlePreviewIssues previews issues without creating them.
+// GET /api/workflows/{workflowID}/issues/preview
+// Query params:
+//   - fast=true: skip LLM generation for faster response (returns raw markdown)
+//   - fast=false: use AI to generate polished markdown files
 func (s *Server) handlePreviewIssues(w http.ResponseWriter, r *http.Request) {
-	workflowID := chi.URLParam(r, "id")
+	workflowID := chi.URLParam(r, "workflowID")
 	ctx := r.Context()
+
+	// Check for fast mode (skip LLM generation)
+	fastMode := r.URL.Query().Get("fast") == "true"
 
 	// Get workflow state
 	state, err := s.stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
 	if err != nil {
 		respondError(w, http.StatusNotFound, fmt.Sprintf("workflow not found: %v", err))
+		return
+	}
+	if state == nil {
+		respondError(w, http.StatusNotFound, "workflow not found")
 		return
 	}
 
@@ -245,38 +269,100 @@ func (s *Server) handlePreviewIssues(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create generator (no client needed for preview, but agent registry for LLM)
-	generator := issues.NewGenerator(nil, issuesCfg, reportDir, s.agentRegistry)
-
-	// Generate previews
-	opts := issues.GenerateOptions{
-		WorkflowID:      workflowID,
-		DryRun:          true,
-		CreateMainIssue: true,
-		CreateSubIssues: true,
-	}
-
-	result, err := generator.Generate(ctx, opts)
-	if err != nil {
-		respondError(w, http.StatusInternalServerError, fmt.Sprintf("preview failed: %v", err))
-		return
-	}
-
-	// Build response
 	response := GenerateIssuesResponse{
 		Success: true,
-		Message: fmt.Sprintf("Preview: %d issues", len(result.PreviewIssues)),
 	}
 
-	for _, preview := range result.PreviewIssues {
-		response.PreviewIssues = append(response.PreviewIssues, IssuePreviewResponse{
-			Title:       preview.Title,
-			Body:        preview.Body,
-			Labels:      preview.Labels,
-			Assignees:   preview.Assignees,
-			IsMainIssue: preview.IsMainIssue,
-			TaskID:      preview.TaskID,
-		})
+	if fastMode {
+		// Fast mode: use direct copy without AI
+		issuesCfg.Generator.Enabled = false
+		generator := issues.NewGenerator(nil, issuesCfg, reportDir, nil)
+
+		opts := issues.GenerateOptions{
+			WorkflowID:      workflowID,
+			DryRun:          true,
+			CreateMainIssue: false, // All sub-issues per user request
+			CreateSubIssues: true,
+		}
+
+		result, err := generator.Generate(ctx, opts)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, fmt.Sprintf("preview failed: %v", err))
+			return
+		}
+
+		response.Message = fmt.Sprintf("Preview: %d issues (fast mode)", len(result.PreviewIssues))
+		for _, preview := range result.PreviewIssues {
+			response.PreviewIssues = append(response.PreviewIssues, IssuePreviewResponse{
+				Title:       preview.Title,
+				Body:        preview.Body,
+				Labels:      preview.Labels,
+				Assignees:   preview.Assignees,
+				IsMainIssue: false,
+				TaskID:      preview.TaskID,
+			})
+		}
+		response.AIUsed = false
+	} else {
+		// AI mode: generate markdown files using LLM
+		if s.agentRegistry == nil {
+			respondError(w, http.StatusInternalServerError, "agent registry not available")
+			return
+		}
+
+		generator := issues.NewGenerator(nil, issuesCfg, reportDir, s.agentRegistry)
+
+		// Generate the issue files
+		files, err := generator.GenerateIssueFiles(ctx, workflowID)
+		if err != nil {
+			response.Success = false
+			response.AIErrors = append(response.AIErrors, err.Error())
+			// Try to read any existing generated files as fallback
+			previews, readErr := generator.ReadGeneratedIssues(workflowID)
+			if readErr == nil && len(previews) > 0 {
+				for _, preview := range previews {
+					response.PreviewIssues = append(response.PreviewIssues, IssuePreviewResponse{
+						Title:       preview.Title,
+						Body:        preview.Body,
+						Labels:      preview.Labels,
+						Assignees:   preview.Assignees,
+						IsMainIssue: false,
+						TaskID:      preview.TaskID,
+					})
+				}
+				response.Success = true
+				response.Message = fmt.Sprintf("Preview: %d issues (from cache)", len(previews))
+			} else {
+				respondError(w, http.StatusInternalServerError, fmt.Sprintf("AI generation failed: %v", err))
+				return
+			}
+		} else {
+			// Read the generated files
+			previews, err := generator.ReadGeneratedIssues(workflowID)
+			if err != nil {
+				respondError(w, http.StatusInternalServerError, fmt.Sprintf("reading generated issues: %v", err))
+				return
+			}
+
+			response.Message = fmt.Sprintf("Preview: %d issues (AI generated)", len(previews))
+			response.AIUsed = true
+
+			for _, preview := range previews {
+				response.PreviewIssues = append(response.PreviewIssues, IssuePreviewResponse{
+					Title:       preview.Title,
+					Body:        preview.Body,
+					Labels:      preview.Labels,
+					Assignees:   preview.Assignees,
+					IsMainIssue: false,
+					TaskID:      preview.TaskID,
+				})
+			}
+
+			// Log generated files
+			for _, f := range files {
+				fmt.Printf("Generated: %s\n", f)
+			}
+		}
 	}
 
 	respondJSON(w, http.StatusOK, response)
@@ -295,4 +381,105 @@ func (s *Server) handleGetIssuesConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondJSON(w, http.StatusOK, issuesCfg)
+}
+
+// CreateSingleIssueRequest is the request body for creating a single issue.
+type CreateSingleIssueRequest struct {
+	Title     string   `json:"title"`
+	Body      string   `json:"body"`
+	Labels    []string `json:"labels"`
+	Assignees []string `json:"assignees"`
+}
+
+// CreateSingleIssueResponse is the response for creating a single issue.
+type CreateSingleIssueResponse struct {
+	Success bool          `json:"success"`
+	Issue   IssueResponse `json:"issue"`
+	Error   string        `json:"error,omitempty"`
+}
+
+// handleCreateSingleIssue creates a single issue directly.
+// POST /api/workflows/{workflowID}/issues/single
+func (s *Server) handleCreateSingleIssue(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	// Parse request body
+	var req CreateSingleIssueRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, fmt.Sprintf("invalid request: %v", err))
+		return
+	}
+
+	// Validate
+	if req.Title == "" {
+		respondError(w, http.StatusBadRequest, "title is required")
+		return
+	}
+
+	// Get issues config
+	var issuesCfg config.IssuesConfig
+	if s.configLoader != nil {
+		cfg, err := s.configLoader.Load()
+		if err == nil {
+			issuesCfg = cfg.Issues
+		}
+	}
+
+	if !issuesCfg.Enabled {
+		respondError(w, http.StatusBadRequest, "issue generation is disabled")
+		return
+	}
+
+	// Create issue client based on provider
+	var issueClient core.IssueClient
+	switch issuesCfg.Provider {
+	case "github", "":
+		client, err := github.NewIssueClientFromRepo()
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, fmt.Sprintf("failed to create GitHub client: %v", err))
+			return
+		}
+		issueClient = client
+	case "gitlab":
+		respondError(w, http.StatusNotImplemented, "GitLab not yet implemented")
+		return
+	default:
+		respondError(w, http.StatusBadRequest, fmt.Sprintf("unknown provider: %s", issuesCfg.Provider))
+		return
+	}
+
+	// Use default labels if none provided
+	labels := req.Labels
+	if len(labels) == 0 {
+		labels = issuesCfg.Labels
+	}
+
+	// Use default assignees if none provided
+	assignees := req.Assignees
+	if len(assignees) == 0 {
+		assignees = issuesCfg.Assignees
+	}
+
+	// Create the issue
+	issue, err := issueClient.CreateIssue(ctx, core.CreateIssueOptions{
+		Title:     req.Title,
+		Body:      req.Body,
+		Labels:    labels,
+		Assignees: assignees,
+	})
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, fmt.Sprintf("failed to create issue: %v", err))
+		return
+	}
+
+	respondJSON(w, http.StatusOK, CreateSingleIssueResponse{
+		Success: true,
+		Issue: IssueResponse{
+			Number: issue.Number,
+			Title:  issue.Title,
+			URL:    issue.URL,
+			State:  issue.State,
+			Labels: issue.Labels,
+		},
+	})
 }

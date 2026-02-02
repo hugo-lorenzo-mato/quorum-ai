@@ -225,6 +225,7 @@ func (s *Server) setupRouter() chi.Router {
 				r.Route("/issues", func(r chi.Router) {
 					r.Post("/", s.handleGenerateIssues)
 					r.Get("/preview", s.handlePreviewIssues)
+					r.Post("/single", s.handleCreateSingleIssue)
 				})
 			})
 		})
@@ -376,6 +377,9 @@ func (s *Server) ListenAndServe(ctx context.Context, addr string) error {
 		Addr:              addr,
 		Handler:           s.router,
 		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       120 * time.Second, // Allow long reads for file uploads
+		WriteTimeout:      120 * time.Second, // Allow long writes for LLM-based responses (issues preview)
+		IdleTimeout:       120 * time.Second,
 	}
 
 	// Graceful shutdown
