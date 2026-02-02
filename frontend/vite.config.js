@@ -8,6 +8,16 @@ export default defineConfig({
   build: {
     outDir: '../internal/web/dist',
     emptyDirBefore: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+          'vendor-editor': ['@monaco-editor/react'],
+          'vendor-flow': ['reactflow'],
+          'vendor-markdown': ['react-markdown', 'react-syntax-highlighter', 'remark-gfm', 'remark-breaks'],
+        },
+      },
+    },
   },
   server: {
     proxy: {
