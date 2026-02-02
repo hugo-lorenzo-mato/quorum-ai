@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/config"
@@ -163,6 +164,17 @@ func TestHandleUpdateConfig_ValidationErrors(t *testing.T) {
 }
 
 func TestHandleUpdateConfig_ValidUpdate(t *testing.T) {
+	// Create temp directory and change to it for test isolation
+	tmpDir := t.TempDir()
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(tmpDir))
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
+
+	// Create .quorum directory and default config
+	require.NoError(t, os.MkdirAll(".quorum", 0o750))
+	require.NoError(t, os.WriteFile(".quorum/config.yaml", []byte(config.DefaultConfigYAML), 0o600))
+
 	stateManager := newMockStateManager()
 	eventBus := events.New(100)
 	server := NewServer(stateManager, eventBus)
