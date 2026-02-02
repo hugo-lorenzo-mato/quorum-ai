@@ -18,7 +18,8 @@ const FileTreeNode = ({ node, level = 0, onSelect, selectedKey }) => {
     if (isFolder) {
       setExpanded(!expanded);
     } else {
-      onSelect(node);
+      // Pass the original item (with real path/getContent) instead of the tree node
+      onSelect(node.originalItem || node);
     }
   };
 
@@ -62,31 +63,37 @@ const FileTreeNode = ({ node, level = 0, onSelect, selectedKey }) => {
 export default function FileTree({ items, onSelect, selectedKey }) {
   // Convert flat list of items (with paths) to tree structure
   // Uses treePath for visual structure if available, otherwise falls back to path or title
+  // IMPORTANT: Stores original item reference to preserve path, getContent, etc.
   const tree = useMemo(() => {
     const root = { id: 'root', type: 'folder', name: 'root', children: [] };
 
     items.forEach((item) => {
-      const pathParts = (item.treePath || item.path || item.title || '').split('/');
+      // Use treePath for visual structure, but preserve original item data
+      const displayPath = item.treePath || item.path || item.title || '';
+      const pathParts = displayPath.split('/');
       let currentLevel = root.children;
-      
+
       pathParts.forEach((part, index) => {
         const isFile = index === pathParts.length - 1;
         const existingNode = currentLevel.find(n => n.name === part);
-        
+
         if (existingNode) {
           if (isFile) {
-            // Merge file info
-            Object.assign(existingNode, { ...item, type: 'file', name: part, key: item.key || item.path });
+            // Merge file info - store original item to preserve path/getContent
+            existingNode.type = 'file';
+            existingNode.name = part;
+            existingNode.key = item.key;
+            existingNode.originalItem = item; // Store reference to original item
           } else {
             currentLevel = existingNode.children;
           }
         } else {
           const newNode = {
-            id: `${item.key || item.path}-${index}`,
+            id: `${item.key || displayPath}-${index}`,
             name: part,
             type: isFile ? 'file' : 'folder',
             children: [],
-            ...(isFile ? item : {})
+            ...(isFile ? { key: item.key, originalItem: item } : {})
           };
           currentLevel.push(newNode);
           if (!isFile) {
@@ -95,7 +102,7 @@ export default function FileTree({ items, onSelect, selectedKey }) {
         }
       });
     });
-    
+
     // Sort: Folders first, then files
     const sortNodes = (nodes) => {
       nodes.sort((a, b) => {
@@ -106,7 +113,7 @@ export default function FileTree({ items, onSelect, selectedKey }) {
         if (n.children) sortNodes(n.children);
       });
     };
-    
+
     sortNodes(root.children);
     return root.children;
   }, [items]);

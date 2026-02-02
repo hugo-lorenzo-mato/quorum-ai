@@ -36,7 +36,7 @@ check: lint test security frontend-check ## Run all checks (Go + frontend)
 
 # Build targets
 .PHONY: build
-build: ## Build for current OS/arch
+build: build-frontend ## Build for current OS/arch (includes frontend)
 	@mkdir -p $(BIN_DIR)
 	CGO_ENABLED=$(CGO_ENABLED) go build -ldflags "$(LDFLAGS)" \
 		-o $(BIN_DIR)/quorum ./cmd/quorum
