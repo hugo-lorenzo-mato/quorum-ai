@@ -1172,10 +1172,10 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
                   {artifactIndex.reportPath}
                 </p>
                 <div className="space-y-4 max-h-[45vh] overflow-y-auto pr-1">
-                  <FileTree 
-                    items={docGroups.flatMap(g => g.docs.map(d => ({ 
-                      ...d, 
-                      path: `${g.label}/${d.title}` // Artificial path for tree structure based on groups
+                  <FileTree
+                    items={docGroups.flatMap(g => g.docs.map(d => ({
+                      ...d,
+                      treePath: `${g.label}/${d.title}` // Artificial path for tree structure, preserves original path
                     })))}
                     onSelect={setSelectedDoc}
                     selectedKey={selectedDoc?.key}
@@ -1615,7 +1615,7 @@ function WorkflowFilters({ filter, setFilter }) {
 export default function Workflows() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { workflows, loading, fetchWorkflows, fetchWorkflow, createWorkflow, deleteWorkflow } = useWorkflowStore();
+  const { workflows, loading, error, fetchWorkflows, fetchWorkflow, createWorkflow, deleteWorkflow, clearError } = useWorkflowStore();
   const { getTasksForWorkflow, setTasks } = useTaskStore();
   const notifyInfo = useUIStore((s) => s.notifyInfo);
   const notifyError = useUIStore((s) => s.notifyError);
@@ -1669,7 +1669,17 @@ export default function Workflows() {
 
   const handleCreate = async (prompt, files = [], title, workflowConfig) => {
     const workflow = await createWorkflow(prompt, { title, config: workflowConfig });
-    if (!workflow) return;
+    if (!workflow) {
+      // Get the error from the store and show it
+      const storeError = useWorkflowStore.getState().error;
+      if (storeError) {
+        notifyError(storeError);
+        clearError();
+      } else {
+        notifyError('Failed to create workflow');
+      }
+      return;
+    }
 
     if (files.length > 0) {
       try {

@@ -61,11 +61,12 @@ const FileTreeNode = ({ node, level = 0, onSelect, selectedKey }) => {
 
 export default function FileTree({ items, onSelect, selectedKey }) {
   // Convert flat list of items (with paths) to tree structure
+  // Uses treePath for visual structure if available, otherwise falls back to path or title
   const tree = useMemo(() => {
     const root = { id: 'root', type: 'folder', name: 'root', children: [] };
-    
+
     items.forEach((item) => {
-      const pathParts = (item.path || item.title || '').split('/');
+      const pathParts = (item.treePath || item.path || item.title || '').split('/');
       let currentLevel = root.children;
       
       pathParts.forEach((part, index) => {

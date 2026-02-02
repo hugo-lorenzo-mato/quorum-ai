@@ -275,22 +275,47 @@ func (s *Server) handleCreateWorkflow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check for duplicate prompts (warning only, doesn't block creation)
+	// Check for duplicate prompts - block if pending/running, warn if completed/failed
 	var duplicateWarning string
 	duplicates, err := s.stateManager.FindWorkflowsByPrompt(ctx, req.Prompt)
 	if err != nil {
 		s.logger.Warn("failed to check for duplicate prompts", "error", err)
 	} else if len(duplicates) > 0 {
-		// Build warning message with duplicate workflow info
-		duplicateWarning = fmt.Sprintf("Found %d workflow(s) with identical prompt: ", len(duplicates))
-		for i, dup := range duplicates {
-			if i > 0 {
-				duplicateWarning += ", "
+		// Check for active duplicates (pending or running) - these block creation
+		var activeDuplicates []core.DuplicateWorkflowInfo
+		var inactiveDuplicates []core.DuplicateWorkflowInfo
+		for _, dup := range duplicates {
+			if dup.Status == core.WorkflowStatusPending || dup.Status == core.WorkflowStatusRunning {
+				activeDuplicates = append(activeDuplicates, dup)
+			} else {
+				inactiveDuplicates = append(inactiveDuplicates, dup)
 			}
-			duplicateWarning += fmt.Sprintf("%s (%s)", dup.WorkflowID, dup.Status)
-			if i >= 2 && len(duplicates) > 3 {
-				duplicateWarning += fmt.Sprintf(" and %d more", len(duplicates)-3)
-				break
+		}
+
+		// Block creation if there are active duplicates
+		if len(activeDuplicates) > 0 {
+			var ids []string
+			for _, dup := range activeDuplicates {
+				ids = append(ids, fmt.Sprintf("%s (%s)", dup.WorkflowID, dup.Status))
+			}
+			respondError(w, http.StatusConflict,
+				fmt.Sprintf("Cannot create workflow: identical prompt already exists in active state. Existing workflow(s): %s. Please wait for completion or delete the existing workflow.",
+					strings.Join(ids, ", ")))
+			return
+		}
+
+		// Warn about inactive duplicates (completed/failed)
+		if len(inactiveDuplicates) > 0 {
+			duplicateWarning = fmt.Sprintf("Found %d completed/failed workflow(s) with identical prompt: ", len(inactiveDuplicates))
+			for i, dup := range inactiveDuplicates {
+				if i > 0 {
+					duplicateWarning += ", "
+				}
+				duplicateWarning += fmt.Sprintf("%s (%s)", dup.WorkflowID, dup.Status)
+				if i >= 2 && len(inactiveDuplicates) > 3 {
+					duplicateWarning += fmt.Sprintf(" and %d more", len(inactiveDuplicates)-3)
+					break
+				}
 			}
 		}
 	}
