@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useConfigStore } from '../stores/configStore';
+import { Search } from 'lucide-react';
 import {
   SettingsToolbar,
   ConflictDialog,
@@ -12,21 +13,78 @@ import {
 } from '../components/config';
 
 const TABS = [
-  { id: 'general', label: 'General', icon: SettingsIcon, component: GeneralTab },
-  { id: 'workflow', label: 'Workflow', icon: WorkflowIcon, component: WorkflowTab },
-  { id: 'agents', label: 'Agents', icon: AgentsIcon, component: AgentsTab },
-  { id: 'phases', label: 'Phases', icon: PhasesIcon, component: PhasesTab },
-  { id: 'git', label: 'Git', icon: GitIcon, component: GitTab },
-  { id: 'advanced', label: 'Advanced', icon: AdvancedIcon, component: AdvancedTab },
+  { 
+    id: 'general', 
+    label: 'General', 
+    icon: SettingsIcon, 
+    component: GeneralTab,
+    keywords: ['log', 'logging', 'chat', 'report', 'markdown', 'output'] 
+  },
+  { 
+    id: 'workflow', 
+    label: 'Workflow', 
+    icon: WorkflowIcon, 
+    component: WorkflowTab,
+    keywords: ['timeout', 'retry', 'dry run', 'sandbox', 'state', 'database', 'backend'] 
+  },
+  { 
+    id: 'agents', 
+    label: 'Agents', 
+    icon: AgentsIcon, 
+    component: AgentsTab,
+    keywords: ['model', 'temperature', 'provider', 'token', 'context'] 
+  },
+  { 
+    id: 'phases', 
+    label: 'Phases', 
+    icon: PhasesIcon, 
+    component: PhasesTab,
+    keywords: ['step', 'order', 'execution'] 
+  },
+  { 
+    id: 'git', 
+    label: 'Git', 
+    icon: GitIcon, 
+    component: GitTab,
+    keywords: ['commit', 'push', 'pr', 'pull request', 'merge', 'github', 'branch'] 
+  },
+  { 
+    id: 'advanced', 
+    label: 'Advanced', 
+    icon: AdvancedIcon, 
+    component: AdvancedTab,
+    keywords: ['trace', 'debug', 'server', 'port', 'host', 'reset', 'danger'] 
+  },
 ];
+
+// Helper to determine if a tab has dirty fields
+const getTabDirty = (tabId, localChanges) => {
+  const dirtyKeys = Object.keys(localChanges);
+  if (dirtyKeys.length === 0) return false;
+
+  const tabMappings = {
+    general: ['log', 'chat', 'report'],
+    workflow: ['workflow', 'state'],
+    agents: ['agents'],
+    phases: ['phases'],
+    git: ['git', 'github'],
+    advanced: ['trace', 'server'],
+  };
+
+  const relevantKeys = tabMappings[tabId] || [];
+  return dirtyKeys.some(key => relevantKeys.includes(key));
+};
 
 export default function Settings() {
   const [activeTab, setActiveTab] = useState('general');
+  const [searchQuery, setSearchQuery] = useState('');
+  
   const loadConfig = useConfigStore((state) => state.loadConfig);
   const loadMetadata = useConfigStore((state) => state.loadMetadata);
   const isLoading = useConfigStore((state) => state.isLoading);
   const error = useConfigStore((state) => state.error);
   const config = useConfigStore((state) => state.config);
+  const localChanges = useConfigStore((state) => state.localChanges);
 
   // Load config and metadata on mount
   useEffect(() => {
@@ -34,29 +92,73 @@ export default function Settings() {
     loadMetadata();
   }, [loadConfig, loadMetadata]);
 
+  // Filter tabs based on search
+  const filteredTabs = useMemo(() => {
+    if (!searchQuery) return TABS;
+    const lowerQuery = searchQuery.toLowerCase();
+    return TABS.filter(tab => 
+      tab.label.toLowerCase().includes(lowerQuery) || 
+      (tab.keywords && tab.keywords.some(k => k.includes(lowerQuery)))
+    );
+  }, [searchQuery]);
+
+  const handleSearchChange = (e) => {
+    const query = e.target.value;
+    setSearchQuery(query);
+    
+    // Auto-switch tab if current becomes hidden
+    if (query) {
+      const lowerQuery = query.toLowerCase();
+      const matching = TABS.filter(tab => 
+        tab.label.toLowerCase().includes(lowerQuery) || 
+        (tab.keywords && tab.keywords.some(k => k.includes(lowerQuery)))
+      );
+      
+      if (matching.length > 0 && !matching.find(t => t.id === activeTab)) {
+        setActiveTab(matching[0].id);
+      }
+    }
+  };
+
   const ActiveComponent = TABS.find((t) => t.id === activeTab)?.component;
 
   return (
-    <div className="space-y-4 sm:space-y-6 pb-32 sm:pb-32">
+    <div className="space-y-4 sm:space-y-6 pb-32 sm:pb-32 animate-fade-in">
       {/* Header */}
-      <div>
-        <h1 className="text-xl sm:text-2xl font-semibold text-foreground tracking-tight">Settings</h1>
-        <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
-          Configure Quorum behavior and preferences
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-semibold text-foreground tracking-tight">Settings</h1>
+          <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
+            Configure Quorum behavior and preferences
+          </p>
+        </div>
+        
+        {/* Search Input */}
+        <div className="relative w-full sm:w-64">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <input
+            type="text"
+            placeholder="Search settings..."
+            value={searchQuery}
+            onChange={handleSearchChange}
+            className="h-9 w-full pl-9 pr-4 rounded-lg border border-border bg-background text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/20 transition-all placeholder:text-muted-foreground/50"
+          />
+        </div>
       </div>
 
       {/* Tab Navigation */}
       <div className="sticky top-14 z-30 -mx-3 sm:-mx-6 px-3 sm:px-6 py-2 sm:py-3 border-b border-border bg-background/80 glass">
-        <div className="flex items-center gap-0.5 sm:gap-1 p-0.5 sm:p-1 rounded-lg bg-secondary border border-border overflow-x-auto">
-          {TABS.map((tab) => {
+        <div className="flex items-center gap-0.5 sm:gap-1 p-0.5 sm:p-1 rounded-lg bg-secondary border border-border overflow-x-auto scrollbar-none">
+          {filteredTabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
+            const isDirty = getTabDirty(tab.id, localChanges);
+            
             return (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm font-medium rounded-md transition-all whitespace-nowrap ${
+                className={`relative flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm font-medium rounded-md transition-all whitespace-nowrap ${
                   isActive
                     ? 'bg-background text-foreground shadow-sm'
                     : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
@@ -67,14 +169,22 @@ export default function Settings() {
               >
                 <Icon className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
                 {tab.label}
+                {isDirty && (
+                  <span className="absolute top-1 right-1 w-1.5 h-1.5 bg-warning rounded-full animate-fade-in" />
+                )}
               </button>
             );
           })}
+          {filteredTabs.length === 0 && (
+            <div className="px-3 py-2 text-xs text-muted-foreground">
+              No matching settings found
+            </div>
+          )}
         </div>
       </div>
 
       {/* Content */}
-      <div>
+      <div className="min-h-[400px]">
         {isLoading && !config && (
           <div className="flex items-center justify-center py-12">
             <svg className="animate-spin h-8 w-8 text-primary" viewBox="0 0 24 24" role="status">
@@ -98,7 +208,9 @@ export default function Settings() {
         )}
 
         {!isLoading && !error && config && ActiveComponent && (
-          <ActiveComponent />
+          <div className="animate-fade-in">
+             <ActiveComponent />
+          </div>
         )}
       </div>
 

@@ -21,6 +21,7 @@ import {
   ReasoningSelector,
   AttachmentPicker,
 } from '../components/chat';
+import ChatMarkdown from '../components/ChatMarkdown';
 
 function TypingIndicator() {
   return (
@@ -63,29 +64,31 @@ function MessageBubble({ message, isLast }) {
           <Bot className="w-4 h-4 text-muted-foreground" />
         )}
       </div>
-      <div className={`max-w-[70%] rounded-2xl px-4 py-3 ${
+      <div className={`max-w-[85%] rounded-2xl px-4 py-3 min-w-[200px] ${
         isUser
           ? 'bg-primary text-primary-foreground rounded-br-md'
           : 'bg-card border border-border rounded-bl-md'
       }`}>
         {!isUser && message.agent && (
-          <p className="text-xs font-medium text-primary mb-1">{agentName}</p>
+          <p className="text-xs font-mono font-medium text-primary mb-1">{agentName}</p>
         )}
-        <p className="text-sm whitespace-pre-wrap leading-relaxed">{message.content}</p>
-        <div className="flex items-center justify-between mt-2">
-          <p className={`text-xs ${isUser ? 'text-primary-foreground/60' : 'text-muted-foreground'}`}>
+        <div className={`text-sm ${isUser ? 'text-primary-foreground' : 'text-foreground'}`}>
+          <ChatMarkdown content={message.content} isUser={isUser} />
+        </div>
+        <div className="flex items-center justify-between mt-2 pt-1 border-t border-white/10 opacity-70">
+          <p className={`text-[10px] font-mono ${isUser ? 'text-primary-foreground/80' : 'text-muted-foreground'}`}>
             {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
           </p>
           <button
             type="button"
             onClick={handleCopy}
-            className={`p-1 rounded hover:bg-accent/50 transition-colors ${copied ? 'text-green-500' : ''}`}
+            className={`p-1 rounded hover:bg-white/10 transition-colors ${copied ? 'text-green-300' : ''}`}
             title={copied ? 'Copied!' : 'Copy message'}
           >
             {copied ? (
-              <CheckCircle2 className="w-3.5 h-3.5" />
+              <CheckCircle2 className="w-3 h-3" />
             ) : (
-              <Copy className={`w-3.5 h-3.5 ${isUser ? 'text-primary-foreground/60' : 'text-muted-foreground'}`} />
+              <Copy className="w-3 h-3" />
             )}
           </button>
         </div>

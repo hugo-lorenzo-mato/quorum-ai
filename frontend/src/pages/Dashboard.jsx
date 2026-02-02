@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useWorkflowStore } from '../stores';
+import { getStatusColor } from '../lib/theme';
 import {
   GitBranch,
   CheckCircle2,
@@ -24,6 +25,35 @@ function getWorkflowTitle(workflow) {
   return workflow.id;
 }
 
+// Simple Sparkline Component
+function Sparkline({ data = [], color = "currentColor", height = 24, width = 60 }) {
+  if (!data || data.length < 2) return null;
+  
+  const min = Math.min(...data);
+  const max = Math.max(...data);
+  const range = max - min || 1;
+  const step = width / (data.length - 1);
+  
+  const points = data.map((d, i) => {
+    const x = i * step;
+    const y = height - ((d - min) / range) * height;
+    return `${x},${y}`;
+  }).join(' ');
+
+  return (
+    <svg width={width} height={height} className="opacity-50" aria-hidden="true">
+      <polyline
+        points={points}
+        fill="none"
+        stroke={color}
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 // Bento Grid Card Component
 function BentoCard({ children, className = '', span = 1 }) {
   const spanClasses = {
@@ -42,7 +72,7 @@ function BentoCard({ children, className = '', span = 1 }) {
 }
 
 // Stat Card for Bento Grid
-function StatCard({ title, value, subtitle, icon: Icon, trend, color = 'primary' }) {
+function StatCard({ title, value, subtitle, icon: Icon, trend, color = 'primary', sparklineData }) {
   const colorClasses = {
     primary: 'bg-primary/10 text-primary',
     success: 'bg-success/10 text-success',
@@ -50,26 +80,41 @@ function StatCard({ title, value, subtitle, icon: Icon, trend, color = 'primary'
     error: 'bg-error/10 text-error',
     info: 'bg-info/10 text-info',
   };
+  
+  // Map color prop to CSS color for sparkline
+  const sparklineColors = {
+    primary: 'var(--color-primary)',
+    success: 'var(--color-success)',
+    warning: 'var(--color-warning)',
+    error: 'var(--color-error)',
+    info: 'var(--color-info)',
+  };
 
   return (
     <BentoCard>
-      <div className="flex items-start justify-between">
-        <div className="space-y-2">
-          <p className="text-sm font-medium text-muted-foreground">{title}</p>
-          <p className="text-3xl font-semibold text-foreground tracking-tight">{value}</p>
-          {subtitle && (
-            <p className="text-sm text-muted-foreground">{subtitle}</p>
-          )}
-          {trend && (
-            <div className="flex items-center gap-1 text-sm text-success">
-              <TrendingUp className="w-3 h-3" />
-              <span>{trend}</span>
-            </div>
-          )}
-        </div>
+      <div className="flex items-start justify-between mb-4">
         <div className={`p-3 rounded-xl ${colorClasses[color]}`}>
           <Icon className="w-5 h-5" />
         </div>
+        {sparklineData && (
+          <Sparkline 
+            data={sparklineData} 
+            color={sparklineColors[color] || 'currentColor'} 
+          />
+        )}
+      </div>
+      <div className="space-y-1">
+        <p className="text-3xl font-mono font-semibold text-foreground tracking-tight">{value}</p>
+        <p className="text-sm font-medium text-muted-foreground">{title}</p>
+        {subtitle && (
+          <p className="text-xs text-muted-foreground mt-1">{subtitle}</p>
+        )}
+        {trend && (
+          <div className="flex items-center gap-1 text-xs text-success font-mono mt-1">
+            <TrendingUp className="w-3 h-3" />
+            <span>{trend}</span>
+          </div>
+        )}
       </div>
     </BentoCard>
   );
@@ -86,24 +131,32 @@ function WorkflowItem({ workflow }) {
 
   const config = statusConfig[workflow.status] || statusConfig.pending;
   const StatusIcon = config.icon;
+  const statusColor = getStatusColor(workflow.status);
 
   return (
     <Link
       to={`/workflows/${workflow.id}`}
       className="group flex items-center gap-4 p-3 -mx-3 rounded-lg transition-colors hover:bg-accent"
     >
-      <div className={`p-2 rounded-lg ${config.bg}`}>
-        <StatusIcon className={`w-4 h-4 ${config.color}`} />
+      <div className={`p-2 rounded-lg ${statusColor.bg}`}>
+        <StatusIcon className={`w-4 h-4 ${statusColor.text}`} />
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-foreground truncate">
           {getWorkflowTitle(workflow)}
         </p>
-        <p className="text-xs text-muted-foreground">
-          {workflow.current_phase || 'Pending'} · {workflow.task_count || 0} tasks
-        </p>
+        <div className="flex items-center gap-2 mt-0.5">
+          <span className="text-xs text-muted-foreground font-mono bg-muted/50 px-1.5 rounded">
+            {workflow.id.substring(0, 8)}
+          </span>
+          <span className="text-xs text-muted-foreground">
+             · {workflow.task_count || 0} tasks
+          </span>
+        </div>
       </div>
-      <ArrowUpRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+      <div className={`text-xs font-medium px-2 py-0.5 rounded-full ${statusColor.bg} ${statusColor.text}`}>
+        {workflow.status}
+      </div>
     </Link>
   );
 }
@@ -231,6 +284,7 @@ export default function Dashboard() {
           subtitle="All time"
           icon={GitBranch}
           color="primary"
+          sparklineData={[5, 8, 12, 15, 20, 25, workflows.length]} // Dummy data for visual
         />
         <StatCard
           title="Completed"
@@ -238,6 +292,7 @@ export default function Dashboard() {
           subtitle={`${Math.round((completedCount / Math.max(workflows.length, 1)) * 100)}% success rate`}
           icon={CheckCircle2}
           color="success"
+          sparklineData={[2, 5, 8, 10, 15, completedCount]}
         />
         <StatCard
           title="Running"
@@ -245,6 +300,7 @@ export default function Dashboard() {
           subtitle="Active now"
           icon={Activity}
           color="info"
+          sparklineData={[0, 1, 0, 2, 1, runningCount]} 
         />
         <StatCard
           title="Failed"
@@ -252,6 +308,7 @@ export default function Dashboard() {
           subtitle="Needs attention"
           icon={XCircle}
           color="error"
+          sparklineData={[0, 0, 1, 0, 1, failedCount]}
         />
       </div>
 

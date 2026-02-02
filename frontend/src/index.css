@@ -1,5 +1,7 @@
 /* Import Inter font */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+/* Import JetBrains Mono font */
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 @import "tailwindcss";
 
@@ -10,6 +12,7 @@
 @theme {
   /* Font family */
   --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
 
   /* Border radius */
   --radius-sm: 0.375rem;

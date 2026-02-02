@@ -1,6 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useKanbanStore, KANBAN_COLUMNS } from '../stores';
+import { getStatusColor, KANBAN_COLUMN_COLORS } from '../lib/theme';
+import { Search } from 'lucide-react';
 
 // Column component
 function KanbanColumn({ column, workflows }) {
@@ -67,30 +69,12 @@ function KanbanColumn({ column, workflows }) {
     if (dragDepth.current === 0) setIsOver(false);
   };
 
-  // Column accent colors (subtle, consistent across themes)
-  const getColumnAccent = () => {
-    switch (column.id) {
-      case 'refinement':
-        return { dot: 'bg-yellow-500', tint: 'bg-yellow-500/10', ring: 'ring-yellow-500/20' };
-      case 'todo':
-        return { dot: 'bg-blue-500', tint: 'bg-blue-500/10', ring: 'ring-blue-500/20' };
-      case 'in_progress':
-        return { dot: 'bg-purple-500', tint: 'bg-purple-500/10', ring: 'ring-purple-500/20' };
-      case 'to_verify':
-        return { dot: 'bg-orange-500', tint: 'bg-orange-500/10', ring: 'ring-orange-500/20' };
-      case 'done':
-        return { dot: 'bg-green-500', tint: 'bg-green-500/10', ring: 'ring-green-500/20' };
-      default:
-        return { dot: 'bg-muted-foreground', tint: 'bg-muted', ring: 'ring-ring/20' };
-    }
-  };
-
-  const accent = getColumnAccent();
+  const accent = KANBAN_COLUMN_COLORS[column.id] || KANBAN_COLUMN_COLORS.default;
 
   return (
     <div
-      className={`flex flex-col min-w-[280px] max-w-[320px] rounded-xl border border-border bg-card/60 backdrop-blur-xl dark:bg-card/40 ${
-        isOver && canDrop ? `ring-2 ${accent.ring}` : ''
+      className={`flex flex-col min-w-[280px] max-w-[320px] rounded-xl border border-border bg-card/60 backdrop-blur-xl dark:bg-card/40 transition-colors ${
+        isOver && canDrop ? `ring-2 ring-dashed ${accent.ring} bg-accent/50` : ''
       }`}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
@@ -107,14 +91,14 @@ function KanbanColumn({ column, workflows }) {
               <p className="text-xs text-muted-foreground truncate">{column.description}</p>
             </div>
           </div>
-          <span className="shrink-0 bg-muted text-muted-foreground text-xs px-2 py-0.5 rounded-full">
+          <span className="shrink-0 bg-muted text-muted-foreground text-xs px-2 py-0.5 rounded-full font-mono">
             {workflows.length}
           </span>
         </div>
       </div>
 
       {/* Workflow cards */}
-      <div className="flex-1 p-3 space-y-2 overflow-y-auto max-h-[calc(100vh-320px)]">
+      <div className="flex-1 p-3 space-y-2 overflow-y-auto max-h-[calc(100vh-320px)] scrollbar-thin">
         {workflows.map((workflow) => (
           <KanbanCard
             key={workflow.id}
@@ -126,8 +110,8 @@ function KanbanColumn({ column, workflows }) {
           />
         ))}
         {workflows.length === 0 && (
-          <div className="text-muted-foreground text-sm text-center py-8">
-            No workflows
+          <div className="flex flex-col items-center justify-center py-8 text-muted-foreground/50 border-2 border-dashed border-border/50 rounded-lg m-1">
+             <span className="text-xs">Empty</span>
           </div>
         )}
       </div>
@@ -140,19 +124,11 @@ function KanbanCard({ workflow, isExecuting, onDragStart, onDragEnd, onClick }) 
   const handleDragStart = (e) => {
     e.dataTransfer.setData('text/plain', workflow.id);
     e.dataTransfer.effectAllowed = 'move';
+    // Create a custom drag image if desired, for now default is fine
     onDragStart();
   };
 
-  const statusConfig = {
-    pending: 'bg-muted text-muted-foreground',
-    running: 'bg-info/10 text-info',
-    completed: 'bg-success/10 text-success',
-    failed: 'bg-error/10 text-error',
-    paused: 'bg-warning/10 text-warning',
-  };
-
-  const status = workflow.status || 'pending';
-  const statusClasses = statusConfig[status] || statusConfig.pending;
+  const statusColor = getStatusColor(workflow.status);
 
   return (
     <div
@@ -160,7 +136,7 @@ function KanbanCard({ workflow, isExecuting, onDragStart, onDragEnd, onClick }) 
       onDragStart={handleDragStart}
       onDragEnd={onDragEnd}
       onClick={onClick}
-      className={`group relative overflow-hidden rounded-xl border border-border bg-card p-3 shadow-sm shadow-black/5 cursor-pointer transition-all hover:bg-accent hover:border-muted-foreground/30 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 dark:bg-secondary dark:border-white/10 dark:shadow-md dark:shadow-black/60 dark:ring-1 dark:ring-white/10 ${
+      className={`group relative overflow-hidden rounded-xl border border-border bg-card p-3 shadow-sm shadow-black/5 cursor-grab active:cursor-grabbing transition-all hover:bg-accent hover:border-muted-foreground/30 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 dark:bg-secondary dark:border-white/10 dark:shadow-md dark:shadow-black/60 dark:ring-1 dark:ring-white/10 ${
         isExecuting ? 'ring-2 ring-info/30 dark:ring-info/40' : ''
       } before:pointer-events-none before:absolute before:inset-0 before:rounded-xl before:content-[''] before:bg-gradient-to-b before:from-white/0 before:to-transparent dark:before:from-white/10`}
       role="button"
@@ -182,14 +158,14 @@ function KanbanCard({ workflow, isExecuting, onDragStart, onDragEnd, onClick }) 
       </h4>
 
       {/* Prompt preview */}
-      <p className="text-muted-foreground text-xs line-clamp-2 mb-3">
+      <p className="text-muted-foreground text-xs line-clamp-2 mb-3 font-mono text-[10px] leading-tight opacity-80">
         {workflow.prompt}
       </p>
 
       {/* Metadata row */}
       <div className="flex items-center justify-between gap-2 text-xs">
-        <span className={`inline-flex items-center px-2 py-0.5 rounded-full font-medium ${statusClasses}`}>
-          {status}
+        <span className={`inline-flex items-center px-2 py-0.5 rounded-full font-medium ${statusColor.bg} ${statusColor.text}`}>
+          {workflow.status || 'pending'}
         </span>
         <div className="flex items-center gap-2 text-muted-foreground">
           {workflow.kanban_execution_count > 0 && (
@@ -214,7 +190,7 @@ function KanbanCard({ workflow, isExecuting, onDragStart, onDragEnd, onClick }) 
       {/* Error indicator */}
       {workflow.kanban_last_error && (
         <div
-          className="mt-2 rounded-lg border border-error/20 bg-error/5 px-2 py-1 text-xs text-error line-clamp-2"
+          className="mt-2 rounded-lg border border-error/20 bg-error/5 px-2 py-1 text-xs text-error line-clamp-2 font-mono"
           title={workflow.kanban_last_error}
         >
           {workflow.kanban_last_error}
@@ -223,7 +199,7 @@ function KanbanCard({ workflow, isExecuting, onDragStart, onDragEnd, onClick }) 
 
       {/* Task count */}
       {workflow.task_count > 0 && (
-        <div className="mt-2 text-xs text-muted-foreground">
+        <div className="mt-2 text-xs text-muted-foreground font-mono">
           {workflow.task_count} tasks
         </div>
       )}
@@ -315,6 +291,22 @@ function EngineControls() {
   );
 }
 
+// Filter Component
+function KanbanFilters({ filter, setFilter }) {
+  return (
+    <div className="relative">
+      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+      <input
+        type="text"
+        placeholder="Filter workflows..."
+        value={filter}
+        onChange={(e) => setFilter(e.target.value)}
+        className="h-9 w-full sm:w-64 pl-9 pr-4 rounded-lg border border-border bg-background text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/20 transition-all"
+      />
+    </div>
+  );
+}
+
 // Main Kanban page
 export default function Kanban() {
   const {
@@ -325,14 +317,32 @@ export default function Kanban() {
     clearError,
   } = useKanbanStore();
 
+  const [filter, setFilter] = useState('');
+
   useEffect(() => {
     fetchBoard();
   }, [fetchBoard]);
 
+  // Filter workflows
+  const filteredColumns = useMemo(() => {
+    if (!filter) return columns;
+    const lowerFilter = filter.toLowerCase();
+    
+    const newColumns = {};
+    Object.keys(columns).forEach(key => {
+      newColumns[key] = columns[key].filter(w => 
+        (w.title && w.title.toLowerCase().includes(lowerFilter)) ||
+        (w.id && w.id.toLowerCase().includes(lowerFilter)) ||
+        (w.prompt && w.prompt.toLowerCase().includes(lowerFilter))
+      );
+    });
+    return newColumns;
+  }, [columns, filter]);
+
   if (loading && Object.values(columns).every(col => col.length === 0)) {
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="text-muted-foreground">Loading board...</div>
+        <div className="text-muted-foreground animate-pulse">Loading board...</div>
       </div>
     );
   }
@@ -347,7 +357,10 @@ export default function Kanban() {
             Visualize and manage workflow execution
           </p>
         </div>
-        <EngineControls />
+        <div className="flex flex-col sm:flex-row gap-3">
+          <KanbanFilters filter={filter} setFilter={setFilter} />
+          <EngineControls />
+        </div>
       </div>
 
       {error && (
@@ -380,7 +393,7 @@ export default function Kanban() {
           <KanbanColumn
             key={column.id}
             column={column}
-            workflows={columns[column.id] || []}
+            workflows={filteredColumns[column.id] || []}
           />
         ))}
       </div>

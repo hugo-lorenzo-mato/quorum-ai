@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useWorkflowStore, useTaskStore, useUIStore, useAgentStore, useConfigStore } from '../stores';
 import { fileApi, workflowApi } from '../lib/api';
 import { getModelsForAgent, getReasoningLevels, supportsReasoning, useEnums } from '../lib/agents';
+import { getStatusColor } from '../lib/theme';
 import MarkdownViewer from '../components/MarkdownViewer';
 import AgentActivity, { AgentActivityCompact } from '../components/AgentActivity';
 import EditWorkflowModal from '../components/EditWorkflowModal';
@@ -27,9 +28,11 @@ import {
   RefreshCw,
   Pencil,
   Trash2,
+  FastForward,
+  RotateCcw,
 } from 'lucide-react';
 import { ConfirmDialog } from '../components/config/ConfirmDialog';
-import { ExecutionModeBadge } from '../components/workflow';
+import { ExecutionModeBadge, PhaseStepper, ReplanModal } from '../components/workflow';
 
 function normalizeWhitespace(s) {
   return String(s || '').replace(/\s+/g, ' ').trim();
@@ -91,19 +94,23 @@ function deriveWorkflowTitle(workflow, tasks = []) {
 }
 
 function StatusBadge({ status }) {
-  const config = {
-    pending: { color: 'bg-muted text-muted-foreground', icon: Clock },
-    running: { color: 'bg-info/10 text-info', icon: Activity },
-    completed: { color: 'bg-success/10 text-success', icon: CheckCircle2 },
-    failed: { color: 'bg-error/10 text-error', icon: XCircle },
-    paused: { color: 'bg-warning/10 text-warning', icon: Pause },
+  const { bg, text } = getStatusColor(status);
+  // Map icon based on status since getStatusColor returns generic props
+  // We can override the icon from the theme if we want, but for now we'll just use the status string to pick icon
+  
+  const iconMap = {
+    pending: Clock,
+    running: Activity,
+    completed: CheckCircle2,
+    failed: XCircle,
+    paused: Pause,
   };
-
-  const { color, icon: Icon } = config[status] || config.pending;
+  
+  const StatusIcon = iconMap[status] || Clock;
 
   return (
-    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${color}`}>
-      <Icon className="w-3 h-3" />
+    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${bg} ${text}`}>
+      <StatusIcon className="w-3 h-3" />
       {status}
     </span>
   );
@@ -129,7 +136,7 @@ function WorkflowCard({ workflow, onClick, onDelete }) {
           <p className="text-sm font-medium text-foreground line-clamp-2">
             {deriveWorkflowTitle(workflow)}
           </p>
-          <p className="text-xs text-muted-foreground mt-1">{workflow.id}</p>
+          <p className="text-xs text-muted-foreground mt-1 font-mono">{workflow.id}</p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <StatusBadge status={workflow.status} />
@@ -155,14 +162,19 @@ function WorkflowCard({ workflow, onClick, onDelete }) {
 }
 
 function TaskItem({ task, selected, onClick }) {
-  const config = {
-    pending: { color: 'text-muted-foreground', bg: 'bg-muted' },
-    running: { color: 'text-info', bg: 'bg-info/10' },
-    completed: { color: 'text-success', bg: 'bg-success/10' },
-    failed: { color: 'text-error', bg: 'bg-error/10' },
+  const { bg, text } = getStatusColor(task.status);
+  
+  // Custom icon map for tasks
+  const iconMap = {
+    pending: Clock,
+    running: Loader2,
+    completed: CheckCircle2,
+    failed: XCircle,
+    paused: Pause,
   };
-
-  const { color, bg } = config[task.status] || config.pending;
+  
+  const StatusIcon = iconMap[task.status] || Clock;
+  const isRunning = task.status === 'running';
 
   return (
     <button
@@ -175,33 +187,44 @@ function TaskItem({ task, selected, onClick }) {
       }`}
     >
       <div className={`p-2 rounded-lg ${bg}`}>
-        {task.status === 'running' ? (
-          <Loader2 className={`w-4 h-4 ${color} animate-spin`} />
-        ) : task.status === 'completed' ? (
-          <CheckCircle2 className={`w-4 h-4 ${color}`} />
-        ) : task.status === 'failed' ? (
-          <XCircle className={`w-4 h-4 ${color}`} />
-        ) : (
-          <Clock className={`w-4 h-4 ${color}`} />
-        )}
+        <StatusIcon className={`w-4 h-4 ${text} ${isRunning ? 'animate-spin' : ''}`} />
       </div>
-      <div className="flex-1 min-w-0">
+      <div className="flex-1 min-w-0 text-left">
         <p className="text-sm font-medium text-foreground truncate">{task.name || task.id}</p>
-        <p className="text-xs text-muted-foreground">{task.phase || task.type || 'Task'}</p>
+        <p className="text-xs text-muted-foreground font-mono mt-0.5">{task.id}</p>
       </div>
-      <StatusBadge status={task.status} />
+      <div className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider ${bg} ${text}`}>
+        {task.status}
+      </div>
     </button>
   );
 }
 
 function WorkflowDetail({ workflow, tasks, onBack }) {
-  const { startWorkflow, pauseWorkflow, resumeWorkflow, stopWorkflow, deleteWorkflow, updateWorkflow, fetchWorkflow, error, clearError } = useWorkflowStore();
+  const {
+    startWorkflow,
+    pauseWorkflow,
+    resumeWorkflow,
+    stopWorkflow,
+    deleteWorkflow,
+    updateWorkflow,
+    fetchWorkflow,
+    analyzeWorkflow,
+    planWorkflow,
+    replanWorkflow,
+    executeWorkflow,
+    loading,
+    error,
+    clearError,
+  } = useWorkflowStore();
   const notifyInfo = useUIStore((s) => s.notifyInfo);
   const notifyError = useUIStore((s) => s.notifyError);
   const navigate = useNavigate();
 
   // Edit modal state
   const [editModalOpen, setEditModalOpen] = useState(false);
+  // Replan modal state
+  const [isReplanModalOpen, setReplanModalOpen] = useState(false);
 
   // Delete confirmation state
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -645,9 +668,9 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
         >
           <ArrowLeft className="w-5 h-5 text-muted-foreground" />
         </button>
-        <div className="flex-1 min-w-0">
+        <div className="min-w-0">
           <div className="flex items-center gap-2 group">
-            <h1 className="text-xl font-semibold text-foreground line-clamp-2">{displayTitle}</h1>
+            <h1 className="text-xl font-semibold text-foreground line-clamp-1">{displayTitle}</h1>
             {canEdit && (
               <button
                 onClick={() => setEditModalOpen(true)}
@@ -663,68 +686,143 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
             <ExecutionModeBadge config={workflow.config} variant="inline" />
           </div>
         </div>
-        <div className="flex items-center gap-3">
+
+        {/* Phase Progress Stepper - inline */}
+        <div className="flex-1 flex justify-center">
+          <PhaseStepper workflow={workflow} compact />
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap justify-end">
           {workflow.status === 'running' && (
             <AgentActivityCompact activeAgents={activeAgents} />
           )}
+
+          {/* Phase action buttons - inline */}
           {workflow.status === 'pending' && (
+            <>
+              <button
+                onClick={() => startWorkflow(workflow.id)}
+                disabled={loading}
+                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-all"
+              >
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <FastForward className="w-4 h-4" />}
+                Run All
+              </button>
+              <button
+                onClick={() => analyzeWorkflow(workflow.id)}
+                disabled={loading}
+                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-info/10 text-info text-sm font-medium hover:bg-info/20 disabled:opacity-50 transition-all"
+              >
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+                Analyze
+              </button>
+            </>
+          )}
+
+          {/* Plan button - after analyze completes */}
+          {workflow.status === 'completed' && workflow.current_phase === 'plan' && (
             <button
-              onClick={() => startWorkflow(workflow.id)}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+              onClick={() => planWorkflow(workflow.id)}
+              disabled={loading}
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-info/10 text-info text-sm font-medium hover:bg-info/20 disabled:opacity-50 transition-all"
             >
-              <Play className="w-4 h-4" />
-              Start
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+              Plan
             </button>
           )}
+
+          {/* Replan button - when plan or execute phase completed */}
+          {workflow.status === 'completed' && (workflow.current_phase === 'plan' || workflow.current_phase === 'execute') && (
+            <button
+              onClick={() => setReplanModalOpen(true)}
+              disabled={loading}
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-warning/10 text-warning text-sm font-medium hover:bg-warning/20 disabled:opacity-50 transition-all"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Replan
+            </button>
+          )}
+
+          {/* Execute button - after plan completes */}
+          {workflow.status === 'completed' && workflow.current_phase === 'execute' && (
+            <button
+              onClick={() => executeWorkflow(workflow.id)}
+              disabled={loading}
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-success/10 text-success text-sm font-medium hover:bg-success/20 disabled:opacity-50 transition-all"
+            >
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+              Execute
+            </button>
+          )}
+
+          {/* Resume button - for paused workflows */}
+          {workflow.status === 'paused' && (
+            <button
+              onClick={() => resumeWorkflow(workflow.id)}
+              disabled={loading}
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-all"
+            >
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+              Resume
+            </button>
+          )}
+
+          {/* Retry button - for failed workflows */}
+          {workflow.status === 'failed' && (
+            <button
+              onClick={() => startWorkflow(workflow.id)}
+              disabled={loading}
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-all"
+            >
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
+              Retry
+            </button>
+          )}
+
+          {/* Running indicator */}
+          {workflow.status === 'running' && (
+            <div className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-info/10 text-info text-sm">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              {workflow.current_phase ? `Running ${workflow.current_phase}...` : 'Running...'}
+            </div>
+          )}
+
+          {/* Pause/Stop controls - when running */}
           {workflow.status === 'running' && (
             <>
               <button
                 onClick={() => pauseWorkflow(workflow.id)}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-secondary text-secondary-foreground text-sm font-medium hover:bg-secondary/80 transition-colors"
+                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-secondary text-secondary-foreground text-sm font-medium hover:bg-secondary/80 transition-colors"
               >
                 <Pause className="w-4 h-4" />
                 Pause
               </button>
               <button
                 onClick={() => stopWorkflow(workflow.id)}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-destructive text-destructive-foreground text-sm font-medium hover:bg-destructive/90 transition-colors"
+                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-destructive text-destructive-foreground text-sm font-medium hover:bg-destructive/90 transition-colors"
               >
                 <StopCircle className="w-4 h-4" />
                 Stop
               </button>
             </>
           )}
+
+          {/* Stop when paused */}
           {workflow.status === 'paused' && (
-            <>
-              <button
-                onClick={() => resumeWorkflow(workflow.id)}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
-              >
-                <Play className="w-4 h-4" />
-                Resume
-              </button>
-              <button
-                onClick={() => stopWorkflow(workflow.id)}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-destructive text-destructive-foreground text-sm font-medium hover:bg-destructive/90 transition-colors"
-              >
-                <StopCircle className="w-4 h-4" />
-                Stop
-              </button>
-            </>
-          )}
-          {workflow.status === 'failed' && (
             <button
-              onClick={() => startWorkflow(workflow.id)}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+              onClick={() => stopWorkflow(workflow.id)}
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-destructive text-destructive-foreground text-sm font-medium hover:bg-destructive/90 transition-colors"
             >
-              <RefreshCw className="w-4 h-4" />
-              Retry
+              <StopCircle className="w-4 h-4" />
+              Stop
             </button>
           )}
+
+          {/* Delete button */}
           {canDelete && (
             <button
               onClick={() => setDeleteDialogOpen(true)}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-destructive/10 text-destructive text-sm font-medium hover:bg-destructive/20 transition-colors"
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-destructive/10 text-destructive text-sm font-medium hover:bg-destructive/20 transition-colors"
               title="Delete workflow"
             >
               <Trash2 className="w-4 h-4" />
@@ -1043,6 +1141,17 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
         message={`This will permanently delete "${displayTitle}" and all its associated data. This action cannot be undone.`}
         confirmText="Delete"
         variant="danger"
+      />
+
+      {/* Replan Modal */}
+      <ReplanModal
+        isOpen={isReplanModalOpen}
+        onClose={() => setReplanModalOpen(false)}
+        onSubmit={async (context) => {
+          await replanWorkflow(workflow.id, context);
+          setReplanModalOpen(false);
+        }}
+        loading={loading}
       />
     </div>
   );

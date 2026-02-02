@@ -15,6 +15,7 @@ import {
   WifiOff,
   RefreshCw,
   KanbanSquare,
+  ChevronRight,
 } from 'lucide-react';
 
 const navItems = [
@@ -24,6 +25,55 @@ const navItems = [
   { path: '/chat', label: 'Chat', icon: MessageSquare },
   { path: '/settings', label: 'Settings', icon: Settings },
 ];
+
+function Breadcrumbs() {
+  const location = useLocation();
+  const pathnames = location.pathname.split('/').filter((x) => x);
+
+  const breadcrumbs = [
+    { name: 'Home', path: '/' },
+    ...pathnames.map((name, index) => {
+      const routeTo = `/${pathnames.slice(0, index + 1).join('/')}`;
+      const isLast = index === pathnames.length - 1;
+      
+      // Find label in navItems if possible
+      const navItem = navItems.find((item) => item.path === routeTo);
+      let label = navItem ? navItem.label : name;
+
+      // Special case: if name looks like an ID, maybe shorten or label it
+      if (name.length > 20) {
+        label = `${name.substring(0, 8)}...`;
+      }
+      
+      // Capitalize first letter if it's a generic path
+      if (!navItem && name.length <= 20) {
+        label = name.charAt(0).toUpperCase() + name.slice(1);
+      }
+
+      return { name: label, path: routeTo, isLast };
+    }),
+  ];
+
+  return (
+    <nav className="hidden sm:flex items-center text-sm text-muted-foreground">
+      {breadcrumbs.map((crumb, index) => (
+        <div key={crumb.path} className="flex items-center">
+          {index > 0 && <ChevronRight className="w-4 h-4 mx-1 text-muted-foreground/50" />}
+          {crumb.isLast ? (
+            <span className="font-medium text-foreground">{crumb.name}</span>
+          ) : (
+            <Link
+              to={crumb.path}
+              className="hover:text-foreground hover:underline transition-colors"
+            >
+              {crumb.name}
+            </Link>
+          )}
+        </div>
+      ))}
+    </nav>
+  );
+}
 
 function ThemeSwitcher() {
   const { theme, setTheme } = useUIStore();
@@ -207,9 +257,9 @@ export default function Layout({ children }) {
 
       {/* Main content */}
       <main
-        className={`min-h-screen transition-all duration-300 ease-in-out md:${
-          sidebarOpen ? 'pl-64' : 'pl-16'
-        } pl-0`}
+        className={`min-h-screen transition-all duration-300 ease-in-out pl-0 ${
+          sidebarOpen ? 'md:pl-64' : 'md:pl-16'
+        }`}
       >
         {/* Top bar */}
         <header className="sticky top-0 z-40 h-14 border-b border-border bg-background/80 glass">
@@ -223,7 +273,12 @@ export default function Layout({ children }) {
               >
                 <PanelLeft className="w-5 h-5" />
               </button>
-              <h1 className="text-xs sm:text-sm font-medium text-muted-foreground">
+              
+              {/* Breadcrumbs (Desktop) / Title (Mobile) */}
+              <div className="hidden sm:block">
+                <Breadcrumbs />
+              </div>
+              <h1 className="sm:hidden text-xs font-medium text-muted-foreground">
                 {navItems.find(item =>
                   location.pathname === item.path ||
                   (item.path !== '/' && location.pathname.startsWith(item.path))
