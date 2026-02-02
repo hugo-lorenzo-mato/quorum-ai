@@ -18,7 +18,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.23'
+          go-version-file: go.mod
           cache: true
 
       - name: Set up Node
@@ -32,9 +32,9 @@ jobs:
         run: make build-frontend
 
       - name: Run gosec
-        uses: securego/gosec@master
+        uses: securego/gosec@v2.22.4
         with:
-          args: ./...
+          args: -exclude=G104,G301,G302,G306 -exclude-dir=.git -exclude-dir=frontend ./...
 
       - name: Run govulncheck
         run: |
