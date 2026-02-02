@@ -853,6 +853,41 @@ func (m *JSONStateManager) FindZombieWorkflows(ctx context.Context, staleThresho
 	return zombies, nil
 }
 
+// FindWorkflowsByPrompt finds workflows with the same prompt.
+// JSON storage doesn't have hash-based indexing, so this scans through workflows.
+func (m *JSONStateManager) FindWorkflowsByPrompt(ctx context.Context, prompt string) ([]core.DuplicateWorkflowInfo, error) {
+	if prompt == "" {
+		return nil, nil
+	}
+
+	summaries, err := m.ListWorkflows(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("listing workflows: %w", err)
+	}
+
+	var results []core.DuplicateWorkflowInfo
+	for _, summary := range summaries {
+		// Use the truncated prompt from summary for quick comparison first
+		// Load full state only if summary prompt matches or is truncated
+		if summary.Prompt == prompt || (len(summary.Prompt) > 0 && len(summary.Prompt) < len(prompt)) {
+			state, err := m.LoadByID(ctx, summary.WorkflowID)
+			if err != nil || state == nil {
+				continue
+			}
+			if state.Prompt == prompt {
+				results = append(results, core.DuplicateWorkflowInfo{
+					WorkflowID: summary.WorkflowID,
+					Status:     summary.Status,
+					CreatedAt:  summary.CreatedAt,
+					Title:      summary.Title,
+				})
+			}
+		}
+	}
+
+	return results, nil
+}
+
 // AcquireWorkflowLock acquires an exclusive lock for a specific workflow.
 // JSONStateManager uses file-based locking and delegates to the global lock.
 func (m *JSONStateManager) AcquireWorkflowLock(ctx context.Context, workflowID core.WorkflowID) error {

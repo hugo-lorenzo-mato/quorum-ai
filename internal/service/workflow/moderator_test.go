@@ -600,3 +600,133 @@ func TestBuildAnalysisSummary(t *testing.T) {
 		})
 	}
 }
+
+func TestDetectTaskType(t *testing.T) {
+	tests := []struct {
+		prompt   string
+		expected string
+	}{
+		{"Analizar la viabilidad de migrar a microservicios", "analysis"},
+		{"Analyze the feasibility of implementing caching", "analysis"},
+		{"Investigate why the API is slow", "analysis"},
+		{"Evaluate the current architecture", "analysis"},
+		{"Diseñar una arquitectura para el nuevo módulo", "design"},
+		{"Design a REST API for user management", "design"},
+		{"Implement user authentication", "design"},
+		{"Create a new database schema", "design"},
+		{"Fix the bug in the login flow", "bugfix"},
+		{"Debug why tests are failing", "bugfix"},
+		{"Corregir el error en la validación", "bugfix"},
+		{"Solve the memory leak issue", "bugfix"},
+		{"Refactorizar el módulo de pagos", "refactor"},
+		{"Refactor the authentication service", "refactor"},
+		{"Improve code readability", "refactor"},
+		{"Optimize database queries", "refactor"},
+		{"Random unrelated text without keywords", "default"},
+		{"Hello world program", "default"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.prompt[:min(20, len(tt.prompt))], func(t *testing.T) {
+			result := detectTaskType(tt.prompt)
+			if result != tt.expected {
+				t.Errorf("detectTaskType(%q) = %q, want %q", tt.prompt, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestEffectiveThreshold(t *testing.T) {
+	tests := []struct {
+		name       string
+		config     ModeratorConfig
+		prompt     string
+		wantResult float64
+	}{
+		{
+			name: "no adaptive thresholds uses default",
+			config: ModeratorConfig{
+				Threshold:  0.85,
+				Thresholds: nil,
+			},
+			prompt:     "Analyze the system",
+			wantResult: 0.85,
+		},
+		{
+			name: "empty adaptive thresholds uses default",
+			config: ModeratorConfig{
+				Threshold:  0.85,
+				Thresholds: map[string]float64{},
+			},
+			prompt:     "Analyze the system",
+			wantResult: 0.85,
+		},
+		{
+			name: "analysis task uses analysis threshold",
+			config: ModeratorConfig{
+				Threshold: 0.85,
+				Thresholds: map[string]float64{
+					"analysis": 0.65,
+					"bugfix":   0.80,
+				},
+			},
+			prompt:     "Analyze the viability of the new approach",
+			wantResult: 0.65,
+		},
+		{
+			name: "bugfix task uses bugfix threshold",
+			config: ModeratorConfig{
+				Threshold: 0.85,
+				Thresholds: map[string]float64{
+					"analysis": 0.65,
+					"bugfix":   0.80,
+				},
+			},
+			prompt:     "Fix the authentication bug",
+			wantResult: 0.80,
+		},
+		{
+			name: "unknown task type uses default threshold",
+			config: ModeratorConfig{
+				Threshold: 0.85,
+				Thresholds: map[string]float64{
+					"analysis": 0.65,
+					"bugfix":   0.80,
+				},
+			},
+			prompt:     "Random task without keywords",
+			wantResult: 0.85,
+		},
+		{
+			name: "design task uses design threshold",
+			config: ModeratorConfig{
+				Threshold: 0.85,
+				Thresholds: map[string]float64{
+					"design": 0.70,
+				},
+			},
+			prompt:     "Design a new API architecture",
+			wantResult: 0.70,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			moderator, err := NewSemanticModerator(tt.config)
+			if err != nil {
+				t.Fatalf("NewSemanticModerator() error = %v", err)
+			}
+			result := moderator.EffectiveThreshold(tt.prompt)
+			if result != tt.wantResult {
+				t.Errorf("EffectiveThreshold(%q) = %v, want %v", tt.prompt, result, tt.wantResult)
+			}
+		})
+	}
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}

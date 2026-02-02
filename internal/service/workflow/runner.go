@@ -350,6 +350,13 @@ func (r *Runner) RunWithState(ctx context.Context, state *core.WorkflowState) er
 		if r.output != nil {
 			r.output.Log("error", "workflow", fmt.Sprintf("Workflow failed: %s", err.Error()))
 		}
+		// Deactivate workflow when validation fails to prevent ghost workflows.
+		if deactErr := r.state.DeactivateWorkflow(ctx); deactErr != nil {
+			r.logger.Warn("failed to deactivate failed workflow",
+				"workflow_id", state.WorkflowID,
+				"error", deactErr,
+			)
+		}
 		return err
 	}
 
@@ -792,6 +799,19 @@ func (r *Runner) createContext(state *core.WorkflowState) *Context {
 		if r.logger != nil {
 			r.logger.Debug("created new report path", "path", state.ReportPath)
 		}
+
+		// Initialize directory structure immediately (eager initialization).
+		// This ensures the directory exists even if the workflow fails during validation,
+		// preventing "ghost" workflows without trace in the filesystem.
+		if err := reportWriter.Initialize(); err != nil {
+			if r.logger != nil {
+				r.logger.Warn("failed to initialize report directory",
+					"workflow_id", state.WorkflowID,
+					"error", err,
+				)
+			}
+			// Don't fail the workflow for this - it's not critical for execution
+		}
 	}
 
 	// In workflow isolation mode, task branches are merged into the workflow branch locally.
@@ -860,7 +880,57 @@ func (r *Runner) handleError(ctx context.Context, state *core.WorkflowState, err
 	}
 	_ = r.state.Save(ctx, state)
 
+	// Write error details to the report directory for debugging and traceability.
+	r.writeErrorToReportDir(state, err)
+
+	// Deactivate workflow when it fails to prevent ghost workflows.
+	// A failed workflow should not remain as the active workflow.
+	if deactErr := r.state.DeactivateWorkflow(ctx); deactErr != nil {
+		r.logger.Warn("failed to deactivate failed workflow",
+			"workflow_id", state.WorkflowID,
+			"error", deactErr,
+		)
+	} else {
+		r.logger.Info("deactivated failed workflow", "workflow_id", state.WorkflowID)
+	}
+
 	return err
+}
+
+// writeErrorToReportDir writes error details to error.md in the workflow's report directory.
+// This provides traceability for failed workflows, especially those that fail early.
+func (r *Runner) writeErrorToReportDir(state *core.WorkflowState, err error) {
+	if state.ReportPath == "" {
+		return
+	}
+
+	errorFile := filepath.Join(state.ReportPath, "error.md")
+	content := fmt.Sprintf(`# Workflow Error
+
+## Workflow ID
+%s
+
+## Timestamp
+%s
+
+## Phase
+%s
+
+## Error
+%s
+
+## Prompt
+%s
+`, state.WorkflowID, time.Now().Format(time.RFC3339), state.CurrentPhase, err.Error(), state.Prompt)
+
+	if writeErr := os.WriteFile(errorFile, []byte(content), 0644); writeErr != nil {
+		if r.logger != nil {
+			r.logger.Warn("failed to write error file",
+				"workflow_id", state.WorkflowID,
+				"error", writeErr,
+			)
+		}
+	}
 }
 
 // validateRunInput validates the input for Run.

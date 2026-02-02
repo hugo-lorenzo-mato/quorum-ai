@@ -287,7 +287,19 @@ func TestSQLiteStateManager_ActiveWorkflow(t *testing.T) {
 		t.Errorf("activeID = %s, want %s", activeID, state.WorkflowID)
 	}
 
-	// Manual set
+	// Manual set to an existing workflow - first create it
+	manualState := &core.WorkflowState{
+		WorkflowID:   "wf-manual",
+		Status:       core.WorkflowStatusRunning,
+		CurrentPhase: core.PhaseAnalyze,
+		Prompt:       "Manual workflow prompt",
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
+	}
+	if err := manager.Save(ctx, manualState); err != nil {
+		t.Fatalf("Save(manualState) error = %v", err)
+	}
+
 	err = manager.SetActiveWorkflowID(ctx, "wf-manual")
 	if err != nil {
 		t.Fatalf("SetActiveWorkflowID() error = %v", err)
@@ -299,6 +311,138 @@ func TestSQLiteStateManager_ActiveWorkflow(t *testing.T) {
 	}
 	if activeID != "wf-manual" {
 		t.Errorf("activeID = %s, want wf-manual", activeID)
+	}
+}
+
+// TestSQLiteStateManager_ActiveWorkflow_CleansUpOrphan verifies that GetActiveWorkflowID
+// auto-cleans orphan references (workflow ID set but workflow doesn't exist).
+func TestSQLiteStateManager_ActiveWorkflow_CleansUpOrphan(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "state.db")
+
+	manager, err := NewSQLiteStateManager(dbPath)
+	if err != nil {
+		t.Fatalf("NewSQLiteStateManager() error = %v", err)
+	}
+	defer manager.Close()
+
+	ctx := context.Background()
+
+	// Set active to a non-existent workflow
+	err = manager.SetActiveWorkflowID(ctx, "wf-nonexistent")
+	if err != nil {
+		t.Fatalf("SetActiveWorkflowID() error = %v", err)
+	}
+
+	// GetActiveWorkflowID should detect the orphan and clean it up
+	activeID, err := manager.GetActiveWorkflowID(ctx)
+	if err != nil {
+		t.Fatalf("GetActiveWorkflowID() error = %v", err)
+	}
+	if activeID != "" {
+		t.Errorf("activeID = %s, want empty (orphan should be cleaned up)", activeID)
+	}
+}
+
+// TestSQLiteStateManager_ActiveWorkflow_CleansUpFailed verifies that GetActiveWorkflowID
+// auto-cleans ghost workflows (workflow in failed state but still active).
+func TestSQLiteStateManager_ActiveWorkflow_CleansUpFailed(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "state.db")
+
+	manager, err := NewSQLiteStateManager(dbPath)
+	if err != nil {
+		t.Fatalf("NewSQLiteStateManager() error = %v", err)
+	}
+	defer manager.Close()
+
+	ctx := context.Background()
+
+	// Create a failed workflow
+	state := &core.WorkflowState{
+		WorkflowID:   "wf-failed",
+		Status:       core.WorkflowStatusFailed,
+		CurrentPhase: core.PhaseAnalyze,
+		Prompt:       "Failed workflow prompt",
+		Error:        "test error",
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
+	}
+	if err := manager.Save(ctx, state); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	// Set it as active (creating a ghost workflow scenario)
+	err = manager.SetActiveWorkflowID(ctx, "wf-failed")
+	if err != nil {
+		t.Fatalf("SetActiveWorkflowID() error = %v", err)
+	}
+
+	// GetActiveWorkflowID should detect the ghost and clean it up
+	activeID, err := manager.GetActiveWorkflowID(ctx)
+	if err != nil {
+		t.Fatalf("GetActiveWorkflowID() error = %v", err)
+	}
+	if activeID != "" {
+		t.Errorf("activeID = %s, want empty (failed workflow should be cleaned up)", activeID)
+	}
+}
+
+func TestSQLiteStateManager_CleanupOnStartup_GhostWorkflow(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "state.db")
+	ctx := context.Background()
+
+	// First, create inconsistent state with first manager
+	manager1, err := NewSQLiteStateManager(dbPath)
+	if err != nil {
+		t.Fatalf("NewSQLiteStateManager() error = %v", err)
+	}
+
+	// Create a failed workflow
+	state := &core.WorkflowState{
+		WorkflowID:   "wf-ghost-startup",
+		Status:       core.WorkflowStatusFailed,
+		CurrentPhase: core.PhaseAnalyze,
+		Prompt:       "Ghost workflow for startup test",
+		Error:        "test error",
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
+	}
+	if err := manager1.Save(ctx, state); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	// Set it as active, bypassing the cleanup in SetActiveWorkflowID
+	// by directly manipulating the database
+	_, err = manager1.db.ExecContext(ctx, `
+		INSERT INTO active_workflow (id, workflow_id, updated_at)
+		VALUES (1, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET
+			workflow_id = excluded.workflow_id,
+			updated_at = excluded.updated_at
+	`, "wf-ghost-startup", time.Now())
+	if err != nil {
+		t.Fatalf("Failed to set active workflow directly: %v", err)
+	}
+
+	manager1.Close()
+
+	// Now create a new manager (simulating restart)
+	// cleanupOnStartup should fix the ghost workflow
+	manager2, err := NewSQLiteStateManager(dbPath)
+	if err != nil {
+		t.Fatalf("NewSQLiteStateManager() on restart error = %v", err)
+	}
+	defer manager2.Close()
+
+	// Active should be cleaned up by startup
+	activeID, err := manager2.GetActiveWorkflowID(ctx)
+	if err != nil {
+		t.Fatalf("GetActiveWorkflowID() error = %v", err)
+	}
+	if activeID != "" {
+		t.Errorf("activeID = %s, want empty (ghost workflow should be cleaned up on startup)", activeID)
 	}
 }
 

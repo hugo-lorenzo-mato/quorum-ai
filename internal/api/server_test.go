@@ -214,6 +214,10 @@ func (m *mockStateManager) UpdateWorkflowHeartbeat(_ context.Context, id core.Wo
 	return fmt.Errorf("workflow not found: %s", id)
 }
 
+func (m *mockStateManager) FindWorkflowsByPrompt(_ context.Context, _ string) ([]core.DuplicateWorkflowInfo, error) {
+	return nil, nil
+}
+
 func (m *mockStateManager) ExecuteAtomically(_ context.Context, fn func(core.AtomicStateContext) error) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()

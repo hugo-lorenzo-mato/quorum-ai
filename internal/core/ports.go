@@ -229,6 +229,10 @@ type StateManager interface {
 	// A workflow is considered a zombie if its heartbeat is older than the threshold.
 	FindZombieWorkflows(ctx context.Context, staleThreshold time.Duration) ([]*WorkflowState, error)
 
+	// FindWorkflowsByPrompt finds workflows with the same prompt (by hash).
+	// Returns matching workflows for duplicate detection.
+	FindWorkflowsByPrompt(ctx context.Context, prompt string) ([]DuplicateWorkflowInfo, error)
+
 	// ExecuteAtomically runs operations atomically within a database transaction.
 	// The callback receives an AtomicStateContext that provides transactional versions
 	// of state operations. If the callback returns an error, the transaction is rolled back.
@@ -264,6 +268,15 @@ type WorkflowSummary struct {
 	CreatedAt    time.Time      `json:"created_at"`
 	UpdatedAt    time.Time      `json:"updated_at"`
 	IsActive     bool           `json:"is_active"`
+}
+
+// DuplicateWorkflowInfo contains information about a potential duplicate workflow.
+// Used when detecting workflows with identical prompts.
+type DuplicateWorkflowInfo struct {
+	WorkflowID WorkflowID     `json:"workflow_id"`
+	Status     WorkflowStatus `json:"status"`
+	CreatedAt  time.Time      `json:"created_at"`
+	Title      string         `json:"title,omitempty"`
 }
 
 // WorkflowState represents the persisted state of a workflow.

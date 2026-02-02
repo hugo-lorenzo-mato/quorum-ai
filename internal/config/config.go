@@ -177,6 +177,10 @@ type ModeratorConfig struct {
 	Agent string `mapstructure:"agent" yaml:"agent"`
 	// Threshold is the consensus score required to pass (0.0-1.0, default: 0.80).
 	Threshold float64 `mapstructure:"threshold" yaml:"threshold"`
+	// Thresholds provides adaptive thresholds based on task type.
+	// Keys: "analysis", "design", "bugfix", "refactor". If a task type matches,
+	// its threshold is used instead of the default Threshold.
+	Thresholds map[string]float64 `mapstructure:"thresholds" yaml:"thresholds"`
 	// MinRounds is the minimum refinement rounds before accepting consensus (default: 2).
 	MinRounds int `mapstructure:"min_rounds" yaml:"min_rounds"`
 	// MaxRounds limits the number of refinement rounds (default: 5).

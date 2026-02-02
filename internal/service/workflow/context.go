@@ -142,6 +142,10 @@ type ModeratorConfig struct {
 	Agent string
 	// Threshold is the semantic consensus score required to pass (0.0-1.0, default: 0.90).
 	Threshold float64
+	// Thresholds provides adaptive thresholds based on task type.
+	// Keys: "analysis", "design", "bugfix", "refactor". If a task type matches,
+	// its threshold is used instead of the default Threshold.
+	Thresholds map[string]float64
 	// MinRounds is the minimum number of rounds before accepting consensus (default: 2).
 	MinRounds int
 	// MaxRounds limits the number of V(n) refinement rounds (default: 5).

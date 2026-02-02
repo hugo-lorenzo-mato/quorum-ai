@@ -355,6 +355,24 @@ func (m *MockStateManager) FindZombieWorkflows(_ context.Context, staleThreshold
 	return nil, nil
 }
 
+// FindWorkflowsByPrompt mocks finding workflows with identical prompts.
+func (m *MockStateManager) FindWorkflowsByPrompt(_ context.Context, prompt string) ([]core.DuplicateWorkflowInfo, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	// Mock implementation: check if the current state has the same prompt
+	if m.state != nil && m.state.Prompt == prompt {
+		return []core.DuplicateWorkflowInfo{
+			{
+				WorkflowID: m.state.WorkflowID,
+				Status:     m.state.Status,
+				CreatedAt:  m.state.CreatedAt,
+				Title:      m.state.Title,
+			},
+		}, nil
+	}
+	return nil, nil
+}
+
 // AcquireWorkflowLock mocks workflow-specific lock acquisition.
 func (m *MockStateManager) AcquireWorkflowLock(_ context.Context, _ core.WorkflowID) error {
 	m.mu.Lock()

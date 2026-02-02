@@ -47,6 +47,9 @@ var migrationV7 string
 //go:embed migrations/008_kanban_support.sql
 var migrationV8 string
 
+//go:embed migrations/009_prompt_hash.sql
+var migrationV9 string
+
 // SQLiteStateManager implements StateManager with SQLite storage.
 type SQLiteStateManager struct {
 	dbPath     string
@@ -117,6 +120,13 @@ func NewSQLiteStateManager(dbPath string, opts ...SQLiteStateManagerOption) (*SQ
 		_ = db.Close()
 		_ = readDB.Close()
 		return nil, fmt.Errorf("running migrations: %w", err)
+	}
+
+	// Cleanup ghost workflows on startup
+	// This fixes any inconsistencies from previous crashes or bugs
+	if err := m.cleanupOnStartup(context.Background()); err != nil {
+		// Log but don't fail startup - cleanup errors shouldn't prevent operation
+		fmt.Printf("WARN: startup cleanup failed: %v\n", err)
 	}
 
 	return m, nil
@@ -264,6 +274,14 @@ func (m *SQLiteStateManager) migrate() error {
 		}
 	}
 
+	if version < 9 {
+		// Migration V9 adds prompt_hash for duplicate detection
+		_, err := m.db.Exec(migrationV9)
+		if err != nil && !strings.Contains(err.Error(), "already exists") && !strings.Contains(err.Error(), "duplicate column") {
+			return fmt.Errorf("applying migration v9: %w", err)
+		}
+	}
+
 	return nil
 }
 
@@ -321,6 +339,13 @@ func (m *SQLiteStateManager) Save(ctx context.Context, state *core.WorkflowState
 		}
 	}
 
+	// Calculate prompt hash for duplicate detection
+	promptHash := ""
+	if state.Prompt != "" {
+		h := sha256.Sum256([]byte(state.Prompt))
+		promptHash = hex.EncodeToString(h[:])
+	}
+
 	// Upsert workflow
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO workflows (
@@ -328,8 +353,9 @@ func (m *SQLiteStateManager) Save(ctx context.Context, state *core.WorkflowState
 			task_order, config, metrics, checksum, created_at, updated_at, report_path,
 			agent_events, workflow_branch,
 			kanban_column, kanban_position, pr_url, pr_number,
-			kanban_started_at, kanban_completed_at, kanban_execution_count, kanban_last_error
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			kanban_started_at, kanban_completed_at, kanban_execution_count, kanban_last_error,
+			prompt_hash
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			version = excluded.version,
 			title = excluded.title,
@@ -352,7 +378,8 @@ func (m *SQLiteStateManager) Save(ctx context.Context, state *core.WorkflowState
 			kanban_started_at = excluded.kanban_started_at,
 			kanban_completed_at = excluded.kanban_completed_at,
 			kanban_execution_count = excluded.kanban_execution_count,
-			kanban_last_error = excluded.kanban_last_error
+			kanban_last_error = excluded.kanban_last_error,
+			prompt_hash = excluded.prompt_hash
 	`,
 		state.WorkflowID, state.Version, state.Title, state.Status, state.CurrentPhase,
 		state.Prompt, state.OptimizedPrompt, string(taskOrderJSON),
@@ -365,6 +392,7 @@ func (m *SQLiteStateManager) Save(ctx context.Context, state *core.WorkflowState
 		nullableString([]byte(state.PRURL)), state.PRNumber,
 		nullableTime(state.KanbanStartedAt), nullableTime(state.KanbanCompletedAt),
 		state.KanbanExecutionCount, nullableString([]byte(state.KanbanLastError)),
+		nullableString([]byte(promptHash)),
 	)
 	if err != nil {
 		return fmt.Errorf("upserting workflow: %w", err)
@@ -817,20 +845,144 @@ func (m *SQLiteStateManager) ListWorkflows(ctx context.Context) ([]core.Workflow
 }
 
 // GetActiveWorkflowID returns the ID of the currently active workflow.
+// It validates that the workflow exists and is not in a terminal state (failed/completed).
+// If the active workflow is inconsistent, it is automatically cleaned up and empty is returned.
 func (m *SQLiteStateManager) GetActiveWorkflowID(ctx context.Context) (core.WorkflowID, error) {
 	m.mu.RLock()
-	defer m.mu.RUnlock()
 
 	// Use read connection for non-blocking reads
 	var id string
 	err := m.readDB.QueryRowContext(ctx, "SELECT workflow_id FROM active_workflow WHERE id = 1").Scan(&id)
 	if err == sql.ErrNoRows {
+		m.mu.RUnlock()
 		return "", nil
 	}
 	if err != nil {
+		m.mu.RUnlock()
 		return "", fmt.Errorf("getting active workflow ID: %w", err)
 	}
+
+	// Validate that the workflow exists and is not in a terminal state
+	if id != "" {
+		var status string
+		err := m.readDB.QueryRowContext(ctx,
+			"SELECT status FROM workflows WHERE id = ?", id).Scan(&status)
+
+		if err == sql.ErrNoRows {
+			// Workflow doesn't exist - inconsistency detected
+			m.mu.RUnlock()
+			m.autoCleanupActiveWorkflow(ctx, id, "workflow not found in database")
+			return "", nil
+		}
+		if err != nil {
+			// Query error - return the ID anyway (don't break on transient errors)
+			m.mu.RUnlock()
+			return core.WorkflowID(id), nil
+		}
+
+		// Check for terminal states: failed and completed workflows should not remain active
+		if status == string(core.WorkflowStatusFailed) || status == string(core.WorkflowStatusCompleted) {
+			m.mu.RUnlock()
+			m.autoCleanupActiveWorkflow(ctx, id, fmt.Sprintf("workflow in terminal state: %s", status))
+			return "", nil
+		}
+	}
+
+	m.mu.RUnlock()
 	return core.WorkflowID(id), nil
+}
+
+// autoCleanupActiveWorkflow cleans up the active_workflow table when inconsistency is detected.
+// This is a defensive measure to prevent ghost workflows from blocking the system.
+func (m *SQLiteStateManager) autoCleanupActiveWorkflow(ctx context.Context, workflowID, reason string) {
+	// Log the inconsistency (using fmt since there's no logger on struct)
+	fmt.Printf("WARN: auto-cleaning inconsistent active_workflow: %s (reason: %s)\n", workflowID, reason)
+
+	// Attempt to clean up
+	if err := m.DeactivateWorkflow(ctx); err != nil {
+		fmt.Printf("ERROR: failed to auto-cleanup active_workflow %s: %v\n", workflowID, err)
+	}
+}
+
+// cleanupOnStartup performs consistency checks and fixes on startup.
+// This cleans up ghost workflows that may have been left from crashes or bugs.
+func (m *SQLiteStateManager) cleanupOnStartup(ctx context.Context) error {
+	// Check if active_workflow points to a terminal workflow
+	var activeID string
+	err := m.readDB.QueryRowContext(ctx,
+		"SELECT workflow_id FROM active_workflow WHERE id = 1").Scan(&activeID)
+
+	if err == sql.ErrNoRows {
+		return nil // No active workflow, nothing to clean
+	}
+	if err != nil {
+		return fmt.Errorf("checking active workflow: %w", err)
+	}
+
+	// Check workflow status
+	var status string
+	err = m.readDB.QueryRowContext(ctx,
+		"SELECT status FROM workflows WHERE id = ?", activeID).Scan(&status)
+
+	if err == sql.ErrNoRows {
+		// Workflow doesn't exist - clean up orphan reference
+		fmt.Printf("INFO: cleaning up orphan active_workflow on startup (workflow %s not found)\n", activeID)
+		return m.DeactivateWorkflow(ctx)
+	}
+	if err != nil {
+		return fmt.Errorf("checking workflow status: %w", err)
+	}
+
+	// If terminal status, clean up
+	if status == string(core.WorkflowStatusFailed) || status == string(core.WorkflowStatusCompleted) {
+		fmt.Printf("INFO: cleaning up ghost active_workflow on startup (workflow %s in %s state)\n", activeID, status)
+		return m.DeactivateWorkflow(ctx)
+	}
+
+	return nil
+}
+
+// FindWorkflowsByPrompt finds workflows with the same prompt hash.
+// Returns workflows that match the given prompt, useful for duplicate detection.
+func (m *SQLiteStateManager) FindWorkflowsByPrompt(ctx context.Context, prompt string) ([]core.DuplicateWorkflowInfo, error) {
+	if prompt == "" {
+		return nil, nil
+	}
+
+	// Calculate prompt hash
+	h := sha256.Sum256([]byte(prompt))
+	promptHash := hex.EncodeToString(h[:])
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	rows, err := m.readDB.QueryContext(ctx, `
+		SELECT id, status, created_at, COALESCE(title, '') as title
+		FROM workflows
+		WHERE prompt_hash = ?
+		ORDER BY created_at DESC
+	`, promptHash)
+	if err != nil {
+		return nil, fmt.Errorf("querying workflows by prompt hash: %w", err)
+	}
+	defer rows.Close()
+
+	var results []core.DuplicateWorkflowInfo
+	for rows.Next() {
+		var info core.DuplicateWorkflowInfo
+		var status string
+		if err := rows.Scan(&info.WorkflowID, &status, &info.CreatedAt, &info.Title); err != nil {
+			return nil, fmt.Errorf("scanning workflow row: %w", err)
+		}
+		info.Status = core.WorkflowStatus(status)
+		results = append(results, info)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating workflow rows: %w", err)
+	}
+
+	return results, nil
 }
 
 // SetActiveWorkflowID sets the active workflow ID.

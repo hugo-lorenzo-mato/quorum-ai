@@ -32,6 +32,7 @@ type WorkflowResponse struct {
 	OptimizedPrompt string            `json:"optimized_prompt,omitempty"`
 	Attachments     []core.Attachment `json:"attachments,omitempty"`
 	Error           string            `json:"error,omitempty"`
+	Warning         string            `json:"warning,omitempty"` // Warning about potential issues (e.g., duplicates)
 	ReportPath      string            `json:"report_path,omitempty"`
 	CreatedAt       time.Time         `json:"created_at"`
 	UpdatedAt       time.Time         `json:"updated_at"`
@@ -274,6 +275,26 @@ func (s *Server) handleCreateWorkflow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Check for duplicate prompts (warning only, doesn't block creation)
+	var duplicateWarning string
+	duplicates, err := s.stateManager.FindWorkflowsByPrompt(ctx, req.Prompt)
+	if err != nil {
+		s.logger.Warn("failed to check for duplicate prompts", "error", err)
+	} else if len(duplicates) > 0 {
+		// Build warning message with duplicate workflow info
+		duplicateWarning = fmt.Sprintf("Found %d workflow(s) with identical prompt: ", len(duplicates))
+		for i, dup := range duplicates {
+			if i > 0 {
+				duplicateWarning += ", "
+			}
+			duplicateWarning += fmt.Sprintf("%s (%s)", dup.WorkflowID, dup.Status)
+			if i >= 2 && len(duplicates) > 3 {
+				duplicateWarning += fmt.Sprintf(" and %d more", len(duplicates)-3)
+				break
+			}
+		}
+	}
+
 	// Validate execution mode configuration
 	if req.Config != nil {
 		cfg, err := s.loadConfig()
@@ -347,6 +368,9 @@ func (s *Server) handleCreateWorkflow(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response := s.stateToWorkflowResponse(ctx, state, workflowID)
+	if duplicateWarning != "" {
+		response.Warning = duplicateWarning
+	}
 	respondJSON(w, http.StatusCreated, response)
 }
 

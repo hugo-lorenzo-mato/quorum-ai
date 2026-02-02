@@ -550,6 +550,55 @@ func (m *SemanticModerator) Threshold() float64 {
 	return m.config.Threshold
 }
 
+// taskTypeKeywords maps task types to their keyword patterns for adaptive threshold detection.
+var taskTypeKeywords = map[string][]string{
+	"analysis": {"analizar", "analyze", "investigar", "investigate", "evaluar", "evaluate", "viabilidad", "feasibility", "assessment", "review"},
+	"design":   {"diseñar", "design", "arquitectura", "architecture", "implementar", "implement", "crear", "create", "build"},
+	"bugfix":   {"fix", "bug", "error", "corregir", "repair", "solve", "debug", "issue", "problem"},
+	"refactor": {"refactorizar", "refactor", "mejorar", "improve", "optimizar", "optimize", "clean", "reorganize", "restructure"},
+}
+
+// detectTaskType analyzes the prompt to determine the task type for adaptive thresholds.
+func detectTaskType(prompt string) string {
+	promptLower := strings.ToLower(prompt)
+
+	// Count keyword matches for each type
+	maxMatches := 0
+	detectedType := "default"
+
+	for taskType, keywords := range taskTypeKeywords {
+		matches := 0
+		for _, keyword := range keywords {
+			if strings.Contains(promptLower, keyword) {
+				matches++
+			}
+		}
+		if matches > maxMatches {
+			maxMatches = matches
+			detectedType = taskType
+		}
+	}
+
+	return detectedType
+}
+
+// EffectiveThreshold returns the appropriate threshold for the given prompt.
+// If adaptive thresholds are configured and the prompt matches a task type,
+// the type-specific threshold is returned. Otherwise, the default threshold is used.
+func (m *SemanticModerator) EffectiveThreshold(prompt string) float64 {
+	// Check if adaptive thresholds are configured
+	if m.config.Thresholds == nil || len(m.config.Thresholds) == 0 {
+		return m.config.Threshold // Default threshold
+	}
+
+	taskType := detectTaskType(prompt)
+	if threshold, ok := m.config.Thresholds[taskType]; ok {
+		return threshold
+	}
+
+	return m.config.Threshold
+}
+
 // MinRounds returns the configured minimum rounds before accepting consensus.
 func (m *SemanticModerator) MinRounds() int {
 	return m.config.MinRounds

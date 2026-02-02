@@ -108,14 +108,21 @@ func (a *Analyzer) Run(ctx context.Context, wctx *Context) error {
 			"See: %s#report-settings", DocsConfigURL)
 	}
 
+	effectiveThreshold := a.moderator.EffectiveThreshold(wctx.State.Prompt)
+	taskType := detectTaskType(wctx.State.Prompt)
 	wctx.Logger.Info("using semantic moderator for consensus evaluation",
-		"threshold", a.moderator.Threshold(),
+		"threshold", effectiveThreshold,
+		"task_type", taskType,
 		"min_rounds", a.moderator.MinRounds(),
 		"max_rounds", a.moderator.MaxRounds(),
 	)
 	if wctx.Output != nil {
-		wctx.Output.Log("info", "analyzer", fmt.Sprintf("Semantic moderator enabled (threshold: %.0f%%, min rounds: %d, max rounds: %d)",
-			a.moderator.Threshold()*100, a.moderator.MinRounds(), a.moderator.MaxRounds()))
+		thresholdInfo := fmt.Sprintf("%.0f%%", effectiveThreshold*100)
+		if taskType != "default" {
+			thresholdInfo = fmt.Sprintf("%.0f%% (adaptive: %s)", effectiveThreshold*100, taskType)
+		}
+		wctx.Output.Log("info", "analyzer", fmt.Sprintf("Semantic moderator enabled (threshold: %s, min rounds: %d, max rounds: %d)",
+			thresholdInfo, a.moderator.MinRounds(), a.moderator.MaxRounds()))
 	}
 
 	return a.runWithModerator(ctx, wctx)
@@ -402,10 +409,11 @@ func (a *Analyzer) runModeratorRound(ctx context.Context, wctx *Context, round i
 		wctx.Logger.Warn("failed to create moderator round checkpoint", "round", round, "error", cpErr)
 	}
 
+	effectiveThreshold := a.moderator.EffectiveThreshold(wctx.State.Prompt)
 	wctx.Logger.Info("moderator evaluation complete",
 		"round", round,
 		"score", evalResult.Score,
-		"threshold", a.moderator.Threshold(),
+		"threshold", effectiveThreshold,
 		"agreements", len(evalResult.Agreements),
 		"divergences", len(evalResult.Divergences),
 	)
@@ -413,25 +421,26 @@ func (a *Analyzer) runModeratorRound(ctx context.Context, wctx *Context, round i
 	if wctx.Output != nil {
 		statusIcon := "⚠"
 		level := "warn"
-		if evalResult.Score >= a.moderator.Threshold() {
+		if evalResult.Score >= effectiveThreshold {
 			statusIcon = "✓"
 			level = "success"
 		}
 		wctx.Output.Log(level, "analyzer", fmt.Sprintf("%s Round %d: Semantic consensus %.0f%% (threshold: %.0f%%)",
-			statusIcon, round, evalResult.Score*100, a.moderator.Threshold()*100))
+			statusIcon, round, evalResult.Score*100, effectiveThreshold*100))
 	}
 
 	return evalResult, nil
 }
 
 func (a *Analyzer) shouldStopForConsensus(wctx *Context, round int, evalResult *ModeratorEvaluationResult) bool {
-	if evalResult.Score < a.moderator.Threshold() {
+	effectiveThreshold := a.moderator.EffectiveThreshold(wctx.State.Prompt)
+	if evalResult.Score < effectiveThreshold {
 		return false
 	}
 	if round >= a.moderator.MinRounds() {
 		wctx.Logger.Info("consensus threshold met",
 			"score", evalResult.Score,
-			"threshold", a.moderator.Threshold(),
+			"threshold", effectiveThreshold,
 			"round", round,
 		)
 		if wctx.Output != nil {
@@ -442,7 +451,7 @@ func (a *Analyzer) shouldStopForConsensus(wctx *Context, round int, evalResult *
 
 	wctx.Logger.Info("consensus threshold met but minimum rounds not reached",
 		"score", evalResult.Score,
-		"threshold", a.moderator.Threshold(),
+		"threshold", effectiveThreshold,
 		"round", round,
 		"min_rounds", a.moderator.MinRounds(),
 	)
@@ -733,7 +742,7 @@ func (a *Analyzer) runVnRefinementWithAgent(ctx context.Context, wctx *Context, 
 		PreviousAnalysis:     previousAnalysis,
 		HasArbiterEvaluation: evalResult != nil,
 		ConsensusScore:       consensusScore,
-		Threshold:            a.moderator.Threshold() * 100,
+		Threshold:            a.moderator.EffectiveThreshold(wctx.State.Prompt) * 100,
 		Agreements:           agreements,
 		Divergences:          divergences,
 		MissingPerspectives:  missingPerspectives,
@@ -1465,28 +1474,29 @@ func (a *Analyzer) continueFromCheckpoint(ctx context.Context, wctx *Context, sa
 			wctx.Logger.Warn("failed to create moderator round checkpoint", "round", round, "error", cpErr)
 		}
 
+		effectiveThreshold := a.moderator.EffectiveThreshold(wctx.State.Prompt)
 		wctx.Logger.Info("moderator evaluation complete",
 			"round", round,
 			"score", evalResult.Score,
-			"threshold", a.moderator.Threshold(),
+			"threshold", effectiveThreshold,
 		)
 
 		if wctx.Output != nil {
 			statusIcon := "⚠"
 			level := "warn"
-			if evalResult.Score >= a.moderator.Threshold() {
+			if evalResult.Score >= effectiveThreshold {
 				statusIcon = "✓"
 				level = "success"
 			}
 			wctx.Output.Log(level, "analyzer", fmt.Sprintf("%s Round %d: Semantic consensus %.0f%% (threshold: %.0f%%)",
-				statusIcon, round, evalResult.Score*100, a.moderator.Threshold()*100))
+				statusIcon, round, evalResult.Score*100, effectiveThreshold*100))
 		}
 
 		// Check if consensus threshold is met AND minimum rounds completed
-		if evalResult.Score >= a.moderator.Threshold() && round >= a.moderator.MinRounds() {
+		if evalResult.Score >= effectiveThreshold && round >= a.moderator.MinRounds() {
 			wctx.Logger.Info("consensus threshold met",
 				"score", evalResult.Score,
-				"threshold", a.moderator.Threshold(),
+				"threshold", effectiveThreshold,
 				"round", round,
 			)
 			if wctx.Output != nil {
