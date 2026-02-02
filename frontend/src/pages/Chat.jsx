@@ -14,6 +14,7 @@ import {
   Check,
   Copy,
   CheckCircle2,
+  ArrowLeft,
 } from 'lucide-react';
 import {
   AgentSelector,
@@ -255,10 +256,14 @@ export default function Chat() {
     await updateSession(sessionId, { title: newTitle });
   };
 
+  const handleBackToList = () => {
+    selectSession(null);
+  };
+
   return (
-    <div className="h-[calc(100vh-8rem)] flex gap-4 animate-fade-in">
+    <div className="h-[calc(100dvh-8rem)] flex gap-4 animate-fade-in">
       {/* Sessions sidebar */}
-      <div className="w-72 flex-shrink-0 flex flex-col gap-4">
+      <div className={`w-full md:w-72 flex-shrink-0 flex flex-col gap-4 ${activeSession ? 'hidden md:flex' : 'flex'}`}>
         <button
           onClick={handleCreateSession}
           disabled={loading}
@@ -287,27 +292,33 @@ export default function Chat() {
       </div>
 
       {/* Chat area */}
-      <div className="flex-1 flex flex-col rounded-xl border border-border bg-card overflow-hidden">
+      <div className={`flex-1 flex flex-col rounded-xl border border-border bg-card overflow-hidden ${!activeSession ? 'hidden md:flex' : 'flex'}`}>
         {activeSession ? (
           <>
             {/* Header */}
-            <div className="px-6 py-4 border-b border-border flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary/20 to-info/20 flex items-center justify-center">
+            <div className="px-4 md:px-6 py-4 border-b border-border flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3 overflow-hidden">
+                <button 
+                  onClick={handleBackToList}
+                  className="md:hidden p-2 -ml-2 rounded-lg hover:bg-accent text-muted-foreground"
+                >
+                  <ArrowLeft className="w-5 h-5" />
+                </button>
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary/20 to-info/20 flex items-center justify-center flex-shrink-0">
                   <Sparkles className="w-5 h-5 text-primary" />
                 </div>
-                <div>
-                  <h3 className="font-semibold text-foreground">
+                <div className="min-w-0">
+                  <h3 className="font-semibold text-foreground truncate">
                     {activeSession.title || `${activeSession.agent || 'Claude'} Chat`}
                   </h3>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-muted-foreground truncate">
                     {activeSession.agent || 'Claude'} · {new Date(activeSession.created_at).toLocaleDateString()}
                   </p>
                 </div>
               </div>
               <button
                 onClick={() => deleteSession(activeSession.id)}
-                className="p-2 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                className="p-2 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors flex-shrink-0"
               >
                 <Trash2 className="w-4 h-4" />
               </button>

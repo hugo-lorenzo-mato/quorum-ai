@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useConfigStore } from '../stores/configStore';
-import { Search } from 'lucide-react';
+import { Search, ArrowLeft, ChevronRight } from 'lucide-react';
 import {
   SettingsToolbar,
   ConflictDialog,
@@ -78,6 +78,8 @@ const getTabDirty = (tabId, localChanges) => {
 export default function Settings() {
   const [activeTab, setActiveTab] = useState('general');
   const [searchQuery, setSearchQuery] = useState('');
+  // Mobile navigation state
+  const [mobileView, setMobileView] = useState('menu'); // 'menu' | 'content'
   
   const loadConfig = useConfigStore((state) => state.loadConfig);
   const loadMetadata = useConfigStore((state) => state.loadMetadata);
@@ -106,8 +108,9 @@ export default function Settings() {
     const query = e.target.value;
     setSearchQuery(query);
     
-    // Auto-switch tab if current becomes hidden
-    if (query) {
+    // Auto-switch tab if current becomes hidden (Desktop behavior)
+    // On mobile we just filter the list
+    if (window.innerWidth >= 768 && query) {
       const lowerQuery = query.toLowerCase();
       const matching = TABS.filter(tab => 
         tab.label.toLowerCase().includes(lowerQuery) || 
@@ -120,12 +123,22 @@ export default function Settings() {
     }
   };
 
+  const handleTabClick = (tabId) => {
+    setActiveTab(tabId);
+    setMobileView('content');
+  };
+
+  const handleMobileBack = () => {
+    setMobileView('menu');
+  };
+
   const ActiveComponent = TABS.find((t) => t.id === activeTab)?.component;
+  const activeTabLabel = TABS.find((t) => t.id === activeTab)?.label;
 
   return (
     <div className="space-y-4 sm:space-y-6 pb-32 sm:pb-32 animate-fade-in">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${mobileView === 'content' ? 'hidden md:flex' : 'flex'}`}>
         <div>
           <h1 className="text-xl sm:text-2xl font-semibold text-foreground tracking-tight">Settings</h1>
           <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
@@ -141,14 +154,25 @@ export default function Settings() {
             placeholder="Search settings..."
             value={searchQuery}
             onChange={handleSearchChange}
-            className="h-9 w-full pl-9 pr-4 rounded-lg border border-border bg-background text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/20 transition-all placeholder:text-muted-foreground/50"
+            className="h-9 w-full pl-9 pr-4 rounded-lg border border-border bg-background text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background transition-all placeholder:text-muted-foreground/50"
           />
         </div>
       </div>
 
-      {/* Tab Navigation */}
-      <div className="sticky top-14 z-30 -mx-3 sm:-mx-6 px-3 sm:px-6 py-2 sm:py-3 border-b border-border bg-background/80 glass">
-        <div className="flex items-center gap-0.5 sm:gap-1 p-0.5 sm:p-1 rounded-lg bg-secondary border border-border overflow-x-auto scrollbar-none">
+      {/* Mobile Content Header */}
+      <div className={`md:hidden items-center gap-3 ${mobileView === 'content' ? 'flex' : 'hidden'}`}>
+        <button 
+          onClick={handleMobileBack}
+          className="p-2 -ml-2 rounded-lg hover:bg-accent text-muted-foreground"
+        >
+          <ArrowLeft className="w-5 h-5" />
+        </button>
+        <h2 className="text-lg font-semibold text-foreground">{activeTabLabel}</h2>
+      </div>
+
+      {/* Tab Navigation (Desktop) */}
+      <div className="hidden md:block sticky top-14 z-30 -mx-6 px-6 py-3 border-b border-border bg-background/80 glass">
+        <div className="flex items-center gap-1 p-1 rounded-lg bg-secondary border border-border overflow-x-auto scrollbar-none">
           {filteredTabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -158,7 +182,7 @@ export default function Settings() {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`relative flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm font-medium rounded-md transition-all whitespace-nowrap ${
+                className={`relative flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md transition-all whitespace-nowrap ${
                   isActive
                     ? 'bg-background text-foreground shadow-sm'
                     : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
@@ -167,7 +191,7 @@ export default function Settings() {
                 role="tab"
                 aria-selected={isActive}
               >
-                <Icon className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
+                <Icon className="w-4 h-4" />
                 {tab.label}
                 {isDirty && (
                   <span className="absolute top-1 right-1 w-1.5 h-1.5 bg-warning rounded-full animate-fade-in" />
@@ -183,8 +207,34 @@ export default function Settings() {
         </div>
       </div>
 
+      {/* Mobile Menu List */}
+      <div className={`md:hidden space-y-2 ${mobileView === 'menu' ? 'block' : 'hidden'}`}>
+        {filteredTabs.map((tab) => {
+          const Icon = tab.icon;
+          const isDirty = getTabDirty(tab.id, localChanges);
+          return (
+            <button
+              key={tab.id}
+              onClick={() => handleTabClick(tab.id)}
+              className="w-full flex items-center justify-between p-4 rounded-xl border border-border bg-card hover:bg-accent active:scale-[0.98] transition-all"
+            >
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-secondary text-foreground">
+                  <Icon className="w-5 h-5" />
+                </div>
+                <span className="font-medium text-foreground">{tab.label}</span>
+                {isDirty && (
+                  <span className="w-2 h-2 bg-warning rounded-full" />
+                )}
+              </div>
+              <ChevronRight className="w-5 h-5 text-muted-foreground" />
+            </button>
+          );
+        })}
+      </div>
+
       {/* Content */}
-      <div className="min-h-[400px]">
+      <div className={`min-h-[400px] ${mobileView === 'content' ? 'block' : 'hidden md:block'}`}>
         {isLoading && !config && (
           <div className="flex items-center justify-center py-12">
             <svg className="animate-spin h-8 w-8 text-primary" viewBox="0 0 24 24" role="status">

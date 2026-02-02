@@ -1,5 +1,6 @@
 import { Link, useLocation } from 'react-router-dom';
 import { useUIStore } from '../stores';
+import MobileBottomNav from './MobileBottomNav';
 import {
   LayoutDashboard,
   GitBranch,
@@ -55,16 +56,16 @@ function Breadcrumbs() {
   ];
 
   return (
-    <nav className="hidden sm:flex items-center text-sm text-muted-foreground">
+    <nav className="flex items-center text-sm text-muted-foreground overflow-hidden">
       {breadcrumbs.map((crumb, index) => (
-        <div key={crumb.path} className="flex items-center">
-          {index > 0 && <ChevronRight className="w-4 h-4 mx-1 text-muted-foreground/50" />}
+        <div key={crumb.path} className="flex items-center min-w-0">
+          {index > 0 && <ChevronRight className="w-4 h-4 mx-1 text-muted-foreground/50 flex-shrink-0" />}
           {crumb.isLast ? (
-            <span className="font-medium text-foreground">{crumb.name}</span>
+            <span className="font-medium text-foreground truncate">{crumb.name}</span>
           ) : (
             <Link
               to={crumb.path}
-              className="hover:text-foreground hover:underline transition-colors"
+              className="hover:text-foreground hover:underline transition-colors truncate"
             >
               {crumb.name}
             </Link>
@@ -173,7 +174,7 @@ export default function Layout({ children }) {
   const { sidebarOpen, toggleSidebar } = useUIStore();
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background pb-16 md:pb-0">
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div
@@ -183,9 +184,9 @@ export default function Layout({ children }) {
         />
       )}
 
-      {/* Sidebar */}
+      {/* Sidebar - Hidden on mobile, visible on desktop */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex flex-col border-r border-border bg-card/50 glass transition-all duration-300 ease-in-out md:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-50 hidden md:flex flex-col border-r border-border bg-card/50 glass transition-all duration-300 ease-in-out md:translate-x-0 ${
           sidebarOpen ? 'w-64 translate-x-0' : 'w-16 -translate-x-full md:translate-x-0'
         }`}
       >
@@ -264,26 +265,12 @@ export default function Layout({ children }) {
         {/* Top bar */}
         <header className="sticky top-0 z-40 h-14 border-b border-border bg-background/80 glass">
           <div className="flex items-center justify-between h-full px-3 sm:px-6">
-            <div className="flex items-center gap-3 sm:gap-4">
-              {/* Mobile menu button */}
-              <button
-                onClick={toggleSidebar}
-                className="md:hidden p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-                aria-label="Toggle sidebar"
-              >
-                <PanelLeft className="w-5 h-5" />
-              </button>
+            <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
               
-              {/* Breadcrumbs (Desktop) / Title (Mobile) */}
-              <div className="hidden sm:block">
+              {/* Breadcrumbs - Always visible now, adapted for mobile */}
+              <div className="flex-1 min-w-0">
                 <Breadcrumbs />
               </div>
-              <h1 className="sm:hidden text-xs font-medium text-muted-foreground">
-                {navItems.find(item =>
-                  location.pathname === item.path ||
-                  (item.path !== '/' && location.pathname.startsWith(item.path))
-                )?.label || 'Quorum AI'}
-              </h1>
             </div>
             <div className="flex items-center gap-3">
               {/* Additional header actions can go here */}
@@ -296,6 +283,9 @@ export default function Layout({ children }) {
           {children}
         </div>
       </main>
+      
+      {/* Mobile Bottom Navigation */}
+      <MobileBottomNav />
     </div>
   );
 }

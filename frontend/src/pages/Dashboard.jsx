@@ -1,7 +1,8 @@
 import { useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useWorkflowStore } from '../stores';
 import { getStatusColor } from '../lib/theme';
+import FAB from '../components/FAB';
 import {
   GitBranch,
   CheckCircle2,
@@ -72,7 +73,7 @@ function BentoCard({ children, className = '', span = 1 }) {
 }
 
 // Stat Card for Bento Grid
-function StatCard({ title, value, subtitle, icon: Icon, trend, color = 'primary', sparklineData }) {
+function StatCard({ title, value, subtitle, icon: Icon, trend, color = 'primary', sparklineData, className = '' }) {
   const colorClasses = {
     primary: 'bg-primary/10 text-primary',
     success: 'bg-success/10 text-success',
@@ -91,7 +92,7 @@ function StatCard({ title, value, subtitle, icon: Icon, trend, color = 'primary'
   };
 
   return (
-    <BentoCard>
+    <BentoCard className={className}>
       <div className="flex items-start justify-between mb-4">
         <div className={`p-3 rounded-xl ${colorClasses[color]}`}>
           <Icon className="w-5 h-5" />
@@ -234,6 +235,7 @@ function LoadingSkeleton() {
 
 export default function Dashboard() {
   const { workflows, activeWorkflow, fetchWorkflows, fetchActiveWorkflow, loading } = useWorkflowStore();
+  const navigate = useNavigate();
 
   useEffect(() => {
     fetchWorkflows();
@@ -264,7 +266,7 @@ export default function Dashboard() {
         </div>
         <Link
           to="/workflows/new"
-          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+          className="hidden md:flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
         >
           <Zap className="w-4 h-4" />
           New Workflow
@@ -276,8 +278,8 @@ export default function Dashboard() {
         <ActiveWorkflowBanner workflow={activeWorkflow} />
       )}
 
-      {/* Bento Grid Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Bento Grid Stats - Carousel on mobile, Grid on desktop */}
+      <div className="flex overflow-x-auto snap-x snap-mandatory gap-4 pb-4 -mx-4 px-4 md:grid md:grid-cols-2 lg:grid-cols-4 md:overflow-visible md:pb-0 md:mx-0 md:px-0 scrollbar-none">
         <StatCard
           title="Total Workflows"
           value={workflows.length}
@@ -285,6 +287,7 @@ export default function Dashboard() {
           icon={GitBranch}
           color="primary"
           sparklineData={[5, 8, 12, 15, 20, 25, workflows.length]} // Dummy data for visual
+          className="min-w-[85vw] md:min-w-0 snap-center"
         />
         <StatCard
           title="Completed"
@@ -293,6 +296,7 @@ export default function Dashboard() {
           icon={CheckCircle2}
           color="success"
           sparklineData={[2, 5, 8, 10, 15, completedCount]}
+          className="min-w-[85vw] md:min-w-0 snap-center"
         />
         <StatCard
           title="Running"
@@ -301,6 +305,7 @@ export default function Dashboard() {
           icon={Activity}
           color="info"
           sparklineData={[0, 1, 0, 2, 1, runningCount]} 
+          className="min-w-[85vw] md:min-w-0 snap-center"
         />
         <StatCard
           title="Failed"
@@ -309,6 +314,7 @@ export default function Dashboard() {
           icon={XCircle}
           color="error"
           sparklineData={[0, 0, 1, 0, 1, failedCount]}
+          className="min-w-[85vw] md:min-w-0 snap-center"
         />
       </div>
 
@@ -338,6 +344,9 @@ export default function Dashboard() {
           <EmptyState />
         )}
       </BentoCard>
+      
+      {/* Mobile FAB */}
+      <FAB onClick={() => navigate('/workflows/new')} icon={Zap} label="New Workflow" />
     </div>
   );
 }

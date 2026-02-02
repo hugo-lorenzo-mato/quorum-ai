@@ -202,3 +202,8 @@
   -webkit-line-clamp: 3;
   overflow: hidden;
 }
+
+/* Safe area padding utility */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}

@@ -2,10 +2,10 @@ import { useEffect, useRef, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useKanbanStore, KANBAN_COLUMNS } from '../stores';
 import { getStatusColor, KANBAN_COLUMN_COLORS } from '../lib/theme';
-import { Search } from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight } from 'lucide-react';
 
 // Column component
-function KanbanColumn({ column, workflows }) {
+function KanbanColumn({ column, workflows, isMobile }) {
   const {
     moveWorkflow,
     setDraggedWorkflow,
@@ -69,11 +69,25 @@ function KanbanColumn({ column, workflows }) {
     if (dragDepth.current === 0) setIsOver(false);
   };
 
+  // Mobile move handlers
+  const getNeighborColumn = (dir) => {
+    const idx = KANBAN_COLUMNS.findIndex(c => c.id === column.id);
+    if (idx === -1) return null;
+    const targetIdx = idx + dir;
+    if (targetIdx >= 0 && targetIdx < KANBAN_COLUMNS.length) {
+      return KANBAN_COLUMNS[targetIdx].id;
+    }
+    return null;
+  };
+
+  const prevColId = getNeighborColumn(-1);
+  const nextColId = getNeighborColumn(1);
+
   const accent = KANBAN_COLUMN_COLORS[column.id] || KANBAN_COLUMN_COLORS.default;
 
   return (
     <div
-      className={`flex flex-col min-w-[280px] max-w-[320px] rounded-xl border border-border bg-card/60 backdrop-blur-xl dark:bg-card/40 transition-colors ${
+      className={`flex flex-col ${isMobile ? 'w-full h-full' : 'min-w-[280px] max-w-[320px]'} rounded-xl border border-border bg-card/60 backdrop-blur-xl dark:bg-card/40 transition-colors ${
         isOver && canDrop ? `ring-2 ring-dashed ${accent.ring} bg-accent/50` : ''
       }`}
       onDragOver={handleDragOver}
@@ -107,6 +121,8 @@ function KanbanColumn({ column, workflows }) {
             onDragStart={() => setDraggedWorkflow(workflow)}
             onDragEnd={() => clearDraggedWorkflow()}
             onClick={() => navigate(`/workflows/${workflow.id}`)}
+            onMovePrev={isMobile && prevColId ? () => moveWorkflow(workflow.id, prevColId) : undefined}
+            onMoveNext={isMobile && nextColId ? () => moveWorkflow(workflow.id, nextColId) : undefined}
           />
         ))}
         {workflows.length === 0 && (
@@ -120,7 +136,7 @@ function KanbanColumn({ column, workflows }) {
 }
 
 // Card component
-function KanbanCard({ workflow, isExecuting, onDragStart, onDragEnd, onClick }) {
+function KanbanCard({ workflow, isExecuting, onDragStart, onDragEnd, onClick, onMovePrev, onMoveNext }) {
   const handleDragStart = (e) => {
     e.dataTransfer.setData('text/plain', workflow.id);
     e.dataTransfer.effectAllowed = 'move';
@@ -203,6 +219,25 @@ function KanbanCard({ workflow, isExecuting, onDragStart, onDragEnd, onClick }) 
           {workflow.task_count} tasks
         </div>
       )}
+      
+      {/* Mobile Move Actions */}
+      <div className="md:hidden flex justify-between mt-3 pt-2 border-t border-border/50">
+        <button
+          onClick={(e) => { e.stopPropagation(); onMovePrev?.(); }}
+          disabled={!onMovePrev}
+          className="p-1.5 rounded-md hover:bg-accent text-muted-foreground disabled:opacity-30"
+        >
+          <ChevronLeft className="w-4 h-4" />
+        </button>
+        <span className="text-[10px] text-muted-foreground self-center uppercase tracking-wider">Move</span>
+        <button
+          onClick={(e) => { e.stopPropagation(); onMoveNext?.(); }}
+          disabled={!onMoveNext}
+          className="p-1.5 rounded-md hover:bg-accent text-muted-foreground disabled:opacity-30"
+        >
+          <ChevronRight className="w-4 h-4" />
+        </button>
+      </div>
     </div>
   );
 }
@@ -307,6 +342,49 @@ function KanbanFilters({ filter, setFilter }) {
   );
 }
 
+// Mobile Column Navigator
+function MobileColumnNav({ columns, activeIndex, onChange }) {
+  return (
+    <div className="md:hidden flex items-center justify-between bg-card/50 backdrop-blur-md p-2 rounded-lg border border-border mb-4">
+      <button
+        onClick={() => onChange(Math.max(0, activeIndex - 1))}
+        disabled={activeIndex === 0}
+        className="p-2 rounded-md hover:bg-accent disabled:opacity-30 transition-colors"
+      >
+        <ChevronLeft className="w-5 h-5" />
+      </button>
+      
+      <div className="flex gap-1.5 overflow-x-auto scrollbar-none px-2">
+        {columns.map((col, idx) => {
+          const accent = KANBAN_COLUMN_COLORS[col.id] || KANBAN_COLUMN_COLORS.default;
+          const isActive = idx === activeIndex;
+          
+          return (
+            <button
+              key={col.id}
+              onClick={() => onChange(idx)}
+              className={`h-2 transition-all rounded-full ${
+                isActive 
+                  ? `w-8 ${accent.dot.replace('bg-', 'bg-')}` // Use the dot color class
+                  : 'w-2 bg-muted-foreground/30'
+              }`}
+              title={col.name}
+            />
+          );
+        })}
+      </div>
+      
+      <button
+        onClick={() => onChange(Math.min(columns.length - 1, activeIndex + 1))}
+        disabled={activeIndex === columns.length - 1}
+        className="p-2 rounded-md hover:bg-accent disabled:opacity-30 transition-colors"
+      >
+        <ChevronRight className="w-5 h-5" />
+      </button>
+    </div>
+  );
+}
+
 // Main Kanban page
 export default function Kanban() {
   const {
@@ -318,6 +396,7 @@ export default function Kanban() {
   } = useKanbanStore();
 
   const [filter, setFilter] = useState('');
+  const [activeColIndex, setActiveColIndex] = useState(0);
 
   useEffect(() => {
     fetchBoard();
@@ -348,9 +427,9 @@ export default function Kanban() {
   }
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6 animate-fade-in flex flex-col h-[calc(100vh-8rem)]">
       {/* Header */}
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between shrink-0">
         <div>
           <h1 className="text-2xl font-semibold text-foreground tracking-tight">Kanban</h1>
           <p className="text-sm text-muted-foreground mt-1">
@@ -364,7 +443,7 @@ export default function Kanban() {
       </div>
 
       {error && (
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 bg-error/10 border border-error/20 rounded-xl">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 bg-error/10 border border-error/20 rounded-xl shrink-0">
           <p className="text-error text-sm">{error}</p>
           <div className="flex items-center gap-2">
             <button
@@ -387,15 +466,35 @@ export default function Kanban() {
         </div>
       )}
 
-      {/* Columns */}
-      <div className="flex gap-4 overflow-x-auto pb-4">
-        {KANBAN_COLUMNS.map((column) => (
+      {/* Mobile Column Navigation */}
+      <MobileColumnNav 
+        columns={KANBAN_COLUMNS} 
+        activeIndex={activeColIndex} 
+        onChange={setActiveColIndex} 
+      />
+
+      {/* Columns Container */}
+      <div className="flex-1 min-h-0">
+        {/* Desktop View */}
+        <div className="hidden md:flex gap-4 overflow-x-auto pb-4 h-full">
+          {KANBAN_COLUMNS.map((column) => (
+            <KanbanColumn
+              key={column.id}
+              column={column}
+              workflows={filteredColumns[column.id] || []}
+            />
+          ))}
+        </div>
+
+        {/* Mobile View - Single Column */}
+        <div className="md:hidden h-full">
           <KanbanColumn
-            key={column.id}
-            column={column}
-            workflows={filteredColumns[column.id] || []}
+            key={KANBAN_COLUMNS[activeColIndex].id}
+            column={KANBAN_COLUMNS[activeColIndex]}
+            workflows={filteredColumns[KANBAN_COLUMNS[activeColIndex].id] || []}
+            isMobile={true}
           />
-        ))}
+        </div>
       </div>
     </div>
   );

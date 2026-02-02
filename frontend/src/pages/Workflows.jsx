@@ -8,6 +8,7 @@ import MarkdownViewer from '../components/MarkdownViewer';
 import AgentActivity, { AgentActivityCompact } from '../components/AgentActivity';
 import EditWorkflowModal from '../components/EditWorkflowModal';
 import VoiceInputButton from '../components/VoiceInputButton';
+import FAB from '../components/FAB';
 import {
   GitBranch,
   Plus,
@@ -143,7 +144,7 @@ function WorkflowCard({ workflow, onClick, onDelete }) {
           {canDelete && (
             <button
               onClick={handleDeleteClick}
-              className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-all"
+              className="p-1.5 rounded-lg md:opacity-0 md:group-hover:opacity-100 hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-all"
               title="Delete workflow"
             >
               <Trash2 className="w-4 h-4" />
@@ -1597,7 +1598,7 @@ export default function Workflows() {
         </div>
         <Link
           to="/workflows/new"
-          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+          className="hidden md:flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
         >
           <Plus className="w-4 h-4" />
           New Workflow
@@ -1637,6 +1638,9 @@ export default function Workflows() {
           </Link>
         </div>
       )}
+      
+      {/* Mobile FAB */}
+      <FAB onClick={() => navigate('/workflows/new')} icon={Plus} label="New Workflow" />
 
       {/* Delete Confirmation Dialog for list view */}
       <ConfirmDialog
