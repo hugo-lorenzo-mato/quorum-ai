@@ -313,3 +313,45 @@ const (
 
 // MergeStrategies is the ordered list of merge strategies.
 var MergeStrategies = []string{MergeStrategyMerge, MergeStrategySquash, MergeStrategyRebase}
+
+// IssueProviders is the ordered list of issue providers.
+// Constants are defined in issue_ports.go as IssueProvider type.
+var IssueProviders = []string{string(IssueProviderGitHub), string(IssueProviderGitLab)}
+
+// Issue template languages
+const (
+	IssueLanguageEnglish    = "english"
+	IssueLanguageSpanish    = "spanish"
+	IssueLanguageFrench     = "french"
+	IssueLanguageGerman     = "german"
+	IssueLanguagePortuguese = "portuguese"
+	IssueLanguageChinese    = "chinese"
+	IssueLanguageJapanese   = "japanese"
+)
+
+// IssueLanguages is the ordered list of issue template languages.
+var IssueLanguages = []string{
+	IssueLanguageEnglish,
+	IssueLanguageSpanish,
+	IssueLanguageFrench,
+	IssueLanguageGerman,
+	IssueLanguagePortuguese,
+	IssueLanguageChinese,
+	IssueLanguageJapanese,
+}
+
+// Issue template tones
+const (
+	IssueToneProfessional = "professional"
+	IssueToneCasual       = "casual"
+	IssueToneTechnical    = "technical"
+	IssueToneConcise      = "concise"
+)
+
+// IssueTones is the ordered list of issue template tones.
+var IssueTones = []string{
+	IssueToneProfessional,
+	IssueToneCasual,
+	IssueToneTechnical,
+	IssueToneConcise,
+}

@@ -19,9 +19,13 @@ type EnumsResponse struct {
 	Phases           []string `json:"phases"`
 	PhaseModelKeys   []string `json:"phase_model_keys"`
 	// Model configuration (centralized source of truth)
-	AgentModels        map[string][]string `json:"agent_models"`
-	AgentDefaultModels map[string]string   `json:"agent_default_models"`
-	AgentsWithReasoning []string           `json:"agents_with_reasoning"`
+	AgentModels         map[string][]string `json:"agent_models"`
+	AgentDefaultModels  map[string]string   `json:"agent_default_models"`
+	AgentsWithReasoning []string            `json:"agents_with_reasoning"`
+	// Issue configuration enums
+	IssueProviders     []string `json:"issue_providers"`
+	TemplateLanguages  []string `json:"template_languages"`
+	TemplateTones      []string `json:"template_tones"`
 }
 
 // handleGetEnums returns all enum values for UI dropdowns.
@@ -40,6 +44,9 @@ func (s *Server) handleGetEnums(w http.ResponseWriter, _ *http.Request) {
 		AgentModels:         core.AgentModels,
 		AgentDefaultModels:  core.AgentDefaultModels,
 		AgentsWithReasoning: core.AgentsWithReasoning,
+		IssueProviders:      core.IssueProviders,
+		TemplateLanguages:   core.IssueLanguages,
+		TemplateTones:       core.IssueTones,
 	}
 
 	respondJSON(w, http.StatusOK, enums)
