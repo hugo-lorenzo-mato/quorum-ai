@@ -166,6 +166,7 @@ export const workflowApi = {
       link_issues: options.linkIssues ?? true,
       labels: options.labels,
       assignees: options.assignees,
+      issues: options.issues, // Frontend-edited issues
     }),
   }),
 

@@ -38,10 +38,21 @@ You MUST read these files to understand the work:
 **Issues Directory**: `{{.IssuesDir}}`
 
 ### File Naming Convention
-- `00-consolidated-analysis.md` - Issue summarizing the overall analysis
+**CRITICAL**: You MUST use EXACTLY these filenames. Do not deviate:
+
+{{if .ConsolidatedAnalysisPath}}
+- `00-consolidated-analysis.md` - Main issue summarizing the overall analysis
+{{end}}
 {{range $i, $task := .TaskFiles}}
 - `{{printf "%02d" (add $i 1)}}-{{$task.Slug}}.md` - Issue for {{$task.ID}}
 {{end}}
+
+**DO NOT create files with these patterns**:
+- ❌ `issue-1-*.md`, `issue-2-*.md` (wrong prefix)
+- ❌ `issue-task-1.md`, `issue-task-2.md` (wrong format)
+- ❌ `01-task.md` without the slug (incomplete)
+
+**Only use the EXACT filenames listed above.**
 
 ---
 
@@ -121,15 +132,21 @@ Each issue file MUST have this structure:
 
 ## YOUR MISSION
 
-1. **READ** the consolidated analysis file
+1. **READ** the consolidated analysis file (if provided)
 2. **READ** each task specification file
 3. **WRITE** one issue markdown file for each source file to the issues directory
-4. Ensure each issue is self-contained and actionable
+4. **USE EXACT FILENAMES** specified above - do not create variations
+5. Ensure each issue is self-contained and actionable
 
-**IMPORTANT**: Use your Read tool to read the source files, then use your Write tool to create the issue files. Do NOT output the content in your response - write it directly to files.
+**IMPORTANT**: 
+- Use your Read tool to read the source files
+- Use your Write tool to create the issue files
+- Do NOT output the content in your response - write it directly to files
+- Do NOT create multiple files for the same task
+- Follow the exact naming convention specified above
 
 ---
 
 ## BEGIN
 
-Read the source files and generate the issue files now.
+Read the source files and generate the issue files now. Remember: use the EXACT filenames listed in the File Naming Convention section.

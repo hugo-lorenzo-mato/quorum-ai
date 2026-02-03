@@ -16,6 +16,27 @@ import (
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service/issues"
 )
 
+// IssueInput represents a single issue to be created (from frontend edits).
+type IssueInput struct {
+	// Title is the issue title.
+	Title string `json:"title"`
+
+	// Body is the issue description.
+	Body string `json:"body"`
+
+	// Labels are the issue labels.
+	Labels []string `json:"labels"`
+
+	// Assignees are the issue assignees.
+	Assignees []string `json:"assignees"`
+
+	// IsMainIssue indicates if this is the main/parent issue.
+	IsMainIssue bool `json:"is_main_issue"`
+
+	// TaskID is the task identifier (optional).
+	TaskID string `json:"task_id"`
+}
+
 // GenerateIssuesRequest is the request body for generating issues.
 type GenerateIssuesRequest struct {
 	// DryRun previews issues without creating them.
@@ -35,6 +56,10 @@ type GenerateIssuesRequest struct {
 
 	// Assignees overrides default assignees.
 	Assignees []string `json:"assignees,omitempty"`
+
+	// Issues contains edited issues from the frontend.
+	// If provided, these will be created directly instead of reading from filesystem.
+	Issues []IssueInput `json:"issues,omitempty"`
 }
 
 // GenerateIssuesResponse is the response for issue generation.
@@ -170,21 +195,48 @@ func (s *Server) handleGenerateIssues(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Generate issues
-	opts := issues.GenerateOptions{
-		WorkflowID:      workflowID,
-		DryRun:          req.DryRun,
-		CreateMainIssue: req.CreateMainIssue,
-		CreateSubIssues: req.CreateSubIssues,
-		LinkIssues:      req.LinkIssues,
-		CustomLabels:    req.Labels,
-		CustomAssignees: req.Assignees,
-	}
+	var result *issues.GenerateResult
 
-	result, err := generator.Generate(genCtx, opts)
-	if err != nil {
-		respondError(w, http.StatusInternalServerError, fmt.Sprintf("issue generation failed: %v", err))
-		return
+	// If issues are provided in the request, create them directly (frontend edited flow)
+	if len(req.Issues) > 0 {
+		slog.Info("creating issues from frontend input", "count", len(req.Issues))
+		
+		// Convert API types to service types
+		issueInputs := make([]issues.IssueInput, len(req.Issues))
+		for i, input := range req.Issues {
+			issueInputs[i] = issues.IssueInput{
+				Title:       input.Title,
+				Body:        input.Body,
+				Labels:      input.Labels,
+				Assignees:   input.Assignees,
+				IsMainIssue: input.IsMainIssue,
+				TaskID:      input.TaskID,
+			}
+		}
+		
+		result, err = generator.CreateIssuesFromInput(genCtx, issueInputs, req.DryRun, req.LinkIssues, req.Labels, req.Assignees)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, fmt.Sprintf("issue creation failed: %v", err))
+			return
+		}
+	} else {
+		// Otherwise, use traditional flow (read from filesystem)
+		slog.Info("generating issues from filesystem artifacts")
+		opts := issues.GenerateOptions{
+			WorkflowID:      workflowID,
+			DryRun:          req.DryRun,
+			CreateMainIssue: req.CreateMainIssue,
+			CreateSubIssues: req.CreateSubIssues,
+			LinkIssues:      req.LinkIssues,
+			CustomLabels:    req.Labels,
+			CustomAssignees: req.Assignees,
+		}
+
+		result, err = generator.Generate(genCtx, opts)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, fmt.Sprintf("issue generation failed: %v", err))
+			return
+		}
 	}
 
 	// Build response

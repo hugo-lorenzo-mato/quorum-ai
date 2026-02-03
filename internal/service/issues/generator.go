@@ -17,6 +17,16 @@ import (
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service"
 )
 
+// IssueInput represents a single issue to be created (from frontend edits).
+type IssueInput struct {
+	Title       string
+	Body        string
+	Labels      []string
+	Assignees   []string
+	IsMainIssue bool
+	TaskID      string
+}
+
 // Generator creates GitHub/GitLab issues from workflow artifacts.
 type Generator struct {
 	client    core.IssueClient
@@ -259,6 +269,114 @@ func (g *Generator) Generate(ctx context.Context, opts GenerateOptions) (*Genera
 			}
 		}
 	}
+
+	return result, nil
+}
+
+// CreateIssuesFromInput creates issues directly from frontend input (edited issues).
+// This bypasses filesystem reading and uses the provided issue data.
+func (g *Generator) CreateIssuesFromInput(ctx context.Context, inputs []IssueInput, dryRun, linkIssues bool, defaultLabels, defaultAssignees []string) (*GenerateResult, error) {
+	result := &GenerateResult{
+		IssueSet: &core.IssueSet{
+			GeneratedAt: time.Now(),
+		},
+	}
+
+	var mainIssue *core.Issue
+
+	// Separate main issue from sub-issues
+	var mainInput *IssueInput
+	var subInputs []IssueInput
+
+	for i := range inputs {
+		if inputs[i].IsMainIssue {
+			mainInput = &inputs[i]
+		} else {
+			subInputs = append(subInputs, inputs[i])
+		}
+	}
+
+	// Create main issue if present
+	if mainInput != nil {
+		labels := mainInput.Labels
+		if len(labels) == 0 {
+			labels = defaultLabels
+		}
+		assignees := mainInput.Assignees
+		if len(assignees) == 0 {
+			assignees = defaultAssignees
+		}
+
+		if dryRun {
+			result.PreviewIssues = append(result.PreviewIssues, IssuePreview{
+				Title:       mainInput.Title,
+				Body:        mainInput.Body,
+				Labels:      labels,
+				Assignees:   assignees,
+				IsMainIssue: true,
+			})
+		} else {
+			issue, err := g.client.CreateIssue(ctx, core.CreateIssueOptions{
+				Title:     mainInput.Title,
+				Body:      mainInput.Body,
+				Labels:    labels,
+				Assignees: assignees,
+			})
+			if err != nil {
+				return nil, fmt.Errorf("creating main issue: %w", err)
+			}
+			mainIssue = issue
+			result.IssueSet.MainIssue = mainIssue
+			slog.Info("created main issue", "number", issue.Number, "title", issue.Title)
+		}
+	}
+
+	// Create sub-issues
+	for _, input := range subInputs {
+		labels := input.Labels
+		if len(labels) == 0 {
+			labels = defaultLabels
+		}
+		assignees := input.Assignees
+		if len(assignees) == 0 {
+			assignees = defaultAssignees
+		}
+
+		if dryRun {
+			result.PreviewIssues = append(result.PreviewIssues, IssuePreview{
+				Title:       input.Title,
+				Body:        input.Body,
+				Labels:      labels,
+				Assignees:   assignees,
+				IsMainIssue: false,
+				TaskID:      input.TaskID,
+			})
+		} else {
+			parentNum := 0
+			if linkIssues && mainIssue != nil {
+				parentNum = mainIssue.Number
+			}
+
+			issue, err := g.client.CreateIssue(ctx, core.CreateIssueOptions{
+				Title:       input.Title,
+				Body:        input.Body,
+				Labels:      labels,
+				Assignees:   assignees,
+				ParentIssue: parentNum,
+			})
+			if err != nil {
+				result.Errors = append(result.Errors, fmt.Errorf("creating issue '%s': %w", input.Title, err))
+				continue
+			}
+			result.IssueSet.SubIssues = append(result.IssueSet.SubIssues, issue)
+			slog.Info("created sub-issue", "number", issue.Number, "title", issue.Title, "task_id", input.TaskID)
+		}
+	}
+
+	slog.Info("created issues from frontend input",
+		"total", len(result.IssueSet.SubIssues)+1,
+		"main", mainIssue != nil,
+		"sub_issues", len(result.IssueSet.SubIssues))
 
 	return result, nil
 }
@@ -513,6 +631,24 @@ func (g *Generator) GetIssueSet(ctx context.Context, workflowID string) (*core.I
 	return nil, nil
 }
 
+// cleanIssuesDirectory removes all existing files in the issues directory
+// to prevent duplicates from accumulating across multiple generations.
+func (g *Generator) cleanIssuesDirectory(issuesDir string) error {
+	// Check if directory exists
+	if _, err := os.Stat(issuesDir); os.IsNotExist(err) {
+		slog.Debug("issues directory does not exist, skipping cleanup", "dir", issuesDir)
+		return nil
+	}
+
+	// Remove the directory and all its contents
+	if err := os.RemoveAll(issuesDir); err != nil {
+		return fmt.Errorf("removing issues directory: %w", err)
+	}
+
+	slog.Info("cleaned issues directory to prevent duplicates", "dir", issuesDir)
+	return nil
+}
+
 // =============================================================================
 // LLM-based Issue Generation (Path-Based Approach)
 // =============================================================================
@@ -551,6 +687,12 @@ func (g *Generator) GenerateIssueFiles(ctx context.Context, workflowID string) (
 	// Use relative path for shorter prompt (Claude will resolve it from cwd)
 	issuesDirRel := filepath.Join(".quorum", "issues", workflowID)
 	issuesDirAbs := filepath.Join(cwd, issuesDirRel)
+	
+	// Clean the directory before generation to avoid duplicates
+	if err := g.cleanIssuesDirectory(issuesDirAbs); err != nil {
+		return nil, fmt.Errorf("cleaning issues directory: %w", err)
+	}
+	
 	if err := os.MkdirAll(issuesDirAbs, 0755); err != nil {
 		return nil, fmt.Errorf("creating issues directory: %w", err)
 	}
@@ -1124,6 +1266,7 @@ func sanitizeFilename(name string) string {
 }
 
 // ReadGeneratedIssues reads the generated issue markdown files and returns IssuePreview objects.
+// Deduplicates by task ID to prevent duplicate issues.
 func (g *Generator) ReadGeneratedIssues(workflowID string) ([]IssuePreview, error) {
 	issuesDir := filepath.Join(".quorum", "issues", workflowID)
 
@@ -1136,6 +1279,7 @@ func (g *Generator) ReadGeneratedIssues(workflowID string) ([]IssuePreview, erro
 	}
 
 	var previews []IssuePreview
+	seen := make(map[string]bool) // Track by taskID to deduplicate
 
 	// Sort entries numerically
 	var files []os.DirEntry
@@ -1159,12 +1303,37 @@ func (g *Generator) ReadGeneratedIssues(workflowID string) ([]IssuePreview, erro
 
 		// Determine if it's the consolidated analysis (task_id will be empty)
 		taskID := ""
-		if !strings.Contains(entry.Name(), "consolidated") {
-			// Extract task ID from filename pattern: XX-task-name.md
-			re := regexp.MustCompile(`^\d+-(.+)\.md$`)
+		isMainIssue := false
+		if strings.Contains(entry.Name(), "consolidated") || strings.HasPrefix(entry.Name(), "00-") {
+			isMainIssue = true
+			taskID = "main"
+		} else {
+			// Extract task ID from filename pattern: XX-task-name.md or issue-N-task-name.md
+			// Try pattern: NN-something.md
+			re := regexp.MustCompile(`^(\d+)-(.+)\.md$`)
 			if match := re.FindStringSubmatch(entry.Name()); len(match) > 1 {
-				taskID = "task-" + strings.Split(match[1], "-")[0]
+				taskNum := match[1]
+				if taskNum != "00" {
+					taskID = "task-" + taskNum
+				}
+			} else {
+				// Try pattern: issue-N-something.md or issue-task-N.md
+				re = regexp.MustCompile(`issue-(?:task-)?(\d+)`)
+				if match := re.FindStringSubmatch(entry.Name()); len(match) > 1 {
+					taskID = "task-" + match[1]
+				}
 			}
+		}
+
+		// Deduplicate: skip if we've already seen this task ID
+		if taskID != "" && seen[taskID] {
+			slog.Warn("duplicate issue file detected, skipping",
+				"file", entry.Name(),
+				"task_id", taskID)
+			continue
+		}
+		if taskID != "" {
+			seen[taskID] = true
 		}
 
 		previews = append(previews, IssuePreview{
@@ -1172,10 +1341,15 @@ func (g *Generator) ReadGeneratedIssues(workflowID string) ([]IssuePreview, erro
 			Body:        body,
 			Labels:      g.config.Labels,
 			Assignees:   g.config.Assignees,
-			IsMainIssue: false, // All are sub-issues per user request
+			IsMainIssue: isMainIssue,
 			TaskID:      taskID,
 		})
 	}
+
+	slog.Info("read generated issues",
+		"total_files", len(files),
+		"unique_issues", len(previews),
+		"duplicates_skipped", len(files)-len(previews))
 
 	return previews, nil
 }

@@ -37,12 +37,15 @@ export default function IssuesActionBar({
       const issues = getIssuesForSubmission();
 
       const response = await workflowApi.generateIssues(workflowId, {
-        dry_run: false,
+        dryRun: false,
+        linkIssues: true,
         issues: issues,
       });
 
       if (response.success) {
-        notifySuccess(`Created ${response.main_issue ? 1 : 0} main issue and ${response.sub_issues?.length || 0} sub-issues`);
+        const mainCount = response.main_issue ? 1 : 0;
+        const subCount = response.sub_issues?.length || 0;
+        notifySuccess(`Created ${mainCount + subCount} issue${mainCount + subCount !== 1 ? 's' : ''} successfully`);
         reset();
         navigate(`/workflows/${workflowId}`);
       } else {
