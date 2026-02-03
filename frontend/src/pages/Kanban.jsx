@@ -315,17 +315,10 @@ function EngineControls() {
   };
 
   return (
-    <div className="flex items-center justify-between sm:justify-start gap-4 rounded-xl border border-border bg-card/50 glass px-4 py-2 sm:py-3 w-full sm:w-auto">
+    <div className="flex items-center justify-between gap-2 rounded-xl border border-border bg-card/50 glass px-2 py-1.5 sm:px-4 sm:py-3 shrink-0">
       {/* Engine toggle */}
-      <div className="flex items-center gap-3">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-foreground">Kanban engine</span>
-          {engine.enabled && (
-            <span className="hidden sm:inline-flex text-xs bg-success/10 text-success px-2 py-0.5 rounded-full">
-              Enabled
-            </span>
-          )}
-        </div>
+      <div className="flex items-center gap-2">
+        <span className="text-xs font-medium text-foreground hidden xs:inline">Engine</span>
         <button
           onClick={handleToggle}
           disabled={isToggling || engine.circuitBreakerOpen}
@@ -380,7 +373,7 @@ function KanbanFilters({ filter, setFilter }) {
         placeholder="Filter workflows..."
         value={filter}
         onChange={(e) => setFilter(e.target.value)}
-        className="h-10 w-full pl-9 pr-4 rounded-lg border border-border bg-background text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/20 transition-all"
+        className="h-9 w-full pl-9 pr-4 rounded-lg border border-border bg-background text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/20 transition-all"
       />
     </div>
   );
@@ -389,7 +382,7 @@ function KanbanFilters({ filter, setFilter }) {
 // Mobile Column Navigator
 function MobileColumnNav({ columns, activeIndex, onChange }) {
   return (
-    <div className="md:hidden flex items-center justify-center bg-background/80 backdrop-blur-md py-4 border-b border-border mb-6 sticky top-0 z-20">
+    <div className="md:hidden flex items-center justify-center bg-background/80 backdrop-blur-md py-2 border-b border-border mb-2 sticky top-0 z-20">
       <div className="flex gap-2 items-center">
         {columns.map((col, idx) => {
           const accent = KANBAN_COLUMN_COLORS[col.id] || KANBAN_COLUMN_COLORS.default;
@@ -499,16 +492,16 @@ export default function Kanban() {
   }
 
   return (
-    <div className="fixed top-14 left-0 right-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] md:static md:h-[calc(100vh-8rem)] md:relative flex flex-col space-y-4 md:space-y-6 animate-fade-in bg-background md:bg-transparent z-0">
+    <div className="fixed top-14 left-0 right-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] md:static md:h-[calc(100vh-8rem)] md:relative flex flex-col space-y-2 md:space-y-6 animate-fade-in bg-background md:bg-transparent z-0">
       {/* Header */}
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between shrink-0 relative z-10">
-        <div className="text-center lg:text-left">
+      <div className="flex items-center justify-between gap-3 px-4 py-2 shrink-0 relative z-10 border-b border-border/50 lg:border-none">
+        <div className="hidden lg:block text-left">
           <h1 className="text-2xl font-semibold text-foreground tracking-tight">Kanban</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Visualize and manage workflow execution
           </p>
         </div>
-        <div className="flex flex-col items-stretch sm:flex-row sm:items-center gap-3 w-full lg:w-auto">
+        <div className="flex items-center gap-2 w-full lg:w-auto">
           <KanbanFilters filter={filter} setFilter={setFilter} />
           <EngineControls />
         </div>
