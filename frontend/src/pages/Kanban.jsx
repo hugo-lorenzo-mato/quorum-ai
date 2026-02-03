@@ -133,33 +133,32 @@ function KanbanColumn({ column, workflows, isMobile, onOpenMobileMenu }) {
     if (dragDepth.current === 0) setIsOver(false);
   };
 
+  // Accent color for the column header
   const accent = KANBAN_COLUMN_COLORS[column.id] || KANBAN_COLUMN_COLORS.default;
 
   return (
     <div
-      className={`flex flex-col ${isMobile ? 'w-[85vw] flex-shrink-0 snap-center h-full mx-2 first:ml-4 last:mr-4' : 'min-w-[280px] max-w-[320px]'} rounded-xl border border-border bg-muted/20 backdrop-blur-sm transition-all duration-200 border-t-[3px] ${accent.border} ${
-        isOver && canDrop ? `ring-2 ring-dashed ${accent.ring} bg-accent/50 shadow-lg` : ''
+      className={`flex flex-col ${isMobile ? 'w-[85vw] flex-shrink-0 snap-center h-full mx-2 first:ml-4 last:mr-4' : 'min-w-[280px] max-w-[320px]'} h-full transition-all duration-200 rounded-xl border border-border/50 bg-secondary/30 backdrop-blur-sm ${
+        isOver && canDrop ? 'ring-2 ring-primary/20 bg-secondary/50' : ''
       }`}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
       onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}
     >
-      {/* Column header */}
-      <div className="p-4 border-b border-border/40">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <h3 className="font-semibold text-foreground text-sm tracking-tight">{column.name}</h3>
-            <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium bg-background border border-border/50 text-muted-foreground shadow-sm`}>
-              {workflows.length}
-            </span>
-          </div>
+      {/* Column header - Structured & Clean */}
+      <div className="flex items-center justify-between p-3 border-b border-border/40">
+        <div className="flex items-center gap-2.5">
+          <div className={`w-2.5 h-2.5 rounded-full ${accent.dot} shadow-sm`} />
+          <h3 className="font-semibold text-foreground text-sm tracking-tight">{column.name}</h3>
         </div>
-        <p className="text-xs text-muted-foreground mt-1 truncate opacity-70">{column.description}</p>
+        <span className="px-2 py-0.5 rounded-md bg-background/50 border border-border/40 text-[10px] font-mono text-muted-foreground">
+            {workflows.length}
+        </span>
       </div>
 
-      {/* Workflow cards */}
-      <div className="flex-1 p-3 space-y-3 overflow-y-auto max-h-[calc(100vh-280px)] scrollbar-thin">
+      {/* Workflow cards container */}
+      <div className="flex-1 p-2 space-y-2.5 overflow-y-auto max-h-[calc(100vh-280px)] scrollbar-thin">
         {workflows.map((workflow) => (
           <KanbanCard
             key={workflow.id}
@@ -173,22 +172,18 @@ function KanbanColumn({ column, workflows, isMobile, onOpenMobileMenu }) {
           />
         ))}
         
-        {/* Empty State */}
+        {/* Empty State - Subtle but visible */}
         {workflows.length === 0 && (
-          <div className={`flex flex-col items-center justify-center py-12 px-4 text-center border-2 border-dashed rounded-xl transition-colors ${
+          <div className={`flex flex-col items-center justify-center py-12 rounded-lg border border-dashed transition-all ${
             isOver && canDrop 
-              ? `${accent.ring.replace('ring-', 'border-')} bg-accent/30` 
-              : 'border-border/30 hover:border-border/50 bg-background/30'
+              ? 'border-primary/40 bg-primary/5 scale-[0.98]' 
+              : 'border-border/30 bg-transparent text-muted-foreground/30'
           }`}>
-            <Inbox className={`w-8 h-8 mb-3 ${isOver && canDrop ? 'text-primary animate-bounce' : 'text-muted-foreground/30'}`} />
-            <span className="text-sm font-medium text-foreground/70">
-              {isOver && canDrop ? 'Drop to move' : 'No workflows'}
-            </span>
-            {!isOver && (
-                <span className="text-xs text-muted-foreground/50 mt-1">
-                {column.id === 'refinement' ? 'Create a new one to start' : 'Move items here'}
-                </span>
-            )}
+             {isOver && canDrop ? (
+                 <Inbox className="w-8 h-8 text-primary/50 mb-2 animate-bounce" />
+             ) : (
+                 <span className="text-xs font-medium">No items</span>
+             )}
           </div>
         )}
       </div>
@@ -196,7 +191,7 @@ function KanbanColumn({ column, workflows, isMobile, onOpenMobileMenu }) {
   );
 }
 
-// Card component
+// Card component - Structured, Top Border Accent, Status Badge
 function KanbanCard({ workflow, isExecuting, onDragStart, onDragEnd, onClick, onOpenMenu }) {
   const handleDragStart = (e) => {
     e.dataTransfer.setData('text/plain', workflow.id);
@@ -205,8 +200,8 @@ function KanbanCard({ workflow, isExecuting, onDragStart, onDragEnd, onClick, on
   };
 
   const statusColor = getStatusColor(workflow.status);
-  // Use the solid color (dot) for the border strip
-  const borderStripColor = statusColor.borderStrip;
+  // Use the border color for the top accent
+  const topAccentColor = statusColor.borderStrip || 'border-border';
 
   return (
     <div
@@ -214,8 +209,10 @@ function KanbanCard({ workflow, isExecuting, onDragStart, onDragEnd, onClick, on
       onDragStart={handleDragStart}
       onDragEnd={onDragEnd}
       onClick={onClick}
-      className={`group relative flex flex-col gap-3 rounded-xl border border-border/60 bg-card p-4 shadow-sm shadow-black/5 cursor-grab active:cursor-grabbing transition-all hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 dark:bg-gradient-to-b dark:from-card dark:to-card/50 dark:border-white/5 dark:shadow-md dark:shadow-black/40 border-l-[3px] ${borderStripColor} ${
-        isExecuting ? 'ring-2 ring-info/30 dark:ring-info/40' : ''
+      className={`group relative flex flex-col gap-3 rounded-lg border border-border bg-card p-3.5 shadow-sm transition-all hover:shadow-md hover:border-primary/30 hover:-translate-y-0.5 cursor-grab active:cursor-grabbing border-t-[3px] ${topAccentColor} ${
+        isExecuting 
+          ? 'shadow-info/10 ring-1 ring-info/20' 
+          : ''
       }`}
       role="button"
       tabIndex={0}
@@ -225,84 +222,65 @@ function KanbanCard({ workflow, isExecuting, onDragStart, onDragEnd, onClick, on
     >
       {/* Execution Indicator */}
       {isExecuting && (
-        <div className="absolute top-3 right-3 flex items-center gap-1.5 text-[10px] font-medium text-info bg-info/10 px-2 py-0.5 rounded-full animate-pulse">
-          <Play className="w-3 h-3 fill-current" />
-          Running
+        <div className="absolute top-3 right-3 flex items-center gap-1.5 text-[10px] font-bold text-info bg-info/5 px-2 py-0.5 rounded-full">
+          <Play className="w-3 h-3 fill-current animate-pulse" />
+          RUNNING
         </div>
       )}
 
       {/* Header & Title */}
-      <div className="flex flex-col gap-1">
-        <div className="flex items-start justify-between gap-2">
-            <h4 className="font-semibold text-foreground text-sm leading-snug line-clamp-2 pr-4">
-            {workflow.title || workflow.id}
-            </h4>
-        </div>
-        
-        {/* Prompt Preview - Clean & Readable */}
-        <p className="text-muted-foreground text-xs line-clamp-2 font-mono opacity-80 mt-1">
+      <div className="space-y-1.5">
+         <h4 className="font-semibold text-foreground text-sm leading-snug line-clamp-2 pr-16">
+            {workflow.title || "Untitled Workflow"}
+         </h4>
+         <p className="text-muted-foreground text-xs line-clamp-2 font-mono opacity-80">
             {workflow.prompt}
-        </p>
+         </p>
       </div>
 
       {/* Footer - Metadata & Status */}
-      <div className="mt-auto flex items-end justify-between gap-2 pt-2 border-t border-border/30">
-        {/* Status Badge */}
-        <button 
-          onClick={(e) => {
-            if (window.innerWidth < 768) {
-              e.stopPropagation();
-              onOpenMenu();
-            }
-          }}
-          className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-medium transition-colors hover:opacity-80 ${statusColor.bg} ${statusColor.text}`}
-        >
-          {workflow.status || 'pending'}
-          <ChevronDown className="w-3 h-3 md:hidden opacity-50" />
-        </button>
-        
-        {/* Icons Row */}
+      <div className="flex items-center justify-between pt-2 mt-1 border-t border-border/30">
         <div className="flex items-center gap-3 text-muted-foreground">
-            {/* Run Count */}
-            {workflow.kanban_execution_count > 0 && (
-                <div className="flex items-center gap-1 text-xs" title={`Executed ${workflow.kanban_execution_count} times`}>
-                    <Clock className="w-3.5 h-3.5" />
-                    <span>{workflow.kanban_execution_count}</span>
-                </div>
-            )}
-            
-            {/* Tasks */}
-            {workflow.task_count > 0 && (
-                <div className="flex items-center gap-1 text-xs" title={`${workflow.task_count} tasks`}>
-                    <ListTodo className="w-3.5 h-3.5" />
-                    <span>{workflow.task_count}</span>
-                </div>
-            )}
-
             {/* PR Link */}
             {workflow.pr_url && (
                 <a
-                href={workflow.pr_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={(e) => e.stopPropagation()}
-                className="flex items-center gap-1 text-xs text-info hover:underline hover:text-info/80 transition-colors"
-                title={`PR #${workflow.pr_number}`}
+                    href={workflow.pr_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="flex items-center gap-1 text-[11px] hover:text-foreground transition-colors"
+                    title={`PR #${workflow.pr_number}`}
                 >
-                <GitPullRequest className="w-3.5 h-3.5" />
+                <GitPullRequest className="w-3 h-3" />
                 <span>#{workflow.pr_number}</span>
                 </a>
             )}
+
+            {/* Tasks */}
+            {workflow.task_count > 0 && (
+                <div className="flex items-center gap-1 text-[11px]" title={`${workflow.task_count} tasks`}>
+                    <ListTodo className="w-3 h-3" />
+                    <span>{workflow.task_count}</span>
+                </div>
+            )}
+        </div>
+
+        {/* Status Badge */}
+        <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-medium uppercase tracking-wide ${statusColor.bg} ${statusColor.text}`}>
+            {workflow.status || 'pending'}
         </div>
       </div>
-
-      {/* Error Indicator (if any) */}
-      {workflow.kanban_last_error && (
-        <div className="flex items-start gap-2 mt-1 p-2 rounded-md bg-error/5 border border-error/10 text-error text-[11px] leading-tight">
-          <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-          <span className="line-clamp-2 font-medium">{workflow.kanban_last_error}</span>
-        </div>
-      )}
+      
+      {/* Mobile Menu Trigger */}
+      <button 
+          onClick={(e) => {
+              e.stopPropagation();
+              onOpenMenu();
+          }}
+          className="absolute top-2 right-2 md:hidden p-2 text-muted-foreground/50 hover:text-foreground"
+      >
+          <ChevronDown className="w-4 h-4" />
+      </button>
     </div>
   );
 }
@@ -535,10 +513,7 @@ export default function Kanban() {
   }
 
   return (
-    <div className="relative h-[calc(100vh-8rem)] flex flex-col space-y-6 animate-fade-in overflow-hidden">
-      {/* Background Pattern */}
-      <div className="absolute inset-0 bg-dot-pattern pointer-events-none" />
-
+    <div className="relative h-[calc(100vh-8rem)] flex flex-col space-y-6 animate-fade-in">
       {/* Header */}
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between shrink-0 relative z-10">
         <div>

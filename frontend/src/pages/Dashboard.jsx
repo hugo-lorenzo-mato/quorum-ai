@@ -120,6 +120,33 @@ function formatUptime(seconds) {
   return `${Math.floor(seconds)}s`;
 }
 
+function buildStatusTooltip(data) {
+  if (!data) return '';
+  const lines = [];
+  const warnings = Array.isArray(data.warnings) ? data.warnings : [];
+  const trendWarnings = Array.isArray(data.trend?.Warnings) ? data.trend.Warnings : [];
+
+  if (warnings.length > 0) {
+    lines.push('Warnings:');
+    warnings.forEach((warning) => {
+      const levelRaw = warning?.Level || warning?.level;
+      const level = levelRaw ? String(levelRaw).toUpperCase() : 'WARNING';
+      const message = warning?.Message || warning?.message || 'Unknown warning';
+      lines.push(`${level}: ${message}`);
+    });
+  }
+
+  if (trendWarnings.length > 0) {
+    if (lines.length > 0) lines.push('');
+    lines.push('Trend:');
+    trendWarnings.forEach((message) => {
+      lines.push(message || 'Unknown trend warning');
+    });
+  }
+
+  return lines.join('\n');
+}
+
 // Metric Row Component for compact display
 function MetricRow({ icon: Icon, label, value, subtext, progress, color = 'primary' }) {
   return (
@@ -197,6 +224,7 @@ function SystemResources({ data, loading, onRefresh, timeAgo }) {
   const uptime = resources?.process_uptime ? resources.process_uptime / 1e9 : 0;
   const heapMB = resources?.heap_alloc_mb || 0;
   const goroutines = resources?.goroutines || 0;
+  const statusTooltip = buildStatusTooltip(data);
 
   // Format load average
   const loadAvg = system.load_avg_1 !== undefined
@@ -361,11 +389,14 @@ function SystemResources({ data, loading, onRefresh, timeAgo }) {
 
         {/* Status warning */}
         {data.status && data.status !== 'healthy' && (
-          <div className={`mt-3 text-xs px-2 py-1 rounded ${ 
-            data.status === 'critical'
-              ? 'bg-error/10 text-error'
-              : 'bg-warning/10 text-warning'
-          }`}>
+          <div
+            className={`mt-3 text-xs px-2 py-1 rounded cursor-help ${ 
+              data.status === 'critical'
+                ? 'bg-error/10 text-error'
+                : 'bg-warning/10 text-warning'
+            }`}
+            title={statusTooltip || undefined}
+          >
             Status: {data.status}
           </div>
         )}
