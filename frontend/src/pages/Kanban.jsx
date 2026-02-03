@@ -200,8 +200,9 @@ function KanbanCard({ workflow, isExecuting, onDragStart, onDragEnd, onClick, on
   };
 
   const statusColor = getStatusColor(workflow.status);
-  // Use the border color for the top accent
-  const topAccentColor = statusColor.borderStrip || 'border-border';
+  const isCompleted = workflow.status === 'completed';
+  // Use the border color for the top accent, but skip for completed items
+  const topAccentColor = isCompleted ? '' : `border-t-[3px] ${statusColor.borderStrip || 'border-border'}`;
 
   return (
     <div
@@ -209,7 +210,7 @@ function KanbanCard({ workflow, isExecuting, onDragStart, onDragEnd, onClick, on
       onDragStart={handleDragStart}
       onDragEnd={onDragEnd}
       onClick={onClick}
-      className={`group relative flex flex-col gap-3 rounded-lg border border-border bg-card p-3.5 shadow-sm transition-all hover:shadow-md hover:border-primary/30 hover:-translate-y-0.5 cursor-grab active:cursor-grabbing border-t-[3px] ${topAccentColor} ${
+      className={`group relative flex flex-col gap-3 rounded-lg border border-border bg-card p-3.5 shadow-sm transition-all hover:shadow-md hover:border-primary/30 hover:-translate-y-0.5 cursor-grab active:cursor-grabbing ${topAccentColor} ${
         isExecuting 
           ? 'shadow-info/10 ring-1 ring-info/20' 
           : ''
