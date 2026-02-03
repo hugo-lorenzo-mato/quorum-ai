@@ -315,13 +315,13 @@ function EngineControls() {
   };
 
   return (
-    <div className="flex flex-col items-center gap-3 w-full sm:w-auto sm:flex-row sm:items-center sm:gap-4 rounded-xl border border-border bg-card/50 glass px-4 py-3">
+    <div className="flex items-center justify-between sm:justify-start gap-4 rounded-xl border border-border bg-card/50 glass px-4 py-2 sm:py-3 w-full sm:w-auto">
       {/* Engine toggle */}
-      <div className="flex items-center justify-between sm:justify-start gap-3 w-full sm:w-auto">
+      <div className="flex items-center gap-3">
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium text-foreground">Kanban engine</span>
           {engine.enabled && (
-            <span className="text-xs bg-success/10 text-success px-2 py-0.5 rounded-full">
+            <span className="hidden sm:inline-flex text-xs bg-success/10 text-success px-2 py-0.5 rounded-full">
               Enabled
             </span>
           )}
@@ -344,8 +344,8 @@ function EngineControls() {
         </button>
       </div>
 
-      {/* Status indicators */}
-      <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 text-sm w-full sm:w-auto">
+      {/* Status indicators - Hidden on mobile for cleaner look */}
+      <div className="hidden sm:flex flex-wrap items-center gap-2 text-sm">
         {engine.currentWorkflowId && (
           <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-info/10 text-info text-xs font-medium">
             <span className="w-1.5 h-1.5 bg-info rounded-full animate-pulse" aria-hidden="true" />
@@ -373,14 +373,14 @@ function EngineControls() {
 // Filter Component
 function KanbanFilters({ filter, setFilter }) {
   return (
-    <div className="relative w-full sm:w-auto">
+    <div className="relative w-full sm:w-64">
       <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
       <input
         type="text"
         placeholder="Filter workflows..."
         value={filter}
         onChange={(e) => setFilter(e.target.value)}
-        className="h-9 w-full sm:w-64 pl-9 pr-4 rounded-lg border border-border bg-background text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/20 transition-all"
+        className="h-10 w-full pl-9 pr-4 rounded-lg border border-border bg-background text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/20 transition-all"
       />
     </div>
   );
@@ -508,7 +508,7 @@ export default function Kanban() {
             Visualize and manage workflow execution
           </p>
         </div>
-        <div className="flex flex-col items-center gap-3 w-full lg:w-auto lg:flex-row">
+        <div className="flex flex-col items-stretch sm:flex-row sm:items-center gap-3 w-full lg:w-auto">
           <KanbanFilters filter={filter} setFilter={setFilter} />
           <EngineControls />
         </div>

@@ -23,6 +23,12 @@ export default function MobileBottomNav() {
 
   useEffect(() => {
     const controlNavbar = () => {
+      // Always show navbar on Chat and Kanban to prevent layout gaps
+      if (['/chat', '/kanban'].some(path => location.pathname.startsWith(path))) {
+        setIsVisible(true);
+        return;
+      }
+
       if (typeof window !== 'undefined') {
         const currentScrollY = window.scrollY;
         
@@ -37,11 +43,14 @@ export default function MobileBottomNav() {
       }
     };
 
+    // Initial check
+    controlNavbar();
+
     window.addEventListener('scroll', controlNavbar);
     return () => {
       window.removeEventListener('scroll', controlNavbar);
     };
-  }, []);
+  }, [location.pathname]);
 
   return (
     <nav 
