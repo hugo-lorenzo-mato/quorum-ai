@@ -192,8 +192,6 @@ function SessionItem({ session, isActive, onClick, onDelete, onRename }) {
   );
 }
 
-// Simplified - sessions now use defaults, agent/model selected per-message
-
 function EmptyChat({ onCreateSession }) {
   return (
     <div className="flex-1 flex items-center justify-center">
@@ -261,9 +259,9 @@ export default function Chat() {
   };
 
   return (
-    <div className="h-[calc(100dvh-8rem)] flex gap-4 animate-fade-in">
+    <div className="flex flex-col md:flex-row h-[calc(100vh-4rem)] md:h-[calc(100vh-5rem)] md:gap-4 animate-fade-in">
       {/* Sessions sidebar */}
-      <div className={`w-full md:w-72 flex-shrink-0 flex flex-col gap-4 ${activeSession ? 'hidden md:flex' : 'flex'}`}>
+      <div className={`w-full md:w-72 flex-shrink-0 flex flex-col gap-4 p-4 md:p-0 ${activeSession ? 'hidden md:flex' : 'flex'}`}>
         <button
           onClick={handleCreateSession}
           disabled={loading}
@@ -292,11 +290,11 @@ export default function Chat() {
       </div>
 
       {/* Chat area */}
-      <div className={`flex-1 flex flex-col rounded-xl border border-border bg-card overflow-hidden ${!activeSession ? 'hidden md:flex' : 'flex'}`}>
+      <div className={`flex-1 flex flex-col bg-background md:bg-card md:border md:border-border md:rounded-xl overflow-hidden ${!activeSession ? 'hidden md:flex' : 'flex'} w-full`}>
         {activeSession ? (
           <>
             {/* Header */}
-            <div className="px-4 md:px-6 py-4 border-b border-border flex items-center justify-between gap-3">
+            <div className="px-4 py-3 md:px-6 md:py-4 border-b border-border bg-card/50 backdrop-blur-sm z-10 flex items-center justify-between gap-3 shrink-0">
               <div className="flex items-center gap-3 overflow-hidden">
                 <button 
                   onClick={handleBackToList}
@@ -325,7 +323,7 @@ export default function Chat() {
             </div>
 
             {/* Messages */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-background">
+            <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 bg-background w-full">
               {activeMessages.length > 0 ? (
                 <>
                   {activeMessages.map((message, index) => (
@@ -348,11 +346,11 @@ export default function Chat() {
                   </div>
                 </div>
               )}
-              <div ref={messagesEndRef} />
+              <div ref={messagesEndRef} className="h-4" />
             </div>
 
             {/* Input */}
-            <div className="p-4 border-t border-border bg-card">
+            <div className="p-4 border-t border-border bg-card/50 backdrop-blur-sm shrink-0 w-full">
               {error && (
                 <div className="mb-3 p-3 bg-destructive/10 text-destructive text-sm rounded-lg flex items-center justify-between">
                   <span>{error}</span>
@@ -398,14 +396,14 @@ export default function Chat() {
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSend(e)}
-                  placeholder={`Message ${currentAgent}... (use @filename to reference files)`}
+                  placeholder={`Message ${currentAgent}...`}
                   disabled={sending}
-                  className="flex-1 h-10 px-4 border border-input rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background disabled:opacity-50 transition-all"
+                  className="flex-1 h-12 md:h-10 px-4 border border-input rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background disabled:opacity-50 transition-all text-base"
                 />
                 <button
                   type="submit"
                   disabled={sending || !input.trim()}
-                  className="h-10 px-4 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                  className="h-12 md:h-10 px-4 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
                 >
                   {sending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
                 </button>

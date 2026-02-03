@@ -22,19 +22,19 @@ const useUIStore = create(
         set({ sidebarOpen: open });
       },
 
-      // Theme (supports: light, dark, midnight, system)
+      // Theme (supports: light, dark, midnight, sepia, high-contrast, dracula, nord, ocean, system)
       setTheme: (theme) => {
         set({ theme });
         const root = document.documentElement;
-        root.classList.remove('dark', 'midnight');
+        // Remove all theme classes
+        root.classList.remove('dark', 'midnight', 'sepia', 'high-contrast', 'dracula', 'nord', 'ocean');
 
         if (theme === 'system') {
           const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
           if (prefersDark) root.classList.add('dark');
-        } else if (theme === 'dark') {
-          root.classList.add('dark');
-        } else if (theme === 'midnight') {
-          root.classList.add('midnight');
+        } else if (theme !== 'light') {
+          // For 'dark', 'midnight', 'sepia', 'high-contrast', 'dracula', 'nord', 'ocean', add the class directly
+          root.classList.add(theme);
         }
       },
 

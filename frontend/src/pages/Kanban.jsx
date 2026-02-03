@@ -2,10 +2,74 @@ import { useEffect, useRef, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useKanbanStore, KANBAN_COLUMNS } from '../stores';
 import { getStatusColor, KANBAN_COLUMN_COLORS } from '../lib/theme';
-import { Search, ChevronLeft, ChevronRight, MoreHorizontal, X } from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight, X, ChevronDown } from 'lucide-react';
+
+// Bottom Sheet Component for Mobile Actions
+function MobileActionSheet({ isOpen, onClose, workflow, onMoveTo }) {
+  if (!isOpen || !workflow) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center md:hidden">
+      {/* Backdrop */}
+      <div 
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in"
+        onClick={onClose}
+      />
+      
+      {/* Sheet Content */}
+      <div className="relative w-full bg-card rounded-t-2xl shadow-xl border-t border-border p-4 animate-fade-up max-w-md mx-auto">
+        <div className="w-12 h-1.5 bg-muted rounded-full mx-auto mb-6" />
+        
+        <div className="mb-6">
+          <h3 className="text-lg font-semibold text-foreground mb-1">Move Workflow</h3>
+          <p className="text-sm text-muted-foreground line-clamp-1">
+            {workflow.title || workflow.id}
+          </p>
+        </div>
+
+        <div className="space-y-2.5">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Select Status</p>
+          {KANBAN_COLUMNS.map(col => {
+             const isCurrent = workflow.kanban_column === col.id;
+             const accent = KANBAN_COLUMN_COLORS[col.id] || KANBAN_COLUMN_COLORS.default;
+             
+             return (
+               <button
+                 key={col.id}
+                 onClick={() => {
+                   if (!isCurrent) {
+                     onMoveTo(col.id);
+                     onClose();
+                   }
+                 }}
+                 disabled={isCurrent}
+                 className={`w-full flex items-center gap-3 p-3 rounded-xl border transition-all ${
+                   isCurrent 
+                     ? 'bg-secondary/50 border-transparent opacity-50 cursor-default' 
+                     : 'bg-background border-border hover:bg-accent active:scale-[0.98]'
+                 }`}
+               >
+                 <span className={`w-3 h-3 rounded-full ${accent.dot}`} />
+                 <span className="font-medium text-foreground">{col.name}</span>
+                 {isCurrent && <span className="ml-auto text-xs text-muted-foreground">(Current)</span>}
+               </button>
+             );
+          })}
+        </div>
+
+        <button 
+          onClick={onClose}
+          className="w-full mt-6 p-3 rounded-xl font-medium text-muted-foreground hover:bg-secondary transition-colors"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
 
 // Column component
-function KanbanColumn({ column, workflows, isMobile }) {
+function KanbanColumn({ column, workflows, isMobile, onOpenMobileMenu }) {
   const {
     moveWorkflow,
     setDraggedWorkflow,
@@ -108,6 +172,7 @@ function KanbanColumn({ column, workflows, isMobile }) {
             onDragEnd={() => clearDraggedWorkflow()}
             onClick={() => navigate(`/workflows/${workflow.id}`)}
             onMoveTo={(targetCol) => moveWorkflow(workflow.id, targetCol)}
+            onOpenMenu={() => onOpenMobileMenu(workflow)}
           />
         ))}
         {workflows.length === 0 && (
@@ -121,9 +186,7 @@ function KanbanColumn({ column, workflows, isMobile }) {
 }
 
 // Card component
-function KanbanCard({ workflow, isExecuting, onDragStart, onDragEnd, onClick, onMoveTo }) {
-  const [showMoveMenu, setShowMoveMenu] = useState(false);
-  
+function KanbanCard({ workflow, isExecuting, onDragStart, onDragEnd, onClick, onOpenMenu }) {
   const handleDragStart = (e) => {
     e.dataTransfer.setData('text/plain', workflow.id);
     e.dataTransfer.effectAllowed = 'move';
@@ -166,20 +229,21 @@ function KanbanCard({ workflow, isExecuting, onDragStart, onDragEnd, onClick, on
 
       {/* Metadata row */}
       <div className="flex items-center justify-between gap-2 text-xs">
-        <span className={`inline-flex items-center px-2 py-0.5 rounded-full font-medium ${statusColor.bg} ${statusColor.text}`}>
+        {/* Status Badge - Interactive Trigger for Mobile */}
+        <button 
+          onClick={(e) => {
+            // Only stop propagation on mobile to open menu
+            if (window.innerWidth < 768) {
+              e.stopPropagation();
+              onOpenMenu();
+            }
+          }}
+          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-medium transition-transform active:scale-95 ${statusColor.bg} ${statusColor.text}`}
+        >
           {workflow.status || 'pending'}
-        </span>
+          <ChevronDown className="w-3 h-3 md:hidden opacity-50" />
+        </button>
         
-        {/* Mobile: Move Menu Button */}
-        <div className="md:hidden">
-           <button 
-             onClick={(e) => { e.stopPropagation(); setShowMoveMenu(!showMoveMenu); }}
-             className={`p-1 rounded hover:bg-accent ${showMoveMenu ? 'bg-accent text-foreground' : 'text-muted-foreground'}`}
-           >
-             {showMoveMenu ? <X className="w-4 h-4" /> : <MoreHorizontal className="w-4 h-4" />}
-           </button>
-        </div>
-
         {/* Desktop: Details */}
         <div className="hidden md:flex items-center gap-2 text-muted-foreground">
           {workflow.kanban_execution_count > 0 && (
@@ -215,27 +279,6 @@ function KanbanCard({ workflow, isExecuting, onDragStart, onDragEnd, onClick, on
       {workflow.task_count > 0 && (
         <div className="mt-2 text-xs text-muted-foreground font-mono">
           {workflow.task_count} tasks
-        </div>
-      )}
-      
-      {/* Mobile Move Actions Overlay */}
-      {showMoveMenu && (
-        <div className="absolute inset-0 bg-card/95 backdrop-blur-sm z-10 flex flex-col justify-center p-4 animate-fade-in" onClick={(e) => e.stopPropagation()}>
-          <p className="text-xs font-medium text-muted-foreground mb-2 text-center uppercase tracking-wide">Move to...</p>
-          <div className="grid grid-cols-2 gap-2">
-            {KANBAN_COLUMNS.map(col => (
-               workflow.kanban_column !== col.id && (
-                 <button
-                   key={col.id}
-                   onClick={() => { onMoveTo(col.id); setShowMoveMenu(false); }}
-                   className="flex items-center justify-center gap-1 p-2 rounded-lg bg-secondary/50 hover:bg-secondary text-xs font-medium transition-colors border border-border"
-                 >
-                   <span className={`w-2 h-2 rounded-full ${KANBAN_COLUMN_COLORS[col.id]?.dot || 'bg-muted'}`} />
-                   {col.name}
-                 </button>
-               )
-            ))}
-          </div>
         </div>
       )}
     </div>
@@ -390,6 +433,7 @@ export default function Kanban() {
   const {
     columns,
     fetchBoard,
+    moveWorkflow,
     loading,
     error,
     clearError,
@@ -397,29 +441,33 @@ export default function Kanban() {
 
   const [filter, setFilter] = useState('');
   const [activeColIndex, setActiveColIndex] = useState(0);
+  
+  // Mobile Menu State
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [selectedWorkflow, setSelectedWorkflow] = useState(null);
+  
   const scrollRef = useRef(null);
 
   useEffect(() => {
     fetchBoard();
   }, [fetchBoard]);
 
+  const handleOpenMobileMenu = (workflow) => {
+    setSelectedWorkflow(workflow);
+    setMobileMenuOpen(true);
+  };
+
+  const handleMoveFromSheet = (targetColumnId) => {
+    if (selectedWorkflow) {
+      moveWorkflow(selectedWorkflow.id, targetColumnId);
+    }
+  };
+
   // Handle scroll to update active index
   const handleScroll = (e) => {
     const container = e.target;
     const scrollLeft = container.scrollLeft;
     const width = container.clientWidth;
-    // Simple logic: index = round(scrollLeft / itemWidth). 
-    // Since item width is approx width, and gap, we can approximate.
-    // Better: use center point.
-    // Center of view = scrollLeft + width / 2
-    // We assume each item takes ~85vw + gap.
-    // Actually, finding the element closest to center is best but expensive on scroll.
-    // Math.round(scrollLeft / (width * 0.85)) roughly.
-    // Let's rely on scrollWidth / items logic if possible, or just rough estimate.
-    // snap-center makes items centered.
-    // index = Math.round(scrollLeft / (itemWidth + gap))
-    // itemWidth = 85vw. Gap = 1rem?
-    // Let's try simple percentage.
     const totalWidth = container.scrollWidth;
     const progress = (scrollLeft + width / 2) / totalWidth;
     const index = Math.floor(progress * KANBAN_COLUMNS.length);
@@ -520,6 +568,7 @@ export default function Kanban() {
               key={column.id}
               column={column}
               workflows={filteredColumns[column.id] || []}
+              onOpenMobileMenu={handleOpenMobileMenu}
             />
           ))}
         </div>
@@ -536,10 +585,19 @@ export default function Kanban() {
               column={column}
               workflows={filteredColumns[column.id] || []}
               isMobile={true}
+              onOpenMobileMenu={handleOpenMobileMenu}
             />
           ))}
         </div>
       </div>
+
+      {/* Mobile Action Sheet */}
+      <MobileActionSheet 
+        isOpen={mobileMenuOpen}
+        onClose={() => setMobileMenuOpen(false)}
+        workflow={selectedWorkflow}
+        onMoveTo={handleMoveFromSheet}
+      />
     </div>
   );
 }

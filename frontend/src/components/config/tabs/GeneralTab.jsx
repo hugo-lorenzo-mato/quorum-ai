@@ -1,4 +1,6 @@
 import { useConfigField, useConfigSelect } from '../../../hooks/useConfigField';
+import { useUIStore } from '../../../stores';
+import { Check, Monitor, Moon, Sun, Laptop } from 'lucide-react';
 import {
   SettingSection,
   SelectSetting,
@@ -7,12 +9,85 @@ import {
   ToggleSetting,
 } from '../index';
 
+const THEMES = [
+  { id: 'system', name: 'System', icon: Laptop, colors: ['#a1a1aa', '#52525b'] },
+  { id: 'light', name: 'Light', icon: Sun, colors: ['#ffffff', '#f4f4f5'] },
+  { id: 'dark', name: 'Dark', icon: Moon, colors: ['#18181b', '#000000'] },
+  { id: 'midnight', name: 'Midnight', colors: ['#000000', '#0a0a0a'] },
+  { id: 'sepia', name: 'Sepia', colors: ['#f5f2e7', '#8c6a48'] },
+  { id: 'dracula', name: 'Dracula', colors: ['#282a36', '#bd93f9'] },
+  { id: 'nord', name: 'Nord', colors: ['#2e3440', '#88c0d0'] },
+  { id: 'ocean', name: 'Ocean', colors: ['#0f172a', '#38bdf8'] },
+];
+
 export function GeneralTab() {
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
+      <AppearanceSection />
       <LogSection />
       <ChatSection />
       <ReportSection />
+    </div>
+  );
+}
+
+function AppearanceSection() {
+  const { theme, setTheme } = useUIStore();
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col gap-1">
+        <h3 className="text-lg font-medium text-foreground">Appearance</h3>
+        <p className="text-sm text-muted-foreground">
+          Customize the look and feel of the application.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 gap-4">
+        {THEMES.map((t) => {
+          const isActive = theme === t.id;
+          const Icon = t.icon;
+
+          return (
+            <button
+              key={t.id}
+              onClick={() => setTheme(t.id)}
+              className={`
+                group relative flex flex-col items-center gap-3 p-4 rounded-xl border-2 transition-all
+                hover:bg-secondary/50 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2
+                ${isActive 
+                  ? 'border-primary bg-secondary/30' 
+                  : 'border-transparent bg-card hover:border-border'
+                }
+              `}
+            >
+              {/* Theme Preview Circle */}
+              <div 
+                className="w-12 h-12 rounded-full shadow-sm flex items-center justify-center border border-border/50 overflow-hidden relative"
+                style={{ 
+                  background: `linear-gradient(135deg, ${t.colors[0]} 50%, ${t.colors[1]} 50%)`
+                }}
+              >
+                {Icon && (
+                  <Icon className={`w-5 h-5 relative z-10 mix-blend-difference text-white/90 drop-shadow-md`} />
+                )}
+              </div>
+
+              {/* Label */}
+              <div className="flex items-center gap-2">
+                <span className={`text-sm font-medium ${isActive ? 'text-primary' : 'text-muted-foreground group-hover:text-foreground'}`}>
+                  {t.name}
+                </span>
+                {isActive && (
+                  <div className="w-4 h-4 rounded-full bg-primary flex items-center justify-center">
+                    <Check className="w-2.5 h-2.5 text-primary-foreground" />
+                  </div>
+                )}
+              </div>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

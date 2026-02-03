@@ -17,6 +17,8 @@ import {
   KanbanSquare,
   ChevronRight,
   Command,
+  Coffee,
+  Contrast,
 } from 'lucide-react';
 
 const navItems = [
@@ -78,10 +80,11 @@ function Breadcrumbs() {
 
 function ThemeSwitcher() {
   const { theme, setTheme } = useUIStore();
-
   const themes = [
     { value: 'light', icon: Sun, label: 'Light' },
     { value: 'dark', icon: Moon, label: 'Dark' },
+    { value: 'sepia', icon: Coffee, label: 'Sepia' },
+    { value: 'high-contrast', icon: Contrast, label: 'High Contrast' },
     { value: 'system', icon: Monitor, label: 'System' },
   ];
 

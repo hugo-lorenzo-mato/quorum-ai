@@ -22,6 +22,9 @@ import {
   Layers,
   MonitorDot,
   Thermometer,
+  ChevronDown,
+  ChevronUp,
+  FileText,
 } from 'lucide-react';
 
 // Get workflow display title
@@ -45,7 +48,7 @@ function BentoCard({ children, className = '' }) {
 }
 
 // Compact Stat Card
-function StatCard({ title, value, subtitle, icon: Icon, color = 'primary' }) {
+function StatCard({ title, value, subtitle, icon: Icon, color = 'primary', className = '' }) {
   const colorClasses = {
     primary: 'bg-primary/10 text-primary',
     success: 'bg-success/10 text-success',
@@ -55,7 +58,7 @@ function StatCard({ title, value, subtitle, icon: Icon, color = 'primary' }) {
   };
 
   return (
-    <BentoCard>
+    <BentoCard className={className}>
       <div className="flex items-start gap-3">
         <div className={`p-2 rounded-lg ${colorClasses[color]}`}>
           <Icon className="w-4 h-4" />
@@ -139,6 +142,20 @@ function MetricRow({ icon: Icon, label, value, subtext, progress, color = 'prima
 
 // System Resources Card - Complete view with Process, Machine, and Hardware info
 function SystemResources({ data, loading, onRefresh, timeAgo }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  // Auto-expand on desktop
+  useEffect(() => {
+    const checkWidth = () => {
+      if (window.innerWidth >= 768) {
+        setIsExpanded(true);
+      }
+    };
+    checkWidth();
+    window.addEventListener('resize', checkWidth);
+    return () => window.removeEventListener('resize', checkWidth);
+  }, []);
+
   if (loading && !data) {
     return (
       <BentoCard className="md:col-span-2">
@@ -189,148 +206,169 @@ function SystemResources({ data, loading, onRefresh, timeAgo }) {
   const gpus = system.gpu_infos || [];
 
   return (
-    <BentoCard className="md:col-span-2">
+    <BentoCard className="md:col-span-2 transition-all duration-300">
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-medium text-foreground flex items-center gap-2">
-          <Server className="w-4 h-4 text-muted-foreground" />
-          System Resources
-        </h3>
+      <div 
+        className="flex items-center justify-between mb-1 md:mb-4 cursor-pointer md:cursor-default py-1 md:py-0"
+        onClick={() => window.innerWidth < 768 && setIsExpanded(!isExpanded)}
+      >
+        <div className="flex items-center gap-2 md:gap-0 flex-1">
+          <h3 className="text-sm font-medium text-foreground flex items-center gap-2">
+            <Server className="w-4 h-4 text-muted-foreground" />
+            System Resources
+          </h3>
+          {/* Mobile summary when collapsed */}
+          {!isExpanded && (
+            <span className="md:hidden text-xs text-muted-foreground ml-2 truncate">
+              CPU: {system.cpu_percent?.toFixed(0)}% · RAM: {(system.mem_used_mb / 1024)?.toFixed(1)}GB
+            </span>
+          )}
+        </div>
+
         <div className="flex items-center gap-2">
           {timeAgo && (
-            <span className="text-[10px] text-muted-foreground">{timeAgo}</span>
+            <span className="text-[10px] text-muted-foreground hidden sm:inline">{timeAgo}</span>
           )}
           <button
-            onClick={onRefresh}
-            className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRefresh();
+            }}
+            className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground z-10"
             title="Refresh"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
           </button>
+          {/* Mobile Chevron */}
+          <div className="md:hidden text-muted-foreground ml-1">
+            {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
-        {/* Quorum Process Section */}
-        <div className="space-y-3">
-          <h4 className="text-xs font-semibold text-info flex items-center gap-1.5 uppercase tracking-wide">
-            <Box className="w-3 h-3" />
-            Quorum Process
-          </h4>
+      <div className={`${isExpanded ? 'block animate-fade-in' : 'hidden md:block'}`}>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 mt-4 md:mt-0">
+          {/* Quorum Process Section */}
+          <div className="space-y-3">
+            <h4 className="text-xs font-semibold text-info flex items-center gap-1.5 uppercase tracking-wide">
+              <Box className="w-3 h-3" />
+              Quorum Process
+            </h4>
 
-          <MetricRow
-            icon={MemoryStick}
-            label="Heap Memory"
-            value={`${heapMB.toFixed(1)} MB`}
-            progress={Math.min(heapMB / 512 * 100, 100)}
-            color="auto"
-          />
+            <MetricRow
+              icon={MemoryStick}
+              label="Heap Memory"
+              value={`${heapMB.toFixed(1)} MB`}
+              progress={Math.min(heapMB / 512 * 100, 100)}
+              color="auto"
+            />
 
-          <MetricRow
-            icon={Layers}
-            label="Goroutines"
-            value={goroutines.toString()}
-          />
+            <MetricRow
+              icon={Layers}
+              label="Goroutines"
+              value={goroutines.toString()}
+            />
 
-          <MetricRow
-            icon={Timer}
-            label="Uptime"
-            value={formatUptime(uptime)}
-          />
-        </div>
-
-        {/* Machine Section */}
-        <div className="space-y-3">
-          <h4 className="text-xs font-semibold text-warning flex items-center gap-1.5 uppercase tracking-wide">
-            <MonitorDot className="w-3 h-3" />
-            Machine
-          </h4>
-
-          <MetricRow
-            icon={Cpu}
-            label="CPU"
-            value={`${system.cpu_percent?.toFixed(1) || 0}%`}
-            subtext={`${system.cpu_cores || 0}C / ${system.cpu_threads || 0}T`}
-            progress={system.cpu_percent || 0}
-            color="auto"
-          />
-
-          <MetricRow
-            icon={MemoryStick}
-            label="RAM"
-            value={`${(system.mem_used_mb / 1024)?.toFixed(1) || 0} / ${(system.mem_total_mb / 1024)?.toFixed(1) || 0} GB`}
-            progress={system.mem_percent || 0}
-            color="auto"
-          />
-
-          <MetricRow
-            icon={HardDrive}
-            label="Disk"
-            value={`${system.disk_used_gb?.toFixed(0) || 0} / ${system.disk_total_gb?.toFixed(0) || 0} GB`}
-            progress={system.disk_percent || 0}
-            color="auto"
-          />
-
-          <MetricRow
-            icon={Gauge}
-            label="Load Avg"
-            value={loadAvg}
-          />
-        </div>
-      </div>
-
-      {/* Hardware Info Section */}
-      <div className="mt-4 pt-3 border-t border-border">
-        <h4 className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wide">
-          Hardware
-        </h4>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <Cpu className="w-3 h-3" />
-            <span className="truncate" title={system.cpu_model || 'Unknown'}>
-              {system.cpu_model || 'Unknown CPU'}
-            </span>
+            <MetricRow
+              icon={Timer}
+              label="Uptime"
+              value={formatUptime(uptime)}
+            />
           </div>
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <MemoryStick className="w-3 h-3" />
-            <span>{(system.mem_total_mb / 1024)?.toFixed(1) || 0} GB RAM</span>
-          </div>
-          {gpus.length > 0 ? (
-            gpus.map((gpu, i) => (
-              <div key={i} className="flex items-center gap-2 text-muted-foreground md:col-span-2">
-                <MonitorDot className="w-3 h-3" />
-                <span className="truncate" title={gpu.name}>
-                  {gpu.name}
-                  {gpu.util_valid && ` · ${gpu.util_percent?.toFixed(0)}%`}
-                  {gpu.mem_valid && ` · ${(gpu.mem_used_mb / 1024)?.toFixed(1)}/${(gpu.mem_total_mb / 1024)?.toFixed(1)} GB`}
-                  {gpu.temp_valid && (
-                    <span className="inline-flex items-center gap-0.5 ml-1">
-                      <Thermometer className="w-2.5 h-2.5" />
-                      {gpu.temp_c?.toFixed(0)}°C
-                    </span>
-                  )}
-                </span>
-              </div>
-            ))
-          ) : (
-            <div className="flex items-center gap-2 text-muted-foreground">
+
+          {/* Machine Section */}
+          <div className="space-y-3">
+            <h4 className="text-xs font-semibold text-warning flex items-center gap-1.5 uppercase tracking-wide">
               <MonitorDot className="w-3 h-3" />
-              <span>No GPU detected</span>
-            </div>
-          )}
-        </div>
-      </div>
+              Machine
+            </h4>
 
-      {/* Status warning */}
-      {data.status && data.status !== 'healthy' && (
-        <div className={`mt-3 text-xs px-2 py-1 rounded ${
-          data.status === 'critical'
-            ? 'bg-error/10 text-error'
-            : 'bg-warning/10 text-warning'
-        }`}>
-          Status: {data.status}
+            <MetricRow
+              icon={Cpu}
+              label="CPU"
+              value={`${system.cpu_percent?.toFixed(1) || 0}%`}
+              subtext={`${system.cpu_cores || 0}C / ${system.cpu_threads || 0}T`}
+              progress={system.cpu_percent || 0}
+              color="auto"
+            />
+
+            <MetricRow
+              icon={MemoryStick}
+              label="RAM"
+              value={`${(system.mem_used_mb / 1024)?.toFixed(1) || 0} / ${(system.mem_total_mb / 1024)?.toFixed(1) || 0} GB`}
+              progress={system.mem_percent || 0}
+              color="auto"
+            />
+
+            <MetricRow
+              icon={HardDrive}
+              label="Disk"
+              value={`${system.disk_used_gb?.toFixed(0) || 0} / ${system.disk_total_gb?.toFixed(0) || 0} GB`}
+              progress={system.disk_percent || 0}
+              color="auto"
+            />
+
+            <MetricRow
+              icon={Gauge}
+              label="Load Avg"
+              value={loadAvg}
+            />
+          </div>
         </div>
-      )}
+
+        {/* Hardware Info Section */}
+        <div className="mt-4 pt-3 border-t border-border">
+          <h4 className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wide">
+            Hardware
+          </h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <Cpu className="w-3 h-3" />
+              <span className="truncate" title={system.cpu_model || 'Unknown'}>
+                {system.cpu_model || 'Unknown CPU'}
+              </span>
+            </div>
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <MemoryStick className="w-3 h-3" />
+              <span>{(system.mem_total_mb / 1024)?.toFixed(1) || 0} GB RAM</span>
+            </div>
+            {gpus.length > 0 ? (
+              gpus.map((gpu, i) => (
+                <div key={i} className="flex items-center gap-2 text-muted-foreground md:col-span-2">
+                  <MonitorDot className="w-3 h-3" />
+                  <span className="truncate" title={gpu.name}>
+                    {gpu.name}
+                    {gpu.util_valid && ` · ${gpu.util_percent?.toFixed(0)}%`}
+                    {gpu.mem_valid && ` · ${(gpu.mem_used_mb / 1024)?.toFixed(1)}/${(gpu.mem_total_mb / 1024)?.toFixed(1)} GB`}
+                    {gpu.temp_valid && (
+                      <span className="inline-flex items-center gap-0.5 ml-1">
+                        <Thermometer className="w-2.5 h-2.5" />
+                        {gpu.temp_c?.toFixed(0)}°C
+                      </span>
+                    )}
+                  </span>
+                </div>
+              ))
+            ) : (
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <MonitorDot className="w-3 h-3" />
+                <span>No GPU detected</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Status warning */}
+        {data.status && data.status !== 'healthy' && (
+          <div className={`mt-3 text-xs px-2 py-1 rounded ${
+            data.status === 'critical'
+              ? 'bg-error/10 text-error'
+              : 'bg-warning/10 text-warning'
+          }`}>
+            Status: {data.status}
+          </div>
+        )}
+      </div>
     </BentoCard>
   );
 }
@@ -411,7 +449,6 @@ function ActiveWorkflowBanner({ workflow }) {
     </div>
   );
 }
-
 // Empty State
 function EmptyState() {
   return (
@@ -423,12 +460,22 @@ function EmptyState() {
       <p className="text-sm text-muted-foreground mb-4 max-w-sm">
         Create your first workflow to start automating tasks with AI agents.
       </p>
-      <Link
-        to="/workflows/new"
-        className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
-      >
-        Create Workflow
-      </Link>
+      <div className="flex items-center gap-3">
+        <Link
+          to="/templates"
+          className="px-4 py-2 rounded-lg border border-border text-foreground text-sm font-medium hover:bg-accent transition-colors flex items-center gap-2"
+        >
+          <FileText className="w-4 h-4" />
+          Templates
+        </Link>
+        <Link
+          to="/workflows/new"
+          className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors flex items-center gap-2"
+        >
+          <Zap className="w-4 h-4" />
+          Create Workflow
+        </Link>
+      </div>
     </div>
   );
 }
@@ -449,8 +496,6 @@ function LoadingSkeleton() {
     </div>
   );
 }
-
-// Custom hook for system resources
 function useSystemResources() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -552,14 +597,15 @@ export default function Dashboard() {
         <ActiveWorkflowBanner workflow={activeWorkflow} />
       )}
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      {/* Stats Grid - Mobile Carousel, Desktop Grid */}
+      <div className="flex overflow-x-auto pb-4 -mx-3 px-3 sm:mx-0 sm:px-0 gap-3 snap-x md:grid md:grid-cols-2 lg:grid-cols-4 md:gap-3 md:overflow-visible md:pb-0 scrollbar-none md:scrollbar-default">
         <StatCard
           title="Total Workflows"
           value={workflows.length}
           subtitle="All time"
           icon={GitBranch}
           color="primary"
+          className="min-w-[160px] md:min-w-0 snap-center"
         />
         <StatCard
           title="Completed"
@@ -567,6 +613,7 @@ export default function Dashboard() {
           subtitle={`${Math.round((completedCount / Math.max(workflows.length, 1)) * 100)}% success`}
           icon={CheckCircle2}
           color="success"
+          className="min-w-[160px] md:min-w-0 snap-center"
         />
         <StatCard
           title="Running"
@@ -574,6 +621,7 @@ export default function Dashboard() {
           subtitle="Active now"
           icon={Activity}
           color="info"
+          className="min-w-[160px] md:min-w-0 snap-center"
         />
         <StatCard
           title="Failed"
@@ -581,6 +629,7 @@ export default function Dashboard() {
           subtitle="Needs attention"
           icon={XCircle}
           color="error"
+          className="min-w-[160px] md:min-w-0 snap-center"
         />
       </div>
 

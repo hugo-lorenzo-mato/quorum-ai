@@ -6,7 +6,7 @@
 @import "tailwindcss";
 
 /* Tailwind v4: align `dark:` variant with our `.dark`/`.midnight` theme classes */
-@custom-variant dark (:is(.dark, .midnight) &);
+@custom-variant dark (:is(.dark, .midnight, .dracula, .nord, .ocean) &);
 
 /* Tailwind v4 Theme Configuration - Shadcn/Vercel Style */
 @theme {
@@ -94,7 +94,7 @@
   --ring-color: #d4d4d8;
 }
 
-/* Midnight Mode - Even darker for OLED */
+/* Midnight Mode - Pure Black (OLED) */
 .midnight {
   --bg: #000000;
   --fg: #fafafa;
@@ -115,6 +115,98 @@
   --border-color: #18181b;
   --input-color: #18181b;
   --ring-color: #d4d4d8;
+}
+
+/* Sepia Mode - Improved for readability (Warm Paper) */
+.sepia {
+  --bg: #f5f2e7; /* Warmer, less yellow */
+  --fg: #433422; /* Dark brown for high contrast */
+  --card-bg: #eae6d9;
+  --card-fg: #433422;
+  --popover-bg: #eae6d9;
+  --popover-fg: #433422;
+  --primary-bg: #8c6a48;
+  --primary-fg: #ffffff;
+  --secondary-bg: #e0dcc7;
+  --secondary-fg: #433422;
+  --muted-bg: #d3cbb7;
+  --muted-fg: #746656;
+  --accent-bg: #e0dcc7;
+  --accent-fg: #433422;
+  --destructive-bg: #a63a26;
+  --destructive-fg: #ffffff;
+  --border-color: #d3cbb7;
+  --input-color: #d3cbb7;
+  --ring-color: #8c6a48;
+}
+
+/* Dracula Mode - High Contrast Neon */
+.dracula {
+  --bg: #282a36;
+  --fg: #f8f8f2;
+  --card-bg: #44475a;
+  --card-fg: #f8f8f2;
+  --popover-bg: #44475a;
+  --popover-fg: #f8f8f2;
+  --primary-bg: #bd93f9; /* Purple */
+  --primary-fg: #282a36;
+  --secondary-bg: #6272a4;
+  --secondary-fg: #f8f8f2;
+  --muted-bg: #6272a4;
+  --muted-fg: #bfbfbf;
+  --accent-bg: #44475a;
+  --accent-fg: #f8f8f2;
+  --destructive-bg: #ff5555;
+  --destructive-fg: #f8f8f2;
+  --border-color: #6272a4;
+  --input-color: #6272a4;
+  --ring-color: #bd93f9;
+}
+
+/* Nord Mode - Arctic Blue/Grey */
+.nord {
+  --bg: #2e3440;
+  --fg: #d8dee9;
+  --card-bg: #3b4252;
+  --card-fg: #eceff4;
+  --popover-bg: #3b4252;
+  --popover-fg: #eceff4;
+  --primary-bg: #88c0d0; /* Cyan */
+  --primary-fg: #2e3440;
+  --secondary-bg: #434c5e;
+  --secondary-fg: #d8dee9;
+  --muted-bg: #434c5e;
+  --muted-fg: #949aae;
+  --accent-bg: #434c5e;
+  --accent-fg: #d8dee9;
+  --destructive-bg: #bf616a;
+  --destructive-fg: #eceff4;
+  --border-color: #4c566a;
+  --input-color: #4c566a;
+  --ring-color: #88c0d0;
+}
+
+/* Ocean Mode - Deep Blue */
+.ocean {
+  --bg: #0f172a; /* Slate 900 */
+  --fg: #e2e8f0;
+  --card-bg: #1e293b; /* Slate 800 */
+  --card-fg: #f1f5f9;
+  --popover-bg: #1e293b;
+  --popover-fg: #f1f5f9;
+  --primary-bg: #38bdf8; /* Sky 400 */
+  --primary-fg: #0f172a;
+  --secondary-bg: #334155; /* Slate 700 */
+  --secondary-fg: #f1f5f9;
+  --muted-bg: #334155;
+  --muted-fg: #94a3b8;
+  --accent-bg: #334155;
+  --accent-fg: #f1f5f9;
+  --destructive-bg: #ef4444;
+  --destructive-fg: #f1f5f9;
+  --border-color: #334155;
+  --input-color: #334155;
+  --ring-color: #38bdf8;
 }
 
 @layer base {

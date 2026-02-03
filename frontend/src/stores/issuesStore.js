@@ -115,6 +115,30 @@ const useIssuesStore = create(
       },
 
       /**
+       * Create a new blank issue
+       */
+      createIssue: () => {
+        const { editedIssues } = get();
+        const newIssue = {
+          _localId: `new-${Date.now()}`,
+          _modified: true,
+          title: '',
+          body: '',
+          labels: [],
+          assignees: [],
+          is_main_issue: false,
+          task_id: null,
+        };
+        
+        set({
+          editedIssues: [newIssue, ...editedIssues],
+          selectedIssueId: newIssue._localId,
+          viewMode: 'edit',
+        });
+        
+        return newIssue._localId;
+      },
+      /**
        * Check if a specific issue has unsaved changes
        */
       hasUnsavedChanges: (id) => {
