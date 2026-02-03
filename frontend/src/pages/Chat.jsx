@@ -263,7 +263,7 @@ export default function Chat() {
   };
 
   return (
-    <div className="flex flex-col md:flex-row m-0 h-[100dvh] md:h-[calc(100vh-5rem)] md:gap-4 animate-fade-in absolute inset-0 md:static bg-background md:bg-transparent z-50 md:z-auto">
+    <div className="flex flex-col md:flex-row m-0 fixed top-14 left-0 right-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] md:static md:h-[calc(100vh-5rem)] md:gap-4 animate-fade-in bg-background md:bg-transparent z-0">
       {/* Sessions sidebar */}
       <div className={`w-full md:w-72 flex-shrink-0 flex flex-col gap-4 p-4 md:p-0 ${activeSession ? 'hidden md:flex' : 'flex h-full'}`}>
         <button
@@ -354,7 +354,7 @@ export default function Chat() {
             </div>
 
             {/* Input */}
-            <div className="shrink-0 w-full border-t border-border bg-card/50 backdrop-blur-sm p-3 pb-[calc(12px+env(safe-area-inset-bottom))] md:p-4">
+            <div className="shrink-0 w-full border-t border-border bg-card/50 backdrop-blur-sm p-3 md:p-4">
               {error && (
                 <div className="mb-3 p-3 bg-destructive/10 text-destructive text-sm rounded-lg flex items-center justify-between">
                   <span>{error}</span>

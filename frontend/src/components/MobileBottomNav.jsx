@@ -54,11 +54,11 @@ export default function MobileBottomNav() {
 
   return (
     <nav 
-      className={`md:hidden fixed bottom-0 left-0 right-0 z-50 h-16 border-t border-border bg-card/80 glass backdrop-blur-xl pb-safe transition-transform duration-300 ease-in-out ${
+      className={`md:hidden fixed bottom-0 left-0 right-0 z-50 h-auto border-t border-border bg-card/80 glass backdrop-blur-xl pb-safe transition-transform duration-300 ease-in-out ${
         isVisible ? 'translate-y-0' : 'translate-y-full'
       }`}
     >
-      <div className="flex h-full items-center justify-around px-2">
+      <div className="flex h-16 items-center justify-around px-2">
         {navItems.map((item) => {
           const isActive = location.pathname === item.path ||
             (item.path !== '/' && location.pathname.startsWith(item.path));
