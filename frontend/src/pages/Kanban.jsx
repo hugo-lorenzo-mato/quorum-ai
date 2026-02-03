@@ -389,16 +389,8 @@ function KanbanFilters({ filter, setFilter }) {
 // Mobile Column Navigator
 function MobileColumnNav({ columns, activeIndex, onChange }) {
   return (
-    <div className="md:hidden flex items-center justify-between bg-card/50 backdrop-blur-md p-2 rounded-lg border border-border mb-4">
-      <button
-        onClick={() => onChange(Math.max(0, activeIndex - 1))}
-        disabled={activeIndex === 0}
-        className="p-2 rounded-md hover:bg-accent disabled:opacity-30 transition-colors"
-      >
-        <ChevronLeft className="w-5 h-5" />
-      </button>
-      
-      <div className="flex gap-1.5 overflow-x-auto scrollbar-none px-2">
+    <div className="md:hidden flex items-center justify-center bg-background/80 backdrop-blur-md p-3 border-b border-border mb-2 sticky top-0 z-20">
+      <div className="flex gap-2 items-center">
         {columns.map((col, idx) => {
           const accent = KANBAN_COLUMN_COLORS[col.id] || KANBAN_COLUMN_COLORS.default;
           const isActive = idx === activeIndex;
@@ -407,24 +399,17 @@ function MobileColumnNav({ columns, activeIndex, onChange }) {
             <button
               key={col.id}
               onClick={() => onChange(idx)}
-              className={`h-2 transition-all rounded-full ${
+              className={`h-1.5 rounded-full transition-all duration-300 ${
                 isActive 
-                  ? `w-8 ${accent.dot.replace('bg-', 'bg-')}` // Use the dot color class
-                  : 'w-2 bg-muted-foreground/30'
+                  ? `w-12 ${accent.dot}` // Active: Longer and colored
+                  : 'w-6 bg-muted hover:bg-muted-foreground/30' // Inactive: Shorter and gray
               }`}
               title={col.name}
+              aria-label={`Go to ${col.name} column`}
             />
           );
         })}
       </div>
-      
-      <button
-        onClick={() => onChange(Math.min(columns.length - 1, activeIndex + 1))}
-        disabled={activeIndex === columns.length - 1}
-        className="p-2 rounded-md hover:bg-accent disabled:opacity-30 transition-colors"
-      >
-        <ChevronRight className="w-5 h-5" />
-      </button>
     </div>
   );
 }
