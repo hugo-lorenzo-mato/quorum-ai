@@ -1,6 +1,6 @@
 import { useConfigField, useConfigSelect } from '../../../hooks/useConfigField';
 import { useUIStore } from '../../../stores';
-import { Check, Monitor, Moon, Sun, Laptop } from 'lucide-react';
+import { Check, Moon, Sun, Laptop, Droplets, Snowflake, Ghost } from 'lucide-react';
 import {
   SettingSection,
   SelectSetting,
@@ -10,14 +10,14 @@ import {
 } from '../index';
 
 const THEMES = [
-  { id: 'system', name: 'System', icon: Laptop, colors: ['#a1a1aa', '#52525b'] },
-  { id: 'light', name: 'Light', icon: Sun, colors: ['#ffffff', '#f4f4f5'] },
-  { id: 'dark', name: 'Dark', icon: Moon, colors: ['#18181b', '#000000'] },
-  { id: 'midnight', name: 'Midnight', colors: ['#000000', '#0a0a0a'] },
-  { id: 'sepia', name: 'Sepia', colors: ['#f5f2e7', '#8c6a48'] },
-  { id: 'dracula', name: 'Dracula', colors: ['#282a36', '#bd93f9'] },
-  { id: 'nord', name: 'Nord', colors: ['#2e3440', '#88c0d0'] },
-  { id: 'ocean', name: 'Ocean', colors: ['#0f172a', '#38bdf8'] },
+  { id: 'system', name: 'System', icon: Laptop, colors: ['#52525b', '#a1a1aa'] },
+  { id: 'light', name: 'Light', icon: Sun, colors: ['#ffffff', '#e4e4e7'] },
+  { id: 'dark', name: 'Dark', icon: Moon, colors: ['#18181b', '#27272a'] },
+  { id: 'midnight', name: 'Midnight', colors: ['#000000', '#18181b'] },
+  { id: 'sepia', name: 'Sepia', colors: ['#f5f2e7', '#e0dcc7'] },
+  { id: 'dracula', name: 'Dracula', icon: Ghost, colors: ['#282a36', '#44475a'] },
+  { id: 'nord', name: 'Nord', icon: Snowflake, colors: ['#2e3440', '#3b4252'] },
+  { id: 'ocean', name: 'Ocean', icon: Droplets, colors: ['#0f172a', '#1e293b'] },
 ];
 
 export function GeneralTab() {
@@ -53,7 +53,7 @@ function AppearanceSection() {
               key={t.id}
               onClick={() => setTheme(t.id)}
               className={`
-                group relative flex flex-col items-center gap-3 p-4 rounded-xl border-2 transition-all
+                group relative flex flex-col items-center gap-3 p-4 rounded-xl border-2 transition-all cursor-pointer
                 hover:bg-secondary/50 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2
                 ${isActive 
                   ? 'border-primary bg-secondary/30' 
@@ -63,13 +63,19 @@ function AppearanceSection() {
             >
               {/* Theme Preview Circle */}
               <div 
-                className="w-12 h-12 rounded-full shadow-sm flex items-center justify-center border border-border/50 overflow-hidden relative"
+                className="w-12 h-12 rounded-full shadow-inner flex items-center justify-center border border-border/50 overflow-hidden relative ring-1 ring-black/5 dark:ring-white/10"
                 style={{ 
                   background: `linear-gradient(135deg, ${t.colors[0]} 50%, ${t.colors[1]} 50%)`
                 }}
               >
                 {Icon && (
-                  <Icon className={`w-5 h-5 relative z-10 mix-blend-difference text-white/90 drop-shadow-md`} />
+                  <Icon className={`w-5 h-5 relative z-10 text-foreground/80 drop-shadow-sm`} 
+                    style={{
+                      // Ensure icon is visible against dark/light backgrounds without blending artifacts
+                      filter: 'drop-shadow(0 1px 2px rgb(0 0 0 / 0.1))',
+                      color: t.id === 'light' || t.id === 'sepia' || t.id === 'system' ? '#18181b' : '#ffffff'
+                    }}
+                  />
                 )}
               </div>
 

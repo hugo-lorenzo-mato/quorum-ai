@@ -201,9 +201,9 @@ function KanbanCard({ workflow, isExecuting, onDragStart, onDragEnd, onClick, on
       onDragStart={handleDragStart}
       onDragEnd={onDragEnd}
       onClick={onClick}
-      className={`group relative overflow-hidden rounded-xl border border-border bg-card p-3 shadow-sm shadow-black/5 cursor-grab active:cursor-grabbing transition-all hover:bg-accent hover:border-muted-foreground/30 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 dark:bg-secondary dark:border-white/10 dark:shadow-md dark:shadow-black/60 dark:ring-1 dark:ring-white/10 ${
+      className={`group relative overflow-hidden rounded-xl border border-border bg-card p-3 shadow-sm shadow-black/5 cursor-grab active:cursor-grabbing transition-all hover:bg-accent hover:border-muted-foreground/30 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 dark:bg-gradient-to-b dark:from-card dark:to-card/50 dark:border-white/5 dark:shadow-md dark:shadow-black/40 dark:hover:border-primary/20 ${
         isExecuting ? 'ring-2 ring-info/30 dark:ring-info/40' : ''
-      } before:pointer-events-none before:absolute before:inset-0 before:rounded-xl before:content-[''] before:bg-gradient-to-b before:from-white/0 before:to-transparent dark:before:from-white/10`}
+      } before:pointer-events-none before:absolute before:inset-0 before:rounded-xl before:content-[''] before:bg-gradient-to-b before:from-white/0 before:to-transparent dark:before:from-white/5`}
       role="button"
       tabIndex={0}
       onKeyDown={(e) => {
