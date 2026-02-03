@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"regexp"
 	"strconv"
 	"strings"
@@ -17,12 +18,67 @@ var _ core.IssueClient = (*IssueClientAdapter)(nil)
 
 // IssueClientAdapter wraps the GitHub Client to implement core.IssueClient.
 type IssueClientAdapter struct {
-	client *Client
+	client      *Client
+	rateLimiter *GitHubRateLimiter
+}
+
+// GitHubRateLimiter implements a simple rate limiter for GitHub API calls.
+// GitHub allows 5000 requests/hour for authenticated users, but we use conservative limits.
+type GitHubRateLimiter struct {
+	maxPerMinute int
+	calls        []time.Time
+}
+
+// NewGitHubRateLimiter creates a rate limiter with the specified max calls per minute.
+func NewGitHubRateLimiter(maxPerMinute int) *GitHubRateLimiter {
+	if maxPerMinute <= 0 {
+		maxPerMinute = 30 // Conservative default: 30/min = 1800/hour
+	}
+	return &GitHubRateLimiter{
+		maxPerMinute: maxPerMinute,
+		calls:        make([]time.Time, 0),
+	}
+}
+
+// Wait blocks until a request is allowed under the rate limit.
+func (r *GitHubRateLimiter) Wait(ctx context.Context) error {
+	for {
+		// Clean up old calls (older than 1 minute)
+		now := time.Now()
+		cutoff := now.Add(-time.Minute)
+		newCalls := make([]time.Time, 0, len(r.calls))
+		for _, t := range r.calls {
+			if t.After(cutoff) {
+				newCalls = append(newCalls, t)
+			}
+		}
+		r.calls = newCalls
+
+		// Check if we can make a call
+		if len(r.calls) < r.maxPerMinute {
+			r.calls = append(r.calls, now)
+			return nil
+		}
+
+		// Calculate wait time
+		oldestCall := r.calls[0]
+		waitTime := time.Minute - now.Sub(oldestCall) + 100*time.Millisecond // Add small buffer
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(waitTime):
+			// Try again
+		}
+	}
 }
 
 // NewIssueClientAdapter creates a new IssueClient adapter from an existing GitHub Client.
 func NewIssueClientAdapter(client *Client) *IssueClientAdapter {
-	return &IssueClientAdapter{client: client}
+	return &IssueClientAdapter{
+		client:      client,
+		rateLimiter: NewGitHubRateLimiter(30), // 30 requests/minute default
+	}
 }
 
 // NewIssueClient creates a new IssueClient from owner/repo.
@@ -45,6 +101,13 @@ func NewIssueClientFromRepo() (*IssueClientAdapter, error) {
 
 // CreateIssue creates a new issue and returns the created issue.
 func (a *IssueClientAdapter) CreateIssue(ctx context.Context, opts core.CreateIssueOptions) (*core.Issue, error) {
+	// Apply rate limiting before making the API call
+	if a.rateLimiter != nil {
+		if err := a.rateLimiter.Wait(ctx); err != nil {
+			return nil, fmt.Errorf("rate limit wait: %w", err)
+		}
+	}
+
 	args := []string{"issue", "create",
 		"--repo", a.client.Repo(),
 		"--title", opts.Title,
@@ -99,10 +162,16 @@ func (a *IssueClientAdapter) CreateIssue(ctx context.Context, opts core.CreateIs
 	// Link to parent if specified
 	if opts.ParentIssue > 0 {
 		if err := a.LinkIssues(ctx, opts.ParentIssue, issueNum); err != nil {
-			// Log but don't fail - issue was created successfully
-			// The caller can handle linking separately if needed
+			// Log the error but don't fail - issue was created successfully
+			// IMPORTANT: Do NOT set ParentIssue if linking failed
+			slog.Warn("failed to link issue to parent",
+				"child_issue", issueNum,
+				"parent_issue", opts.ParentIssue,
+				"error", err)
+		} else {
+			// Only set ParentIssue if linking succeeded
+			issue.ParentIssue = opts.ParentIssue
 		}
-		issue.ParentIssue = opts.ParentIssue
 	}
 
 	return issue, nil

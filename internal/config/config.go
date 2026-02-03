@@ -571,6 +571,63 @@ type IssueGeneratorConfig struct {
 
 	// MaxBodyLength limits the generated body length in characters.
 	MaxBodyLength int `mapstructure:"max_body_length" yaml:"max_body_length" json:"max_body_length"`
+
+	// Resilience configures retry and circuit breaker behavior for LLM calls.
+	Resilience LLMResilienceConfig `mapstructure:"resilience" yaml:"resilience" json:"resilience"`
+
+	// Validation configures issue content validation.
+	Validation IssueValidationConfig `mapstructure:"validation" yaml:"validation" json:"validation"`
+
+	// RateLimit configures rate limiting for GitHub API calls.
+	RateLimit GitHubRateLimitConfig `mapstructure:"rate_limit" yaml:"rate_limit" json:"rate_limit"`
+}
+
+// LLMResilienceConfig configures retry and circuit breaker behavior.
+type LLMResilienceConfig struct {
+	// Enabled activates resilience features (retry, circuit breaker).
+	Enabled bool `mapstructure:"enabled" yaml:"enabled" json:"enabled"`
+
+	// MaxRetries is the maximum number of retry attempts.
+	MaxRetries int `mapstructure:"max_retries" yaml:"max_retries" json:"max_retries"`
+
+	// InitialBackoff is the initial delay before first retry.
+	InitialBackoff string `mapstructure:"initial_backoff" yaml:"initial_backoff" json:"initial_backoff"`
+
+	// MaxBackoff is the maximum delay between retries.
+	MaxBackoff string `mapstructure:"max_backoff" yaml:"max_backoff" json:"max_backoff"`
+
+	// BackoffMultiplier is the exponential backoff multiplier.
+	BackoffMultiplier float64 `mapstructure:"backoff_multiplier" yaml:"backoff_multiplier" json:"backoff_multiplier"`
+
+	// FailureThreshold is the number of consecutive failures to open the circuit.
+	FailureThreshold int `mapstructure:"failure_threshold" yaml:"failure_threshold" json:"failure_threshold"`
+
+	// ResetTimeout is how long the circuit stays open before trying again.
+	ResetTimeout string `mapstructure:"reset_timeout" yaml:"reset_timeout" json:"reset_timeout"`
+}
+
+// IssueValidationConfig configures issue content validation.
+type IssueValidationConfig struct {
+	// Enabled activates issue content validation.
+	Enabled bool `mapstructure:"enabled" yaml:"enabled" json:"enabled"`
+
+	// SanitizeForbidden enables automatic removal of forbidden content.
+	SanitizeForbidden bool `mapstructure:"sanitize_forbidden" yaml:"sanitize_forbidden" json:"sanitize_forbidden"`
+
+	// RequiredSections lists sections that must be present in issues.
+	RequiredSections []string `mapstructure:"required_sections" yaml:"required_sections" json:"required_sections"`
+
+	// ForbiddenPatterns lists regex patterns that should not appear in issues.
+	ForbiddenPatterns []string `mapstructure:"forbidden_patterns" yaml:"forbidden_patterns" json:"forbidden_patterns"`
+}
+
+// GitHubRateLimitConfig configures rate limiting for GitHub API.
+type GitHubRateLimitConfig struct {
+	// Enabled activates rate limiting.
+	Enabled bool `mapstructure:"enabled" yaml:"enabled" json:"enabled"`
+
+	// MaxPerMinute is the maximum requests per minute.
+	MaxPerMinute int `mapstructure:"max_per_minute" yaml:"max_per_minute" json:"max_per_minute"`
 }
 
 // Validate validates the issues configuration.

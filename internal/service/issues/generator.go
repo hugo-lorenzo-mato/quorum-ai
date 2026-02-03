@@ -34,16 +34,20 @@ type Generator struct {
 	reportDir string
 	agents    core.AgentRegistry          // Optional: for LLM-based generation
 	prompts   *service.PromptRenderer     // Lazy-initialized prompt renderer
+
+	// LLM generation cache - prevents regenerating files within same workflow
+	llmGenerationCache map[string][]IssuePreview // workflowID -> generated issues
 }
 
 // NewGenerator creates a new issue generator.
 // agents can be nil if LLM-based generation is not needed.
 func NewGenerator(client core.IssueClient, cfg config.IssuesConfig, reportDir string, agents core.AgentRegistry) *Generator {
 	return &Generator{
-		client:    client,
-		config:    cfg,
-		reportDir: reportDir,
-		agents:    agents,
+		client:             client,
+		config:             cfg,
+		reportDir:          reportDir,
+		agents:             agents,
+		llmGenerationCache: make(map[string][]IssuePreview),
 	}
 }
 
@@ -122,6 +126,117 @@ type IssuePreview struct {
 	Assignees   []string
 	IsMainIssue bool
 	TaskID      string
+}
+
+// GenerationTracker tracks expected vs actual generated files to avoid race conditions.
+// This replaces the fragile timestamp-based detection.
+type GenerationTracker struct {
+	// ExpectedFiles maps expected filename to task info.
+	ExpectedFiles map[string]string // filename -> taskID or "main"
+
+	// GeneratedFiles maps filename to generation time.
+	GeneratedFiles map[string]time.Time
+
+	// StartTime is when generation began.
+	StartTime time.Time
+
+	// WorkflowID identifies the workflow being processed.
+	WorkflowID string
+}
+
+// NewGenerationTracker creates a new tracker for a generation run.
+func NewGenerationTracker(workflowID string) *GenerationTracker {
+	return &GenerationTracker{
+		ExpectedFiles:  make(map[string]string),
+		GeneratedFiles: make(map[string]time.Time),
+		StartTime:      time.Now(),
+		WorkflowID:     workflowID,
+	}
+}
+
+// AddExpected registers an expected file.
+func (t *GenerationTracker) AddExpected(filename, taskID string) {
+	t.ExpectedFiles[filename] = taskID
+}
+
+// MarkGenerated marks a file as generated.
+func (t *GenerationTracker) MarkGenerated(filename string, modTime time.Time) {
+	t.GeneratedFiles[filename] = modTime
+}
+
+// GetMissingFiles returns files that were expected but not generated.
+func (t *GenerationTracker) GetMissingFiles() []string {
+	var missing []string
+	for expected := range t.ExpectedFiles {
+		if _, found := t.GeneratedFiles[expected]; !found {
+			missing = append(missing, expected)
+		}
+	}
+	return missing
+}
+
+// IsValidFile checks if a file should be considered as generated
+// (created after start time and either expected or matching pattern).
+func (t *GenerationTracker) IsValidFile(filename string, modTime time.Time) bool {
+	// Must be created/modified after generation started
+	if modTime.Before(t.StartTime) {
+		return false
+	}
+
+	// If we have expected files, check against them
+	if len(t.ExpectedFiles) > 0 {
+		// Direct match
+		if _, ok := t.ExpectedFiles[filename]; ok {
+			return true
+		}
+		// Fuzzy match for variations
+		for expected := range t.ExpectedFiles {
+			if fuzzyMatchFilename(filename, expected) {
+				return true
+			}
+		}
+	}
+
+	// If no expected files defined, accept any .md file created after start
+	return true
+}
+
+// fuzzyMatchFilename checks if two filenames are similar enough to be considered the same.
+func fuzzyMatchFilename(actual, expected string) bool {
+	// Remove extension
+	actualBase := strings.TrimSuffix(actual, ".md")
+	expectedBase := strings.TrimSuffix(expected, ".md")
+
+	// Exact match
+	if actualBase == expectedBase {
+		return true
+	}
+
+	// Check if one contains the other (handles prefix/suffix variations)
+	if strings.Contains(actualBase, expectedBase) || strings.Contains(expectedBase, actualBase) {
+		return true
+	}
+
+	// Check numeric prefix match (01-foo vs 1-foo)
+	actualNum := extractLeadingNumber(actualBase)
+	expectedNum := extractLeadingNumber(expectedBase)
+	if actualNum == expectedNum && actualNum != "" {
+		// Same number, check rest
+		actualRest := strings.TrimLeft(actualBase, "0123456789-")
+		expectedRest := strings.TrimLeft(expectedBase, "0123456789-")
+		if actualRest == expectedRest {
+			return true
+		}
+	}
+
+	return false
+}
+
+// extractLeadingNumber extracts leading digits from a string.
+func extractLeadingNumber(s string) string {
+	re := regexp.MustCompile(`^(\d+)`)
+	match := re.FindString(s)
+	return match
 }
 
 // Generate creates issues from workflow artifacts.
@@ -938,7 +1053,13 @@ func (g *Generator) getTaskFilePaths() ([]service.IssueTaskFile, error) {
 }
 
 // scanGeneratedIssueFiles scans the issues directory for generated markdown files.
+// If a tracker is provided, it uses start-time based validation instead of a fixed window.
 func (g *Generator) scanGeneratedIssueFiles(issuesDir string) ([]string, error) {
+	return g.scanGeneratedIssueFilesWithTracker(issuesDir, nil)
+}
+
+// scanGeneratedIssueFilesWithTracker scans with an optional tracker for better accuracy.
+func (g *Generator) scanGeneratedIssueFilesWithTracker(issuesDir string, tracker *GenerationTracker) ([]string, error) {
 	entries, err := os.ReadDir(issuesDir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -962,9 +1083,28 @@ func (g *Generator) scanGeneratedIssueFiles(issuesDir string) ([]string, error) 
 			continue
 		}
 
-		// Only consider recently created/modified files (within last 10 minutes)
-		if time.Since(info.ModTime()) < 10*time.Minute {
-			files = append(files, filePath)
+		// Use tracker if available for more accurate detection
+		if tracker != nil {
+			if tracker.IsValidFile(entry.Name(), info.ModTime()) {
+				files = append(files, filePath)
+				tracker.MarkGenerated(entry.Name(), info.ModTime())
+			}
+		} else {
+			// Fallback: accept any .md file modified in the last 30 minutes
+			// (increased from 10 minutes to handle longer batch processing)
+			if time.Since(info.ModTime()) < 30*time.Minute {
+				files = append(files, filePath)
+			}
+		}
+	}
+
+	// Log any missing expected files
+	if tracker != nil {
+		missing := tracker.GetMissingFiles()
+		if len(missing) > 0 {
+			slog.Warn("expected files not found in generation output",
+				"missing", missing,
+				"workflow_id", tracker.WorkflowID)
 		}
 	}
 
@@ -1014,8 +1154,15 @@ func (g *Generator) parseAndWriteIssueFiles(output, issuesDir string) ([]string,
 			continue
 		}
 
-		// Write the file
-		filePath := filepath.Join(issuesDir, filename)
+		// SECURITY: Validate the output path to prevent path traversal attacks
+		filePath, err := ValidateOutputPath(issuesDir, filename)
+		if err != nil {
+			slog.Error("path validation failed, skipping file",
+				"filename", filename,
+				"error", err)
+			continue
+		}
+
 		if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
 			slog.Warn("failed to write issue file", "path", filePath, "error", err)
 			continue
@@ -1075,8 +1222,15 @@ func (g *Generator) parseCodeBlockFiles(output, issuesDir string) ([]string, err
 			continue
 		}
 
-		// Write the file
-		filePath := filepath.Join(issuesDir, filename)
+		// SECURITY: Validate the output path to prevent path traversal attacks
+		filePath, err := ValidateOutputPath(issuesDir, filename)
+		if err != nil {
+			slog.Error("path validation failed, skipping file",
+				"filename", filename,
+				"error", err)
+			continue
+		}
+
 		if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
 			slog.Warn("failed to write issue file", "path", filePath, "error", err)
 			continue
@@ -1375,9 +1529,69 @@ func parseIssueMarkdown(content string) (title, body string) {
 	return "Untitled Issue", strings.TrimSpace(content)
 }
 
-// generateWithLLM is kept for backwards compatibility but redirects to file-based approach.
-// Returns empty strings to trigger fallback (the new approach is GenerateIssueFiles).
+// generateWithLLM generates issue content using LLM by delegating to GenerateIssueFiles.
+// It caches results to avoid regenerating files for each task in the same workflow.
+// Returns title and body for the requested issue (main or specific task).
 func (g *Generator) generateWithLLM(ctx context.Context, content, taskID, workflowID string, isMain bool) (title, body string, err error) {
-	// This method is deprecated - use GenerateIssueFiles instead
-	return "", "", fmt.Errorf("deprecated: use GenerateIssueFiles for AI-based generation")
+	// Check if we already have cached results for this workflow
+	if cachedIssues, ok := g.llmGenerationCache[workflowID]; ok {
+		return g.findIssueInCache(cachedIssues, taskID, isMain)
+	}
+
+	// Verify we have agent registry
+	if g.agents == nil {
+		return "", "", fmt.Errorf("LLM generation requires agent registry")
+	}
+
+	// Generate all issue files using the path-based approach
+	slog.Info("generating all issue files with LLM",
+		"workflow_id", workflowID,
+		"agent", g.config.Generator.Agent)
+
+	files, err := g.GenerateIssueFiles(ctx, workflowID)
+	if err != nil {
+		return "", "", fmt.Errorf("LLM generation failed: %w", err)
+	}
+
+	if len(files) == 0 {
+		return "", "", fmt.Errorf("LLM generated no issue files")
+	}
+
+	// Read all generated files into cache
+	issues, err := g.ReadGeneratedIssues(workflowID)
+	if err != nil {
+		return "", "", fmt.Errorf("reading generated issues: %w", err)
+	}
+
+	// Store in cache for subsequent calls
+	g.llmGenerationCache[workflowID] = issues
+
+	slog.Info("cached LLM-generated issues",
+		"workflow_id", workflowID,
+		"count", len(issues))
+
+	// Find and return the requested issue
+	return g.findIssueInCache(issues, taskID, isMain)
+}
+
+// findIssueInCache searches the cached issues for a specific task or main issue.
+func (g *Generator) findIssueInCache(issues []IssuePreview, taskID string, isMain bool) (title, body string, err error) {
+	for _, issue := range issues {
+		if isMain && issue.IsMainIssue {
+			return issue.Title, issue.Body, nil
+		}
+		if !isMain && issue.TaskID == taskID {
+			return issue.Title, issue.Body, nil
+		}
+		// Fallback: match by partial taskID (e.g., "task-1" matches "task-1-something")
+		if !isMain && taskID != "" && strings.Contains(issue.TaskID, taskID) {
+			return issue.Title, issue.Body, nil
+		}
+	}
+
+	// If not found, return error (will trigger fallback to direct copy)
+	if isMain {
+		return "", "", fmt.Errorf("main issue not found in LLM output")
+	}
+	return "", "", fmt.Errorf("task %s not found in LLM output", taskID)
 }
