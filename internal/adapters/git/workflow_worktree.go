@@ -88,6 +88,57 @@ func sanitizeForPath(s string) string {
 	return result.String()
 }
 
+// getMergeWorktreePath returns the path for the temporary merge worktree.
+func (m *WorkflowWorktreeManagerImpl) getMergeWorktreePath(workflowID string) string {
+	return filepath.Join(m.getWorkflowWorktreeRoot(workflowID), "_merge")
+}
+
+// createMergeWorktree creates a temporary worktree for merge operations.
+// Returns a git client for the worktree and a cleanup function.
+// The worktree is created pointing to the specified branch.
+// This allows merge operations without affecting the user's working directory.
+func (m *WorkflowWorktreeManagerImpl) createMergeWorktree(ctx context.Context, workflowID, branch string) (*Client, func(), error) {
+	mergeWorktreePath := m.getMergeWorktreePath(workflowID)
+
+	// Remove existing merge worktree if present (from previous failed run)
+	if _, err := os.Stat(mergeWorktreePath); err == nil {
+		_ = m.git.RemoveWorktree(ctx, mergeWorktreePath)
+		_ = os.RemoveAll(mergeWorktreePath)
+	}
+
+	// Ensure parent directory exists
+	if err := os.MkdirAll(filepath.Dir(mergeWorktreePath), 0755); err != nil {
+		return nil, nil, fmt.Errorf("creating merge worktree parent: %w", err)
+	}
+
+	// Create worktree pointing to the target branch
+	if err := m.git.CreateWorktree(ctx, mergeWorktreePath, branch); err != nil {
+		return nil, nil, fmt.Errorf("creating merge worktree: %w", err)
+	}
+
+	// Create git client for the worktree
+	mergeGit, err := NewClient(mergeWorktreePath)
+	if err != nil {
+		_ = m.git.RemoveWorktree(ctx, mergeWorktreePath)
+		return nil, nil, fmt.Errorf("creating git client for merge worktree: %w", err)
+	}
+
+	cleanup := func() {
+		if rmErr := m.git.RemoveWorktree(ctx, mergeWorktreePath); rmErr != nil {
+			m.logger.Warn("failed to remove merge worktree", "path", mergeWorktreePath, "error", rmErr)
+		}
+		// Also remove the directory in case worktree remove didn't clean it
+		_ = os.RemoveAll(mergeWorktreePath)
+	}
+
+	m.logger.Info("created merge worktree",
+		"workflow_id", workflowID,
+		"path", mergeWorktreePath,
+		"branch", branch)
+
+	return mergeGit, cleanup, nil
+}
+
 // InitializeWorkflow creates a workflow branch and worktree root directory.
 func (m *WorkflowWorktreeManagerImpl) InitializeWorkflow(ctx context.Context, workflowID string, baseBranch string) (*core.WorkflowGitInfo, error) {
 	m.mu.Lock()
@@ -248,6 +299,7 @@ func (m *WorkflowWorktreeManagerImpl) MergeTaskToWorkflow(ctx context.Context, w
 
 // mergeTaskToWorkflowLocked is the internal implementation without mutex.
 // Caller must hold m.mu.
+// Uses a temporary worktree to perform the merge, avoiding checkout in the user's working directory.
 func (m *WorkflowWorktreeManagerImpl) mergeTaskToWorkflowLocked(ctx context.Context, workflowID string, taskID core.TaskID, strategy string) error {
 	m.logger.Info("merging task to workflow",
 		"workflow_id", workflowID,
@@ -257,45 +309,37 @@ func (m *WorkflowWorktreeManagerImpl) mergeTaskToWorkflowLocked(ctx context.Cont
 	workflowBranch := m.GetWorkflowBranch(workflowID)
 	taskBranch := m.GetTaskBranch(workflowID, taskID)
 
-	// Save current branch to restore later
-	currentBranch, err := m.git.CurrentBranch(ctx)
+	// Create a temporary worktree for the merge operation.
+	// This avoids doing checkout in the main repo, which would fail if user has uncommitted changes.
+	mergeGit, cleanup, err := m.createMergeWorktree(ctx, workflowID, workflowBranch)
 	if err != nil {
-		m.logger.Warn("could not get current branch", "error", err)
+		return fmt.Errorf("creating merge worktree: %w", err)
 	}
+	defer cleanup()
 
-	// Checkout workflow branch
-	if err := m.git.CheckoutBranch(ctx, workflowBranch); err != nil {
-		return fmt.Errorf("checking out workflow branch: %w", err)
-	}
-
-	// Restore original branch on exit
-	if currentBranch != "" && currentBranch != workflowBranch {
-		defer func() {
-			_ = m.git.CheckoutBranch(ctx, currentBranch)
-		}()
-	}
-
-	// Perform merge based on strategy
+	// Perform merge based on strategy (all operations happen in the merge worktree)
 	switch strategy {
 	case "rebase":
-		return m.rebaseTaskToWorkflow(ctx, workflowBranch, taskBranch)
+		return m.rebaseTaskToWorkflowInWorktree(ctx, mergeGit, workflowBranch, taskBranch)
 	case "parallel":
 		// For parallel, just attempt merge without special handling
-		return m.mergeTaskSequential(ctx, taskBranch, string(taskID))
+		return m.mergeTaskSequentialInWorktree(ctx, mergeGit, taskBranch, string(taskID))
 	default: // "sequential" or empty
-		return m.mergeTaskSequential(ctx, taskBranch, string(taskID))
+		return m.mergeTaskSequentialInWorktree(ctx, mergeGit, taskBranch, string(taskID))
 	}
 }
 
-func (m *WorkflowWorktreeManagerImpl) mergeTaskSequential(ctx context.Context, taskBranch string, taskID string) error {
+// mergeTaskSequentialInWorktree performs a merge in the provided worktree git client.
+// This is the isolated version that doesn't touch the user's working directory.
+func (m *WorkflowWorktreeManagerImpl) mergeTaskSequentialInWorktree(ctx context.Context, worktreeGit *Client, taskBranch string, taskID string) error {
 	message := fmt.Sprintf("Merge task %s", taskID)
 
-	// Execute merge with --no-ff
-	_, err := m.git.run(ctx, "merge", "--no-ff", "-m", message, taskBranch)
+	// Execute merge with --no-ff in the worktree
+	_, err := worktreeGit.run(ctx, "merge", "--no-ff", "-m", message, taskBranch)
 	if err != nil {
 		if strings.Contains(err.Error(), "CONFLICT") || strings.Contains(err.Error(), "conflict") {
 			// Abort the merge and return conflict error
-			_, _ = m.git.run(ctx, "merge", "--abort")
+			_, _ = worktreeGit.run(ctx, "merge", "--abort")
 			return fmt.Errorf("merge conflict for task %s: %w", taskID, ErrMergeConflict)
 		}
 		return fmt.Errorf("merging task branch: %w", err)
@@ -304,21 +348,25 @@ func (m *WorkflowWorktreeManagerImpl) mergeTaskSequential(ctx context.Context, t
 	return nil
 }
 
-func (m *WorkflowWorktreeManagerImpl) rebaseTaskToWorkflow(ctx context.Context, workflowBranch, taskBranch string) error {
+// rebaseTaskToWorkflowInWorktree performs a rebase (via cherry-pick) in the provided worktree.
+// This is the isolated version that doesn't touch the user's working directory.
+func (m *WorkflowWorktreeManagerImpl) rebaseTaskToWorkflowInWorktree(ctx context.Context, worktreeGit *Client, workflowBranch, taskBranch string) error {
 	// For rebase strategy, we cherry-pick commits from task branch
 	// This maintains linear history
 
 	// Get commits that are in taskBranch but not in workflowBranch
+	// Note: we use the main git client here since this is a read-only operation
 	commits, err := m.getUniqueCommits(ctx, workflowBranch, taskBranch)
 	if err != nil {
 		return fmt.Errorf("getting unique commits: %w", err)
 	}
 
+	// Cherry-pick each commit in the worktree
 	for _, commit := range commits {
-		_, err := m.git.run(ctx, "cherry-pick", commit)
+		_, err := worktreeGit.run(ctx, "cherry-pick", commit)
 		if err != nil {
 			if strings.Contains(err.Error(), "CONFLICT") || strings.Contains(err.Error(), "conflict") {
-				_, _ = m.git.run(ctx, "cherry-pick", "--abort")
+				_, _ = worktreeGit.run(ctx, "cherry-pick", "--abort")
 				return fmt.Errorf("cherry-pick conflict for commit %s: %w", commit, ErrMergeConflict)
 			}
 			return fmt.Errorf("cherry-picking commit %s: %w", commit, err)
@@ -374,6 +422,7 @@ func (m *WorkflowWorktreeManagerImpl) MergeAllTasksToWorkflow(ctx context.Contex
 }
 
 // FinalizeWorkflow completes workflow Git operations and optionally merges to base.
+// Uses a temporary worktree to perform the merge, avoiding checkout in the user's working directory.
 func (m *WorkflowWorktreeManagerImpl) FinalizeWorkflow(ctx context.Context, workflowID string, merge bool) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -391,31 +440,55 @@ func (m *WorkflowWorktreeManagerImpl) FinalizeWorkflow(ctx context.Context, work
 			baseBranch = "main"
 		}
 
-		// Save current branch
-		currentBranch, _ := m.git.CurrentBranch(ctx)
+		// Create a temporary worktree for the finalize merge.
+		// We use a different path than the task merge worktree to avoid conflicts.
+		finalizeWorktreePath := filepath.Join(m.getWorkflowWorktreeRoot(workflowID), "_finalize")
 
-		// Checkout base branch
-		if err := m.git.CheckoutBranch(ctx, baseBranch); err != nil {
-			return fmt.Errorf("checking out base branch: %w", err)
+		// Remove existing finalize worktree if present (from previous failed run)
+		if _, statErr := os.Stat(finalizeWorktreePath); statErr == nil {
+			_ = m.git.RemoveWorktree(ctx, finalizeWorktreePath)
+			_ = os.RemoveAll(finalizeWorktreePath)
 		}
 
-		// Restore original branch on exit
-		if currentBranch != "" && currentBranch != baseBranch {
-			defer func() {
-				_ = m.git.CheckoutBranch(ctx, currentBranch)
-			}()
+		// Create worktree pointing to the base branch
+		if err := m.git.CreateWorktree(ctx, finalizeWorktreePath, baseBranch); err != nil {
+			return fmt.Errorf("creating finalize worktree: %w", err)
 		}
 
-		// Merge workflow branch
+		// Ensure cleanup of the finalize worktree
+		defer func() {
+			if rmErr := m.git.RemoveWorktree(ctx, finalizeWorktreePath); rmErr != nil {
+				m.logger.Warn("failed to remove finalize worktree", "path", finalizeWorktreePath, "error", rmErr)
+			}
+			_ = os.RemoveAll(finalizeWorktreePath)
+		}()
+
+		// Create git client for the finalize worktree
+		finalizeGit, err := NewClient(finalizeWorktreePath)
+		if err != nil {
+			return fmt.Errorf("creating git client for finalize worktree: %w", err)
+		}
+
+		m.logger.Info("created finalize worktree",
+			"workflow_id", workflowID,
+			"path", finalizeWorktreePath,
+			"base_branch", baseBranch)
+
+		// Merge workflow branch into base (in the worktree)
 		message := fmt.Sprintf("Merge workflow %s", workflowID)
-		_, err = m.git.run(ctx, "merge", "--no-ff", "-m", message, workflowBranch)
+		_, err = finalizeGit.run(ctx, "merge", "--no-ff", "-m", message, workflowBranch)
 		if err != nil {
 			if strings.Contains(err.Error(), "CONFLICT") || strings.Contains(err.Error(), "conflict") {
-				_, _ = m.git.run(ctx, "merge", "--abort")
+				_, _ = finalizeGit.run(ctx, "merge", "--abort")
 				return fmt.Errorf("conflict merging workflow to base: %w", ErrMergeConflict)
 			}
 			return fmt.Errorf("merging workflow branch: %w", err)
 		}
+
+		m.logger.Info("workflow merged to base branch",
+			"workflow_id", workflowID,
+			"workflow_branch", workflowBranch,
+			"base_branch", baseBranch)
 	}
 
 	// Cleanup task worktrees (but keep branches for history)
