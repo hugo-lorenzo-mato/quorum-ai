@@ -330,6 +330,7 @@ type DeepHealthResponse struct {
 	Status    string                        `json:"status"`
 	Time      string                        `json:"time"`
 	Resources *diagnostics.ResourceSnapshot `json:"resources,omitempty"`
+	System    *diagnostics.SystemMetrics    `json:"system,omitempty"`
 	Trend     *diagnostics.ResourceTrend    `json:"trend,omitempty"`
 	Warnings  []diagnostics.HealthWarning   `json:"warnings,omitempty"`
 }
@@ -340,6 +341,11 @@ func (s *Server) handleDeepHealth(w http.ResponseWriter, _ *http.Request) {
 		Status: "healthy",
 		Time:   time.Now().UTC().Format(time.RFC3339),
 	}
+
+	// Always get system metrics (CPU, RAM, Disk, Load, GPU)
+	collector := diagnostics.NewSystemMetricsCollector()
+	systemMetrics := collector.Collect()
+	response.System = &systemMetrics
 
 	if s.resourceMonitor != nil {
 		// Get current resource snapshot

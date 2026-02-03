@@ -8,6 +8,8 @@ import (
 
 	"github.com/charmbracelet/bubbles/viewport"
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/diagnostics"
 )
 
 // StatsPanel displays token usage and system metrics
@@ -20,7 +22,7 @@ type StatsPanel struct {
 
 	// Stats data
 	resourceStats ResourceStats
-	machineStats  MachineStats
+	machineStats  diagnostics.SystemMetrics
 }
 
 // NewStatsPanel creates a new stats panel
@@ -61,7 +63,7 @@ func (p *StatsPanel) SetResourceStats(stats ResourceStats) {
 }
 
 // SetMachineStats updates machine-wide statistics
-func (p *StatsPanel) SetMachineStats(stats MachineStats) {
+func (p *StatsPanel) SetMachineStats(stats diagnostics.SystemMetrics) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.machineStats = stats

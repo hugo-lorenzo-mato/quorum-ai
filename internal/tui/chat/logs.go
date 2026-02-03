@@ -8,6 +8,8 @@ import (
 
 	"github.com/charmbracelet/bubbles/viewport"
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/diagnostics"
 )
 
 // LogLevel represents log severity
@@ -45,36 +47,6 @@ type ResourceStats struct {
 	Goroutines    int
 }
 
-// GPUInfo holds GPU usage information (best-effort).
-type GPUInfo struct {
-	Name        string
-	UtilPercent float64
-	UtilValid   bool
-	MemTotalMB  float64
-	MemUsedMB   float64
-	MemValid    bool
-	TempC       float64
-	TempValid   bool
-}
-
-// MachineStats holds machine-wide resource usage
-type MachineStats struct {
-	CPUModel    string
-	CPUCores    int
-	CPUThreads  int
-	MemTotalMB  float64
-	MemUsedMB   float64
-	MemPercent  float64
-	CPUPercent  float64
-	DiskTotalGB float64
-	DiskUsedGB  float64
-	DiskPercent float64
-	LoadAvg1    float64
-	LoadAvg5    float64
-	LoadAvg15   float64
-	GPUInfos    []GPUInfo
-}
-
 // LogsPanel manages the logs display
 type LogsPanel struct {
 	mu       sync.Mutex
@@ -88,7 +60,7 @@ type LogsPanel struct {
 	// Footer stats
 	tokenStats    []TokenStats
 	resourceStats ResourceStats
-	machineStats  MachineStats
+	machineStats  diagnostics.SystemMetrics
 	showFooter    bool
 	footerHeight  int // Fixed height for footer section
 }
@@ -222,7 +194,7 @@ func (p *LogsPanel) SetResourceStats(stats ResourceStats) {
 }
 
 // SetMachineStats updates machine-wide statistics
-func (p *LogsPanel) SetMachineStats(stats MachineStats) {
+func (p *LogsPanel) SetMachineStats(stats diagnostics.SystemMetrics) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.machineStats = stats

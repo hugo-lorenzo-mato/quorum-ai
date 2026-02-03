@@ -16,6 +16,12 @@ import {
   Timer,
   Server,
   RefreshCw,
+  MemoryStick,
+  Gauge,
+  Box,
+  Layers,
+  MonitorDot,
+  Thermometer,
 } from 'lucide-react';
 
 // Get workflow display title
@@ -29,39 +35,45 @@ function getWorkflowTitle(workflow) {
   return workflow.id;
 }
 
-// Compact Stats Bar Component
-function StatsBar({ total, completed, running, failed }) {
-  const stats = [
-    { label: 'Total', value: total, icon: GitBranch, color: 'text-primary' },
-    { label: 'Completed', value: completed, icon: CheckCircle2, color: 'text-success' },
-    { label: 'Running', value: running, icon: Activity, color: 'text-info' },
-    { label: 'Failed', value: failed, icon: XCircle, color: 'text-error' },
-  ];
-
+// Bento Grid Card Component
+function BentoCard({ children, className = '' }) {
   return (
-    <div className="flex flex-wrap items-center gap-2 p-3 rounded-xl border border-border bg-card animate-fade-up">
-      {stats.map((stat, index) => (
-        <div key={stat.label} className="flex items-center gap-1.5">
-          {index > 0 && <span className="hidden sm:block text-border mx-1">|</span>}
-          <stat.icon className={`w-4 h-4 ${stat.color}`} />
-          <span className="text-sm font-medium text-foreground">{stat.value}</span>
-          <span className="text-xs text-muted-foreground hidden sm:inline">{stat.label}</span>
-        </div>
-      ))}
-      {total > 0 && (
-        <>
-          <span className="hidden md:block text-border mx-1">|</span>
-          <span className="hidden md:inline text-xs text-muted-foreground">
-            {Math.round((completed / Math.max(total, 1)) * 100)}% success rate
-          </span>
-        </>
-      )}
+    <div className={`group relative rounded-xl border border-border bg-card p-4 transition-all hover:border-muted-foreground/30 hover:shadow-lg animate-fade-up ${className}`}>
+      {children}
     </div>
   );
 }
 
+// Compact Stat Card
+function StatCard({ title, value, subtitle, icon: Icon, color = 'primary' }) {
+  const colorClasses = {
+    primary: 'bg-primary/10 text-primary',
+    success: 'bg-success/10 text-success',
+    warning: 'bg-warning/10 text-warning',
+    error: 'bg-error/10 text-error',
+    info: 'bg-info/10 text-info',
+  };
+
+  return (
+    <BentoCard>
+      <div className="flex items-start gap-3">
+        <div className={`p-2 rounded-lg ${colorClasses[color]}`}>
+          <Icon className="w-4 h-4" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-xl font-mono font-semibold text-foreground">{value}</p>
+          <p className="text-xs font-medium text-muted-foreground truncate">{title}</p>
+          {subtitle && (
+            <p className="text-[10px] text-muted-foreground mt-0.5 truncate">{subtitle}</p>
+          )}
+        </div>
+      </div>
+    </BentoCard>
+  );
+}
+
 // Progress Bar Component
-function ProgressBar({ value, max, color = 'primary', size = 'md' }) {
+function ProgressBar({ value, max, color = 'primary', size = 'sm' }) {
   const percent = max > 0 ? Math.min((value / max) * 100, 100) : 0;
   const heightClass = size === 'sm' ? 'h-1.5' : 'h-2';
 
@@ -75,8 +87,8 @@ function ProgressBar({ value, max, color = 'primary', size = 'md' }) {
 
   // Dynamic color based on percentage
   const getAutoColor = () => {
-    if (percent < 50) return colorClasses.success;
-    if (percent < 75) return colorClasses.warning;
+    if (percent < 60) return colorClasses.success;
+    if (percent < 80) return colorClasses.warning;
     return colorClasses.error;
   };
 
@@ -104,24 +116,54 @@ function formatUptime(seconds) {
   return `${Math.floor(seconds)}s`;
 }
 
-// System Resources Card
-function SystemResources({ resources, loading, onRefresh }) {
-  if (loading && !resources) {
-    return (
-      <div className="rounded-xl border border-border bg-card p-4 animate-pulse">
-        <div className="h-4 bg-muted rounded w-32 mb-4" />
-        <div className="space-y-3">
-          <div className="h-8 bg-muted rounded" />
-          <div className="h-8 bg-muted rounded" />
-          <div className="h-8 bg-muted rounded" />
+// Metric Row Component for compact display
+function MetricRow({ icon: Icon, label, value, subtext, progress, color = 'primary' }) {
+  return (
+    <div className="flex items-center gap-3">
+      <Icon className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+      <div className="flex-1 min-w-0">
+        <div className="flex items-baseline justify-between gap-2">
+          <span className="text-xs text-muted-foreground">{label}</span>
+          <span className="text-sm font-mono font-medium text-foreground">{value}</span>
         </div>
+        {progress !== undefined && (
+          <ProgressBar value={progress} max={100} color={color} size="sm" />
+        )}
+        {subtext && (
+          <p className="text-[10px] text-muted-foreground mt-0.5">{subtext}</p>
+        )}
       </div>
+    </div>
+  );
+}
+
+// System Resources Card - Complete view with Process, Machine, and Hardware info
+function SystemResources({ data, loading, onRefresh, timeAgo }) {
+  if (loading && !data) {
+    return (
+      <BentoCard className="md:col-span-2">
+        <div className="animate-pulse">
+          <div className="h-4 bg-muted rounded w-32 mb-4" />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-3">
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className="h-8 bg-muted rounded" />
+              ))}
+            </div>
+            <div className="space-y-3">
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className="h-8 bg-muted rounded" />
+              ))}
+            </div>
+          </div>
+        </div>
+      </BentoCard>
     );
   }
 
-  if (!resources) {
+  if (!data?.system) {
     return (
-      <div className="rounded-xl border border-border bg-card p-4">
+      <BentoCard className="md:col-span-2">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-medium text-foreground flex items-center gap-2">
             <Server className="w-4 h-4 text-muted-foreground" />
@@ -129,106 +171,167 @@ function SystemResources({ resources, loading, onRefresh }) {
           </h3>
         </div>
         <p className="text-xs text-muted-foreground">Unable to load system metrics</p>
-      </div>
+      </BentoCard>
     );
   }
 
-  const { resources: res } = resources;
-  const memoryMB = res?.heap_alloc_mb || 0;
-  const goroutines = res?.goroutines || 0;
-  const uptime = res?.process_uptime ? res.process_uptime / 1e9 : 0; // nanoseconds to seconds
-  const commandsActive = res?.commands_active || 0;
+  const { system, resources } = data;
+  const uptime = resources?.process_uptime ? resources.process_uptime / 1e9 : 0;
+  const heapMB = resources?.heap_alloc_mb || 0;
+  const goroutines = resources?.goroutines || 0;
 
-  const metrics = [
-    {
-      label: 'Memory',
-      value: `${memoryMB.toFixed(1)} MB`,
-      icon: HardDrive,
-      progress: memoryMB,
-      max: 512, // Assume 512MB as reference
-      color: 'auto',
-    },
-    {
-      label: 'Goroutines',
-      value: goroutines,
-      icon: Cpu,
-      progress: goroutines,
-      max: 1000,
-      color: 'auto',
-    },
-    {
-      label: 'Uptime',
-      value: formatUptime(uptime),
-      icon: Timer,
-      showProgress: false,
-    },
-    {
-      label: 'Active Tasks',
-      value: commandsActive,
-      icon: Activity,
-      showProgress: false,
-    },
-  ];
+  // Format load average
+  const loadAvg = system.load_avg_1 !== undefined
+    ? `${system.load_avg_1?.toFixed(2)} / ${system.load_avg_5?.toFixed(2)} / ${system.load_avg_15?.toFixed(2)}`
+    : 'n/a';
+
+  // GPU info
+  const gpus = system.gpu_infos || [];
 
   return (
-    <div className="rounded-xl border border-border bg-card p-4 animate-fade-up">
+    <BentoCard className="md:col-span-2">
+      {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-medium text-foreground flex items-center gap-2">
           <Server className="w-4 h-4 text-muted-foreground" />
           System Resources
         </h3>
-        <button
-          onClick={onRefresh}
-          className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-          title="Refresh"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-        </button>
+        <div className="flex items-center gap-2">
+          {timeAgo && (
+            <span className="text-[10px] text-muted-foreground">{timeAgo}</span>
+          )}
+          <button
+            onClick={onRefresh}
+            className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+            title="Refresh"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
       </div>
 
-      <div className="space-y-3">
-        {metrics.map((metric) => (
-          <div key={metric.label} className="space-y-1">
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground flex items-center gap-1.5">
-                <metric.icon className="w-3.5 h-3.5" />
-                {metric.label}
-              </span>
-              <span className="text-xs font-medium text-foreground font-mono">
-                {metric.value}
-              </span>
-            </div>
-            {metric.showProgress !== false && metric.max && (
-              <ProgressBar
-                value={metric.progress}
-                max={metric.max}
-                color={metric.color}
-                size="sm"
-              />
-            )}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+        {/* Quorum Process Section */}
+        <div className="space-y-3">
+          <h4 className="text-xs font-semibold text-info flex items-center gap-1.5 uppercase tracking-wide">
+            <Box className="w-3 h-3" />
+            Quorum Process
+          </h4>
+
+          <MetricRow
+            icon={MemoryStick}
+            label="Heap Memory"
+            value={`${heapMB.toFixed(1)} MB`}
+            progress={Math.min(heapMB / 512 * 100, 100)}
+            color="auto"
+          />
+
+          <MetricRow
+            icon={Layers}
+            label="Goroutines"
+            value={goroutines.toString()}
+          />
+
+          <MetricRow
+            icon={Timer}
+            label="Uptime"
+            value={formatUptime(uptime)}
+          />
+        </div>
+
+        {/* Machine Section */}
+        <div className="space-y-3">
+          <h4 className="text-xs font-semibold text-warning flex items-center gap-1.5 uppercase tracking-wide">
+            <MonitorDot className="w-3 h-3" />
+            Machine
+          </h4>
+
+          <MetricRow
+            icon={Cpu}
+            label="CPU"
+            value={`${system.cpu_percent?.toFixed(1) || 0}%`}
+            subtext={`${system.cpu_cores || 0}C / ${system.cpu_threads || 0}T`}
+            progress={system.cpu_percent || 0}
+            color="auto"
+          />
+
+          <MetricRow
+            icon={MemoryStick}
+            label="RAM"
+            value={`${(system.mem_used_mb / 1024)?.toFixed(1) || 0} / ${(system.mem_total_mb / 1024)?.toFixed(1) || 0} GB`}
+            progress={system.mem_percent || 0}
+            color="auto"
+          />
+
+          <MetricRow
+            icon={HardDrive}
+            label="Disk"
+            value={`${system.disk_used_gb?.toFixed(0) || 0} / ${system.disk_total_gb?.toFixed(0) || 0} GB`}
+            progress={system.disk_percent || 0}
+            color="auto"
+          />
+
+          <MetricRow
+            icon={Gauge}
+            label="Load Avg"
+            value={loadAvg}
+          />
+        </div>
+      </div>
+
+      {/* Hardware Info Section */}
+      <div className="mt-4 pt-3 border-t border-border">
+        <h4 className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wide">
+          Hardware
+        </h4>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <Cpu className="w-3 h-3" />
+            <span className="truncate" title={system.cpu_model || 'Unknown'}>
+              {system.cpu_model || 'Unknown CPU'}
+            </span>
           </div>
-        ))}
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <MemoryStick className="w-3 h-3" />
+            <span>{(system.mem_total_mb / 1024)?.toFixed(1) || 0} GB RAM</span>
+          </div>
+          {gpus.length > 0 ? (
+            gpus.map((gpu, i) => (
+              <div key={i} className="flex items-center gap-2 text-muted-foreground md:col-span-2">
+                <MonitorDot className="w-3 h-3" />
+                <span className="truncate" title={gpu.name}>
+                  {gpu.name}
+                  {gpu.util_valid && ` · ${gpu.util_percent?.toFixed(0)}%`}
+                  {gpu.mem_valid && ` · ${(gpu.mem_used_mb / 1024)?.toFixed(1)}/${(gpu.mem_total_mb / 1024)?.toFixed(1)} GB`}
+                  {gpu.temp_valid && (
+                    <span className="inline-flex items-center gap-0.5 ml-1">
+                      <Thermometer className="w-2.5 h-2.5" />
+                      {gpu.temp_c?.toFixed(0)}°C
+                    </span>
+                  )}
+                </span>
+              </div>
+            ))
+          ) : (
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <MonitorDot className="w-3 h-3" />
+              <span>No GPU detected</span>
+            </div>
+          )}
+        </div>
       </div>
 
-      {resources.status && resources.status !== 'healthy' && (
+      {/* Status warning */}
+      {data.status && data.status !== 'healthy' && (
         <div className={`mt-3 text-xs px-2 py-1 rounded ${
-          resources.status === 'critical'
+          data.status === 'critical'
             ? 'bg-error/10 text-error'
             : 'bg-warning/10 text-warning'
         }`}>
-          Status: {resources.status}
+          Status: {data.status}
         </div>
       )}
-    </div>
-  );
-}
-
-// Bento Grid Card Component
-function BentoCard({ children, className = '' }) {
-  return (
-    <div className={`group relative rounded-xl border border-border bg-card p-4 md:p-6 transition-all hover:border-muted-foreground/30 hover:shadow-lg animate-fade-up ${className}`}>
-      {children}
-    </div>
+    </BentoCard>
   );
 }
 
@@ -334,10 +437,14 @@ function EmptyState() {
 function LoadingSkeleton() {
   return (
     <div className="space-y-4">
-      <div className="h-12 rounded-xl bg-muted animate-pulse" />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {[...Array(4)].map((_, i) => (
+          <div key={i} className="h-20 rounded-xl bg-muted animate-pulse" />
+        ))}
+      </div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="h-40 rounded-xl bg-muted animate-pulse" />
-        <div className="md:col-span-2 h-40 rounded-xl bg-muted animate-pulse" />
+        <div className="md:col-span-2 h-32 rounded-xl bg-muted animate-pulse" />
+        <div className="h-32 rounded-xl bg-muted animate-pulse" />
       </div>
     </div>
   );
@@ -345,16 +452,19 @@ function LoadingSkeleton() {
 
 // Custom hook for system resources
 function useSystemResources() {
-  const [resources, setResources] = useState(null);
+  const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [lastUpdate, setLastUpdate] = useState(null);
+  const [timeAgo, setTimeAgo] = useState('');
 
   const fetchResources = useCallback(async () => {
     setLoading(true);
     try {
       const response = await fetch('/health/deep');
       if (response.ok) {
-        const data = await response.json();
-        setResources(data);
+        const result = await response.json();
+        setData(result);
+        setLastUpdate(Date.now());
       }
     } catch (error) {
       console.error('Failed to fetch system resources:', error);
@@ -363,19 +473,42 @@ function useSystemResources() {
     }
   }, []);
 
+  // Auto-fetch every 30 seconds
   useEffect(() => {
     fetchResources();
-    // Auto-refresh every 30 seconds
     const interval = setInterval(fetchResources, 30000);
     return () => clearInterval(interval);
   }, [fetchResources]);
 
-  return { resources, loading, refresh: fetchResources };
+  // Update "time ago" text every 5 seconds
+  useEffect(() => {
+    const updateTimeAgo = () => {
+      if (!lastUpdate) {
+        setTimeAgo('');
+        return;
+      }
+      const seconds = Math.floor((Date.now() - lastUpdate) / 1000);
+      if (seconds < 5) {
+        setTimeAgo('just now');
+      } else if (seconds < 60) {
+        setTimeAgo(`${seconds}s ago`);
+      } else {
+        const minutes = Math.floor(seconds / 60);
+        setTimeAgo(`${minutes}m ago`);
+      }
+    };
+
+    updateTimeAgo();
+    const interval = setInterval(updateTimeAgo, 5000);
+    return () => clearInterval(interval);
+  }, [lastUpdate]);
+
+  return { data, loading, refresh: fetchResources, timeAgo };
 }
 
 export default function Dashboard() {
   const { workflows, activeWorkflow, fetchWorkflows, fetchActiveWorkflow, loading } = useWorkflowStore();
-  const { resources, loading: resourcesLoading, refresh: refreshResources } = useSystemResources();
+  const { data: systemData, loading: systemLoading, refresh: refreshSystem, timeAgo: systemTimeAgo } = useSystemResources();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -414,58 +547,79 @@ export default function Dashboard() {
         </Link>
       </div>
 
-      {/* Compact Stats Bar */}
-      <StatsBar
-        total={workflows.length}
-        completed={completedCount}
-        running={runningCount}
-        failed={failedCount}
-      />
-
       {/* Active Workflow Banner */}
       {activeWorkflow && activeWorkflow.status === 'running' && (
         <ActiveWorkflowBanner workflow={activeWorkflow} />
       )}
 
-      {/* Main Grid: System Resources + Recent Workflows */}
+      {/* Stats Grid */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <StatCard
+          title="Total Workflows"
+          value={workflows.length}
+          subtitle="All time"
+          icon={GitBranch}
+          color="primary"
+        />
+        <StatCard
+          title="Completed"
+          value={completedCount}
+          subtitle={`${Math.round((completedCount / Math.max(workflows.length, 1)) * 100)}% success`}
+          icon={CheckCircle2}
+          color="success"
+        />
+        <StatCard
+          title="Running"
+          value={runningCount}
+          subtitle="Active now"
+          icon={Activity}
+          color="info"
+        />
+        <StatCard
+          title="Failed"
+          value={failedCount}
+          subtitle="Needs attention"
+          icon={XCircle}
+          color="error"
+        />
+      </div>
+
+      {/* System Resources + Recent Workflows */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* System Resources - smaller on desktop */}
-        <div className="md:col-span-1">
-          <SystemResources
-            resources={resources}
-            loading={resourcesLoading}
-            onRefresh={refreshResources}
-          />
-        </div>
+        {/* System Resources */}
+        <SystemResources
+          data={systemData}
+          loading={systemLoading}
+          onRefresh={refreshSystem}
+          timeAgo={systemTimeAgo}
+        />
 
-        {/* Recent Workflows - larger on desktop */}
-        <div className="md:col-span-2">
-          <BentoCard>
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h2 className="text-base font-semibold text-foreground">Recent Workflows</h2>
-                <p className="text-xs text-muted-foreground">Your latest workflow activity</p>
-              </div>
-              <Link
-                to="/workflows"
-                className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
-              >
-                View all
-                <ArrowUpRight className="w-3.5 h-3.5" />
-              </Link>
+        {/* Recent Workflows */}
+        <BentoCard>
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h2 className="text-sm font-semibold text-foreground">Recent Workflows</h2>
+              <p className="text-xs text-muted-foreground">Latest activity</p>
             </div>
+            <Link
+              to="/workflows"
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+            >
+              View all
+              <ArrowUpRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
 
-            {recentWorkflows.length > 0 ? (
-              <div className="space-y-0.5">
-                {recentWorkflows.map((workflow) => (
-                  <WorkflowItem key={workflow.id} workflow={workflow} />
-                ))}
-              </div>
-            ) : (
-              <EmptyState />
-            )}
-          </BentoCard>
-        </div>
+          {recentWorkflows.length > 0 ? (
+            <div className="space-y-0.5">
+              {recentWorkflows.map((workflow) => (
+                <WorkflowItem key={workflow.id} workflow={workflow} />
+              ))}
+            </div>
+          ) : (
+            <EmptyState />
+          )}
+        </BentoCard>
       </div>
 
       {/* Mobile FAB */}

@@ -23,6 +23,7 @@ import (
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/clip"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/control"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/diagnostics"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/events"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/logging"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/tui"
@@ -375,7 +376,7 @@ type Model struct {
 	shortcutsOverlay *ShortcutsOverlay
 	fileViewer       *FileViewer
 	statsWidget      *StatsWidget
-	machineCollector *MachineStatsCollector
+	machineCollector *diagnostics.SystemMetricsCollector
 
 	// Cancellation for interrupts
 	cancelFunc context.CancelFunc
@@ -479,7 +480,7 @@ func NewModel(cp *control.ControlPlane, agents core.AgentRegistry, defaultAgent,
 		shortcutsOverlay: NewShortcutsOverlay(),
 		fileViewer:       NewFileViewer(),
 		statsWidget:      NewStatsWidget(),
-		machineCollector: NewMachineStatsCollector(),
+		machineCollector: diagnostics.NewSystemMetricsCollector(),
 		darkTheme:        true,                 // Default to dark theme
 		messageStyles:    NewMessageStyles(80), // Default width, updated on resize
 	}
