@@ -10,11 +10,17 @@ You are generating GitHub/GitLab issues from workflow artifacts.
 3. Each issue must be clean, actionable, and ready for GitHub/GitLab
 
 **DO NOT include in issues:**
-- Model names or versions
-- Agent names (Claude, Gemini, etc.)
-- Generation timestamps
-- Internal IDs or workflow IDs
+- Model names or versions (Claude, GPT-4, Gemini, etc.)
+- Agent names or AI references
+- Generation timestamps or dates
+- Internal IDs, workflow IDs, or task IDs
 - Technical metadata about the generation process
+- YAML frontmatter or metadata blocks from source files
+- File paths or directory references
+- Debug information or logs
+- Any content that reveals this was AI-generated
+
+**Your job is to transform the analysis into clean, professional issues that look like they were written by a human developer.**
 
 ---
 
@@ -61,7 +67,7 @@ You MUST read these files to understand the work:
 Each issue file MUST have this structure:
 
 ```markdown
-# [Concise Issue Title]
+# [Descriptive Title of the Objective]
 
 ## Summary
 [Brief description of what this issue addresses]
@@ -79,6 +85,27 @@ Each issue file MUST have this structure:
 [How to verify this issue is resolved]
 {{end}}
 ```
+
+### Title Requirements (CRITICAL)
+
+The issue title (the `# ` H1 heading) must be:
+- **Descriptive**: Clearly explains the objective or goal of the task
+- **Clean**: No numeric prefixes, no internal markers, no slugs
+- **Professional**: Written as a human would write it for a real project
+
+**DO NOT use these patterns in titles:**
+- ❌ `# 01-implement-auth` (numeric prefix)
+- ❌ `# task-001: Implement Auth` (task marker)
+- ❌ `# 001-add-pagination` (numeric prefix)
+- ❌ `# implement-user-authentication` (slug format with dashes)
+
+**USE descriptive titles like:**
+- ✅ `# Implement User Authentication`
+- ✅ `# Add Pagination to Product Listing`
+- ✅ `# Fix Memory Leak in Cache Service`
+- ✅ `# Refactor Database Connection Pool`
+
+**Note**: The filename can have numeric prefixes for ordering (e.g., `01-implement-auth.md`), but the H1 title inside the file must be clean and descriptive.
 
 ---
 

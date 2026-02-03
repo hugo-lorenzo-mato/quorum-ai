@@ -890,21 +890,8 @@ func (g *Generator) GenerateIssueFiles(ctx context.Context, workflowID string) (
 			"batch", batchNum+1,
 			"total_batches", totalBatches,
 			"output_length", len(result.Output))
-
-		// Parse the LLM output and write files to disk
-		// The LLM returns content with file markers, not actual files
-		if result.Output != "" {
-			batchFiles, parseErr := g.parseAndWriteIssueFiles(result.Output, issuesDirAbs)
-			if parseErr != nil {
-				slog.Warn("failed to parse batch output",
-					"batch", batchNum+1,
-					"error", parseErr)
-			} else {
-				slog.Info("parsed and wrote files from batch",
-					"batch", batchNum+1,
-					"files_written", len(batchFiles))
-			}
-		}
+		// LLM writes files directly to disk using its Write tool
+		// No parsing needed - files are created by the agent
 	}
 
 	slog.Info("AI issue generation completed", "total_batches", totalBatches)
