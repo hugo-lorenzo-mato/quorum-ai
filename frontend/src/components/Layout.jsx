@@ -297,7 +297,7 @@ export default function Layout({ children }) {
         </header>
 
         {/* Page content */}
-        <div className="p-3 sm:p-6">
+        <div className="px-3 pt-3 pb-0 sm:p-6">
           {children}
         </div>
       </main>
