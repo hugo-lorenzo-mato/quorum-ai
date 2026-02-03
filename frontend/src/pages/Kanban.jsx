@@ -158,7 +158,7 @@ function KanbanColumn({ column, workflows, isMobile, onOpenMobileMenu }) {
       </div>
 
       {/* Workflow cards container */}
-      <div className="flex-1 p-2 space-y-2.5 overflow-y-auto max-h-[calc(100vh-280px)] scrollbar-thin">
+      <div className="flex-1 p-2 space-y-2.5 overflow-y-auto min-h-0 scrollbar-thin">
         {workflows.map((workflow) => (
           <KanbanCard
             key={workflow.id}
@@ -499,7 +499,7 @@ export default function Kanban() {
   }
 
   return (
-    <div className="relative h-[calc(100vh-8rem)] flex flex-col space-y-6 animate-fade-in">
+    <div className="fixed top-14 left-0 right-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] md:static md:h-[calc(100vh-8rem)] md:relative flex flex-col space-y-4 md:space-y-6 animate-fade-in bg-background md:bg-transparent z-0">
       {/* Header */}
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between shrink-0 relative z-10">
         <div className="text-center lg:text-left">
