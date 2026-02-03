@@ -890,19 +890,33 @@ func (g *Generator) GenerateIssueFiles(ctx context.Context, workflowID string) (
 			"batch", batchNum+1,
 			"total_batches", totalBatches,
 			"output_length", len(result.Output))
+
+		// Parse the LLM output and write files to disk
+		// The LLM returns content with file markers, not actual files
+		if result.Output != "" {
+			batchFiles, parseErr := g.parseAndWriteIssueFiles(result.Output, issuesDirAbs)
+			if parseErr != nil {
+				slog.Warn("failed to parse batch output",
+					"batch", batchNum+1,
+					"error", parseErr)
+			} else {
+				slog.Info("parsed and wrote files from batch",
+					"batch", batchNum+1,
+					"files_written", len(batchFiles))
+			}
+		}
 	}
 
 	slog.Info("AI issue generation completed", "total_batches", totalBatches)
 
 	// Scan the filesystem for generated issue files
-	// (Claude wrote them directly, so we just need to find them)
 	files, err := g.scanGeneratedIssueFiles(issuesDirAbs)
 	if err != nil {
 		return nil, fmt.Errorf("scanning generated issue files: %w", err)
 	}
 
 	if len(files) == 0 {
-		return nil, fmt.Errorf("AI did not generate any issue files (all %d batches completed but no files found)", totalBatches)
+		return nil, fmt.Errorf("AI did not generate any issue files (all %d batches completed but no files found in %s)", totalBatches, issuesDirAbs)
 	}
 
 	slog.Info("found generated issue files", "count", len(files))
