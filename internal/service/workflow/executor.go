@@ -152,6 +152,12 @@ func (e *Executor) Run(ctx context.Context, wctx *Context) error {
 		// This allows fallback agents to work properly and other tasks to complete independently.
 		useWorktrees := shouldUseWorktrees(wctx.Config.WorktreeMode, len(ready))
 
+		// Force worktrees when workflow isolation is enabled, regardless of mode.
+		// Workflow isolation requires task branches to exist for merge operations.
+		if wctx.UseWorkflowIsolation() {
+			useWorktrees = true
+		}
+
 		var wg sync.WaitGroup
 		var mu sync.Mutex
 		var firstErr error
