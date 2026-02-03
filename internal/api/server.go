@@ -150,7 +150,6 @@ func NewServer(stateManager core.StateManager, eventBus *events.EventBus, opts .
 	return s
 }
 
-
 // Handler returns the HTTP handler for the server.
 func (s *Server) Handler() http.Handler {
 	return s.router
@@ -225,6 +224,7 @@ func (s *Server) setupRouter() chi.Router {
 				r.Route("/issues", func(r chi.Router) {
 					r.Post("/", s.handleGenerateIssues)
 					r.Get("/preview", s.handlePreviewIssues)
+					r.Post("/files", s.handleSaveIssuesFiles)
 					r.Post("/single", s.handleCreateSingleIssue)
 				})
 			})

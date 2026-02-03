@@ -88,6 +88,30 @@ const useIssuesStore = create(
       },
 
       /**
+       * Apply saved issues while preserving selection when possible.
+       */
+      applySavedIssues: (issues, aiInfo = {}) => {
+        const { selectedIssueId } = get();
+        const issuesWithIds = issues.map((issue, idx) => ({
+          ...issue,
+          _localId: issue.task_id || (issue.is_main_issue ? 'main' : `issue-${idx}`),
+          _modified: false,
+        }));
+
+        const nextSelected = issuesWithIds.find(i => i._localId === selectedIssueId)
+          ? selectedIssueId
+          : issuesWithIds[0]?._localId || null;
+
+        set({
+          originalIssues: JSON.parse(JSON.stringify(issuesWithIds)),
+          editedIssues: issuesWithIds,
+          selectedIssueId: nextSelected,
+          aiUsed: aiInfo.ai_used || false,
+          aiErrors: aiInfo.ai_errors || [],
+        });
+      },
+
+      /**
        * Select an issue for editing
        */
       selectIssue: (id) => set({ selectedIssueId: id }),
@@ -115,6 +139,20 @@ const useIssuesStore = create(
       },
 
       /**
+       * Update issue metadata without marking as modified
+       */
+      setIssueFilePath: (id, filePath) => {
+        const { editedIssues } = get();
+        set({
+          editedIssues: editedIssues.map(issue =>
+            issue._localId === id
+              ? { ...issue, file_path: filePath }
+              : issue
+          ),
+        });
+      },
+
+      /**
        * Create a new blank issue
        */
       createIssue: () => {
@@ -128,6 +166,7 @@ const useIssuesStore = create(
           assignees: [],
           is_main_issue: false,
           task_id: null,
+          file_path: null,
         };
         
         set({
@@ -249,6 +288,7 @@ const useIssuesStore = create(
           assignees: issue.assignees || [],
           is_main_issue: issue.is_main_issue || false,
           task_id: issue.task_id || null,
+          file_path: issue.file_path || null,
         }));
       },
 

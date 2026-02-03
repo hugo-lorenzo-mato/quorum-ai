@@ -25,6 +25,7 @@ type IssueInput struct {
 	Assignees   []string
 	IsMainIssue bool
 	TaskID      string
+	FilePath    string
 }
 
 // Generator creates GitHub/GitLab issues from workflow artifacts.
@@ -32,8 +33,8 @@ type Generator struct {
 	client    core.IssueClient
 	config    config.IssuesConfig
 	reportDir string
-	agents    core.AgentRegistry          // Optional: for LLM-based generation
-	prompts   *service.PromptRenderer     // Lazy-initialized prompt renderer
+	agents    core.AgentRegistry      // Optional: for LLM-based generation
+	prompts   *service.PromptRenderer // Lazy-initialized prompt renderer
 
 	// LLM generation cache - prevents regenerating files within same workflow
 	llmGenerationCache map[string][]IssuePreview // workflowID -> generated issues
@@ -126,6 +127,14 @@ type IssuePreview struct {
 	Assignees   []string
 	IsMainIssue bool
 	TaskID      string
+	FilePath    string
+}
+
+type expectedIssueFile struct {
+	FileName string
+	TaskID   string
+	IsMain   bool
+	Task     *service.IssueTaskFile
 }
 
 // GenerationTracker tracks expected vs actual generated files to avoid race conditions.
@@ -258,6 +267,7 @@ func (g *Generator) Generate(ctx context.Context, opts GenerateOptions) (*Genera
 	if len(opts.CustomAssignees) > 0 {
 		assignees = opts.CustomAssignees
 	}
+	mainLabels := ensureEpicLabel(labels)
 
 	// Read consolidated analysis for main issue
 	var consolidatedContent string
@@ -302,7 +312,7 @@ func (g *Generator) Generate(ctx context.Context, opts GenerateOptions) (*Genera
 				result.PreviewIssues = append(result.PreviewIssues, IssuePreview{
 					Title:       mainTitle,
 					Body:        mainBody,
-					Labels:      labels,
+					Labels:      mainLabels,
 					Assignees:   assignees,
 					IsMainIssue: true,
 				})
@@ -310,7 +320,7 @@ func (g *Generator) Generate(ctx context.Context, opts GenerateOptions) (*Genera
 				mainIssue, err = g.client.CreateIssue(ctx, core.CreateIssueOptions{
 					Title:     mainTitle,
 					Body:      mainBody,
-					Labels:    labels,
+					Labels:    mainLabels,
 					Assignees: assignees,
 				})
 				if err != nil {
@@ -417,6 +427,7 @@ func (g *Generator) CreateIssuesFromInput(ctx context.Context, inputs []IssueInp
 		if len(labels) == 0 {
 			labels = defaultLabels
 		}
+		labels = ensureEpicLabel(labels)
 		assignees := mainInput.Assignees
 		if len(assignees) == 0 {
 			assignees = defaultAssignees
@@ -429,6 +440,7 @@ func (g *Generator) CreateIssuesFromInput(ctx context.Context, inputs []IssueInp
 				Labels:      labels,
 				Assignees:   assignees,
 				IsMainIssue: true,
+				FilePath:    mainInput.FilePath,
 			})
 		} else {
 			issue, err := g.client.CreateIssue(ctx, core.CreateIssueOptions{
@@ -465,6 +477,7 @@ func (g *Generator) CreateIssuesFromInput(ctx context.Context, inputs []IssueInp
 				Assignees:   assignees,
 				IsMainIssue: false,
 				TaskID:      input.TaskID,
+				FilePath:    input.FilePath,
 			})
 		} else {
 			parentNum := 0
@@ -794,6 +807,17 @@ func (g *Generator) GenerateIssueFiles(ctx context.Context, workflowID string) (
 		return nil, fmt.Errorf("getting prompt renderer: %w", err)
 	}
 
+	logger, closeLogger, err := g.openIssuesLogger(workflowID)
+	if err != nil {
+		slog.Warn("failed to open issues log file", "error", err)
+	} else {
+		defer func() {
+			if closeErr := closeLogger(); closeErr != nil {
+				slog.Warn("failed to close issues log file", "error", closeErr)
+			}
+		}()
+	}
+
 	// Create output directory
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -802,12 +826,12 @@ func (g *Generator) GenerateIssueFiles(ctx context.Context, workflowID string) (
 	// Use relative path for shorter prompt (Claude will resolve it from cwd)
 	issuesDirRel := filepath.Join(".quorum", "issues", workflowID)
 	issuesDirAbs := filepath.Join(cwd, issuesDirRel)
-	
+
 	// Clean the directory before generation to avoid duplicates
 	if err := g.cleanIssuesDirectory(issuesDirAbs); err != nil {
 		return nil, fmt.Errorf("cleaning issues directory: %w", err)
 	}
-	
+
 	if err := os.MkdirAll(issuesDirAbs, 0755); err != nil {
 		return nil, fmt.Errorf("creating issues directory: %w", err)
 	}
@@ -824,89 +848,211 @@ func (g *Generator) GenerateIssueFiles(ctx context.Context, workflowID string) (
 		return nil, fmt.Errorf("getting task file paths: %w", err)
 	}
 
-	// Split tasks into batches to avoid Claude CLI "Prompt is too long" error
-	batches := g.splitIntoBatches(taskFiles, maxTasksPerBatch)
-	totalBatches := len(batches)
+	expected := g.buildExpectedIssueFiles(consolidatedPath, taskFiles)
+	expectedByName := make(map[string]expectedIssueFile, len(expected))
+	tracker := NewGenerationTracker(workflowID)
+	for _, exp := range expected {
+		expectedByName[exp.FileName] = exp
+		tracker.AddExpected(exp.FileName, exp.TaskID)
+	}
+
+	resilienceCfg := g.buildLLMResilienceConfig(g.config.Generator.Resilience, logger)
+	executor := NewResilientLLMExecutor(agent, resilienceCfg)
+	maxAttempts := 1
+	if resilienceCfg.Enabled && resilienceCfg.MaxRetries > 0 {
+		maxAttempts = resilienceCfg.MaxRetries + 1
+	}
 
 	slog.Info("starting AI issue generation",
 		"agent", g.config.Generator.Agent,
 		"model", g.config.Generator.Model,
 		"output_dir", issuesDirRel,
 		"total_tasks", len(taskFiles),
-		"batches", totalBatches)
+		"max_attempts", maxAttempts)
 
-	cfg := g.config.Template
-
-	// Process each batch
-	for batchNum, batch := range batches {
-		// Include consolidated analysis only in the first batch
-		var consolidatedForBatch string
-		if batchNum == 0 {
-			consolidatedForBatch = consolidatedPath
-		}
-
-		params := service.IssueGenerateParams{
-			ConsolidatedAnalysisPath: consolidatedForBatch,
-			TaskFiles:                batch,
-			IssuesDir:                issuesDirRel,
-			Language:                 cfg.Language,
-			Tone:                     cfg.Tone,
-			Summarize:                g.config.Generator.Summarize,
-			IncludeDiagrams:          cfg.IncludeDiagrams,
-			IncludeTestingSection:    true,
-			CustomInstructions:       cfg.CustomInstructions,
-			Convention:               cfg.Convention,
-		}
-
-		prompt, err := prompts.RenderIssueGenerate(params)
-		if err != nil {
-			return nil, fmt.Errorf("rendering issue generation prompt (batch %d): %w", batchNum+1, err)
-		}
-
-		slog.Info("processing issue generation batch",
-			"batch", batchNum+1,
-			"total_batches", totalBatches,
-			"tasks_in_batch", len(batch),
-			"prompt_size", len(prompt),
-			"includes_consolidated", consolidatedForBatch != "")
-
-		if len(prompt) > 100 {
-			slog.Debug("batch prompt preview", "first_100", prompt[:100])
-		}
-
-		result, err := agent.Execute(ctx, core.ExecuteOptions{
-			Prompt:  prompt,
-			Model:   g.config.Generator.Model,
-			Format:  core.OutputFormatText,
-			Timeout: 10 * time.Minute,
-			Sandbox: false,
-			WorkDir: cwd,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("executing agent (batch %d/%d): %w", batchNum+1, totalBatches, err)
-		}
-
-		slog.Info("batch completed",
-			"batch", batchNum+1,
-			"total_batches", totalBatches,
-			"output_length", len(result.Output))
-		// LLM writes files directly to disk using its Write tool
-		// No parsing needed - files are created by the agent
+	if logger != nil {
+		deadline, hasDeadline := ctx.Deadline()
+		logger.Info("issue generation started",
+			"workflow_id", workflowID,
+			"agent", g.config.Generator.Agent,
+			"model", g.config.Generator.Model,
+			"output_dir", issuesDirRel,
+			"total_tasks", len(taskFiles),
+			"max_attempts", maxAttempts,
+			"has_deadline", hasDeadline,
+			"deadline", deadline)
 	}
 
-	slog.Info("AI issue generation completed", "total_batches", totalBatches)
+	cfg := g.config.Template
+	batchSize := maxTasksPerBatch
+	missing := expected
+	var batchErrors []error
 
-	// Scan the filesystem for generated issue files
-	files, err := g.scanGeneratedIssueFiles(issuesDirAbs)
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+
+		if len(missing) == 0 {
+			break
+		}
+
+		var tasksToGenerate []service.IssueTaskFile
+		includeMain := false
+		for _, exp := range missing {
+			if exp.IsMain {
+				includeMain = true
+				continue
+			}
+			if exp.Task != nil {
+				tasksToGenerate = append(tasksToGenerate, *exp.Task)
+			}
+		}
+
+		batches := g.splitIntoBatches(tasksToGenerate, batchSize)
+		totalBatches := len(batches)
+
+		if logger != nil {
+			logger.Info("starting generation attempt",
+				"attempt", attempt,
+				"max_attempts", maxAttempts,
+				"batch_size", batchSize,
+				"tasks_to_generate", len(tasksToGenerate),
+				"include_main", includeMain,
+				"batches", totalBatches)
+		}
+
+		for batchNum, batch := range batches {
+			var consolidatedForBatch string
+			if includeMain && batchNum == 0 {
+				consolidatedForBatch = consolidatedPath
+			}
+
+			params := service.IssueGenerateParams{
+				ConsolidatedAnalysisPath: consolidatedForBatch,
+				TaskFiles:                batch,
+				IssuesDir:                issuesDirRel,
+				Language:                 cfg.Language,
+				Tone:                     cfg.Tone,
+				Summarize:                g.config.Generator.Summarize,
+				IncludeDiagrams:          cfg.IncludeDiagrams,
+				IncludeTestingSection:    true,
+				CustomInstructions:       cfg.CustomInstructions,
+				Convention:               cfg.Convention,
+			}
+
+			prompt, err := prompts.RenderIssueGenerate(params)
+			if err != nil {
+				return nil, fmt.Errorf("rendering issue generation prompt (batch %d, attempt %d): %w", batchNum+1, attempt, err)
+			}
+
+			slog.Info("processing issue generation batch",
+				"batch", batchNum+1,
+				"total_batches", totalBatches,
+				"attempt", attempt,
+				"tasks_in_batch", len(batch),
+				"prompt_size", len(prompt),
+				"includes_consolidated", consolidatedForBatch != "")
+
+			if logger != nil {
+				taskIDs := make([]string, 0, len(batch))
+				for _, task := range batch {
+					taskIDs = append(taskIDs, task.ID)
+				}
+				logger.Info("executing batch",
+					"attempt", attempt,
+					"batch", batchNum+1,
+					"total_batches", totalBatches,
+					"tasks", taskIDs,
+					"prompt_size", len(prompt),
+					"includes_consolidated", consolidatedForBatch != "")
+			}
+
+			deadline, hasDeadline := ctx.Deadline()
+			timeout := resolveExecuteTimeout(deadline, hasDeadline, 10*time.Minute)
+
+			result, err := executor.Execute(ctx, core.ExecuteOptions{
+				Prompt:  prompt,
+				Model:   g.config.Generator.Model,
+				Format:  core.OutputFormatText,
+				Timeout: timeout,
+				Sandbox: false,
+				WorkDir: cwd,
+			})
+			if err != nil {
+				batchErrors = append(batchErrors, fmt.Errorf("batch %d/%d attempt %d: %w", batchNum+1, totalBatches, attempt, err))
+				if logger != nil {
+					logger.Error("batch failed",
+						"attempt", attempt,
+						"batch", batchNum+1,
+						"error", err)
+				}
+				continue
+			}
+
+			slog.Info("batch completed",
+				"batch", batchNum+1,
+				"total_batches", totalBatches,
+				"attempt", attempt,
+				"output_length", len(result.Output))
+			if logger != nil {
+				logger.Info("batch completed",
+					"attempt", attempt,
+					"batch", batchNum+1,
+					"output_length", len(result.Output))
+			}
+		}
+
+		if _, err := g.scanGeneratedIssueFilesWithTracker(issuesDirAbs, tracker); err != nil {
+			return nil, fmt.Errorf("scanning generated issue files: %w", err)
+		}
+
+		missingNames := tracker.GetMissingFiles()
+		sort.Strings(missingNames)
+		if len(missingNames) == 0 {
+			break
+		}
+
+		missing = missing[:0]
+		for _, name := range missingNames {
+			if exp, ok := expectedByName[name]; ok {
+				missing = append(missing, exp)
+			}
+		}
+
+		if logger != nil {
+			logger.Warn("missing issue files after attempt",
+				"attempt", attempt,
+				"missing", missingNames)
+		}
+
+		if attempt < maxAttempts && batchSize > 1 {
+			batchSize = (batchSize + 1) / 2
+		}
+	}
+
+	files, err := g.scanGeneratedIssueFilesWithTracker(issuesDirAbs, tracker)
 	if err != nil {
 		return nil, fmt.Errorf("scanning generated issue files: %w", err)
 	}
 
 	if len(files) == 0 {
-		return nil, fmt.Errorf("AI did not generate any issue files (all %d batches completed but no files found in %s)", totalBatches, issuesDirAbs)
+		return nil, fmt.Errorf("AI did not generate any issue files (no files found in %s)", issuesDirAbs)
 	}
 
-	slog.Info("found generated issue files", "count", len(files))
+	if missingNames := tracker.GetMissingFiles(); len(missingNames) > 0 {
+		sort.Strings(missingNames)
+		errMsg := fmt.Sprintf("issue generation incomplete: missing %d file(s): %s", len(missingNames), strings.Join(missingNames, ", "))
+		if len(batchErrors) > 0 {
+			errMsg = fmt.Sprintf("%s; batch errors: %v", errMsg, batchErrors)
+		}
+		return nil, fmt.Errorf("%s", errMsg)
+	}
+
+	slog.Info("AI issue generation completed", "total_files", len(files))
+	if logger != nil {
+		logger.Info("issue generation completed", "total_files", len(files))
+	}
 
 	return files, nil
 }
@@ -1045,10 +1191,15 @@ func (g *Generator) getTaskFilePaths() ([]service.IssueTaskFile, error) {
 		return nil, fmt.Errorf("no task files found in any location")
 	}
 
-	// Sort by task ID
+	// Sort by numeric task ID (task-1, task-2, task-10, ...)
 	sort.Slice(taskFiles, func(i, j int) bool {
-		return taskFiles[i].ID < taskFiles[j].ID
+		return extractTaskNumber(taskFiles[i].ID) < extractTaskNumber(taskFiles[j].ID)
 	})
+
+	// Assign global 1-based index for deterministic file naming
+	for i := range taskFiles {
+		taskFiles[i].Index = i + 1
+	}
 
 	return taskFiles, nil
 }
@@ -1081,6 +1232,10 @@ func (g *Generator) scanGeneratedIssueFilesWithTracker(issuesDir string, tracker
 		filePath := filepath.Join(issuesDir, entry.Name())
 		info, err := os.Stat(filePath)
 		if err != nil {
+			continue
+		}
+		if info.Size() == 0 {
+			slog.Warn("skipping empty issue file", "file", entry.Name(), "path", filePath)
 			continue
 		}
 
@@ -1435,6 +1590,12 @@ func (g *Generator) ReadGeneratedIssues(workflowID string) ([]IssuePreview, erro
 
 	var previews []IssuePreview
 	seen := make(map[string]bool) // Track by taskID to deduplicate
+	taskIndexMap := make(map[int]string)
+	if taskFiles, err := g.getTaskFilePaths(); err == nil {
+		for _, task := range taskFiles {
+			taskIndexMap[task.Index] = task.ID
+		}
+	}
 
 	// Sort entries numerically
 	var files []os.DirEntry
@@ -1469,13 +1630,29 @@ func (g *Generator) ReadGeneratedIssues(workflowID string) ([]IssuePreview, erro
 			if match := re.FindStringSubmatch(entry.Name()); len(match) > 1 {
 				taskNum := match[1]
 				if taskNum != "00" {
-					taskID = "task-" + taskNum
+					if num, err := strconv.Atoi(taskNum); err == nil {
+						if mapped, ok := taskIndexMap[num]; ok {
+							taskID = mapped
+						} else {
+							taskID = fmt.Sprintf("task-%d", num)
+						}
+					} else {
+						taskID = "task-" + taskNum
+					}
 				}
 			} else {
 				// Try pattern: issue-N-something.md or issue-task-N.md
 				re = regexp.MustCompile(`issue-(?:task-)?(\d+)`)
 				if match := re.FindStringSubmatch(entry.Name()); len(match) > 1 {
-					taskID = "task-" + match[1]
+					if num, err := strconv.Atoi(match[1]); err == nil {
+						if mapped, ok := taskIndexMap[num]; ok {
+							taskID = mapped
+						} else {
+							taskID = fmt.Sprintf("task-%d", num)
+						}
+					} else {
+						taskID = "task-" + match[1]
+					}
 				}
 			}
 		}
@@ -1498,6 +1675,7 @@ func (g *Generator) ReadGeneratedIssues(workflowID string) ([]IssuePreview, erro
 			Assignees:   g.config.Assignees,
 			IsMainIssue: isMainIssue,
 			TaskID:      taskID,
+			FilePath:    filepath.Join(issuesDir, entry.Name()),
 		})
 	}
 

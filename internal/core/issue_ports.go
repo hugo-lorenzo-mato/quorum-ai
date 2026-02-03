@@ -32,6 +32,9 @@ func (p IssueProvider) IsValid() bool {
 
 // Issue represents an issue on a tracking platform (GitHub, GitLab).
 type Issue struct {
+	// ID is the unique database ID for the issue (platform-specific, e.g., GitHub issue ID).
+	ID int64
+
 	// Number is the unique issue number within the repository.
 	Number int
 

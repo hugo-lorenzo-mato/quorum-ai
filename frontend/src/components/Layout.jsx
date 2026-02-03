@@ -1,6 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
 import { useUIStore } from '../stores';
 import MobileBottomNav from './MobileBottomNav';
+import Notifications from './Notifications';
 import Logo from './Logo';
 import {
   LayoutDashboard,
@@ -313,6 +314,8 @@ export default function Layout({ children }) {
       
       {/* Mobile Bottom Navigation */}
       <MobileBottomNav />
+
+      <Notifications />
     </div>
   );
 }

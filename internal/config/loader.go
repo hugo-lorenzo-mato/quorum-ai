@@ -276,6 +276,13 @@ func (l *Loader) setDefaults() {
 	l.v.SetDefault("issues.assignees", []string{})
 	l.v.SetDefault("issues.gitlab.use_epics", false)
 	l.v.SetDefault("issues.gitlab.project_id", "")
+	l.v.SetDefault("issues.generator.resilience.enabled", true)
+	l.v.SetDefault("issues.generator.resilience.max_retries", 3)
+	l.v.SetDefault("issues.generator.resilience.initial_backoff", "1s")
+	l.v.SetDefault("issues.generator.resilience.max_backoff", "30s")
+	l.v.SetDefault("issues.generator.resilience.backoff_multiplier", 2.0)
+	l.v.SetDefault("issues.generator.resilience.failure_threshold", 3)
+	l.v.SetDefault("issues.generator.resilience.reset_timeout", "30s")
 }
 
 // ConfigFile returns the config file path if one was used.

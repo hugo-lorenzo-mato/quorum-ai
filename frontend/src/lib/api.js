@@ -171,6 +171,16 @@ export const workflowApi = {
   }),
 
   /**
+   * Save issue markdown files to disk.
+   * @param {string} id - Workflow ID
+   * @param {Array} issues - Issues to save
+   */
+  saveIssuesFiles: (id, issues = []) => request(`/workflows/${id}/issues/files`, {
+    method: 'POST',
+    body: JSON.stringify({ issues }),
+  }),
+
+  /**
    * Preview issues without creating them.
    * @param {string} id - Workflow ID
    * @param {boolean} fast - Use fast mode (skip LLM generation for instant response)
@@ -195,6 +205,9 @@ export const workflowApi = {
       body: issue.body,
       labels: issue.labels || [],
       assignees: issue.assignees || [],
+      is_main_issue: issue.is_main_issue || false,
+      task_id: issue.task_id || null,
+      file_path: issue.file_path || null,
     }),
   }),
 

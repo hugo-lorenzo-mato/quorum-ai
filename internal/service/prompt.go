@@ -329,6 +329,8 @@ type IssueTaskFile struct {
 	ID   string // Task ID (e.g., "task-1")
 	Name string // Task name
 	Slug string // URL-safe name for filename
+	// Index is the global, 1-based ordering of the task for file naming.
+	Index int
 }
 
 // IssueGenerateParams contains parameters for issue generation template.

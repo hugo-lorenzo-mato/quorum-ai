@@ -21,7 +21,7 @@ export default function IssueEditorPanel({
   workflowId,
 }) {
   const { theme, notifySuccess, notifyError } = useUIStore();
-  const { updateIssue, workflowId: storeWorkflowId } = useIssuesStore();
+  const { updateIssue, setIssueFilePath, workflowId: storeWorkflowId } = useIssuesStore();
 
   // State for creating single issue
   const [creating, setCreating] = useState(false);
@@ -36,11 +36,32 @@ export default function IssueEditorPanel({
 
     try {
       setCreating(true);
+      const saveResponse = await workflowApi.saveIssuesFiles(wfId, [{
+        title: issue.title,
+        body: issue.body,
+        labels: issue.labels || [],
+        assignees: issue.assignees || [],
+        is_main_issue: issue.is_main_issue || false,
+        task_id: issue.task_id || null,
+        file_path: issue.file_path || null,
+      }]);
+      if (!saveResponse.success) {
+        throw new Error(saveResponse.message || 'Failed to save issue file');
+      }
+
+      const savedIssue = saveResponse.issues?.[0];
+      if (savedIssue?.file_path) {
+        setIssueFilePath(issue._localId, savedIssue.file_path);
+      }
+
       const response = await workflowApi.createSingleIssue(wfId, {
         title: issue.title,
         body: issue.body,
         labels: issue.labels || [],
         assignees: issue.assignees || [],
+        is_main_issue: issue.is_main_issue || false,
+        task_id: issue.task_id || null,
+        file_path: savedIssue?.file_path || issue.file_path || null,
       });
 
       if (response.success) {
@@ -55,7 +76,7 @@ export default function IssueEditorPanel({
     } finally {
       setCreating(false);
     }
-  }, [issue, wfId, notifySuccess, notifyError]);
+  }, [issue, wfId, setIssueFilePath, updateIssue, notifySuccess, notifyError]);
 
   // Handle field updates
   const handleTitleChange = useCallback((e) => {

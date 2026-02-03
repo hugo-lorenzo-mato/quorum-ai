@@ -35,6 +35,9 @@ type IssueInput struct {
 
 	// TaskID is the task identifier (optional).
 	TaskID string `json:"task_id"`
+
+	// FilePath is the markdown file path for this issue (optional).
+	FilePath string `json:"file_path,omitempty"`
 }
 
 // GenerateIssuesRequest is the request body for generating issues.
@@ -89,6 +92,18 @@ type GenerateIssuesResponse struct {
 	AIErrors []string `json:"ai_errors,omitempty"`
 }
 
+// SaveIssuesFilesRequest is the request body for saving issues to disk.
+type SaveIssuesFilesRequest struct {
+	Issues []IssueInput `json:"issues"`
+}
+
+// SaveIssuesFilesResponse is the response for saving issues to disk.
+type SaveIssuesFilesResponse struct {
+	Success bool                   `json:"success"`
+	Message string                 `json:"message"`
+	Issues  []IssuePreviewResponse `json:"issues,omitempty"`
+}
+
 // IssueResponse represents a created issue.
 type IssueResponse struct {
 	Number      int      `json:"number"`
@@ -107,6 +122,7 @@ type IssuePreviewResponse struct {
 	Assignees   []string `json:"assignees"`
 	IsMainIssue bool     `json:"is_main_issue"`
 	TaskID      string   `json:"task_id,omitempty"`
+	FilePath    string   `json:"file_path,omitempty"`
 }
 
 // handleGenerateIssues generates GitHub/GitLab issues from workflow artifacts.
@@ -197,11 +213,19 @@ func (s *Server) handleGenerateIssues(w http.ResponseWriter, r *http.Request) {
 
 	var result *issues.GenerateResult
 
-	// If issues are provided in the request, create them directly (frontend edited flow)
+	labels := req.Labels
+	if len(labels) == 0 {
+		labels = issuesCfg.Labels
+	}
+	assignees := req.Assignees
+	if len(assignees) == 0 {
+		assignees = issuesCfg.Assignees
+	}
+
+	// If issues are provided in the request, write to disk then create from files
 	if len(req.Issues) > 0 {
 		slog.Info("creating issues from frontend input", "count", len(req.Issues))
-		
-		// Convert API types to service types
+
 		issueInputs := make([]issues.IssueInput, len(req.Issues))
 		for i, input := range req.Issues {
 			issueInputs[i] = issues.IssueInput{
@@ -211,25 +235,74 @@ func (s *Server) handleGenerateIssues(w http.ResponseWriter, r *http.Request) {
 				Assignees:   input.Assignees,
 				IsMainIssue: input.IsMainIssue,
 				TaskID:      input.TaskID,
+				FilePath:    input.FilePath,
 			}
 		}
-		
-		result, err = generator.CreateIssuesFromInput(genCtx, issueInputs, req.DryRun, req.LinkIssues, req.Labels, req.Assignees)
+
+		previews, err := generator.WriteIssuesToDisk(workflowID, issueInputs)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, fmt.Sprintf("saving issue files failed: %v", err))
+			return
+		}
+		for i := range issueInputs {
+			if i < len(previews) {
+				issueInputs[i].FilePath = previews[i].FilePath
+			}
+		}
+
+		result, err = generator.CreateIssuesFromFiles(genCtx, workflowID, issueInputs, req.DryRun, req.LinkIssues, labels, assignees)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, fmt.Sprintf("issue creation failed: %v", err))
+			return
+		}
+	} else if issuesCfg.Generator.Enabled {
+		slog.Info("generating issues from filesystem artifacts using LLM")
+		if _, err := generator.GenerateIssueFiles(genCtx, workflowID); err != nil {
+			respondError(w, http.StatusInternalServerError, fmt.Sprintf("issue generation failed: %v", err))
+			return
+		}
+
+		previews, err := generator.ReadGeneratedIssues(workflowID)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, fmt.Sprintf("reading generated issues: %v", err))
+			return
+		}
+
+		issueInputs := make([]issues.IssueInput, 0, len(previews))
+		for _, preview := range previews {
+			if preview.IsMainIssue && !req.CreateMainIssue {
+				continue
+			}
+			if !preview.IsMainIssue && !req.CreateSubIssues {
+				continue
+			}
+			issueInputs = append(issueInputs, issues.IssueInput{
+				Title:       preview.Title,
+				Body:        preview.Body,
+				Labels:      nil,
+				Assignees:   nil,
+				IsMainIssue: preview.IsMainIssue,
+				TaskID:      preview.TaskID,
+				FilePath:    preview.FilePath,
+			})
+		}
+
+		result, err = generator.CreateIssuesFromFiles(genCtx, workflowID, issueInputs, req.DryRun, req.LinkIssues, labels, assignees)
 		if err != nil {
 			respondError(w, http.StatusInternalServerError, fmt.Sprintf("issue creation failed: %v", err))
 			return
 		}
 	} else {
 		// Otherwise, use traditional flow (read from filesystem)
-		slog.Info("generating issues from filesystem artifacts")
+		slog.Info("generating issues from filesystem artifacts (direct copy)")
 		opts := issues.GenerateOptions{
 			WorkflowID:      workflowID,
 			DryRun:          req.DryRun,
 			CreateMainIssue: req.CreateMainIssue,
 			CreateSubIssues: req.CreateSubIssues,
 			LinkIssues:      req.LinkIssues,
-			CustomLabels:    req.Labels,
-			CustomAssignees: req.Assignees,
+			CustomLabels:    labels,
+			CustomAssignees: assignees,
 		}
 
 		result, err = generator.Generate(genCtx, opts)
@@ -254,6 +327,7 @@ func (s *Server) handleGenerateIssues(w http.ResponseWriter, r *http.Request) {
 				Assignees:   preview.Assignees,
 				IsMainIssue: preview.IsMainIssue,
 				TaskID:      preview.TaskID,
+				FilePath:    preview.FilePath,
 			})
 		}
 	} else {
@@ -290,6 +364,94 @@ func (s *Server) handleGenerateIssues(w http.ResponseWriter, r *http.Request) {
 	// Add AI generation info for debugging
 	response.AIUsed = result.AIUsed
 	response.AIErrors = result.AIErrors
+
+	respondJSON(w, http.StatusOK, response)
+}
+
+// handleSaveIssuesFiles saves issues to markdown files on disk.
+// POST /api/workflows/{workflowID}/issues/files
+func (s *Server) handleSaveIssuesFiles(w http.ResponseWriter, r *http.Request) {
+	workflowID := chi.URLParam(r, "workflowID")
+	ctx := r.Context()
+
+	// Get workflow state
+	state, err := s.stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
+	if err != nil {
+		respondError(w, http.StatusNotFound, fmt.Sprintf("workflow not found: %v", err))
+		return
+	}
+	if state == nil {
+		respondError(w, http.StatusNotFound, "workflow not found")
+		return
+	}
+
+	// Parse request body
+	var req SaveIssuesFilesRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, fmt.Sprintf("invalid request: %v", err))
+		return
+	}
+	if len(req.Issues) == 0 {
+		respondError(w, http.StatusBadRequest, "issues are required")
+		return
+	}
+
+	// Get issues config from loader
+	var issuesCfg config.IssuesConfig
+	if s.configLoader != nil {
+		cfg, err := s.configLoader.Load()
+		if err == nil {
+			issuesCfg = cfg.Issues
+		}
+	}
+
+	if !issuesCfg.Enabled {
+		respondError(w, http.StatusBadRequest, "issue generation is disabled in configuration")
+		return
+	}
+
+	reportDir := state.ReportPath
+	if reportDir == "" {
+		respondError(w, http.StatusBadRequest, "workflow has no report directory")
+		return
+	}
+
+	generator := issues.NewGenerator(nil, issuesCfg, reportDir, s.agentRegistry)
+
+	issueInputs := make([]issues.IssueInput, len(req.Issues))
+	for i, input := range req.Issues {
+		issueInputs[i] = issues.IssueInput{
+			Title:       input.Title,
+			Body:        input.Body,
+			Labels:      input.Labels,
+			Assignees:   input.Assignees,
+			IsMainIssue: input.IsMainIssue,
+			TaskID:      input.TaskID,
+			FilePath:    input.FilePath,
+		}
+	}
+
+	previews, err := generator.WriteIssuesToDisk(workflowID, issueInputs)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, fmt.Sprintf("saving issues failed: %v", err))
+		return
+	}
+
+	response := SaveIssuesFilesResponse{
+		Success: true,
+		Message: fmt.Sprintf("Saved %d issue file(s)", len(previews)),
+	}
+	for _, preview := range previews {
+		response.Issues = append(response.Issues, IssuePreviewResponse{
+			Title:       preview.Title,
+			Body:        preview.Body,
+			Labels:      preview.Labels,
+			Assignees:   preview.Assignees,
+			IsMainIssue: preview.IsMainIssue,
+			TaskID:      preview.TaskID,
+			FilePath:    preview.FilePath,
+		})
+	}
 
 	respondJSON(w, http.StatusOK, response)
 }
@@ -367,8 +529,9 @@ func (s *Server) handlePreviewIssues(w http.ResponseWriter, r *http.Request) {
 				Body:        preview.Body,
 				Labels:      preview.Labels,
 				Assignees:   preview.Assignees,
-				IsMainIssue: false,
+				IsMainIssue: preview.IsMainIssue,
 				TaskID:      preview.TaskID,
+				FilePath:    preview.FilePath,
 			})
 		}
 		response.AIUsed = false
@@ -384,53 +547,35 @@ func (s *Server) handlePreviewIssues(w http.ResponseWriter, r *http.Request) {
 		// Generate the issue files
 		files, err := generator.GenerateIssueFiles(ctx, workflowID)
 		if err != nil {
-			response.Success = false
-			response.AIErrors = append(response.AIErrors, err.Error())
-			// Try to read any existing generated files as fallback
-			previews, readErr := generator.ReadGeneratedIssues(workflowID)
-			if readErr == nil && len(previews) > 0 {
-				for _, preview := range previews {
-					response.PreviewIssues = append(response.PreviewIssues, IssuePreviewResponse{
-						Title:       preview.Title,
-						Body:        preview.Body,
-						Labels:      preview.Labels,
-						Assignees:   preview.Assignees,
-						IsMainIssue: false,
-						TaskID:      preview.TaskID,
-					})
-				}
-				response.Success = true
-				response.Message = fmt.Sprintf("Preview: %d issues (from cache)", len(previews))
-			} else {
-				respondError(w, http.StatusInternalServerError, fmt.Sprintf("AI generation failed: %v", err))
-				return
-			}
-		} else {
-			// Read the generated files
-			previews, err := generator.ReadGeneratedIssues(workflowID)
-			if err != nil {
-				respondError(w, http.StatusInternalServerError, fmt.Sprintf("reading generated issues: %v", err))
-				return
-			}
+			respondError(w, http.StatusInternalServerError, fmt.Sprintf("AI generation failed: %v", err))
+			return
+		}
 
-			response.Message = fmt.Sprintf("Preview: %d issues (AI generated)", len(previews))
-			response.AIUsed = true
+		// Read the generated files
+		previews, err := generator.ReadGeneratedIssues(workflowID)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, fmt.Sprintf("reading generated issues: %v", err))
+			return
+		}
 
-			for _, preview := range previews {
-				response.PreviewIssues = append(response.PreviewIssues, IssuePreviewResponse{
-					Title:       preview.Title,
-					Body:        preview.Body,
-					Labels:      preview.Labels,
-					Assignees:   preview.Assignees,
-					IsMainIssue: false,
-					TaskID:      preview.TaskID,
-				})
-			}
+		response.Message = fmt.Sprintf("Preview: %d issues (AI generated)", len(previews))
+		response.AIUsed = true
 
-			// Log generated files
-			for _, f := range files {
-				fmt.Printf("Generated: %s\n", f)
-			}
+		for _, preview := range previews {
+			response.PreviewIssues = append(response.PreviewIssues, IssuePreviewResponse{
+				Title:       preview.Title,
+				Body:        preview.Body,
+				Labels:      preview.Labels,
+				Assignees:   preview.Assignees,
+				IsMainIssue: preview.IsMainIssue,
+				TaskID:      preview.TaskID,
+				FilePath:    preview.FilePath,
+			})
+		}
+
+		// Log generated files
+		for _, f := range files {
+			fmt.Printf("Generated: %s\n", f)
 		}
 	}
 
@@ -454,10 +599,13 @@ func (s *Server) handleGetIssuesConfig(w http.ResponseWriter, r *http.Request) {
 
 // CreateSingleIssueRequest is the request body for creating a single issue.
 type CreateSingleIssueRequest struct {
-	Title     string   `json:"title"`
-	Body      string   `json:"body"`
-	Labels    []string `json:"labels"`
-	Assignees []string `json:"assignees"`
+	Title       string   `json:"title"`
+	Body        string   `json:"body"`
+	Labels      []string `json:"labels"`
+	Assignees   []string `json:"assignees"`
+	IsMainIssue bool     `json:"is_main_issue"`
+	TaskID      string   `json:"task_id,omitempty"`
+	FilePath    string   `json:"file_path,omitempty"`
 }
 
 // CreateSingleIssueResponse is the response for creating a single issue.
@@ -470,7 +618,19 @@ type CreateSingleIssueResponse struct {
 // handleCreateSingleIssue creates a single issue directly.
 // POST /api/workflows/{workflowID}/issues/single
 func (s *Server) handleCreateSingleIssue(w http.ResponseWriter, r *http.Request) {
+	workflowID := chi.URLParam(r, "workflowID")
 	ctx := r.Context()
+
+	// Get workflow state
+	state, err := s.stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
+	if err != nil {
+		respondError(w, http.StatusNotFound, fmt.Sprintf("workflow not found: %v", err))
+		return
+	}
+	if state == nil {
+		respondError(w, http.StatusNotFound, "workflow not found")
+		return
+	}
 
 	// Parse request body
 	var req CreateSingleIssueRequest
@@ -530,25 +690,60 @@ func (s *Server) handleCreateSingleIssue(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Create the issue
-	issue, err := issueClient.CreateIssue(ctx, core.CreateIssueOptions{
-		Title:     req.Title,
-		Body:      req.Body,
-		Labels:    labels,
-		Assignees: assignees,
-	})
+	reportDir := state.ReportPath
+	if reportDir == "" {
+		respondError(w, http.StatusBadRequest, "workflow has no report directory")
+		return
+	}
+
+	generator := issues.NewGenerator(issueClient, issuesCfg, reportDir, s.agentRegistry)
+
+	input := issues.IssueInput{
+		Title:       req.Title,
+		Body:        req.Body,
+		Labels:      labels,
+		Assignees:   assignees,
+		IsMainIssue: req.IsMainIssue,
+		TaskID:      req.TaskID,
+		FilePath:    req.FilePath,
+	}
+
+	if input.FilePath == "" {
+		previews, err := generator.WriteIssuesToDisk(workflowID, []issues.IssueInput{input})
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, fmt.Sprintf("failed to save issue file: %v", err))
+			return
+		}
+		if len(previews) > 0 {
+			input.FilePath = previews[0].FilePath
+		}
+	}
+
+	result, err := generator.CreateIssuesFromFiles(ctx, workflowID, []issues.IssueInput{input}, false, false, labels, assignees)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, fmt.Sprintf("failed to create issue: %v", err))
+		return
+	}
+
+	var created *core.Issue
+	if result.IssueSet.MainIssue != nil {
+		created = result.IssueSet.MainIssue
+	} else if len(result.IssueSet.SubIssues) > 0 {
+		created = result.IssueSet.SubIssues[0]
+	}
+	if created == nil {
+		respondError(w, http.StatusInternalServerError, "issue creation failed")
 		return
 	}
 
 	respondJSON(w, http.StatusOK, CreateSingleIssueResponse{
 		Success: true,
 		Issue: IssueResponse{
-			Number: issue.Number,
-			Title:  issue.Title,
-			URL:    issue.URL,
-			State:  issue.State,
-			Labels: issue.Labels,
+			Number: created.Number,
+			Title:  created.Title,
+			URL:    created.URL,
+			State:  created.State,
+			Labels: created.Labels,
 		},
 	})
 }

@@ -126,6 +126,7 @@ func TestIssueProvider_IsValid(t *testing.T) {
 func TestIssue_Fields(t *testing.T) {
 	now := time.Now()
 	issue := Issue{
+		ID:          987654,
 		Number:      42,
 		Title:       "Test Issue",
 		Body:        "This is a test body",
@@ -138,6 +139,9 @@ func TestIssue_Fields(t *testing.T) {
 		UpdatedAt:   now,
 	}
 
+	if issue.ID != 987654 {
+		t.Errorf("ID = %v, want 987654", issue.ID)
+	}
 	if issue.Number != 42 {
 		t.Errorf("Number = %v, want 42", issue.Number)
 	}

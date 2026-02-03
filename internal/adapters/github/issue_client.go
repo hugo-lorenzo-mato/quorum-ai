@@ -146,7 +146,7 @@ func (a *IssueClientAdapter) CreateIssue(ctx context.Context, opts core.CreateIs
 	issue, err := a.GetIssue(ctx, issueNum)
 	if err != nil {
 		// Return partial issue if fetch fails
-		return &core.Issue{
+		issue = &core.Issue{
 			Number:    issueNum,
 			Title:     opts.Title,
 			Body:      opts.Body,
@@ -156,7 +156,7 @@ func (a *IssueClientAdapter) CreateIssue(ctx context.Context, opts core.CreateIs
 			Assignees: opts.Assignees,
 			CreatedAt: time.Now(),
 			UpdatedAt: time.Now(),
-		}, nil
+		}
 	}
 
 	// Link to parent if specified
@@ -226,7 +226,7 @@ func (a *IssueClientAdapter) AddIssueComment(ctx context.Context, number int, co
 func (a *IssueClientAdapter) GetIssue(ctx context.Context, number int) (*core.Issue, error) {
 	output, err := a.client.run(ctx, "issue", "view", strconv.Itoa(number),
 		"--repo", a.client.Repo(),
-		"--json", "number,title,body,url,state,labels,assignees,createdAt,updatedAt")
+		"--json", "id,number,title,body,url,state,labels,assignees,createdAt,updatedAt")
 	if err != nil {
 		return nil, fmt.Errorf("getting issue #%d: %w", number, err)
 	}
@@ -235,40 +235,33 @@ func (a *IssueClientAdapter) GetIssue(ctx context.Context, number int) (*core.Is
 }
 
 // LinkIssues creates a parent-child relationship between issues.
-// For GitHub: Updates parent body with a task list containing child reference.
+// For GitHub: Creates a sub-issue relationship via the REST API.
 func (a *IssueClientAdapter) LinkIssues(ctx context.Context, parent, child int) error {
-	// Get parent issue
-	parentIssue, err := a.GetIssue(ctx, parent)
+	if parent <= 0 || child <= 0 {
+		return fmt.Errorf("invalid issue numbers: parent=%d child=%d", parent, child)
+	}
+
+	childIssue, err := a.GetIssue(ctx, child)
 	if err != nil {
-		return fmt.Errorf("getting parent issue #%d: %w", parent, err)
+		return fmt.Errorf("getting child issue #%d: %w", child, err)
+	}
+	if childIssue == nil || childIssue.ID == 0 {
+		return fmt.Errorf("child issue ID not found for #%d", child)
 	}
 
-	// Create task list item for child
-	childLink := fmt.Sprintf("- [ ] #%d", child)
-
-	// Check if parent body already has a task list section
-	var newBody string
-	if strings.Contains(parentIssue.Body, "## Sub-Issues") ||
-		strings.Contains(parentIssue.Body, "## Tasks") ||
-		strings.Contains(parentIssue.Body, "## Related Issues") {
-		// Append to existing section
-		newBody = parentIssue.Body + "\n" + childLink
-	} else {
-		// Create new section
-		if parentIssue.Body != "" {
-			newBody = parentIssue.Body + "\n\n## Sub-Issues\n\n" + childLink
-		} else {
-			newBody = "## Sub-Issues\n\n" + childLink
-		}
+	endpoint := fmt.Sprintf("/repos/%s/issues/%d/sub_issues", a.client.Repo(), parent)
+	_, err = a.client.run(ctx, "api", "-X", "POST", endpoint, "-f", fmt.Sprintf("sub_issue_id=%d", childIssue.ID))
+	if err != nil {
+		return fmt.Errorf("creating sub-issue link (parent %d, child %d): %w", parent, child, err)
 	}
 
-	// Update parent issue body
-	return a.UpdateIssue(ctx, parent, "", newBody)
+	return nil
 }
 
 // parseIssueJSON parses GitHub issue JSON output to core.Issue.
 func parseIssueJSON(output string) (*core.Issue, error) {
 	var data struct {
+		ID        int64     `json:"id"`
 		Number    int       `json:"number"`
 		Title     string    `json:"title"`
 		Body      string    `json:"body"`
@@ -299,6 +292,7 @@ func parseIssueJSON(output string) (*core.Issue, error) {
 	}
 
 	return &core.Issue{
+		ID:        data.ID,
 		Number:    data.Number,
 		Title:     data.Title,
 		Body:      data.Body,

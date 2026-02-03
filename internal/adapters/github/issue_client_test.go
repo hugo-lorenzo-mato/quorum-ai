@@ -73,6 +73,7 @@ func TestParseIssueJSON(t *testing.T) {
 		{
 			name: "valid issue JSON",
 			json: `{
+				"id": 987654,
 				"number": 42,
 				"title": "Test Issue",
 				"body": "This is the issue body",
@@ -84,6 +85,7 @@ func TestParseIssueJSON(t *testing.T) {
 				"updatedAt": "2024-01-15T12:00:00Z"
 			}`,
 			want: &core.Issue{
+				ID:        987654,
 				Number:    42,
 				Title:     "Test Issue",
 				Body:      "This is the issue body",
@@ -97,6 +99,7 @@ func TestParseIssueJSON(t *testing.T) {
 		{
 			name: "issue with empty labels and assignees",
 			json: `{
+				"id": 123456,
 				"number": 1,
 				"title": "Simple Issue",
 				"body": "",
@@ -108,6 +111,7 @@ func TestParseIssueJSON(t *testing.T) {
 				"updatedAt": "2024-01-01T00:00:00Z"
 			}`,
 			want: &core.Issue{
+				ID:        123456,
 				Number:    1,
 				Title:     "Simple Issue",
 				Body:      "",
@@ -164,6 +168,7 @@ func TestIssueClientAdapter_CreateIssue(t *testing.T) {
 	// Setup mock responses
 	mockRunner.OnCommand("gh issue create").Return("https://github.com/owner/repo/issues/123\n")
 	mockRunner.OnCommand("gh issue view 123").Return(`{
+		"id": 456789,
 		"number": 123,
 		"title": "Test Issue",
 		"body": "Test body",
@@ -235,6 +240,7 @@ func TestIssueClientAdapter_AddIssueComment(t *testing.T) {
 func TestIssueClientAdapter_GetIssue(t *testing.T) {
 	mockRunner := NewMockRunner()
 	mockRunner.OnCommand("gh issue view 42").Return(`{
+		"id": 112233,
 		"number": 42,
 		"title": "Existing Issue",
 		"body": "Issue body content",

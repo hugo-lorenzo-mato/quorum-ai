@@ -20,6 +20,7 @@ export default function IssuesActionBar({
   const { notifySuccess, notifyError } = useUIStore();
   const {
     getIssuesForSubmission,
+    applySavedIssues,
     setSubmitting,
     setError,
     clearError,
@@ -36,10 +37,17 @@ export default function IssuesActionBar({
 
       const issues = getIssuesForSubmission();
 
+      const saveResponse = await workflowApi.saveIssuesFiles(workflowId, issues);
+      if (!saveResponse.success) {
+        throw new Error(saveResponse.message || 'Failed to save issue files');
+      }
+      const issuesToSubmit = saveResponse.issues || issues;
+      applySavedIssues(issuesToSubmit);
+
       const response = await workflowApi.generateIssues(workflowId, {
         dryRun: false,
         linkIssues: true,
-        issues: issues,
+        issues: issuesToSubmit,
       });
 
       if (response.success) {
@@ -62,8 +70,24 @@ export default function IssuesActionBar({
 
   // Handle save draft (just persists to localStorage via store)
   const handleSaveDraft = () => {
-    // The store already persists to localStorage automatically
-    notifySuccess('Draft saved locally');
+    const saveDraft = async () => {
+      try {
+        const issues = getIssuesForSubmission();
+        const response = await workflowApi.saveIssuesFiles(workflowId, issues);
+        if (!response.success) {
+          throw new Error(response.message || 'Failed to save issue files');
+        }
+        if (response.issues) {
+          applySavedIssues(response.issues);
+        }
+        notifySuccess('Draft saved');
+      } catch (err) {
+        console.error('Failed to save draft:', err);
+        notifyError(err.message || 'Failed to save draft');
+      }
+    };
+
+    saveDraft();
   };
 
   // Handle export as markdown files

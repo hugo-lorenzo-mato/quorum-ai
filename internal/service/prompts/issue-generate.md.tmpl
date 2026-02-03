@@ -50,7 +50,7 @@ You MUST read these files to understand the work:
 - `00-consolidated-analysis.md` - Main issue summarizing the overall analysis
 {{end}}
 {{range $i, $task := .TaskFiles}}
-- `{{printf "%02d" (add $i 1)}}-{{$task.Slug}}.md` - Issue for {{$task.ID}}
+- `{{printf "%02d" $task.Index}}-{{$task.Slug}}.md` - Issue for {{$task.ID}}
 {{end}}
 
 **DO NOT create files with these patterns**:
