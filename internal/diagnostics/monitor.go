@@ -37,6 +37,13 @@ type ResourceTrend struct {
 	Warnings            []string // Trend-based warnings
 }
 
+const (
+	trendMinDuration            = 10 * time.Minute
+	trendFDGrowthRateThreshold  = 50.0  // FDs per hour
+	trendGoroutineGrowthRateMax = 500.0 // Goroutines per hour
+	trendMemoryGrowthRateMax    = 250.0 // MB per hour
+)
+
 // HealthWarning represents a single health concern.
 type HealthWarning struct {
 	Level   string  // "warning" or "critical"
@@ -210,31 +217,35 @@ func (m *ResourceMonitor) GetTrend() ResourceTrend {
 
 	first := history[0]
 	last := history[len(history)-1]
-	duration := last.Timestamp.Sub(first.Timestamp).Hours()
+	duration := last.Timestamp.Sub(first.Timestamp)
 
-	if duration < 0.01 { // Less than 36 seconds
+	if duration < trendMinDuration {
+		return ResourceTrend{IsHealthy: true}
+	}
+	hours := duration.Hours()
+	if hours <= 0 {
 		return ResourceTrend{IsHealthy: true}
 	}
 
 	trend := ResourceTrend{
-		FDGrowthRate:        float64(last.OpenFDs-first.OpenFDs) / duration,
-		GoroutineGrowthRate: float64(last.Goroutines-first.Goroutines) / duration,
-		MemoryGrowthRate:    (last.HeapAllocMB - first.HeapAllocMB) / duration,
+		FDGrowthRate:        float64(last.OpenFDs-first.OpenFDs) / hours,
+		GoroutineGrowthRate: float64(last.Goroutines-first.Goroutines) / hours,
+		MemoryGrowthRate:    (last.HeapAllocMB - first.HeapAllocMB) / hours,
 		IsHealthy:           true,
 	}
 
 	// Check for concerning trends
-	if trend.FDGrowthRate > 10 { // More than 10 FDs/hour
+	if trend.FDGrowthRate > trendFDGrowthRateThreshold {
 		trend.IsHealthy = false
 		trend.Warnings = append(trend.Warnings,
 			fmt.Sprintf("FD count growing at %.1f/hour (potential leak)", trend.FDGrowthRate))
 	}
-	if trend.GoroutineGrowthRate > 100 { // More than 100 goroutines/hour
+	if trend.GoroutineGrowthRate > trendGoroutineGrowthRateMax {
 		trend.IsHealthy = false
 		trend.Warnings = append(trend.Warnings,
 			fmt.Sprintf("Goroutine count growing at %.1f/hour (potential leak)", trend.GoroutineGrowthRate))
 	}
-	if trend.MemoryGrowthRate > 100 { // More than 100 MB/hour
+	if trend.MemoryGrowthRate > trendMemoryGrowthRateMax {
 		trend.IsHealthy = false
 		trend.Warnings = append(trend.Warnings,
 			fmt.Sprintf("Memory growing at %.1f MB/hour", trend.MemoryGrowthRate))

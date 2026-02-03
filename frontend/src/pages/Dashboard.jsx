@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useWorkflowStore } from '../stores';
 import { getStatusColor } from '../lib/theme';
 import FAB from '../components/FAB';
+import Logo from '../components/Logo';
 import {
   GitBranch,
   CheckCircle2,
@@ -246,7 +247,7 @@ function SystemResources({ data, loading, onRefresh, timeAgo }) {
         </div>
       </div>
 
-      <div className={`${isExpanded ? 'block animate-fade-in' : 'hidden md:block'}`}>
+      <div className={`${isExpanded ? 'block animate-fade-in' : 'hidden md:block'}`}> 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 mt-4 md:mt-0">
           {/* Quorum Process Section */}
           <div className="space-y-3">
@@ -360,7 +361,7 @@ function SystemResources({ data, loading, onRefresh, timeAgo }) {
 
         {/* Status warning */}
         {data.status && data.status !== 'healthy' && (
-          <div className={`mt-3 text-xs px-2 py-1 rounded ${
+          <div className={`mt-3 text-xs px-2 py-1 rounded ${ 
             data.status === 'critical'
               ? 'bg-error/10 text-error'
               : 'bg-warning/10 text-warning'
@@ -449,31 +450,34 @@ function ActiveWorkflowBanner({ workflow }) {
     </div>
   );
 }
-// Empty State
+// Empty State with Large Logo
 function EmptyState() {
   return (
-    <div className="flex flex-col items-center justify-center py-8 text-center">
-      <div className="p-3 rounded-2xl bg-muted mb-3">
-        <GitBranch className="w-6 h-6 text-muted-foreground" />
+    <div className="flex flex-col items-center justify-center py-12 text-center">
+      <div className="relative mb-6">
+        <div className="absolute inset-0 bg-primary/20 blur-xl rounded-full" />
+        <div className="relative p-6 rounded-3xl bg-card border border-border shadow-sm">
+          <Logo className="w-16 h-16" />
+        </div>
       </div>
-      <h3 className="text-base font-semibold text-foreground mb-1">No workflows yet</h3>
-      <p className="text-sm text-muted-foreground mb-4 max-w-sm">
-        Create your first workflow to start automating tasks with AI agents.
+      <h3 className="text-lg font-semibold text-foreground mb-2">Welcome to Quorum AI</h3>
+      <p className="text-sm text-muted-foreground mb-6 max-w-sm mx-auto leading-relaxed">
+        Your intelligent consensus engine is ready. Create your first workflow to orchestrate AI agents.
       </p>
-      <div className="flex items-center gap-3">
+      <div className="flex flex-col sm:flex-row items-center gap-3">
         <Link
           to="/templates"
-          className="px-4 py-2 rounded-lg border border-border text-foreground text-sm font-medium hover:bg-accent transition-colors flex items-center gap-2"
+          className="w-full sm:w-auto px-5 py-2.5 rounded-xl border border-border text-foreground text-sm font-medium hover:bg-accent transition-all flex items-center justify-center gap-2"
         >
           <FileText className="w-4 h-4" />
-          Templates
+          Browse Templates
         </Link>
         <Link
           to="/workflows/new"
-          className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors flex items-center gap-2"
+          className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-all flex items-center justify-center gap-2 shadow-lg shadow-primary/20"
         >
           <Zap className="w-4 h-4" />
-          Create Workflow
+          Start Workflow
         </Link>
       </div>
     </div>
@@ -484,14 +488,15 @@ function EmptyState() {
 function LoadingSkeleton() {
   return (
     <div className="space-y-4">
+      <div className="h-20 bg-muted/50 rounded-xl animate-pulse w-1/3 mb-8" />
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[...Array(4)].map((_, i) => (
-          <div key={i} className="h-20 rounded-xl bg-muted animate-pulse" />
+          <div key={i} className="h-24 rounded-xl bg-muted/50 animate-pulse" />
         ))}
       </div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="md:col-span-2 h-32 rounded-xl bg-muted animate-pulse" />
-        <div className="h-32 rounded-xl bg-muted animate-pulse" />
+        <div className="md:col-span-2 h-64 rounded-xl bg-muted/50 animate-pulse" />
+        <div className="h-64 rounded-xl bg-muted/50 animate-pulse" />
       </div>
     </div>
   );
@@ -574,22 +579,32 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="space-y-4 animate-fade-in">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl md:text-2xl font-semibold text-foreground tracking-tight">Dashboard</h1>
-          <p className="text-xs md:text-sm text-muted-foreground mt-0.5">
-            Monitor your AI workflows and system health
-          </p>
+    <div className="space-y-6 animate-fade-in pb-20 md:pb-0">
+      {/* Brand Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border/50 pb-6">
+        <div className="flex items-center gap-4">
+          <div className="p-3 bg-gradient-to-br from-primary/10 to-primary/5 rounded-2xl border border-primary/10 shadow-sm">
+             <Logo className="w-10 h-10" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-foreground tracking-tight">
+              Quorum AI
+            </h1>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              Consensus Engine Dashboard
+            </p>
+          </div>
         </div>
-        <Link
-          to="/workflows/new"
-          className="hidden md:flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
-        >
-          <Zap className="w-4 h-4" />
-          New Workflow
-        </Link>
+        
+        <div className="flex items-center gap-3">
+          <Link
+            to="/workflows/new"
+            className="hidden md:flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-all shadow-sm hover:shadow-md"
+          >
+            <Zap className="w-4 h-4" />
+            New Workflow
+          </Link>
+        </div>
       </div>
 
       {/* Active Workflow Banner */}
@@ -598,7 +613,7 @@ export default function Dashboard() {
       )}
 
       {/* Stats Grid - Mobile Carousel, Desktop Grid */}
-      <div className="flex overflow-x-auto pb-4 -mx-3 px-3 sm:mx-0 sm:px-0 gap-3 snap-x md:grid md:grid-cols-2 lg:grid-cols-4 md:gap-3 md:overflow-visible md:pb-0 scrollbar-none md:scrollbar-default">
+      <div className="flex overflow-x-auto pb-4 -mx-3 px-3 sm:mx-0 sm:px-0 gap-3 snap-x md:grid md:grid-cols-2 lg:grid-cols-4 md:gap-4 md:overflow-visible md:pb-0 scrollbar-none md:scrollbar-default">
         <StatCard
           title="Total Workflows"
           value={workflows.length}
@@ -634,7 +649,7 @@ export default function Dashboard() {
       </div>
 
       {/* System Resources + Recent Workflows */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* System Resources */}
         <SystemResources
           data={systemData}
@@ -645,10 +660,10 @@ export default function Dashboard() {
 
         {/* Recent Workflows */}
         <BentoCard>
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center justify-between mb-4">
             <div>
-              <h2 className="text-sm font-semibold text-foreground">Recent Workflows</h2>
-              <p className="text-xs text-muted-foreground">Latest activity</p>
+              <h2 className="text-sm font-semibold text-foreground">Recent Activity</h2>
+              <p className="text-xs text-muted-foreground">Latest executions</p>
             </div>
             <Link
               to="/workflows"
@@ -660,7 +675,7 @@ export default function Dashboard() {
           </div>
 
           {recentWorkflows.length > 0 ? (
-            <div className="space-y-0.5">
+            <div className="space-y-1">
               {recentWorkflows.map((workflow) => (
                 <WorkflowItem key={workflow.id} workflow={workflow} />
               ))}

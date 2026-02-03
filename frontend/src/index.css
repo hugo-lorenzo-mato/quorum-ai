@@ -252,6 +252,13 @@
   -webkit-backdrop-filter: blur(12px);
 }
 
+/* Dot pattern background */
+.bg-dot-pattern {
+  background-image: radial-gradient(var(--muted-fg) 1px, transparent 1px);
+  background-size: 24px 24px;
+  opacity: 0.15;
+}
+
 /* Subtle animations */
 @keyframes fade-in {
   from { opacity: 0; }

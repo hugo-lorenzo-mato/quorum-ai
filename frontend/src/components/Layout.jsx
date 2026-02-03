@@ -20,6 +20,7 @@ import {
   Droplets,
   Snowflake,
   Ghost,
+  MoonStar,
 } from 'lucide-react';
 
 const navItems = [
@@ -84,6 +85,7 @@ function ThemeSwitcher() {
   const themes = [
     { value: 'light', icon: Sun, label: 'Light' },
     { value: 'dark', icon: Moon, label: 'Dark' },
+    { value: 'midnight', icon: MoonStar, label: 'Midnight' },
     { value: 'dracula', icon: Ghost, label: 'Dracula' },
     { value: 'nord', icon: Snowflake, label: 'Nord' },
     { value: 'ocean', icon: Droplets, label: 'Ocean' },
@@ -202,7 +204,7 @@ export default function Layout({ children }) {
             </div>
             {sidebarOpen && (
               <span className="font-bold text-foreground tracking-tight animate-fade-in text-lg">
-                Quorum
+                Quorum AI
               </span>
             )}
           </Link>

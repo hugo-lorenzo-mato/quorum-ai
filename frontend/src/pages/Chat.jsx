@@ -16,6 +16,7 @@ import {
   CheckCircle2,
   ArrowLeft,
 } from 'lucide-react';
+import Logo from '../components/Logo';
 import {
   AgentSelector,
   ModelSelector,
@@ -62,7 +63,7 @@ function MessageBubble({ message, isLast }) {
         {isUser ? (
           <User className="w-4 h-4 text-primary-foreground" />
         ) : (
-          <Bot className="w-4 h-4 text-muted-foreground" />
+          <Logo className="w-4 h-4 text-muted-foreground" />
         )}
       </div>
       <div className={`max-w-[85%] rounded-2xl px-4 py-3 min-w-[200px] ${
