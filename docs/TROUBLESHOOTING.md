@@ -17,6 +17,12 @@ This document covers common issues and their solutions when using quorum-ai.
   - [OpenCode Connection Refused](#opencode-connection-refused)
   - [Model Not Found](#model-not-found)
   - [Slow OpenCode Response](#slow-opencode-response)
+- [Issue Generation Issues](#issue-generation-issues)
+  - [More Issues Created Than Tasks](#more-issues-created-than-tasks)
+  - [Issue Edits Not Applied](#issue-edits-not-applied)
+  - [Duplicate Issues Warning in Logs](#duplicate-issues-warning-in-logs)
+  - [AI Generation Timeout](#ai-generation-timeout)
+  - [Issues Missing Task Information](#issues-missing-task-information)
 
 ---
 
@@ -350,3 +356,130 @@ If you encounter an issue not covered here:
    - Relevant configuration (redact sensitive data)
    - Full error message and stack trace if available
    - Steps to reproduce the issue
+
+---
+
+## Issue Generation Issues
+
+### More Issues Created Than Tasks
+
+**Symptoms:**
+
+```
+Expected 12 issues, but 15 were created in GitHub
+```
+
+**Cause:**
+
+In versions prior to v1.1.0, issue generation files accumulated in `.quorum/issues/{workflowID}/` without cleanup, causing duplicates when regenerating issues.
+
+**Solution:**
+
+**v1.1.0+:** Fixed automatically. The system now cleans the directory before each generation.
+
+**v1.0.x:** Manually clean the directory:
+
+```bash
+rm -rf .quorum/issues/{workflowID}/
+```
+
+Then regenerate issues.
+
+### Issue Edits Not Applied
+
+**Symptoms:**
+
+```
+Edited issue titles/bodies in the UI, but created issues have original content
+```
+
+**Cause:**
+
+In versions prior to v1.1.0, the backend ignored the edited issues sent from the frontend and re-read files from disk.
+
+**Solution:**
+
+**v1.1.0+:** Fixed automatically. Backend now uses edited content from frontend.
+
+**Verification:** Check backend logs for:
+```
+INFO creating issues from frontend input count=12
+```
+
+**v1.0.x:** Upgrade to v1.1.0+ or edit the generated markdown files directly in `.quorum/issues/{workflowID}/`.
+
+### Duplicate Issues Warning in Logs
+
+**Symptoms:**
+
+```
+WARN duplicate issue file detected file=issue-1-task.md task_id=task-1
+```
+
+**Cause:**
+
+Multiple files exist with the same task ID (e.g., `01-task.md` and `issue-1-task.md`).
+
+**Solution:**
+
+This is informational only. The system automatically deduplicates and uses the first file found (sorted numerically).
+
+To prevent in future:
+1. Ensure AI generation completes successfully (no partial runs)
+2. System auto-cleans before generation in v1.1.0+
+
+### AI Generation Timeout
+
+**Symptoms:**
+
+```
+Error: issue generation failed: context deadline exceeded
+```
+
+**Cause:**
+
+Large workflows with 50+ tasks exceed the configured timeout.
+
+**Solution:**
+
+**Option 1:** Increase timeout in config:
+```yaml
+issues:
+  timeout: "10m"  # Increase from default 5m
+```
+
+**Option 2:** Use fast mode (no AI processing):
+```bash
+quorum issues preview --workflow-id $WF_ID --fast
+```
+
+**Option 3:** Process tasks in smaller batches by splitting the workflow.
+
+### Issues Missing Task Information
+
+**Symptoms:**
+
+```
+Created issues don't include task details, acceptance criteria, or proper structure
+```
+
+**Cause:**
+
+Fast mode was used (direct copy) instead of AI mode.
+
+**Solution:**
+
+Use AI generation for better quality:
+
+1. In UI: Select "AI Generation" instead of "Fast Preview"
+2. Via API: Call `/issues/preview` without `?fast=true`
+3. Ensure `generator.enabled: true` in config
+
+**Trade-off:** AI mode takes 60-120s vs instant for fast mode.
+
+---
+
+## See Also
+
+- [Issues Workflow Documentation](ISSUES_WORKFLOW.md) for complete guide
+- [Configuration Reference](CONFIGURATION.md) for issue generation settings
