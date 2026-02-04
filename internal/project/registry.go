@@ -198,6 +198,9 @@ func (r *FileRegistry) load() error {
 func (r *FileRegistry) save() error {
 	// Caller must hold write lock
 
+	// Merge with disk to preserve changes from other processes (CLI, other servers)
+	r.mergeFromDisk()
+
 	// Create backup if enabled
 	if r.backupEnabled {
 		if _, err := os.Stat(r.configPath); err == nil {
@@ -224,6 +227,39 @@ func (r *FileRegistry) save() error {
 	}
 
 	return nil
+}
+
+// mergeFromDisk reads the registry file and merges any new projects added by other processes
+func (r *FileRegistry) mergeFromDisk() {
+	// Read current file from disk
+	data, err := os.ReadFile(r.configPath)
+	if err != nil {
+		return // File doesn't exist or can't be read, nothing to merge
+	}
+
+	var diskConfig RegistryConfig
+	if err := yaml.Unmarshal(data, &diskConfig); err != nil {
+		return // Can't parse file, skip merge
+	}
+
+	// Build a map of our current projects by ID
+	currentProjects := make(map[string]*Project)
+	for _, p := range r.config.Projects {
+		currentProjects[p.ID] = p
+	}
+
+	// Add any projects from disk that we don't have in memory
+	for _, diskProject := range diskConfig.Projects {
+		if _, exists := currentProjects[diskProject.ID]; !exists {
+			// This project was added by another process, preserve it
+			r.config.Projects = append(r.config.Projects, diskProject)
+		}
+	}
+
+	// If disk has a default project and we don't, use it
+	if r.config.DefaultProject == "" && diskConfig.DefaultProject != "" {
+		r.config.DefaultProject = diskConfig.DefaultProject
+	}
 }
 
 // ListProjects returns all registered projects
