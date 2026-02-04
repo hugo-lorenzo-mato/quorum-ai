@@ -1,6 +1,7 @@
 import { Bot, ChevronDown } from 'lucide-react';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { getAgents, getAgentByValue, useEnums } from '../../lib/agents';
+import { useConfigStore } from '../../stores/configStore';
 
 export default function AgentSelector({ value, onChange, disabled }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -19,8 +20,28 @@ export default function AgentSelector({ value, onChange, disabled }) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const agents = getAgents();
+  const config = useConfigStore((state) => state.config);
+
+  // Filter agents to show only enabled ones
+  const agents = useMemo(() => {
+    const allAgents = getAgents();
+    if (!config?.agents) return allAgents;
+
+    return allAgents.filter((agent) => {
+      const agentConfig = config.agents[agent.value];
+      // Show agent if it's enabled (default to true if not configured)
+      return agentConfig?.enabled !== false;
+    });
+  }, [config?.agents]);
+
   const selected = getAgentByValue(value);
+
+  // If current agent is disabled, switch to first enabled agent
+  useEffect(() => {
+    if (agents.length > 0 && !agents.find((a) => a.value === value)) {
+      onChange(agents[0].value);
+    }
+  }, [agents, value, onChange]);
 
   return (
     <div className="relative" ref={ref}>
