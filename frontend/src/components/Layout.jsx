@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useUIStore } from '../stores';
 import MobileBottomNav from './MobileBottomNav';
@@ -11,6 +12,7 @@ import {
   Settings,
   PanelLeftClose,
   PanelLeft,
+  Menu,
   Sun,
   Moon,
   Monitor,
@@ -180,14 +182,35 @@ function ConnectionStatus({ compact = false }) {
 
 export default function Layout({ children }) {
   const location = useLocation();
-  const { sidebarOpen, toggleSidebar } = useUIStore();
+  const { sidebarOpen, toggleSidebar, setSidebarOpen } = useUIStore();
+
+  // Close sidebar on route change on mobile
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth < 768 && sidebarOpen) {
+        setSidebarOpen(false);
+      }
+    };
+    
+    // Initial check handled by store persistence mostly, but good to be safe if we want it closed
+    // We won't force close on mount to respect user preference if they reloaded, 
+    // but typically mobile sidebars start closed.
+    
+    return () => {};
+  }, []);
+
+  useEffect(() => {
+    if (window.innerWidth < 768) {
+      setSidebarOpen(false);
+    }
+  }, [location.pathname, setSidebarOpen]);
 
   return (
     <div className="min-h-screen bg-background pb-16 md:pb-0">
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-40 md:hidden"
+          className="fixed inset-0 bg-black/50 z-[55] md:hidden"
           onClick={toggleSidebar}
           aria-hidden="true"
         />
@@ -195,7 +218,7 @@ export default function Layout({ children }) {
 
       {/* Sidebar - Hidden on mobile, visible on desktop */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 hidden md:flex flex-col border-r border-border bg-card/50 glass transition-all duration-300 ease-in-out md:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-[60] flex flex-col border-r border-border bg-card/50 glass transition-all duration-300 ease-in-out md:translate-x-0 ${
           sidebarOpen ? 'w-64 translate-x-0' : 'w-16 -translate-x-full md:translate-x-0'
         }`}
       >
@@ -282,6 +305,15 @@ export default function Layout({ children }) {
           <div className="flex items-center justify-between h-full px-3 sm:px-6">
             <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
               
+              {/* Mobile Menu Toggle */}
+              <button
+                onClick={toggleSidebar}
+                className="md:hidden p-2 -ml-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                title="Toggle menu"
+              >
+                <Menu className="w-5 h-5" />
+              </button>
+
               {/* Expand Toggle - Only visible when sidebar is collapsed */}
               {!sidebarOpen && (
                 <button
