@@ -15,7 +15,6 @@ import {
   Menu,
   Sun,
   Moon,
-  Monitor,
   Wifi,
   WifiOff,
   RefreshCw,
@@ -41,26 +40,27 @@ function Breadcrumbs() {
   const pathnames = location.pathname.split('/').filter((x) => x);
 
   const breadcrumbs = [
-    { name: 'Home', path: '/' },
+    { name: 'Home', path: '/', fullName: 'Home' },
     ...pathnames.map((name, index) => {
       const routeTo = `/${pathnames.slice(0, index + 1).join('/')}`;
       const isLast = index === pathnames.length - 1;
-      
+
       // Find label in navItems if possible
       const navItem = navItems.find((item) => item.path === routeTo);
       let label = navItem ? navItem.label : name;
+      const fullName = label;
 
-      // Special case: if name looks like an ID, maybe shorten or label it
-      if (name.length > 20) {
-        label = `${name.substring(0, 8)}...`;
+      // Special case: if name looks like an ID, shorten for display but keep full for tooltip
+      if (!navItem && name.length > 50) {
+        label = `${name.substring(0, 20)}...`;
       }
-      
+
       // Capitalize first letter if it's a generic path
-      if (!navItem && name.length <= 20) {
+      if (!navItem && name.length <= 50) {
         label = name.charAt(0).toUpperCase() + name.slice(1);
       }
 
-      return { name: label, path: routeTo, isLast };
+      return { name: label, fullName, path: routeTo, isLast };
     }),
   ];
 
@@ -70,11 +70,17 @@ function Breadcrumbs() {
         <div key={crumb.path} className="flex items-center min-w-0">
           {index > 0 && <ChevronRight className="w-4 h-4 mx-1 text-muted-foreground/50 flex-shrink-0" />}
           {crumb.isLast ? (
-            <span className="font-medium text-foreground truncate">{crumb.name}</span>
+            <span
+              className="font-medium text-foreground truncate max-w-[200px] sm:max-w-[300px] md:max-w-[400px]"
+              title={crumb.fullName}
+            >
+              {crumb.name}
+            </span>
           ) : (
             <Link
               to={crumb.path}
-              className="hover:text-foreground hover:underline transition-colors truncate"
+              className="hover:text-foreground hover:underline transition-colors truncate shrink-0"
+              title={crumb.fullName}
             >
               {crumb.name}
             </Link>
@@ -203,6 +209,7 @@ export default function Layout({ children }) {
     if (window.innerWidth < 768) {
       setSidebarOpen(false);
     }
+    window.scrollTo(0, 0);
   }, [location.pathname, setSidebarOpen]);
 
   return (
@@ -249,11 +256,18 @@ export default function Layout({ children }) {
 
         {/* Project Selector */}
         <div className="px-2 py-2 border-b border-border">
-          <ProjectSelector collapsed={!sidebarOpen} />
+          <ProjectSelector 
+            collapsed={!sidebarOpen} 
+            onProjectSelected={() => {
+              if (window.innerWidth < 768) {
+                setSidebarOpen(false);
+              }
+            }}
+          />
         </div>
 
-        {/* Navigation */}
-        <nav className="flex-1 p-2 space-y-1 overflow-y-auto">
+        {/* Navigation - Hidden on mobile as it's in the bottom bar */}
+        <nav className="hidden md:block flex-1 p-2 space-y-1 overflow-y-auto">
           {navItems.map((item) => {
             const isActive = location.pathname === item.path ||
               (item.path !== '/' && location.pathname.startsWith(item.path));

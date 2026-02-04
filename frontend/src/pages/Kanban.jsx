@@ -136,9 +136,12 @@ function KanbanColumn({ column, workflows, isMobile, onOpenMobileMenu }) {
   // Accent color for the column header
   const accent = KANBAN_COLUMN_COLORS[column.id] || KANBAN_COLUMN_COLORS.default;
 
+  // On mobile, use the column's tint color for better visual distinction
+  const bgClass = isMobile ? accent.tint : 'bg-secondary/30';
+
   return (
     <div
-      className={`flex flex-col ${isMobile ? 'w-[85vw] flex-shrink-0 snap-center h-full mx-2 first:ml-4 last:mr-4' : 'min-w-[280px] max-w-[320px]'} h-full transition-all duration-200 rounded-xl border border-border/50 bg-secondary/30 backdrop-blur-sm ${
+      className={`flex flex-col ${isMobile ? 'w-[85vw] flex-shrink-0 snap-center h-full mx-2 first:ml-4 last:mr-4' : 'min-w-[280px] max-w-[320px]'} h-full transition-all duration-200 rounded-xl border border-border/50 ${bgClass} backdrop-blur-sm ${
         isOver && canDrop ? 'ring-2 ring-primary/20 bg-secondary/50' : ''
       }`}
       onDragOver={handleDragOver}
@@ -315,16 +318,20 @@ function EngineControls() {
   };
 
   return (
-    <div className="flex items-center justify-between gap-2 rounded-xl border border-border bg-card/50 glass px-2 py-1.5 sm:px-4 sm:py-3 shrink-0">
+    <div
+      className="flex items-center justify-between gap-2 rounded-xl border border-border bg-card/50 glass px-3 py-2 sm:px-4 sm:py-3 shrink-0"
+      title="Auto-execute workflows from Todo column"
+    >
       {/* Engine toggle */}
       <div className="flex items-center gap-2">
-        <span className="text-xs font-medium text-foreground hidden xs:inline">Engine</span>
+        <Play className={`w-3.5 h-3.5 ${engine.enabled ? 'text-success' : 'text-muted-foreground'}`} />
+        <span className="text-xs font-medium text-foreground">Auto</span>
         <button
           onClick={handleToggle}
           disabled={isToggling || engine.circuitBreakerOpen}
           role="switch"
           aria-checked={engine.enabled}
-          aria-label="Toggle Kanban engine"
+          aria-label="Toggle auto-execution of workflows"
           className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
             engine.enabled ? 'bg-success/80' : 'bg-muted'
           } ${isToggling || engine.circuitBreakerOpen ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}

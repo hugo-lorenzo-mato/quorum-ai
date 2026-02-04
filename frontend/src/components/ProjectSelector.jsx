@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
-import { ChevronDown, FolderKanban, Check, Plus, Star, AlertCircle, Folder } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { ChevronDown, FolderKanban, Check, Star, AlertCircle, Folder, Settings } from 'lucide-react';
 import { useProjectStore } from '../stores';
 
 /**
  * Project selector dropdown for multi-project support.
  * Displays in the sidebar and allows users to switch between projects.
  */
-export default function ProjectSelector({ collapsed = false }) {
+export default function ProjectSelector({ collapsed = false, onProjectSelected }) {
   const [isOpen, setIsOpen] = useState(false);
   const {
     projects,
@@ -39,6 +40,9 @@ export default function ProjectSelector({ collapsed = false }) {
   const handleSelectProject = (projectId) => {
     selectProject(projectId);
     setIsOpen(false);
+    if (onProjectSelected) {
+      onProjectSelected(projectId);
+    }
   };
 
   const handleSetDefault = (e, projectId) => {
@@ -46,60 +50,115 @@ export default function ProjectSelector({ collapsed = false }) {
     setDefaultProject(projectId);
   };
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'healthy':
-        return 'text-green-500';
-      case 'degraded':
-        return 'text-yellow-500';
-      case 'unavailable':
-        return 'text-red-500';
-      default:
-        return 'text-muted-foreground';
-    }
-  };
+  const ProjectList = () => (
+    <div className="max-h-[280px] overflow-y-auto custom-scrollbar">
+      {projects.length === 0 && !loading ? (
+        <div className="px-3 py-4 text-sm text-muted-foreground text-center">
+          No projects registered
+        </div>
+      ) : (
+        projects.map((project) => (
+          <div
+            key={project.id}
+            className="group/item flex items-center gap-1 px-1 mb-0.5 last:mb-0"
+          >
+            <button
+              onClick={() => handleSelectProject(project.id)}
+              className={`flex-1 px-2 py-2 flex items-center gap-3 rounded-lg transition-colors text-left ${
+                project.id === currentProjectId
+                  ? 'bg-accent/80 text-accent-foreground'
+                  : 'hover:bg-accent/50 text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <div
+                className="w-2 h-2 rounded-full flex-shrink-0"
+                style={{ backgroundColor: project.color || '#4A90D9' }}
+              />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1">
+                  <span className="text-sm font-medium truncate">{project.name}</span>
+                  {project.is_default && (
+                    <Star className="w-3 h-3 text-yellow-500 fill-yellow-500" />
+                  )}
+                </div>
+                <div className="text-[10px] opacity-70 truncate">
+                  {project.path}
+                </div>
+              </div>
+              {project.id === currentProjectId && (
+                <Check className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+              )}
+            </button>
+
+            {/* Set as default button */}
+            {!project.is_default && (
+              <button
+                onClick={(e) => handleSetDefault(e, project.id)}
+                className="p-1.5 rounded-md opacity-0 group-hover/item:opacity-100 hover:bg-accent transition-all text-muted-foreground hover:text-yellow-500"
+                title="Set as default"
+              >
+                <Star className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+        ))
+      )}
+    </div>
+  );
+
+  const DropdownContainer = ({ children, className = '' }) => (
+    <div className={`absolute p-1 bg-popover/95 backdrop-blur-sm border border-border rounded-xl shadow-xl z-[100] animate-in fade-in zoom-in-95 duration-100 ${className}`}>
+      {error && (
+        <div className="px-3 py-2 text-xs text-red-500 flex items-center gap-1">
+          <AlertCircle className="w-3 h-3" />
+          {error}
+        </div>
+      )}
+      {children}
+      {/* Manage projects link */}
+      <div className="border-t border-border/50 mt-1 pt-1">
+        <Link
+          to="/projects"
+          onClick={() => setIsOpen(false)}
+          className="w-full px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-accent/50 rounded-lg flex items-center gap-2 transition-colors"
+        >
+          <Settings className="w-4 h-4" />
+          Manage Projects
+        </Link>
+      </div>
+    </div>
+  );
 
   // Collapsed view - just show an icon
   if (collapsed) {
     return (
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="project-selector relative w-full p-2 rounded-lg bg-secondary hover:bg-accent transition-colors flex items-center justify-center"
-        title={currentProject?.name || 'Select project'}
-      >
-        <FolderKanban className="w-5 h-5 text-primary" />
-        {currentProject && (
-          <div
-            className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-background"
-            style={{ backgroundColor: currentProject.color || '#4A90D9' }}
-          />
-        )}
-
-        {/* Dropdown */}
-        {isOpen && (
-          <div className="absolute left-full ml-2 top-0 w-56 py-1 bg-popover border border-border rounded-lg shadow-lg z-50">
-            <div className="px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              Projects
-            </div>
-            {projects.map((project) => (
-              <button
-                key={project.id}
-                onClick={() => handleSelectProject(project.id)}
-                className="w-full px-3 py-2 flex items-center gap-2 hover:bg-accent transition-colors text-left"
-              >
-                <div
-                  className="w-3 h-3 rounded-full flex-shrink-0"
-                  style={{ backgroundColor: project.color || '#4A90D9' }}
-                />
-                <span className="flex-1 truncate text-sm">{project.name}</span>
-                {project.id === currentProjectId && (
-                  <Check className="w-4 h-4 text-primary" />
-                )}
-              </button>
-            ))}
+      <div className="project-selector relative">
+        <button
+          onClick={() => setIsOpen(!isOpen)}
+          className="w-full p-2 rounded-lg hover:bg-accent/50 transition-colors flex items-center justify-center group relative"
+          title={currentProject?.name || 'Select project'}
+        >
+          <div className={`relative flex items-center justify-center w-8 h-8 rounded-md transition-all ${isOpen ? 'bg-accent text-accent-foreground' : 'text-muted-foreground group-hover:text-foreground'}`}>
+             {currentProject ? (
+               <div
+                 className="w-full h-full rounded-md flex items-center justify-center text-[10px] font-bold text-white uppercase"
+                 style={{ backgroundColor: currentProject.color || '#4A90D9' }}
+               >
+                 {currentProject.name.substring(0, 2)}
+               </div>
+             ) : (
+               <FolderKanban className="w-5 h-5" />
+             )}
           </div>
+        </button>
+
+        {/* Dropdown - Pop out to right */}
+        {isOpen && (
+          <DropdownContainer className="left-full top-0 ml-2 w-72 origin-top-left">
+            <ProjectList />
+          </DropdownContainer>
         )}
-      </button>
+      </div>
     );
   }
 
@@ -145,75 +204,11 @@ export default function ProjectSelector({ collapsed = false }) {
         />
       </button>
 
-      {/* Dropdown */}
+      {/* Dropdown - Slightly wider than parent to feel expansive */}
       {isOpen && (
-        <div className="absolute left-0 right-0 mt-2 p-1 bg-popover/95 backdrop-blur-sm border border-border rounded-xl shadow-xl z-50 animate-in fade-in zoom-in-95 duration-100">
-          {error && (
-            <div className="px-3 py-2 text-xs text-red-500 flex items-center gap-1">
-              <AlertCircle className="w-3 h-3" />
-              {error}
-            </div>
-          )}
-
-          <div className="max-h-[280px] overflow-y-auto custom-scrollbar">
-            {projects.length === 0 && !loading ? (
-              <div className="px-3 py-4 text-sm text-muted-foreground text-center">
-                No projects registered
-              </div>
-            ) : (
-              projects.map((project) => (
-                <div
-                  key={project.id}
-                  className="group/item flex items-center gap-1 px-1 mb-0.5 last:mb-0"
-                >
-                  <button
-                    onClick={() => handleSelectProject(project.id)}
-                    className={`flex-1 px-2 py-2 flex items-center gap-3 rounded-lg transition-colors text-left ${
-                      project.id === currentProjectId
-                        ? 'bg-accent/80 text-accent-foreground'
-                        : 'hover:bg-accent/50 text-muted-foreground hover:text-foreground'
-                    }`}
-                  >
-                    <div
-                      className="w-2 h-2 rounded-full flex-shrink-0"
-                      style={{ backgroundColor: project.color || '#4A90D9' }}
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1">
-                        <span className="text-sm font-medium truncate">{project.name}</span>
-                        {project.is_default && (
-                          <Star className="w-3 h-3 text-yellow-500 fill-yellow-500" />
-                        )}
-                      </div>
-                      <div className="text-[10px] opacity-70 truncate">
-                        {project.path}
-                      </div>
-                    </div>
-                    {project.id === currentProjectId && (
-                      <Check className="w-3.5 h-3.5 text-primary flex-shrink-0" />
-                    )}
-                  </button>
-
-                  {/* Set as default button */}
-                  {!project.is_default && (
-                    <button
-                      onClick={(e) => handleSetDefault(e, project.id)}
-                      className="p-1.5 rounded-md opacity-0 group-hover/item:opacity-100 hover:bg-accent transition-all text-muted-foreground hover:text-yellow-500"
-                      title="Set as default"
-                    >
-                      <Star className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
-              ))
-            )}
-          </div>
-
-          {/* Add project hint */}
-          <div className="px-3 py-2 text-[10px] text-muted-foreground border-t border-border/50 mt-1 bg-muted/20 rounded-b-lg">
-            Use CLI to add: <code className="font-mono text-primary">quorum add .</code>
-          </div>
-        </div>
+        <DropdownContainer className="left-0 mt-2 w-72 origin-top-left">
+          <ProjectList />
+        </DropdownContainer>
       )}
     </div>
   );

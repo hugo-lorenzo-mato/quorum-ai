@@ -304,6 +304,15 @@ func (m *SQLiteStateManager) Save(ctx context.Context, state *core.WorkflowState
 	// Update timestamp
 	state.UpdatedAt = time.Now()
 
+	// Auto-move completed workflows to "to_verify" column if not already in to_verify or done
+	if state.Status == core.WorkflowStatusCompleted {
+		if state.KanbanColumn != "to_verify" && state.KanbanColumn != "done" {
+			state.KanbanColumn = "to_verify"
+			now := time.Now()
+			state.KanbanCompletedAt = &now
+		}
+	}
+
 	// Calculate checksum
 	state.Checksum = ""
 	stateBytes, err := json.Marshal(state)

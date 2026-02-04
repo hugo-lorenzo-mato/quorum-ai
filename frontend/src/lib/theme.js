@@ -44,11 +44,11 @@ export const STATUS_COLORS = {
 };
 
 export const KANBAN_COLUMN_COLORS = {
-  refinement: { 
-    dot: 'bg-slate-500', 
-    tint: 'bg-slate-500/5', 
-    ring: 'ring-slate-500/20',
-    border: 'border-slate-500'
+  refinement: {
+    dot: 'bg-sky-500',
+    tint: 'bg-sky-500/10',
+    ring: 'ring-sky-500/20',
+    border: 'border-sky-500'
   },
   todo: { 
     dot: 'bg-indigo-500', 

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useWorkflowStore, useTaskStore, useUIStore, useAgentStore, useConfigStore } from '../stores';
 import { fileApi, workflowApi } from '../lib/api';
 import { getModelsForAgent, getReasoningLevels, supportsReasoning, useEnums } from '../lib/agents';
@@ -39,6 +39,7 @@ import {
   Network,
   LayoutList,
   FolderTree,
+  Filter,
 } from 'lucide-react';
 import { ConfirmDialog } from '../components/config/ConfirmDialog';
 import { ExecutionModeBadge, PhaseStepper, ReplanModal } from '../components/workflow';
@@ -1721,17 +1722,46 @@ function NewWorkflowForm({ onSubmit, onCancel, loading }) {
 );
 }
 
-// Filter Component
+// Status Filter Tabs
+const STATUS_FILTERS = [
+  { value: 'all', label: 'All', icon: null },
+  { value: 'running', label: 'Running', icon: Activity },
+  { value: 'completed', label: 'Completed', icon: CheckCircle2 },
+  { value: 'failed', label: 'Failed', icon: XCircle },
+];
+
+function StatusFilterTabs({ status, setStatus }) {
+  return (
+    <div className="flex items-center gap-1 p-1 rounded-lg bg-muted/50">
+      {STATUS_FILTERS.map(({ value, label, icon: Icon }) => (
+        <button
+          key={value}
+          onClick={() => setStatus(value)}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
+            status === value
+              ? 'bg-background text-foreground shadow-sm'
+              : 'text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          {Icon && <Icon className="w-3.5 h-3.5" />}
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// Text Filter Component
 function WorkflowFilters({ filter, setFilter }) {
   return (
     <div className="relative w-full sm:w-64">
       <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
       <input
         type="text"
-        placeholder="Filter workflows..."
+        placeholder="Search workflows..."
         value={filter}
         onChange={(e) => setFilter(e.target.value)}
-        className="h-9 w-full pl-9 pr-4 rounded-lg border border-border bg-background text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/20 transition-all"
+        className="h-10 w-full pl-9 pr-4 rounded-lg border border-border bg-background text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/20 transition-all"
       />
     </div>
   );
@@ -1740,12 +1770,24 @@ function WorkflowFilters({ filter, setFilter }) {
 export default function Workflows() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { workflows, loading, error, fetchWorkflows, fetchWorkflow, createWorkflow, deleteWorkflow, clearError } = useWorkflowStore();
   const { getTasksForWorkflow, setTasks } = useTaskStore();
   const notifyInfo = useUIStore((s) => s.notifyInfo);
   const notifyError = useUIStore((s) => s.notifyError);
   const [showNewForm, setShowNewForm] = useState(false);
   const [filter, setFilter] = useState('');
+
+  // Get status filter from URL params
+  const statusFilter = searchParams.get('status') || 'all';
+  const setStatusFilter = useCallback((status) => {
+    if (status === 'all') {
+      searchParams.delete('status');
+    } else {
+      searchParams.set('status', status);
+    }
+    setSearchParams(searchParams);
+  }, [searchParams, setSearchParams]);
 
   // Delete from list state
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -1761,17 +1803,27 @@ export default function Workflows() {
     }
   }, [fetchWorkflow, id]);
 
-  // Filter workflows
+  // Filter workflows by status and text
   const filteredWorkflows = useMemo(() => {
-    if (!filter) return workflows;
-    const lowerFilter = filter.toLowerCase();
-    
-    return workflows.filter(w => 
-      (deriveWorkflowTitle(w).toLowerCase().includes(lowerFilter)) ||
-      (w.id && w.id.toLowerCase().includes(lowerFilter)) ||
-      (w.prompt && w.prompt.toLowerCase().includes(lowerFilter))
-    );
-  }, [workflows, filter]);
+    let result = workflows;
+
+    // Apply status filter
+    if (statusFilter && statusFilter !== 'all') {
+      result = result.filter(w => w.status === statusFilter);
+    }
+
+    // Apply text filter
+    if (filter) {
+      const lowerFilter = filter.toLowerCase();
+      result = result.filter(w =>
+        (deriveWorkflowTitle(w).toLowerCase().includes(lowerFilter)) ||
+        (w.id && w.id.toLowerCase().includes(lowerFilter)) ||
+        (w.prompt && w.prompt.toLowerCase().includes(lowerFilter))
+      );
+    }
+
+    return result;
+  }, [workflows, filter, statusFilter]);
 
   // Fetch tasks for the selected workflow
   const fetchTasks = useCallback(async (workflowId) => {
@@ -1871,20 +1923,34 @@ export default function Workflows() {
   // Show workflow list
   return (
     <div className="space-y-6 animate-fade-in px-3 sm:px-0 pb-10">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground tracking-tight">Workflows</h1>
-          <p className="text-sm text-muted-foreground mt-1">Manage your AI automation workflows</p>
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold text-foreground tracking-tight">Workflows</h1>
+            <p className="text-sm text-muted-foreground mt-1">Manage your AI automation workflows</p>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+            <WorkflowFilters filter={filter} setFilter={setFilter} />
+            <Link
+              to="/workflows/new"
+              className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors shadow-sm whitespace-nowrap"
+            >
+              <Plus className="w-4 h-4" />
+              New Workflow
+            </Link>
+          </div>
         </div>
-        <div className="flex flex-col sm:flex-row gap-3">
-          <WorkflowFilters filter={filter} setFilter={setFilter} />
-          <Link
-            to="/workflows/new"
-            className="hidden md:flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            New Workflow
-          </Link>
+
+        {/* Status Filter Tabs */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/50 pb-4">
+          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar max-w-full pb-1 -mb-1 mask-linear-fade">
+            <StatusFilterTabs status={statusFilter} setStatus={setStatusFilter} />
+          </div>
+          {statusFilter !== 'all' && (
+            <div className="hidden sm:block text-xs text-muted-foreground whitespace-nowrap px-1">
+              Showing {filteredWorkflows.length} {statusFilter} workflow{filteredWorkflows.length !== 1 ? 's' : ''}
+            </div>
+          )}
         </div>
       </div>
 

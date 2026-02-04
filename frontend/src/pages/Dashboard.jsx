@@ -50,7 +50,7 @@ function BentoCard({ children, className = '' }) {
 }
 
 // Compact Stat Card
-function StatCard({ title, value, subtitle, icon: Icon, color = 'primary', className = '' }) {
+function StatCard({ title, value, subtitle, icon: Icon, color = 'primary', className = '', to }) {
   const colorClasses = {
     primary: 'bg-primary/10 text-primary',
     success: 'bg-success/10 text-success',
@@ -59,20 +59,33 @@ function StatCard({ title, value, subtitle, icon: Icon, color = 'primary', class
     info: 'bg-info/10 text-info',
   };
 
+  const content = (
+    <div className="flex items-start gap-3">
+      <div className={`p-2 rounded-lg ${colorClasses[color]}`}>
+        <Icon className="w-4 h-4" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-xl font-mono font-semibold text-foreground">{value}</p>
+        <p className="text-xs font-medium text-muted-foreground truncate">{title}</p>
+        {subtitle && (
+          <p className="text-[10px] text-muted-foreground mt-0.5 truncate">{subtitle}</p>
+        )}
+      </div>
+      {to && <ArrowUpRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />}
+    </div>
+  );
+
+  if (to) {
+    return (
+      <Link to={to} className={`group relative rounded-xl border border-border bg-card p-4 transition-all hover:border-primary/50 hover:shadow-lg hover:bg-accent/30 animate-fade-up cursor-pointer ${className}`}>
+        {content}
+      </Link>
+    );
+  }
+
   return (
     <BentoCard className={className}>
-      <div className="flex items-start gap-3">
-        <div className={`p-2 rounded-lg ${colorClasses[color]}`}>
-          <Icon className="w-4 h-4" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-xl font-mono font-semibold text-foreground">{value}</p>
-          <p className="text-xs font-medium text-muted-foreground truncate">{title}</p>
-          {subtitle && (
-            <p className="text-[10px] text-muted-foreground mt-0.5 truncate">{subtitle}</p>
-          )}
-        </div>
-      </div>
+      {content}
     </BentoCard>
   );
 }
@@ -679,6 +692,7 @@ export default function Dashboard() {
           subtitle={`${healthyProjectsCount} healthy`}
           icon={FolderKanban}
           color="primary"
+          to="/projects"
           className="min-w-[160px] md:min-w-0 snap-center"
         />
         <StatCard
@@ -687,6 +701,7 @@ export default function Dashboard() {
           subtitle="All time"
           icon={GitBranch}
           color="primary"
+          to="/workflows"
           className="min-w-[160px] md:min-w-0 snap-center"
         />
         <StatCard
@@ -695,6 +710,7 @@ export default function Dashboard() {
           subtitle={`${Math.round((completedCount / Math.max(workflows.length, 1)) * 100)}% success`}
           icon={CheckCircle2}
           color="success"
+          to="/workflows?status=completed"
           className="min-w-[160px] md:min-w-0 snap-center"
         />
         <StatCard
@@ -703,6 +719,7 @@ export default function Dashboard() {
           subtitle="Active now"
           icon={Activity}
           color="info"
+          to="/workflows?status=running"
           className="min-w-[160px] md:min-w-0 snap-center"
         />
         <StatCard
@@ -711,6 +728,7 @@ export default function Dashboard() {
           subtitle="Needs attention"
           icon={XCircle}
           color="error"
+          to="/workflows?status=failed"
           className="min-w-[160px] md:min-w-0 snap-center"
         />
       </div>

@@ -7,6 +7,7 @@ import IssuesEditor from './pages/IssuesEditor';
 import Chat from './pages/Chat';
 import Settings from './pages/Settings';
 import Kanban from './pages/Kanban';
+import Projects from './pages/Projects';
 import useSSE from './hooks/useSSE';
 import { useUIStore } from './stores';
 import { loadEnums } from './lib/agents';
@@ -36,6 +37,7 @@ function AppContent() {
         <Route path="/workflows/:id/issues" element={<IssuesEditor />} />
         <Route path="/kanban" element={<Kanban />} />
         <Route path="/chat" element={<Chat />} />
+        <Route path="/projects" element={<Projects />} />
         <Route path="/settings" element={<Settings />} />
       </Routes>
     </Layout>

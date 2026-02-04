@@ -4,6 +4,8 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -35,6 +37,7 @@ type CreateProjectRequest struct {
 type UpdateProjectRequest struct {
 	Name  *string `json:"name,omitempty"`
 	Color *string `json:"color,omitempty"`
+	Path  *string `json:"path,omitempty"`
 }
 
 // SetDefaultProjectRequest is the request body for setting the default project.
@@ -218,6 +221,44 @@ func (h *ProjectsHandler) handleUpdateProject(w http.ResponseWriter, r *http.Req
 		p.Color = *req.Color
 		updated = true
 	}
+	if req.Path != nil && *req.Path != "" {
+		// Validate the new path
+		newPath := *req.Path
+
+		// Convert to absolute path
+		absPath, err := filepath.Abs(newPath)
+		if err != nil {
+			respondError(w, http.StatusBadRequest, "invalid path format")
+			return
+		}
+
+		// Check if path exists and is a directory
+		fileInfo, err := os.Stat(absPath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				respondError(w, http.StatusBadRequest, "path does not exist")
+				return
+			}
+			respondError(w, http.StatusBadRequest, "cannot access path")
+			return
+		}
+		if !fileInfo.IsDir() {
+			respondError(w, http.StatusBadRequest, "path is not a directory")
+			return
+		}
+
+		// Check if another project already uses this path (only if path changed)
+		if absPath != p.Path {
+			existing, _ := h.registry.GetProjectByPath(ctx, absPath)
+			if existing != nil && existing.ID != p.ID {
+				respondError(w, http.StatusConflict, "another project is already registered at this path")
+				return
+			}
+		}
+
+		p.Path = absPath
+		updated = true
+	}
 
 	if !updated {
 		respondError(w, http.StatusBadRequest, "no fields to update")
@@ -227,6 +268,13 @@ func (h *ProjectsHandler) handleUpdateProject(w http.ResponseWriter, r *http.Req
 	if err := h.registry.UpdateProject(ctx, p); err != nil {
 		respondError(w, http.StatusInternalServerError, "failed to update project")
 		return
+	}
+
+	// Re-validate project status after path change
+	if req.Path != nil {
+		_ = h.registry.ValidateProject(ctx, p.ID)
+		// Refresh project data after validation
+		p, _ = h.registry.GetProject(ctx, p.ID)
 	}
 
 	// Get default project ID for is_default flag
