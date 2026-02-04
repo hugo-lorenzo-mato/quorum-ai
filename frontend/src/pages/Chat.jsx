@@ -263,7 +263,7 @@ export default function Chat() {
   };
 
   return (
-    <div className="flex flex-col md:flex-row m-0 fixed top-14 left-0 right-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] md:static md:h-[calc(100vh-5rem)] md:gap-4 animate-fade-in bg-background md:bg-transparent z-0">
+    <div className="flex flex-col md:flex-row m-0 md:h-[calc(100vh-5rem)] md:gap-4 animate-fade-in bg-background md:bg-transparent z-0 pb-10">
       {/* Sessions sidebar */}
       <div className={`w-full md:w-72 flex-shrink-0 flex flex-col gap-4 p-4 md:p-0 ${activeSession ? 'hidden md:flex' : 'flex h-full'}`}>
         <button

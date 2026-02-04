@@ -24,9 +24,9 @@ type TaskCreatedEvent struct {
 }
 
 // NewTaskCreatedEvent creates a new task created event.
-func NewTaskCreatedEvent(workflowID, taskID, phase, name, agent, model string) TaskCreatedEvent {
+func NewTaskCreatedEvent(workflowID, projectID, taskID, phase, name, agent, model string) TaskCreatedEvent {
 	return TaskCreatedEvent{
-		BaseEvent: NewBaseEvent(TypeTaskCreated, workflowID),
+		BaseEvent: NewBaseEvent(TypeTaskCreated, workflowID, projectID),
 		TaskID:    taskID,
 		Phase:     phase,
 		Name:      name,
@@ -43,9 +43,9 @@ type TaskStartedEvent struct {
 }
 
 // NewTaskStartedEvent creates a new task started event.
-func NewTaskStartedEvent(workflowID, taskID, worktreePath string) TaskStartedEvent {
+func NewTaskStartedEvent(workflowID, projectID, taskID, worktreePath string) TaskStartedEvent {
 	return TaskStartedEvent{
-		BaseEvent:    NewBaseEvent(TypeTaskStarted, workflowID),
+		BaseEvent:    NewBaseEvent(TypeTaskStarted, workflowID, projectID),
 		TaskID:       taskID,
 		WorktreePath: worktreePath,
 	}
@@ -62,9 +62,9 @@ type TaskProgressEvent struct {
 }
 
 // NewTaskProgressEvent creates a new task progress event.
-func NewTaskProgressEvent(workflowID, taskID string, progress float64, tokensIn, tokensOut int, message string) TaskProgressEvent {
+func NewTaskProgressEvent(workflowID, projectID, taskID string, progress float64, tokensIn, tokensOut int, message string) TaskProgressEvent {
 	return TaskProgressEvent{
-		BaseEvent: NewBaseEvent(TypeTaskProgress, workflowID),
+		BaseEvent: NewBaseEvent(TypeTaskProgress, workflowID, projectID),
 		TaskID:    taskID,
 		Progress:  progress,
 		TokensIn:  tokensIn,
@@ -84,9 +84,9 @@ type TaskCompletedEvent struct {
 }
 
 // NewTaskCompletedEvent creates a new task completed event.
-func NewTaskCompletedEvent(workflowID, taskID string, duration time.Duration, tokensIn, tokensOut int, costUSD float64) TaskCompletedEvent {
+func NewTaskCompletedEvent(workflowID, projectID, taskID string, duration time.Duration, tokensIn, tokensOut int, costUSD float64) TaskCompletedEvent {
 	return TaskCompletedEvent{
-		BaseEvent: NewBaseEvent(TypeTaskCompleted, workflowID),
+		BaseEvent: NewBaseEvent(TypeTaskCompleted, workflowID, projectID),
 		TaskID:    taskID,
 		Duration:  duration,
 		TokensIn:  tokensIn,
@@ -104,13 +104,13 @@ type TaskFailedEvent struct {
 }
 
 // NewTaskFailedEvent creates a new task failed event.
-func NewTaskFailedEvent(workflowID, taskID string, err error, retryable bool) TaskFailedEvent {
+func NewTaskFailedEvent(workflowID, projectID, taskID string, err error, retryable bool) TaskFailedEvent {
 	errStr := ""
 	if err != nil {
 		errStr = err.Error()
 	}
 	return TaskFailedEvent{
-		BaseEvent: NewBaseEvent(TypeTaskFailed, workflowID),
+		BaseEvent: NewBaseEvent(TypeTaskFailed, workflowID, projectID),
 		TaskID:    taskID,
 		Error:     errStr,
 		Retryable: retryable,
@@ -125,9 +125,9 @@ type TaskSkippedEvent struct {
 }
 
 // NewTaskSkippedEvent creates a new task skipped event.
-func NewTaskSkippedEvent(workflowID, taskID, reason string) TaskSkippedEvent {
+func NewTaskSkippedEvent(workflowID, projectID, taskID, reason string) TaskSkippedEvent {
 	return TaskSkippedEvent{
-		BaseEvent: NewBaseEvent(TypeTaskSkipped, workflowID),
+		BaseEvent: NewBaseEvent(TypeTaskSkipped, workflowID, projectID),
 		TaskID:    taskID,
 		Reason:    reason,
 	}
@@ -143,13 +143,13 @@ type TaskRetryEvent struct {
 }
 
 // NewTaskRetryEvent creates a new task retry event.
-func NewTaskRetryEvent(workflowID, taskID string, attemptNum, maxAttempts int, err error) TaskRetryEvent {
+func NewTaskRetryEvent(workflowID, projectID, taskID string, attemptNum, maxAttempts int, err error) TaskRetryEvent {
 	errStr := ""
 	if err != nil {
 		errStr = err.Error()
 	}
 	return TaskRetryEvent{
-		BaseEvent:   NewBaseEvent(TypeTaskRetry, workflowID),
+		BaseEvent:   NewBaseEvent(TypeTaskRetry, workflowID, projectID),
 		TaskID:      taskID,
 		AttemptNum:  attemptNum,
 		MaxAttempts: maxAttempts,

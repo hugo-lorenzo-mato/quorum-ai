@@ -103,9 +103,10 @@ func (ks *KanbanServer) RegisterRoutes(r chi.Router) {
 // handleGetBoard returns the full Kanban board state.
 func (ks *KanbanServer) handleGetBoard(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	stateManager := ks.server.getProjectStateManager(ctx)
 
 	// Type assert to get Kanban-specific methods
-	kanbanMgr, ok := ks.server.stateManager.(interface {
+	kanbanMgr, ok := stateManager.(interface {
 		GetKanbanBoard(ctx context.Context) (map[string][]*core.WorkflowState, error)
 	})
 	if !ok {
@@ -183,8 +184,10 @@ func (ks *KanbanServer) handleMoveWorkflow(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	stateManager := ks.server.getProjectStateManager(ctx)
+
 	// Type assert to get Kanban-specific methods
-	kanbanMgr, ok := ks.server.stateManager.(interface {
+	kanbanMgr, ok := stateManager.(interface {
 		MoveWorkflow(ctx context.Context, workflowID, toColumn string, position int) error
 		LoadByID(ctx context.Context, id core.WorkflowID) (*core.WorkflowState, error)
 	})
@@ -229,7 +232,7 @@ func (ks *KanbanServer) handleMoveWorkflow(w http.ResponseWriter, r *http.Reques
 	// Emit event for SSE
 	if ks.eventBus != nil {
 		ks.eventBus.Publish(events.NewKanbanWorkflowMovedEvent(
-			workflowID, fromColumn, req.ToColumn, req.Position, true,
+			workflowID, "", fromColumn, req.ToColumn, req.Position, true,
 		))
 	}
 

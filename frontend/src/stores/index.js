@@ -4,4 +4,5 @@ export { default as useChatStore } from './chatStore';
 export { default as useUIStore } from './uiStore';
 export { default as useAgentStore } from './agentStore';
 export { default as useKanbanStore, KANBAN_COLUMNS } from './kanbanStore';
+export { default as useProjectStore } from './projectStore';
 export { useConfigStore, selectConfig, selectIsDirty, selectIsLoading, selectIsSaving, selectError, selectValidationErrors, selectHasConflict, selectSchema, selectEnums, selectAgents, selectFieldValue, selectFieldError, selectIsFieldDirty } from './configStore';

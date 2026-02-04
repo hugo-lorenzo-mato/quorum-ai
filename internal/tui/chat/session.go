@@ -107,7 +107,7 @@ Respond helpfully and concisely.`, conversationContext, content)
 
 	// Publish event
 	if s.eventBus != nil {
-		s.eventBus.Publish(events.NewChatMessageEvent("", events.RoleAgent, agent, result.Output))
+		s.eventBus.Publish(events.NewChatMessageEvent("", "", events.RoleAgent, agent, result.Output))
 	}
 
 	return nil

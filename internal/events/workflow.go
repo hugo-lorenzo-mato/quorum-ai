@@ -19,9 +19,9 @@ type WorkflowStartedEvent struct {
 }
 
 // NewWorkflowStartedEvent creates a new workflow started event.
-func NewWorkflowStartedEvent(workflowID, prompt string) WorkflowStartedEvent {
+func NewWorkflowStartedEvent(workflowID, projectID, prompt string) WorkflowStartedEvent {
 	return WorkflowStartedEvent{
-		BaseEvent: NewBaseEvent(TypeWorkflowStarted, workflowID),
+		BaseEvent: NewBaseEvent(TypeWorkflowStarted, workflowID, projectID),
 		Prompt:    prompt,
 	}
 }
@@ -38,9 +38,9 @@ type WorkflowStateUpdatedEvent struct {
 }
 
 // NewWorkflowStateUpdatedEvent creates a new state updated event.
-func NewWorkflowStateUpdatedEvent(workflowID, phase string, total, completed, failed, skipped int) WorkflowStateUpdatedEvent {
+func NewWorkflowStateUpdatedEvent(workflowID, projectID, phase string, total, completed, failed, skipped int) WorkflowStateUpdatedEvent {
 	return WorkflowStateUpdatedEvent{
-		BaseEvent:  NewBaseEvent(TypeWorkflowStateUpdated, workflowID),
+		BaseEvent:  NewBaseEvent(TypeWorkflowStateUpdated, workflowID, projectID),
 		Phase:      phase,
 		TotalTasks: total,
 		Completed:  completed,
@@ -58,9 +58,9 @@ type WorkflowCompletedEvent struct {
 }
 
 // NewWorkflowCompletedEvent creates a new workflow completed event.
-func NewWorkflowCompletedEvent(workflowID string, duration time.Duration, totalCost float64) WorkflowCompletedEvent {
+func NewWorkflowCompletedEvent(workflowID, projectID string, duration time.Duration, totalCost float64) WorkflowCompletedEvent {
 	return WorkflowCompletedEvent{
-		BaseEvent: NewBaseEvent(TypeWorkflowCompleted, workflowID),
+		BaseEvent: NewBaseEvent(TypeWorkflowCompleted, workflowID, projectID),
 		Duration:  duration,
 		TotalCost: totalCost,
 	}
@@ -75,13 +75,13 @@ type WorkflowFailedEvent struct {
 }
 
 // NewWorkflowFailedEvent creates a new workflow failed event.
-func NewWorkflowFailedEvent(workflowID, phase string, err error) WorkflowFailedEvent {
+func NewWorkflowFailedEvent(workflowID, projectID, phase string, err error) WorkflowFailedEvent {
 	errStr := ""
 	if err != nil {
 		errStr = err.Error()
 	}
 	return WorkflowFailedEvent{
-		BaseEvent: NewBaseEvent(TypeWorkflowFailed, workflowID),
+		BaseEvent: NewBaseEvent(TypeWorkflowFailed, workflowID, projectID),
 		Phase:     phase,
 		Error:     errStr,
 	}
@@ -95,9 +95,9 @@ type WorkflowPausedEvent struct {
 }
 
 // NewWorkflowPausedEvent creates a new workflow paused event.
-func NewWorkflowPausedEvent(workflowID, phase, reason string) WorkflowPausedEvent {
+func NewWorkflowPausedEvent(workflowID, projectID, phase, reason string) WorkflowPausedEvent {
 	return WorkflowPausedEvent{
-		BaseEvent: NewBaseEvent(TypeWorkflowPaused, workflowID),
+		BaseEvent: NewBaseEvent(TypeWorkflowPaused, workflowID, projectID),
 		Phase:     phase,
 		Reason:    reason,
 	}
@@ -110,9 +110,9 @@ type WorkflowResumedEvent struct {
 }
 
 // NewWorkflowResumedEvent creates a new workflow resumed event.
-func NewWorkflowResumedEvent(workflowID, fromPhase string) WorkflowResumedEvent {
+func NewWorkflowResumedEvent(workflowID, projectID, fromPhase string) WorkflowResumedEvent {
 	return WorkflowResumedEvent{
-		BaseEvent: NewBaseEvent(TypeWorkflowResumed, workflowID),
+		BaseEvent: NewBaseEvent(TypeWorkflowResumed, workflowID, projectID),
 		FromPhase: fromPhase,
 	}
 }

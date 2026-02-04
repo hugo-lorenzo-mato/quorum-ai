@@ -206,7 +206,7 @@ func (e *WorkflowExecutor) executeAsync(
 
 		// Publish SSE event
 		if e.eventBus != nil {
-			e.eventBus.Publish(events.NewWorkflowFailedEvent(workflowID, string(state.CurrentPhase), runErr))
+			e.eventBus.Publish(events.NewWorkflowFailedEvent(workflowID, "", string(state.CurrentPhase), runErr))
 		}
 	} else {
 		e.logger.Info("workflow execution completed",
@@ -218,7 +218,7 @@ func (e *WorkflowExecutor) executeAsync(
 
 		// Publish SSE event
 		if e.eventBus != nil {
-			e.eventBus.Publish(events.NewWorkflowCompletedEvent(workflowID, duration, totalCost))
+			e.eventBus.Publish(events.NewWorkflowCompletedEvent(workflowID, "", duration, totalCost))
 		}
 	}
 }

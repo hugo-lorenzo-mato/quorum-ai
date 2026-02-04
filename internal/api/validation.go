@@ -123,7 +123,8 @@ func (s *Server) handleValidateConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Load current config as base
-	cfg, err := s.loadConfig()
+	ctx := r.Context()
+	cfg, err := s.loadConfigForContext(ctx)
 	if err != nil {
 		s.logger.Error("failed to load config", "error", err)
 		respondError(w, http.StatusInternalServerError, "failed to load configuration")

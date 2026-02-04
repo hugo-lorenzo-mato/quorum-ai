@@ -1,7 +1,22 @@
+import useProjectStore from '../stores/projectStore';
+
 const API_BASE = '/api/v1';
 
+/**
+ * Build URL with project query parameter if a project is selected.
+ * @param {string} baseUrl - The base URL
+ * @returns {string} URL with project parameter if applicable
+ */
+function buildUrlWithProject(baseUrl) {
+  const projectId = useProjectStore.getState().currentProjectId;
+  if (!projectId) return baseUrl;
+
+  const separator = baseUrl.includes('?') ? '&' : '?';
+  return `${baseUrl}${separator}project=${encodeURIComponent(projectId)}`;
+}
+
 async function request(endpoint, options = {}) {
-  const url = `${API_BASE}${endpoint}`;
+  const url = buildUrlWithProject(`${API_BASE}${endpoint}`);
   const config = {
     headers: {
       'Content-Type': 'application/json',

@@ -222,11 +222,11 @@ func (e *Engine) startExecution(ctx context.Context, workflow *core.WorkflowStat
 		e.logger.Error("failed to persist engine state", "error", err)
 	}
 
-	// Emit event
+	// Emit event (projectID will be added when engine becomes project-aware)
 	e.eventBus.Publish(events.NewKanbanWorkflowMovedEvent(
-		workflowID, fromColumn, "in_progress", 0, false,
+		workflowID, "", fromColumn, "in_progress", 0, false,
 	))
-	e.eventBus.Publish(events.NewKanbanExecutionStartedEvent(workflowID, 0))
+	e.eventBus.Publish(events.NewKanbanExecutionStartedEvent(workflowID, "", 0))
 
 	// Start workflow execution in background
 	go func() {
@@ -316,11 +316,11 @@ func (e *Engine) handleWorkflowCompleted(ctx context.Context, workflowID string)
 		e.logger.Error("failed to persist engine state", "error", err)
 	}
 
-	// Emit events
+	// Emit events (projectID will be added when engine becomes project-aware)
 	e.eventBus.Publish(events.NewKanbanWorkflowMovedEvent(
-		workflowID, "in_progress", "to_verify", 0, false,
+		workflowID, "", "in_progress", "to_verify", 0, false,
 	))
-	e.eventBus.Publish(events.NewKanbanExecutionCompletedEvent(workflowID, prURL, prNumber))
+	e.eventBus.Publish(events.NewKanbanExecutionCompletedEvent(workflowID, "", prURL, prNumber))
 }
 
 // handleWorkflowFailed handles workflow failure.
@@ -347,7 +347,7 @@ func (e *Engine) handleWorkflowFailed(ctx context.Context, workflowID string, er
 
 		failures, _, lastFailure := e.circuitBreaker.GetState()
 		e.eventBus.Publish(events.NewKanbanCircuitBreakerOpenedEvent(
-			failures, e.circuitBreaker.Threshold(), lastFailure,
+			"", failures, e.circuitBreaker.Threshold(), lastFailure,
 		))
 	}
 
@@ -356,11 +356,11 @@ func (e *Engine) handleWorkflowFailed(ctx context.Context, workflowID string, er
 		e.logger.Error("failed to persist engine state", "error", err)
 	}
 
-	// Emit events
+	// Emit events (projectID will be added when engine becomes project-aware)
 	e.eventBus.Publish(events.NewKanbanWorkflowMovedEvent(
-		workflowID, "in_progress", "refinement", 0, false,
+		workflowID, "", "in_progress", "refinement", 0, false,
 	))
-	e.eventBus.Publish(events.NewKanbanExecutionFailedEvent(workflowID, errMsg, consecutiveFailures))
+	e.eventBus.Publish(events.NewKanbanExecutionFailedEvent(workflowID, "", errMsg, consecutiveFailures))
 }
 
 // Stop gracefully stops the engine.
@@ -390,7 +390,7 @@ func (e *Engine) Enable(ctx context.Context) error {
 
 	currentWfID := e.getCurrentWorkflowID()
 	e.eventBus.Publish(events.NewKanbanEngineStateChangedEvent(
-		true, currentWfID, false,
+		"", true, currentWfID, false,
 	))
 
 	e.logger.Info("kanban engine enabled")
@@ -407,7 +407,7 @@ func (e *Engine) Disable(ctx context.Context) error {
 
 	currentWfID := e.getCurrentWorkflowID()
 	e.eventBus.Publish(events.NewKanbanEngineStateChangedEvent(
-		false, currentWfID, e.circuitBreaker.IsOpen(),
+		"", false, currentWfID, e.circuitBreaker.IsOpen(),
 	))
 
 	e.logger.Info("kanban engine disabled")
@@ -433,7 +433,7 @@ func (e *Engine) ResetCircuitBreaker(ctx context.Context) error {
 	}
 
 	e.eventBus.Publish(events.NewKanbanEngineStateChangedEvent(
-		e.enabled.Load(), e.getCurrentWorkflowID(), false,
+		"", e.enabled.Load(), e.getCurrentWorkflowID(), false,
 	))
 
 	e.logger.Info("circuit breaker reset")

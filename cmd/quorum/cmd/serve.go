@@ -23,6 +23,7 @@ import (
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/events"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/kanban"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/logging"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/project"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service/workflow"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/web"
 )
@@ -255,6 +256,30 @@ func runServe(_ *cobra.Command, _ []string) error {
 		}
 	}
 
+	// Create project registry for multi-project support
+	var projectRegistry project.Registry
+	projectReg, err := project.NewFileRegistry(project.WithLogger(logger.Logger))
+	if err != nil {
+		logger.Warn("failed to create project registry, multi-project support disabled", slog.String("error", err.Error()))
+	} else {
+		projectRegistry = projectReg
+		logger.Info("project registry initialized", slog.Int("project_count", projectReg.Count()))
+		defer projectReg.Close()
+	}
+
+	// Create state pool for multi-project context management
+	var statePool *project.StatePool
+	if projectRegistry != nil {
+		statePool = project.NewStatePool(
+			projectRegistry,
+			project.WithPoolLogger(logger.Logger),
+			project.WithMaxActiveContexts(10),
+			project.WithEvictionGracePeriod(30*time.Minute),
+		)
+		logger.Info("state pool initialized for multi-project support")
+		defer statePool.Close()
+	}
+
 	// Create server options
 	serverOpts := []web.ServerOption{web.WithEventBus(eventBus)}
 	if registry != nil {
@@ -283,6 +308,12 @@ func runServe(_ *cobra.Command, _ []string) error {
 	}
 	if unifiedTracker != nil {
 		serverOpts = append(serverOpts, web.WithUnifiedTracker(unifiedTracker))
+	}
+	if projectRegistry != nil {
+		serverOpts = append(serverOpts, web.WithProjectRegistry(projectRegistry))
+	}
+	if statePool != nil {
+		serverOpts = append(serverOpts, web.WithStatePool(statePool))
 	}
 
 	// Create and start server with event bus and agent registry

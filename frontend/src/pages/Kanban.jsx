@@ -382,7 +382,7 @@ function KanbanFilters({ filter, setFilter }) {
 // Mobile Column Navigator
 function MobileColumnNav({ columns, activeIndex, onChange }) {
   return (
-    <div className="md:hidden flex items-center justify-center bg-background/80 backdrop-blur-md py-2 border-b border-border mb-2 sticky top-0 z-20">
+    <div className="md:hidden flex items-center justify-center bg-background/80 backdrop-blur-md py-2 border-b border-border mb-2 sticky top-14 z-20">
       <div className="flex gap-2 items-center">
         {columns.map((col, idx) => {
           const accent = KANBAN_COLUMN_COLORS[col.id] || KANBAN_COLUMN_COLORS.default;
@@ -492,7 +492,7 @@ export default function Kanban() {
   }
 
   return (
-    <div className="fixed top-14 left-0 right-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] md:static md:h-[calc(100vh-8rem)] md:relative flex flex-col space-y-2 md:space-y-6 animate-fade-in bg-background md:bg-transparent z-0">
+    <div className="flex flex-col space-y-2 md:space-y-6 animate-fade-in pb-10">
       {/* Header */}
       <div className="flex items-center justify-between gap-3 px-4 py-2 shrink-0 relative z-10 border-b border-border/50 lg:border-none">
         <div className="hidden lg:block text-left">

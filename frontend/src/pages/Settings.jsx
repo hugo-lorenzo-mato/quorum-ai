@@ -157,7 +157,7 @@ export default function Settings() {
   const groups = ['System', 'Project'];
 
   return (
-    <div className="flex flex-col fixed top-14 left-0 right-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] md:static md:h-[calc(100vh-4rem)] bg-background z-0">
+    <div className="flex flex-col md:h-[calc(100vh-4rem)] bg-background z-0 pb-10">
       {/* Header */}
       <header className="flex-none px-6 py-4 border-b border-border bg-card/50 backdrop-blur-sm z-10">
         <div className={`flex items-center justify-between gap-4 ${mobileView === 'content' ? 'hidden md:flex' : 'flex'}`}>

@@ -146,15 +146,16 @@ func (s *Server) isWorkflowRunning(ctx context.Context, workflowID string) bool 
 
 // handleListWorkflows returns all workflows.
 func (s *Server) handleListWorkflows(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	stateManager := s.getProjectStateManager(ctx)
+
 	// Return empty list if state manager is not configured
-	if s.stateManager == nil {
+	if stateManager == nil {
 		respondJSON(w, http.StatusOK, []WorkflowResponse{})
 		return
 	}
 
-	ctx := r.Context()
-
-	workflows, err := s.stateManager.ListWorkflows(ctx)
+	workflows, err := stateManager.ListWorkflows(ctx)
 	if err != nil {
 		s.logger.Error("failed to list workflows", "error", err)
 		respondError(w, http.StatusInternalServerError, "failed to list workflows")
@@ -180,12 +181,14 @@ func (s *Server) handleListWorkflows(w http.ResponseWriter, r *http.Request) {
 
 // handleGetWorkflow returns a specific workflow by ID.
 func (s *Server) handleGetWorkflow(w http.ResponseWriter, r *http.Request) {
-	if s.stateManager == nil {
+	ctx := r.Context()
+	stateManager := s.getProjectStateManager(ctx)
+
+	if stateManager == nil {
 		respondError(w, http.StatusNotFound, "workflow not found")
 		return
 	}
 
-	ctx := r.Context()
 	workflowID := chi.URLParam(r, "workflowID")
 
 	if workflowID == "" {
@@ -193,7 +196,7 @@ func (s *Server) handleGetWorkflow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	state, err := s.stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
+	state, err := stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
 	if err != nil {
 		s.logger.Error("failed to load workflow", "workflow_id", workflowID, "error", err)
 		respondError(w, http.StatusInternalServerError, "failed to load workflow")
@@ -205,7 +208,7 @@ func (s *Server) handleGetWorkflow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	activeID, _ := s.stateManager.GetActiveWorkflowID(ctx)
+	activeID, _ := stateManager.GetActiveWorkflowID(ctx)
 
 	response := s.stateToWorkflowResponse(ctx, state, activeID)
 	respondJSON(w, http.StatusOK, response)
@@ -213,15 +216,16 @@ func (s *Server) handleGetWorkflow(w http.ResponseWriter, r *http.Request) {
 
 // handleGetActiveWorkflow returns the currently active workflow.
 func (s *Server) handleGetActiveWorkflow(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	stateManager := s.getProjectStateManager(ctx)
+
 	// Return 404 if state manager is not configured
-	if s.stateManager == nil {
+	if stateManager == nil {
 		respondError(w, http.StatusNotFound, "no active workflow")
 		return
 	}
 
-	ctx := r.Context()
-
-	activeID, err := s.stateManager.GetActiveWorkflowID(ctx)
+	activeID, err := stateManager.GetActiveWorkflowID(ctx)
 	if err != nil {
 		s.logger.Error("failed to get active workflow ID", "error", err)
 		respondError(w, http.StatusInternalServerError, "failed to get active workflow")
@@ -233,7 +237,7 @@ func (s *Server) handleGetActiveWorkflow(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	state, err := s.stateManager.LoadByID(ctx, activeID)
+	state, err := stateManager.LoadByID(ctx, activeID)
 	if err != nil {
 		s.logger.Error("failed to load active workflow", "workflow_id", activeID, "error", err)
 		respondError(w, http.StatusInternalServerError, "failed to load workflow")
@@ -257,12 +261,13 @@ func (s *Server) handleGetActiveWorkflow(w http.ResponseWriter, r *http.Request)
 
 // handleCreateWorkflow creates a new workflow.
 func (s *Server) handleCreateWorkflow(w http.ResponseWriter, r *http.Request) {
-	if s.stateManager == nil {
+	ctx := r.Context()
+	stateManager := s.getProjectStateManager(ctx)
+
+	if stateManager == nil {
 		respondError(w, http.StatusServiceUnavailable, "workflow management not available")
 		return
 	}
-
-	ctx := r.Context()
 
 	var req CreateWorkflowRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -277,7 +282,7 @@ func (s *Server) handleCreateWorkflow(w http.ResponseWriter, r *http.Request) {
 
 	// Check for duplicate prompts - block if pending/running, warn if completed/failed
 	var duplicateWarning string
-	duplicates, err := s.stateManager.FindWorkflowsByPrompt(ctx, req.Prompt)
+	duplicates, err := stateManager.FindWorkflowsByPrompt(ctx, req.Prompt)
 	if err != nil {
 		s.logger.Warn("failed to check for duplicate prompts", "error", err)
 	} else if len(duplicates) > 0 {
@@ -322,7 +327,7 @@ func (s *Server) handleCreateWorkflow(w http.ResponseWriter, r *http.Request) {
 
 	// Validate execution mode configuration
 	if req.Config != nil {
-		cfg, err := s.loadConfig()
+		cfg, err := s.loadConfigForContext(ctx)
 		if err != nil {
 			s.logger.Error("failed to load config for validation", "error", err)
 			respondError(w, http.StatusInternalServerError, "failed to load configuration")
@@ -386,7 +391,7 @@ func (s *Server) handleCreateWorkflow(w http.ResponseWriter, r *http.Request) {
 		KanbanPosition: 0,
 	}
 
-	if err := s.stateManager.Save(ctx, state); err != nil {
+	if err := stateManager.Save(ctx, state); err != nil {
 		s.logger.Error("failed to save workflow", "workflow_id", workflowID, "error", err)
 		respondError(w, http.StatusInternalServerError, "failed to create workflow")
 		return
@@ -401,12 +406,14 @@ func (s *Server) handleCreateWorkflow(w http.ResponseWriter, r *http.Request) {
 
 // handleUpdateWorkflow updates an existing workflow.
 func (s *Server) handleUpdateWorkflow(w http.ResponseWriter, r *http.Request) {
-	if s.stateManager == nil {
+	ctx := r.Context()
+	stateManager := s.getProjectStateManager(ctx)
+
+	if stateManager == nil {
 		respondError(w, http.StatusNotFound, "workflow not found")
 		return
 	}
 
-	ctx := r.Context()
 	workflowID := chi.URLParam(r, "workflowID")
 
 	if workflowID == "" {
@@ -414,7 +421,7 @@ func (s *Server) handleUpdateWorkflow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	state, err := s.stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
+	state, err := stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
 	if err != nil {
 		s.logger.Error("failed to load workflow", "workflow_id", workflowID, "error", err)
 		respondError(w, http.StatusInternalServerError, "failed to load workflow")
@@ -487,7 +494,7 @@ func (s *Server) handleUpdateWorkflow(w http.ResponseWriter, r *http.Request) {
 			merged.SingleAgentReasoningEffort = *req.Config.SingleAgentReasoningEffort
 		}
 
-		cfg, err := s.loadConfig()
+		cfg, err := s.loadConfigForContext(ctx)
 		if err != nil {
 			s.logger.Error("failed to load config for validation", "error", err)
 			respondError(w, http.StatusInternalServerError, "failed to load configuration")
@@ -514,29 +521,31 @@ func (s *Server) handleUpdateWorkflow(w http.ResponseWriter, r *http.Request) {
 	}
 	state.UpdatedAt = time.Now()
 
-	if err := s.stateManager.Save(ctx, state); err != nil {
+	if err := stateManager.Save(ctx, state); err != nil {
 		s.logger.Error("failed to save workflow", "workflow_id", workflowID, "error", err)
 		respondError(w, http.StatusInternalServerError, "failed to update workflow")
 		return
 	}
 
-	activeID, _ := s.stateManager.GetActiveWorkflowID(ctx)
+	activeID, _ := stateManager.GetActiveWorkflowID(ctx)
 	response := s.stateToWorkflowResponse(ctx, state, activeID)
 	respondJSON(w, http.StatusOK, response)
 }
 
 // handleDeleteWorkflow deletes a workflow.
 func (s *Server) handleDeleteWorkflow(w http.ResponseWriter, r *http.Request) {
-	if s.stateManager == nil {
+	ctx := r.Context()
+	stateManager := s.getProjectStateManager(ctx)
+
+	if stateManager == nil {
 		respondError(w, http.StatusNotFound, "workflow not found")
 		return
 	}
 
-	ctx := r.Context()
 	workflowID := chi.URLParam(r, "workflowID")
 
 	// Load workflow to check it exists and is not running
-	state, err := s.stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
+	state, err := stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
 	if err != nil || state == nil {
 		respondError(w, http.StatusNotFound, "workflow not found")
 		return
@@ -549,7 +558,7 @@ func (s *Server) handleDeleteWorkflow(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Delete the workflow
-	if err := s.stateManager.DeleteWorkflow(ctx, core.WorkflowID(workflowID)); err != nil {
+	if err := stateManager.DeleteWorkflow(ctx, core.WorkflowID(workflowID)); err != nil {
 		respondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -566,12 +575,14 @@ func (s *Server) handleDeleteWorkflow(w http.ResponseWriter, r *http.Request) {
 
 // handleActivateWorkflow sets a workflow as active.
 func (s *Server) handleActivateWorkflow(w http.ResponseWriter, r *http.Request) {
-	if s.stateManager == nil {
+	ctx := r.Context()
+	stateManager := s.getProjectStateManager(ctx)
+
+	if stateManager == nil {
 		respondError(w, http.StatusNotFound, "workflow not found")
 		return
 	}
 
-	ctx := r.Context()
 	workflowID := chi.URLParam(r, "workflowID")
 
 	if workflowID == "" {
@@ -580,7 +591,7 @@ func (s *Server) handleActivateWorkflow(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Verify workflow exists
-	state, err := s.stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
+	state, err := stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
 	if err != nil {
 		s.logger.Error("failed to load workflow", "workflow_id", workflowID, "error", err)
 		respondError(w, http.StatusInternalServerError, "failed to load workflow")
@@ -592,7 +603,7 @@ func (s *Server) handleActivateWorkflow(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if err := s.stateManager.SetActiveWorkflowID(ctx, core.WorkflowID(workflowID)); err != nil {
+	if err := stateManager.SetActiveWorkflowID(ctx, core.WorkflowID(workflowID)); err != nil {
 		s.logger.Error("failed to set active workflow", "workflow_id", workflowID, "error", err)
 		respondError(w, http.StatusInternalServerError, "failed to activate workflow")
 		return
@@ -694,7 +705,8 @@ func (s *Server) handleDownloadWorkflow(w http.ResponseWriter, r *http.Request) 
 	}
 
 	ctx := r.Context()
-	state, err := s.stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
+	stateManager := s.getProjectStateManager(ctx)
+	state, err := stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
 	if err != nil || state == nil {
 		respondError(w, http.StatusNotFound, "workflow not found")
 		return
@@ -774,15 +786,16 @@ func (s *Server) HandleRunWorkflow(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
+	stateManager := s.getProjectStateManager(ctx)
 
 	// Check if state manager is available
-	if s.stateManager == nil {
+	if stateManager == nil {
 		respondError(w, http.StatusServiceUnavailable, "workflow management not available")
 		return
 	}
 
 	// Load workflow state for initial validation and response
-	state, err := s.stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
+	state, err := stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
 	if err != nil {
 		s.logger.Error("failed to load workflow", "workflow_id", workflowID, "error", err)
 		respondError(w, http.StatusInternalServerError, "failed to load workflow")
@@ -878,7 +891,7 @@ func (s *Server) HandleRunWorkflow(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get runner factory
-	factory := s.RunnerFactory()
+	factory := s.RunnerFactoryForContext(ctx)
 	if factory == nil {
 		// Rollback the execution start
 		_ = s.unifiedTracker.RollbackExecution(ctx, core.WorkflowID(workflowID), "missing configuration")
@@ -891,7 +904,7 @@ func (s *Server) HandleRunWorkflow(w http.ResponseWriter, r *http.Request) {
 	execCtx, cancel := context.WithTimeout(context.Background(), 4*time.Hour)
 
 	// Reload state (it was updated by StartExecution)
-	state, err = s.stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
+	state, err = stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
 	if err != nil {
 		cancel()
 		_ = s.unifiedTracker.RollbackExecution(ctx, core.WorkflowID(workflowID), "failed to reload state")
@@ -910,7 +923,7 @@ func (s *Server) HandleRunWorkflow(w http.ResponseWriter, r *http.Request) {
 
 	// Connect notifier to state for agent event persistence
 	notifier.SetState(state)
-	notifier.SetStateSaver(s.stateManager)
+	notifier.SetStateSaver(stateManager)
 
 	// Start execution in background
 	go func() {
@@ -1098,11 +1111,12 @@ func (s *Server) handlePauseWorkflow(w http.ResponseWriter, r *http.Request) {
 
 	// Update persisted state
 	ctx := r.Context()
-	state, err := s.stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
+	stateManager := s.getProjectStateManager(ctx)
+	state, err := stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
 	if err == nil && state != nil {
 		state.Status = core.WorkflowStatusPaused
 		state.UpdatedAt = time.Now()
-		if saveErr := s.stateManager.Save(ctx, state); saveErr != nil {
+		if saveErr := stateManager.Save(ctx, state); saveErr != nil {
 			s.logger.Warn("failed to persist paused status", "workflow_id", workflowID, "error", saveErr)
 		}
 	}
@@ -1143,12 +1157,13 @@ func (s *Server) handleResumeWorkflow(w http.ResponseWriter, r *http.Request) {
 
 	// Update persisted state
 	ctx := r.Context()
-	state, err := s.stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
+	stateManager := s.getProjectStateManager(ctx)
+	state, err := stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
 	if err == nil && state != nil {
 		state.Status = core.WorkflowStatusRunning
 		state.Error = "" // Clear previous error on resume
 		state.UpdatedAt = time.Now()
-		if saveErr := s.stateManager.Save(ctx, state); saveErr != nil {
+		if saveErr := stateManager.Save(ctx, state); saveErr != nil {
 			s.logger.Warn("failed to persist running status", "workflow_id", workflowID, "error", saveErr)
 		}
 	}
@@ -1180,14 +1195,15 @@ func (s *Server) HandleAnalyzeWorkflow(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
+	stateManager := s.getProjectStateManager(ctx)
 
-	if s.stateManager == nil {
+	if stateManager == nil {
 		respondError(w, http.StatusServiceUnavailable, "workflow management not available")
 		return
 	}
 
 	// Load workflow state
-	state, err := s.stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
+	state, err := stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
 	if err != nil {
 		s.logger.Error("failed to load workflow", "workflow_id", workflowID, "error", err)
 		respondError(w, http.StatusInternalServerError, "failed to load workflow")
@@ -1237,7 +1253,7 @@ func (s *Server) HandleAnalyzeWorkflow(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get runner factory
-	factory := s.RunnerFactory()
+	factory := s.RunnerFactoryForContext(ctx)
 	if factory == nil {
 		_ = s.unifiedTracker.RollbackExecution(ctx, core.WorkflowID(workflowID), "missing configuration")
 		respondError(w, http.StatusServiceUnavailable, "workflow execution not available: missing configuration")
@@ -1248,7 +1264,7 @@ func (s *Server) HandleAnalyzeWorkflow(w http.ResponseWriter, r *http.Request) {
 	execCtx, cancel := context.WithTimeout(context.Background(), 4*time.Hour)
 
 	// Reload state (it was updated by StartExecution)
-	state, err = s.stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
+	state, err = stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
 	if err != nil {
 		cancel()
 		_ = s.unifiedTracker.RollbackExecution(ctx, core.WorkflowID(workflowID), "failed to reload state")
@@ -1266,7 +1282,7 @@ func (s *Server) HandleAnalyzeWorkflow(w http.ResponseWriter, r *http.Request) {
 	}
 
 	notifier.SetState(state)
-	notifier.SetStateSaver(s.stateManager)
+	notifier.SetStateSaver(stateManager)
 
 	// Execute analyze phase in background
 	go func() {
@@ -1287,7 +1303,7 @@ func (s *Server) HandleAnalyzeWorkflow(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Load final state and emit completion
-		finalState, _ := s.stateManager.LoadByID(context.Background(), core.WorkflowID(workflowID))
+		finalState, _ := stateManager.LoadByID(context.Background(), core.WorkflowID(workflowID))
 		if finalState != nil {
 			notifier.PhaseCompleted(string(core.PhaseAnalyze), time.Since(state.UpdatedAt))
 		}
@@ -1327,13 +1343,14 @@ func (s *Server) HandlePlanWorkflow(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
+	stateManager := s.getProjectStateManager(ctx)
 
-	if s.stateManager == nil {
+	if stateManager == nil {
 		respondError(w, http.StatusServiceUnavailable, "workflow management not available")
 		return
 	}
 
-	state, err := s.stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
+	state, err := stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
 	if err != nil {
 		s.logger.Error("failed to load workflow", "workflow_id", workflowID, "error", err)
 		respondError(w, http.StatusInternalServerError, "failed to load workflow")
@@ -1389,7 +1406,7 @@ func (s *Server) HandlePlanWorkflow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	factory := s.RunnerFactory()
+	factory := s.RunnerFactoryForContext(ctx)
 	if factory == nil {
 		_ = s.unifiedTracker.RollbackExecution(ctx, core.WorkflowID(workflowID), "missing configuration")
 		respondError(w, http.StatusServiceUnavailable, "workflow execution not available: missing configuration")
@@ -1398,7 +1415,7 @@ func (s *Server) HandlePlanWorkflow(w http.ResponseWriter, r *http.Request) {
 
 	execCtx, cancel := context.WithTimeout(context.Background(), 2*time.Hour)
 
-	state, err = s.stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
+	state, err = stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
 	if err != nil {
 		cancel()
 		_ = s.unifiedTracker.RollbackExecution(ctx, core.WorkflowID(workflowID), "failed to reload state")
@@ -1415,7 +1432,7 @@ func (s *Server) HandlePlanWorkflow(w http.ResponseWriter, r *http.Request) {
 	}
 
 	notifier.SetState(state)
-	notifier.SetStateSaver(s.stateManager)
+	notifier.SetStateSaver(stateManager)
 
 	go func() {
 		defer cancel()
@@ -1482,13 +1499,14 @@ func (s *Server) HandleReplanWorkflow(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
+	stateManager := s.getProjectStateManager(ctx)
 
-	if s.stateManager == nil {
+	if stateManager == nil {
 		respondError(w, http.StatusServiceUnavailable, "workflow management not available")
 		return
 	}
 
-	state, err := s.stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
+	state, err := stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "failed to load workflow")
 		return
@@ -1535,7 +1553,7 @@ func (s *Server) HandleReplanWorkflow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	factory := s.RunnerFactory()
+	factory := s.RunnerFactoryForContext(ctx)
 	if factory == nil {
 		_ = s.unifiedTracker.RollbackExecution(ctx, core.WorkflowID(workflowID), "missing configuration")
 		respondError(w, http.StatusServiceUnavailable, "workflow execution not available")
@@ -1544,7 +1562,7 @@ func (s *Server) HandleReplanWorkflow(w http.ResponseWriter, r *http.Request) {
 
 	execCtx, cancel := context.WithTimeout(context.Background(), 2*time.Hour)
 
-	state, err = s.stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
+	state, err = stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
 	if err != nil {
 		cancel()
 		_ = s.unifiedTracker.RollbackExecution(ctx, core.WorkflowID(workflowID), "failed to reload state")
@@ -1561,7 +1579,7 @@ func (s *Server) HandleReplanWorkflow(w http.ResponseWriter, r *http.Request) {
 	}
 
 	notifier.SetState(state)
-	notifier.SetStateSaver(s.stateManager)
+	notifier.SetStateSaver(stateManager)
 
 	additionalContext := req.Context
 
@@ -1621,13 +1639,14 @@ func (s *Server) HandleExecuteWorkflow(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
+	stateManager := s.getProjectStateManager(ctx)
 
-	if s.stateManager == nil {
+	if stateManager == nil {
 		respondError(w, http.StatusServiceUnavailable, "workflow management not available")
 		return
 	}
 
-	state, err := s.stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
+	state, err := stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "failed to load workflow")
 		return
@@ -1684,7 +1703,7 @@ func (s *Server) HandleExecuteWorkflow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	factory := s.RunnerFactory()
+	factory := s.RunnerFactoryForContext(ctx)
 	if factory == nil {
 		_ = s.unifiedTracker.RollbackExecution(ctx, core.WorkflowID(workflowID), "missing configuration")
 		respondError(w, http.StatusServiceUnavailable, "workflow execution not available")
@@ -1693,7 +1712,7 @@ func (s *Server) HandleExecuteWorkflow(w http.ResponseWriter, r *http.Request) {
 
 	execCtx, cancel := context.WithTimeout(context.Background(), 8*time.Hour)
 
-	state, err = s.stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
+	state, err = stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
 	if err != nil {
 		cancel()
 		_ = s.unifiedTracker.RollbackExecution(ctx, core.WorkflowID(workflowID), "failed to reload state")
@@ -1710,7 +1729,7 @@ func (s *Server) HandleExecuteWorkflow(w http.ResponseWriter, r *http.Request) {
 	}
 
 	notifier.SetState(state)
-	notifier.SetStateSaver(s.stateManager)
+	notifier.SetStateSaver(stateManager)
 
 	go func() {
 		defer cancel()
@@ -1729,7 +1748,7 @@ func (s *Server) HandleExecuteWorkflow(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		finalState, _ := s.stateManager.LoadByID(context.Background(), core.WorkflowID(workflowID))
+		finalState, _ := stateManager.LoadByID(context.Background(), core.WorkflowID(workflowID))
 		if finalState != nil && finalState.Status == core.WorkflowStatusCompleted {
 			notifier.WorkflowCompleted(time.Since(state.UpdatedAt), finalState.Metrics.TotalCostUSD)
 		}

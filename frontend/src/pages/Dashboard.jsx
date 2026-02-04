@@ -26,6 +26,7 @@ import {
   ChevronDown,
   ChevronUp,
   FileText,
+  FolderKanban,
 } from 'lucide-react';
 
 // Get workflow display title
@@ -532,6 +533,31 @@ function LoadingSkeleton() {
     </div>
   );
 }
+function useProjects() {
+  const [projects, setProjects] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchProjects = useCallback(async () => {
+    try {
+      const response = await fetch('/api/v1/projects/');
+      if (response.ok) {
+        const result = await response.json();
+        setProjects(result || []);
+      }
+    } catch (error) {
+      console.error('Failed to fetch projects:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchProjects();
+  }, [fetchProjects]);
+
+  return { projects, loading, refresh: fetchProjects };
+}
+
 function useSystemResources() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -590,6 +616,7 @@ function useSystemResources() {
 export default function Dashboard() {
   const { workflows, activeWorkflow, fetchWorkflows, fetchActiveWorkflow, loading } = useWorkflowStore();
   const { data: systemData, loading: systemLoading, refresh: refreshSystem, timeAgo: systemTimeAgo } = useSystemResources();
+  const { projects } = useProjects();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -600,6 +627,7 @@ export default function Dashboard() {
   const completedCount = workflows.filter(w => w.status === 'completed').length;
   const runningCount = workflows.filter(w => w.status === 'running').length;
   const failedCount = workflows.filter(w => w.status === 'failed').length;
+  const healthyProjectsCount = projects.filter(p => p.status === 'healthy').length;
 
   const recentWorkflows = [...workflows]
     .sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))
@@ -610,7 +638,7 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="fixed top-14 left-0 right-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] md:static md:h-auto md:pb-0 overflow-y-auto space-y-6 animate-fade-in bg-background md:bg-transparent z-0">
+    <div className="space-y-6 animate-fade-in pb-10">
       {/* Brand Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border/50 pb-6">
         <div className="flex items-center gap-4">
@@ -644,9 +672,17 @@ export default function Dashboard() {
       )}
 
       {/* Stats Grid - Mobile Carousel, Desktop Grid */}
-      <div className="flex overflow-x-auto pb-4 -mx-3 px-3 sm:mx-0 sm:px-0 gap-3 snap-x md:grid md:grid-cols-2 lg:grid-cols-4 md:gap-4 md:overflow-visible md:pb-0 scrollbar-none md:scrollbar-default">
+      <div className="flex overflow-x-auto pb-4 -mx-3 px-3 sm:mx-0 sm:px-0 gap-3 snap-x md:grid md:grid-cols-2 lg:grid-cols-5 md:gap-4 md:overflow-visible md:pb-0 scrollbar-none md:scrollbar-default">
         <StatCard
-          title="Total Workflows"
+          title="Projects"
+          value={projects.length}
+          subtitle={`${healthyProjectsCount} healthy`}
+          icon={FolderKanban}
+          color="primary"
+          className="min-w-[160px] md:min-w-0 snap-center"
+        />
+        <StatCard
+          title="Workflows"
           value={workflows.length}
           subtitle="All time"
           icon={GitBranch}

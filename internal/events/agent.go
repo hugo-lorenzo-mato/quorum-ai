@@ -44,9 +44,9 @@ type AgentStreamEvent struct {
 }
 
 // NewAgentStreamEvent creates a new agent stream event.
-func NewAgentStreamEvent(workflowID string, kind AgentEventType, agent, message string) AgentStreamEvent {
+func NewAgentStreamEvent(workflowID, projectID string, kind AgentEventType, agent, message string) AgentStreamEvent {
 	return AgentStreamEvent{
-		BaseEvent: NewBaseEvent(TypeAgentEvent, workflowID),
+		BaseEvent: NewBaseEvent(TypeAgentEvent, workflowID, projectID),
 		EventKind: kind,
 		Agent:     agent,
 		Message:   message,

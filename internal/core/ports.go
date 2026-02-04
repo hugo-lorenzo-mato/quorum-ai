@@ -337,6 +337,7 @@ type TaskState struct {
 	ID           TaskID     `json:"id"`
 	Phase        Phase      `json:"phase"`
 	Name         string     `json:"name"`
+	Description  string     `json:"description,omitempty"`
 	Status       TaskStatus `json:"status"`
 	CLI          string     `json:"cli"`
 	Model        string     `json:"model"`

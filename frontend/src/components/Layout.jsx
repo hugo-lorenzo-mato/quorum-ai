@@ -3,6 +3,7 @@ import { useUIStore } from '../stores';
 import MobileBottomNav from './MobileBottomNav';
 import Notifications from './Notifications';
 import Logo from './Logo';
+import ProjectSelector from './ProjectSelector';
 import {
   LayoutDashboard,
   GitBranch,
@@ -221,6 +222,11 @@ export default function Layout({ children }) {
               <PanelLeftClose className="w-4 h-4" />
             </button>
           )}
+        </div>
+
+        {/* Project Selector */}
+        <div className="px-2 py-2 border-b border-border">
+          <ProjectSelector collapsed={!sidebarOpen} />
         </div>
 
         {/* Navigation */}

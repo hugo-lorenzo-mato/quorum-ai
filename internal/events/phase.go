@@ -15,9 +15,9 @@ type PhaseStartedEvent struct {
 }
 
 // NewPhaseStartedEvent creates a new phase started event.
-func NewPhaseStartedEvent(workflowID, phase string) PhaseStartedEvent {
+func NewPhaseStartedEvent(workflowID, projectID, phase string) PhaseStartedEvent {
 	return PhaseStartedEvent{
-		BaseEvent: NewBaseEvent(TypePhaseStarted, workflowID),
+		BaseEvent: NewBaseEvent(TypePhaseStarted, workflowID, projectID),
 		Phase:     phase,
 	}
 }
@@ -30,9 +30,9 @@ type PhaseCompletedEvent struct {
 }
 
 // NewPhaseCompletedEvent creates a new phase completed event.
-func NewPhaseCompletedEvent(workflowID, phase string, duration time.Duration) PhaseCompletedEvent {
+func NewPhaseCompletedEvent(workflowID, projectID, phase string, duration time.Duration) PhaseCompletedEvent {
 	return PhaseCompletedEvent{
-		BaseEvent: NewBaseEvent(TypePhaseCompleted, workflowID),
+		BaseEvent: NewBaseEvent(TypePhaseCompleted, workflowID, projectID),
 		Phase:     phase,
 		Duration:  duration,
 	}

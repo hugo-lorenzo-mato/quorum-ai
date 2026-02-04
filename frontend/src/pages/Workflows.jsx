@@ -790,9 +790,9 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
   }, [agentActivity, selectedTaskId, tasks]);
 
   return (
-    <div className="fixed top-14 left-0 right-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] md:static md:h-auto overflow-y-auto bg-background md:bg-transparent z-0 space-y-6 animate-fade-in px-3 sm:px-0">
+    <div className="space-y-6 animate-fade-in px-3 sm:px-0 pb-10">
       {/* Header */}
-      <div className="sticky top-14 z-30 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 -mx-3 sm:-mx-6 px-3 sm:px-6 py-3 border-b border-border shadow-sm mb-6 transition-all">
+      <div className="md:sticky md:top-14 z-20 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 -mx-3 sm:-mx-6 px-3 sm:px-6 py-4 border-b border-border shadow-sm mb-6 transition-all">
         <div className="flex flex-col md:flex-row md:items-center gap-4">
           <div className="flex items-center gap-4 w-full md:w-auto">
             <button
@@ -1486,7 +1486,7 @@ function NewWorkflowForm({ onSubmit, onCancel, loading }) {
   };
 
   return (
-    <div className="fixed top-14 left-0 right-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] md:static md:h-auto overflow-y-auto bg-background md:bg-transparent z-0">
+    <div className="w-full animate-fade-in pb-10">
       <div className="max-w-2xl mx-auto p-6 rounded-xl border border-border bg-card animate-fade-up">
         <h2 className="text-xl font-semibold text-foreground mb-6">Create New Workflow</h2>
       <form onSubmit={handleSubmit} className="space-y-8">
@@ -1870,7 +1870,7 @@ export default function Workflows() {
 
   // Show workflow list
   return (
-    <div className="fixed top-14 left-0 right-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] md:static md:h-auto overflow-y-auto bg-background md:bg-transparent z-0 space-y-6 animate-fade-in px-3 sm:px-0">
+    <div className="space-y-6 animate-fade-in px-3 sm:px-0 pb-10">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-foreground tracking-tight">Workflows</h1>

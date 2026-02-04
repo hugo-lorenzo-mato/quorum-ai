@@ -1,0 +1,102 @@
+// Package project provides multi-project management capabilities for Quorum AI.
+// It includes a registry for tracking projects, context encapsulation for
+// project-specific resources, and a pool for managing active project contexts.
+package project
+
+import (
+	"time"
+)
+
+// ProjectStatus represents the health state of a project
+type ProjectStatus string
+
+const (
+	// StatusHealthy indicates the project is fully operational
+	StatusHealthy ProjectStatus = "healthy"
+	// StatusDegraded indicates partial functionality (e.g., config issues)
+	StatusDegraded ProjectStatus = "degraded"
+	// StatusOffline indicates the project directory is not accessible
+	StatusOffline ProjectStatus = "offline"
+	// StatusInitializing indicates first-time setup is in progress
+	StatusInitializing ProjectStatus = "initializing"
+)
+
+// String returns the string representation of the status
+func (s ProjectStatus) String() string {
+	return string(s)
+}
+
+// IsValid checks if the status is a valid value
+func (s ProjectStatus) IsValid() bool {
+	switch s {
+	case StatusHealthy, StatusDegraded, StatusOffline, StatusInitializing:
+		return true
+	default:
+		return false
+	}
+}
+
+// Project represents a registered Quorum project
+type Project struct {
+	// ID is the unique identifier for the project (cryptographically random)
+	ID string `yaml:"id" json:"id"`
+	// Path is the absolute filesystem path to the project root
+	Path string `yaml:"path" json:"path"`
+	// Name is the human-readable name of the project
+	Name string `yaml:"name" json:"name"`
+	// LastAccessed is the timestamp of the last access to this project
+	LastAccessed time.Time `yaml:"last_accessed" json:"last_accessed"`
+	// Status indicates the current health state of the project
+	Status ProjectStatus `yaml:"status" json:"status"`
+	// StatusMessage provides additional context for non-healthy statuses
+	StatusMessage string `yaml:"status_message,omitempty" json:"status_message,omitempty"`
+	// Color is the UI accent color for the project badge
+	Color string `yaml:"color,omitempty" json:"color,omitempty"`
+	// CreatedAt is the timestamp when the project was registered
+	CreatedAt time.Time `yaml:"created_at" json:"created_at"`
+}
+
+// Clone creates a deep copy of the project
+func (p *Project) Clone() *Project {
+	if p == nil {
+		return nil
+	}
+	return &Project{
+		ID:            p.ID,
+		Path:          p.Path,
+		Name:          p.Name,
+		LastAccessed:  p.LastAccessed,
+		Status:        p.Status,
+		StatusMessage: p.StatusMessage,
+		Color:         p.Color,
+		CreatedAt:     p.CreatedAt,
+	}
+}
+
+// IsHealthy returns true if the project status is healthy
+func (p *Project) IsHealthy() bool {
+	return p != nil && p.Status == StatusHealthy
+}
+
+// IsAccessible returns true if the project can be accessed (healthy or degraded)
+func (p *Project) IsAccessible() bool {
+	return p != nil && (p.Status == StatusHealthy || p.Status == StatusDegraded)
+}
+
+// RegistryConfig holds the persisted registry data
+type RegistryConfig struct {
+	// Version is the schema version of the registry file
+	Version int `yaml:"version"`
+	// DefaultProject is the ID of the default project for legacy endpoints
+	DefaultProject string `yaml:"default_project,omitempty"`
+	// Projects is the list of all registered projects
+	Projects []*Project `yaml:"projects"`
+}
+
+// AddProjectOptions provides options when adding a project
+type AddProjectOptions struct {
+	// Name is the custom name for the project (auto-generated from path if empty)
+	Name string
+	// Color is the custom UI color (auto-generated if empty)
+	Color string
+}

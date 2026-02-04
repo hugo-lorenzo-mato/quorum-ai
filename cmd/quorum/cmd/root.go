@@ -14,6 +14,7 @@ var (
 	logFormat string
 	noColor   bool
 	quiet     bool
+	projectID string // --project/-p flag for multi-project support
 
 	// Version info - set via SetVersion()
 	appVersion string
@@ -64,21 +65,40 @@ func init() {
 		"disable colored output")
 	rootCmd.PersistentFlags().BoolVarP(&quiet, "quiet", "q", false,
 		"suppress non-essential output")
+	rootCmd.PersistentFlags().StringVar(&projectID, "project", "",
+		"project ID, name, or path to operate on (default: current directory or default project)")
 
 	// Bind flags to viper (errors are nil when flag exists)
 	_ = viper.BindPFlag("log.level", rootCmd.PersistentFlags().Lookup("log-level"))
 	_ = viper.BindPFlag("log.format", rootCmd.PersistentFlags().Lookup("log-format"))
 	_ = viper.BindPFlag("no_color", rootCmd.PersistentFlags().Lookup("no-color"))
 	_ = viper.BindPFlag("quiet", rootCmd.PersistentFlags().Lookup("quiet"))
+	_ = viper.BindPFlag("project", rootCmd.PersistentFlags().Lookup("project"))
 }
 
 func initConfig() error {
 	if cfgFile != "" {
 		viper.SetConfigFile(cfgFile)
 	} else {
-		viper.SetConfigName(".quorum")
+		viper.SetConfigName("config")
 		viper.SetConfigType("yaml")
-		viper.AddConfigPath(".")
+
+		// If --project flag is specified, try to resolve project path
+		// Otherwise use current directory
+		configPaths := []string{".quorum"}
+
+		// Add project-specific config path if --project is specified
+		if projectID != "" {
+			// We'll attempt to resolve the project path
+			// This is a best-effort - if it fails, we fall back to current directory
+			if projectPath := tryResolveProjectPath(projectID); projectPath != "" {
+				configPaths = append([]string{projectPath + "/.quorum"}, configPaths...)
+			}
+		}
+
+		for _, p := range configPaths {
+			viper.AddConfigPath(p)
+		}
 		viper.AddConfigPath("$HOME/.config/quorum")
 	}
 
@@ -93,4 +113,16 @@ func initConfig() error {
 	}
 
 	return nil
+}
+
+// tryResolveProjectPath attempts to resolve a project path from an ID/name/path.
+// This is used during config initialization, so it's best-effort and doesn't return errors.
+func tryResolveProjectPath(value string) string {
+	// This is a simplified version that doesn't use the registry to avoid circular deps
+	// If value looks like a path, use it directly
+	if strings.HasPrefix(value, "/") || strings.HasPrefix(value, ".") {
+		return value
+	}
+	// For now, return empty - the registry-based resolution happens later
+	return ""
 }

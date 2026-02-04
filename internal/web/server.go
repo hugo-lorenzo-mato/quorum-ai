@@ -18,6 +18,7 @@ import (
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/diagnostics"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/events"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/kanban"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/project"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service/workflow"
 )
 
@@ -37,6 +38,8 @@ type Server struct {
 	heartbeatManager *workflow.HeartbeatManager // for zombie workflow detection
 	kanbanEngine     *kanban.Engine             // for Kanban board workflow execution
 	unifiedTracker   *api.UnifiedTracker        // for centralized workflow tracking
+	projectRegistry  project.Registry           // for multi-project support
+	statePool        *project.StatePool         // for multi-project context management
 	apiServer        *api.Server
 }
 
@@ -141,6 +144,20 @@ func WithUnifiedTracker(tracker *api.UnifiedTracker) ServerOption {
 	}
 }
 
+// WithProjectRegistry sets the project registry for multi-project support.
+func WithProjectRegistry(registry project.Registry) ServerOption {
+	return func(s *Server) {
+		s.projectRegistry = registry
+	}
+}
+
+// WithStatePool sets the state pool for multi-project context management.
+func WithStatePool(pool *project.StatePool) ServerOption {
+	return func(s *Server) {
+		s.statePool = pool
+	}
+}
+
 // New creates a new Server instance with the given configuration.
 func New(cfg Config, logger *slog.Logger, opts ...ServerOption) *Server {
 	if logger == nil {
@@ -180,6 +197,12 @@ func New(cfg Config, logger *slog.Logger, opts ...ServerOption) *Server {
 		}
 		if s.unifiedTracker != nil {
 			apiOpts = append(apiOpts, api.WithUnifiedTracker(s.unifiedTracker))
+		}
+		if s.projectRegistry != nil {
+			apiOpts = append(apiOpts, api.WithProjectRegistry(s.projectRegistry))
+		}
+		if s.statePool != nil {
+			apiOpts = append(apiOpts, api.WithStatePool(s.statePool))
 		}
 		s.apiServer = api.NewServer(s.stateManager, s.eventBus, apiOpts...)
 		if s.agentRegistry != nil && s.stateManager != nil {

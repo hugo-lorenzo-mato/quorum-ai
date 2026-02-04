@@ -160,7 +160,7 @@ export default function IssuesEditor() {
   }
 
   return (
-    <div className="flex flex-col fixed top-14 left-0 right-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] md:static md:h-[calc(100vh-4rem)] bg-background overflow-hidden z-0">
+    <div className="flex flex-col md:h-[calc(100vh-4rem)] bg-background overflow-hidden z-0 pb-10">
       {/* Header */}
       <header className="flex items-center justify-between px-6 py-4 border-b border-border bg-card shadow-sm shrink-0 z-20">
         <div className="flex items-center gap-4">

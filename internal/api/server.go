@@ -11,16 +11,18 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
+	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/rs/cors"
 
 	webadapters "github.com/hugo-lorenzo-mato/quorum-ai/internal/adapters/web"
+	apimiddleware "github.com/hugo-lorenzo-mato/quorum-ai/internal/api/middleware"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/attachments"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/config"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/diagnostics"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/events"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/kanban"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/project"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service/workflow"
 )
 
@@ -49,6 +51,12 @@ type Server struct {
 
 	// Kanban engine for sequential workflow execution
 	kanbanEngine *kanban.Engine
+
+	// Project registry for multi-project support
+	projectRegistry project.Registry
+
+	// State pool for multi-project context management
+	statePool *project.StatePool
 
 	// Mutex for config file operations to prevent race conditions
 	configMu sync.RWMutex
@@ -127,6 +135,20 @@ func WithUnifiedTracker(tracker *UnifiedTracker) ServerOption {
 	}
 }
 
+// WithProjectRegistry sets the project registry for multi-project support.
+func WithProjectRegistry(registry project.Registry) ServerOption {
+	return func(s *Server) {
+		s.projectRegistry = registry
+	}
+}
+
+// WithStatePool sets the state pool for multi-project context management.
+func WithStatePool(pool *project.StatePool) ServerOption {
+	return func(s *Server) {
+		s.statePool = pool
+	}
+}
+
 // NewServer creates a new API server.
 func NewServer(stateManager core.StateManager, eventBus *events.EventBus, opts ...ServerOption) *Server {
 	wd, _ := os.Getwd() // Best effort default
@@ -144,7 +166,15 @@ func NewServer(stateManager core.StateManager, eventBus *events.EventBus, opts .
 	s.attachments = attachments.NewStore(s.root)
 
 	// Create chat handler with agent registry and chat store (may be nil)
-	s.chatHandler = webadapters.NewChatHandler(s.agentRegistry, eventBus, s.attachments, s.chatStore)
+	// Pass resolvers for project-scoped chat storage
+	s.chatHandler = webadapters.NewChatHandler(
+		s.agentRegistry,
+		eventBus,
+		s.attachments,
+		s.chatStore,
+		webadapters.WithChatStoreResolver(s.getProjectChatStore),
+		webadapters.WithProjectRootResolver(s.getProjectRootPath),
+	)
 
 	s.router = s.setupRouter()
 	return s
@@ -160,10 +190,10 @@ func (s *Server) setupRouter() chi.Router {
 	r := chi.NewRouter()
 
 	// Middleware
-	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP)
-	r.Use(middleware.Recoverer)
-	r.Use(middleware.Timeout(60 * time.Second))
+	r.Use(chimiddleware.RequestID)
+	r.Use(chimiddleware.RealIP)
+	r.Use(chimiddleware.Recoverer)
+	r.Use(chimiddleware.Timeout(60 * time.Second))
 	r.Use(s.loggingMiddleware)
 
 	// CORS for frontend access
@@ -182,6 +212,13 @@ func (s *Server) setupRouter() chi.Router {
 
 	// API v1 routes
 	r.Route("/api/v1", func(r chi.Router) {
+		// Apply project context middleware if both registry and pool are configured
+		if s.projectRegistry != nil && s.statePool != nil {
+			registryAdapter := apimiddleware.NewRegistryAdapter(s.projectRegistry)
+			poolAdapter := apimiddleware.NewStatePoolAdapter(s.statePool)
+			r.Use(apimiddleware.QueryProjectMiddleware(poolAdapter, registryAdapter, s.logger))
+		}
+
 		// Workflow endpoints
 		r.Route("/workflows", func(r chi.Router) {
 			r.Get("/", s.handleListWorkflows)
@@ -276,6 +313,12 @@ func (s *Server) setupRouter() chi.Router {
 		// Kanban board endpoints
 		kanbanServer := NewKanbanServer(s, s.kanbanEngine, s.eventBus)
 		kanbanServer.RegisterRoutes(r)
+
+		// Project management endpoints (only if registry is configured)
+		if s.projectRegistry != nil {
+			projectsHandler := NewProjectsHandler(s.projectRegistry)
+			projectsHandler.RegisterRoutes(r)
+		}
 	})
 
 	return r
@@ -285,7 +328,7 @@ func (s *Server) setupRouter() chi.Router {
 func (s *Server) loggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
-		ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
+		ww := chimiddleware.NewWrapResponseWriter(w, r.ProtoMajor)
 
 		defer func() {
 			s.logger.Info("http request",

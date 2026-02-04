@@ -83,14 +83,23 @@ type ListSessionsResponse struct {
 	Total    int           `json:"total"`
 }
 
+// ChatStoreResolver is a function that returns the ChatStore for the current request context.
+// This allows for project-scoped chat storage.
+type ChatStoreResolver func(ctx context.Context) core.ChatStore
+
+// ProjectRootResolver is a function that returns the project root directory for the current request context.
+type ProjectRootResolver func(ctx context.Context) string
+
 // ChatHandler handles chat-related HTTP requests.
 type ChatHandler struct {
-	mu              sync.RWMutex
-	agents          core.AgentRegistry
-	eventBus        *events.EventBus
-	sessions        map[string]*chatSessionState
-	attachmentStore *attachments.Store
-	chatStore       core.ChatStore
+	mu                  sync.RWMutex
+	agents              core.AgentRegistry
+	eventBus            *events.EventBus
+	sessions            map[string]*chatSessionState
+	attachmentStore     *attachments.Store
+	chatStore           core.ChatStore              // Fallback global store
+	chatStoreResolver   ChatStoreResolver           // Per-request store resolver
+	projectRootResolver ProjectRootResolver         // Per-request project root resolver
 }
 
 // chatSessionState holds the internal state of a chat session.
@@ -103,8 +112,25 @@ type chatSessionState struct {
 	projectRoot string // Directory where .quorum is located, for file access scoping
 }
 
+// ChatHandlerOption is a functional option for configuring ChatHandler.
+type ChatHandlerOption func(*ChatHandler)
+
+// WithChatStoreResolver sets the ChatStore resolver for project-scoped storage.
+func WithChatStoreResolver(resolver ChatStoreResolver) ChatHandlerOption {
+	return func(h *ChatHandler) {
+		h.chatStoreResolver = resolver
+	}
+}
+
+// WithProjectRootResolver sets the project root resolver for project-scoped sessions.
+func WithProjectRootResolver(resolver ProjectRootResolver) ChatHandlerOption {
+	return func(h *ChatHandler) {
+		h.projectRootResolver = resolver
+	}
+}
+
 // NewChatHandler creates a new ChatHandler.
-func NewChatHandler(agents core.AgentRegistry, eventBus *events.EventBus, attachmentStore *attachments.Store, chatStore core.ChatStore) *ChatHandler {
+func NewChatHandler(agents core.AgentRegistry, eventBus *events.EventBus, attachmentStore *attachments.Store, chatStore core.ChatStore, opts ...ChatHandlerOption) *ChatHandler {
 	h := &ChatHandler{
 		agents:          agents,
 		eventBus:        eventBus,
@@ -113,12 +139,42 @@ func NewChatHandler(agents core.AgentRegistry, eventBus *events.EventBus, attach
 		chatStore:       chatStore,
 	}
 
-	// Load existing sessions from persistent store
+	// Apply options
+	for _, opt := range opts {
+		opt(h)
+	}
+
+	// Load existing sessions from persistent store (only from global store at startup)
 	if chatStore != nil {
 		h.loadPersistedSessions()
 	}
 
 	return h
+}
+
+// getChatStore returns the ChatStore for the given context.
+// If a resolver is configured and returns a non-nil store, that is used.
+// Otherwise, falls back to the global chatStore.
+func (h *ChatHandler) getChatStore(ctx context.Context) core.ChatStore {
+	if h.chatStoreResolver != nil {
+		if store := h.chatStoreResolver(ctx); store != nil {
+			return store
+		}
+	}
+	return h.chatStore
+}
+
+// getProjectRoot returns the project root for the given context.
+// If a resolver is configured, uses that. Otherwise, uses current working directory.
+func (h *ChatHandler) getProjectRoot(ctx context.Context) string {
+	if h.projectRootResolver != nil {
+		if root := h.projectRootResolver(ctx); root != "" {
+			return root
+		}
+	}
+	// Fallback to current working directory
+	root, _ := os.Getwd()
+	return root
 }
 
 // loadPersistedSessions loads all sessions from the persistent store.
@@ -218,9 +274,10 @@ func (h *ChatHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 
 	now := time.Now()
 	sessionID := uuid.New().String()
+	ctx := r.Context()
 
 	// Get project root for file access scoping
-	projectRoot, _ := os.Getwd()
+	projectRoot := h.getProjectRoot(ctx)
 
 	session := ChatSession{
 		ID:           sessionID,
@@ -242,7 +299,8 @@ func (h *ChatHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 	h.mu.Unlock()
 
 	// Persist session to store
-	if h.chatStore != nil {
+	chatStore := h.getChatStore(ctx)
+	if chatStore != nil {
 		persistedSession := &core.ChatSessionState{
 			ID:          sessionID,
 			CreatedAt:   now,
@@ -251,7 +309,7 @@ func (h *ChatHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 			Model:       req.Model,
 			ProjectRoot: projectRoot,
 		}
-		if err := h.chatStore.SaveSession(r.Context(), persistedSession); err != nil {
+		if err := chatStore.SaveSession(ctx, persistedSession); err != nil {
 			// Log error but don't fail the request - session is already in memory
 			_ = err
 		}
@@ -259,17 +317,24 @@ func (h *ChatHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 
 	// Publish event
 	if h.eventBus != nil {
-		h.eventBus.Publish(events.NewChatMessageEvent("", events.RoleSystem, "", fmt.Sprintf("Session %s created", sessionID)))
+		h.eventBus.Publish(events.NewChatMessageEvent("", "", events.RoleSystem, "", fmt.Sprintf("Session %s created", sessionID)))
 	}
 
 	writeJSON(w, http.StatusCreated, session)
 }
 
-// ListSessions lists all chat sessions.
-func (h *ChatHandler) ListSessions(w http.ResponseWriter, _ *http.Request) {
+// ListSessions lists all chat sessions for the current project.
+func (h *ChatHandler) ListSessions(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	projectRoot := h.getProjectRoot(ctx)
+
 	h.mu.RLock()
-	sessions := make([]ChatSession, 0, len(h.sessions))
+	sessions := make([]ChatSession, 0)
 	for _, state := range h.sessions {
+		// Filter by project root for project isolation
+		if state.projectRoot != projectRoot {
+			continue
+		}
 		// Return session without messages for list view
 		sess := state.session
 		sess.MessageCount = len(state.messages)
@@ -340,7 +405,9 @@ func (h *ChatHandler) UpdateSession(w http.ResponseWriter, r *http.Request) {
 	h.mu.Unlock()
 
 	// Persist changes
-	if updated && h.chatStore != nil {
+	ctx := r.Context()
+	chatStore := h.getChatStore(ctx)
+	if updated && chatStore != nil {
 		persistedSession := &core.ChatSessionState{
 			ID:          sessionID,
 			Title:       state.title,
@@ -350,7 +417,7 @@ func (h *ChatHandler) UpdateSession(w http.ResponseWriter, r *http.Request) {
 			Model:       state.model,
 			ProjectRoot: state.projectRoot,
 		}
-		_ = h.chatStore.SaveSession(r.Context(), persistedSession)
+		_ = chatStore.SaveSession(ctx, persistedSession)
 	}
 
 	writeJSON(w, http.StatusOK, session)
@@ -373,8 +440,10 @@ func (h *ChatHandler) DeleteSession(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Delete from persistent store
-	if h.chatStore != nil {
-		_ = h.chatStore.DeleteSession(r.Context(), sessionID)
+	ctx := r.Context()
+	chatStore := h.getChatStore(ctx)
+	if chatStore != nil {
+		_ = chatStore.DeleteSession(ctx, sessionID)
 	}
 
 	// Best-effort cleanup of attachments on disk.
@@ -452,7 +521,9 @@ func (h *ChatHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 	h.mu.Unlock()
 
 	// Persist user message
-	if h.chatStore != nil {
+	ctx := r.Context()
+	chatStore := h.getChatStore(ctx)
+	if chatStore != nil {
 		persistedMsg := &core.ChatMessageState{
 			ID:        userMsg.ID,
 			SessionID: sessionID,
@@ -460,12 +531,12 @@ func (h *ChatHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 			Content:   userMsg.Content,
 			Timestamp: userMsg.Timestamp,
 		}
-		_ = h.chatStore.SaveMessage(r.Context(), persistedMsg)
+		_ = chatStore.SaveMessage(ctx, persistedMsg)
 	}
 
 	// Publish user message event
 	if h.eventBus != nil {
-		h.eventBus.Publish(events.NewChatMessageEvent("", events.RoleUser, "", req.Content))
+		h.eventBus.Publish(events.NewChatMessageEvent("", "", events.RoleUser, "", req.Content))
 	}
 
 	// Execute agent with all options
@@ -501,8 +572,8 @@ func (h *ChatHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 	state.session.UpdatedAt = agentMsg.Timestamp
 	h.mu.Unlock()
 
-	// Persist agent message
-	if h.chatStore != nil {
+	// Persist agent message (reuse chatStore from earlier in this function)
+	if chatStore != nil {
 		var tokensIn, tokensOut int
 		var costUSD float64
 		if agentMsg.Tokens != nil {
@@ -521,7 +592,7 @@ func (h *ChatHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 			TokensOut: tokensOut,
 			CostUSD:   costUSD,
 		}
-		_ = h.chatStore.SaveMessage(r.Context(), persistedMsg)
+		_ = chatStore.SaveMessage(ctx, persistedMsg)
 	}
 
 	// Return agent message directly for frontend compatibility
@@ -639,7 +710,7 @@ Respond helpfully and concisely.`, contextBuilder, fileContext, lastContent)
 
 	// Publish agent response event
 	if h.eventBus != nil {
-		h.eventBus.Publish(events.NewChatMessageEvent("", events.RoleAgent, opts.agentName, result.Output))
+		h.eventBus.Publish(events.NewChatMessageEvent("", "", events.RoleAgent, opts.agentName, result.Output))
 	}
 
 	return msg, nil
@@ -684,7 +755,9 @@ func (h *ChatHandler) SetAgent(w http.ResponseWriter, r *http.Request) {
 	h.mu.Unlock()
 
 	// Persist session update
-	if h.chatStore != nil {
+	ctx := r.Context()
+	chatStore := h.getChatStore(ctx)
+	if chatStore != nil {
 		persistedSession := &core.ChatSessionState{
 			ID:          sessionID,
 			CreatedAt:   state.session.CreatedAt,
@@ -693,7 +766,7 @@ func (h *ChatHandler) SetAgent(w http.ResponseWriter, r *http.Request) {
 			Model:       state.model,
 			ProjectRoot: state.projectRoot,
 		}
-		_ = h.chatStore.SaveSession(r.Context(), persistedSession)
+		_ = chatStore.SaveSession(ctx, persistedSession)
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{
@@ -727,7 +800,9 @@ func (h *ChatHandler) SetModel(w http.ResponseWriter, r *http.Request) {
 	h.mu.Unlock()
 
 	// Persist session update
-	if h.chatStore != nil {
+	ctx := r.Context()
+	chatStore := h.getChatStore(ctx)
+	if chatStore != nil {
 		persistedSession := &core.ChatSessionState{
 			ID:          sessionID,
 			CreatedAt:   state.session.CreatedAt,
@@ -736,7 +811,7 @@ func (h *ChatHandler) SetModel(w http.ResponseWriter, r *http.Request) {
 			Model:       req.Model,
 			ProjectRoot: state.projectRoot,
 		}
-		_ = h.chatStore.SaveSession(r.Context(), persistedSession)
+		_ = chatStore.SaveSession(ctx, persistedSession)
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{

@@ -16,9 +16,9 @@ type PauseRequestEvent struct {
 }
 
 // NewPauseRequestEvent creates a new pause request event.
-func NewPauseRequestEvent(workflowID, reason string) PauseRequestEvent {
+func NewPauseRequestEvent(workflowID, projectID, reason string) PauseRequestEvent {
 	return PauseRequestEvent{
-		BaseEvent: NewBaseEvent(TypePauseRequest, workflowID),
+		BaseEvent: NewBaseEvent(TypePauseRequest, workflowID, projectID),
 		Reason:    reason,
 	}
 }
@@ -29,9 +29,9 @@ type ResumeRequestEvent struct {
 }
 
 // NewResumeRequestEvent creates a new resume request event.
-func NewResumeRequestEvent(workflowID string) ResumeRequestEvent {
+func NewResumeRequestEvent(workflowID, projectID string) ResumeRequestEvent {
 	return ResumeRequestEvent{
-		BaseEvent: NewBaseEvent(TypeResumeRequest, workflowID),
+		BaseEvent: NewBaseEvent(TypeResumeRequest, workflowID, projectID),
 	}
 }
 
@@ -43,9 +43,9 @@ type AbortRequestEvent struct {
 }
 
 // NewAbortRequestEvent creates a new abort request event.
-func NewAbortRequestEvent(workflowID, reason string, force bool) AbortRequestEvent {
+func NewAbortRequestEvent(workflowID, projectID, reason string, force bool) AbortRequestEvent {
 	return AbortRequestEvent{
-		BaseEvent: NewBaseEvent(TypeAbortRequest, workflowID),
+		BaseEvent: NewBaseEvent(TypeAbortRequest, workflowID, projectID),
 		Reason:    reason,
 		Force:     force,
 	}
@@ -58,9 +58,9 @@ type RetryRequestEvent struct {
 }
 
 // NewRetryRequestEvent creates a new retry request event.
-func NewRetryRequestEvent(workflowID, taskID string) RetryRequestEvent {
+func NewRetryRequestEvent(workflowID, projectID, taskID string) RetryRequestEvent {
 	return RetryRequestEvent{
-		BaseEvent: NewBaseEvent(TypeRetryRequest, workflowID),
+		BaseEvent: NewBaseEvent(TypeRetryRequest, workflowID, projectID),
 		TaskID:    taskID,
 	}
 }
@@ -73,9 +73,9 @@ type SkipRequestEvent struct {
 }
 
 // NewSkipRequestEvent creates a new skip request event.
-func NewSkipRequestEvent(workflowID, taskID, reason string) SkipRequestEvent {
+func NewSkipRequestEvent(workflowID, projectID, taskID, reason string) SkipRequestEvent {
 	return SkipRequestEvent{
-		BaseEvent: NewBaseEvent(TypeSkipRequest, workflowID),
+		BaseEvent: NewBaseEvent(TypeSkipRequest, workflowID, projectID),
 		TaskID:    taskID,
 		Reason:    reason,
 	}

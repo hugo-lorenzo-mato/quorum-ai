@@ -44,13 +44,13 @@ type MetricsUpdateEvent struct {
 }
 
 // NewMetricsUpdateEvent creates a new metrics update event.
-func NewMetricsUpdateEvent(workflowID string, tokensIn, tokensOut int, cost, limit, consensusScore float64, duration time.Duration) MetricsUpdateEvent {
+func NewMetricsUpdateEvent(workflowID, projectID string, tokensIn, tokensOut int, cost, limit, consensusScore float64, duration time.Duration) MetricsUpdateEvent {
 	usagePercent := 0.0
 	if limit > 0 {
 		usagePercent = (cost / limit) * 100
 	}
 	return MetricsUpdateEvent{
-		BaseEvent:      NewBaseEvent(TypeMetricsUpdate, workflowID),
+		BaseEvent:      NewBaseEvent(TypeMetricsUpdate, workflowID, projectID),
 		TotalTokensIn:  tokensIn,
 		TotalTokensOut: tokensOut,
 		TotalCostUSD:   cost,
@@ -71,9 +71,9 @@ type CostAlertEvent struct {
 }
 
 // NewCostAlertEvent creates a new cost alert event.
-func NewCostAlertEvent(workflowID string, currentCost, limit float64, level AlertLevel) CostAlertEvent {
+func NewCostAlertEvent(workflowID, projectID string, currentCost, limit float64, level AlertLevel) CostAlertEvent {
 	return CostAlertEvent{
-		BaseEvent:   NewBaseEvent(TypeCostAlert, workflowID),
+		BaseEvent:   NewBaseEvent(TypeCostAlert, workflowID, projectID),
 		CurrentCost: currentCost,
 		Limit:       limit,
 		Level:       level,

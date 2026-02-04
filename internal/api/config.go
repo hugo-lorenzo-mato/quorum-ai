@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/api/middleware"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/config"
 )
 
@@ -16,11 +18,13 @@ import (
 
 // handleGetConfig returns the current configuration.
 func (s *Server) handleGetConfig(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
 	// Use read lock to allow concurrent reads
 	s.configMu.RLock()
 	defer s.configMu.RUnlock()
 
-	cfg, err := s.loadConfig()
+	cfg, err := s.loadConfigForContext(ctx)
 	if err != nil {
 		s.logger.Error("failed to load config", "error", err)
 		respondError(w, http.StatusInternalServerError, "failed to load configuration")
@@ -29,7 +33,7 @@ func (s *Server) handleGetConfig(w http.ResponseWriter, r *http.Request) {
 
 	// Get file metadata and ETag from file (not from marshaled config!)
 	// IMPORTANT: ETag must be calculated from file bytes to match PATCH validation
-	configPath := s.getConfigPath()
+	configPath := s.getProjectConfigPath(ctx)
 	meta, _ := getConfigFileMeta(configPath)
 
 	// Use file-based ETag for consistency with PATCH validation
@@ -83,6 +87,8 @@ func (s *Server) determineConfigSource(configPath string) string {
 
 // handleUpdateConfig updates configuration values.
 func (s *Server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
 	// Use write lock to prevent concurrent modifications
 	s.configMu.Lock()
 	defer s.configMu.Unlock()
@@ -93,7 +99,7 @@ func (s *Server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	configPath := s.getConfigPath()
+	configPath := s.getProjectConfigPath(ctx)
 
 	// Check for force update flag
 	forceUpdate := r.URL.Query().Get("force") == "true"
@@ -117,7 +123,7 @@ func (s *Server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 				"current_etag", currentETag)
 
 			// Return 412 with current config and ETag
-			cfg, loadErr := s.loadConfig()
+			cfg, loadErr := s.loadConfigForContext(ctx)
 			if loadErr != nil {
 				respondError(w, http.StatusInternalServerError, "failed to load current configuration")
 				return
@@ -135,7 +141,7 @@ func (s *Server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Load current config
-	cfg, err := s.loadConfig()
+	cfg, err := s.loadConfigForContext(ctx)
 	if err != nil {
 		s.logger.Error("failed to load config", "error", err)
 		respondError(w, http.StatusInternalServerError, "failed to load configuration")
@@ -173,12 +179,14 @@ func (s *Server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleResetConfig resets configuration to defaults.
-func (s *Server) handleResetConfig(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) handleResetConfig(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
 	// Use write lock to prevent concurrent modifications
 	s.configMu.Lock()
 	defer s.configMu.Unlock()
 
-	configPath := s.getConfigPath()
+	configPath := s.getProjectConfigPath(ctx)
 
 	// Ensure .quorum directory exists
 	configDir := filepath.Dir(configPath)
@@ -344,21 +352,27 @@ func (s *Server) handleGetAgents(w http.ResponseWriter, _ *http.Request) {
 	respondJSON(w, http.StatusOK, agents)
 }
 
-// loadConfig loads the configuration from file using the config loader.
-func (s *Server) loadConfig() (*config.Config, error) {
-	configPath := s.getConfigPath()
-
-	// Check if config file exists, if not use defaults
+// loadConfigForContext loads the configuration using the project-scoped config loader.
+func (s *Server) loadConfigForContext(ctx context.Context) (*config.Config, error) {
+	loader := s.getProjectConfigLoader(ctx)
+	if loader != nil {
+		return loader.Load()
+	}
+	// Fallback: load from default path
+	configPath := s.getProjectConfigPath(ctx)
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		return config.NewLoader().Load()
 	}
-
-	// Load using config loader for consistency
 	return config.NewLoader().WithConfigFile(configPath).Load()
 }
 
-// getConfigPath returns the config file path.
-func (s *Server) getConfigPath() string {
+// getProjectConfigPath returns the config file path for the current project context.
+func (s *Server) getProjectConfigPath(ctx context.Context) string {
+	pc := middleware.GetProjectContext(ctx)
+	if pc != nil {
+		return filepath.Join(pc.ProjectRoot(), ".quorum", "config.yaml")
+	}
+	// Fallback to relative path (legacy mode)
 	return filepath.Join(".quorum", "config.yaml")
 }
 

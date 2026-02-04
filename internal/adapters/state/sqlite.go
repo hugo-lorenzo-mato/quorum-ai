@@ -50,6 +50,9 @@ var migrationV8 string
 //go:embed migrations/009_prompt_hash.sql
 var migrationV9 string
 
+//go:embed migrations/010_add_task_description.sql
+var migrationV10 string
+
 // SQLiteStateManager implements StateManager with SQLite storage.
 type SQLiteStateManager struct {
 	dbPath     string
@@ -282,6 +285,14 @@ func (m *SQLiteStateManager) migrate() error {
 		}
 	}
 
+	if version < 10 {
+		// Migration V10 adds description column to tasks table
+		_, err := m.db.Exec(migrationV10)
+		if err != nil && !strings.Contains(err.Error(), "already exists") && !strings.Contains(err.Error(), "duplicate column") {
+			return fmt.Errorf("applying migration v10: %w", err)
+		}
+	}
+
 	return nil
 }
 
@@ -476,15 +487,15 @@ func (m *SQLiteStateManager) insertTask(ctx context.Context, tx *sql.Tx, workflo
 
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO tasks (
-			id, workflow_id, phase, name, status, cli, model,
+			id, workflow_id, phase, name, description, status, cli, model,
 			dependencies, tokens_in, tokens_out, cost_usd, retries,
 			error, worktree_path, started_at, completed_at,
 			output, output_file, model_used, finish_reason, tool_calls,
 			last_commit, files_modified, branch, resumable, resume_hint,
 			merge_pending, merge_commit
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
-		task.ID, workflowID, task.Phase, task.Name, task.Status,
+		task.ID, workflowID, task.Phase, task.Name, nullableString([]byte(task.Description)), task.Status,
 		task.CLI, task.Model, string(depsJSON),
 		task.TokensIn, task.TokensOut, task.CostUSD, task.Retries,
 		nullableString([]byte(task.Error)), nullableString([]byte(task.WorktreePath)),
@@ -635,7 +646,7 @@ func (m *SQLiteStateManager) loadWorkflowByID(ctx context.Context, id core.Workf
 	// Load tasks using read connection
 	state.Tasks = make(map[core.TaskID]*core.TaskState)
 	rows, err := m.readDB.QueryContext(ctx, `
-		SELECT id, phase, name, status, cli, model, dependencies,
+		SELECT id, phase, name, description, status, cli, model, dependencies,
 		       tokens_in, tokens_out, cost_usd, retries, error,
 		       worktree_path, started_at, completed_at, output,
 		       output_file, model_used, finish_reason, tool_calls,
@@ -686,7 +697,7 @@ func (m *SQLiteStateManager) loadWorkflowByID(ctx context.Context, id core.Workf
 func (m *SQLiteStateManager) scanTask(rows *sql.Rows) (*core.TaskState, error) {
 	var task core.TaskState
 	var depsJSON, toolCallsJSON sql.NullString
-	var cli, model, errorStr, worktreePath sql.NullString
+	var description, cli, model, errorStr, worktreePath sql.NullString
 	var startedAt, completedAt sql.NullTime
 	var output, outputFile, modelUsed, finishReason sql.NullString
 	var lastCommit, filesModifiedJSON, branch, resumeHint sql.NullString
@@ -695,7 +706,7 @@ func (m *SQLiteStateManager) scanTask(rows *sql.Rows) (*core.TaskState, error) {
 	var mergeCommit sql.NullString
 
 	err := rows.Scan(
-		&task.ID, &task.Phase, &task.Name, &task.Status,
+		&task.ID, &task.Phase, &task.Name, &description, &task.Status,
 		&cli, &model, &depsJSON,
 		&task.TokensIn, &task.TokensOut, &task.CostUSD, &task.Retries,
 		&errorStr, &worktreePath, &startedAt, &completedAt,
@@ -707,6 +718,9 @@ func (m *SQLiteStateManager) scanTask(rows *sql.Rows) (*core.TaskState, error) {
 		return nil, err
 	}
 
+	if description.Valid {
+		task.Description = description.String
+	}
 	if cli.Valid {
 		task.CLI = cli.String
 	}
@@ -2173,7 +2187,7 @@ func (a *sqliteAtomicContext) LoadByID(id core.WorkflowID) (*core.WorkflowState,
 	// Load tasks within transaction
 	state.Tasks = make(map[core.TaskID]*core.TaskState)
 	rows, err := a.tx.QueryContext(a.ctx, `
-		SELECT id, phase, name, status, cli, model, dependencies,
+		SELECT id, phase, name, description, status, cli, model, dependencies,
 		       tokens_in, tokens_out, cost_usd, retries, error,
 		       worktree_path, started_at, completed_at, output,
 		       output_file, model_used, finish_reason, tool_calls,

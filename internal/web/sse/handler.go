@@ -25,6 +25,7 @@ type client struct {
 	id       string
 	done     chan struct{}
 	events   chan []byte
+	project  string // optional filter by project ID
 	workflow string // optional filter by workflow ID
 	closed   bool   // tracks if done channel is already closed
 }
@@ -58,12 +59,14 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
 
-	// Create client
+	// Create client with optional project and workflow filters
+	projectID := r.URL.Query().Get("project")
 	workflowID := r.URL.Query().Get("workflow")
 	c := &client{
 		id:       fmt.Sprintf("%d", time.Now().UnixNano()),
 		done:     make(chan struct{}),
 		events:   make(chan []byte, 100),
+		project:  projectID,
 		workflow: workflowID,
 	}
 
@@ -78,6 +81,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Send initial connection event
 	h.sendEvent(w, flusher, "connected", map[string]string{
 		"client_id": c.id,
+		"project":   projectID,
 		"workflow":  workflowID,
 	})
 
@@ -98,6 +102,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		case event, ok := <-eventCh:
 			if !ok {
 				return
+			}
+			// Filter by project if specified
+			if c.project != "" && event.ProjectID() != c.project {
+				continue
 			}
 			// Filter by workflow if specified
 			if c.workflow != "" && event.WorkflowID() != c.workflow {

@@ -30,9 +30,9 @@ type UserInputRequestedEvent struct {
 }
 
 // NewUserInputRequestedEvent creates a new user input request event.
-func NewUserInputRequestedEvent(workflowID, requestID, prompt string, options []string) UserInputRequestedEvent {
+func NewUserInputRequestedEvent(workflowID, projectID, requestID, prompt string, options []string) UserInputRequestedEvent {
 	return UserInputRequestedEvent{
-		BaseEvent: NewBaseEvent(TypeUserInputRequested, workflowID),
+		BaseEvent: NewBaseEvent(TypeUserInputRequested, workflowID, projectID),
 		RequestID: requestID,
 		Prompt:    prompt,
 		Options:   options,
@@ -48,9 +48,9 @@ type UserInputProvidedEvent struct {
 }
 
 // NewUserInputProvidedEvent creates a new user input provided event.
-func NewUserInputProvidedEvent(workflowID, requestID, input string, cancelled bool) UserInputProvidedEvent {
+func NewUserInputProvidedEvent(workflowID, projectID, requestID, input string, cancelled bool) UserInputProvidedEvent {
 	return UserInputProvidedEvent{
-		BaseEvent: NewBaseEvent(TypeUserInputProvided, workflowID),
+		BaseEvent: NewBaseEvent(TypeUserInputProvided, workflowID, projectID),
 		RequestID: requestID,
 		Input:     input,
 		Cancelled: cancelled,
@@ -67,9 +67,9 @@ type ChatMessageReceivedEvent struct {
 }
 
 // NewChatMessageEvent creates a new chat message event.
-func NewChatMessageEvent(workflowID string, role MessageRole, agent, content string) ChatMessageReceivedEvent {
+func NewChatMessageEvent(workflowID, projectID string, role MessageRole, agent, content string) ChatMessageReceivedEvent {
 	return ChatMessageReceivedEvent{
-		BaseEvent: NewBaseEvent(TypeChatMessageReceived, workflowID),
+		BaseEvent: NewBaseEvent(TypeChatMessageReceived, workflowID, projectID),
 		Role:      role,
 		Agent:     agent,
 		Content:   content,
@@ -85,9 +85,9 @@ type AgentResponseChunkEvent struct {
 }
 
 // NewAgentResponseChunkEvent creates a new agent response chunk event.
-func NewAgentResponseChunkEvent(workflowID, agent, chunk string, isFinal bool) AgentResponseChunkEvent {
+func NewAgentResponseChunkEvent(workflowID, projectID, agent, chunk string, isFinal bool) AgentResponseChunkEvent {
 	return AgentResponseChunkEvent{
-		BaseEvent: NewBaseEvent(TypeAgentResponseChunk, workflowID),
+		BaseEvent: NewBaseEvent(TypeAgentResponseChunk, workflowID, projectID),
 		Agent:     agent,
 		Chunk:     chunk,
 		IsFinal:   isFinal,

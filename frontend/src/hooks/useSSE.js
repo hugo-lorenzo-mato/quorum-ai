@@ -4,9 +4,10 @@ import useTaskStore from '../stores/taskStore';
 import useUIStore from '../stores/uiStore';
 import useAgentStore from '../stores/agentStore';
 import useKanbanStore from '../stores/kanbanStore';
+import useProjectStore from '../stores/projectStore';
 import { workflowApi } from '../lib/api';
 
-const SSE_URL = '/api/v1/sse/events';
+const SSE_BASE_URL = '/api/v1/sse/events';
 const RECONNECT_DELAY = 3000;
 const MAX_RECONNECT_ATTEMPTS = 10;
 const POLLING_INTERVAL = 5000;
@@ -25,6 +26,10 @@ export default function useSSE() {
   const pollingIntervalRef = useRef(null);
   const connectRef = useRef(null);
   const [connectionMode, setConnectionModeLocal] = useState(CONNECTION_MODE.DISCONNECTED);
+
+  // Project context for filtering
+  const currentProjectId = useProjectStore(state => state.currentProjectId);
+  const prevProjectIdRef = useRef(currentProjectId);
 
   const setSSEConnected = useUIStore(state => state.setSSEConnected);
   const setConnectionModeInStore = useUIStore(state => state.setConnectionMode);
@@ -230,7 +235,13 @@ export default function useSSE() {
       eventSourceRef.current.close();
     }
 
-    const eventSource = new EventSource(SSE_URL);
+    // Build SSE URL with optional project filter
+    let sseUrl = SSE_BASE_URL;
+    if (currentProjectId) {
+      sseUrl = `${SSE_BASE_URL}?project=${encodeURIComponent(currentProjectId)}`;
+    }
+
+    const eventSource = new EventSource(sseUrl);
     eventSourceRef.current = eventSource;
 
     eventSource.onopen = () => {
@@ -306,7 +317,7 @@ export default function useSSE() {
         }
       });
     });
-  }, [handleEvent, setConnectionMode, setSSEConnected, startPolling, stopPolling]);
+  }, [handleEvent, setConnectionMode, setSSEConnected, startPolling, stopPolling, currentProjectId]);
 
   // Keep ref updated for reconnection
   useEffect(() => {
@@ -337,6 +348,16 @@ export default function useSSE() {
   useEffect(() => {
     setRetrySSEFn(() => retrySSE);
   }, [retrySSE, setRetrySSEFn]);
+
+  // Reconnect when project changes
+  useEffect(() => {
+    if (prevProjectIdRef.current !== currentProjectId) {
+      console.log(`Project changed from ${prevProjectIdRef.current} to ${currentProjectId}, reconnecting SSE`);
+      prevProjectIdRef.current = currentProjectId;
+      reconnectAttemptRef.current = 0;
+      connect();
+    }
+  }, [currentProjectId, connect]);
 
   useEffect(() => {
     connect();

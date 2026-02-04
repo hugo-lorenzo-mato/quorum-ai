@@ -132,7 +132,8 @@ func (s *Server) handleGenerateIssues(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	// Get workflow state
-	state, err := s.stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
+	stateManager := s.getProjectStateManager(ctx)
+	state, err := stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
 	if err != nil {
 		respondError(w, http.StatusNotFound, fmt.Sprintf("workflow not found: %v", err))
 		return
@@ -155,8 +156,9 @@ func (s *Server) handleGenerateIssues(w http.ResponseWriter, r *http.Request) {
 
 	// Get issues config from loader
 	var issuesCfg config.IssuesConfig
-	if s.configLoader != nil {
-		cfg, err := s.configLoader.Load()
+	configLoader := s.getProjectConfigLoader(ctx)
+	if configLoader != nil {
+		cfg, err := configLoader.Load()
 		if err == nil {
 			issuesCfg = cfg.Issues
 		}
@@ -375,7 +377,8 @@ func (s *Server) handleSaveIssuesFiles(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	// Get workflow state
-	state, err := s.stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
+	stateManager := s.getProjectStateManager(ctx)
+	state, err := stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
 	if err != nil {
 		respondError(w, http.StatusNotFound, fmt.Sprintf("workflow not found: %v", err))
 		return
@@ -398,8 +401,9 @@ func (s *Server) handleSaveIssuesFiles(w http.ResponseWriter, r *http.Request) {
 
 	// Get issues config from loader
 	var issuesCfg config.IssuesConfig
-	if s.configLoader != nil {
-		cfg, err := s.configLoader.Load()
+	configLoader := s.getProjectConfigLoader(ctx)
+	if configLoader != nil {
+		cfg, err := configLoader.Load()
 		if err == nil {
 			issuesCfg = cfg.Issues
 		}
@@ -469,7 +473,8 @@ func (s *Server) handlePreviewIssues(w http.ResponseWriter, r *http.Request) {
 	fastMode := r.URL.Query().Get("fast") == "true"
 
 	// Get workflow state
-	state, err := s.stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
+	stateManager := s.getProjectStateManager(ctx)
+	state, err := stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
 	if err != nil {
 		respondError(w, http.StatusNotFound, fmt.Sprintf("workflow not found: %v", err))
 		return
@@ -481,8 +486,9 @@ func (s *Server) handlePreviewIssues(w http.ResponseWriter, r *http.Request) {
 
 	// Get issues config
 	var issuesCfg config.IssuesConfig
-	if s.configLoader != nil {
-		cfg, err := s.configLoader.Load()
+	configLoader := s.getProjectConfigLoader(ctx)
+	if configLoader != nil {
+		cfg, err := configLoader.Load()
 		if err == nil {
 			issuesCfg = cfg.Issues
 		}
@@ -585,10 +591,12 @@ func (s *Server) handlePreviewIssues(w http.ResponseWriter, r *http.Request) {
 // handleGetIssuesConfig returns the current issues configuration.
 // GET /api/config/issues
 func (s *Server) handleGetIssuesConfig(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 	var issuesCfg config.IssuesConfig
 
-	if s.configLoader != nil {
-		cfg, err := s.configLoader.Load()
+	configLoader := s.getProjectConfigLoader(ctx)
+	if configLoader != nil {
+		cfg, err := configLoader.Load()
 		if err == nil {
 			issuesCfg = cfg.Issues
 		}
@@ -622,7 +630,8 @@ func (s *Server) handleCreateSingleIssue(w http.ResponseWriter, r *http.Request)
 	ctx := r.Context()
 
 	// Get workflow state
-	state, err := s.stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
+	stateManager := s.getProjectStateManager(ctx)
+	state, err := stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
 	if err != nil {
 		respondError(w, http.StatusNotFound, fmt.Sprintf("workflow not found: %v", err))
 		return
@@ -647,8 +656,9 @@ func (s *Server) handleCreateSingleIssue(w http.ResponseWriter, r *http.Request)
 
 	// Get issues config
 	var issuesCfg config.IssuesConfig
-	if s.configLoader != nil {
-		cfg, err := s.configLoader.Load()
+	configLoader := s.getProjectConfigLoader(ctx)
+	if configLoader != nil {
+		cfg, err := configLoader.Load()
 		if err == nil {
 			issuesCfg = cfg.Issues
 		}

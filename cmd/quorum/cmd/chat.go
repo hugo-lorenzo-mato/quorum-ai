@@ -476,31 +476,31 @@ type chatOutputNotifier struct {
 
 func (n *chatOutputNotifier) PhaseStarted(phase core.Phase) {
 	if n.eventBus != nil {
-		n.eventBus.Publish(events.NewPhaseStartedEvent("", string(phase)))
+		n.eventBus.Publish(events.NewPhaseStartedEvent("", "", string(phase)))
 	}
 }
 
 func (n *chatOutputNotifier) TaskStarted(task *core.Task) {
 	if n.eventBus != nil && task != nil {
-		n.eventBus.Publish(events.NewTaskStartedEvent("", string(task.ID), ""))
+		n.eventBus.Publish(events.NewTaskStartedEvent("", "", string(task.ID), ""))
 	}
 }
 
 func (n *chatOutputNotifier) TaskCompleted(task *core.Task, duration time.Duration) {
 	if n.eventBus != nil && task != nil {
-		n.eventBus.Publish(events.NewTaskCompletedEvent("", string(task.ID), duration, task.TokensIn, task.TokensOut, task.CostUSD))
+		n.eventBus.Publish(events.NewTaskCompletedEvent("", "", string(task.ID), duration, task.TokensIn, task.TokensOut, task.CostUSD))
 	}
 }
 
 func (n *chatOutputNotifier) TaskFailed(task *core.Task, err error) {
 	if n.eventBus != nil && task != nil {
-		n.eventBus.Publish(events.NewTaskFailedEvent("", string(task.ID), err, task.Retries > 0))
+		n.eventBus.Publish(events.NewTaskFailedEvent("", "", string(task.ID), err, task.Retries > 0))
 	}
 }
 
 func (n *chatOutputNotifier) TaskSkipped(task *core.Task, reason string) {
 	if n.eventBus != nil && task != nil {
-		n.eventBus.Publish(events.NewTaskSkippedEvent("", string(task.ID), reason))
+		n.eventBus.Publish(events.NewTaskSkippedEvent("", "", string(task.ID), reason))
 	}
 }
 
@@ -520,6 +520,7 @@ func (n *chatOutputNotifier) WorkflowStateUpdated(state *core.WorkflowState) {
 		}
 		n.eventBus.Publish(events.NewWorkflowStateUpdatedEvent(
 			string(state.WorkflowID),
+			"",
 			string(state.CurrentPhase),
 			len(state.Tasks),
 			completed,
@@ -531,13 +532,13 @@ func (n *chatOutputNotifier) WorkflowStateUpdated(state *core.WorkflowState) {
 func (n *chatOutputNotifier) Log(level, source, message string) {
 	if n.eventBus != nil {
 		fullMessage := "[" + source + "] " + message
-		n.eventBus.Publish(events.NewLogEvent("", level, fullMessage, nil))
+		n.eventBus.Publish(events.NewLogEvent("", "", level, fullMessage, nil))
 	}
 }
 
 func (n *chatOutputNotifier) AgentEvent(kind, agent, message string, data map[string]interface{}) {
 	if n.eventBus != nil {
-		n.eventBus.Publish(events.NewAgentStreamEvent("", events.AgentEventType(kind), agent, message).WithData(data))
+		n.eventBus.Publish(events.NewAgentStreamEvent("", "", events.AgentEventType(kind), agent, message).WithData(data))
 	}
 }
 
@@ -839,12 +840,12 @@ func (n *tracingChatOutputNotifier) WorkflowStateUpdated(state *core.WorkflowSta
 func (n *tracingChatOutputNotifier) Log(level, source, message string) {
 	if n.eventBus != nil {
 		fullMessage := "[" + source + "] " + message
-		n.eventBus.Publish(events.NewLogEvent("", level, fullMessage, nil))
+		n.eventBus.Publish(events.NewLogEvent("", "", level, fullMessage, nil))
 	}
 }
 
 func (n *tracingChatOutputNotifier) AgentEvent(kind, agent, message string, data map[string]interface{}) {
 	if n.eventBus != nil {
-		n.eventBus.Publish(events.NewAgentStreamEvent("", events.AgentEventType(kind), agent, message).WithData(data))
+		n.eventBus.Publish(events.NewAgentStreamEvent("", "", events.AgentEventType(kind), agent, message).WithData(data))
 	}
 }

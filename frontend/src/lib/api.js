@@ -1,8 +1,26 @@
+import useProjectStore from '../stores/projectStore';
+
 const API_BASE = '/api/v1';
 
+/**
+ * Build URL with project query parameter if a project is selected.
+ * @param {string} baseUrl - The base URL
+ * @param {boolean} skipProject - If true, don't add project parameter (for project API calls)
+ * @returns {string} URL with project parameter if applicable
+ */
+function buildUrlWithProject(baseUrl, skipProject = false) {
+  if (skipProject) return baseUrl;
+
+  const projectId = useProjectStore.getState().currentProjectId;
+  if (!projectId) return baseUrl;
+
+  const separator = baseUrl.includes('?') ? '&' : '?';
+  return `${baseUrl}${separator}project=${encodeURIComponent(projectId)}`;
+}
+
 async function request(endpoint, options = {}) {
-  const url = `${API_BASE}${endpoint}`;
-  const { timeout, ...restOptions } = options;
+  const { skipProject, timeout, ...restOptions } = options;
+  const url = buildUrlWithProject(`${API_BASE}${endpoint}`, skipProject);
 
   // Create abort controller for timeout
   const controller = new AbortController();
@@ -220,7 +238,8 @@ export const workflowApi = {
       formData.append('files', file);
     }
 
-    const response = await fetch(`${API_BASE}/workflows/${id}/attachments`, {
+    const url = buildUrlWithProject(`${API_BASE}/workflows/${id}/attachments`);
+    const response = await fetch(url, {
       method: 'POST',
       body: formData,
     });
@@ -278,7 +297,8 @@ export const chatApi = {
       formData.append('files', file);
     }
 
-    const response = await fetch(`${API_BASE}/chat/sessions/${sessionId}/attachments`, {
+    const url = buildUrlWithProject(`${API_BASE}/chat/sessions/${sessionId}/attachments`);
+    const response = await fetch(url, {
       method: 'POST',
       body: formData,
     });
@@ -326,6 +346,41 @@ export const healthApi = {
   check: () => fetch('/health').then(r => r.json()),
 };
 
+// Project API (global operations, not scoped to a project)
+export const projectApi = {
+  list: () => request('/projects/', { skipProject: true }),
+
+  get: (id) => request(`/projects/${id}/`, { skipProject: true }),
+
+  create: (path, options = {}) => request('/projects/', {
+    method: 'POST',
+    body: JSON.stringify({
+      path,
+      name: options.name,
+      color: options.color,
+    }),
+    skipProject: true,
+  }),
+
+  update: (id, data) => request(`/projects/${id}/`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+    skipProject: true,
+  }),
+
+  delete: (id) => request(`/projects/${id}/`, { method: 'DELETE', skipProject: true }),
+
+  validate: (id) => request(`/projects/${id}/validate`, { method: 'POST', skipProject: true }),
+
+  getDefault: () => request('/projects/default', { skipProject: true }),
+
+  setDefault: (id) => request('/projects/default', {
+    method: 'PUT',
+    body: JSON.stringify({ id }),
+    skipProject: true,
+  }),
+};
+
 // Kanban API
 export const kanbanApi = {
   // Get full board state
@@ -353,5 +408,6 @@ export default {
   config: configApi,
   files: fileApi,
   health: healthApi,
+  project: projectApi,
   kanban: kanbanApi,
 };

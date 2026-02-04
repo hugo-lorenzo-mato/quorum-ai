@@ -125,8 +125,21 @@ func (f *RunnerFactory) CreateRunner(ctx context.Context, workflowID string, cp 
 
 // RunnerFactory returns a factory for creating workflow runners.
 // Returns nil if required dependencies are not configured.
+// DEPRECATED: Use RunnerFactoryForContext for project-scoped resources.
 func (s *Server) RunnerFactory() *RunnerFactory {
-	if s.stateManager == nil || s.agentRegistry == nil || s.eventBus == nil || s.configLoader == nil {
+	return s.RunnerFactoryForContext(context.Background())
+}
+
+// RunnerFactoryForContext returns a factory for creating workflow runners
+// using project-scoped resources from the request context.
+// Returns nil if required dependencies are not configured.
+func (s *Server) RunnerFactoryForContext(ctx context.Context) *RunnerFactory {
+	// Get project-scoped resources
+	stateManager := s.getProjectStateManager(ctx)
+	eventBus := s.getProjectEventBus(ctx)
+	configLoader := s.getProjectConfigLoader(ctx)
+
+	if stateManager == nil || s.agentRegistry == nil || eventBus == nil || configLoader == nil {
 		return nil
 	}
 
@@ -137,10 +150,10 @@ func (s *Server) RunnerFactory() *RunnerFactory {
 	}
 
 	factory := NewRunnerFactory(
-		s.stateManager,
+		stateManager,
 		s.agentRegistry,
-		s.eventBus,
-		s.configLoader,
+		eventBus,
+		configLoader,
 		logger,
 	)
 

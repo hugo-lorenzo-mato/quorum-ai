@@ -22,9 +22,9 @@ type KanbanWorkflowMovedEvent struct {
 }
 
 // NewKanbanWorkflowMovedEvent creates a new workflow moved event.
-func NewKanbanWorkflowMovedEvent(workflowID, fromColumn, toColumn string, newPosition int, userInitiated bool) KanbanWorkflowMovedEvent {
+func NewKanbanWorkflowMovedEvent(workflowID, projectID, fromColumn, toColumn string, newPosition int, userInitiated bool) KanbanWorkflowMovedEvent {
 	return KanbanWorkflowMovedEvent{
-		BaseEvent:     NewBaseEvent(TypeKanbanWorkflowMoved, workflowID),
+		BaseEvent:     NewBaseEvent(TypeKanbanWorkflowMoved, workflowID, projectID),
 		FromColumn:    fromColumn,
 		ToColumn:      toColumn,
 		NewPosition:   newPosition,
@@ -39,9 +39,9 @@ type KanbanExecutionStartedEvent struct {
 }
 
 // NewKanbanExecutionStartedEvent creates a new execution started event.
-func NewKanbanExecutionStartedEvent(workflowID string, queuePosition int) KanbanExecutionStartedEvent {
+func NewKanbanExecutionStartedEvent(workflowID, projectID string, queuePosition int) KanbanExecutionStartedEvent {
 	return KanbanExecutionStartedEvent{
-		BaseEvent:     NewBaseEvent(TypeKanbanExecutionStarted, workflowID),
+		BaseEvent:     NewBaseEvent(TypeKanbanExecutionStarted, workflowID, projectID),
 		QueuePosition: queuePosition,
 	}
 }
@@ -54,9 +54,9 @@ type KanbanExecutionCompletedEvent struct {
 }
 
 // NewKanbanExecutionCompletedEvent creates a new execution completed event.
-func NewKanbanExecutionCompletedEvent(workflowID, prURL string, prNumber int) KanbanExecutionCompletedEvent {
+func NewKanbanExecutionCompletedEvent(workflowID, projectID, prURL string, prNumber int) KanbanExecutionCompletedEvent {
 	return KanbanExecutionCompletedEvent{
-		BaseEvent: NewBaseEvent(TypeKanbanExecutionCompleted, workflowID),
+		BaseEvent: NewBaseEvent(TypeKanbanExecutionCompleted, workflowID, projectID),
 		PRURL:     prURL,
 		PRNumber:  prNumber,
 	}
@@ -70,9 +70,9 @@ type KanbanExecutionFailedEvent struct {
 }
 
 // NewKanbanExecutionFailedEvent creates a new execution failed event.
-func NewKanbanExecutionFailedEvent(workflowID, errMsg string, consecutiveFailures int) KanbanExecutionFailedEvent {
+func NewKanbanExecutionFailedEvent(workflowID, projectID, errMsg string, consecutiveFailures int) KanbanExecutionFailedEvent {
 	return KanbanExecutionFailedEvent{
-		BaseEvent:           NewBaseEvent(TypeKanbanExecutionFailed, workflowID),
+		BaseEvent:           NewBaseEvent(TypeKanbanExecutionFailed, workflowID, projectID),
 		Error:               errMsg,
 		ConsecutiveFailures: consecutiveFailures,
 	}
@@ -87,13 +87,13 @@ type KanbanEngineStateChangedEvent struct {
 }
 
 // NewKanbanEngineStateChangedEvent creates a new engine state changed event.
-func NewKanbanEngineStateChangedEvent(enabled bool, currentWorkflowID *string, circuitBreakerOpen bool) KanbanEngineStateChangedEvent {
+func NewKanbanEngineStateChangedEvent(projectID string, enabled bool, currentWorkflowID *string, circuitBreakerOpen bool) KanbanEngineStateChangedEvent {
 	wfID := ""
 	if currentWorkflowID != nil {
 		wfID = *currentWorkflowID
 	}
 	return KanbanEngineStateChangedEvent{
-		BaseEvent:          NewBaseEvent(TypeKanbanEngineStateChanged, wfID),
+		BaseEvent:          NewBaseEvent(TypeKanbanEngineStateChanged, wfID, projectID),
 		Enabled:            enabled,
 		CurrentWorkflowID:  currentWorkflowID,
 		CircuitBreakerOpen: circuitBreakerOpen,
@@ -109,9 +109,9 @@ type KanbanCircuitBreakerOpenedEvent struct {
 }
 
 // NewKanbanCircuitBreakerOpenedEvent creates a new circuit breaker opened event.
-func NewKanbanCircuitBreakerOpenedEvent(consecutiveFailures, threshold int, lastFailureAt time.Time) KanbanCircuitBreakerOpenedEvent {
+func NewKanbanCircuitBreakerOpenedEvent(projectID string, consecutiveFailures, threshold int, lastFailureAt time.Time) KanbanCircuitBreakerOpenedEvent {
 	return KanbanCircuitBreakerOpenedEvent{
-		BaseEvent:           NewBaseEvent(TypeKanbanCircuitBreakerOpened, ""),
+		BaseEvent:           NewBaseEvent(TypeKanbanCircuitBreakerOpened, "", projectID),
 		ConsecutiveFailures: consecutiveFailures,
 		Threshold:           threshold,
 		LastFailureAt:       lastFailureAt,

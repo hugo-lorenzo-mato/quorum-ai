@@ -104,24 +104,25 @@ func (n *WebOutputNotifier) FlushState() {
 
 // PhaseStarted is called when a phase begins.
 func (n *WebOutputNotifier) PhaseStarted(phase core.Phase) {
-	n.eventBus.Publish(events.NewPhaseStartedEvent(n.workflowID, string(phase)))
+	n.eventBus.Publish(events.NewPhaseStartedEvent(n.workflowID, "", string(phase)))
 }
 
 // PhaseCompleted emits a phase_completed event.
 // NOTE: This is NOT part of the OutputNotifier interface but is needed for web context.
 func (n *WebOutputNotifier) PhaseCompleted(phase string, duration time.Duration) {
-	n.eventBus.Publish(events.NewPhaseCompletedEvent(n.workflowID, phase, duration))
+	n.eventBus.Publish(events.NewPhaseCompletedEvent(n.workflowID, "", phase, duration))
 }
 
 // TaskStarted is called when a task begins.
 func (n *WebOutputNotifier) TaskStarted(task *core.Task) {
-	n.eventBus.Publish(events.NewTaskStartedEvent(n.workflowID, string(task.ID), ""))
+	n.eventBus.Publish(events.NewTaskStartedEvent(n.workflowID, "", string(task.ID), ""))
 }
 
 // TaskCompleted is called when a task finishes successfully.
 func (n *WebOutputNotifier) TaskCompleted(task *core.Task, duration time.Duration) {
 	n.eventBus.Publish(events.NewTaskCompletedEvent(
 		n.workflowID,
+		"", // projectID will be added when notifier becomes project-aware
 		string(task.ID),
 		duration,
 		task.TokensIn,
@@ -132,12 +133,12 @@ func (n *WebOutputNotifier) TaskCompleted(task *core.Task, duration time.Duratio
 
 // TaskFailed is called when a task fails.
 func (n *WebOutputNotifier) TaskFailed(task *core.Task, err error) {
-	n.eventBus.Publish(events.NewTaskFailedEvent(n.workflowID, string(task.ID), err, false))
+	n.eventBus.Publish(events.NewTaskFailedEvent(n.workflowID, "", string(task.ID), err, false))
 }
 
 // TaskSkipped is called when a task is skipped.
 func (n *WebOutputNotifier) TaskSkipped(task *core.Task, reason string) {
-	n.eventBus.Publish(events.NewTaskSkippedEvent(n.workflowID, string(task.ID), reason))
+	n.eventBus.Publish(events.NewTaskSkippedEvent(n.workflowID, "", string(task.ID), reason))
 }
 
 // WorkflowStateUpdated is called when the workflow state changes.
@@ -155,6 +156,7 @@ func (n *WebOutputNotifier) WorkflowStateUpdated(state *core.WorkflowState) {
 	}
 	n.eventBus.Publish(events.NewWorkflowStateUpdatedEvent(
 		n.workflowID,
+		"", // projectID will be added when notifier becomes project-aware
 		string(state.CurrentPhase),
 		len(state.Tasks),
 		completed,
@@ -166,13 +168,13 @@ func (n *WebOutputNotifier) WorkflowStateUpdated(state *core.WorkflowState) {
 // Log sends a log message to the UI.
 func (n *WebOutputNotifier) Log(level, source, message string) {
 	fullMessage := "[" + source + "] " + message
-	n.eventBus.Publish(events.NewLogEvent(n.workflowID, level, fullMessage, nil))
+	n.eventBus.Publish(events.NewLogEvent(n.workflowID, "", level, fullMessage, nil))
 }
 
 // AgentEvent is called when an agent emits a streaming event.
 func (n *WebOutputNotifier) AgentEvent(kind, agent, message string, data map[string]interface{}) {
 	// Publish to SSE for real-time updates
-	n.eventBus.Publish(events.NewAgentStreamEvent(n.workflowID, events.AgentEventType(kind), agent, message).WithData(data))
+	n.eventBus.Publish(events.NewAgentStreamEvent(n.workflowID, "", events.AgentEventType(kind), agent, message).WithData(data))
 
 	// Also persist to workflow state for reload recovery
 	n.stateMu.Lock()
@@ -200,17 +202,17 @@ func (n *WebOutputNotifier) AgentEvent(kind, agent, message string, data map[str
 // WorkflowStarted emits a workflow_started event.
 // NOTE: This is NOT part of the OutputNotifier interface but is needed for web context.
 func (n *WebOutputNotifier) WorkflowStarted(prompt string) {
-	n.eventBus.Publish(events.NewWorkflowStartedEvent(n.workflowID, prompt))
+	n.eventBus.Publish(events.NewWorkflowStartedEvent(n.workflowID, "", prompt))
 }
 
 // WorkflowCompleted emits a workflow_completed event using priority channel.
 // NOTE: This is NOT part of the OutputNotifier interface but is needed for web context.
 func (n *WebOutputNotifier) WorkflowCompleted(duration time.Duration, totalCost float64) {
-	n.eventBus.PublishPriority(events.NewWorkflowCompletedEvent(n.workflowID, duration, totalCost))
+	n.eventBus.PublishPriority(events.NewWorkflowCompletedEvent(n.workflowID, "", duration, totalCost))
 }
 
 // WorkflowFailed emits a workflow_failed event using priority channel.
 // NOTE: This is NOT part of the OutputNotifier interface but is needed for web context.
 func (n *WebOutputNotifier) WorkflowFailed(phase string, err error) {
-	n.eventBus.PublishPriority(events.NewWorkflowFailedEvent(n.workflowID, phase, err))
+	n.eventBus.PublishPriority(events.NewWorkflowFailedEvent(n.workflowID, "", phase, err))
 }

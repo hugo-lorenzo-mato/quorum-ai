@@ -16,6 +16,7 @@ type SSEEvent struct {
 }
 
 // handleSSE handles Server-Sent Events for real-time updates.
+// Uses project-scoped EventBus if a project is specified via ?project= query parameter.
 func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 	// Set SSE headers
 	w.Header().Set("Content-Type", "text/event-stream")
@@ -30,13 +31,21 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Subscribe to all events
-	eventCh := s.eventBus.Subscribe()
-
 	// Get context for cancellation
 	ctx := r.Context()
 
-	s.logger.Info("SSE client connected", "remote_addr", r.RemoteAddr)
+	// Get project-scoped EventBus (falls back to global if no project context)
+	eventBus := s.getProjectEventBus(ctx)
+	if eventBus == nil {
+		respondError(w, http.StatusServiceUnavailable, "event bus not available")
+		return
+	}
+
+	// Subscribe to project-scoped events
+	eventCh := eventBus.Subscribe()
+
+	projectID := getProjectID(ctx)
+	s.logger.Info("SSE client connected", "remote_addr", r.RemoteAddr, "project_id", projectID)
 
 	// Send initial connection event
 	s.sendSSEEvent(w, flusher, "connected", map[string]string{

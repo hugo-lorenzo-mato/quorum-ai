@@ -113,7 +113,7 @@ func TestHandler_StreamsEvents(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Publish an event
-	bus.Publish(events.NewWorkflowStartedEvent("wf-123", "test prompt"))
+	bus.Publish(events.NewWorkflowStartedEvent("wf-123", "", "test prompt"))
 
 	// Read the workflow_started event
 	eventLine, err := reader.ReadString('\n')
@@ -186,8 +186,8 @@ func TestHandler_FiltersWorkflow(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Publish events for different workflows
-	bus.Publish(events.NewWorkflowStartedEvent("wf-456", "other workflow"))
-	bus.Publish(events.NewWorkflowStartedEvent("wf-123", "filtered workflow"))
+	bus.Publish(events.NewWorkflowStartedEvent("wf-456", "", "other workflow"))
+	bus.Publish(events.NewWorkflowStartedEvent("wf-123", "", "filtered workflow"))
 
 	// We should only receive the wf-123 event
 	eventLine, err := reader.ReadString('\n')
@@ -208,6 +208,73 @@ func TestHandler_FiltersWorkflow(t *testing.T) {
 
 	if eventData["workflow_id"] != "wf-123" {
 		t.Errorf("expected filtered workflow wf-123, got %v (event: %s)", eventData["workflow_id"], eventLine)
+	}
+}
+
+func TestHandler_FiltersProject(t *testing.T) {
+	bus := events.New(100)
+	defer bus.Close()
+
+	h := NewHandler(bus)
+	h.SetHeartbeatFrequency(10 * time.Second)
+
+	// Create test server
+	ts := httptest.NewServer(h)
+	defer ts.Close()
+
+	// Create context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Create request with project filter
+	req, err := http.NewRequestWithContext(ctx, "GET", ts.URL+"?project=proj-1", nil)
+	if err != nil {
+		t.Fatalf("failed to create request: %v", err)
+	}
+
+	// Connect client
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("failed to connect: %v", err)
+	}
+	defer resp.Body.Close()
+
+	reader := bufio.NewReader(resp.Body)
+
+	// Skip connection event
+	for i := 0; i < 3; i++ {
+		_, _ = reader.ReadString('\n')
+	}
+
+	// Give the handler time to subscribe
+	time.Sleep(100 * time.Millisecond)
+
+	// Publish events for different projects
+	bus.Publish(events.NewWorkflowStartedEvent("wf-1", "proj-2", "other project"))
+	bus.Publish(events.NewWorkflowStartedEvent("wf-2", "proj-1", "filtered project"))
+
+	// We should only receive the proj-1 event
+	eventLine, err := reader.ReadString('\n')
+	if err != nil {
+		t.Fatalf("failed to read event line: %v", err)
+	}
+
+	dataLine, err := reader.ReadString('\n')
+	if err != nil {
+		t.Fatalf("failed to read data line: %v", err)
+	}
+
+	jsonStr := strings.TrimPrefix(dataLine, "data: ")
+	var eventData map[string]interface{}
+	if err := json.Unmarshal([]byte(jsonStr), &eventData); err != nil {
+		t.Fatalf("failed to parse event data: %v", err)
+	}
+
+	if eventData["project_id"] != "proj-1" {
+		t.Errorf("expected filtered project proj-1, got %v (event: %s)", eventData["project_id"], eventLine)
+	}
+	if eventData["workflow_id"] != "wf-2" {
+		t.Errorf("expected workflow wf-2, got %v", eventData["workflow_id"])
 	}
 }
 
