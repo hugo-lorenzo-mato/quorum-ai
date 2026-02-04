@@ -41,6 +41,19 @@ type TaskOutputValidationResult struct {
 	ToolCalls  int
 	TokensOut  int
 	HasFileOps bool
+	// GitChanges indicates whether real filesystem changes were detected.
+	// This is the primary validation signal - if files changed, the task produced real output.
+	GitChanges bool
+}
+
+// GitChangesInfo contains information about filesystem changes detected after task execution.
+// This is used to validate that agents actually produced output, regardless of their
+// internal metrics (tokens, tool calls) which may not be reported accurately.
+type GitChangesInfo struct {
+	HasChanges    bool     // True if any files were modified, added, or deleted
+	ModifiedFiles []string // Files that were modified
+	AddedFiles    []string // New files (untracked)
+	DeletedFiles  []string // Files that were deleted
 }
 
 // fileWriteToolNames contains tool names that indicate file write operations.
@@ -394,8 +407,12 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 			return e.handleExecutionFailure(wctx, task, taskState, lastAgentName, lastModel, lastRetryCount, lastDurationMS, execErr)
 		}
 
+		// Detect actual git changes before validation
+		// This is the primary signal - if files changed, the task produced real output
+		gitChanges := e.detectGitChanges(ctx, wctx, workDir)
+
 		// Validate output before declaring success - validation failure should trigger fallback
-		validation := e.validateTaskOutput(result, task)
+		validation := e.validateTaskOutput(result, task, gitChanges)
 		if !validation.Valid {
 			validationErr := fmt.Errorf("task output validation failed: %s", validation.Warning)
 			wctx.Logger.Warn("executor: task output validation failed, checking for fallback",
@@ -403,6 +420,7 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 				"task_name", task.Name,
 				"agent", agentName,
 				"tokens_out", result.TokensOut,
+				"git_changes", gitChanges.HasChanges,
 				"warning", validation.Warning,
 				"has_more_fallbacks", agentIdx < len(agentsToTry)-1,
 			)
@@ -1265,17 +1283,85 @@ func GetFullOutput(state *core.TaskState) (string, error) {
 	return string(data), nil
 }
 
+// detectGitChanges checks for actual filesystem changes in the working directory.
+// This is the primary validation signal - if files changed, the task produced real output,
+// regardless of what the agent reports for tokens or tool calls.
+func (e *Executor) detectGitChanges(ctx context.Context, wctx *Context, workDir string) *GitChangesInfo {
+	info := &GitChangesInfo{}
+
+	// Determine the git path
+	gitPath := workDir
+	if gitPath == "" {
+		if wctx.Git == nil {
+			return info
+		}
+		var err error
+		gitPath, err = wctx.Git.RepoRoot(ctx)
+		if err != nil || gitPath == "" {
+			return info
+		}
+	}
+
+	// Get a git client for the path
+	var gitClient core.GitClient
+	if e.gitFactory != nil {
+		var err error
+		gitClient, err = e.gitFactory.NewClient(gitPath)
+		if err != nil {
+			wctx.Logger.Debug("detectGitChanges: failed to create git client", "error", err)
+			return info
+		}
+	} else if wctx.Git != nil {
+		gitClient = wctx.Git
+	} else {
+		return info
+	}
+
+	// Get git status to detect changes
+	status, err := gitClient.Status(ctx)
+	if err != nil {
+		wctx.Logger.Debug("detectGitChanges: failed to get git status", "error", err)
+		return info
+	}
+
+	// Collect modified files (staged changes)
+	for _, f := range status.Staged {
+		info.ModifiedFiles = append(info.ModifiedFiles, f.Path)
+	}
+
+	// Collect unstaged modifications
+	for _, f := range status.Unstaged {
+		info.ModifiedFiles = append(info.ModifiedFiles, f.Path)
+	}
+
+	// Collect new/untracked files
+	info.AddedFiles = append(info.AddedFiles, status.Untracked...)
+
+	// Determine if there are any changes
+	info.HasChanges = len(info.ModifiedFiles) > 0 || len(info.AddedFiles) > 0 || len(info.DeletedFiles) > 0
+
+	if info.HasChanges {
+		wctx.Logger.Debug("detectGitChanges: changes detected",
+			"modified", len(info.ModifiedFiles),
+			"added", len(info.AddedFiles),
+			"deleted", len(info.DeletedFiles),
+		)
+	}
+
+	return info
+}
+
 // validateTaskOutput checks if the task execution produced meaningful output.
-// This addresses the issue where agents may complete without error but produce no files.
-// Returns validation result with details about tool calls and token counts.
-func (e *Executor) validateTaskOutput(result *core.ExecuteResult, task *core.Task) TaskOutputValidationResult {
+// The primary validation signal is git changes - if files were modified, the task succeeded.
+// Token counts and tool calls are used as fallback signals when git detection is unavailable.
+func (e *Executor) validateTaskOutput(result *core.ExecuteResult, task *core.Task, gitChanges *GitChangesInfo) TaskOutputValidationResult {
 	validation := TaskOutputValidationResult{
 		Valid:     true,
 		ToolCalls: len(result.ToolCalls),
 		TokensOut: result.TokensOut,
 	}
 
-	// Check for file write operations in tool calls
+	// Check for file write operations in tool calls (legacy signal)
 	for _, tc := range result.ToolCalls {
 		toolNameLower := strings.ToLower(tc.Name)
 		if fileWriteToolNames[toolNameLower] {
@@ -1284,21 +1370,33 @@ func (e *Executor) validateTaskOutput(result *core.ExecuteResult, task *core.Tas
 		}
 	}
 
-	// Validation 1: Check for suspiciously low token output
-	// Tasks with very low output tokens likely didn't produce code
-	if result.TokensOut < SuspiciouslyLowTokenThreshold {
-		validation.Valid = false
-		validation.Warning = fmt.Sprintf(
-			"task output suspiciously short: %d tokens (expected >=%d for code generation). "+
-				"Agent may have responded with intent description instead of implementation.",
-			result.TokensOut,
-			SuspiciouslyLowTokenThreshold,
-		)
+	// Set GitChanges flag if we detected real filesystem changes
+	if gitChanges != nil && gitChanges.HasChanges {
+		validation.GitChanges = true
+	}
+
+	// PRIMARY VALIDATION: Git changes are the source of truth.
+	// If files were actually modified/created, the task produced real output,
+	// regardless of what tokens or tool calls the agent reports.
+	if validation.GitChanges {
+		// Task produced real changes - this is a success
+		// Add informational note about what changed
+		totalChanges := len(gitChanges.ModifiedFiles) + len(gitChanges.AddedFiles)
+		if totalChanges > 0 && result.TokensOut < MinExpectedTokensForImplementation {
+			// Low tokens but real changes - just note it, don't warn
+			validation.Warning = fmt.Sprintf(
+				"task completed with %d file(s) changed (tokens_out=%d, possibly underreported)",
+				totalChanges,
+				result.TokensOut,
+			)
+		}
 		return validation
 	}
 
-	// Validation 2: Check for missing tool calls in implementation tasks
-	// If task name suggests implementation but no tools were called, it's suspicious
+	// No git changes detected - fall back to token/tool call validation
+	// This handles cases where git detection failed or task is read-only
+
+	// Determine task type for appropriate validation
 	taskNameLower := strings.ToLower(task.Name)
 	isImplementationTask := strings.Contains(taskNameLower, "implement") ||
 		strings.Contains(taskNameLower, "create") ||
@@ -1307,56 +1405,57 @@ func (e *Executor) validateTaskOutput(result *core.ExecuteResult, task *core.Tas
 		strings.Contains(taskNameLower, "write") ||
 		strings.Contains(taskNameLower, "develop")
 
-	if isImplementationTask && len(result.ToolCalls) == 0 {
-		// Implementation task with no tool calls and low-ish tokens is suspicious
-		if result.TokensOut < MinExpectedTokensForImplementation {
+	isAnalysisTask := strings.Contains(taskNameLower, "analyze") ||
+		strings.Contains(taskNameLower, "review") ||
+		strings.Contains(taskNameLower, "check") ||
+		strings.Contains(taskNameLower, "verify") ||
+		strings.Contains(taskNameLower, "audit") ||
+		strings.Contains(taskNameLower, "inspect") ||
+		strings.Contains(taskNameLower, "read")
+
+	// For analysis/read-only tasks, only require minimum token threshold
+	if isAnalysisTask {
+		if result.TokensOut < SuspiciouslyLowTokenThreshold {
 			validation.Valid = false
 			validation.Warning = fmt.Sprintf(
-				"implementation task completed without tool calls and with low output (%d tokens). "+
-					"Agent may not have executed file writes. Tool calls: %d",
+				"analysis task output too short: %d tokens (expected >=%d)",
 				result.TokensOut,
-				len(result.ToolCalls),
+				SuspiciouslyLowTokenThreshold,
 			)
-			return validation
 		}
-		// Has some tokens but no tool calls - warn but don't fail
+		return validation
+	}
+
+	// For implementation tasks without git changes, this is likely a failure
+	if isImplementationTask {
+		validation.Valid = false
 		validation.Warning = fmt.Sprintf(
-			"implementation task completed without tool calls (tokens_out=%d). "+
-				"Verify that expected files were created.",
+			"implementation task completed but no files were modified. "+
+				"Agent output: %d tokens, tool calls: %d. "+
+				"The agent may have described what to do instead of doing it.",
 			result.TokensOut,
+			len(result.ToolCalls),
 		)
+		return validation
 	}
 
-	// Validation 3: Check token count for tasks that require substantial code
-	// Frontend components, stores, handlers typically need 300+ tokens
-	requiresSubstantialCode := strings.Contains(taskNameLower, "component") ||
-		strings.Contains(taskNameLower, "page") ||
-		strings.Contains(taskNameLower, "store") ||
-		strings.Contains(taskNameLower, "handler") ||
-		strings.Contains(taskNameLower, "frontend") ||
-		strings.Contains(taskNameLower, "backend") ||
-		strings.Contains(taskNameLower, "api")
-
-	if requiresSubstantialCode && result.TokensOut < MinExpectedTokensForImplementation {
-		if !validation.HasFileOps {
-			validation.Valid = false
-			validation.Warning = fmt.Sprintf(
-				"task requiring substantial code completed with only %d tokens and no file operations. "+
-					"Expected >=%d tokens for this type of task.",
-				result.TokensOut,
-				MinExpectedTokensForImplementation,
-			)
-			return validation
-		}
-		// Has file ops but low tokens - just warn
-		if validation.Warning == "" {
-			validation.Warning = fmt.Sprintf(
-				"task output lower than expected: %d tokens (typically need %d+ for this task type)",
-				result.TokensOut,
-				MinExpectedTokensForImplementation,
-			)
-		}
+	// For other tasks (unknown type), use token threshold as fallback
+	if result.TokensOut < SuspiciouslyLowTokenThreshold {
+		validation.Valid = false
+		validation.Warning = fmt.Sprintf(
+			"task output suspiciously short: %d tokens (expected >=%d). "+
+				"No file changes detected.",
+			result.TokensOut,
+			SuspiciouslyLowTokenThreshold,
+		)
+		return validation
 	}
+
+	// Unknown task type with reasonable tokens but no git changes - warn but pass
+	validation.Warning = fmt.Sprintf(
+		"task completed with %d tokens but no file changes detected. Verify output is correct.",
+		result.TokensOut,
+	)
 
 	return validation
 }
