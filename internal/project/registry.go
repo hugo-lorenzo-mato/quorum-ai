@@ -149,21 +149,17 @@ func NewFileRegistry(opts ...RegistryOption) (*FileRegistry, error) {
 
 // getRegistryPath returns the default registry file path
 func getRegistryPath() (string, error) {
-	configDir, err := os.UserConfigDir()
+	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			return "", fmt.Errorf("cannot determine config directory: %w", err)
-		}
-		configDir = filepath.Join(homeDir, ".config")
+		return "", fmt.Errorf("cannot determine home directory: %w", err)
 	}
 
-	quorumConfigDir := filepath.Join(configDir, "quorum")
-	if err := os.MkdirAll(quorumConfigDir, 0o750); err != nil {
-		return "", fmt.Errorf("cannot create config directory: %w", err)
+	quorumRegistryDir := filepath.Join(homeDir, ".quorum-registry")
+	if err := os.MkdirAll(quorumRegistryDir, 0o750); err != nil {
+		return "", fmt.Errorf("cannot create registry directory: %w", err)
 	}
 
-	return filepath.Join(quorumConfigDir, "projects.yaml"), nil
+	return filepath.Join(quorumRegistryDir, "projects.yaml"), nil
 }
 
 // load reads the registry from disk
