@@ -263,19 +263,22 @@ export default function Chat() {
   };
 
   return (
-    <div className="flex flex-col md:flex-row m-0 md:h-[calc(100vh-5rem)] md:gap-4 animate-fade-in bg-background md:bg-transparent z-0 pb-10">
+    <div className="h-[calc(100vh-3.5rem)] flex overflow-hidden animate-fade-in">{/* 3.5rem = h-14 del header */}
       {/* Sessions sidebar */}
-      <div className={`w-full md:w-72 flex-shrink-0 flex flex-col gap-4 p-4 md:p-0 ${activeSession ? 'hidden md:flex' : 'flex h-full'}`}>
-        <button
-          onClick={handleCreateSession}
-          disabled={loading}
-          className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors shrink-0"
-        >
-          {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-          New Chat
-        </button>
+      <div className={`w-full md:w-80 flex-shrink-0 flex flex-col gap-4 p-4 bg-card border-r border-border ${activeSession ? 'hidden md:flex' : 'flex'}`}>
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-foreground">Chats</h2>
+          <button
+            onClick={handleCreateSession}
+            disabled={loading}
+            className="flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
+          >
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+            New
+          </button>
+        </div>
 
-        <div className="flex-1 overflow-y-auto space-y-1 min-h-0">
+        <div className="flex-1 overflow-y-auto space-y-1 min-h-0 pr-2">
           {sessions.length > 0 ? (
             sessions.map((session) => (
               <SessionItem
@@ -288,28 +291,31 @@ export default function Chat() {
               />
             ))
           ) : (
-            <p className="text-center py-8 text-sm text-muted-foreground">No chats yet</p>
+            <div className="text-center py-12">
+              <MessageSquare className="w-12 h-12 mx-auto mb-3 text-muted-foreground opacity-50" />
+              <p className="text-sm text-muted-foreground">No chats yet</p>
+            </div>
           )}
         </div>
       </div>
 
       {/* Chat area */}
-      <div className={`flex-1 flex flex-col bg-background md:bg-card md:border md:border-border md:rounded-xl overflow-hidden ${!activeSession ? 'hidden md:flex' : 'flex h-full'} w-full`}>
+      <div className={`flex-1 flex flex-col bg-background ${!activeSession ? 'hidden md:flex' : 'flex'}`}>
         {activeSession ? (
           <>
             {/* Header */}
-            <div className="px-4 py-3 md:px-6 md:py-4 border-b border-border bg-card/50 backdrop-blur-sm z-10 flex items-center justify-between gap-3 shrink-0">
-              <div className="flex items-center gap-3 overflow-hidden">
+            <div className="px-4 py-3 md:px-6 md:py-4 border-b border-border bg-card backdrop-blur-sm z-10 flex items-center justify-between gap-3 shrink-0">
+              <div className="flex items-center gap-3 overflow-hidden flex-1">
                 <button 
                   onClick={handleBackToList}
                   className="md:hidden p-2 -ml-2 rounded-lg hover:bg-accent text-muted-foreground"
                 >
                   <ArrowLeft className="w-5 h-5" />
                 </button>
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary/20 to-info/20 flex items-center justify-center flex-shrink-0">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center flex-shrink-0">
                   <Sparkles className="w-5 h-5 text-primary" />
                 </div>
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <h3 className="font-semibold text-foreground truncate">
                     {activeSession.title || `${activeSession.agent || 'Claude'} Chat`}
                   </h3>
@@ -327,7 +333,8 @@ export default function Chat() {
             </div>
 
             {/* Messages */}
-            <div className="flex-1 min-h-0 overflow-y-auto p-4 md:p-6 space-y-6 bg-background w-full">
+            <div className="flex-1 min-h-0 overflow-y-auto">
+              <div className="max-w-5xl mx-auto px-4 md:px-8 py-6 space-y-6">
               {activeMessages.length > 0 ? (
                 <>
                   {activeMessages.map((message, index) => (
@@ -351,10 +358,12 @@ export default function Chat() {
                 </div>
               )}
               <div ref={messagesEndRef} className="h-4" />
+              </div>
             </div>
 
             {/* Input */}
-            <div className="shrink-0 w-full border-t border-border bg-card/50 backdrop-blur-sm p-3 md:p-4">
+            <div className="shrink-0 border-t border-border bg-card backdrop-blur-sm">
+              <div className="max-w-5xl mx-auto px-4 md:px-8 py-4">
               {error && (
                 <div className="mb-3 p-3 bg-destructive/10 text-destructive text-sm rounded-lg flex items-center justify-between">
                   <span>{error}</span>
@@ -421,6 +430,7 @@ export default function Chat() {
                   {sending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
                 </button>
               </form>
+              </div>
             </div>
           </>
         ) : (

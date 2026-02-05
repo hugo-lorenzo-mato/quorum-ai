@@ -191,6 +191,9 @@ function ConnectionStatus({ compact = false }) {
 export default function Layout({ children }) {
   const location = useLocation();
   const { sidebarOpen, toggleSidebar, setSidebarOpen } = useUIStore();
+  
+  // Check if we're on the chat page - chat needs full control of its layout
+  const isChatPage = location.pathname === '/chat';
 
   // Close sidebar on route change on mobile
   useEffect(() => {
@@ -361,7 +364,7 @@ export default function Layout({ children }) {
         </header>
 
         {/* Page content */}
-        <div className="px-3 pt-3 pb-0 sm:p-6">
+        <div className={isChatPage ? '' : 'px-3 pt-3 pb-0 sm:p-6'}>
           {children}
         </div>
       </main>

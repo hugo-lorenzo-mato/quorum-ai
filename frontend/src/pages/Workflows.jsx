@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom';
+import { useParams, useNavigate, Link, useSearchParams, useLocation } from 'react-router-dom';
 import { useWorkflowStore, useTaskStore, useUIStore, useAgentStore, useConfigStore } from '../stores';
 import { fileApi, workflowApi } from '../lib/api';
 import { getModelsForAgent, getReasoningLevels, supportsReasoning, useEnums } from '../lib/agents';
@@ -41,6 +41,7 @@ import {
   Layers,
   FolderTree,
   Filter,
+  Sparkles,
 } from 'lucide-react';
 import { ConfirmDialog } from '../components/config/ConfirmDialog';
 import { ExecutionModeBadge, PhaseStepper, ReplanModal } from '../components/workflow';
@@ -792,9 +793,10 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
   }, [agentActivity, selectedTaskId, tasks]);
 
   return (
-    <div className="space-y-6 animate-fade-in px-3 sm:px-0 pb-10">
+    <div className="space-y-6 animate-fade-in pb-10">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 space-y-6">
       {/* Header */}
-      <div className="md:sticky md:top-14 z-20 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 -mx-3 sm:-mx-6 px-3 sm:px-6 py-4 border-b border-border shadow-sm mb-6 transition-all">
+      <div className="md:sticky md:top-14 z-20 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 -mx-4 sm:-mx-6 px-4 sm:px-6 py-4 border-b border-border shadow-sm transition-all">
         <div className="flex flex-col md:flex-row md:items-center gap-4">
           <div className="flex items-center gap-4 w-full md:w-auto">
             <button
@@ -1407,6 +1409,7 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
         onSelect={handleIssuesModeSelect}
         loading={issuesGenerating}
       />
+      </div>
     </div>
   );
 }
@@ -1418,6 +1421,10 @@ const AGENT_OPTIONS = [
 ];
 
 function NewWorkflowForm({ onSubmit, onCancel, loading }) {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const template = location.state?.template;
+  
   const [title, setTitle] = useState('');
   const [prompt, setPrompt] = useState('');
   const [files, setFiles] = useState([]);
@@ -1431,6 +1438,19 @@ function NewWorkflowForm({ onSubmit, onCancel, loading }) {
 
   // Subscribe for enums updates (models/reasoning)
   useEnums();
+
+  // Apply template if provided
+  useEffect(() => {
+    if (template) {
+      if (template.name) setTitle(template.name);
+      if (template.prompt) setPrompt(template.prompt);
+      if (template.executionStrategy === 'single-agent') {
+        setExecutionMode('single_agent');
+      } else if (template.executionStrategy === 'multi-agent-consensus') {
+        setExecutionMode('multi_agent');
+      }
+    }
+  }, [template]);
 
   // Get enabled agents from config store
   const { config } = useConfigStore();
@@ -1490,7 +1510,16 @@ function NewWorkflowForm({ onSubmit, onCancel, loading }) {
   return (
     <div className="w-full animate-fade-in pb-10">
       <div className="max-w-2xl mx-auto p-6 rounded-xl border border-border bg-card animate-fade-up">
-        <h2 className="text-xl font-semibold text-foreground mb-6">Create New Workflow</h2>
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-xl font-semibold text-foreground">Create New Workflow</h2>
+          <Link
+            to="/templates"
+            className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-primary hover:text-primary/80 bg-primary/10 hover:bg-primary/20 rounded-lg transition-colors"
+          >
+            <Sparkles className="w-4 h-4" />
+            Browse Templates
+          </Link>
+        </div>
       <form onSubmit={handleSubmit} className="space-y-8">
         {/* Step 1: Definition */}
         <div className="space-y-4">
@@ -1923,7 +1952,8 @@ export default function Workflows() {
 
   // Show workflow list
   return (
-    <div className="space-y-6 animate-fade-in px-3 sm:px-0 pb-10">
+    <div className="space-y-6 animate-fade-in pb-10">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 space-y-6">
       <div className="flex flex-col gap-4">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
@@ -2006,6 +2036,7 @@ export default function Workflows() {
         confirmText="Delete"
         variant="danger"
       />
+      </div>
     </div>
   );
 }

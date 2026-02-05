@@ -117,19 +117,19 @@ function TemplatePreviewModal({ template, onClose, onUseTemplate }) {
 function TemplateCard({ template, onUse, onPreview }) {
   return (
     <div
-      className={`group flex flex-col h-full rounded-xl border border-border bg-card p-4 transition-all hover:border-primary/30 hover:shadow-lg animate-fade-up`}
+      className={`group flex flex-col h-full rounded-xl border border-border bg-card p-3 transition-all hover:border-primary/30 hover:shadow-lg animate-fade-up`}
     >
-      <div className="flex-1 space-y-4 cursor-pointer" onClick={() => onPreview(template)}>
+      <div className="flex-1 space-y-3 cursor-pointer" onClick={() => onPreview(template)}>
         <div className="flex items-start justify-between">
           <div className="p-2 rounded-lg bg-primary/10 text-primary">
-            <TemplateIcon name={template.icon} className="h-5 w-5" />
+            <TemplateIcon name={template.icon} className="h-4 w-4" />
           </div>
-          <Badge variant="outline" className="text-[10px] uppercase tracking-widest font-black opacity-60">
+          <Badge variant="outline" className="text-[9px] uppercase tracking-widest font-black opacity-60">
             {template.executionStrategy === 'multi-agent-consensus' ? 'Consensus' : 'Direct'}
           </Badge>
         </div>
-        <div className="space-y-1.5">
-          <h3 className="font-bold text-base text-foreground group-hover:text-primary transition-colors">{template.name}</h3>
+        <div className="space-y-1">
+          <h3 className="font-bold text-sm text-foreground group-hover:text-primary transition-colors">{template.name}</h3>
           <p className="text-xs leading-relaxed line-clamp-3 text-muted-foreground">{template.description}</p>
         </div>
         <div className="flex flex-wrap gap-1.5">
@@ -140,9 +140,14 @@ function TemplateCard({ template, onUse, onPreview }) {
           ))}
         </div>
       </div>
-      <div className="pt-4 mt-auto flex gap-2 border-t border-border/50">
-        <Button variant="ghost" size="sm" onClick={() => onPreview(template)} className="flex-1 text-xs font-bold">Details</Button>
-        <Button size="sm" onClick={() => onUse(template)} className="flex-1 text-xs font-bold">Apply</Button>
+      <div className="pt-3 mt-auto flex gap-2 border-t border-border/50">
+        <Button variant="outline" size="sm" onClick={() => onPreview(template)} className="flex-1 text-xs font-bold">
+          <Info className="w-3 h-3 mr-1" />
+          Details
+        </Button>
+        <Button variant="outline" size="sm" onClick={() => onUse(template)} className="flex-1 text-xs font-bold bg-primary/5 border-primary/20 hover:bg-primary/10">
+          Apply
+        </Button>
       </div>
     </div>
   );
@@ -155,6 +160,7 @@ export default function Templates() {
 
   return (
     <div className="space-y-6 animate-fade-in pb-10">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 space-y-6">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border/50 pb-6">
         <div>
@@ -194,6 +200,7 @@ export default function Templates() {
         </div>
       )}
       {previewTemplate && <TemplatePreviewModal template={previewTemplate} onClose={() => setPreviewTemplate(null)} onUseTemplate={(t) => { setPreviewTemplate(null); useTemplate(t); }} />}
+      </div>
     </div>
   );
 }

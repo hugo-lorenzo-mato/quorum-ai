@@ -273,7 +273,7 @@ export default function Settings() {
 
         {/* Content Area */}
         <main className={`flex-1 overflow-y-auto bg-background p-4 sm:p-8 ${mobileView === 'content' ? 'block' : 'hidden md:block'}`}>
-          <div className="max-w-4xl mx-auto space-y-6 pb-24">
+          <div className="max-w-6xl mx-auto space-y-6 pb-24">
             {isLoading && !config ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="w-8 h-8 animate-spin text-primary" />
