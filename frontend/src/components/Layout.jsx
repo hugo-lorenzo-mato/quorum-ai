@@ -25,13 +25,11 @@ import {
   Ghost,
   MoonStar,
   Github,
-  Sparkles,
 } from 'lucide-react';
 
 const navItems = [
   { path: '/', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/workflows', label: 'Workflows', icon: GitBranch },
-  { path: '/templates', label: 'Templates', icon: Sparkles },
   { path: '/kanban', label: 'Kanban', icon: KanbanSquare },
   { path: '/chat', label: 'Chat', icon: MessageSquare },
   { path: '/settings', label: 'Settings', icon: Settings },
