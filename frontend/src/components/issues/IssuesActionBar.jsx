@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Download, Save, Send, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Download, Save, Send, Loader2, AlertCircle } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { workflowApi } from '../../lib/api';
 import useIssuesStore from '../../stores/issuesStore';

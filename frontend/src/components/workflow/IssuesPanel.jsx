@@ -5,53 +5,14 @@ import { useUIStore } from '../../stores';
 import useIssuesStore from '../../stores/issuesStore';
 import {
   FileText,
-  ExternalLink,
   Loader2,
   Send,
-  CheckCircle2,
   AlertCircle,
 } from 'lucide-react';
 import { GenerationOptionsModal } from '../issues';
 
-function CreatedIssueCard({ issue }) {
-  return (
-    <a
-      href={issue.url}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="block p-4 border border-border rounded-xl bg-background hover:border-primary/30 hover:bg-accent/30 active:scale-[0.98] transition-all shadow-sm group"
-    >
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="p-1.5 rounded-full bg-success/10 text-success">
-            <CheckCircle2 className="w-4 h-4" />
-          </div>
-          <span className="text-sm font-semibold text-foreground truncate group-hover:text-primary transition-colors">
-            <span className="text-muted-foreground font-mono mr-1">#{issue.number}</span>
-            {issue.title}
-          </span>
-        </div>
-        <ExternalLink className="w-4 h-4 text-muted-foreground shrink-0 group-hover:text-primary transition-colors" />
-      </div>
-      {issue.labels && issue.labels.length > 0 && (
-        <div className="flex items-center gap-1.5 mt-3 flex-wrap pl-10">
-          {issue.labels.map((label, i) => (
-            <span
-              key={i}
-              className="px-2 py-0.5 rounded-md bg-muted text-[10px] font-medium text-muted-foreground"
-            >
-              {label}
-            </span>
-          ))}
-        </div>
-      )}
-    </a>
-  );
-}
-
 export default function IssuesPanel({ workflow }) {
   const navigate = useNavigate();
-  const notifyInfo = useUIStore((s) => s.notifyInfo);
   const notifyError = useUIStore((s) => s.notifyError);
 
   // Issues store actions
@@ -63,10 +24,8 @@ export default function IssuesPanel({ workflow }) {
     cancelGeneration,
   } = useIssuesStore();
 
-  const [loading, setLoading] = useState(false);
+  const [loading, _setLoading] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
-  const [previewIssues, setPreviewIssues] = useState(null);
-  const [createdIssues, setCreatedIssues] = useState(null);
   const [error, setError] = useState(null);
   const [issuesEnabled, setIssuesEnabled] = useState(null);
 
@@ -167,77 +126,7 @@ export default function IssuesPanel({ workflow }) {
     notifyError,
   ]);
 
-  // Open editor with existing preview issues
-  const handleOpenEditor = useCallback(() => {
-    if (previewIssues && previewIssues.length > 0) {
-      setWorkflow(workflow.id, workflow.title || workflow.id);
-      loadIssues(previewIssues);
-      navigate(`/workflows/${workflow.id}/issues`);
-    }
-  }, [previewIssues, workflow.id, workflow.title, setWorkflow, loadIssues, navigate]);
-
-  // Preview issues (dry run) - for inline preview
-  const handlePreview = useCallback(async () => {
-    setPreviewLoading(true);
-    setError(null);
-
-    try {
-      const enabled = await checkIssuesConfig();
-      if (!enabled) {
-        setError('Issue generation is disabled in settings');
-        return;
-      }
-
-      const response = await workflowApi.previewIssues(workflow.id, true);
-      setPreviewIssues(response.preview_issues || []);
-      setCreatedIssues(null);
-    } catch (err) {
-      setError(err.message || 'Failed to preview issues');
-      notifyError(err.message || 'Failed to preview issues');
-    } finally {
-      setPreviewLoading(false);
-    }
-  }, [workflow.id, checkIssuesConfig, notifyError]);
-
-  // Generate issues directly (without editor)
-  const handleGenerate = useCallback(async (options = {}) => {
-    setLoading(true);
-    setError(null);
-
-    try {
-      const enabled = await checkIssuesConfig();
-      if (!enabled) {
-        setError('Issue generation is disabled in settings');
-        return;
-      }
-
-      const response = await workflowApi.generateIssues(workflow.id, options);
-
-      const created = [];
-      if (response.main_issue) {
-        created.push(response.main_issue);
-      }
-      if (response.sub_issues) {
-        created.push(...response.sub_issues);
-      }
-
-      setCreatedIssues(created);
-      setPreviewIssues(null);
-      notifyInfo(response.message || `Created ${created.length} issue(s)`);
-
-      if (response.errors && response.errors.length > 0) {
-        setError(`Warnings: ${response.errors.join(', ')}`);
-      }
-    } catch (err) {
-      setError(err.message || 'Failed to generate issues');
-      notifyError(err.message || 'Failed to generate issues');
-    } finally {
-      setLoading(false);
-    }
-  }, [workflow.id, checkIssuesConfig, notifyInfo, notifyError]);
-
   // Check if workflow can generate issues (has artifacts)
-  const canGenerateIssues = workflow.status === 'completed' && workflow.current_phase === 'done';
   const hasAnalysis = workflow.current_phase && ['plan', 'execute', 'done'].includes(workflow.current_phase);
 
   if (!hasAnalysis) {
@@ -298,20 +187,6 @@ export default function IssuesPanel({ workflow }) {
           <p className="text-xs text-warning">
             Issue generation is disabled. Enable it in Settings → Issues.
           </p>
-        </div>
-      )}
-
-      {/* Created Issues */}
-      {createdIssues && createdIssues.length > 0 && (
-        <div className="space-y-2">
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-            Created Issues ({createdIssues.length})
-          </p>
-          <div className="space-y-2 max-h-[40vh] overflow-y-auto">
-            {createdIssues.map((issue, index) => (
-              <CreatedIssueCard key={index} issue={issue} />
-            ))}
-          </div>
         </div>
       )}
 

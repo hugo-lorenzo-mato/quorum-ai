@@ -21,18 +21,19 @@ export default function AgentSelector({ value, onChange, disabled }) {
   }, []);
 
   const config = useConfigStore((state) => state.config);
+  const agentsConfig = config?.agents;
 
   // Filter agents to show only enabled ones
   const agents = useMemo(() => {
     const allAgents = getAgents();
-    if (!config?.agents) return allAgents;
+    if (!agentsConfig) return allAgents;
 
     return allAgents.filter((agent) => {
-      const agentConfig = config.agents[agent.value];
+      const agentConfig = agentsConfig[agent.value];
       // Show agent if it's enabled (default to true if not configured)
       return agentConfig?.enabled !== false;
     });
-  }, [config?.agents]);
+  }, [agentsConfig]);
 
   const selected = getAgentByValue(value);
 

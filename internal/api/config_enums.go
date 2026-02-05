@@ -3,7 +3,6 @@ package api
 import (
 	"net/http"
 
-	"github.com/hugo-lorenzo-mato/quorum-ai/internal/config"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 )
 
@@ -30,21 +29,8 @@ type EnumsResponse struct {
 }
 
 // handleGetEnums returns all enum values for UI dropdowns.
-// The Agents list is filtered to include only enabled agents based on the current configuration.
+// The Agents list includes all supported agents (enabled/disabled).
 func (s *Server) handleGetEnums(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	// Load configuration to filter enabled agents
-	s.configMu.RLock()
-	cfg, err := s.loadConfigForContext(ctx)
-	s.configMu.RUnlock()
-
-	// Filter agents based on configuration (default to enabled if error loading config)
-	enabledAgents := core.Agents
-	if err == nil && cfg != nil {
-		enabledAgents = filterEnabledAgents(cfg)
-	}
-
 	enums := EnumsResponse{
 		LogLevels:           core.LogLevels,
 		LogFormats:          core.LogFormats,
@@ -53,7 +39,7 @@ func (s *Server) handleGetEnums(w http.ResponseWriter, r *http.Request) {
 		WorktreeModes:       core.WorktreeModes,
 		MergeStrategies:     core.MergeStrategies,
 		ReasoningEfforts:    core.ReasoningEfforts,
-		Agents:              enabledAgents,
+		Agents:              core.Agents,
 		Phases:              core.Phases,
 		PhaseModelKeys:      core.PhaseModelKeys,
 		AgentModels:         core.AgentModels,
@@ -65,17 +51,4 @@ func (s *Server) handleGetEnums(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondJSON(w, http.StatusOK, enums)
-}
-
-// filterEnabledAgents returns a list of agents that are enabled in the configuration.
-// By default, all agents are considered enabled unless explicitly disabled.
-func filterEnabledAgents(cfg *config.Config) []string {
-	var enabled []string
-	for _, agent := range core.Agents {
-		agentCfg := cfg.Agents.GetAgentConfig(agent)
-		if agentCfg != nil && agentCfg.Enabled {
-			enabled = append(enabled, agent)
-		}
-	}
-	return enabled
 }

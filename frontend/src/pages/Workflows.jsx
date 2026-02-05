@@ -39,7 +39,6 @@ import {
   Network,
   LayoutList,
   FolderTree,
-  Filter,
   Sparkles,
 } from 'lucide-react';
 import { ConfirmDialog } from '../components/config/ConfirmDialog';
@@ -1421,35 +1420,29 @@ const AGENT_OPTIONS = [
 
 function NewWorkflowForm({ onSubmit, onCancel, loading }) {
   const location = useLocation();
-  const navigate = useNavigate();
   const template = location.state?.template;
   
-  const [title, setTitle] = useState('');
-  const [prompt, setPrompt] = useState('');
+  const [title, setTitle] = useState(() => template?.name || '');
+  const [prompt, setPrompt] = useState(() => template?.prompt || '');
   const [files, setFiles] = useState([]);
   const fileInputRef = useRef(null);
 
   // Execution mode state
-  const [executionMode, setExecutionMode] = useState('multi_agent');
+  const [executionMode, setExecutionMode] = useState(() => {
+    if (template?.executionStrategy === 'single-agent') {
+      return 'single_agent';
+    }
+    if (template?.executionStrategy === 'multi-agent-consensus') {
+      return 'multi_agent';
+    }
+    return 'multi_agent';
+  });
   const [singleAgentName, setSingleAgentName] = useState('claude');
   const [singleAgentModel, setSingleAgentModel] = useState('');
   const [singleAgentReasoningEffort, setSingleAgentReasoningEffort] = useState('');
 
   // Subscribe for enums updates (models/reasoning)
   useEnums();
-
-  // Apply template if provided
-  useEffect(() => {
-    if (template) {
-      if (template.name) setTitle(template.name);
-      if (template.prompt) setPrompt(template.prompt);
-      if (template.executionStrategy === 'single-agent') {
-        setExecutionMode('single_agent');
-      } else if (template.executionStrategy === 'multi-agent-consensus') {
-        setExecutionMode('multi_agent');
-      }
-    }
-  }, [template]);
 
   // Get enabled agents from config store
   const { config } = useConfigStore();
@@ -1473,7 +1466,6 @@ function NewWorkflowForm({ onSubmit, onCancel, loading }) {
     ? singleAgentReasoningEffort
     : '';
 
-  const selectedModel = modelOptions.find((m) => m.value === effectiveSingleAgentModel);
   const selectedReasoning = reasoningLevels.find((r) => r.value === effectiveSingleAgentReasoningEffort);
 
   const handleSubmit = (e) => {
@@ -1800,7 +1792,7 @@ export default function Workflows() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { workflows, loading, error, fetchWorkflows, fetchWorkflow, createWorkflow, deleteWorkflow, clearError } = useWorkflowStore();
+  const { workflows, loading, fetchWorkflows, fetchWorkflow, createWorkflow, deleteWorkflow, clearError } = useWorkflowStore();
   const { getTasksForWorkflow, setTasks } = useTaskStore();
   const notifyInfo = useUIStore((s) => s.notifyInfo);
   const notifyError = useUIStore((s) => s.notifyError);

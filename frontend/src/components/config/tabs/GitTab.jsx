@@ -106,7 +106,7 @@ function FinalizationSection() {
   const prBaseBranch = useConfigField('git.finalization.pr_base_branch');
   const mergeStrategy = useConfigSelect('git.finalization.merge_strategy', 'merge_strategies');
 
-  const { value: autoPushValue, onChange: setAutoPush } = autoPush;
+  const { value: autoPushValue } = autoPush;
   const { value: autoPrValue, onChange: setAutoPr } = autoPr;
   const { value: autoMergeValue, onChange: setAutoMerge } = autoMerge;
 

@@ -10,13 +10,24 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/config"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 )
+
+func newIntegrationTestServerWithEnabledAgent(t *testing.T, agent string) *testServer {
+	ts := newIntegrationTestServer(t)
+	loader := config.NewLoader()
+	v := loader.Viper()
+	v.Set("agents.default", agent)
+	v.Set("agents."+agent+".enabled", true)
+	ts.server.configLoader = loader
+	return ts
+}
 
 // TestIntegration_CreateWorkflow_WithExecutionMode tests creating workflows
 // with different execution mode configurations.
 func TestIntegration_CreateWorkflow_WithExecutionMode(t *testing.T) {
-	ts := newIntegrationTestServer(t)
+	ts := newIntegrationTestServerWithEnabledAgent(t, "claude")
 
 	t.Run("create workflow with single-agent mode", func(t *testing.T) {
 		reqBody := map[string]interface{}{
@@ -24,7 +35,7 @@ func TestIntegration_CreateWorkflow_WithExecutionMode(t *testing.T) {
 			"title":  "Single Agent Test",
 			"config": map[string]interface{}{
 				"execution_mode":     "single_agent",
-				"single_agent_name":  "test-agent",
+				"single_agent_name":  "claude",
 				"single_agent_model": "test-model",
 			},
 		}
@@ -58,8 +69,8 @@ func TestIntegration_CreateWorkflow_WithExecutionMode(t *testing.T) {
 		if config["execution_mode"] != "single_agent" {
 			t.Errorf("expected execution_mode 'single_agent', got '%v'", config["execution_mode"])
 		}
-		if config["single_agent_name"] != "test-agent" {
-			t.Errorf("expected single_agent_name 'test-agent', got '%v'", config["single_agent_name"])
+		if config["single_agent_name"] != "claude" {
+			t.Errorf("expected single_agent_name 'claude', got '%v'", config["single_agent_name"])
 		}
 	})
 
@@ -138,14 +149,14 @@ func TestIntegration_CreateWorkflow_WithExecutionMode(t *testing.T) {
 // TestIntegration_GetWorkflow_IncludesExecutionMode tests that getting a workflow
 // returns the execution mode configuration.
 func TestIntegration_GetWorkflow_IncludesExecutionMode(t *testing.T) {
-	ts := newIntegrationTestServer(t)
+	ts := newIntegrationTestServerWithEnabledAgent(t, "claude")
 
 	// Create a workflow with single-agent mode
 	reqBody := map[string]interface{}{
 		"prompt": "Test workflow",
 		"config": map[string]interface{}{
 			"execution_mode":    "single_agent",
-			"single_agent_name": "test-agent",
+			"single_agent_name": "claude",
 		},
 	}
 	body, _ := json.Marshal(reqBody)
@@ -160,9 +171,18 @@ func TestIntegration_GetWorkflow_IncludesExecutionMode(t *testing.T) {
 	}
 	defer createResp.Body.Close()
 
+	if createResp.StatusCode != http.StatusCreated {
+		t.Fatalf("expected status %d, got %d", http.StatusCreated, createResp.StatusCode)
+	}
+
 	var createResult map[string]interface{}
-	json.NewDecoder(createResp.Body).Decode(&createResult)
-	id := createResult["id"].(string)
+	if err := json.NewDecoder(createResp.Body).Decode(&createResult); err != nil {
+		t.Fatalf("failed to decode create response: %v", err)
+	}
+	id, _ := createResult["id"].(string)
+	if id == "" {
+		t.Fatal("expected non-empty workflow ID")
+	}
 
 	// Get the workflow
 	getResp, err := http.Get(ts.URL + "/api/v1/workflows/" + id + "/")
@@ -189,21 +209,21 @@ func TestIntegration_GetWorkflow_IncludesExecutionMode(t *testing.T) {
 	if config["execution_mode"] != "single_agent" {
 		t.Errorf("expected execution_mode 'single_agent', got '%v'", config["execution_mode"])
 	}
-	if config["single_agent_name"] != "test-agent" {
-		t.Errorf("expected single_agent_name 'test-agent', got '%v'", config["single_agent_name"])
+	if config["single_agent_name"] != "claude" {
+		t.Errorf("expected single_agent_name 'claude', got '%v'", config["single_agent_name"])
 	}
 }
 
 // TestIntegration_ListWorkflows_IncludesExecutionMode tests that listing workflows
 // returns execution mode configuration for each workflow.
 func TestIntegration_ListWorkflows_IncludesExecutionMode(t *testing.T) {
-	ts := newIntegrationTestServer(t)
+	ts := newIntegrationTestServerWithEnabledAgent(t, "claude")
 
 	// Create workflows with different execution modes
 	configs := []map[string]interface{}{
 		{
 			"execution_mode":    "single_agent",
-			"single_agent_name": "test-agent",
+			"single_agent_name": "claude",
 		},
 		{
 			"execution_mode": "multi_agent",
@@ -265,14 +285,14 @@ func TestIntegration_ListWorkflows_IncludesExecutionMode(t *testing.T) {
 // TestIntegration_WorkflowConfigPersistence tests that workflow config is persisted
 // correctly across create and get operations.
 func TestIntegration_WorkflowConfigPersistence(t *testing.T) {
-	ts := newIntegrationTestServer(t)
+	ts := newIntegrationTestServerWithEnabledAgent(t, "claude")
 
 	t.Run("full config is persisted", func(t *testing.T) {
 		reqBody := map[string]interface{}{
 			"prompt": "Test config persistence",
 			"config": map[string]interface{}{
 				"execution_mode":      "single_agent",
-				"single_agent_name":   "test-agent",
+				"single_agent_name":   "claude",
 				"single_agent_model":  "test-model-v1",
 				"consensus_threshold": 0.85,
 				"dry_run":             true,
@@ -290,9 +310,18 @@ func TestIntegration_WorkflowConfigPersistence(t *testing.T) {
 		}
 		defer createResp.Body.Close()
 
+		if createResp.StatusCode != http.StatusCreated {
+			t.Fatalf("expected status %d, got %d", http.StatusCreated, createResp.StatusCode)
+		}
+
 		var createResult map[string]interface{}
-		json.NewDecoder(createResp.Body).Decode(&createResult)
-		id := createResult["id"].(string)
+		if err := json.NewDecoder(createResp.Body).Decode(&createResult); err != nil {
+			t.Fatalf("failed to decode create response: %v", err)
+		}
+		id, _ := createResult["id"].(string)
+		if id == "" {
+			t.Fatal("expected non-empty workflow ID")
+		}
 
 		// Get the workflow back
 		getResp, err := http.Get(ts.URL + "/api/v1/workflows/" + id + "/")
@@ -310,7 +339,7 @@ func TestIntegration_WorkflowConfigPersistence(t *testing.T) {
 		if config["execution_mode"] != "single_agent" {
 			t.Errorf("execution_mode mismatch: got %v", config["execution_mode"])
 		}
-		if config["single_agent_name"] != "test-agent" {
+		if config["single_agent_name"] != "claude" {
 			t.Errorf("single_agent_name mismatch: got %v", config["single_agent_name"])
 		}
 		if config["single_agent_model"] != "test-model-v1" {

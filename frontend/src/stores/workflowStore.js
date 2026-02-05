@@ -477,7 +477,7 @@ const useWorkflowStore = create((set, get) => ({
   },
 
   handlePhaseCompleted: (data) => {
-    const { workflows, activeWorkflow } = get();
+    const { workflows } = get();
     // When a phase completes, the workflow might still be running (next phase)
     // or completed (final phase). We update the phase and let other events
     // update the status if needed.

@@ -307,7 +307,7 @@ export default function Settings() {
         <div className={`md:hidden flex-1 overflow-y-auto p-4 space-y-6 bg-background ${mobileView === 'menu' ? 'block animate-fade-in' : 'hidden'}`}>
           {filteredTabs.length === 0 && (
             <div className="text-center py-8 text-muted-foreground">
-              No settings found matching "{searchQuery}"
+              No settings found matching &quot;{searchQuery}&quot;
             </div>
           )}
           

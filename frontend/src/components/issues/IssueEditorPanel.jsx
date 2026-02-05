@@ -76,7 +76,7 @@ export default function IssueEditorPanel({
     } finally {
       setCreating(false);
     }
-  }, [issue, wfId, setIssueFilePath, updateIssue, notifySuccess, notifyError]);
+  }, [issue, wfId, setIssueFilePath, notifySuccess, notifyError]);
 
   // Handle field updates
   const handleTitleChange = useCallback((e) => {
@@ -300,7 +300,7 @@ export default function IssueEditorPanel({
                   {/* Assignees */}
                   {issue.assignees?.length > 0 && (
                      <div className="flex items-center -space-x-2">
-                        {issue.assignees.map((a, i) => (
+                        {issue.assignees.map((a) => (
                            <div key={a} className="w-6 h-6 rounded-full bg-secondary ring-2 ring-background flex items-center justify-center text-[10px] font-bold uppercase ring-offset-2 ring-offset-background" title={a}>
                               {a.substring(0,2)}
                            </div>

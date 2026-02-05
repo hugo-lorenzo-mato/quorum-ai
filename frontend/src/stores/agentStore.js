@@ -144,7 +144,6 @@ const useAgentStore = create((set, get) => ({
       // Events are in chronological order, so we process them sequentially
       const existing = agentStatuses[event.agent] || {};
       const eventKind = event.event_kind;
-      const isStartEvent = eventKind === 'started';
       const isEndEvent = eventKind === 'completed' || eventKind === 'error';
 
       // Use the startedAt from first pass, or event timestamp as fallback

@@ -62,13 +62,13 @@ describe('Settings', () => {
   it('renders all tabs', () => {
     render(<Settings />);
 
-    expect(screen.getByText('General')).toBeInTheDocument();
-    expect(screen.getByText('Workflow Defaults')).toBeInTheDocument();
-    expect(screen.getByText('Agents & Models')).toBeInTheDocument();
-    expect(screen.getByText('Execution Phases')).toBeInTheDocument();
-    expect(screen.getByText('Git Integration')).toBeInTheDocument();
-    expect(screen.getByText('Issue Generation')).toBeInTheDocument();
-    expect(screen.getByText('Advanced')).toBeInTheDocument();
+    expect(screen.getAllByText('General').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Workflow Defaults').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Agents & Models').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Execution Phases').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Git Integration').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Issue Generation').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Advanced').length).toBeGreaterThan(0);
   });
 
   it('loads config on mount', () => {

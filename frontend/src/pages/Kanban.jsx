@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useKanbanStore, KANBAN_COLUMNS } from '../stores';
 import { getStatusColor, KANBAN_COLUMN_COLORS } from '../lib/theme';
-import { Search, ChevronLeft, ChevronRight, X, MoreVertical, GitPullRequest, ListTodo, Play, AlertCircle, Clock, Inbox } from 'lucide-react';
+import { Search, MoreVertical, GitPullRequest, ListTodo, Play, Inbox } from 'lucide-react';
 
 // Bottom Sheet Component for Mobile Actions
 function MobileActionSheet({ isOpen, onClose, workflow, onMoveTo }) {

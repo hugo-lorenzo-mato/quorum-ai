@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { FileText, Tag, Users, X, Loader2 } from 'lucide-react';
+import { Tag, Users, X, Loader2 } from 'lucide-react';
 import { Button } from '../ui/Button';
 
 /**
