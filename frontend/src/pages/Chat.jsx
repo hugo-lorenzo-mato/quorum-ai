@@ -333,10 +333,9 @@ export default function Chat() {
             </div>
 
             {/* Messages */}
-            <div className="flex-1 min-h-0 overflow-y-auto">
-              <div className="max-w-5xl mx-auto px-4 md:px-8 py-6 space-y-6">
+            <div className="flex-1 min-h-0 overflow-y-auto flex flex-col">
               {activeMessages.length > 0 ? (
-                <>
+                <div className="max-w-5xl mx-auto px-4 md:px-8 py-6 space-y-6 w-full">
                   {activeMessages.map((message, index) => (
                     <MessageBubble
                       key={message.id || index}
@@ -345,9 +344,10 @@ export default function Chat() {
                     />
                   ))}
                   {sending && <TypingIndicator />}
-                </>
+                  <div ref={messagesEndRef} className="h-4" />
+                </div>
               ) : (
-                <div className="flex items-center justify-center h-full">
+                <div className="flex items-center justify-center flex-1">
                   <div className="text-center">
                     <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-primary/10 flex items-center justify-center">
                       <Sparkles className="w-8 h-8 text-primary" />
@@ -357,8 +357,6 @@ export default function Chat() {
                   </div>
                 </div>
               )}
-              <div ref={messagesEndRef} className="h-4" />
-              </div>
             </div>
 
             {/* Input */}
