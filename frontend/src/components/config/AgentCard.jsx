@@ -3,7 +3,7 @@ import { Bot, Check, ChevronDown, ChevronUp } from 'lucide-react';
 import { useConfigField } from '../../hooks/useConfigField';
 import { useConfigStore } from '../../stores/configStore';
 import { TextInputSetting, ToggleSetting, SelectSetting } from './index';
-import { AGENT_INFO, PHASE_MODEL_KEYS, PHASE_LABELS, supportsReasoning } from '../../lib/agents';
+import { AGENT_INFO, PHASE_MODEL_KEYS, PHASE_LABELS, supportsReasoning, getModelsForAgent, useEnums } from '../../lib/agents';
 
 function normalizeBoolMap(value) {
   if (!value || typeof value !== 'object') return {};
@@ -33,19 +33,19 @@ export function AgentCard({ agentKey }) {
 
   const phaseKeys = useConfigStore((state) => state.enums?.phase_model_keys) || PHASE_MODEL_KEYS;
   const reasoningEfforts = useConfigStore((state) => state.enums?.reasoning_efforts);
-  const agentsMetadata = useConfigStore((state) => state.agents) || [];
 
   const [showOverrides, setShowOverrides] = useState(false);
 
-  // Get available models for this agent
-  const agentMeta = agentsMetadata.find((a) => a.name === agentKey);
+  // Subscribe to enums updates for model data
+  useEnums();
+
+  // Get available models for this agent from enums (loaded by loadEnums)
   const availableModels = useMemo(() => {
-    if (!agentMeta?.models?.length) return [];
-    return agentMeta.models.map((m) => ({ value: m, label: m }));
-  }, [agentMeta]);
+    return getModelsForAgent(agentKey);
+  }, [agentKey]);
 
   // Check if this agent supports reasoning effort
-  const hasReasoningEffort = agentMeta?.hasReasoningEffort === true || supportsReasoning(agentKey);
+  const hasReasoningEffort = supportsReasoning(agentKey);
   const reasoningEffortOptions = useMemo(() => {
     return (reasoningEfforts || []).map((e) => ({ value: e, label: e.charAt(0).toUpperCase() + e.slice(1) }));
   }, [reasoningEfforts]);
@@ -221,16 +221,16 @@ export function AgentCard({ agentKey }) {
             disabled={path.disabled || !isEnabled}
           />
 
-          <TextInputSetting
+          <SelectSetting
             label="Default model"
             tooltip="Used when no per-phase model override is set."
             id={`agent-${agentKey}-model`}
-            placeholder="e.g. gpt-5.3-codex"
             value={model.value}
             onChange={model.onChange}
+            options={availableModels}
             error={model.error}
             disabled={model.disabled || !isEnabled}
-            suggestions={availableModels.map((m) => m.value)}
+            placeholder={null}
           />
 
           {hasReasoningEffort && (

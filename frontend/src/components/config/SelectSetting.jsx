@@ -56,12 +56,12 @@ export function SelectSetting({
           aria-describedby={error ? `${inputId}-error` : undefined}
         >
           {placeholder && (
-            <option value="" disabled>
+            <option value="" disabled hidden>
               {placeholder}
             </option>
           )}
           {options.map((option) => (
-            <option key={option.value} value={option.value}>
+            <option key={option.value} value={option.value} disabled={option.disabled}>
               {option.label}
             </option>
           ))}

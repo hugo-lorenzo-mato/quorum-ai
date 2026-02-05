@@ -1,14 +1,14 @@
-import { Bot, ChevronDown } from 'lucide-react';
-import { useState, useRef, useEffect, useMemo } from 'react';
-import { getAgents, getAgentByValue, useEnums } from '../../lib/agents';
-import { useConfigStore } from '../../stores/configStore';
+import { Bot, ChevronDown, Loader2 } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { getAgentByValue, useEnabledAgents } from '../../lib/agents';
 
 export default function AgentSelector({ value, onChange, disabled }) {
   const [isOpen, setIsOpen] = useState(false);
   const ref = useRef(null);
 
-  // Subscribe to enums updates for re-render when API data loads
-  useEnums();
+  // Get only enabled agents (filters by config.agents.{name}.enabled)
+  const agents = useEnabledAgents();
+  const isLoading = agents.length === 0;
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -19,21 +19,6 @@ export default function AgentSelector({ value, onChange, disabled }) {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
-
-  const config = useConfigStore((state) => state.config);
-  const agentsConfig = config?.agents;
-
-  // Filter agents to show only enabled ones
-  const agents = useMemo(() => {
-    const allAgents = getAgents();
-    if (!agentsConfig) return allAgents;
-
-    return allAgents.filter((agent) => {
-      const agentConfig = agentsConfig[agent.value];
-      // Show agent if it's enabled (default to true if not configured)
-      return agentConfig?.enabled !== false;
-    });
-  }, [agentsConfig]);
 
   const selected = getAgentByValue(value);
 
@@ -48,12 +33,16 @@ export default function AgentSelector({ value, onChange, disabled }) {
     <div className="relative" ref={ref}>
       <button
         type="button"
-        onClick={() => !disabled && setIsOpen(!isOpen)}
-        disabled={disabled}
+        onClick={() => !disabled && !isLoading && setIsOpen(!isOpen)}
+        disabled={disabled || isLoading}
         className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border bg-background hover:bg-accent text-sm transition-colors disabled:opacity-50"
       >
-        <Bot className="w-4 h-4 text-muted-foreground" />
-        <span className="font-medium">{selected.label}</span>
+        {isLoading ? (
+          <Loader2 className="w-4 h-4 text-muted-foreground animate-spin" />
+        ) : (
+          <Bot className="w-4 h-4 text-muted-foreground" />
+        )}
+        <span className="font-medium">{isLoading ? 'Loading...' : selected.label}</span>
         <ChevronDown className={`w-3 h-3 text-muted-foreground transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 

@@ -6,6 +6,7 @@
 
 import { useState, useEffect } from 'react';
 import { configApi } from './api';
+import { useConfigStore } from '../stores/configStore';
 
 // =============================================================================
 // State Management - Data loaded from API
@@ -123,6 +124,39 @@ export function getAgents() {
     label: AGENT_INFO[value]?.label || value,
     description: AGENT_INFO[value]?.description || '',
   }));
+}
+
+/**
+ * Get list of enabled agents only.
+ * Filters agents based on config.agents.{name}.enabled
+ * @param {Object} agentsConfig - The agents config object (config.agents)
+ * @returns {Array} List of enabled agents with display info
+ */
+export function getEnabledAgents(agentsConfig) {
+  const allAgents = getAgents();
+
+  // If config not loaded yet, return empty array to prevent showing disabled agents
+  if (!agentsConfig) return [];
+
+  return allAgents.filter(agent => {
+    const config = agentsConfig[agent.value];
+    // Agent is enabled if: config doesn't exist OR enabled !== false
+    return config?.enabled !== false;
+  });
+}
+
+/**
+ * React hook to get enabled agents with automatic updates.
+ * Uses configStore to filter agents by enabled status.
+ * @returns {Array} List of enabled agents with display info
+ */
+export function useEnabledAgents() {
+  const agentsConfig = useConfigStore((state) => state.config?.agents);
+
+  // Also subscribe to enums updates
+  useEnums();
+
+  return getEnabledAgents(agentsConfig);
 }
 
 // Legacy export for compatibility

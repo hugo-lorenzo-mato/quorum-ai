@@ -11,6 +11,7 @@ import Kanban from './pages/Kanban';
 import Projects from './pages/Projects';
 import useSSE from './hooks/useSSE';
 import { useUIStore } from './stores';
+import { useConfigStore } from './stores/configStore';
 import { loadEnums } from './lib/agents';
 
 function AppContent() {
@@ -24,9 +25,13 @@ function AppContent() {
     setTheme(theme);
   }, [theme, setTheme]);
 
-  // Load enums from API on app start
+  // Load enums and config from API on app start
   useEffect(() => {
     loadEnums();
+    // Load config and metadata globally so agent enabled/disabled state is available everywhere
+    const configStore = useConfigStore.getState();
+    configStore.loadConfig();
+    configStore.loadMetadata();
   }, []);
 
   return (

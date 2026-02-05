@@ -1,5 +1,5 @@
 import { useConfigField } from '../../hooks/useConfigField';
-import { useConfigStore } from '../../stores/configStore';
+import { useEnabledAgents } from '../../lib/agents';
 import { SelectSetting, NumberInputSetting } from './index';
 
 const PHASE_INFO = {
@@ -46,9 +46,9 @@ export function PhaseCard({ phaseKey }) {
   // Derive mode from enabled flags
   const currentMode = moderatorEnabled.value ? 'moderator' : 'single';
 
-  // Get available agents from config
-  const agents = useConfigStore((state) => state.enums?.agent_keys || ['claude', 'codex', 'gemini', 'copilot']);
-  const agentOptions = agents.map((a) => ({ value: a, label: a.charAt(0).toUpperCase() + a.slice(1) }));
+  // Get only enabled agents
+  const enabledAgents = useEnabledAgents();
+  const agentOptions = enabledAgents.map((a) => ({ value: a.value, label: a.label }));
 
   const handleModeChange = (newMode) => {
     if (newMode === 'single') {

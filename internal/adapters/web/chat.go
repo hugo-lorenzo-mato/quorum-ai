@@ -96,6 +96,7 @@ type ChatHandler struct {
 	agents              core.AgentRegistry
 	eventBus            *events.EventBus
 	sessions            map[string]*chatSessionState
+	loadedProjectRoots  map[string]bool // best-effort cache to avoid reloading persisted sessions repeatedly
 	attachmentStore     *attachments.Store
 	chatStore           core.ChatStore      // Fallback global store
 	chatStoreResolver   ChatStoreResolver   // Per-request store resolver
@@ -132,11 +133,12 @@ func WithProjectRootResolver(resolver ProjectRootResolver) ChatHandlerOption {
 // NewChatHandler creates a new ChatHandler.
 func NewChatHandler(agents core.AgentRegistry, eventBus *events.EventBus, attachmentStore *attachments.Store, chatStore core.ChatStore, opts ...ChatHandlerOption) *ChatHandler {
 	h := &ChatHandler{
-		agents:          agents,
-		eventBus:        eventBus,
-		sessions:        make(map[string]*chatSessionState),
-		attachmentStore: attachmentStore,
-		chatStore:       chatStore,
+		agents:             agents,
+		eventBus:           eventBus,
+		sessions:           make(map[string]*chatSessionState),
+		loadedProjectRoots: make(map[string]bool),
+		attachmentStore:    attachmentStore,
+		chatStore:          chatStore,
 	}
 
 	// Apply options
@@ -150,6 +152,107 @@ func NewChatHandler(agents core.AgentRegistry, eventBus *events.EventBus, attach
 	}
 
 	return h
+}
+
+// ensureProjectSessionsLoaded loads persisted sessions for a project root into memory if needed.
+// This is necessary because in multi-project mode, the ChatStore is resolved per request and cannot
+// be loaded at process startup.
+func (h *ChatHandler) ensureProjectSessionsLoaded(ctx context.Context, projectRoot string) {
+	if projectRoot == "" {
+		projectRoot = h.getProjectRoot(ctx)
+	}
+
+	h.mu.RLock()
+	alreadyLoaded := h.loadedProjectRoots[projectRoot]
+	h.mu.RUnlock()
+	if alreadyLoaded {
+		return
+	}
+
+	store := h.getChatStore(ctx)
+	if store == nil {
+		return
+	}
+
+	h.loadPersistedSessionsFromStore(ctx, store, projectRoot)
+
+	h.mu.Lock()
+	h.loadedProjectRoots[projectRoot] = true
+	h.mu.Unlock()
+}
+
+// ensureSessionLoaded ensures a session exists in memory by loading it from the resolved ChatStore on-demand.
+func (h *ChatHandler) ensureSessionLoaded(ctx context.Context, sessionID string) bool {
+	h.mu.RLock()
+	_, ok := h.sessions[sessionID]
+	h.mu.RUnlock()
+	if ok {
+		return true
+	}
+
+	store := h.getChatStore(ctx)
+	if store == nil {
+		return false
+	}
+
+	sess, err := store.LoadSession(ctx, sessionID)
+	if err != nil || sess == nil {
+		return false
+	}
+
+	projectRoot := sess.ProjectRoot
+	if projectRoot == "" {
+		projectRoot = h.getProjectRoot(ctx)
+	}
+
+	messages, err := store.LoadMessages(ctx, sess.ID)
+	if err != nil {
+		// If we can't load messages, still expose the session.
+		messages = nil
+	}
+
+	chatMessages := make([]ChatMessage, 0, len(messages))
+	for _, msg := range messages {
+		chatMessages = append(chatMessages, ChatMessage{
+			ID:        msg.ID,
+			SessionID: msg.SessionID,
+			Role:      msg.Role,
+			Agent:     msg.Agent,
+			Content:   msg.Content,
+			Timestamp: msg.Timestamp,
+			Tokens: &TokenInfo{
+				Input:   msg.TokensIn,
+				Output:  msg.TokensOut,
+				CostUSD: msg.CostUSD,
+			},
+		})
+	}
+
+	state := &chatSessionState{
+		session: ChatSession{
+			ID:           sess.ID,
+			Title:        sess.Title,
+			CreatedAt:    sess.CreatedAt,
+			UpdatedAt:    sess.UpdatedAt,
+			Agent:        sess.Agent,
+			Model:        sess.Model,
+			MessageCount: len(chatMessages),
+		},
+		messages:    chatMessages,
+		agent:       sess.Agent,
+		model:       sess.Model,
+		title:       sess.Title,
+		projectRoot: projectRoot,
+	}
+
+	h.mu.Lock()
+	// Re-check under lock to avoid overwriting newer in-memory state.
+	if _, exists := h.sessions[sessionID]; !exists {
+		h.sessions[sessionID] = state
+	}
+	h.mu.Unlock()
+
+	return true
 }
 
 // getChatStore returns the ChatStore for the given context.
@@ -227,6 +330,77 @@ func (h *ChatHandler) loadPersistedSessions() {
 			title:       sess.Title,
 			projectRoot: sess.ProjectRoot,
 		}
+	}
+}
+
+// loadPersistedSessionsFromStore loads sessions and their messages from the given store, filtering by project root.
+// It merges results into the in-memory sessions map.
+func (h *ChatHandler) loadPersistedSessionsFromStore(ctx context.Context, store core.ChatStore, projectRoot string) {
+	sessions, err := store.ListSessions(ctx)
+	if err != nil {
+		return
+	}
+
+	for _, sess := range sessions {
+		// Project isolation: if the session has a stored project root, enforce it.
+		// If it is empty (older data), treat it as belonging to the current project.
+		if sess.ProjectRoot != "" && sess.ProjectRoot != projectRoot {
+			continue
+		}
+		if sess.ProjectRoot == "" {
+			sess.ProjectRoot = projectRoot
+		}
+
+		messages, err := store.LoadMessages(ctx, sess.ID)
+		if err != nil {
+			continue
+		}
+
+		chatMessages := make([]ChatMessage, 0, len(messages))
+		for _, msg := range messages {
+			chatMessages = append(chatMessages, ChatMessage{
+				ID:        msg.ID,
+				SessionID: msg.SessionID,
+				Role:      msg.Role,
+				Agent:     msg.Agent,
+				Content:   msg.Content,
+				Timestamp: msg.Timestamp,
+				Tokens: &TokenInfo{
+					Input:   msg.TokensIn,
+					Output:  msg.TokensOut,
+					CostUSD: msg.CostUSD,
+				},
+			})
+		}
+
+		loaded := &chatSessionState{
+			session: ChatSession{
+				ID:           sess.ID,
+				Title:        sess.Title,
+				CreatedAt:    sess.CreatedAt,
+				UpdatedAt:    sess.UpdatedAt,
+				Agent:        sess.Agent,
+				Model:        sess.Model,
+				MessageCount: len(chatMessages),
+			},
+			messages:    chatMessages,
+			agent:       sess.Agent,
+			model:       sess.Model,
+			title:       sess.Title,
+			projectRoot: sess.ProjectRoot,
+		}
+
+		h.mu.Lock()
+		existing, exists := h.sessions[sess.ID]
+		if !exists {
+			h.sessions[sess.ID] = loaded
+		} else {
+			// Prefer the version with more messages (covers "restart + restore" and multi-process cases).
+			if len(existing.messages) < len(loaded.messages) || existing.session.UpdatedAt.Before(loaded.session.UpdatedAt) {
+				h.sessions[sess.ID] = loaded
+			}
+		}
+		h.mu.Unlock()
 	}
 }
 
@@ -328,6 +502,9 @@ func (h *ChatHandler) ListSessions(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	projectRoot := h.getProjectRoot(ctx)
 
+	// Ensure persisted sessions for this project are available after restart.
+	h.ensureProjectSessionsLoaded(ctx, projectRoot)
+
 	h.mu.RLock()
 	sessions := make([]ChatSession, 0)
 	for _, state := range h.sessions {
@@ -349,6 +526,12 @@ func (h *ChatHandler) ListSessions(w http.ResponseWriter, r *http.Request) {
 // GetSession returns a specific chat session.
 func (h *ChatHandler) GetSession(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "sessionID")
+	ctx := r.Context()
+
+	if !h.ensureSessionLoaded(ctx, sessionID) {
+		writeError(w, http.StatusNotFound, "session not found")
+		return
+	}
 
 	h.mu.RLock()
 	state, exists := h.sessions[sessionID]
@@ -370,6 +553,12 @@ func (h *ChatHandler) GetSession(w http.ResponseWriter, r *http.Request) {
 // UpdateSession updates a chat session (e.g., title).
 func (h *ChatHandler) UpdateSession(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "sessionID")
+	ctx := r.Context()
+
+	if !h.ensureSessionLoaded(ctx, sessionID) {
+		writeError(w, http.StatusNotFound, "session not found")
+		return
+	}
 
 	var req UpdateSessionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -405,7 +594,6 @@ func (h *ChatHandler) UpdateSession(w http.ResponseWriter, r *http.Request) {
 	h.mu.Unlock()
 
 	// Persist changes
-	ctx := r.Context()
 	chatStore := h.getChatStore(ctx)
 	if updated && chatStore != nil {
 		persistedSession := &core.ChatSessionState{
@@ -426,6 +614,13 @@ func (h *ChatHandler) UpdateSession(w http.ResponseWriter, r *http.Request) {
 // DeleteSession deletes a chat session.
 func (h *ChatHandler) DeleteSession(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "sessionID")
+	ctx := r.Context()
+
+	// If the session isn't in memory (e.g., after restart), try to load it so we can delete it.
+	if !h.ensureSessionLoaded(ctx, sessionID) {
+		writeError(w, http.StatusNotFound, "session not found")
+		return
+	}
 
 	h.mu.Lock()
 	_, exists := h.sessions[sessionID]
@@ -440,7 +635,6 @@ func (h *ChatHandler) DeleteSession(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Delete from persistent store
-	ctx := r.Context()
 	chatStore := h.getChatStore(ctx)
 	if chatStore != nil {
 		_ = chatStore.DeleteSession(ctx, sessionID)
@@ -457,6 +651,12 @@ func (h *ChatHandler) DeleteSession(w http.ResponseWriter, r *http.Request) {
 // GetMessages returns messages for a chat session.
 func (h *ChatHandler) GetMessages(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "sessionID")
+	ctx := r.Context()
+
+	if !h.ensureSessionLoaded(ctx, sessionID) {
+		writeError(w, http.StatusNotFound, "session not found")
+		return
+	}
 
 	h.mu.RLock()
 	state, exists := h.sessions[sessionID]
@@ -476,6 +676,12 @@ func (h *ChatHandler) GetMessages(w http.ResponseWriter, r *http.Request) {
 // SendMessage sends a message in a chat session and gets an agent response.
 func (h *ChatHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "sessionID")
+	ctx := r.Context()
+
+	if !h.ensureSessionLoaded(ctx, sessionID) {
+		writeError(w, http.StatusNotFound, "session not found")
+		return
+	}
 
 	var req SendMessageRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -521,7 +727,6 @@ func (h *ChatHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 	h.mu.Unlock()
 
 	// Persist user message
-	ctx := r.Context()
 	chatStore := h.getChatStore(ctx)
 	if chatStore != nil {
 		persistedMsg := &core.ChatMessageState{
