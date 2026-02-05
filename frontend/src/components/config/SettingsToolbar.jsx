@@ -20,7 +20,7 @@ export function SettingsToolbar() {
 
   return (
     <div
-      className={`fixed bottom-16 md:bottom-0 right-0 z-50 border-t border-border bg-background/80 glass shadow-lg md:${
+      className={`fixed bottom-16 md:bottom-0 right-0 z-[100] border-t border-border bg-background shadow-2xl md:${
         sidebarOpen ? 'left-64' : 'left-16'
       } left-0`}
     >
@@ -78,13 +78,20 @@ export function SettingsToolbar() {
       </div>
       {hasErrors && (
         <div className="px-3 sm:px-6 pb-3">
-          <div className="rounded-lg border border-error/20 bg-error/5 px-3 py-2 text-xs text-error space-y-1">
-            {Object.entries(validationErrors).map(([field, message]) => (
-              <div key={field} className="flex flex-wrap gap-2">
-                <span className="font-mono text-[11px]">{field}</span>
-                <span>{message}</span>
-              </div>
-            ))}
+          <div className="rounded-lg border-2 border-destructive/30 bg-destructive/10 px-4 py-3 space-y-2">
+            <p className="text-sm font-semibold text-destructive mb-2">
+              ⚠️ Please fix {errorCount} validation error{errorCount > 1 ? 's' : ''} before saving:
+            </p>
+            <div className="space-y-2">
+              {Object.entries(validationErrors).map(([field, message]) => (
+                <div key={field} className="flex flex-col gap-1 pl-4 border-l-2 border-destructive/40">
+                  <code className="font-mono text-xs text-foreground bg-background/50 px-2 py-0.5 rounded inline-block w-fit">
+                    {field}
+                  </code>
+                  <span className="text-sm text-destructive">{message}</span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}
