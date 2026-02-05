@@ -794,7 +794,7 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
 
   return (
     <div className="space-y-6 animate-fade-in pb-10">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 space-y-6">
+      <div className="px-4 sm:px-6 space-y-6">
       {/* Header */}
       <div className="md:sticky md:top-14 z-20 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 -mx-4 sm:-mx-6 px-4 sm:px-6 py-4 border-b border-border shadow-sm transition-all">
         <div className="flex flex-col md:flex-row md:items-center gap-4">
@@ -1953,7 +1953,7 @@ export default function Workflows() {
   // Show workflow list
   return (
     <div className="space-y-6 animate-fade-in pb-10">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 space-y-6">
+      <div className="px-4 sm:px-6 space-y-6">
       <div className="flex flex-col gap-4">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>

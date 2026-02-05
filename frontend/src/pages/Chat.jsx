@@ -56,7 +56,7 @@ function MessageBubble({ message, isLast }) {
   };
 
   return (
-    <div className={`flex gap-3 ${isUser ? 'flex-row-reverse' : ''} ${isLast ? 'animate-fade-up' : ''}`}>
+    <div className={`flex gap-3 ${isUser ? 'flex-row-reverse justify-start' : 'justify-start'} ${isLast ? 'animate-fade-up' : ''}`}>
       <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
         isUser ? 'bg-primary' : 'bg-muted'
       }`}>
@@ -66,7 +66,7 @@ function MessageBubble({ message, isLast }) {
           <Logo className="w-4 h-4 text-muted-foreground" />
         )}
       </div>
-      <div className={`max-w-[85%] rounded-2xl px-4 py-3 min-w-[200px] ${
+      <div className={`max-w-[75%] rounded-2xl px-4 py-3 min-w-[200px] ${
         isUser
           ? 'bg-primary text-primary-foreground rounded-br-md'
           : 'bg-card border border-border rounded-bl-md'

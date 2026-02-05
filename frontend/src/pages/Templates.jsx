@@ -160,7 +160,7 @@ export default function Templates() {
 
   return (
     <div className="space-y-6 animate-fade-in pb-10">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 space-y-6">
+      <div className="px-4 sm:px-6 space-y-6">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border/50 pb-6">
         <div>
