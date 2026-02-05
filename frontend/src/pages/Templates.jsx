@@ -282,29 +282,29 @@ export default function Templates() {
             </div>
 
             {/* Compact Actions Footer */}
-            <div className="flex items-center justify-between p-3 border-t border-border/50 bg-muted/5 mt-auto">
+            <div className="flex items-center justify-between p-3.5 border-t border-border/50 bg-muted/5 mt-auto">
               <div className="flex items-center gap-2">
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     useTemplate(template);
                   }}
-                  className="h-7 px-3 rounded-md text-[10px] font-bold bg-foreground text-background hover:bg-foreground/90 transition-all active:scale-95"
+                  className="h-7.5 px-3 rounded-md text-[10.5px] font-bold bg-foreground text-background hover:bg-foreground/90 transition-all active:scale-[0.97] shadow-sm flex items-center justify-center"
                 >
-                  Use
+                  Use Template
                 </button>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     setPreviewTemplate(template);
                   }}
-                  className="h-7 px-2.5 rounded-md text-[10px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-all"
+                  className="h-7.5 px-3 rounded-md text-[10.5px] font-medium border border-border bg-background text-muted-foreground hover:text-foreground hover:bg-accent transition-all active:scale-[0.97] flex items-center justify-center"
                 >
                   Preview
                 </button>
               </div>
               
-              <Badge variant="outline" className="text-[8px] px-1.5 py-0 h-3.5 font-bold border-border/50 opacity-60">
+              <Badge variant="outline" className="text-[8.5px] px-1.5 py-0 h-4 font-bold border-border/50 opacity-60 tracking-tight">
                 {template.executionStrategy === 'multi-agent-consensus' ? 'MULTI' : 'SINGLE'}
               </Badge>
             </div>
