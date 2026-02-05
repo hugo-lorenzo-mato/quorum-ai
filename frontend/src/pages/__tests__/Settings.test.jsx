@@ -56,22 +56,19 @@ describe('Settings', () => {
     render(<Settings />);
 
     expect(screen.getByText('Settings')).toBeInTheDocument();
-    expect(screen.getByText(/Configure Quorum/i)).toBeInTheDocument();
+    expect(screen.getByText(/Manage your global configuration and preferences/i)).toBeInTheDocument();
   });
 
   it('renders all tabs', () => {
     render(<Settings />);
 
-    // Use getAllByRole to find tab buttons specifically
-    const tabs = screen.getAllByRole('tab');
-    const tabNames = tabs.map(tab => tab.textContent);
-
-    expect(tabNames).toContain('General');
-    expect(tabNames).toContain('Workflow');
-    expect(tabNames).toContain('Agents');
-    expect(tabNames).toContain('Phases');
-    expect(tabNames).toContain('Git');
-    expect(tabNames).toContain('Advanced');
+    expect(screen.getByText('General')).toBeInTheDocument();
+    expect(screen.getByText('Workflow Defaults')).toBeInTheDocument();
+    expect(screen.getByText('Agents & Models')).toBeInTheDocument();
+    expect(screen.getByText('Execution Phases')).toBeInTheDocument();
+    expect(screen.getByText('Git Integration')).toBeInTheDocument();
+    expect(screen.getByText('Issue Generation')).toBeInTheDocument();
+    expect(screen.getByText('Advanced')).toBeInTheDocument();
   });
 
   it('loads config on mount', () => {

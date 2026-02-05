@@ -60,7 +60,6 @@ export default function IssuesPanel({ workflow }) {
     loadIssues,
     startGeneration,
     updateGenerationProgress,
-    finishGeneration,
     cancelGeneration,
   } = useIssuesStore();
 
@@ -163,7 +162,6 @@ export default function IssuesPanel({ workflow }) {
     loadIssues,
     startGeneration,
     updateGenerationProgress,
-    finishGeneration,
     cancelGeneration,
     navigate,
     notifyError,

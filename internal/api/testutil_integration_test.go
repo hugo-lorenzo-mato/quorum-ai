@@ -458,6 +458,10 @@ func (m *threadSafeMockStateManager) UpdateWorkflowHeartbeat(_ context.Context, 
 	return m.UpdateHeartbeat(context.Background(), id)
 }
 
+func (m *threadSafeMockStateManager) FindWorkflowsByPrompt(_ context.Context, _ string) ([]core.DuplicateWorkflowInfo, error) {
+	return nil, nil
+}
+
 func (m *threadSafeMockStateManager) ExecuteAtomically(_ context.Context, fn func(core.AtomicStateContext) error) error {
 	// For testing, just execute the function with a mock atomic context
 	return fn(&mockAtomicStateContextIntegration{sm: m})

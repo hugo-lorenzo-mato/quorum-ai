@@ -97,7 +97,7 @@ func TestIntegration_SSE_ReceivesWorkflowEvents(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Publish an event directly to the event bus
-	ts.eventBus.Publish(events.NewWorkflowStartedEvent("wf-test", "test prompt"))
+	ts.eventBus.Publish(events.NewWorkflowStartedEvent("wf-test", "", "test prompt"))
 
 	// Wait for the event to arrive via SSE
 	if !sseClient.waitForEvent("workflow_started", 2*time.Second) {

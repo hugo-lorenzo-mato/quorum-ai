@@ -202,13 +202,14 @@ export default function Layout({ children }) {
         setSidebarOpen(false);
       }
     };
-    
-    // Initial check handled by store persistence mostly, but good to be safe if we want it closed
-    // We won't force close on mount to respect user preference if they reloaded, 
-    // but typically mobile sidebars start closed.
-    
-    return () => {};
-  }, []);
+
+    window.addEventListener('resize', handleResize);
+    handleResize();
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [sidebarOpen, setSidebarOpen]);
 
   useEffect(() => {
     if (window.innerWidth < 768) {

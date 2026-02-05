@@ -1,13 +1,11 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { workflowTemplates, templateCategories } from '../data/workflowTemplates';
-import { Card, CardHeader, CardTitle, CardDescription } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { Input } from '../components/ui/Input';
 import {
   Search,
-  Sparkles,
   X,
   BarChart3,
   Trash2,
@@ -41,7 +39,6 @@ import {
   Shuffle,
   Zap,
   Activity,
-  ChevronRight,
   Info,
   Terminal
 } from 'lucide-react';
@@ -156,7 +153,7 @@ function TemplateCard({ template, onUse, onPreview }) {
 export default function Templates() {
   const navigate = useNavigate(); const [selectedCategory, setSelectedCategory] = useState('All'); const [searchQuery, setSearchQuery] = useState(''); const [previewTemplate, setPreviewTemplate] = useState(null);
   const filteredTemplates = useMemo(() => workflowTemplates.filter((t) => (selectedCategory === 'All' || t.category === selectedCategory) && (!searchQuery || t.name.toLowerCase().includes(searchQuery.toLowerCase()) || t.description.toLowerCase().includes(searchQuery.toLowerCase()) || t.tags.some((tag) => tag.toLowerCase().includes(searchQuery.toLowerCase())))), [selectedCategory, searchQuery]);
-  const useTemplate = (t) => navigate('/workflows/new', { state: { template: { prompt: t.prompt, executionStrategy: t.executionStrategy, name: t.name } } });
+  const handleUseTemplate = (t) => navigate('/workflows/new', { state: { template: { prompt: t.prompt, executionStrategy: t.executionStrategy, name: t.name } } });
 
   return (
     <div className="space-y-6 animate-fade-in pb-10">
@@ -196,7 +193,7 @@ export default function Templates() {
 
       {filteredTemplates.length > 0 ? (
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {filteredTemplates.map((t) => <TemplateCard key={t.id} template={t} onUse={useTemplate} onPreview={setPreviewTemplate} />)}
+          {filteredTemplates.map((t) => <TemplateCard key={t.id} template={t} onUse={handleUseTemplate} onPreview={setPreviewTemplate} />)}
         </div>
       ) : (
         <div className="text-center py-24 opacity-40">
@@ -204,7 +201,7 @@ export default function Templates() {
           <p className="text-lg font-medium">No blueprints found</p>
         </div>
       )}
-      {previewTemplate && <TemplatePreviewModal template={previewTemplate} onClose={() => setPreviewTemplate(null)} onUseTemplate={(t) => { setPreviewTemplate(null); useTemplate(t); }} />}
+      {previewTemplate && <TemplatePreviewModal template={previewTemplate} onClose={() => setPreviewTemplate(null)} onUseTemplate={(t) => { setPreviewTemplate(null); handleUseTemplate(t); }} />}
       </div>
     </div>
   );

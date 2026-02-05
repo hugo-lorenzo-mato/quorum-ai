@@ -275,8 +275,9 @@ export default function Settings() {
         <main className={`flex-1 overflow-y-auto bg-background p-4 sm:p-8 ${mobileView === 'content' ? 'block' : 'hidden md:block'}`}>
           <div className="space-y-6 pb-24">
             {isLoading && !config ? (
-              <div className="flex items-center justify-center py-12">
+              <div className="flex items-center justify-center py-12" role="status" aria-live="polite">
                 <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                <span className="sr-only">Loading settings</span>
               </div>
             ) : error ? (
               <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-xl text-destructive flex items-center justify-between">

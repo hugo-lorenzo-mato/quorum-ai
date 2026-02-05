@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
@@ -15,6 +16,7 @@ type Loader struct {
 	v          *viper.Viper
 	configFile string
 	envPrefix  string
+	mu         sync.Mutex // Protects concurrent access to viper operations
 }
 
 // NewLoader creates a new configuration loader.
@@ -60,6 +62,10 @@ func (l *Loader) Viper() *viper.Viper {
 // 5. User config (~/.config/quorum/config.yaml)
 // 6. Defaults
 func (l *Loader) Load() (*Config, error) {
+	// Lock to prevent concurrent map writes in viper
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
 	// Set defaults first
 	l.setDefaults()
 

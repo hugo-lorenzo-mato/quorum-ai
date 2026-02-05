@@ -1,4 +1,4 @@
-import { FileText, Circle, Plus, Filter } from 'lucide-react';
+import { FileText, Plus, Filter } from 'lucide-react';
 
 /**
  * Sidebar listing all issues (main + sub).
