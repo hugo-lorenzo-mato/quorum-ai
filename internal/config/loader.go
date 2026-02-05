@@ -122,7 +122,75 @@ func (l *Loader) Load() (*Config, error) {
 		return nil, fmt.Errorf("unmarshaling config: %w", err)
 	}
 
+	// Resolve all relative paths to absolute paths
+	// Use the project root (parent of .quorum/) as the base for relative paths
+	projectDir := ""
+	if configPath := l.v.ConfigFileUsed(); configPath != "" {
+		absConfigPath, err := filepath.Abs(configPath)
+		if err == nil {
+			configDir := filepath.Dir(absConfigPath)
+			// If config is in .quorum/ directory, use its parent as project root
+			// e.g., /project/.quorum/config.yaml -> /project/
+			if filepath.Base(configDir) == ".quorum" {
+				projectDir = filepath.Dir(configDir)
+			} else {
+				// Legacy .quorum.yaml in project root
+				projectDir = configDir
+			}
+		}
+	}
+	// If no config file found, fall back to current working directory
+	if projectDir == "" {
+		projectDir, _ = os.Getwd()
+	}
+	l.resolveAbsolutePaths(&cfg, projectDir)
+
 	return &cfg, nil
+}
+
+// resolveAbsolutePaths converts all relative paths in the config to absolute paths.
+// Relative paths are resolved relative to baseDir (typically the config file's directory).
+// This prevents issues when quorum is executed from different working directories.
+func (l *Loader) resolveAbsolutePaths(cfg *Config, baseDir string) {
+	// State paths
+	if cfg.State.Path != "" {
+		cfg.State.Path = resolvePathRelativeTo(cfg.State.Path, baseDir)
+	}
+	if cfg.State.BackupPath != "" {
+		cfg.State.BackupPath = resolvePathRelativeTo(cfg.State.BackupPath, baseDir)
+	}
+
+	// Trace directory
+	if cfg.Trace.Dir != "" {
+		cfg.Trace.Dir = resolvePathRelativeTo(cfg.Trace.Dir, baseDir)
+	}
+
+	// Report base directory
+	if cfg.Report.BaseDir != "" {
+		cfg.Report.BaseDir = resolvePathRelativeTo(cfg.Report.BaseDir, baseDir)
+	}
+
+	// Diagnostics crash dump directory
+	if cfg.Diagnostics.CrashDump.Dir != "" {
+		cfg.Diagnostics.CrashDump.Dir = resolvePathRelativeTo(cfg.Diagnostics.CrashDump.Dir, baseDir)
+	}
+
+	// Git worktree directory
+	if cfg.Git.Worktree.Dir != "" {
+		cfg.Git.Worktree.Dir = resolvePathRelativeTo(cfg.Git.Worktree.Dir, baseDir)
+	}
+}
+
+// resolvePathRelativeTo converts a relative path to an absolute path using baseDir as the base.
+// If the path is already absolute, it is returned unchanged.
+// Example: resolvePathRelativeTo(".quorum/state.db", "/home/user/project")
+//
+//	→ "/home/user/project/.quorum/state.db"
+func resolvePathRelativeTo(path, baseDir string) string {
+	if filepath.IsAbs(path) {
+		return path
+	}
+	return filepath.Join(baseDir, path)
 }
 
 func loadNormalizedConfigMap(path string) (map[string]interface{}, error) {

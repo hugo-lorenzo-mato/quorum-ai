@@ -102,6 +102,7 @@ func runServe(_ *cobra.Command, _ []string) error {
 		if statePath == "" {
 			statePath = ".quorum/state/state.json"
 		}
+		// Path is already resolved to absolute by config loader
 		backend := quorumCfg.State.EffectiveBackend()
 		sm, err := state.NewStateManager(backend, statePath)
 		if err != nil {
@@ -118,9 +119,9 @@ func runServe(_ *cobra.Command, _ []string) error {
 		backend := quorumCfg.State.EffectiveBackend()
 		var chatPath string
 		if backend == "sqlite" {
-			chatPath = filepath.Join(".quorum", "chat.db")
+			chatPath = filepath.Join(filepath.Dir(quorumCfg.State.Path), "chat.db")
 		} else {
-			chatPath = filepath.Join(".quorum", "chat")
+			chatPath = filepath.Join(filepath.Dir(quorumCfg.State.Path), "chat")
 		}
 		cs, err := chat.NewChatStore(backend, chatPath)
 		if err != nil {
