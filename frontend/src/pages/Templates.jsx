@@ -148,13 +148,13 @@ function TemplatePreviewModal({ template, onClose, onUseTemplate }) {
         <div className="flex justify-end items-center gap-3 p-6 border-t border-border/50 bg-muted/5">
           <button
             onClick={onClose}
-            className="h-9 px-4 rounded-md text-sm font-medium border border-border bg-background hover:bg-accent hover:text-foreground transition-all active:scale-[0.98]"
+            className="h-9 px-4 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-all"
           >
             Cancel
           </button>
           <button
             onClick={() => onUseTemplate(template)}
-            className="h-9 px-5 rounded-md text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-all shadow-md active:scale-[0.98]"
+            className="h-9 px-5 rounded-md text-sm font-medium bg-foreground text-background hover:bg-foreground/90 transition-all shadow-sm active:scale-[0.98]"
           >
             Use This Template
           </button>
@@ -243,72 +243,63 @@ export default function Templates() {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {filteredTemplates.map((template) => (
           <div 
-            key={template.id} 
-            className="group relative flex flex-col rounded-xl border border-border/50 bg-gradient-to-br from-card via-card to-card backdrop-blur-sm shadow-sm transition-all duration-300 hover:shadow-lg hover:border-primary/30 hover:-translate-y-0.5 overflow-hidden"
+            key={template.id}
+            onClick={() => useTemplate(template)}
+            className="group relative flex flex-col rounded-xl border border-border bg-card cursor-pointer transition-all duration-200 hover:border-primary/50 hover:shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:hover:shadow-[0_8px_30px_rgb(0,0,0,0.2)] overflow-hidden"
           >
-            {/* Top accent line */}
-            <div className="absolute top-0 left-4 right-4 h-0.5 rounded-full bg-gradient-to-r from-transparent via-primary to-transparent" />
+            {/* Discrete Preview Action */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setPreviewTemplate(template);
+              }}
+              className="absolute top-3 right-3 z-10 p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent opacity-0 group-hover:opacity-100 transition-all duration-200"
+              title="Preview template"
+            >
+              <Globe className="w-4 h-4" />
+            </button>
 
             <div className="flex-1 p-5">
               <div className="flex items-start gap-4 mb-4">
-                <div className="p-2.5 rounded-xl bg-primary/5 border border-primary/10 text-primary/70 group-hover:text-primary group-hover:bg-primary/10 transition-all duration-300 transform group-hover:scale-110">
-                  <TemplateIcon name={template.icon} className="w-6 h-6" />
+                <div className="p-2.5 rounded-lg bg-muted/50 text-muted-foreground group-hover:text-primary group-hover:bg-primary/5 transition-colors duration-200">
+                  <TemplateIcon name={template.icon} className="w-5 h-5" />
                 </div>
-                <div className="flex-1 min-w-0">
-                  <h3 className="text-base font-semibold text-foreground leading-snug line-clamp-2 group-hover:text-primary transition-colors">
+                <div className="flex-1 min-w-0 pr-6">
+                  <h3 className="text-sm font-semibold text-foreground leading-snug line-clamp-2 group-hover:text-primary transition-colors">
                     {template.name}
                   </h3>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70 bg-muted/30 px-1.5 py-0.5 rounded">
-                      {template.category}
-                    </span>
-                  </div>
+                  <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/50 mt-1">
+                    {template.category}
+                  </p>
                 </div>
               </div>
 
-              <p className="text-sm text-muted-foreground line-clamp-3 leading-relaxed mb-4">
+              <p className="text-xs text-muted-foreground line-clamp-3 leading-relaxed mb-6">
                 {template.description}
               </p>
 
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge 
-                  variant={template.executionStrategy === 'multi-agent-consensus' ? 'default' : 'outline'}
-                  className="text-[10px] py-0 h-5"
-                >
-                  {template.executionStrategy === 'multi-agent-consensus' ? (
-                    <span className="inline-flex items-center gap-1">
-                      <Network className="w-2.5 h-2.5" />
-                      Multi-Agent
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1">
-                      <Zap className="w-2.5 h-2.5" />
-                      Single-Agent
-                    </span>
-                  )}
-                </Badge>
-                {template.tags.slice(0, 2).map((tag) => (
-                  <Badge key={tag} variant="secondary" className="text-[10px] py-0 h-5">
-                    {tag}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Badge 
+                    variant={template.executionStrategy === 'multi-agent-consensus' ? 'default' : 'outline'}
+                    className="text-[9px] px-1.5 py-0 h-4 uppercase font-bold tracking-tighter"
+                  >
+                    {template.executionStrategy === 'multi-agent-consensus' ? 'Multi' : 'Single'}
                   </Badge>
-                ))}
+                  <div className="flex gap-1">
+                    {template.tags.slice(0, 1).map((tag) => (
+                      <span key={tag} className="text-[10px] text-muted-foreground/60 bg-muted/30 px-1.5 py-0.5 rounded">
+                        #{tag}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                
+                <div className="flex items-center gap-1 text-[11px] font-medium text-primary opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300">
+                  <span>Use</span>
+                  <Zap className="w-3 h-3 fill-current" />
+                </div>
               </div>
-            </div>
-
-            {/* Actions */}
-            <div className="flex items-center gap-2 p-3 border-t border-border/30 bg-muted/5">
-              <button
-                onClick={() => useTemplate(template)} 
-                className="flex-1 inline-flex items-center justify-center h-9 px-4 rounded-md text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-all shadow-sm active:scale-[0.98]"
-              >
-                Use Template
-              </button>
-              <button
-                onClick={() => setPreviewTemplate(template)}
-                className="inline-flex items-center justify-center h-9 px-4 rounded-md text-xs font-medium border border-border bg-background hover:bg-accent hover:text-foreground transition-all active:scale-[0.98]"
-              >
-                Preview
-              </button>
             </div>
           </div>
         ))}
