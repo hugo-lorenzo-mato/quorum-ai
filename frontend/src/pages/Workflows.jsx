@@ -38,6 +38,7 @@ import {
   FileText,
   Network,
   LayoutList,
+  Layers,
   FolderTree,
   Filter,
   Sparkles,
