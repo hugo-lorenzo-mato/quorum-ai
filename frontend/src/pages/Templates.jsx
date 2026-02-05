@@ -117,14 +117,14 @@ function TemplatePreviewModal({ template, onClose, onUseTemplate }) {
 function TemplateCard({ template, onUse, onPreview }) {
   return (
     <div
-      className={`group flex flex-col h-full rounded-xl border border-border bg-card p-3 transition-all hover:border-primary/30 hover:shadow-lg animate-fade-up`}
+      className={`group flex flex-col h-full rounded-xl border border-border bg-card p-3 transition-all duration-300 hover:border-primary/50 hover:shadow-2xl hover:shadow-primary/10 hover:-translate-y-1 hover:scale-[1.02] animate-fade-up`}
     >
       <div className="flex-1 space-y-3 cursor-pointer" onClick={() => onPreview(template)}>
         <div className="flex items-start justify-between">
-          <div className="p-2 rounded-lg bg-primary/10 text-primary">
+          <div className="p-2 rounded-lg bg-primary/10 text-primary group-hover:bg-primary/20 group-hover:scale-110 transition-all duration-300">
             <TemplateIcon name={template.icon} className="h-4 w-4" />
           </div>
-          <Badge variant="outline" className="text-[9px] uppercase tracking-widest font-black opacity-60">
+          <Badge variant="outline" className="text-[9px] uppercase tracking-widest font-black opacity-60 group-hover:opacity-100 transition-opacity">
             {template.executionStrategy === 'multi-agent-consensus' ? 'Consensus' : 'Direct'}
           </Badge>
         </div>

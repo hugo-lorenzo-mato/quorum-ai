@@ -146,7 +146,7 @@ function WorkflowCard({ workflow, onClick, onDelete }) {
   return (
     <div
       onClick={onClick}
-      className="relative w-full text-left p-4 rounded-xl border border-border bg-card hover:border-muted-foreground/30 hover:shadow-md transition-all group cursor-pointer"
+      className="relative w-full text-left p-4 rounded-xl border border-border bg-card hover:border-primary/40 hover:shadow-xl hover:shadow-primary/5 hover:-translate-y-1 hover:scale-[1.02] transition-all duration-300 group cursor-pointer"
     >
       <div className="flex items-start justify-between gap-2 mb-3">
         <div className="flex-1 min-w-0">
