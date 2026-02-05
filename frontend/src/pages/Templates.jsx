@@ -148,13 +148,13 @@ function TemplatePreviewModal({ template, onClose, onUseTemplate }) {
         <div className="flex justify-end items-center gap-3 p-6 border-t border-border/50 bg-muted/5">
           <button
             onClick={onClose}
-            className="h-10 px-5 rounded-lg text-sm font-medium border border-border bg-background hover:bg-accent hover:text-foreground transition-all"
+            className="h-9 px-4 rounded-md text-sm font-medium border border-border bg-background hover:bg-accent hover:text-foreground transition-all active:scale-[0.98]"
           >
             Cancel
           </button>
           <button
             onClick={() => onUseTemplate(template)}
-            className="h-10 px-6 rounded-lg text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-all shadow-md active:scale-95"
+            className="h-9 px-5 rounded-md text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-all shadow-md active:scale-[0.98]"
           >
             Use This Template
           </button>
@@ -299,13 +299,13 @@ export default function Templates() {
             <div className="flex items-center gap-2 p-3 border-t border-border/30 bg-muted/5">
               <button
                 onClick={() => useTemplate(template)} 
-                className="flex-1 inline-flex items-center justify-center h-8 px-3 rounded-lg text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-sm"
+                className="flex-1 inline-flex items-center justify-center h-9 px-4 rounded-md text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-all shadow-sm active:scale-[0.98]"
               >
                 Use Template
               </button>
               <button
                 onClick={() => setPreviewTemplate(template)}
-                className="inline-flex items-center justify-center h-8 px-3 rounded-lg text-xs font-medium border border-border bg-background hover:bg-accent hover:text-foreground transition-all"
+                className="inline-flex items-center justify-center h-9 px-4 rounded-md text-xs font-medium border border-border bg-background hover:bg-accent hover:text-foreground transition-all active:scale-[0.98]"
               >
                 Preview
               </button>
