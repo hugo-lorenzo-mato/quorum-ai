@@ -528,13 +528,17 @@ func TestEngine_HandleWorkflowCompleted(t *testing.T) {
 		Logger:       testLogger(),
 	})
 
-	// Set as current workflow
+	// Set as current workflow with project context
 	wfID := "wf-complete"
-	engine.currentWfID.Store(&wfID)
+	projectID := "default"
+	engine.currentExe.Store(&currentExecution{
+		WorkflowID: wfID,
+		ProjectID:  projectID,
+	})
 
 	// Handle completion
 	ctx := context.Background()
-	engine.handleWorkflowCompleted(ctx, wfID)
+	engine.handleWorkflowCompletedForProject(ctx, wfID, projectID)
 
 	// Verify workflow moved to to_verify
 	if stateMgr.UpdateCallCount() == 0 {
@@ -570,10 +574,14 @@ func TestEngine_HandleWorkflowFailed(t *testing.T) {
 	})
 
 	wfID := "wf-fail"
-	engine.currentWfID.Store(&wfID)
+	projectID := "default"
+	engine.currentExe.Store(&currentExecution{
+		WorkflowID: wfID,
+		ProjectID:  projectID,
+	})
 
 	ctx := context.Background()
-	engine.handleWorkflowFailed(ctx, wfID, "test error")
+	engine.handleWorkflowFailedForProject(ctx, wfID, projectID, "test error")
 
 	// Verify workflow moved to refinement
 	storedWf := stateMgr.workflows[wfID]
@@ -616,10 +624,14 @@ func TestEngine_CircuitBreakerTrips(t *testing.T) {
 	engine.enabled.Store(true)
 
 	wfID := "wf-trip"
-	engine.currentWfID.Store(&wfID)
+	projectID := "default"
+	engine.currentExe.Store(&currentExecution{
+		WorkflowID: wfID,
+		ProjectID:  projectID,
+	})
 
 	// This failure should trip the breaker
-	engine.handleWorkflowFailed(ctx, wfID, "second failure")
+	engine.handleWorkflowFailedForProject(ctx, wfID, projectID, "second failure")
 
 	if !engine.circuitBreaker.IsOpen() {
 		t.Error("circuit breaker should be open")

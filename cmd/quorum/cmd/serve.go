@@ -241,23 +241,6 @@ func runServe(_ *cobra.Command, _ []string) error {
 		logger.Info("workflow executor initialized for Kanban engine")
 	}
 
-	// Create Kanban engine if we have the required dependencies
-	var kanbanEngine *kanban.Engine
-	if workflowExecutor != nil && stateManager != nil {
-		// Check if state manager implements KanbanStateManager
-		if kanbanSM, ok := stateManager.(kanban.KanbanStateManager); ok {
-			kanbanEngine = kanban.NewEngine(kanban.EngineConfig{
-				Executor:     workflowExecutor,
-				StateManager: kanbanSM,
-				EventBus:     eventBus,
-				Logger:       logger.Logger,
-			})
-			logger.Info("Kanban engine initialized")
-		} else {
-			logger.Warn("state manager does not implement KanbanStateManager, Kanban engine disabled")
-		}
-	}
-
 	// Create project registry for multi-project support
 	var projectRegistry project.Registry
 	projectReg, err := project.NewFileRegistry(project.WithLogger(logger.Logger))
@@ -280,6 +263,37 @@ func runServe(_ *cobra.Command, _ []string) error {
 		)
 		logger.Info("state pool initialized for multi-project support")
 		defer statePool.Close()
+	}
+
+	// Create Kanban engine if we have the required dependencies
+	// This must be after StatePool is created so we can use multi-project mode
+	var kanbanEngine *kanban.Engine
+	if workflowExecutor != nil {
+		engineCfg := kanban.EngineConfig{
+			Executor: workflowExecutor,
+			EventBus: eventBus,
+			Logger:   logger.Logger,
+		}
+
+		// Prefer multi-project mode if StatePool and Registry are available
+		if statePool != nil && projectRegistry != nil {
+			engineCfg.ProjectProvider = api.NewKanbanStatePoolProvider(statePool, projectRegistry)
+			logger.Info("Kanban engine using multi-project mode")
+		} else if stateManager != nil {
+			// Fall back to single-project mode (legacy)
+			if kanbanSM, ok := stateManager.(kanban.KanbanStateManager); ok {
+				engineCfg.StateManager = kanbanSM
+				logger.Info("Kanban engine using single-project mode (legacy)")
+			} else {
+				logger.Warn("state manager does not implement KanbanStateManager, Kanban engine disabled")
+			}
+		}
+
+		// Only create engine if we have a way to access state
+		if engineCfg.ProjectProvider != nil || engineCfg.StateManager != nil {
+			kanbanEngine = kanban.NewEngine(engineCfg)
+			logger.Info("Kanban engine initialized")
+		}
 	}
 
 	// Create server options

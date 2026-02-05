@@ -61,16 +61,25 @@ type KanbanStateManager interface {
 	SaveKanbanEngineState(ctx context.Context, state *KanbanEngineState) error
 }
 
+// currentExecution tracks the currently executing workflow and its project.
+type currentExecution struct {
+	WorkflowID string
+	ProjectID  string
+}
+
 // Engine is the Kanban execution engine that processes workflows sequentially.
 type Engine struct {
-	executor       WorkflowExecutor
-	stateManager   KanbanStateManager
-	eventBus       *events.EventBus
-	circuitBreaker *CircuitBreaker
-	logger         *slog.Logger
+	executor        WorkflowExecutor
+	projectProvider ProjectStateProvider
+	globalEventBus  *events.EventBus
+	circuitBreaker  *CircuitBreaker
+	logger          *slog.Logger
 
-	enabled     atomic.Bool
-	currentWfID atomic.Value // *string
+	// Legacy single-project mode (for backward compatibility)
+	legacyStateManager KanbanStateManager
+
+	enabled    atomic.Bool
+	currentExe atomic.Value // *currentExecution
 
 	stopCh       chan struct{}
 	doneCh       chan struct{}
@@ -83,8 +92,12 @@ type Engine struct {
 // EngineConfig holds configuration for the Engine.
 type EngineConfig struct {
 	Executor     WorkflowExecutor
-	StateManager KanbanStateManager
-	EventBus     *events.EventBus
+	StateManager KanbanStateManager // Legacy: single StateManager (deprecated, use ProjectProvider)
+	EventBus     *events.EventBus   // Global event bus for subscriptions
+
+	// Multi-project support
+	ProjectProvider ProjectStateProvider // Provider for project-scoped StateManagers
+
 	Logger       *slog.Logger
 	TickInterval time.Duration
 }
@@ -96,24 +109,35 @@ func NewEngine(cfg EngineConfig) *Engine {
 	}
 
 	e := &Engine{
-		executor:       cfg.Executor,
-		stateManager:   cfg.StateManager,
-		eventBus:       cfg.EventBus,
-		circuitBreaker: NewCircuitBreaker(DefaultCircuitBreakerThreshold),
-		logger:         cfg.Logger,
-		tickInterval:   cfg.TickInterval,
-		tickerFactory:  time.NewTicker,
+		executor:           cfg.Executor,
+		projectProvider:    cfg.ProjectProvider,
+		globalEventBus:     cfg.EventBus,
+		legacyStateManager: cfg.StateManager,
+		circuitBreaker:     NewCircuitBreaker(DefaultCircuitBreakerThreshold),
+		logger:             cfg.Logger,
+		tickInterval:       cfg.TickInterval,
+		tickerFactory:      time.NewTicker,
 	}
 
-	e.currentWfID.Store((*string)(nil))
+	// If no ProjectProvider but we have a legacy StateManager, create a single-project provider
+	if e.projectProvider == nil && e.legacyStateManager != nil {
+		e.projectProvider = NewSingleProjectProvider(e.legacyStateManager, cfg.EventBus)
+		e.logger.Info("kanban engine using single-project mode (legacy)")
+	}
+
+	e.currentExe.Store((*currentExecution)(nil))
 	return e
 }
 
 // Start begins the engine loop.
 func (e *Engine) Start(ctx context.Context) error {
-	// Load persisted state
+	if e.projectProvider == nil {
+		return fmt.Errorf("no project provider configured")
+	}
+
+	// Load persisted state (uses legacy state manager if available)
 	if err := e.loadState(ctx); err != nil {
-		return fmt.Errorf("load engine state: %w", err)
+		e.logger.Warn("failed to load engine state, starting fresh", "error", err)
 	}
 
 	// Recover any interrupted workflow
@@ -125,7 +149,7 @@ func (e *Engine) Start(ctx context.Context) error {
 	e.stopCh = make(chan struct{})
 	e.doneCh = make(chan struct{})
 
-	// Subscribe to workflow events
+	// Subscribe to workflow events from global event bus
 	eventTypes := []string{
 		events.TypeWorkflowCompleted,
 		events.TypeWorkflowFailed,
@@ -133,7 +157,7 @@ func (e *Engine) Start(ctx context.Context) error {
 
 	go e.runLoop(ctx, eventTypes)
 
-	e.logger.Info("kanban engine started")
+	e.logger.Info("kanban engine started", "multi_project", e.projectProvider != nil)
 	return nil
 }
 
@@ -144,18 +168,19 @@ func (e *Engine) runLoop(ctx context.Context, eventTypes []string) {
 	ticker := e.tickerFactory(e.tickInterval)
 	defer ticker.Stop()
 
-	// Subscribe to workflow events
-	eventCh := e.eventBus.Subscribe(eventTypes...)
-	defer e.eventBus.Unsubscribe(eventCh)
+	// Subscribe to workflow events from global event bus
+	eventCh := e.globalEventBus.Subscribe(eventTypes...)
+	defer e.globalEventBus.Unsubscribe(eventCh)
 
 	for {
 		select {
 		case <-e.stopCh:
 			e.logger.Info("kanban engine stopping")
 			// Wait for current workflow if running
-			if wfID := e.getCurrentWorkflowID(); wfID != nil {
-				e.logger.Info("waiting for current workflow to complete", "workflow_id", *wfID)
-				e.waitForWorkflowCompletion(ctx, eventCh, *wfID)
+			if exe := e.getCurrentExecution(); exe != nil {
+				e.logger.Info("waiting for current workflow to complete",
+					"workflow_id", exe.WorkflowID, "project_id", exe.ProjectID)
+				e.waitForWorkflowCompletion(ctx, eventCh, exe.WorkflowID)
 			}
 			return
 
@@ -177,26 +202,49 @@ func (e *Engine) tick(ctx context.Context) {
 	if e.circuitBreaker.IsOpen() {
 		return
 	}
-	if e.getCurrentWorkflowID() != nil {
-		return
+	if e.getCurrentExecution() != nil {
+		return // Already executing a workflow
 	}
 
-	// Get next workflow from To Do queue
-	workflow, err := e.stateManager.GetNextKanbanWorkflow(ctx)
+	// Get list of active projects
+	projects, err := e.projectProvider.ListActiveProjects(ctx)
 	if err != nil {
-		e.logger.Error("failed to get next kanban workflow", "error", err)
+		e.logger.Error("failed to list active projects", "error", err)
 		return
 	}
-	if workflow == nil {
-		return // Queue is empty
-	}
 
-	// Start execution
-	e.startExecution(ctx, workflow)
+	// Iterate over projects looking for a workflow to execute
+	for _, proj := range projects {
+		stateManager, err := e.projectProvider.GetProjectStateManager(ctx, proj.ID)
+		if err != nil {
+			e.logger.Warn("failed to get state manager for project",
+				"project_id", proj.ID, "error", err)
+			continue
+		}
+		if stateManager == nil {
+			continue
+		}
+
+		// Get next workflow from this project's To Do queue
+		workflow, err := stateManager.GetNextKanbanWorkflow(ctx)
+		if err != nil {
+			e.logger.Warn("failed to get next kanban workflow",
+				"project_id", proj.ID, "error", err)
+			continue
+		}
+		if workflow == nil {
+			continue // This project's queue is empty
+		}
+
+		// Found a workflow - start execution
+		e.startExecutionForProject(ctx, workflow, proj.ID, stateManager)
+		return // Only execute one workflow at a time
+	}
 }
 
-// startExecution moves a workflow to in_progress and starts execution.
-func (e *Engine) startExecution(ctx context.Context, workflow *core.WorkflowState) {
+// startExecutionForProject moves a workflow to in_progress and starts execution.
+// This is the project-aware version that uses project-specific StateManager.
+func (e *Engine) startExecutionForProject(ctx context.Context, workflow *core.WorkflowState, projectID string, stateManager KanbanStateManager) {
 	workflowID := string(workflow.WorkflowID)
 	fromColumn := workflow.KanbanColumn
 	if fromColumn == "" {
@@ -205,28 +253,34 @@ func (e *Engine) startExecution(ctx context.Context, workflow *core.WorkflowStat
 
 	e.logger.Info("starting kanban workflow execution",
 		"workflow_id", workflowID,
+		"project_id", projectID,
 		"title", workflow.Title,
 	)
 
-	// Move to in_progress
-	if err := e.stateManager.MoveWorkflow(ctx, workflowID, "in_progress", 0); err != nil {
-		e.logger.Error("failed to move workflow to in_progress", "error", err)
+	// Move to in_progress using project-specific StateManager
+	if err := stateManager.MoveWorkflow(ctx, workflowID, "in_progress", 0); err != nil {
+		e.logger.Error("failed to move workflow to in_progress",
+			"workflow_id", workflowID, "project_id", projectID, "error", err)
 		return
 	}
 
-	// Update current workflow
-	e.currentWfID.Store(&workflowID)
+	// Update current execution (workflow + project)
+	e.currentExe.Store(&currentExecution{
+		WorkflowID: workflowID,
+		ProjectID:  projectID,
+	})
 
 	// Update engine state in DB
 	if err := e.persistState(ctx); err != nil {
 		e.logger.Error("failed to persist engine state", "error", err)
 	}
 
-	// Emit event (projectID will be added when engine becomes project-aware)
-	e.eventBus.Publish(events.NewKanbanWorkflowMovedEvent(
-		workflowID, "", fromColumn, "in_progress", 0, false,
+	// Get project-specific EventBus for SSE events
+	projectEventBus := e.projectProvider.GetProjectEventBus(ctx, projectID)
+	e.publishEvent(projectEventBus, events.NewKanbanWorkflowMovedEvent(
+		workflowID, projectID, fromColumn, "in_progress", 0, false,
 	))
-	e.eventBus.Publish(events.NewKanbanExecutionStartedEvent(workflowID, "", 0))
+	e.publishEvent(projectEventBus, events.NewKanbanExecutionStartedEvent(workflowID, projectID, 0))
 
 	// Start workflow execution in background
 	go func() {
@@ -240,48 +294,69 @@ func (e *Engine) startExecution(ctx context.Context, workflow *core.WorkflowStat
 			// For early failures, we must handle state cleanup here because the executor
 			// won't publish a WorkflowFailedEvent. We detect early failures by checking
 			// if the executor immediately returned an error (like "already running", "not found", etc.)
-			e.logger.Error("workflow execution error", "workflow_id", workflowID, "error", err)
+			e.logger.Error("workflow execution error",
+				"workflow_id", workflowID, "project_id", projectID, "error", err)
 
 			// Handle early failure: update state directly since no event will be published
 			// This covers cases like validation errors, missing config, etc.
 			errMsg := err.Error()
-			e.handleWorkflowFailed(execCtx, workflowID, errMsg)
+			e.handleWorkflowFailedForProject(execCtx, workflowID, projectID, errMsg)
 		}
 		// Note: For successful async execution, WorkflowCompletedEvent/WorkflowFailedEvent
 		// will be published by the executor and handled in handleWorkflowEvent()
 	}()
 }
 
+// publishEvent publishes an event to the given EventBus (or global if nil).
+func (e *Engine) publishEvent(projectEventBus EventPublisher, event events.Event) {
+	if projectEventBus != nil {
+		projectEventBus.Publish(event)
+	}
+	// Also publish to global event bus for backward compatibility
+	if e.globalEventBus != nil {
+		e.globalEventBus.Publish(event)
+	}
+}
+
 // handleWorkflowEvent processes workflow completion/failure events.
 func (e *Engine) handleWorkflowEvent(ctx context.Context, event events.Event) {
-	currentWfID := e.getCurrentWorkflowID()
-	if currentWfID == nil {
+	currentExe := e.getCurrentExecution()
+	if currentExe == nil {
 		return // No current workflow, ignore event
 	}
 
-	if event.WorkflowID() != *currentWfID {
+	if event.WorkflowID() != currentExe.WorkflowID {
 		return // Not our workflow
 	}
 
 	switch evt := event.(type) {
 	case events.WorkflowCompletedEvent:
-		e.handleWorkflowCompleted(ctx, *currentWfID)
+		e.handleWorkflowCompletedForProject(ctx, currentExe.WorkflowID, currentExe.ProjectID)
 
 	case events.WorkflowFailedEvent:
 		errMsg := evt.Error
 		if errMsg == "" {
 			errMsg = "workflow failed"
 		}
-		e.handleWorkflowFailed(ctx, *currentWfID, errMsg)
+		e.handleWorkflowFailedForProject(ctx, currentExe.WorkflowID, currentExe.ProjectID, errMsg)
 	}
 }
 
-// handleWorkflowCompleted handles successful workflow completion.
-func (e *Engine) handleWorkflowCompleted(ctx context.Context, workflowID string) {
-	e.logger.Info("kanban workflow completed", "workflow_id", workflowID)
+// handleWorkflowCompletedForProject handles successful workflow completion with project context.
+func (e *Engine) handleWorkflowCompletedForProject(ctx context.Context, workflowID, projectID string) {
+	e.logger.Info("kanban workflow completed", "workflow_id", workflowID, "project_id", projectID)
+
+	// Get project-specific StateManager
+	stateManager, err := e.projectProvider.GetProjectStateManager(ctx, projectID)
+	if err != nil || stateManager == nil {
+		e.logger.Error("failed to get state manager for completed workflow",
+			"workflow_id", workflowID, "project_id", projectID, "error", err)
+		e.clearCurrentExecution(ctx)
+		return
+	}
 
 	// Load workflow to get branch info
-	workflow, err := e.stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
+	workflow, err := stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
 	if err != nil {
 		e.logger.Error("failed to load completed workflow", "error", err)
 	}
@@ -300,44 +375,51 @@ func (e *Engine) handleWorkflowCompleted(ctx context.Context, workflowID string)
 			"branch", workflow.WorkflowBranch)
 	}
 
-	// Move to to_verify
-	if err := e.stateManager.UpdateKanbanStatus(ctx, workflowID, "to_verify", prURL, prNumber, ""); err != nil {
+	// Move to to_verify using project-specific StateManager
+	if err := stateManager.UpdateKanbanStatus(ctx, workflowID, "to_verify", prURL, prNumber, ""); err != nil {
 		e.logger.Error("failed to move workflow to to_verify", "error", err)
 	}
 
 	// Reset circuit breaker on success
 	e.circuitBreaker.RecordSuccess()
 
-	// Clear current workflow
-	e.currentWfID.Store((*string)(nil))
+	// Clear current execution
+	e.clearCurrentExecution(ctx)
 
-	// Persist state
-	if err := e.persistState(ctx); err != nil {
-		e.logger.Error("failed to persist engine state", "error", err)
-	}
-
-	// Emit events (projectID will be added when engine becomes project-aware)
-	e.eventBus.Publish(events.NewKanbanWorkflowMovedEvent(
-		workflowID, "", "in_progress", "to_verify", 0, false,
+	// Get project-specific EventBus for SSE events
+	projectEventBus := e.projectProvider.GetProjectEventBus(ctx, projectID)
+	e.publishEvent(projectEventBus, events.NewKanbanWorkflowMovedEvent(
+		workflowID, projectID, "in_progress", "to_verify", 0, false,
 	))
-	e.eventBus.Publish(events.NewKanbanExecutionCompletedEvent(workflowID, "", prURL, prNumber))
+	e.publishEvent(projectEventBus, events.NewKanbanExecutionCompletedEvent(workflowID, projectID, prURL, prNumber))
 }
 
-// handleWorkflowFailed handles workflow failure.
-func (e *Engine) handleWorkflowFailed(ctx context.Context, workflowID, errMsg string) {
-	e.logger.Warn("kanban workflow failed", "workflow_id", workflowID, "error", errMsg)
+// handleWorkflowFailedForProject handles workflow failure with project context.
+func (e *Engine) handleWorkflowFailedForProject(ctx context.Context, workflowID, projectID, errMsg string) {
+	e.logger.Warn("kanban workflow failed", "workflow_id", workflowID, "project_id", projectID, "error", errMsg)
 
-	// Move to refinement
-	if err := e.stateManager.UpdateKanbanStatus(ctx, workflowID, "refinement", "", 0, errMsg); err != nil {
-		e.logger.Error("failed to move workflow to refinement", "error", err)
+	// Get project-specific StateManager
+	stateManager, err := e.projectProvider.GetProjectStateManager(ctx, projectID)
+	if err != nil || stateManager == nil {
+		e.logger.Error("failed to get state manager for failed workflow",
+			"workflow_id", workflowID, "project_id", projectID, "error", err)
+		// Continue with cleanup even if we can't update state
+	} else {
+		// Move to refinement using project-specific StateManager
+		if err := stateManager.UpdateKanbanStatus(ctx, workflowID, "refinement", "", 0, errMsg); err != nil {
+			e.logger.Error("failed to move workflow to refinement", "error", err)
+		}
 	}
 
 	// Record failure in circuit breaker
 	tripped := e.circuitBreaker.RecordFailure()
 	consecutiveFailures := e.circuitBreaker.ConsecutiveFailures()
 
-	// Clear current workflow
-	e.currentWfID.Store((*string)(nil))
+	// Clear current execution
+	e.clearCurrentExecution(ctx)
+
+	// Get project-specific EventBus for SSE events
+	projectEventBus := e.projectProvider.GetProjectEventBus(ctx, projectID)
 
 	// If circuit breaker tripped, disable engine
 	if tripped {
@@ -346,21 +428,24 @@ func (e *Engine) handleWorkflowFailed(ctx context.Context, workflowID, errMsg st
 		e.enabled.Store(false)
 
 		failures, _, lastFailure := e.circuitBreaker.GetState()
-		e.eventBus.Publish(events.NewKanbanCircuitBreakerOpenedEvent(
-			"", failures, e.circuitBreaker.Threshold(), lastFailure,
+		e.publishEvent(projectEventBus, events.NewKanbanCircuitBreakerOpenedEvent(
+			projectID, failures, e.circuitBreaker.Threshold(), lastFailure,
 		))
 	}
 
-	// Persist state
+	// Emit events
+	e.publishEvent(projectEventBus, events.NewKanbanWorkflowMovedEvent(
+		workflowID, projectID, "in_progress", "refinement", 0, false,
+	))
+	e.publishEvent(projectEventBus, events.NewKanbanExecutionFailedEvent(workflowID, projectID, errMsg, consecutiveFailures))
+}
+
+// clearCurrentExecution clears the current execution and persists state.
+func (e *Engine) clearCurrentExecution(ctx context.Context) {
+	e.currentExe.Store((*currentExecution)(nil))
 	if err := e.persistState(ctx); err != nil {
 		e.logger.Error("failed to persist engine state", "error", err)
 	}
-
-	// Emit events (projectID will be added when engine becomes project-aware)
-	e.eventBus.Publish(events.NewKanbanWorkflowMovedEvent(
-		workflowID, "", "in_progress", "refinement", 0, false,
-	))
-	e.eventBus.Publish(events.NewKanbanExecutionFailedEvent(workflowID, "", errMsg, consecutiveFailures))
 }
 
 // Stop gracefully stops the engine.
@@ -389,9 +474,11 @@ func (e *Engine) Enable(ctx context.Context) error {
 	}
 
 	currentWfID := e.getCurrentWorkflowID()
-	e.eventBus.Publish(events.NewKanbanEngineStateChangedEvent(
-		"", true, currentWfID, false,
-	))
+	if e.globalEventBus != nil {
+		e.globalEventBus.Publish(events.NewKanbanEngineStateChangedEvent(
+			"", true, currentWfID, false,
+		))
+	}
 
 	e.logger.Info("kanban engine enabled")
 	return nil
@@ -406,9 +493,11 @@ func (e *Engine) Disable(ctx context.Context) error {
 	}
 
 	currentWfID := e.getCurrentWorkflowID()
-	e.eventBus.Publish(events.NewKanbanEngineStateChangedEvent(
-		"", false, currentWfID, e.circuitBreaker.IsOpen(),
-	))
+	if e.globalEventBus != nil {
+		e.globalEventBus.Publish(events.NewKanbanEngineStateChangedEvent(
+			"", false, currentWfID, e.circuitBreaker.IsOpen(),
+		))
+	}
 
 	e.logger.Info("kanban engine disabled")
 	return nil
@@ -424,6 +513,15 @@ func (e *Engine) CurrentWorkflowID() *string {
 	return e.getCurrentWorkflowID()
 }
 
+// CurrentProjectID returns the project ID of the currently executing workflow.
+func (e *Engine) CurrentProjectID() *string {
+	exe := e.getCurrentExecution()
+	if exe == nil {
+		return nil
+	}
+	return &exe.ProjectID
+}
+
 // ResetCircuitBreaker resets the circuit breaker.
 func (e *Engine) ResetCircuitBreaker(ctx context.Context) error {
 	e.circuitBreaker.Reset()
@@ -432,9 +530,11 @@ func (e *Engine) ResetCircuitBreaker(ctx context.Context) error {
 		return fmt.Errorf("persist state: %w", err)
 	}
 
-	e.eventBus.Publish(events.NewKanbanEngineStateChangedEvent(
-		"", e.enabled.Load(), e.getCurrentWorkflowID(), false,
-	))
+	if e.globalEventBus != nil {
+		e.globalEventBus.Publish(events.NewKanbanEngineStateChangedEvent(
+			"", e.enabled.Load(), e.getCurrentWorkflowID(), false,
+		))
+	}
 
 	e.logger.Info("circuit breaker reset")
 	return nil
@@ -460,16 +560,52 @@ func (e *Engine) GetState() EngineState {
 
 // Helper methods
 
-func (e *Engine) getCurrentWorkflowID() *string {
-	v := e.currentWfID.Load()
+// getCurrentExecution returns the current execution (workflow + project).
+func (e *Engine) getCurrentExecution() *currentExecution {
+	v := e.currentExe.Load()
 	if v == nil {
 		return nil
 	}
-	return v.(*string)
+	return v.(*currentExecution)
+}
+
+// getCurrentWorkflowID returns just the workflow ID for backward compatibility.
+func (e *Engine) getCurrentWorkflowID() *string {
+	exe := e.getCurrentExecution()
+	if exe == nil {
+		return nil
+	}
+	return &exe.WorkflowID
+}
+
+// getEngineStateManager returns a StateManager for persisting engine state.
+// Uses legacy StateManager if available, otherwise tries the first project.
+func (e *Engine) getEngineStateManager(ctx context.Context) KanbanStateManager {
+	// Prefer legacy state manager for engine state (global state)
+	if e.legacyStateManager != nil {
+		return e.legacyStateManager
+	}
+
+	// Fallback: try to get from first project
+	if e.projectProvider != nil {
+		projects, err := e.projectProvider.ListActiveProjects(ctx)
+		if err == nil && len(projects) > 0 {
+			sm, _ := e.projectProvider.GetProjectStateManager(ctx, projects[0].ID)
+			return sm
+		}
+	}
+
+	return nil
 }
 
 func (e *Engine) loadState(ctx context.Context) error {
-	state, err := e.stateManager.GetKanbanEngineState(ctx)
+	sm := e.getEngineStateManager(ctx)
+	if sm == nil {
+		// No state manager available, start with defaults
+		return nil
+	}
+
+	state, err := sm.GetKanbanEngineState(ctx)
 	if err != nil {
 		return err
 	}
@@ -480,7 +616,15 @@ func (e *Engine) loadState(ctx context.Context) error {
 	}
 
 	e.enabled.Store(state.Enabled)
-	e.currentWfID.Store(state.CurrentWorkflowID)
+
+	// Restore current execution if we have a workflow ID
+	// Note: We don't have the project ID in the persisted state, so we can't fully restore
+	// This is a limitation - after restart, interrupted workflows may not be properly recovered
+	if state.CurrentWorkflowID != nil {
+		e.logger.Warn("engine state has current workflow but project ID is unknown, clearing",
+			"workflow_id", *state.CurrentWorkflowID)
+		// We'll handle this in recoverInterrupted by searching all projects
+	}
 
 	var lastFailure time.Time
 	if state.LastFailureAt != nil {
@@ -492,6 +636,12 @@ func (e *Engine) loadState(ctx context.Context) error {
 }
 
 func (e *Engine) persistState(ctx context.Context) error {
+	sm := e.getEngineStateManager(ctx)
+	if sm == nil {
+		// No state manager available, can't persist
+		return nil
+	}
+
 	failures, isOpen, lastFailure := e.circuitBreaker.GetState()
 
 	state := &KanbanEngineState{
@@ -504,51 +654,77 @@ func (e *Engine) persistState(ctx context.Context) error {
 		state.LastFailureAt = &lastFailure
 	}
 
-	return e.stateManager.SaveKanbanEngineState(ctx, state)
+	return sm.SaveKanbanEngineState(ctx, state)
 }
 
 func (e *Engine) recoverInterrupted(ctx context.Context) error {
-	currentWfID := e.getCurrentWorkflowID()
-	if currentWfID == nil {
+	// Try to recover from persisted engine state
+	sm := e.getEngineStateManager(ctx)
+	if sm == nil {
 		return nil
 	}
 
-	e.logger.Info("recovering interrupted workflow", "workflow_id", *currentWfID)
-
-	// Load workflow to check its status
-	workflow, err := e.stateManager.LoadByID(ctx, core.WorkflowID(*currentWfID))
+	state, err := sm.GetKanbanEngineState(ctx)
 	if err != nil {
-		return fmt.Errorf("load interrupted workflow: %w", err)
+		e.currentExe.Store((*currentExecution)(nil))
+		return err
+	}
+	if state == nil || state.CurrentWorkflowID == nil {
+		// No interrupted workflow to recover
+		e.currentExe.Store((*currentExecution)(nil))
+		return nil
+	}
+
+	wfID := *state.CurrentWorkflowID
+	e.logger.Info("recovering interrupted workflow", "workflow_id", wfID)
+
+	// Load the workflow to check its current status
+	workflow, err := sm.LoadByID(ctx, core.WorkflowID(wfID))
+	if err != nil {
+		e.logger.Warn("failed to load interrupted workflow", "workflow_id", wfID, "error", err)
+		e.currentExe.Store((*currentExecution)(nil))
+		return nil
 	}
 
 	if workflow == nil {
-		// Workflow was deleted
-		e.currentWfID.Store((*string)(nil))
+		e.logger.Warn("interrupted workflow was deleted", "workflow_id", wfID)
+		e.currentExe.Store((*currentExecution)(nil))
 		return nil
 	}
 
+	// Move workflow to appropriate column based on its status
 	switch workflow.Status {
 	case core.WorkflowStatusCompleted:
-		// Workflow completed while we were down
-		e.handleWorkflowCompleted(ctx, *currentWfID)
+		// Move to to_verify
+		if err := sm.UpdateKanbanStatus(ctx, wfID, "to_verify", workflow.PRURL, workflow.PRNumber, ""); err != nil {
+			e.logger.Error("failed to move recovered workflow to to_verify", "error", err)
+		} else {
+			e.logger.Info("recovered completed workflow to to_verify", "workflow_id", wfID)
+		}
 
 	case core.WorkflowStatusFailed:
-		// Workflow failed while we were down
-		e.handleWorkflowFailed(ctx, *currentWfID, workflow.Error)
-
-	default:
-		// Workflow in unknown state, move to refinement
-		e.logger.Warn("interrupted workflow in unexpected state, moving to refinement",
-			"workflow_id", *currentWfID,
-			"status", workflow.Status,
-		)
-		if err := e.stateManager.UpdateKanbanStatus(ctx, *currentWfID, "refinement", "", 0,
-			fmt.Sprintf("Workflow interrupted in %s state", workflow.Status)); err != nil {
-			e.logger.Error("failed to move interrupted workflow to refinement", "error", err)
+		// Move to refinement
+		errMsg := workflow.Error
+		if errMsg == "" {
+			errMsg = "interrupted during execution"
 		}
-		e.currentWfID.Store((*string)(nil))
+		if err := sm.UpdateKanbanStatus(ctx, wfID, "refinement", "", 0, errMsg); err != nil {
+			e.logger.Error("failed to move recovered workflow to refinement", "error", err)
+		} else {
+			e.logger.Info("recovered failed workflow to refinement", "workflow_id", wfID)
+		}
+
+	case core.WorkflowStatusRunning:
+		// Still marked as running - move to refinement as it was interrupted
+		if err := sm.UpdateKanbanStatus(ctx, wfID, "refinement", "", 0, "workflow interrupted during execution (server restart)"); err != nil {
+			e.logger.Error("failed to move interrupted workflow to refinement", "error", err)
+		} else {
+			e.logger.Info("recovered interrupted workflow to refinement", "workflow_id", wfID)
+		}
 	}
 
+	// Clear current execution state
+	e.currentExe.Store((*currentExecution)(nil))
 	return nil
 }
 
