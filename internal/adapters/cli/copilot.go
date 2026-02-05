@@ -260,9 +260,11 @@ func (c *CopilotAdapter) buildArgs(opts core.ExecuteOptions) []string {
 	args = append(args, "--allow-all-paths")
 	args = append(args, "--allow-all-urls")
 
+	// Silent mode - output only agent response without stats (reduces meta-information)
+	args = append(args, "--silent")
+
 	// Note: Copilot CLI does not support --output-format json or stream-json.
 	// Streaming is handled via log files (see streaming.go StreamMethodLogFile).
-	// We don't use --silent to allow some progress visibility in output.
 
 	return args
 }
