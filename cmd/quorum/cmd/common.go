@@ -346,6 +346,7 @@ func CreateWorkflowContext(deps *PhaseRunnerDeps, state *core.WorkflowState) *wo
 			WorktreeMode:      deps.RunnerConfig.WorktreeMode,
 			PhaseTimeouts:     deps.RunnerConfig.PhaseTimeouts,
 			Moderator:         deps.ModeratorConfig,
+			SingleAgent:       deps.RunnerConfig.SingleAgent,
 			Finalization:      finalizationCfg,
 		},
 	}

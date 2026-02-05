@@ -261,7 +261,7 @@ func validateSingleAgentConfig(wfConfig *WorkflowConfig, agents config.AgentsCon
 			return &ValidationFieldError{
 				Field:   "single_agent_reasoning_effort",
 				Value:   effort,
-				Message: "invalid value: must be minimal, low, medium, high, or xhigh",
+				Message: "invalid value: must be none, minimal, low, medium, high, or xhigh",
 				Code:    ErrCodeInvalidEnum,
 			}
 		}

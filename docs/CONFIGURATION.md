@@ -281,7 +281,7 @@ agents:
   codex:
     enabled: true
     path: codex
-    model: gpt-5.2-codex
+    model: gpt-5.3-codex
     reasoning_effort: high
     reasoning_effort_phases:
       refine: xhigh
@@ -309,7 +309,7 @@ agents:
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `reasoning_effort` | string | - | Default reasoning effort: `minimal`, `low`, `medium`, `high`, `xhigh` |
+| `reasoning_effort` | string | - | Default reasoning effort. Valid values depend on the model (common: `none`, `minimal`, `low`, `medium`, `high`, `xhigh`). |
 | `reasoning_effort_phases` | map | `{}` | Per-phase reasoning effort overrides |
 
 #### OpenCode Agent

@@ -56,7 +56,7 @@ type SendMessageRequest struct {
 	Content         string   `json:"content"`
 	Agent           string   `json:"agent,omitempty"`
 	Model           string   `json:"model,omitempty"`
-	ReasoningEffort string   `json:"reasoning_effort,omitempty"` // minimal, low, medium, high, xhigh
+	ReasoningEffort string   `json:"reasoning_effort,omitempty"` // none, minimal, low, medium, high, xhigh
 	Attachments     []string `json:"attachments,omitempty"`      // File paths to include as context
 }
 

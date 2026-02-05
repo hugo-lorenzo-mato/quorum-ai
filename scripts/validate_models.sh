@@ -32,7 +32,7 @@ test_model() {
         codex)
             # Some models need lower reasoning effort (config has xhigh default)
             case "$model" in
-                gpt-5.2-codex|gpt-5.2|gpt-5.1-codex-max)
+                gpt-5.3-codex|gpt-5.2-codex|gpt-5.2|gpt-5.1-codex-max)
                     result=$(timeout $TIMEOUT codex exec -m "$model" $extra_args "$PROMPT" 2>&1) && status=$? || status=$?
                     ;;
                 gpt-5.1-codex-mini)
@@ -85,6 +85,7 @@ echo ""
 
 # CODEX - Test models that work with ChatGPT account
 echo -e "${BLUE}CODEX${NC}"
+test_model codex "gpt-5.3-codex"
 test_model codex "gpt-5.2-codex"
 test_model codex "gpt-5.2"
 test_model codex "gpt-5.1-codex-max"

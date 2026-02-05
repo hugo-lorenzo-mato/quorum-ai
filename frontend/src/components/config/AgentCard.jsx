@@ -225,7 +225,7 @@ export function AgentCard({ agentKey }) {
             label="Default model"
             tooltip="Used when no per-phase model override is set."
             id={`agent-${agentKey}-model`}
-            placeholder="e.g. gpt-5.2-codex"
+            placeholder="e.g. gpt-5.3-codex"
             value={model.value}
             onChange={model.onChange}
             error={model.error}

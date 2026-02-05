@@ -62,7 +62,7 @@ agents:
   codex:
     enabled: true
     path: codex
-    model: gpt-5.2-codex
+    model: gpt-5.3-codex
     reasoning_effort: high
     reasoning_effort_phases:
       refine: xhigh

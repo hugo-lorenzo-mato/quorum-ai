@@ -12,6 +12,7 @@ import (
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/api/middleware"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/config"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 )
 
 // Note: DTO types are defined in config_types.go
@@ -234,7 +235,7 @@ func (s *Server) handleResetConfig(w http.ResponseWriter, r *http.Request) {
 // Reasoning efforts synced with internal/core/constants.go.
 func (s *Server) handleGetAgents(w http.ResponseWriter, _ *http.Request) {
 	// Common reasoning efforts for agents that support it
-	reasoningEfforts := []string{"low", "medium", "high"}
+	reasoningEfforts := core.ReasoningEfforts
 
 	agents := []map[string]interface{}{
 		{
@@ -283,7 +284,9 @@ func (s *Server) handleGetAgents(w http.ResponseWriter, _ *http.Request) {
 			// Synced with internal/adapters/cli/codex.go
 			// Note: o3, o4-mini, gpt-4.1, gpt-5-mini require API key (not ChatGPT account)
 			"models": []string{
-				// GPT-5.2 family (latest)
+				// GPT-5.3 family (latest)
+				"gpt-5.3-codex",
+				// GPT-5.2 family
 				"gpt-5.2-codex",
 				"gpt-5.2",
 				// GPT-5.1 family

@@ -156,16 +156,16 @@ agents:
   codex:
     enabled: true
     path: codex
-    model: gpt-5.2-codex
-    # Codex-specific: default reasoning effort (minimal/low/medium/high/xhigh)
+    model: gpt-5.3-codex
+    # Codex-specific: default reasoning effort (none/minimal/low/medium/high/xhigh)
     reasoning_effort: high
     phase_models:
-      refine: gpt-5.2-codex
-      analyze: gpt-5.2-codex
-      moderate: gpt-5.2-codex
-      synthesize: gpt-5.2-codex
-      plan: gpt-5.2-codex
-      execute: gpt-5.2-codex
+      refine: gpt-5.3-codex
+      analyze: gpt-5.3-codex
+      moderate: gpt-5.3-codex
+      synthesize: gpt-5.3-codex
+      plan: gpt-5.3-codex
+      execute: gpt-5.3-codex
     # Per-phase reasoning effort overrides (optional)
     reasoning_effort_phases:
       refine: xhigh

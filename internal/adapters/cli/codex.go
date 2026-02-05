@@ -97,8 +97,18 @@ func (c *CodexAdapter) Execute(ctx context.Context, opts core.ExecuteOptions) (*
 func (c *CodexAdapter) buildArgs(opts core.ExecuteOptions) []string {
 	args := []string{"exec", "--skip-git-repo-check"}
 
+	// Model selection (opts overrides config; fall back to core default).
+	model := opts.Model
+	if model == "" {
+		model = c.config.Model
+	}
+	if model == "" {
+		model = core.GetDefaultModel(core.AgentCodex)
+	}
+
 	// Determine reasoning effort: opts (per-message) > config > phase-based defaults
 	reasoningEffort := c.getReasoningEffort(opts)
+	reasoningEffort = core.NormalizeReasoningEffortForModel(model, reasoningEffort)
 
 	// Headless approvals/sandbox via config overrides
 	args = append(args,
@@ -108,11 +118,13 @@ func (c *CodexAdapter) buildArgs(opts core.ExecuteOptions) []string {
 		"-c", `skip_git_repo_check=true`,
 	)
 
-	// Model selection
-	model := opts.Model
-	if model == "" {
-		model = c.config.Model
+	// `minimal` reasoning effort is incompatible with web_search; disable it explicitly
+	// to avoid Codex API errors when users have web_search enabled in ~/.codex/config.toml.
+	if reasoningEffort == core.ReasoningMinimal {
+		args = append(args, "-c", `web_search="disabled"`)
 	}
+
+	// Model selection
 	if model != "" {
 		args = append(args, "--model", model)
 	}

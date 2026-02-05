@@ -36,6 +36,7 @@ func IsValidAgent(agent string) bool {
 
 // Reasoning effort levels
 const (
+	ReasoningNone    = "none"
 	ReasoningMinimal = "minimal"
 	ReasoningLow     = "low"
 	ReasoningMedium  = "medium"
@@ -45,6 +46,7 @@ const (
 
 // ReasoningEfforts is the ordered list of reasoning effort levels.
 var ReasoningEfforts = []string{
+	ReasoningNone,
 	ReasoningMinimal,
 	ReasoningLow,
 	ReasoningMedium,
@@ -54,6 +56,7 @@ var ReasoningEfforts = []string{
 
 // ValidReasoningEfforts is a map for O(1) reasoning effort validation.
 var ValidReasoningEfforts = map[string]bool{
+	ReasoningNone:    true,
 	ReasoningMinimal: true,
 	ReasoningLow:     true,
 	ReasoningMedium:  true,
@@ -86,16 +89,17 @@ func SupportsReasoning(agent string) bool {
 // Models not in this map default to "high".
 var CodexModelMaxReasoning = map[string]string{
 	// These models support xhigh (maximum)
+	"gpt-5.3-codex":     ReasoningXHigh,
 	"gpt-5.2-codex":     ReasoningXHigh,
 	"gpt-5.2":           ReasoningXHigh,
 	"gpt-5.1-codex-max": ReasoningXHigh,
 	// These models support up to high
-	"gpt-5.1-codex": ReasoningHigh,
-	"gpt-5.1":       ReasoningHigh,
-	"gpt-5-codex":   ReasoningHigh,
-	"gpt-5":         ReasoningHigh,
-	// Mini models only support up to medium
-	"gpt-5.1-codex-mini": ReasoningMedium,
+	"gpt-5.1-codex":      ReasoningHigh,
+	"gpt-5.1-codex-mini": ReasoningHigh,
+	"gpt-5.1":            ReasoningHigh,
+	"gpt-5-codex":        ReasoningHigh,
+	"gpt-5-codex-mini":   ReasoningHigh,
+	"gpt-5":              ReasoningHigh,
 }
 
 // GetMaxReasoningEffort returns the maximum reasoning effort supported by a Codex model.
@@ -147,17 +151,20 @@ var AgentModels = map[string][]string{
 		"gemini-3-flash-preview",
 	},
 	AgentCodex: {
-		// GPT-5.2 family (latest, recommended) - supports xhigh reasoning
-		"gpt-5.2-codex", // Most advanced agentic coding model (default for Codex CLI)
-		"gpt-5.2",       // Base GPT-5.2 model
+		// GPT-5.3 family (latest, recommended)
+		"gpt-5.3-codex", // Most advanced agentic coding model (default for Codex CLI)
+		// GPT-5.2 family - supports xhigh reasoning
+		"gpt-5.2-codex",
+		"gpt-5.2", // Base GPT-5.2 model
 		// GPT-5.1 family
 		"gpt-5.1-codex-max",  // Maximum capability for extended tasks (xhigh reasoning)
 		"gpt-5.1-codex",      // Code-optimized GPT-5.1 (max: high reasoning)
-		"gpt-5.1-codex-mini", // Cost-effective codex (max: medium reasoning)
+		"gpt-5.1-codex-mini", // Cost-effective codex (max: high reasoning)
 		"gpt-5.1",            // Base GPT-5.1 model (max: high reasoning)
 		// GPT-5 family
-		"gpt-5-codex", // GPT-5 codex version (max: high reasoning)
-		"gpt-5",       // Base GPT-5 model (max: high reasoning)
+		"gpt-5-codex",      // GPT-5 codex version (max: high reasoning)
+		"gpt-5-codex-mini", // GPT-5 codex mini (max: high reasoning)
+		"gpt-5",            // Base GPT-5 model (max: high reasoning)
 	},
 	AgentCopilot: {
 		// Anthropic Claude models (via Copilot) - from copilot --help
@@ -192,7 +199,7 @@ var AgentModels = map[string][]string{
 var AgentDefaultModels = map[string]string{
 	AgentClaude:   "sonnet",
 	AgentGemini:   "gemini-2.5-flash",
-	AgentCodex:    "gpt-5.2-codex",
+	AgentCodex:    "gpt-5.3-codex",
 	AgentCopilot:  "claude-sonnet-4.5",
 	AgentOpenCode: "qwen2.5-coder:32b",
 }

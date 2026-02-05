@@ -391,6 +391,46 @@ func TestCodexAdapter_BuildArgs(t *testing.T) {
 	}
 }
 
+func TestCodexAdapter_BuildArgs_NormalizesReasoningEffort(t *testing.T) {
+	cfg := AgentConfig{
+		Model: "gpt-5.2-codex",
+	}
+	adapter, _ := NewCodexAdapter(cfg)
+	codex := adapter.(*CodexAdapter)
+
+	opts := core.ExecuteOptions{
+		ReasoningEffort: core.ReasoningNone, // not supported by gpt-5.2-codex
+	}
+
+	args := codex.buildArgs(opts)
+
+	// gpt-5.2-codex supports low/medium/high/xhigh; none should normalize to low.
+	if !containsString(args, `model_reasoning_effort="low"`) {
+		t.Fatalf("expected model_reasoning_effort to normalize to low, args=%v", args)
+	}
+}
+
+func TestCodexAdapter_BuildArgs_DisablesWebSearchForMinimal(t *testing.T) {
+	cfg := AgentConfig{
+		Model: "gpt-5",
+	}
+	adapter, _ := NewCodexAdapter(cfg)
+	codex := adapter.(*CodexAdapter)
+
+	opts := core.ExecuteOptions{
+		ReasoningEffort: core.ReasoningMinimal,
+	}
+
+	args := codex.buildArgs(opts)
+
+	if !containsString(args, `model_reasoning_effort="minimal"`) {
+		t.Fatalf("expected model_reasoning_effort minimal, args=%v", args)
+	}
+	if !containsString(args, `web_search="disabled"`) {
+		t.Fatalf("expected web_search disabled for minimal reasoning effort, args=%v", args)
+	}
+}
+
 func TestCodexAdapter_EstimateCost(t *testing.T) {
 	adapter, _ := NewCodexAdapter(AgentConfig{})
 	codex := adapter.(*CodexAdapter)

@@ -222,7 +222,7 @@ quorum run --skip-refine "Implement user authentication with JWT tokens"
 
 # Single-agent mode (bypass multi-agent consensus)
 quorum run --single-agent claude "Add error handling to the API"
-quorum run --single-agent codex --single-agent-model gpt-5.2-codex "Refactor utils.go"
+quorum run --single-agent codex --single-agent-model gpt-5.3-codex "Refactor utils.go"
 
 # Check workflow status
 quorum status
