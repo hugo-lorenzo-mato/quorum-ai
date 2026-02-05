@@ -252,11 +252,15 @@
   -webkit-backdrop-filter: blur(12px);
 }
 
-/* Dot pattern background utility - Refined for "Quiet Luxury" look */
+/* Dot pattern background utility - Ultra subtle */
 .bg-dot-pattern {
   background-image: radial-gradient(var(--foreground) 0.5px, transparent 0.5px);
-  background-size: 24px 24px;
-  opacity: 0.03;
+  background-size: 32px 32px;
+  opacity: 0.02;
+}
+
+.shadow-soft {
+  shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.03), 0 2px 8px -1px rgba(0, 0, 0, 0.02);
 }
 
 /* Subtle animations */
