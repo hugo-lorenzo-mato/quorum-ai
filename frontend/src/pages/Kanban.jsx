@@ -20,7 +20,8 @@ import {
   Settings,
   Cpu,
   Zap,
-  LayoutDashboard
+  LayoutDashboard,
+  MoreVertical
 } from 'lucide-react';
 import { Badge } from '../components/ui/Badge';
 import { Input } from '../components/ui/Input';
