@@ -256,7 +256,7 @@ export default function Templates() {
           >
             <div className="flex-1 p-5 pb-4">
               <div className="flex items-start justify-between mb-4">
-                <div className="p-2.5 rounded-lg bg-muted/50 text-muted-foreground group-hover:text-foreground group-hover:bg-muted transition-colors">
+                <div className="p-2.5 rounded-lg bg-muted/50 text-muted-foreground border border-transparent group-hover:text-primary group-hover:bg-primary/10 group-hover:border-primary/20 transition-all duration-300">
                   <TemplateIcon name={template.icon} className="w-5 h-5" />
                 </div>
                 <div className="flex gap-1.5">
