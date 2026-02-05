@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom';
+import { useParams, useNavigate, Link, useSearchParams, useLocation } from 'react-router-dom';
 import { useWorkflowStore, useTaskStore, useUIStore, useAgentStore, useConfigStore } from '../stores';
 import { fileApi, workflowApi } from '../lib/api';
 import { getModelsForAgent, getReasoningLevels, supportsReasoning, useEnums } from '../lib/agents';
@@ -1416,14 +1416,15 @@ const AGENT_OPTIONS = [
   { value: 'codex', label: 'Codex' },
 ];
 
-function NewWorkflowForm({ onSubmit, onCancel, loading }) {
-  const [title, setTitle] = useState('');
-  const [prompt, setPrompt] = useState('');
+function NewWorkflowForm({ onSubmit, onCancel, loading, initialData }) {
+  const [title, setTitle] = useState(initialData?.name || '');
+  const [prompt, setPrompt] = useState(initialData?.prompt || '');
   const [files, setFiles] = useState([]);
   const fileInputRef = useRef(null);
 
-  // Execution mode state
-  const [executionMode, setExecutionMode] = useState('multi_agent');
+  // Execution mode state - initialize from template if provided
+  const initialExecutionMode = initialData?.executionStrategy === 'single-agent' ? 'single_agent' : 'multi_agent';
+  const [executionMode, setExecutionMode] = useState(initialExecutionMode);
   const [singleAgentName, setSingleAgentName] = useState('claude');
   const [singleAgentModel, setSingleAgentModel] = useState('');
   const [singleAgentReasoningEffort, setSingleAgentReasoningEffort] = useState('');
@@ -1770,6 +1771,7 @@ function WorkflowFilters({ filter, setFilter }) {
 export default function Workflows() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const { workflows, loading, error, fetchWorkflows, fetchWorkflow, createWorkflow, deleteWorkflow, clearError } = useWorkflowStore();
   const { getTasksForWorkflow, setTasks } = useTaskStore();
@@ -1777,6 +1779,9 @@ export default function Workflows() {
   const notifyError = useUIStore((s) => s.notifyError);
   const [showNewForm, setShowNewForm] = useState(false);
   const [filter, setFilter] = useState('');
+
+  // Get template data from location state (if navigating from Templates page)
+  const templateData = location.state?.template;
 
   // Get status filter from URL params
   const statusFilter = searchParams.get('status') || 'all';
@@ -1800,8 +1805,11 @@ export default function Workflows() {
   useEffect(() => {
     if (id && id !== 'new') {
       fetchWorkflow(id);
+    } else if (id === 'new' || templateData) {
+      // Show new workflow form if navigating to /workflows/new or if template data is present
+      setShowNewForm(true);
     }
-  }, [fetchWorkflow, id]);
+  }, [fetchWorkflow, id, templateData]);
 
   // Filter workflows by status and text
   const filteredWorkflows = useMemo(() => {
@@ -1903,8 +1911,11 @@ export default function Workflows() {
         onCancel={() => {
           setShowNewForm(false);
           if (id === 'new') navigate('/workflows');
+          // Clear location state after canceling
+          navigate(location.pathname, { replace: true, state: {} });
         }}
         loading={loading}
+        initialData={templateData}
       />
     );
   }

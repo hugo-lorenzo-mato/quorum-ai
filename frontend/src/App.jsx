@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import Workflows from './pages/Workflows';
+import Templates from './pages/Templates';
 import IssuesEditor from './pages/IssuesEditor';
 import Chat from './pages/Chat';
 import Settings from './pages/Settings';
@@ -35,6 +36,7 @@ function AppContent() {
         <Route path="/workflows" element={<Workflows />} />
         <Route path="/workflows/:id" element={<Workflows />} />
         <Route path="/workflows/:id/issues" element={<IssuesEditor />} />
+        <Route path="/templates" element={<Templates />} />
         <Route path="/kanban" element={<Kanban />} />
         <Route path="/chat" element={<Chat />} />
         <Route path="/projects" element={<Projects />} />
