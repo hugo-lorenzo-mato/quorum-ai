@@ -511,18 +511,18 @@ function EmptyState() {
       </p>
       <div className="flex flex-col sm:flex-row items-center gap-3">
         <Link
-          to="/templates"
-          className="w-full sm:w-auto px-5 py-2.5 rounded-xl border border-border text-foreground text-sm font-medium hover:bg-accent transition-all flex items-center justify-center gap-2"
-        >
-          <FileText className="w-4 h-4" />
-          Browse Templates
-        </Link>
-        <Link
           to="/workflows/new"
           className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-all flex items-center justify-center gap-2 shadow-lg shadow-primary/20"
         >
           <Zap className="w-4 h-4" />
           Start Workflow
+        </Link>
+        <Link
+          to="/templates"
+          className="w-full sm:w-auto px-5 py-2.5 rounded-xl border border-border text-foreground text-sm font-medium hover:bg-accent transition-all flex items-center justify-center gap-2"
+        >
+          <FileText className="w-4 h-4" />
+          Browse Templates
         </Link>
       </div>
     </div>

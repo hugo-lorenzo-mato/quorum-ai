@@ -169,6 +169,7 @@ var AgentModels = map[string][]string{
 	AgentCopilot: {
 		// Anthropic Claude models (via Copilot) - from copilot --help
 		"claude-sonnet-4.5", // Best balance, strong reasoning (default)
+		"claude-opus-4.6",   // Latest opus - most powerful Claude
 		"claude-opus-4.5",   // Most powerful Claude
 		"claude-haiku-4.5",  // Fast, efficient
 		"claude-sonnet-4",   // Previous gen sonnet

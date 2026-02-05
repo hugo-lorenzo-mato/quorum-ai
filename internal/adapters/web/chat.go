@@ -816,6 +816,17 @@ type executeAgentOptions struct {
 	history         []ChatMessage
 }
 
+// buildChatSystemPrompt creates a system prompt for chat interactions.
+// This prompt encourages concise, direct responses without meta-commentary.
+func buildChatSystemPrompt() string {
+	return `## Response Guidelines
+- Provide direct, concise answers to user questions
+- Do NOT include self-identification statements unless explicitly asked "who are you"
+- Do NOT explain technical limitations, access restrictions, or capabilities
+- Do NOT show reasoning process unless explicitly requested
+- Be helpful and accurate, but brief`
+}
+
 // executeAgent runs the message through the agent and returns the response.
 func (h *ChatHandler) executeAgent(ctx context.Context, opts executeAgentOptions) (ChatMessage, error) {
 	if h.agents == nil {
@@ -888,6 +899,7 @@ Respond helpfully and concisely.`, contextBuilder, fileContext, lastContent)
 
 	execOpts := core.ExecuteOptions{
 		Prompt:          prompt,
+		SystemPrompt:    buildChatSystemPrompt(),
 		Model:           opts.model,
 		Format:          core.OutputFormatText,
 		Phase:           core.PhaseExecute,

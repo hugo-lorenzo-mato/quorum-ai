@@ -99,6 +99,7 @@ echo ""
 # COPILOT - Test models from copilot --help
 echo -e "${BLUE}COPILOT${NC}"
 test_model copilot "claude-sonnet-4.5"
+test_model copilot "claude-opus-4.6"
 test_model copilot "claude-opus-4.5"
 test_model copilot "claude-haiku-4.5"
 test_model copilot "gpt-5.2-codex"

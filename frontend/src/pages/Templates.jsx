@@ -151,13 +151,7 @@ function TemplatePreviewModal({ template, onClose, onUseTemplate }) {
         </div>
 
         {/* Footer */}
-        <div className="flex justify-end items-center gap-3 p-6 border-t border-border/50 bg-muted/5">
-          <button
-            onClick={onClose}
-            className="h-8 px-4 rounded-md text-xs font-medium border border-border bg-background text-muted-foreground hover:text-foreground hover:bg-accent hover:shadow-sm transition-all active:scale-[0.97]"
-          >
-            Cancel
-          </button>
+        <div className="flex justify-end items-center p-6 border-t border-border/50 bg-muted/5">
           <button
             onClick={() => onUseTemplate(template)}
             className="h-8 px-5 rounded-md text-xs font-bold bg-primary text-primary-foreground hover:bg-primary/90 hover:shadow-md hover:-translate-y-0.5 hover:scale-[1.02] transition-all shadow-sm active:scale-[0.97]"
@@ -195,7 +189,7 @@ export default function Templates() {
     return matchesCategory && matchesSearch;
   });
 
-  const useTemplate = (template) => {
+  const handleUseTemplate = (template) => {
     navigate('/workflows/new', {
       state: {
         template: {
@@ -292,16 +286,6 @@ export default function Templates() {
 
             {/* Compact Actions Footer */}
             <div className="flex items-center justify-between p-3.5 border-t border-border/50 bg-muted/5 mt-auto">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  useTemplate(template);
-                }}
-                className="h-7.5 px-3 rounded-md text-[10.5px] font-bold bg-primary text-primary-foreground hover:bg-primary/90 hover:shadow-md hover:-translate-y-0.5 hover:scale-[1.02] transition-all active:scale-[0.97] shadow-sm flex items-center justify-center"
-              >
-                Use Template
-              </button>
-
               <div 
                 className="flex items-center justify-center w-6 h-6 rounded-full border border-border/50 bg-background/50 text-muted-foreground/60 group-hover:text-primary group-hover:border-primary/30 group-hover:bg-primary/5 transition-all duration-300"
                 title={template.executionStrategy === 'multi-agent-consensus' ? 'Multi-Agent' : 'Single-Agent'}
@@ -312,6 +296,16 @@ export default function Templates() {
                   <Zap className="w-3.5 h-3.5" />
                 )}
               </div>
+
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleUseTemplate(template);
+                }}
+                className="h-7.5 px-3 rounded-md text-[10.5px] font-bold bg-background/50 border border-border/60 text-foreground/70 hover:border-primary hover:text-primary hover:bg-primary/5 hover:-translate-y-0.5 hover:scale-[1.02] transition-all active:scale-[0.97] shadow-sm flex items-center justify-center"
+              >
+                Use Template
+              </button>
             </div>
           </div>
         ))}
@@ -325,7 +319,7 @@ export default function Templates() {
           </div>
           <h3 className="text-lg font-semibold text-foreground mb-2">No templates found</h3>
           <p className="text-sm text-muted-foreground text-center max-w-xs">
-            We couldn't find any templates matching "{searchQuery}". Try adjusting your filters or search terms.
+            We couldn&apos;t find any templates matching &quot;{searchQuery}&quot;. Try adjusting your filters or search terms.
           </p>
           <button 
             onClick={() => { setSearchQuery(''); setSelectedCategory('All'); }}
@@ -353,7 +347,7 @@ export default function Templates() {
           onClose={() => setPreviewTemplate(null)}
           onUseTemplate={(template) => {
             setPreviewTemplate(null);
-            useTemplate(template);
+            handleUseTemplate(template);
           }}
         />
       )}

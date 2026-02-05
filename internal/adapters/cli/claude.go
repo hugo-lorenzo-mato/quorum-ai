@@ -146,9 +146,9 @@ func (c *ClaudeAdapter) buildArgs(opts core.ExecuteOptions) []string {
 		args = append(args, "--model", model)
 	}
 
-	// System prompt (for customizing assistant behavior)
+	// System prompt (append to default system prompt for customizing assistant behavior)
 	if opts.SystemPrompt != "" {
-		args = append(args, "--system-prompt", opts.SystemPrompt)
+		args = append(args, "--append-system-prompt", opts.SystemPrompt)
 	}
 
 	// Note: --output-format stream-json is added by ExecuteWithStreaming via streaming config

@@ -41,7 +41,6 @@ import {
   FolderTree,
   Sparkles,
   Layers,
-  Filter,
   ListTodo,
 } from 'lucide-react';
 import { ConfirmDialog } from '../components/config/ConfirmDialog';

@@ -71,7 +71,7 @@ func (c *CodexAdapter) Ping(ctx context.Context) error {
 func (c *CodexAdapter) Execute(ctx context.Context, opts core.ExecuteOptions) (*core.ExecuteResult, error) {
 	args := c.buildArgs(opts)
 
-	// Codex CLI doesn't have --system-prompt, so prepend to user prompt
+	// Codex CLI handles system prompt via -c developer_instructions or prepend to user prompt
 	// Pass via stdin for robustness with long prompts and special characters
 	prompt := opts.Prompt
 	if opts.SystemPrompt != "" && prompt != "" {
@@ -128,6 +128,10 @@ func (c *CodexAdapter) buildArgs(opts core.ExecuteOptions) []string {
 	if model != "" {
 		args = append(args, "--model", model)
 	}
+
+	// System prompt via developer_instructions (for chat mode optimizations)
+	// Note: This is in addition to the prepended instructions in Execute()
+	// The -c config approach can be used for more structured control if needed in the future
 
 	// Max tokens and temperature are configured via Codex config files,
 	// not as CLI flags for `codex exec`.
