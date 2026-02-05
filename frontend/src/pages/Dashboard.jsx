@@ -4,6 +4,7 @@ import { useWorkflowStore } from '../stores';
 import { getStatusColor } from '../lib/theme';
 import FAB from '../components/FAB';
 import Logo from '../components/Logo';
+import { Badge } from '../components/ui/Badge';
 import {
   GitBranch,
   CheckCircle2,

@@ -31,6 +31,7 @@ import {
 import ChatMarkdown from '../components/ChatMarkdown';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
+import { Input } from '../components/ui/Input';
 
 function TypingIndicator() {
   return (
@@ -73,7 +74,7 @@ function MessageBubble({ message, isLast }) {
           <Logo className="w-5 h-5 text-primary" />
         )}
       </div>
-      <div className={`max-w-[85%] flex flex-col ${isUser ? 'items-end' : 'items-start'}`}>
+      <div className={`group max-w-[85%] flex flex-col ${isUser ? 'items-end' : 'items-start'}`}>
         <div className={`rounded-2xl px-5 py-4 shadow-sm border transition-all ${
           isUser
             ? 'bg-primary text-primary-foreground border-primary/20 rounded-tr-none'
