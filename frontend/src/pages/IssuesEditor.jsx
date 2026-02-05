@@ -231,8 +231,8 @@ export default function IssuesEditor() {
         <div className={`${
           mobileTab === 'editor' ? 'flex' : 'hidden'
         } md:flex flex-1 flex-col overflow-hidden bg-background relative h-full w-full min-w-0`}>
-          {/* Background Pattern */}
-          <div className="absolute inset-0 opacity-[0.02] pointer-events-none bg-[radial-gradient(#000_1px,transparent_1px)] dark:bg-[radial-gradient(#fff_1px,transparent_1px)] [background-size:16px_16px]" />
+          {/* Background Pattern - Consistent across app */}
+          <div className="absolute inset-0 bg-dot-pattern pointer-events-none" />
           
           <div className="relative flex-1 flex flex-col min-h-0 z-0 h-full w-full">
              <IssueEditorPanel

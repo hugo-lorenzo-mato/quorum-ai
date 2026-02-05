@@ -499,7 +499,10 @@ export default function Kanban() {
   }
 
   return (
-    <div className="flex flex-col space-y-2 md:space-y-6 animate-fade-in pb-10">
+    <div className="relative flex flex-col space-y-2 md:space-y-6 animate-fade-in pb-10 min-h-full">
+      {/* Background Pattern - Consistent across app */}
+      <div className="absolute inset-0 bg-dot-pattern pointer-events-none -z-10" />
+
       {/* Header */}
       <div className="flex items-center justify-between gap-3 px-4 py-2 shrink-0 relative z-10 border-b border-border/50 lg:border-none">
         <div className="hidden lg:block text-left">
