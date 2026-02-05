@@ -6,6 +6,7 @@ import {
   MessageSquare,
   Settings,
   KanbanSquare,
+  FileText,
 } from 'lucide-react';
 
 const navItems = [
@@ -13,6 +14,7 @@ const navItems = [
   { path: '/workflows', label: 'Workflows', icon: GitBranch },
   { path: '/kanban', label: 'Kanban', icon: KanbanSquare },
   { path: '/chat', label: 'Chat', icon: MessageSquare },
+  { path: '/templates', label: 'Templates', icon: FileText },
   { path: '/settings', label: 'Settings', icon: Settings },
 ];
 
