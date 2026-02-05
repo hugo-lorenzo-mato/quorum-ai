@@ -40,6 +40,9 @@ import {
   LayoutList,
   FolderTree,
   Sparkles,
+  Layers,
+  Filter,
+  ListTodo,
 } from 'lucide-react';
 import { ConfirmDialog } from '../components/config/ConfirmDialog';
 import { ExecutionModeBadge, PhaseStepper, ReplanModal } from '../components/workflow';
@@ -133,6 +136,7 @@ function StatusBadge({ status }) {
 
 function WorkflowCard({ workflow, onClick, onDelete }) {
   const canDelete = workflow.status !== 'running';
+  const statusColor = getStatusColor(workflow.status);
 
   const handleDeleteClick = (e) => {
     e.stopPropagation();
@@ -141,20 +145,47 @@ function WorkflowCard({ workflow, onClick, onDelete }) {
     }
   };
 
+  // Determine variant based on status
+  let variant = 'default';
+  if (workflow.status === 'running') variant = 'executing';
+  else if (workflow.status === 'completed') variant = 'completed';
+  else if (workflow.status === 'failed') variant = 'failed';
+
   return (
     <div
       onClick={onClick}
-      className="relative w-full text-left p-4 rounded-xl border border-border bg-card hover:border-primary/40 hover:shadow-xl hover:shadow-primary/5 hover:-translate-y-1 hover:scale-[1.02] transition-all duration-300 group cursor-pointer"
+      className={`group relative w-full text-left p-4 rounded-xl border transition-all duration-300 cursor-pointer backdrop-blur-sm shadow-sm ${
+        variant === 'executing'
+          ? 'border-blue-500/40 bg-gradient-to-br from-blue-500/5 via-card to-card hover:shadow-lg hover:shadow-blue-500/10'
+          : variant === 'completed'
+          ? 'border-border/50 bg-gradient-to-br from-card via-card to-emerald-500/5 hover:border-emerald-500/30 hover:shadow-lg'
+          : variant === 'failed'
+          ? 'border-border/50 bg-gradient-to-br from-card via-card to-rose-500/5 hover:border-rose-500/30 hover:shadow-lg'
+          : 'border-border/50 bg-gradient-to-br from-card via-card to-card hover:border-primary/30 hover:shadow-lg'
+      } hover:-translate-y-0.5`}
     >
-      <div className="flex items-start justify-between gap-2 mb-3">
+      {/* Top accent line */}
+      <div className={`absolute top-0 left-4 right-4 h-0.5 rounded-full ${
+        variant === 'executing' 
+          ? 'bg-gradient-to-r from-transparent via-blue-500 to-transparent' 
+          : variant === 'completed'
+          ? 'bg-gradient-to-r from-transparent via-emerald-500 to-transparent'
+          : variant === 'failed'
+          ? 'bg-gradient-to-r from-transparent via-rose-500 to-transparent'
+          : 'bg-gradient-to-r from-transparent via-primary to-transparent'
+      }`} />
+
+      <div className="flex items-start justify-between gap-3 mb-3">
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-foreground line-clamp-2">
+          <p className="text-base font-semibold text-foreground line-clamp-2 leading-snug group-hover:text-primary transition-colors">
             {deriveWorkflowTitle(workflow)}
           </p>
-          <p className="text-xs text-muted-foreground mt-1 font-mono">{workflow.id}</p>
+          <p className="text-xs text-muted-foreground mt-1.5 font-mono opacity-80">{workflow.id}</p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <StatusBadge status={workflow.status} />
+          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold uppercase tracking-wide border ${statusColor.bg} ${statusColor.text} ${statusColor.border}`}>
+            {workflow.status}
+          </span>
           {canDelete && (
             <button
               onClick={handleDeleteClick}
@@ -166,11 +197,19 @@ function WorkflowCard({ workflow, onClick, onDelete }) {
           )}
         </div>
       </div>
-      <div className="flex items-center gap-4 text-xs text-muted-foreground">
-        <span>Phase: {workflow.current_phase || 'N/A'}</span>
-        <span>Tasks: {workflow.task_count || 0}</span>
+
+      <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap pt-2 border-t border-border/30">
+        <div className="flex items-center gap-1.5">
+          <Layers className="w-3.5 h-3.5" />
+          <span className="font-medium">Phase: {workflow.current_phase || 'N/A'}</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <ListTodo className="w-3.5 h-3.5" />
+          <span className="font-medium">Tasks: {workflow.task_count || 0}</span>
+        </div>
         <ExecutionModeBadge config={workflow.config} variant="inline" />
       </div>
+      
       <ChevronRight className="absolute right-4 bottom-4 w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
     </div>
   );

@@ -146,12 +146,18 @@ function ProjectCard({
 
   return (
     <div
-      className={`relative p-4 rounded-xl border transition-all duration-300 overflow-hidden ${
+      className={`group relative p-5 rounded-xl border transition-all duration-300 overflow-hidden backdrop-blur-sm shadow-sm ${
         isSelected
-          ? 'border-primary bg-primary/5 ring-2 ring-primary/20'
-          : 'border-border bg-card hover:border-primary/40 hover:shadow-xl hover:shadow-primary/5 hover:-translate-y-1 hover:scale-[1.01]'
+          ? 'border-primary/40 bg-gradient-to-br from-primary/5 via-card to-card ring-2 ring-primary/20 shadow-lg'
+          : 'border-border/50 bg-gradient-to-br from-card via-card to-card hover:border-primary/30 hover:shadow-lg hover:-translate-y-0.5'
       }`}
     >
+      {/* Top accent */}
+      <div className={`absolute top-0 left-4 right-4 h-0.5 ${
+        isSelected 
+          ? 'bg-gradient-to-r from-transparent via-primary to-transparent' 
+          : 'bg-gradient-to-r from-transparent via-muted-foreground/20 to-transparent'
+      }`} />
       {/* Header row */}
       <div className="flex flex-col sm:flex-row items-start gap-4 mb-4">
         {/* Color picker */}
