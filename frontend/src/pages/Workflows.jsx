@@ -1767,10 +1767,10 @@ function StatusFilterTabs({ status, setStatus }) {
         <button
           key={value}
           onClick={() => setStatus(value)}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-200 ${
             status === value
               ? 'bg-background text-foreground shadow-sm'
-              : 'text-muted-foreground hover:text-foreground'
+              : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
           }`}
         >
           {Icon && <Icon className="w-3.5 h-3.5" />}
@@ -1791,7 +1791,7 @@ function WorkflowFilters({ filter, setFilter }) {
         placeholder="Search workflows..."
         value={filter}
         onChange={(e) => setFilter(e.target.value)}
-        className="h-10 w-full pl-9 pr-4 rounded-lg border border-border bg-background text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/20 transition-all"
+        className="h-10 w-full pl-9 pr-4 rounded-lg border border-border bg-background text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/20 hover:border-border/80 transition-all"
       />
     </div>
   );
