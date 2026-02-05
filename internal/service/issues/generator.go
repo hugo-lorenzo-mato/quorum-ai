@@ -630,7 +630,7 @@ func (g *Generator) parseTaskFile(num, slug, content string) TaskInfo {
 		}
 
 		// Stop after frontmatter
-		if line == "---" && len(task.Agent) > 0 {
+		if line == "---" && task.Agent != "" {
 			break
 		}
 	}
@@ -753,7 +753,7 @@ func (g *Generator) extractTaskContent(content string) string {
 }
 
 // GetIssueSet retrieves an existing issue set for a workflow (if any).
-func (g *Generator) GetIssueSet(ctx context.Context, workflowID string) (*core.IssueSet, error) {
+func (g *Generator) GetIssueSet(_ context.Context, _ string) (*core.IssueSet, error) {
 	// This would typically query the state store for persisted issue references
 	// For now, return nil indicating no existing issues
 	return nil, nil
@@ -791,6 +791,7 @@ func (g *Generator) cleanIssuesDirectory(issuesDir string) error {
 // is the practical maximum before hitting "Prompt is too long" errors.
 const maxTasksPerBatch = 8
 
+//nolint:gocyclo // Orchestrates prompt generation, file IO, and validations.
 func (g *Generator) GenerateIssueFiles(ctx context.Context, workflowID string) ([]string, error) {
 	if g.agents == nil {
 		return nil, fmt.Errorf("agent registry not available")
@@ -832,7 +833,7 @@ func (g *Generator) GenerateIssueFiles(ctx context.Context, workflowID string) (
 		return nil, fmt.Errorf("cleaning issues directory: %w", err)
 	}
 
-	if err := os.MkdirAll(issuesDirAbs, 0755); err != nil {
+	if err := os.MkdirAll(issuesDirAbs, 0o755); err != nil {
 		return nil, fmt.Errorf("creating issues directory: %w", err)
 	}
 
@@ -1206,6 +1207,8 @@ func (g *Generator) getTaskFilePaths() ([]service.IssueTaskFile, error) {
 
 // scanGeneratedIssueFiles scans the issues directory for generated markdown files.
 // If a tracker is provided, it uses start-time based validation instead of a fixed window.
+//
+//nolint:unused // Reserved for future refactors that scan without tracker.
 func (g *Generator) scanGeneratedIssueFiles(issuesDir string) ([]string, error) {
 	return g.scanGeneratedIssueFilesWithTracker(issuesDir, nil)
 }
@@ -1274,11 +1277,13 @@ func (g *Generator) scanGeneratedIssueFilesWithTracker(issuesDir string, tracker
 
 // parseAndWriteIssueFiles parses the AI output and writes markdown files.
 // Expected format: <!-- FILE: filename.md --> followed by content until the next marker.
+//
+//nolint:unused // Reserved for alternative parsing mode.
 func (g *Generator) parseAndWriteIssueFiles(output, issuesDir string) ([]string, error) {
 	var files []string
 
 	// Pattern to match file markers: <!-- FILE: filename.md -->
-	fileMarkerRe := regexp.MustCompile(`(?m)^<!--\s*FILE:\s*([^\s]+\.md)\s*-->`)
+	fileMarkerRe := regexp.MustCompile(`(?m)^<!--\s*FILE:\s*(\S+\.md)\s*-->`)
 	matches := fileMarkerRe.FindAllStringSubmatchIndex(output, -1)
 
 	if len(matches) == 0 {
@@ -1319,7 +1324,7 @@ func (g *Generator) parseAndWriteIssueFiles(output, issuesDir string) ([]string,
 			continue
 		}
 
-		if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
+		if err := os.WriteFile(filePath, []byte(content), 0o600); err != nil {
 			slog.Warn("failed to write issue file", "path", filePath, "error", err)
 			continue
 		}
@@ -1338,6 +1343,8 @@ func (g *Generator) parseAndWriteIssueFiles(output, issuesDir string) ([]string,
 
 // parseCodeBlockFiles attempts to parse files from code blocks with filename headers.
 // Format: ### filename.md followed by a code block
+//
+//nolint:unused // Reserved for alternative parsing mode.
 func (g *Generator) parseCodeBlockFiles(output, issuesDir string) ([]string, error) {
 	var files []string
 
@@ -1387,7 +1394,7 @@ func (g *Generator) parseCodeBlockFiles(output, issuesDir string) ([]string, err
 			continue
 		}
 
-		if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
+		if err := os.WriteFile(filePath, []byte(content), 0o600); err != nil {
 			slog.Warn("failed to write issue file", "path", filePath, "error", err)
 			continue
 		}
@@ -1415,7 +1422,9 @@ func extractFileNumber(name string) int {
 }
 
 // buildMasterPrompt creates the prompt for AI to generate all issue markdown files.
-func (g *Generator) buildMasterPrompt(consolidated string, tasks []TaskInfo, workflowID, outputDir string) string {
+//
+//nolint:unused // Reserved for future prompt consolidation.
+func (g *Generator) buildMasterPrompt(consolidated string, tasks []TaskInfo, _, outputDir string) string {
 	cfg := g.config.Template
 
 	var sb strings.Builder
@@ -1711,7 +1720,7 @@ func parseIssueMarkdown(content string) (title, body string) {
 // generateWithLLM generates issue content using LLM by delegating to GenerateIssueFiles.
 // It caches results to avoid regenerating files for each task in the same workflow.
 // Returns title and body for the requested issue (main or specific task).
-func (g *Generator) generateWithLLM(ctx context.Context, content, taskID, workflowID string, isMain bool) (title, body string, err error) {
+func (g *Generator) generateWithLLM(ctx context.Context, _, taskID, workflowID string, isMain bool) (title, body string, err error) {
 	// Check if we already have cached results for this workflow
 	if cachedIssues, ok := g.llmGenerationCache[workflowID]; ok {
 		return g.findIssueInCache(cachedIssues, taskID, isMain)

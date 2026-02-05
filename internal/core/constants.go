@@ -101,8 +101,8 @@ var CodexModelMaxReasoning = map[string]string{
 // GetMaxReasoningEffort returns the maximum reasoning effort supported by a Codex model.
 // Returns "high" as default if model is not found.
 func GetMaxReasoningEffort(model string) string {
-	if max, ok := CodexModelMaxReasoning[model]; ok {
-		return max
+	if maxReasoning, ok := CodexModelMaxReasoning[model]; ok {
+		return maxReasoning
 	}
 	return ReasoningHigh
 }

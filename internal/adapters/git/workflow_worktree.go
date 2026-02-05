@@ -36,7 +36,7 @@ func NewWorkflowWorktreeManager(repoPath, baseDir string, git *Client, logger *s
 		absBaseDir = filepath.Join(repoPath, baseDir)
 	}
 
-	if err := os.MkdirAll(absBaseDir, 0755); err != nil {
+	if err := os.MkdirAll(absBaseDir, 0o755); err != nil {
 		return nil, fmt.Errorf("creating worktree base directory: %w", err)
 	}
 
@@ -107,7 +107,7 @@ func (m *WorkflowWorktreeManagerImpl) createMergeWorktree(ctx context.Context, w
 	}
 
 	// Ensure parent directory exists
-	if err := os.MkdirAll(filepath.Dir(mergeWorktreePath), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(mergeWorktreePath), 0o755); err != nil {
 		return nil, nil, fmt.Errorf("creating merge worktree parent: %w", err)
 	}
 
@@ -140,7 +140,7 @@ func (m *WorkflowWorktreeManagerImpl) createMergeWorktree(ctx context.Context, w
 }
 
 // InitializeWorkflow creates a workflow branch and worktree root directory.
-func (m *WorkflowWorktreeManagerImpl) InitializeWorkflow(ctx context.Context, workflowID string, baseBranch string) (*core.WorkflowGitInfo, error) {
+func (m *WorkflowWorktreeManagerImpl) InitializeWorkflow(ctx context.Context, workflowID, baseBranch string) (*core.WorkflowGitInfo, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -172,7 +172,7 @@ func (m *WorkflowWorktreeManagerImpl) InitializeWorkflow(ctx context.Context, wo
 	}
 
 	// Create the workflow worktree root directory
-	if err := os.MkdirAll(worktreeRoot, 0755); err != nil {
+	if err := os.MkdirAll(worktreeRoot, 0o755); err != nil {
 		return nil, fmt.Errorf("creating workflow worktree root: %w", err)
 	}
 
@@ -202,7 +202,7 @@ func (m *WorkflowWorktreeManagerImpl) CreateTaskWorktree(ctx context.Context, wo
 
 	// Ensure workflow worktree root exists
 	worktreeRoot := m.getWorkflowWorktreeRoot(workflowID)
-	if err := os.MkdirAll(worktreeRoot, 0755); err != nil {
+	if err := os.MkdirAll(worktreeRoot, 0o755); err != nil {
 		return nil, fmt.Errorf("creating workflow worktree root: %w", err)
 	}
 
@@ -331,7 +331,7 @@ func (m *WorkflowWorktreeManagerImpl) mergeTaskToWorkflowLocked(ctx context.Cont
 
 // mergeTaskSequentialInWorktree performs a merge in the provided worktree git client.
 // This is the isolated version that doesn't touch the user's working directory.
-func (m *WorkflowWorktreeManagerImpl) mergeTaskSequentialInWorktree(ctx context.Context, worktreeGit *Client, taskBranch string, taskID string) error {
+func (m *WorkflowWorktreeManagerImpl) mergeTaskSequentialInWorktree(ctx context.Context, worktreeGit *Client, taskBranch, taskID string) error {
 	message := fmt.Sprintf("Merge task %s", taskID)
 
 	// Execute merge with --no-ff in the worktree
@@ -625,7 +625,9 @@ func (m *WorkflowWorktreeManagerImpl) getAheadBehind(ctx context.Context, branch
 	}
 
 	var behind, ahead int
-	fmt.Sscanf(output, "%d\t%d", &behind, &ahead)
+	if _, err := fmt.Sscanf(output, "%d\t%d", &behind, &ahead); err != nil {
+		return aheadBehindInfo{}, fmt.Errorf("parsing ahead/behind: %w", err)
+	}
 
 	return aheadBehindInfo{ahead: ahead, behind: behind}, nil
 }

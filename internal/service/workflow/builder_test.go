@@ -8,11 +8,11 @@ import (
 
 func TestBuildRunnerConfigFromConfig_SingleAgentConfig(t *testing.T) {
 	tests := []struct {
-		name           string
-		cfg            *config.Config
-		expectEnabled  bool
-		expectAgent    string
-		expectModel    string
+		name          string
+		cfg           *config.Config
+		expectEnabled bool
+		expectAgent   string
+		expectModel   string
 	}{
 		{
 			name: "single_agent enabled from app config",
@@ -63,8 +63,8 @@ func TestBuildRunnerConfigFromConfig_SingleAgentConfig(t *testing.T) {
 			expectModel:   "",
 		},
 		{
-			name: "empty config defaults to disabled",
-			cfg:  &config.Config{},
+			name:          "empty config defaults to disabled",
+			cfg:           &config.Config{},
 			expectEnabled: false,
 			expectAgent:   "",
 			expectModel:   "",

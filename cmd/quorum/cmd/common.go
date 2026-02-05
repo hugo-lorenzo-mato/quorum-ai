@@ -324,18 +324,18 @@ func CreateWorkflowContext(deps *PhaseRunnerDeps, state *core.WorkflowState) *wo
 	}
 
 	return &workflow.Context{
-		State:      state,
-		Agents:     deps.Registry,
-		Prompts:    deps.PromptAdapter,
-		Checkpoint: deps.CheckpointAdapter,
-		Retry:      deps.RetryAdapter,
-		RateLimits: deps.RateLimiterAdapt,
-		Worktrees:  deps.WorktreeManager,
+		State:             state,
+		Agents:            deps.Registry,
+		Prompts:           deps.PromptAdapter,
+		Checkpoint:        deps.CheckpointAdapter,
+		Retry:             deps.RetryAdapter,
+		RateLimits:        deps.RateLimiterAdapt,
+		Worktrees:         deps.WorktreeManager,
 		WorkflowWorktrees: deps.WorkflowWorktrees,
 		GitIsolation:      deps.GitIsolation,
-		Git:        deps.GitClient,
-		GitHub:     deps.GitHubClient,
-		Logger:     deps.Logger,
+		Git:               deps.GitClient,
+		GitHub:            deps.GitHubClient,
+		Logger:            deps.Logger,
 		Config: &workflow.Config{
 			DryRun:            deps.RunnerConfig.DryRun,
 			Sandbox:           deps.RunnerConfig.Sandbox,

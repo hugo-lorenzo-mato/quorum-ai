@@ -65,6 +65,7 @@ func init() {
 		"Disable CORS headers")
 }
 
+//nolint:gocyclo // CLI wiring handles many flags and dependencies.
 func runServe(_ *cobra.Command, _ []string) error {
 	// Create logger
 	logger := logging.New(logging.Config{

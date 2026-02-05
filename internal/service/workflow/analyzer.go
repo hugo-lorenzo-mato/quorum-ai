@@ -1842,9 +1842,9 @@ func loadExistingAnalysis(path, agentName, model string) (*AnalysisOutput, error
 type AnalysisCheckpointMetadata struct {
 	AgentName   string  `json:"agent_name"`
 	Model       string  `json:"model"`
-	Round       int     `json:"round"`        // 1 for V1, 2 for V2, etc.
-	FilePath    string  `json:"file_path"`    // Path to analysis file on disk
-	PromptHash  string  `json:"prompt_hash"`  // SHA256 of effective prompt for cache invalidation
+	Round       int     `json:"round"`       // 1 for V1, 2 for V2, etc.
+	FilePath    string  `json:"file_path"`   // Path to analysis file on disk
+	PromptHash  string  `json:"prompt_hash"` // SHA256 of effective prompt for cache invalidation
 	TokensIn    int     `json:"tokens_in"`
 	TokensOut   int     `json:"tokens_out"`
 	CostUSD     float64 `json:"cost_usd"`

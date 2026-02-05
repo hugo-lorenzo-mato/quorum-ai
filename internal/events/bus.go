@@ -40,7 +40,7 @@ func NewBaseEvent(eventType, workflowID, projectID string) BaseEvent {
 }
 
 // NewBaseEventLegacy creates a new base event without project ID.
-// DEPRECATED: Use NewBaseEvent with projectID for proper project filtering.
+// Deprecated: Use NewBaseEvent with projectID for proper project filtering.
 func NewBaseEventLegacy(eventType, workflowID string) BaseEvent {
 	return NewBaseEvent(eventType, workflowID, "")
 }

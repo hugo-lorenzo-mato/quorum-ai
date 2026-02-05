@@ -135,28 +135,28 @@ func DefaultRunnerConfig() *RunnerConfig {
 // It coordinates the refinement, analysis, planning, and execution phases
 // but delegates the actual work to specialized phase runners.
 type Runner struct {
-	config         *RunnerConfig
-	state          StateManager
-	agents         core.AgentRegistry
-	refiner        *Refiner
-	analyzer       *Analyzer
-	planner        *Planner
-	executor       *Executor
-	checkpoint     CheckpointCreator
-	resumeProvider ResumePointProvider
-	prompts        PromptRenderer
-	retry          RetryExecutor
-	rateLimits     RateLimiterGetter
-	worktrees      WorktreeManager
+	config            *RunnerConfig
+	state             StateManager
+	agents            core.AgentRegistry
+	refiner           *Refiner
+	analyzer          *Analyzer
+	planner           *Planner
+	executor          *Executor
+	checkpoint        CheckpointCreator
+	resumeProvider    ResumePointProvider
+	prompts           PromptRenderer
+	retry             RetryExecutor
+	rateLimits        RateLimiterGetter
+	worktrees         WorktreeManager
 	workflowWorktrees core.WorkflowWorktreeManager
 	gitIsolation      *GitIsolationConfig
-	git            core.GitClient
-	github         core.GitHubClient
-	logger         *logging.Logger
-	output         OutputNotifier
-	modeEnforcer   ModeEnforcerInterface
-	control        *control.ControlPlane
-	heartbeat      *HeartbeatManager
+	git               core.GitClient
+	github            core.GitHubClient
+	logger            *logging.Logger
+	output            OutputNotifier
+	modeEnforcer      ModeEnforcerInterface
+	control           *control.ControlPlane
+	heartbeat         *HeartbeatManager
 }
 
 // RunnerDeps holds dependencies for creating a Runner.
@@ -168,22 +168,22 @@ type RunnerDeps struct {
 		DAGBuilder
 		TaskDAG
 	}
-	Checkpoint       CheckpointCreator
-	ResumeProvider   ResumePointProvider
-	Prompts          PromptRenderer
-	Retry            RetryExecutor
-	RateLimits       RateLimiterGetter
-	Worktrees        WorktreeManager
+	Checkpoint        CheckpointCreator
+	ResumeProvider    ResumePointProvider
+	Prompts           PromptRenderer
+	Retry             RetryExecutor
+	RateLimits        RateLimiterGetter
+	Worktrees         WorktreeManager
 	WorkflowWorktrees core.WorkflowWorktreeManager
 	GitIsolation      *GitIsolationConfig
-	GitClientFactory GitClientFactory
-	Git              core.GitClient
-	GitHub           core.GitHubClient
-	Logger           *logging.Logger
-	Output           OutputNotifier
-	ModeEnforcer     ModeEnforcerInterface
-	Control          *control.ControlPlane
-	Heartbeat        *HeartbeatManager
+	GitClientFactory  GitClientFactory
+	Git               core.GitClient
+	GitHub            core.GitHubClient
+	Logger            *logging.Logger
+	Output            OutputNotifier
+	ModeEnforcer      ModeEnforcerInterface
+	Control           *control.ControlPlane
+	Heartbeat         *HeartbeatManager
 }
 
 // NewRunner creates a new workflow runner with all dependencies.
@@ -207,28 +207,28 @@ func NewRunner(deps RunnerDeps) *Runner {
 	}
 
 	return &Runner{
-		config:         deps.Config,
-		state:          deps.State,
-		agents:         deps.Agents,
-		refiner:        NewRefiner(deps.Config.Refiner),
-		analyzer:       analyzer,
-		planner:        NewPlanner(deps.DAG, deps.State),
-		executor:       NewExecutor(deps.DAG, deps.State, deps.Config.DenyTools).WithGitFactory(deps.GitClientFactory),
-		checkpoint:     deps.Checkpoint,
-		resumeProvider: deps.ResumeProvider,
-		prompts:        deps.Prompts,
-		retry:          deps.Retry,
-		rateLimits:     deps.RateLimits,
-		worktrees:      deps.Worktrees,
+		config:            deps.Config,
+		state:             deps.State,
+		agents:            deps.Agents,
+		refiner:           NewRefiner(deps.Config.Refiner),
+		analyzer:          analyzer,
+		planner:           NewPlanner(deps.DAG, deps.State),
+		executor:          NewExecutor(deps.DAG, deps.State, deps.Config.DenyTools).WithGitFactory(deps.GitClientFactory),
+		checkpoint:        deps.Checkpoint,
+		resumeProvider:    deps.ResumeProvider,
+		prompts:           deps.Prompts,
+		retry:             deps.Retry,
+		rateLimits:        deps.RateLimits,
+		worktrees:         deps.Worktrees,
 		workflowWorktrees: deps.WorkflowWorktrees,
 		gitIsolation:      deps.GitIsolation,
-		git:            deps.Git,
-		github:         deps.GitHub,
-		logger:         deps.Logger,
-		output:         deps.Output,
-		modeEnforcer:   deps.ModeEnforcer,
-		control:        deps.Control,
-		heartbeat:      deps.Heartbeat,
+		git:               deps.Git,
+		github:            deps.GitHub,
+		logger:            deps.Logger,
+		output:            deps.Output,
+		modeEnforcer:      deps.ModeEnforcer,
+		control:           deps.Control,
+		heartbeat:         deps.Heartbeat,
 	}
 }
 
@@ -826,22 +826,22 @@ func (r *Runner) createContext(state *core.WorkflowState) *Context {
 	}
 
 	return &Context{
-		State:        state,
-		Agents:       r.agents,
-		Prompts:      r.prompts,
-		Checkpoint:   r.checkpoint,
-		Retry:        r.retry,
-		RateLimits:   r.rateLimits,
-		Worktrees:    r.worktrees,
+		State:             state,
+		Agents:            r.agents,
+		Prompts:           r.prompts,
+		Checkpoint:        r.checkpoint,
+		Retry:             r.retry,
+		RateLimits:        r.rateLimits,
+		Worktrees:         r.worktrees,
 		WorkflowWorktrees: r.workflowWorktrees,
 		GitIsolation:      r.gitIsolation,
-		Git:          r.git,
-		GitHub:       r.github,
-		Logger:       r.logger,
-		Output:       r.output,
-		ModeEnforcer: r.modeEnforcer,
-		Control:      r.control,
-		Report:       reportWriter,
+		Git:               r.git,
+		GitHub:            r.github,
+		Logger:            r.logger,
+		Output:            r.output,
+		ModeEnforcer:      r.modeEnforcer,
+		Control:           r.control,
+		Report:            reportWriter,
 		Config: &Config{
 			DryRun:                 r.config.DryRun,
 			Sandbox:                r.config.Sandbox,
@@ -923,7 +923,7 @@ func (r *Runner) writeErrorToReportDir(state *core.WorkflowState, err error) {
 %s
 `, state.WorkflowID, time.Now().Format(time.RFC3339), state.CurrentPhase, err.Error(), state.Prompt)
 
-	if writeErr := os.WriteFile(errorFile, []byte(content), 0644); writeErr != nil {
+	if writeErr := os.WriteFile(errorFile, []byte(content), 0o600); writeErr != nil {
 		if r.logger != nil {
 			r.logger.Warn("failed to write error file",
 				"workflow_id", state.WorkflowID,

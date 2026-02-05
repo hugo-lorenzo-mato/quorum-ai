@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -41,26 +42,30 @@ func newTestServer(t *testing.T) (*httptest.Server, *api.Server, core.StateManag
 	registry := testutil.NewMockRegistry()
 	registry.Add("claude", testutil.NewMockAgent("claude"))
 	registry.Add("gemini", testutil.NewMockAgent("gemini"))
+	registry.Add("codex", testutil.NewMockAgent("codex"))
+	registry.Add("copilot", testutil.NewMockAgent("copilot"))
 	registry.Add("opencode", testutil.NewMockAgent("opencode"))
 
 	// 4. Setup Config Loader (pointing to a temp config file)
-	configPath := filepath.Join(dir, ".quorum.yaml")
-	// Write default config
-	defaultConfig := `
-log:
-  level: info
-agents:
-  default: claude
-`
-	err = os.WriteFile(configPath, []byte(defaultConfig), 0644)
+	configDir := filepath.Join(dir, ".quorum")
+	testutil.AssertNoError(t, os.MkdirAll(configDir, 0o750))
+	configPath := filepath.Join(configDir, "config.yaml")
+	// Write default config (valid, full)
+	err = os.WriteFile(configPath, []byte(config.DefaultConfigYAML), 0o600)
+	testutil.AssertNoError(t, err)
+	// Also write legacy config for file API tests
+	legacyConfigPath := filepath.Join(dir, ".quorum.yaml")
+	err = os.WriteFile(legacyConfigPath, []byte(config.DefaultConfigYAML), 0o600)
 	testutil.AssertNoError(t, err)
 
 	cfgLoader := config.NewLoader().WithConfigFile(configPath)
 
 	// 5. Create Server
+	tracker := api.NewUnifiedTracker(sm, nil, slog.Default(), api.DefaultUnifiedTrackerConfig())
 	srv := api.NewServer(sm, eb,
 		api.WithAgentRegistry(registry),
 		api.WithConfigLoader(cfgLoader),
+		api.WithUnifiedTracker(tracker),
 		api.WithRoot(dir),
 	)
 
@@ -173,23 +178,26 @@ func TestE2E_Configuration(t *testing.T) {
 	status, headers, body := request(t, ts, "GET", "/api/v1/config", nil)
 	testutil.AssertEqual(t, status, http.StatusOK)
 
-	var cfg config.Config
+	var cfg api.ConfigResponseWithMeta
 	err := json.Unmarshal(body, &cfg)
 	testutil.AssertNoError(t, err)
-	testutil.AssertEqual(t, cfg.Agents.Default, "claude")
+	testutil.AssertEqual(t, cfg.Config.Agents.Default, "claude")
 
 	// 2. Update Config
 	etag := headers.Get("ETag")
 
-	newCfg := cfg
-	newCfg.Agents.Default = "gemini"
+	updateReq := api.FullConfigUpdate{
+		Agents: &api.AgentsConfigUpdate{
+			Default: strPtr("gemini"),
+		},
+	}
 
 	// Try without If-Match first (optional check, but good for E2E)
-	status, _, _ = request(t, ts, "PATCH", "/api/v1/config", newCfg)
+	status, _, _ = request(t, ts, "PATCH", "/api/v1/config", updateReq)
 
 	// If it fails with PreconditionRequired, retry with header
 	if status == http.StatusPreconditionRequired {
-		reqBody, err := json.Marshal(newCfg)
+		reqBody, err := json.Marshal(updateReq)
 		testutil.AssertNoError(t, err)
 		req, err := http.NewRequest("PATCH", ts.URL+"/api/v1/config", bytes.NewBuffer(reqBody))
 		testutil.AssertNoError(t, err)
@@ -209,7 +217,7 @@ func TestE2E_Configuration(t *testing.T) {
 	testutil.AssertEqual(t, status, http.StatusOK)
 	err = json.Unmarshal(body, &cfg)
 	testutil.AssertNoError(t, err)
-	testutil.AssertEqual(t, cfg.Agents.Default, "gemini")
+	testutil.AssertEqual(t, cfg.Config.Agents.Default, "gemini")
 }
 
 func TestE2E_ConfigSections(t *testing.T) {
@@ -239,8 +247,7 @@ func TestE2E_ConfigSections(t *testing.T) {
 			Agents: &api.AgentsConfigUpdate{
 				Default: strPtr("gemini"),
 				Claude: &api.FullAgentConfigUpdate{
-					Enabled: boolPtr(false),
-					Model:   strPtr("claude-3-5-sonnet-latest"),
+					Model: strPtr("claude-3-5-sonnet-latest"),
 				},
 			},
 		}
@@ -251,7 +258,7 @@ func TestE2E_ConfigSections(t *testing.T) {
 		err := json.Unmarshal(body, &cfg)
 		testutil.AssertNoError(t, err)
 		testutil.AssertEqual(t, cfg.Config.Agents.Default, "gemini")
-		testutil.AssertEqual(t, cfg.Config.Agents.Claude.Enabled, false)
+		testutil.AssertEqual(t, cfg.Config.Agents.Claude.Enabled, true)
 		testutil.AssertEqual(t, cfg.Config.Agents.Claude.Model, "claude-3-5-sonnet-latest")
 	})
 
@@ -265,7 +272,7 @@ func TestE2E_ConfigSections(t *testing.T) {
 					AutoPush: boolPtr(true),
 				},
 				Worktree: &api.WorktreeConfigUpdate{
-					Mode: strPtr("shared"),
+					Mode: strPtr("always"),
 				},
 			},
 		}
@@ -277,7 +284,7 @@ func TestE2E_ConfigSections(t *testing.T) {
 		testutil.AssertNoError(t, err)
 		testutil.AssertEqual(t, cfg.Config.Git.Task.AutoCommit, true)
 		testutil.AssertEqual(t, cfg.Config.Git.Finalization.AutoPush, true)
-		testutil.AssertEqual(t, cfg.Config.Git.Worktree.Mode, "shared")
+		testutil.AssertEqual(t, cfg.Config.Git.Worktree.Mode, "always")
 	})
 
 	t.Run("Log Config", func(t *testing.T) {

@@ -97,9 +97,9 @@ type ChatHandler struct {
 	eventBus            *events.EventBus
 	sessions            map[string]*chatSessionState
 	attachmentStore     *attachments.Store
-	chatStore           core.ChatStore              // Fallback global store
-	chatStoreResolver   ChatStoreResolver           // Per-request store resolver
-	projectRootResolver ProjectRootResolver         // Per-request project root resolver
+	chatStore           core.ChatStore      // Fallback global store
+	chatStoreResolver   ChatStoreResolver   // Per-request store resolver
+	projectRootResolver ProjectRootResolver // Per-request project root resolver
 }
 
 // chatSessionState holds the internal state of a chat session.

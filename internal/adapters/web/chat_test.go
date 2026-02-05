@@ -167,6 +167,7 @@ func TestCreateSession(t *testing.T) {
 func TestListSessions(t *testing.T) {
 	h := NewChatHandler(nil, nil, nil, nil)
 	r := setupTestRouter(h)
+	projectRoot := h.getProjectRoot(context.Background())
 
 	// Create some sessions
 	h.sessions["session-1"] = &chatSessionState{
@@ -174,9 +175,11 @@ func TestListSessions(t *testing.T) {
 		messages: []ChatMessage{
 			{ID: "msg-1", Content: "Hello"},
 		},
+		projectRoot: projectRoot,
 	}
 	h.sessions["session-2"] = &chatSessionState{
-		session: ChatSession{ID: "session-2", Agent: "gemini"},
+		session:     ChatSession{ID: "session-2", Agent: "gemini"},
+		projectRoot: projectRoot,
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/chat/sessions", nil)

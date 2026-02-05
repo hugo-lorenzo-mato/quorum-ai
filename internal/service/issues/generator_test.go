@@ -289,9 +289,9 @@ func TestGenerator_formatTitle(t *testing.T) {
 		want     string
 	}{
 		{
-			name:     "main issue",
-			isMain:   true,
-			want:     "[quorum] Workflow Summary",
+			name:   "main issue",
+			isMain: true,
+			want:   "[quorum] Workflow Summary",
 		},
 		{
 			name:     "task issue",

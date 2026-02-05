@@ -308,8 +308,9 @@ issues:
 	if cfg.Git.Worktree.AutoClean != true {
 		t.Errorf("Git.Worktree.AutoClean = %v, want %v (legacy autoclean)", cfg.Git.Worktree.AutoClean, true)
 	}
-	if cfg.Git.Worktree.Dir != ".worktrees" {
-		t.Errorf("Git.Worktree.Dir = %q, want %q", cfg.Git.Worktree.Dir, ".worktrees")
+	expectedWorktreeDir := filepath.Join(tmpDir, ".worktrees")
+	if cfg.Git.Worktree.Dir != expectedWorktreeDir {
+		t.Errorf("Git.Worktree.Dir = %q, want %q", cfg.Git.Worktree.Dir, expectedWorktreeDir)
 	}
 	if cfg.Git.Task.AutoCommit != true {
 		t.Errorf("Git.Task.AutoCommit = %v, want %v (legacy auto_commit)", cfg.Git.Task.AutoCommit, true)

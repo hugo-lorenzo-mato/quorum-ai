@@ -683,11 +683,11 @@ var (
 	createWorkflowWorktreeManager = defaultCreateWorkflowWorktreeManager
 )
 
-func defaultCreateGitClient(cwd string) (core.GitClient, error) {
+func defaultCreateGitClient(_ string) (core.GitClient, error) {
 	return nil, fmt.Errorf("git client factory not configured")
 }
 
-func defaultCreateWorktreeManager(gc core.GitClient, worktreeDir string, logger *logging.Logger) WorktreeManager {
+func defaultCreateWorktreeManager(_ core.GitClient, _ string, _ *logging.Logger) WorktreeManager {
 	return nil
 }
 
@@ -699,7 +699,7 @@ func defaultCreateGitClientFactory() GitClientFactory {
 	return nil
 }
 
-func defaultCreateWorkflowWorktreeManager(_ core.GitClient, _ string, _ string, _ *logging.Logger) (core.WorkflowWorktreeManager, error) {
+func defaultCreateWorkflowWorktreeManager(_ core.GitClient, _, _ string, _ *logging.Logger) (core.WorkflowWorktreeManager, error) {
 	return nil, fmt.Errorf("workflow worktree manager factory not configured")
 }
 

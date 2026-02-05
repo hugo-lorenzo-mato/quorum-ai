@@ -55,12 +55,12 @@ type TraceConfigResponse struct {
 
 // WorkflowConfigResponse represents workflow configuration.
 type WorkflowConfigResponse struct {
-	Timeout    string                    `json:"timeout"`
-	MaxRetries int                       `json:"max_retries"`
-	DryRun     bool                      `json:"dry_run"`
-	Sandbox    bool                      `json:"sandbox"`
-	DenyTools  []string                  `json:"deny_tools"`
-	Heartbeat  HeartbeatConfigResponse   `json:"heartbeat"`
+	Timeout    string                  `json:"timeout"`
+	MaxRetries int                     `json:"max_retries"`
+	DryRun     bool                    `json:"dry_run"`
+	Sandbox    bool                    `json:"sandbox"`
+	DenyTools  []string                `json:"deny_tools"`
+	Heartbeat  HeartbeatConfigResponse `json:"heartbeat"`
 }
 
 // HeartbeatConfigResponse represents heartbeat configuration for zombie workflow detection.
@@ -247,15 +247,15 @@ type PreflightConfigResponse struct {
 
 // IssuesConfigResponse represents issues configuration.
 type IssuesConfigResponse struct {
-	Enabled      bool                           `json:"enabled"`
-	Provider     string                         `json:"provider"`
-	AutoGenerate bool                           `json:"auto_generate"`
-	Timeout      string                         `json:"timeout"`
-	Template     IssueTemplateConfigResponse    `json:"template"`
-	Labels       []string                       `json:"default_labels"`
-	Assignees    []string                       `json:"default_assignees"`
-	GitLab       GitLabIssueConfigResponse      `json:"gitlab"`
-	Generator    IssueGeneratorConfigResponse   `json:"generator"`
+	Enabled      bool                         `json:"enabled"`
+	Provider     string                       `json:"provider"`
+	AutoGenerate bool                         `json:"auto_generate"`
+	Timeout      string                       `json:"timeout"`
+	Template     IssueTemplateConfigResponse  `json:"template"`
+	Labels       []string                     `json:"default_labels"`
+	Assignees    []string                     `json:"default_assignees"`
+	GitLab       GitLabIssueConfigResponse    `json:"gitlab"`
+	Generator    IssueGeneratorConfigResponse `json:"generator"`
 }
 
 // IssueTemplateConfigResponse represents issue template configuration.
@@ -327,12 +327,12 @@ type TraceConfigUpdate struct {
 
 // WorkflowConfigUpdate represents workflow configuration update.
 type WorkflowConfigUpdate struct {
-	Timeout    *string                  `json:"timeout,omitempty"`
-	MaxRetries *int                     `json:"max_retries,omitempty"`
-	DryRun     *bool                    `json:"dry_run,omitempty"`
-	Sandbox    *bool                    `json:"sandbox,omitempty"`
-	DenyTools  *[]string                `json:"deny_tools,omitempty"`
-	Heartbeat  *HeartbeatConfigUpdate   `json:"heartbeat,omitempty"`
+	Timeout    *string                `json:"timeout,omitempty"`
+	MaxRetries *int                   `json:"max_retries,omitempty"`
+	DryRun     *bool                  `json:"dry_run,omitempty"`
+	Sandbox    *bool                  `json:"sandbox,omitempty"`
+	DenyTools  *[]string              `json:"deny_tools,omitempty"`
+	Heartbeat  *HeartbeatConfigUpdate `json:"heartbeat,omitempty"`
 }
 
 // HeartbeatConfigUpdate represents heartbeat configuration update.
@@ -519,15 +519,15 @@ type PreflightConfigUpdate struct {
 
 // IssuesConfigUpdate represents issues configuration update.
 type IssuesConfigUpdate struct {
-	Enabled      *bool                         `json:"enabled,omitempty"`
-	Provider     *string                       `json:"provider,omitempty"`
-	AutoGenerate *bool                         `json:"auto_generate,omitempty"`
-	Timeout      *string                       `json:"timeout,omitempty"`
-	Template     *IssueTemplateConfigUpdate    `json:"template,omitempty"`
-	Labels       *[]string                     `json:"default_labels,omitempty"`
-	Assignees    *[]string                     `json:"default_assignees,omitempty"`
-	GitLab       *GitLabIssueConfigUpdate      `json:"gitlab,omitempty"`
-	Generator    *IssueGeneratorConfigUpdate   `json:"generator,omitempty"`
+	Enabled      *bool                       `json:"enabled,omitempty"`
+	Provider     *string                     `json:"provider,omitempty"`
+	AutoGenerate *bool                       `json:"auto_generate,omitempty"`
+	Timeout      *string                     `json:"timeout,omitempty"`
+	Template     *IssueTemplateConfigUpdate  `json:"template,omitempty"`
+	Labels       *[]string                   `json:"default_labels,omitempty"`
+	Assignees    *[]string                   `json:"default_assignees,omitempty"`
+	GitLab       *GitLabIssueConfigUpdate    `json:"gitlab,omitempty"`
+	Generator    *IssueGeneratorConfigUpdate `json:"generator,omitempty"`
 }
 
 // IssueTemplateConfigUpdate represents issue template update.

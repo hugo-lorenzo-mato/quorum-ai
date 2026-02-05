@@ -205,12 +205,12 @@ func runExecute(_ *cobra.Command, _ []string) error {
 	// Workflow-level finalization for git isolation (push/PR/cleanup).
 	// Best-effort: failures here should not mark the workflow as failed.
 	(&workflow.WorkflowIsolationFinalizer{
-		Finalization:     deps.RunnerConfig.Finalization,
+		Finalization:      deps.RunnerConfig.Finalization,
 		GitIsolation:      deps.GitIsolation,
 		WorkflowWorktrees: deps.WorkflowWorktrees,
-		Git:              deps.GitClient,
-		GitHub:           deps.GitHubClient,
-		Logger:           deps.Logger,
+		Git:               deps.GitClient,
+		GitHub:            deps.GitHubClient,
+		Logger:            deps.Logger,
 	}).Finalize(ctx, workflowState)
 
 	// Mark workflow completed

@@ -160,8 +160,6 @@ func (pc *ProjectContext) initStateManager(opts *contextOptions) error {
 	switch opts.stateBackend {
 	case "json":
 		statePath = filepath.Join(stateDir, "state.json")
-	case "sqlite":
-		fallthrough
 	default:
 		statePath = filepath.Join(stateDir, "state.db")
 	}
@@ -204,8 +202,6 @@ func (pc *ProjectContext) initChatStore(opts *contextOptions) error {
 	switch opts.stateBackend {
 	case "json":
 		chatPath = filepath.Join(pc.Root, ".quorum", "chat")
-	case "sqlite":
-		fallthrough
 	default:
 		chatPath = filepath.Join(pc.Root, ".quorum", "chat.db")
 	}
@@ -278,7 +274,7 @@ func (pc *ProjectContext) IsClosed() bool {
 }
 
 // Validate checks that all resources are accessible
-func (pc *ProjectContext) Validate(ctx context.Context) error {
+func (pc *ProjectContext) Validate(_ context.Context) error {
 	pc.mu.RLock()
 	defer pc.mu.RUnlock()
 

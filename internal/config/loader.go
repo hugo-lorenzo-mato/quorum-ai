@@ -389,6 +389,8 @@ func (l *Loader) AllSettings() map[string]interface{} {
 
 // Validate checks configuration consistency and returns an error if invalid.
 // This provides fail-fast validation for agent references and model configuration.
+//
+//nolint:gocyclo // Validation is intentionally explicit for clearer errors.
 func Validate(cfg *Config) error {
 	// Validate default agent
 	if cfg.Agents.Default == "" {

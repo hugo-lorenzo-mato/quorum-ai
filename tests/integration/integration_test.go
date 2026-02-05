@@ -464,7 +464,8 @@ func TestIntegration_SQLiteMultipleWorkflows(t *testing.T) {
 	testutil.AssertNoError(t, sqliteSM.SetActiveWorkflowID(ctx, "wf-1"))
 	activeID, err = sqliteSM.GetActiveWorkflowID(ctx)
 	testutil.AssertNoError(t, err)
-	testutil.AssertEqual(t, activeID, "wf-1")
+	// Completed workflows are auto-cleaned from active tracking.
+	testutil.AssertEqual(t, activeID, "")
 }
 
 // TestIntegration_BackendFromConfig tests creating state manager from config.

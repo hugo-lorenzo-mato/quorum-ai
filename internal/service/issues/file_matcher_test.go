@@ -92,10 +92,10 @@ func TestMatchFile_TaskVariations(t *testing.T) {
 	matcher := NewFileMatcher(taskFiles)
 
 	tests := []struct {
-		filename     string
-		wantMatched  bool
-		wantTaskID   string
-		wantConfMin  int // minimum confidence
+		filename    string
+		wantMatched bool
+		wantTaskID  string
+		wantConfMin int // minimum confidence
 	}{
 		// High confidence matches
 		{"01-implement-login.md", true, "task-1", 90},
@@ -215,8 +215,8 @@ func TestMatchAll_HigherConfidencePrevails(t *testing.T) {
 
 	// Provide multiple files that could match task-1
 	filenames := []string{
-		"01-implement-login.md",        // Higher confidence (slug match)
-		"01-something-else.md",         // Lower confidence (number only)
+		"01-implement-login.md", // Higher confidence (slug match)
+		"01-something-else.md",  // Lower confidence (number only)
 	}
 
 	_, tasks, _ := matcher.MatchAll(filenames)

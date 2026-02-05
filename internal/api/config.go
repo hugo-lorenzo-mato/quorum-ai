@@ -339,11 +339,11 @@ func (s *Server) handleGetAgents(w http.ResponseWriter, _ *http.Request) {
 			// Requires local Ollama server with these models installed
 			"models": []string{
 				// Local Ollama models (from `ollama list`)
-				"qwen2.5-coder:32b",  // Best local coding model
-				"qwen3-coder:30b",    // Latest Qwen coder
-				"deepseek-r1:32b",    // Reasoning model
-				"codestral:22b",      // Mistral code model
-				"gpt-oss:20b",        // Open source GPT
+				"qwen2.5-coder:32b", // Best local coding model
+				"qwen3-coder:30b",   // Latest Qwen coder
+				"deepseek-r1:32b",   // Reasoning model
+				"codestral:22b",     // Mistral code model
+				"gpt-oss:20b",       // Open source GPT
 			},
 			"available": true,
 		},
@@ -372,7 +372,10 @@ func (s *Server) getProjectConfigPath(ctx context.Context) string {
 	if pc != nil {
 		return filepath.Join(pc.ProjectRoot(), ".quorum", "config.yaml")
 	}
-	// Fallback to relative path (legacy mode)
+	// Fallback to server root (legacy mode)
+	if s.root != "" {
+		return filepath.Join(s.root, ".quorum", "config.yaml")
+	}
 	return filepath.Join(".quorum", "config.yaml")
 }
 

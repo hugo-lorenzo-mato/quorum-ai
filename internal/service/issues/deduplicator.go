@@ -85,7 +85,7 @@ func NewDeduplicator(stateDir string) *Deduplicator {
 // GetOrCreateState retrieves existing state or creates new state for a workflow.
 // Returns the state and a bool indicating if it was existing (true) or new (false).
 func (d *Deduplicator) GetOrCreateState(workflowID, inputChecksum string) (*GenerationState, bool, error) {
-	statePath := d.getStatePath(workflowID)
+	statePath := d.getStatePath()
 
 	// Try to load existing state
 	state, err := d.loadState(statePath)
@@ -151,10 +151,10 @@ func (d *Deduplicator) MarkFailed(state *GenerationState, err error) {
 
 // Save persists the state to disk.
 func (d *Deduplicator) Save(state *GenerationState) error {
-	statePath := d.getStatePath(state.WorkflowID)
+	statePath := d.getStatePath()
 
 	// Ensure directory exists
-	if err := os.MkdirAll(filepath.Dir(statePath), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(statePath), 0o755); err != nil {
 		return fmt.Errorf("creating state directory: %w", err)
 	}
 
@@ -163,7 +163,7 @@ func (d *Deduplicator) Save(state *GenerationState) error {
 		return fmt.Errorf("marshaling state: %w", err)
 	}
 
-	if err := os.WriteFile(statePath, data, 0644); err != nil {
+	if err := os.WriteFile(statePath, data, 0o600); err != nil {
 		return fmt.Errorf("writing state file: %w", err)
 	}
 
@@ -178,15 +178,15 @@ func (d *Deduplicator) Save(state *GenerationState) error {
 
 // Delete removes the state file for a workflow.
 func (d *Deduplicator) Delete(workflowID string) error {
-	statePath := d.getStatePath(workflowID)
+	statePath := d.getStatePath()
 	if err := os.Remove(statePath); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("removing state file: %w", err)
+		return fmt.Errorf("removing state file for workflow %s: %w", workflowID, err)
 	}
 	return nil
 }
 
 // getStatePath returns the path to the state file for a workflow.
-func (d *Deduplicator) getStatePath(workflowID string) string {
+func (d *Deduplicator) getStatePath() string {
 	return filepath.Join(d.stateDir, ".generation-state.json")
 }
 
@@ -244,8 +244,12 @@ func hashFile(h io.Writer, path string) error {
 	defer f.Close()
 
 	// Write path as separator
-	h.Write([]byte(path))
-	h.Write([]byte{0})
+	if _, err := h.Write([]byte(path)); err != nil {
+		return err
+	}
+	if _, err := h.Write([]byte{0}); err != nil {
+		return err
+	}
 
 	// Write content
 	if _, err := io.Copy(h, f); err != nil {
@@ -270,10 +274,13 @@ func truncateChecksum(checksum string) string {
 }
 
 // HasExistingIssues checks if issues have already been created for a workflow.
-func (d *Deduplicator) HasExistingIssues(workflowID string) (bool, int) {
-	statePath := d.getStatePath(workflowID)
+func (d *Deduplicator) HasExistingIssues(workflowID string) (hasIssues bool, issueCount int) {
+	statePath := d.getStatePath()
 	state, err := d.loadState(statePath)
 	if err != nil || state == nil {
+		return false, 0
+	}
+	if state.WorkflowID != workflowID {
 		return false, 0
 	}
 	return len(state.CreatedIssues) > 0, len(state.CreatedIssues)
@@ -281,9 +288,12 @@ func (d *Deduplicator) HasExistingIssues(workflowID string) (bool, int) {
 
 // GetExistingIssueNumbers returns the numbers of already-created issues.
 func (d *Deduplicator) GetExistingIssueNumbers(workflowID string) []int {
-	statePath := d.getStatePath(workflowID)
+	statePath := d.getStatePath()
 	state, err := d.loadState(statePath)
 	if err != nil || state == nil {
+		return nil
+	}
+	if state.WorkflowID != workflowID {
 		return nil
 	}
 

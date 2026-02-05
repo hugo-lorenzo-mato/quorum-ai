@@ -207,6 +207,8 @@ func isSQLiteBusy(err error) bool {
 }
 
 // migrate runs pending migrations.
+//
+//nolint:gocyclo // Migration stepper is intentionally verbose for clarity.
 func (m *SQLiteStateManager) migrate() error {
 	// Check current schema version
 	var version int
@@ -557,6 +559,7 @@ func (m *SQLiteStateManager) LoadByID(ctx context.Context, id core.WorkflowID) (
 	return m.loadWorkflowByID(ctx, id)
 }
 
+//nolint:gocyclo // Multi-table load keeps logic centralized for consistency.
 func (m *SQLiteStateManager) loadWorkflowByID(ctx context.Context, id core.WorkflowID) (*core.WorkflowState, error) {
 	// Load workflow using read connection
 	var state core.WorkflowState
@@ -900,6 +903,7 @@ func (m *SQLiteStateManager) GetActiveWorkflowID(ctx context.Context) (core.Work
 		if err != nil {
 			// Query error - return the ID anyway (don't break on transient errors)
 			m.mu.RUnlock()
+			//nolint:nilerr // Status lookup failure shouldn't block access to the active workflow ID.
 			return core.WorkflowID(id), nil
 		}
 
@@ -1215,10 +1219,7 @@ func (m *SQLiteStateManager) ReleaseWorkflowLock(ctx context.Context, workflowID
 		}
 
 		rows, _ := result.RowsAffected()
-		if rows == 0 {
-			// Lock didn't exist or wasn't ours - not an error, just log
-			// (no logger on struct, so we silently continue)
-		}
+		_ = rows // Lock didn't exist or wasn't ours; ignore.
 
 		return nil
 	})
@@ -2102,6 +2103,8 @@ func (m *SQLiteStateManager) ExecuteAtomically(ctx context.Context, fn func(core
 }
 
 // LoadByID retrieves a workflow state within the transaction.
+//
+//nolint:gocyclo // Complex aggregation mirrors database schema.
 func (a *sqliteAtomicContext) LoadByID(id core.WorkflowID) (*core.WorkflowState, error) {
 	var state core.WorkflowState
 	var taskOrderJSON, configJSON, metricsJSON sql.NullString

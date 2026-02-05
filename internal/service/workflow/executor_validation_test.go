@@ -296,7 +296,7 @@ func TestValidateTaskOutput_CopilotScenario(t *testing.T) {
 	// Copilot typically reports low tokens (estimated) but actually writes files
 	t.Run("Copilot with git changes should pass", func(t *testing.T) {
 		result := &core.ExecuteResult{
-			TokensOut: 162, // Actual value from the error
+			TokensOut: 162,               // Actual value from the error
 			ToolCalls: []core.ToolCall{}, // Copilot doesn't report tool calls
 		}
 		task := &core.Task{Name: "Implement feature"}

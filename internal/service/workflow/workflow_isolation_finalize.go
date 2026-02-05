@@ -13,13 +13,13 @@ import (
 // This is intentionally best-effort: failures here should not mark the whole workflow as failed,
 // because all task results are already present in the workflow branch.
 type WorkflowIsolationFinalizer struct {
-	Finalization     FinalizationConfig
+	Finalization      FinalizationConfig
 	GitIsolation      *GitIsolationConfig
 	WorkflowWorktrees core.WorkflowWorktreeManager
-	Git              core.GitClient
-	GitHub           core.GitHubClient
-	Logger           *logging.Logger
-	Output           OutputNotifier
+	Git               core.GitClient
+	GitHub            core.GitHubClient
+	Logger            *logging.Logger
+	Output            OutputNotifier
 }
 
 func (f *WorkflowIsolationFinalizer) logWarn(msg string, args ...any) {
@@ -131,13 +131,13 @@ func (r *Runner) finalizeWorkflowIsolation(ctx context.Context, state *core.Work
 		return
 	}
 	finalizer := &WorkflowIsolationFinalizer{
-		Finalization:     r.config.Finalization,
+		Finalization:      r.config.Finalization,
 		GitIsolation:      r.gitIsolation,
 		WorkflowWorktrees: r.workflowWorktrees,
-		Git:              r.git,
-		GitHub:           r.github,
-		Logger:           r.logger,
-		Output:           r.output,
+		Git:               r.git,
+		GitHub:            r.github,
+		Logger:            r.logger,
+		Output:            r.output,
 	}
 	finalizer.Finalize(ctx, state)
 }

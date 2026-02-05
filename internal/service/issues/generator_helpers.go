@@ -17,12 +17,12 @@ func (g *Generator) openIssuesLogger(workflowID string) (*slog.Logger, func() er
 	}
 
 	logDir := filepath.Join(cwd, ".quorum", "logs")
-	if err := os.MkdirAll(logDir, 0755); err != nil {
+	if err := os.MkdirAll(logDir, 0o755); err != nil {
 		return nil, nil, fmt.Errorf("creating log directory: %w", err)
 	}
 
 	logPath := filepath.Join(logDir, fmt.Sprintf("issues-%s.log", workflowID))
-	file, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	file, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
 		return nil, nil, fmt.Errorf("opening issues log file: %w", err)
 	}

@@ -83,8 +83,3 @@ func (s *Server) getProjectRootPath(ctx context.Context) string {
 func getProjectID(ctx context.Context) string {
 	return middleware.GetProjectID(ctx)
 }
-
-// hasProjectContext checks if a project context is available in the request.
-func hasProjectContext(ctx context.Context) bool {
-	return middleware.GetProjectContext(ctx) != nil
-}

@@ -201,11 +201,11 @@ func (m *FileMatcher) GetMissingTasks(matchedTasks map[string]string) []string {
 func extractTaskNumber(filename string) int {
 	// Try different patterns
 	patterns := []*regexp.Regexp{
-		regexp.MustCompile(`^(\d+)-`),           // 01-foo.md
-		regexp.MustCompile(`task-(\d+)`),        // task-1-foo.md
-		regexp.MustCompile(`issue-(\d+)`),       // issue-1.md
-		regexp.MustCompile(`-(\d+)\.md$`),       // foo-1.md
-		regexp.MustCompile(`(\d+)\.md$`),        // 1.md
+		regexp.MustCompile(`^(\d+)-`),     // 01-foo.md
+		regexp.MustCompile(`task-(\d+)`),  // task-1-foo.md
+		regexp.MustCompile(`issue-(\d+)`), // issue-1.md
+		regexp.MustCompile(`-(\d+)\.md$`), // foo-1.md
+		regexp.MustCompile(`(\d+)\.md$`),  // 1.md
 	}
 
 	for _, re := range patterns {

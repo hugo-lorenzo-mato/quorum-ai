@@ -372,22 +372,22 @@ func (s *Server) handleCreateWorkflow(w http.ResponseWriter, r *http.Request) {
 
 	// Create workflow state
 	state := &core.WorkflowState{
-		Version:       core.CurrentStateVersion,
-		WorkflowID:    workflowID,
-		Title:         req.Title,
-		Status:        core.WorkflowStatusPending,
-		CurrentPhase:  core.PhaseAnalyze,
-		Prompt:        req.Prompt,
-		Tasks:         make(map[core.TaskID]*core.TaskState),
-		TaskOrder:     make([]core.TaskID, 0),
-		Config:        config,
-		Metrics:       &core.StateMetrics{},
-		Checkpoints:   make([]core.Checkpoint, 0),
-		CreatedAt:     time.Now(),
-		UpdatedAt:     time.Now(),
-		ResumeCount:   0,
-		MaxResumes:    3, // Enable auto-resume with default max 3 attempts
-		KanbanColumn:  "refinement",
+		Version:        core.CurrentStateVersion,
+		WorkflowID:     workflowID,
+		Title:          req.Title,
+		Status:         core.WorkflowStatusPending,
+		CurrentPhase:   core.PhaseAnalyze,
+		Prompt:         req.Prompt,
+		Tasks:          make(map[core.TaskID]*core.TaskState),
+		TaskOrder:      make([]core.TaskID, 0),
+		Config:         config,
+		Metrics:        &core.StateMetrics{},
+		Checkpoints:    make([]core.Checkpoint, 0),
+		CreatedAt:      time.Now(),
+		UpdatedAt:      time.Now(),
+		ResumeCount:    0,
+		MaxResumes:     3, // Enable auto-resume with default max 3 attempts
+		KanbanColumn:   "refinement",
 		KanbanPosition: 0,
 	}
 
@@ -726,7 +726,7 @@ func (s *Server) handleDownloadWorkflow(w http.ResponseWriter, r *http.Request) 
 
 	// Set headers for zip download
 	filename := fmt.Sprintf("%s-artifacts.zip", workflowID)
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
 	w.Header().Set("Content-Type", "application/zip")
 
 	zipWriter := zip.NewWriter(w)

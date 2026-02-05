@@ -15,9 +15,9 @@ import (
 // JSONChatStore implements ChatStore using JSON files.
 // Each session is stored as a separate JSON file containing session metadata and messages.
 type JSONChatStore struct {
-	mu           sync.RWMutex
-	baseDir      string // Base directory for chat files (e.g., .quorum/chat)
-	sessionsDir  string // Directory for session files
+	mu          sync.RWMutex
+	baseDir     string // Base directory for chat files (e.g., .quorum/chat)
+	sessionsDir string // Directory for session files
 }
 
 // NewJSONChatStore creates a new JSON-based chat store.
@@ -38,8 +38,8 @@ func NewJSONChatStore(path string) (*JSONChatStore, error) {
 
 // chatFileEnvelope wraps session data with messages for file storage.
 type chatFileEnvelope struct {
-	Version  int                    `json:"version"`
-	Session  *core.ChatSessionState `json:"session"`
+	Version  int                      `json:"version"`
+	Session  *core.ChatSessionState   `json:"session"`
 	Messages []*core.ChatMessageState `json:"messages"`
 }
 
@@ -49,7 +49,7 @@ func (s *JSONChatStore) sessionPath(id string) string {
 }
 
 // SaveSession persists a chat session.
-func (s *JSONChatStore) SaveSession(ctx context.Context, session *core.ChatSessionState) error {
+func (s *JSONChatStore) SaveSession(_ context.Context, session *core.ChatSessionState) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -74,7 +74,7 @@ func (s *JSONChatStore) SaveSession(ctx context.Context, session *core.ChatSessi
 }
 
 // LoadSession retrieves a chat session by ID.
-func (s *JSONChatStore) LoadSession(ctx context.Context, id string) (*core.ChatSessionState, error) {
+func (s *JSONChatStore) LoadSession(_ context.Context, id string) (*core.ChatSessionState, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -96,7 +96,7 @@ func (s *JSONChatStore) LoadSession(ctx context.Context, id string) (*core.ChatS
 }
 
 // ListSessions returns all chat sessions.
-func (s *JSONChatStore) ListSessions(ctx context.Context) ([]*core.ChatSessionState, error) {
+func (s *JSONChatStore) ListSessions(_ context.Context) ([]*core.ChatSessionState, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -132,7 +132,7 @@ func (s *JSONChatStore) ListSessions(ctx context.Context) ([]*core.ChatSessionSt
 }
 
 // DeleteSession removes a chat session and all its messages.
-func (s *JSONChatStore) DeleteSession(ctx context.Context, id string) error {
+func (s *JSONChatStore) DeleteSession(_ context.Context, id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -145,7 +145,7 @@ func (s *JSONChatStore) DeleteSession(ctx context.Context, id string) error {
 }
 
 // SaveMessage adds a message to a session.
-func (s *JSONChatStore) SaveMessage(ctx context.Context, msg *core.ChatMessageState) error {
+func (s *JSONChatStore) SaveMessage(_ context.Context, msg *core.ChatMessageState) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -175,7 +175,7 @@ func (s *JSONChatStore) SaveMessage(ctx context.Context, msg *core.ChatMessageSt
 }
 
 // LoadMessages retrieves all messages for a session.
-func (s *JSONChatStore) LoadMessages(ctx context.Context, sessionID string) ([]*core.ChatMessageState, error) {
+func (s *JSONChatStore) LoadMessages(_ context.Context, sessionID string) ([]*core.ChatMessageState, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 

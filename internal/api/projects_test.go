@@ -16,14 +16,14 @@ import (
 
 // mockRegistry implements project.Registry for testing.
 type mockRegistry struct {
-	projects       []*project.Project
-	defaultID      string
-	addError       error
-	removeError    error
-	updateError    error
-	validateError  error
-	getDefaultErr  error
-	setDefaultErr  error
+	projects      []*project.Project
+	defaultID     string
+	addError      error
+	removeError   error
+	updateError   error
+	validateError error
+	getDefaultErr error
+	setDefaultErr error
 }
 
 func (m *mockRegistry) ListProjects(ctx context.Context) ([]*project.Project, error) {
@@ -173,14 +173,14 @@ func setupProjectsTest() (*mockRegistry, *ProjectsHandler, chi.Router) {
 				CreatedAt:    time.Now().Add(-24 * time.Hour),
 			},
 			{
-				ID:           "proj-2",
-				Path:         "/home/user/project2",
-				Name:         "Project Two",
-				Status:       project.StatusDegraded,
+				ID:            "proj-2",
+				Path:          "/home/user/project2",
+				Name:          "Project Two",
+				Status:        project.StatusDegraded,
 				StatusMessage: "Config not found",
-				Color:        "#7B68EE",
-				LastAccessed: time.Now(),
-				CreatedAt:    time.Now().Add(-48 * time.Hour),
+				Color:         "#7B68EE",
+				LastAccessed:  time.Now(),
+				CreatedAt:     time.Now().Add(-48 * time.Hour),
 			},
 		},
 		defaultID: "proj-1",

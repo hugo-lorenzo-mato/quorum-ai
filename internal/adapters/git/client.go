@@ -774,7 +774,7 @@ func (c *Client) ContinueRebase(ctx context.Context) error {
 }
 
 // HasRebaseInProgress checks if a rebase is in progress.
-func (c *Client) HasRebaseInProgress(ctx context.Context) (bool, error) {
+func (c *Client) HasRebaseInProgress(_ context.Context) (bool, error) {
 	gitDir := c.findGitDir()
 	rebaseApply := filepath.Join(gitDir, "rebase-apply")
 	rebaseMerge := filepath.Join(gitDir, "rebase-merge")

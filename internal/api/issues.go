@@ -127,6 +127,8 @@ type IssuePreviewResponse struct {
 
 // handleGenerateIssues generates GitHub/GitLab issues from workflow artifacts.
 // POST /api/workflows/{workflowID}/issues
+//
+//nolint:gocyclo // Handler orchestrates many validation and IO steps.
 func (s *Server) handleGenerateIssues(w http.ResponseWriter, r *http.Request) {
 	workflowID := chi.URLParam(r, "workflowID")
 	ctx := r.Context()

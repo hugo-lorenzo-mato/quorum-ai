@@ -125,7 +125,7 @@ func (cb *CircuitBreaker) SetState(failures int, open bool, lastFailure time.Tim
 
 // GetState returns the current state for persistence.
 // Returns: consecutiveFailures, isOpen, lastFailureAt
-func (cb *CircuitBreaker) GetState() (int, bool, time.Time) {
+func (cb *CircuitBreaker) GetState() (failures int, open bool, lastFailure time.Time) {
 	cb.mu.RLock()
 	defer cb.mu.RUnlock()
 	return cb.consecutiveFailures, cb.open, cb.lastFailureAt

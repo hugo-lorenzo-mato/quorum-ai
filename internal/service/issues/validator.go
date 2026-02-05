@@ -145,7 +145,7 @@ func (v *IssueValidator) Validate(content string) IssueValidationResult {
 	result.TitleLength = len(title)
 	result.BodyLength = len(body)
 	result.HasTitle = title != "" && title != "Untitled Issue"
-	result.HasBody = len(strings.TrimSpace(body)) > 0
+	result.HasBody = strings.TrimSpace(body) != ""
 
 	// Validate title length
 	if result.TitleLength < v.config.MinTitleLength {
@@ -209,9 +209,8 @@ func (v *IssueValidator) ValidateAll(contents []string) []IssueValidationResult 
 
 // SanitizeForbidden removes forbidden patterns from the content.
 // Returns the sanitized content and a list of patterns that were removed.
-func (v *IssueValidator) SanitizeForbidden(content string) (string, []string) {
-	var removed []string
-	sanitized := content
+func (v *IssueValidator) SanitizeForbidden(content string) (sanitized string, removed []string) {
+	sanitized = content
 
 	for _, re := range v.forbiddenRegexes {
 		matches := re.FindAllString(sanitized, -1)

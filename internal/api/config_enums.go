@@ -23,14 +23,14 @@ type EnumsResponse struct {
 	AgentDefaultModels  map[string]string   `json:"agent_default_models"`
 	AgentsWithReasoning []string            `json:"agents_with_reasoning"`
 	// Issue configuration enums
-	IssueProviders     []string `json:"issue_providers"`
-	TemplateLanguages  []string `json:"template_languages"`
-	TemplateTones      []string `json:"template_tones"`
+	IssueProviders    []string `json:"issue_providers"`
+	TemplateLanguages []string `json:"template_languages"`
+	TemplateTones     []string `json:"template_tones"`
 }
 
 // handleGetEnums returns all enum values for UI dropdowns.
 // The Agents list includes all supported agents (enabled/disabled).
-func (s *Server) handleGetEnums(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleGetEnums(w http.ResponseWriter, _ *http.Request) {
 	enums := EnumsResponse{
 		LogLevels:           core.LogLevels,
 		LogFormats:          core.LogFormats,

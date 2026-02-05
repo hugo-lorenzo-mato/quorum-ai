@@ -324,7 +324,7 @@ func (e *Engine) handleWorkflowCompleted(ctx context.Context, workflowID string)
 }
 
 // handleWorkflowFailed handles workflow failure.
-func (e *Engine) handleWorkflowFailed(ctx context.Context, workflowID string, errMsg string) {
+func (e *Engine) handleWorkflowFailed(ctx context.Context, workflowID, errMsg string) {
 	e.logger.Warn("kanban workflow failed", "workflow_id", workflowID, "error", errMsg)
 
 	// Move to refinement

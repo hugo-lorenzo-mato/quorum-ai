@@ -11,13 +11,13 @@ import (
 func FuzzTaskStateTransitions(f *testing.F) {
 	// Seed with common transition sequences
 	// 0=MarkRunning, 1=MarkCompleted, 2=MarkFailed, 3=MarkSkipped
-	f.Add([]byte{0})         // Just start
-	f.Add([]byte{0, 1})      // Start then complete
-	f.Add([]byte{0, 2})      // Start then fail
-	f.Add([]byte{3})         // Skip without starting
-	f.Add([]byte{0, 0})      // Double start
-	f.Add([]byte{1, 0, 1})   // Complete without starting
-	f.Add([]byte{0, 1, 2})   // Complete then fail (should be no-op)
+	f.Add([]byte{0})       // Just start
+	f.Add([]byte{0, 1})    // Start then complete
+	f.Add([]byte{0, 2})    // Start then fail
+	f.Add([]byte{3})       // Skip without starting
+	f.Add([]byte{0, 0})    // Double start
+	f.Add([]byte{1, 0, 1}) // Complete without starting
+	f.Add([]byte{0, 1, 2}) // Complete then fail (should be no-op)
 
 	f.Fuzz(func(t *testing.T, sequence []byte) {
 		task := NewTask("test", "test task", PhaseExecute)
@@ -225,8 +225,7 @@ func assertTaskInvariants(t *testing.T, task *Task, previousStatus TaskStatus) {
 
 	// Terminal states should be sticky (except for reset which is tested separately)
 	if isTaskTerminal(previousStatus) && task.Status != previousStatus {
-		// This is expected behavior when state machine rejects invalid transitions
-		// The status should remain unchanged
+		t.Fatalf("terminal status changed from %s to %s", previousStatus, task.Status)
 	}
 }
 

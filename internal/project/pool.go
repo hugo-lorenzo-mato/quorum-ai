@@ -48,19 +48,19 @@ func WithPoolLogger(logger *slog.Logger) PoolOption {
 }
 
 // WithMaxActiveContexts sets the maximum number of active contexts
-func WithMaxActiveContexts(max int) PoolOption {
+func WithMaxActiveContexts(maxActive int) PoolOption {
 	return func(o *poolOptions) {
-		if max > 0 {
-			o.maxActiveContexts = max
+		if maxActive > 0 {
+			o.maxActiveContexts = maxActive
 		}
 	}
 }
 
 // WithMinActiveContexts sets the minimum number of contexts to keep
-func WithMinActiveContexts(min int) PoolOption {
+func WithMinActiveContexts(minActive int) PoolOption {
 	return func(o *poolOptions) {
-		if min >= 0 {
-			o.minActiveContexts = min
+		if minActive >= 0 {
+			o.minActiveContexts = minActive
 		}
 	}
 }
@@ -371,7 +371,7 @@ func (p *StatePool) evictProjectLocked(projectID string, orderIndex int) error {
 }
 
 // EvictProject manually evicts a specific project from the pool
-func (p *StatePool) EvictProject(ctx context.Context, projectID string) error {
+func (p *StatePool) EvictProject(_ context.Context, projectID string) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 

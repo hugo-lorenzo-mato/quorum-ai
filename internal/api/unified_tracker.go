@@ -411,29 +411,31 @@ func (t *UnifiedTracker) CleanupOrphanedWorkflows(ctx context.Context) (int, err
 	cleaned := 0
 	for _, id := range runningIDs {
 		// If not in memory, it's orphaned
-		if !t.IsRunningInMemory(id) {
-			t.logger.Warn("cleaning up orphaned workflow",
-				"workflow_id", id)
-
-			// Clear running status
-			if err := t.stateManager.ClearWorkflowRunning(ctx, id); err != nil {
-				t.logger.Error("failed to clear orphaned workflow",
-					"workflow_id", id,
-					"error", err)
-				continue
-			}
-
-			// Update state to failed
-			state, err := t.stateManager.LoadByID(ctx, id)
-			if err == nil && state != nil {
-				state.Status = core.WorkflowStatusFailed
-				state.Error = "Orphaned workflow (server restarted during execution)"
-				state.UpdatedAt = time.Now()
-				_ = t.stateManager.Save(ctx, state)
-			}
-
-			cleaned++
+		if t.IsRunningInMemory(id) {
+			continue
 		}
+
+		t.logger.Warn("cleaning up orphaned workflow",
+			"workflow_id", id)
+
+		// Clear running status
+		if err := t.stateManager.ClearWorkflowRunning(ctx, id); err != nil {
+			t.logger.Error("failed to clear orphaned workflow",
+				"workflow_id", id,
+				"error", err)
+			continue
+		}
+
+		// Update state to failed
+		state, err := t.stateManager.LoadByID(ctx, id)
+		if err == nil && state != nil {
+			state.Status = core.WorkflowStatusFailed
+			state.Error = "Orphaned workflow (server restarted during execution)"
+			state.UpdatedAt = time.Now()
+			_ = t.stateManager.Save(ctx, state)
+		}
+
+		cleaned++
 	}
 
 	if cleaned > 0 {
@@ -444,7 +446,7 @@ func (t *UnifiedTracker) CleanupOrphanedWorkflows(ctx context.Context) (int, err
 }
 
 // Shutdown stops all tracking and cleans up resources.
-func (t *UnifiedTracker) Shutdown(ctx context.Context) {
+func (t *UnifiedTracker) Shutdown(_ context.Context) {
 	t.mu.Lock()
 	handles := make([]*ExecutionHandle, 0, len(t.handles))
 	for _, h := range t.handles {

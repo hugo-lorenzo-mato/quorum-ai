@@ -11,13 +11,13 @@ import (
 
 // mockWorkflowWorktreeManager implements core.WorkflowWorktreeManager for tests.
 type mockWorkflowWorktreeManager struct {
-	createInfo    *core.WorktreeInfo
-	createErr     error
-	mergeErr      error
-	removeErr     error
-	createCalls   []createTaskWorktreeCall
-	mergeCalls    []mergeTaskCall
-	removeCalls   []removeTaskWorktreeCall
+	createInfo  *core.WorktreeInfo
+	createErr   error
+	mergeErr    error
+	removeErr   error
+	createCalls []createTaskWorktreeCall
+	mergeCalls  []mergeTaskCall
+	removeCalls []removeTaskWorktreeCall
 }
 
 type createTaskWorktreeCall struct {

@@ -79,11 +79,9 @@ func (h *ProjectsHandler) RegisterRoutes(r chi.Router) {
 func (h *ProjectsHandler) handleListProjects(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	// Reload registry to pick up changes from CLI or other processes
-	if err := h.registry.Reload(); err != nil {
-		// Log but don't fail - we can still serve stale data
-		// In production this would use a proper logger
-	}
+	// Reload registry to pick up changes from CLI or other processes.
+	// Ignore errors here to keep serving stale data if reload fails.
+	_ = h.registry.Reload()
 
 	projects, err := h.registry.ListProjects(ctx)
 	if err != nil {

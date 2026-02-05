@@ -15,16 +15,16 @@ import (
 
 // mockProjectContext implements ProjectContext for testing.
 type mockProjectContext struct {
-	id       string
-	root     string
-	closed   bool
-	touched  bool
+	id      string
+	root    string
+	closed  bool
+	touched bool
 }
 
 func (m *mockProjectContext) ProjectID() string   { return m.id }
 func (m *mockProjectContext) ProjectRoot() string { return m.root }
-func (m *mockProjectContext) IsClosed() bool { return m.closed }
-func (m *mockProjectContext) Touch()         { m.touched = true }
+func (m *mockProjectContext) IsClosed() bool      { return m.closed }
+func (m *mockProjectContext) Touch()              { m.touched = true }
 
 // mockRegistry implements ProjectRegistry for testing.
 type mockRegistry struct {

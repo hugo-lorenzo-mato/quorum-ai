@@ -11,8 +11,8 @@ import (
 
 type mockWorkflowIsolationManager struct {
 	initCalls []struct {
-		workflowID  string
-		baseBranch  string
+		workflowID string
+		baseBranch string
 	}
 }
 

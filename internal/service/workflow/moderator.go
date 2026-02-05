@@ -58,7 +58,7 @@ type SemanticModerator struct {
 func NewSemanticModerator(config ModeratorConfig) (*SemanticModerator, error) {
 	// Validate agent is set when enabled (model is resolved from agent config)
 	if config.Enabled && config.Agent == "" {
-		return nil, fmt.Errorf("missing moderator agent: set 'phases.analyze.moderator.agent' to one of your configured agents (e.g., 'claude', 'gemini'). " +
+		return nil, fmt.Errorf("missing moderator agent: set 'phases.analyze.moderator.agent' to one of your configured agents (e.g., 'claude', 'gemini'). "+
 			"See: %s#phases-settings", DocsConfigURL)
 	}
 
@@ -68,9 +68,9 @@ func NewSemanticModerator(config ModeratorConfig) (*SemanticModerator, error) {
 	}
 
 	return &SemanticModerator{
-		config: config,
-	},
-	nil
+			config: config,
+		},
+		nil
 }
 
 // Evaluate runs semantic consensus evaluation on the given analyses.
@@ -84,7 +84,7 @@ func (m *SemanticModerator) Evaluate(ctx context.Context, wctx *Context, round i
 // The attempt parameter tracks which attempt this is (1-based) for file naming and traceability.
 func (m *SemanticModerator) EvaluateWithAgent(ctx context.Context, wctx *Context, round, attempt int, outputs []AnalysisOutput, agentName string) (*ModeratorEvaluationResult, error) {
 	if !m.config.Enabled {
-		return nil, fmt.Errorf("semantic moderator is not enabled. " +
+		return nil, fmt.Errorf("semantic moderator is not enabled. "+
 			"Set 'phases.analyze.moderator.enabled: true' in your config. See: %s#phases-settings", DocsConfigURL)
 	}
 
@@ -95,7 +95,7 @@ func (m *SemanticModerator) EvaluateWithAgent(ctx context.Context, wctx *Context
 	}
 	agent, err := wctx.Agents.Get(moderatorAgentName)
 	if err != nil {
-		return nil, fmt.Errorf("moderator agent '%s' not available: %w. " +
+		return nil, fmt.Errorf("moderator agent '%s' not available: %w. "+
 			"Ensure this agent is configured and responding (run 'quorum doctor' to verify). See: %s#agents", moderatorAgentName, err, DocsConfigURL)
 	}
 
@@ -304,6 +304,8 @@ type moderatorFrontmatter struct {
 }
 
 // parseModeratorResponse parses the moderator's response to extract the consensus score and details.
+//
+//nolint:gocyclo // Parsing logic is intentionally explicit for robustness.
 func (m *SemanticModerator) parseModeratorResponse(output string) *ModeratorEvaluationResult {
 	result := &ModeratorEvaluationResult{
 		RawOutput:  output,
@@ -467,7 +469,7 @@ func parseYAMLFrontmatterRobust(text string) (frontmatter, body string, ok bool)
 	// Extract content between delimiters
 	start, end := match[2], match[3]
 	frontmatter = text[start:end]
-	
+
 	// Body is everything after the closing ---
 	fullMatchEnd := match[1]
 	if fullMatchEnd < len(text) {
@@ -499,7 +501,7 @@ func extractScoreFromInterface(val interface{}) (float64, bool) {
 		cleaned := strings.ReplaceAll(v, "%", "")
 		cleaned = strings.ReplaceAll(cleaned, " ", "")
 		cleaned = strings.TrimSuffix(cleaned, "/100")
-		
+
 		if s, err := strconv.ParseFloat(cleaned, 64); err == nil {
 			if s <= 1.0 {
 				return s, true
@@ -551,11 +553,15 @@ func (m *SemanticModerator) Threshold() float64 {
 }
 
 // taskTypeKeywords maps task types to their keyword patterns for adaptive threshold detection.
-var taskTypeKeywords = map[string][]string{
-	"analysis": {"analizar", "analyze", "investigar", "investigate", "evaluar", "evaluate", "viabilidad", "feasibility", "assessment", "review"},
-	"design":   {"diseñar", "design", "arquitectura", "architecture", "implementar", "implement", "crear", "create", "build"},
-	"bugfix":   {"fix", "bug", "error", "corregir", "repair", "solve", "debug", "issue", "problem"},
-	"refactor": {"refactorizar", "refactor", "mejorar", "improve", "optimizar", "optimize", "clean", "reorganize", "restructure"},
+// Order matters for deterministic tie-breaking (analysis > design > bugfix > refactor).
+var taskTypeKeywords = []struct {
+	name     string
+	keywords []string
+}{
+	{name: "analysis", keywords: []string{"analizar", "analyze", "investigar", "investigate", "evaluar", "evaluate", "viabilidad", "feasibility", "assessment", "review"}},
+	{name: "design", keywords: []string{"diseñar", "design", "arquitectura", "architecture", "implementar", "implement", "crear", "create", "build"}},
+	{name: "bugfix", keywords: []string{"fix", "bug", "error", "corregir", "repair", "solve", "debug", "issue", "problem"}},
+	{name: "refactor", keywords: []string{"refactorizar", "refactor", "mejorar", "improve", "optimizar", "optimize", "clean", "reorganize", "restructure"}},
 }
 
 // detectTaskType analyzes the prompt to determine the task type for adaptive thresholds.
@@ -566,16 +572,16 @@ func detectTaskType(prompt string) string {
 	maxMatches := 0
 	detectedType := "default"
 
-	for taskType, keywords := range taskTypeKeywords {
+	for _, entry := range taskTypeKeywords {
 		matches := 0
-		for _, keyword := range keywords {
+		for _, keyword := range entry.keywords {
 			if strings.Contains(promptLower, keyword) {
 				matches++
 			}
 		}
 		if matches > maxMatches {
 			maxMatches = matches
-			detectedType = taskType
+			detectedType = entry.name
 		}
 	}
 

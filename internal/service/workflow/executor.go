@@ -393,10 +393,10 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 				if wctx.Output != nil {
 					// Use "error" to stop the timer for this agent, include fallback info in data
 					wctx.Output.AgentEvent("error", agentName, fmt.Sprintf("Agent failed, trying next: %v", execErr), map[string]interface{}{
-						"task_id":      string(task.ID),
-						"next_agent":   agentsToTry[agentIdx+1],
-						"is_fallback":  true,
-						"duration_ms":  durationMS,
+						"task_id":     string(task.ID),
+						"next_agent":  agentsToTry[agentIdx+1],
+						"is_fallback": true,
+						"duration_ms": durationMS,
 					})
 				}
 				continue
@@ -433,11 +433,11 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 				if wctx.Output != nil {
 					// Use "error" to stop the timer for this agent, include fallback info in data
 					wctx.Output.AgentEvent("error", agentName, fmt.Sprintf("Output validation failed, trying next agent: %v", validationErr), map[string]interface{}{
-						"task_id":      string(task.ID),
-						"next_agent":   agentsToTry[agentIdx+1],
-						"tokens_out":   result.TokensOut,
-						"is_fallback":  true,
-						"duration_ms":  durationMS,
+						"task_id":     string(task.ID),
+						"next_agent":  agentsToTry[agentIdx+1],
+						"tokens_out":  result.TokensOut,
+						"is_fallback": true,
+						"duration_ms": durationMS,
 					})
 				}
 				continue

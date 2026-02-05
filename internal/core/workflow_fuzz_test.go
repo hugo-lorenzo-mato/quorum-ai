@@ -12,17 +12,17 @@ import (
 func FuzzWorkflowStateTransitions(f *testing.F) {
 	// Seed with common transition sequences
 	// 0=Start, 1=Pause, 2=Resume, 3=Complete, 4=Fail, 5=Abort
-	f.Add([]byte{0})            // Just start
-	f.Add([]byte{0, 1})         // Start then pause
-	f.Add([]byte{0, 1, 2})      // Start, pause, resume
-	f.Add([]byte{0, 3})         // Start then complete
-	f.Add([]byte{0, 4})         // Start then fail
-	f.Add([]byte{0, 5})         // Start then abort
-	f.Add([]byte{0, 1, 2, 3})   // Full lifecycle
-	f.Add([]byte{1, 0, 1, 2})   // Invalid start, then valid
-	f.Add([]byte{3, 0, 3})      // Complete without starting
-	f.Add([]byte{0, 0, 0})      // Multiple starts
-	f.Add([]byte{0, 1, 1, 2})   // Multiple pauses
+	f.Add([]byte{0})          // Just start
+	f.Add([]byte{0, 1})       // Start then pause
+	f.Add([]byte{0, 1, 2})    // Start, pause, resume
+	f.Add([]byte{0, 3})       // Start then complete
+	f.Add([]byte{0, 4})       // Start then fail
+	f.Add([]byte{0, 5})       // Start then abort
+	f.Add([]byte{0, 1, 2, 3}) // Full lifecycle
+	f.Add([]byte{1, 0, 1, 2}) // Invalid start, then valid
+	f.Add([]byte{3, 0, 3})    // Complete without starting
+	f.Add([]byte{0, 0, 0})    // Multiple starts
+	f.Add([]byte{0, 1, 1, 2}) // Multiple pauses
 
 	f.Fuzz(func(t *testing.T, sequence []byte) {
 		wf := NewWorkflow("test", "test prompt", nil)

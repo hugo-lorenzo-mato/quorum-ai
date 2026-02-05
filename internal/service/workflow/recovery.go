@@ -238,14 +238,17 @@ func (r *RecoveryManager) abortIncompleteOpsInPath(ctx context.Context, path str
 	// Check if .git is a file (worktree) or directory (main repo)
 	info, err := os.Stat(gitDir)
 	if err != nil {
-		return nil // No .git, not a repo
+		if os.IsNotExist(err) {
+			return nil // No .git, not a repo
+		}
+		return fmt.Errorf("stat git dir: %w", err)
 	}
 
 	// If .git is a file, read the actual gitdir path
 	if !info.IsDir() {
 		content, err := os.ReadFile(gitDir)
 		if err != nil {
-			return nil
+			return fmt.Errorf("read git dir pointer: %w", err)
 		}
 		// Parse "gitdir: /path/to/gitdir"
 		var actualGitDir string

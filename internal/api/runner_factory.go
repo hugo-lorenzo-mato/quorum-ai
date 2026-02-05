@@ -125,7 +125,7 @@ func (f *RunnerFactory) CreateRunner(ctx context.Context, workflowID string, cp 
 
 // RunnerFactory returns a factory for creating workflow runners.
 // Returns nil if required dependencies are not configured.
-// DEPRECATED: Use RunnerFactoryForContext for project-scoped resources.
+// Deprecated: Use RunnerFactoryForContext for project-scoped resources.
 func (s *Server) RunnerFactory() *RunnerFactory {
 	return s.RunnerFactoryForContext(context.Background())
 }

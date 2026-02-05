@@ -118,7 +118,9 @@ func (e *WorkflowExecutor) execute(ctx context.Context, workflowID core.Workflow
 	runner, notifier, err := e.runnerFactory.CreateRunner(execCtx, id, handle.ControlPlane, state.Config)
 	if err != nil {
 		cancel()
-		e.unifiedTracker.RollbackExecution(ctx, workflowID, err.Error())
+		if rollbackErr := e.unifiedTracker.RollbackExecution(ctx, workflowID, err.Error()); rollbackErr != nil && e.logger != nil {
+			e.logger.Error("failed to rollback execution", "workflow_id", workflowID, "error", rollbackErr)
+		}
 		return fmt.Errorf("creating runner: %w", err)
 	}
 
@@ -130,7 +132,9 @@ func (e *WorkflowExecutor) execute(ctx context.Context, workflowID core.Workflow
 	state, err = e.stateManager.LoadByID(ctx, workflowID)
 	if err != nil {
 		cancel()
-		e.unifiedTracker.RollbackExecution(ctx, workflowID, err.Error())
+		if rollbackErr := e.unifiedTracker.RollbackExecution(ctx, workflowID, err.Error()); rollbackErr != nil && e.logger != nil {
+			e.logger.Error("failed to rollback execution", "workflow_id", workflowID, "error", rollbackErr)
+		}
 		return fmt.Errorf("reloading workflow state: %w", err)
 	}
 
@@ -140,7 +144,9 @@ func (e *WorkflowExecutor) execute(ctx context.Context, workflowID core.Workflow
 	// Wait for confirmation from the goroutine
 	if err := handle.WaitForConfirmation(5 * time.Second); err != nil {
 		// Goroutine failed to start or timed out - rollback
-		e.unifiedTracker.RollbackExecution(ctx, workflowID, err.Error())
+		if rollbackErr := e.unifiedTracker.RollbackExecution(ctx, workflowID, err.Error()); rollbackErr != nil && e.logger != nil {
+			e.logger.Error("failed to rollback execution", "workflow_id", workflowID, "error", rollbackErr)
+		}
 		return fmt.Errorf("workflow failed to start: %w", err)
 	}
 
@@ -167,7 +173,9 @@ func (e *WorkflowExecutor) executeAsync(
 	defer func() {
 		// Clean up via UnifiedTracker
 		if e.unifiedTracker != nil {
-			e.unifiedTracker.FinishExecution(context.Background(), core.WorkflowID(workflowID))
+			if finishErr := e.unifiedTracker.FinishExecution(context.Background(), core.WorkflowID(workflowID)); finishErr != nil && e.logger != nil {
+				e.logger.Error("failed to finish execution", "workflow_id", workflowID, "error", finishErr)
+			}
 		}
 	}()
 	defer notifier.FlushState()

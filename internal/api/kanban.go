@@ -35,21 +35,21 @@ type KanbanBoardResponse struct {
 
 // KanbanWorkflowResponse represents a workflow in Kanban context.
 type KanbanWorkflowResponse struct {
-	ID                    string     `json:"id"`
-	Title                 string     `json:"title"`
-	Status                string     `json:"status"`
-	KanbanColumn          string     `json:"kanban_column"`
-	KanbanPosition        int        `json:"kanban_position"`
-	PRURL                 string     `json:"pr_url,omitempty"`
-	PRNumber              int        `json:"pr_number,omitempty"`
-	KanbanStartedAt       *time.Time `json:"kanban_started_at,omitempty"`
-	KanbanCompletedAt     *time.Time `json:"kanban_completed_at,omitempty"`
-	KanbanExecutionCount  int        `json:"kanban_execution_count"`
-	KanbanLastError       string     `json:"kanban_last_error,omitempty"`
-	CreatedAt             time.Time  `json:"created_at"`
-	UpdatedAt             time.Time  `json:"updated_at"`
-	Prompt                string     `json:"prompt"`
-	TaskCount             int        `json:"task_count"`
+	ID                   string     `json:"id"`
+	Title                string     `json:"title"`
+	Status               string     `json:"status"`
+	KanbanColumn         string     `json:"kanban_column"`
+	KanbanPosition       int        `json:"kanban_position"`
+	PRURL                string     `json:"pr_url,omitempty"`
+	PRNumber             int        `json:"pr_number,omitempty"`
+	KanbanStartedAt      *time.Time `json:"kanban_started_at,omitempty"`
+	KanbanCompletedAt    *time.Time `json:"kanban_completed_at,omitempty"`
+	KanbanExecutionCount int        `json:"kanban_execution_count"`
+	KanbanLastError      string     `json:"kanban_last_error,omitempty"`
+	CreatedAt            time.Time  `json:"created_at"`
+	UpdatedAt            time.Time  `json:"updated_at"`
+	Prompt               string     `json:"prompt"`
+	TaskCount            int        `json:"task_count"`
 }
 
 // KanbanEngineStateResponse represents the engine state for API responses.
@@ -338,21 +338,21 @@ func workflowToKanbanResponse(wf *core.WorkflowState) KanbanWorkflowResponse {
 	}
 
 	return KanbanWorkflowResponse{
-		ID:                    string(wf.WorkflowID),
-		Title:                 wf.Title,
-		Status:                string(wf.Status),
-		KanbanColumn:          kanbanColumn,
-		KanbanPosition:        wf.KanbanPosition,
-		PRURL:                 wf.PRURL,
-		PRNumber:              wf.PRNumber,
-		KanbanStartedAt:       wf.KanbanStartedAt,
-		KanbanCompletedAt:     wf.KanbanCompletedAt,
-		KanbanExecutionCount:  wf.KanbanExecutionCount,
-		KanbanLastError:       wf.KanbanLastError,
-		CreatedAt:             wf.CreatedAt,
-		UpdatedAt:             wf.UpdatedAt,
-		Prompt:                prompt,
-		TaskCount:             len(wf.Tasks),
+		ID:                   string(wf.WorkflowID),
+		Title:                wf.Title,
+		Status:               string(wf.Status),
+		KanbanColumn:         kanbanColumn,
+		KanbanPosition:       wf.KanbanPosition,
+		PRURL:                wf.PRURL,
+		PRNumber:             wf.PRNumber,
+		KanbanStartedAt:      wf.KanbanStartedAt,
+		KanbanCompletedAt:    wf.KanbanCompletedAt,
+		KanbanExecutionCount: wf.KanbanExecutionCount,
+		KanbanLastError:      wf.KanbanLastError,
+		CreatedAt:            wf.CreatedAt,
+		UpdatedAt:            wf.UpdatedAt,
+		Prompt:               prompt,
+		TaskCount:            len(wf.Tasks),
 	}
 }
 

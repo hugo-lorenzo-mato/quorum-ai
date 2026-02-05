@@ -81,6 +81,7 @@ type FileRegistry struct {
 	autoSave      bool
 	backupEnabled bool
 	closed        bool
+	removedIDs    map[string]struct{}
 }
 
 // RegistryOption configures a FileRegistry
@@ -120,6 +121,7 @@ func NewFileRegistry(opts ...RegistryOption) (*FileRegistry, error) {
 		logger:        slog.Default(),
 		autoSave:      true,
 		backupEnabled: true,
+		removedIDs:    make(map[string]struct{}),
 	}
 
 	for _, opt := range opts {
@@ -191,6 +193,7 @@ func (r *FileRegistry) load() error {
 	}
 
 	r.config = &config
+	r.removedIDs = make(map[string]struct{})
 	return nil
 }
 
@@ -206,7 +209,7 @@ func (r *FileRegistry) save() error {
 		if _, err := os.Stat(r.configPath); err == nil {
 			backupPath := r.configPath + ".bak"
 			data, _ := os.ReadFile(r.configPath)
-			_ = os.WriteFile(backupPath, data, 0o640)
+			_ = os.WriteFile(backupPath, data, 0o600)
 		}
 	}
 
@@ -217,7 +220,7 @@ func (r *FileRegistry) save() error {
 
 	// Write to temp file first, then rename for atomicity
 	tmpPath := r.configPath + ".tmp"
-	if err := os.WriteFile(tmpPath, data, 0o640); err != nil {
+	if err := os.WriteFile(tmpPath, data, 0o600); err != nil {
 		return NewRegistryError("save", err)
 	}
 
@@ -250,6 +253,9 @@ func (r *FileRegistry) mergeFromDisk() {
 
 	// Add any projects from disk that we don't have in memory
 	for _, diskProject := range diskConfig.Projects {
+		if _, removed := r.removedIDs[diskProject.ID]; removed {
+			continue
+		}
 		if _, exists := currentProjects[diskProject.ID]; !exists {
 			// This project was added by another process, preserve it
 			r.config.Projects = append(r.config.Projects, diskProject)
@@ -263,7 +269,7 @@ func (r *FileRegistry) mergeFromDisk() {
 }
 
 // ListProjects returns all registered projects
-func (r *FileRegistry) ListProjects(ctx context.Context) ([]*Project, error) {
+func (r *FileRegistry) ListProjects(_ context.Context) ([]*Project, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -279,7 +285,7 @@ func (r *FileRegistry) ListProjects(ctx context.Context) ([]*Project, error) {
 }
 
 // GetProject retrieves a project by ID
-func (r *FileRegistry) GetProject(ctx context.Context, id string) (*Project, error) {
+func (r *FileRegistry) GetProject(_ context.Context, id string) (*Project, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -296,7 +302,7 @@ func (r *FileRegistry) GetProject(ctx context.Context, id string) (*Project, err
 }
 
 // GetProjectByPath retrieves a project by its filesystem path
-func (r *FileRegistry) GetProjectByPath(ctx context.Context, path string) (*Project, error) {
+func (r *FileRegistry) GetProjectByPath(_ context.Context, path string) (*Project, error) {
 	cleanPath := filepath.Clean(path)
 
 	r.mu.RLock()
@@ -315,7 +321,7 @@ func (r *FileRegistry) GetProjectByPath(ctx context.Context, path string) (*Proj
 }
 
 // AddProject registers a new project from the given path
-func (r *FileRegistry) AddProject(ctx context.Context, path string, opts *AddProjectOptions) (*Project, error) {
+func (r *FileRegistry) AddProject(_ context.Context, path string, opts *AddProjectOptions) (*Project, error) {
 	// Ensure absolute path
 	absPath, err := filepath.Abs(path)
 	if err != nil {
@@ -406,7 +412,7 @@ func (r *FileRegistry) AddProject(ctx context.Context, path string, opts *AddPro
 }
 
 // RemoveProject unregisters a project by ID
-func (r *FileRegistry) RemoveProject(ctx context.Context, id string) error {
+func (r *FileRegistry) RemoveProject(_ context.Context, id string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -415,6 +421,7 @@ func (r *FileRegistry) RemoveProject(ctx context.Context, id string) error {
 	}
 
 	index := -1
+	prevDefault := r.config.DefaultProject
 	for i, p := range r.config.Projects {
 		if p.ID == id {
 			index = i
@@ -430,6 +437,7 @@ func (r *FileRegistry) RemoveProject(ctx context.Context, id string) error {
 
 	// Remove from slice
 	r.config.Projects = append(r.config.Projects[:index], r.config.Projects[index+1:]...)
+	r.removedIDs[id] = struct{}{}
 
 	// Clear default if this was the default project
 	if r.config.DefaultProject == id {
@@ -445,8 +453,11 @@ func (r *FileRegistry) RemoveProject(ctx context.Context, id string) error {
 			// Rollback
 			r.config.Projects = append(r.config.Projects[:index],
 				append([]*Project{removedProject}, r.config.Projects[index:]...)...)
+			r.config.DefaultProject = prevDefault
+			delete(r.removedIDs, id)
 			return err
 		}
+		delete(r.removedIDs, id)
 	}
 
 	r.logger.Info("project removed", "id", id, "name", removedProject.Name)
@@ -454,7 +465,7 @@ func (r *FileRegistry) RemoveProject(ctx context.Context, id string) error {
 }
 
 // UpdateProject updates project metadata
-func (r *FileRegistry) UpdateProject(ctx context.Context, project *Project) error {
+func (r *FileRegistry) UpdateProject(_ context.Context, project *Project) error {
 	if project == nil || project.ID == "" {
 		return NewRegistryError("update", fmt.Errorf("invalid project"))
 	}
@@ -480,7 +491,7 @@ func (r *FileRegistry) UpdateProject(ctx context.Context, project *Project) erro
 }
 
 // ValidateProject checks if a project is still valid and accessible
-func (r *FileRegistry) ValidateProject(ctx context.Context, id string) error {
+func (r *FileRegistry) ValidateProject(_ context.Context, id string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -591,7 +602,7 @@ func (r *FileRegistry) ValidateAll(ctx context.Context) error {
 }
 
 // GetDefaultProject returns the default project for legacy endpoints
-func (r *FileRegistry) GetDefaultProject(ctx context.Context) (*Project, error) {
+func (r *FileRegistry) GetDefaultProject(_ context.Context) (*Project, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -622,7 +633,7 @@ func (r *FileRegistry) GetDefaultProject(ctx context.Context) (*Project, error) 
 }
 
 // SetDefaultProject sets the default project for legacy endpoints
-func (r *FileRegistry) SetDefaultProject(ctx context.Context, id string) error {
+func (r *FileRegistry) SetDefaultProject(_ context.Context, id string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -652,7 +663,7 @@ func (r *FileRegistry) SetDefaultProject(ctx context.Context, id string) error {
 }
 
 // TouchProject updates the last accessed time for a project
-func (r *FileRegistry) TouchProject(ctx context.Context, id string) error {
+func (r *FileRegistry) TouchProject(_ context.Context, id string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -738,7 +749,7 @@ func generateProjectID() string {
 // generateProjectName creates a human-readable name from a path
 func generateProjectName(path string) string {
 	name := filepath.Base(path)
-	if len(name) > 0 {
+	if name != "" {
 		name = strings.ToUpper(name[:1]) + name[1:]
 	}
 	name = strings.ReplaceAll(name, "-", " ")

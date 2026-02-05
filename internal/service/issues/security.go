@@ -82,16 +82,16 @@ func SanitizeFilename(filename string) string {
 
 	// Replace potentially dangerous characters
 	dangerous := []string{
-		"..", // Parent directory reference
-		"/",  // Path separator (Unix)
-		"\\", // Path separator (Windows)
-		":",  // Drive separator (Windows) / alternative data streams
-		"*",  // Wildcard
-		"?",  // Wildcard
-		"\"", // Quote
-		"<",  // Redirect
-		">",  // Redirect
-		"|",  // Pipe
+		"..",   // Parent directory reference
+		"/",    // Path separator (Unix)
+		"\\",   // Path separator (Windows)
+		":",    // Drive separator (Windows) / alternative data streams
+		"*",    // Wildcard
+		"?",    // Wildcard
+		"\"",   // Quote
+		"<",    // Redirect
+		">",    // Redirect
+		"|",    // Pipe
 		"\x00", // Null byte
 	}
 

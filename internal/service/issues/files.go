@@ -32,7 +32,7 @@ func (g *Generator) WriteIssuesToDisk(workflowID string, inputs []IssueInput) ([
 
 	issuesDirRel := filepath.Join(".quorum", "issues", workflowID)
 	issuesDirAbs := filepath.Join(cwd, issuesDirRel)
-	if err := os.MkdirAll(issuesDirAbs, 0755); err != nil {
+	if err := os.MkdirAll(issuesDirAbs, 0o755); err != nil {
 		return nil, fmt.Errorf("creating issues directory: %w", err)
 	}
 
@@ -71,7 +71,7 @@ func (g *Generator) WriteIssuesToDisk(workflowID string, inputs []IssueInput) ([
 		}
 
 		content := buildIssueMarkdown(input.Title, input.Body)
-		if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
+		if err := os.WriteFile(filePath, []byte(content), 0o600); err != nil {
 			return nil, fmt.Errorf("writing issue file %s: %w", filePath, err)
 		}
 
@@ -290,7 +290,7 @@ func (g *Generator) resolveIssueFilename(input IssueInput, tasksByID map[string]
 	if slug == "" {
 		slug = "issue"
 	}
-	*maxIndex = *maxIndex + 1
+	(*maxIndex)++
 	name := fmt.Sprintf("%02d-%s.md", *maxIndex, slug)
 	return uniqueIssueFilename(name, used)
 }
@@ -405,7 +405,7 @@ func (g *Generator) writeIssueMappingFile(workflowID string, entries []issueMapp
 	mapping.Issues = entries
 
 	issuesDir := filepath.Join(".quorum", "issues", workflowID)
-	if err := os.MkdirAll(issuesDir, 0755); err != nil {
+	if err := os.MkdirAll(issuesDir, 0o755); err != nil {
 		return fmt.Errorf("creating issues directory: %w", err)
 	}
 
@@ -414,7 +414,7 @@ func (g *Generator) writeIssueMappingFile(workflowID string, entries []issueMapp
 	if err != nil {
 		return fmt.Errorf("marshaling mapping: %w", err)
 	}
-	return os.WriteFile(mappingPath, data, 0644)
+	return os.WriteFile(mappingPath, data, 0o600)
 }
 
 func ensureEpicLabel(labels []string) []string {

@@ -869,7 +869,7 @@ func (m *JSONStateManager) FindWorkflowsByPrompt(ctx context.Context, prompt str
 	for _, summary := range summaries {
 		// Use the truncated prompt from summary for quick comparison first
 		// Load full state only if summary prompt matches or is truncated
-		if summary.Prompt == prompt || (len(summary.Prompt) > 0 && len(summary.Prompt) < len(prompt)) {
+		if summary.Prompt == prompt || (summary.Prompt != "" && len(summary.Prompt) < len(prompt)) {
 			state, err := m.LoadByID(ctx, summary.WorkflowID)
 			if err != nil || state == nil {
 				continue
@@ -890,14 +890,14 @@ func (m *JSONStateManager) FindWorkflowsByPrompt(ctx context.Context, prompt str
 
 // AcquireWorkflowLock acquires an exclusive lock for a specific workflow.
 // JSONStateManager uses file-based locking and delegates to the global lock.
-func (m *JSONStateManager) AcquireWorkflowLock(ctx context.Context, workflowID core.WorkflowID) error {
+func (m *JSONStateManager) AcquireWorkflowLock(ctx context.Context, _ core.WorkflowID) error {
 	// JSON state manager uses single-file storage, so per-workflow locking
 	// falls back to global locking for simplicity.
 	return m.AcquireLock(ctx)
 }
 
 // ReleaseWorkflowLock releases the lock for a specific workflow.
-func (m *JSONStateManager) ReleaseWorkflowLock(ctx context.Context, workflowID core.WorkflowID) error {
+func (m *JSONStateManager) ReleaseWorkflowLock(ctx context.Context, _ core.WorkflowID) error {
 	return m.ReleaseLock(ctx)
 }
 

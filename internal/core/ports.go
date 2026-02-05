@@ -166,7 +166,7 @@ type StateManager interface {
 	AcquireLock(ctx context.Context) error
 
 	// ReleaseLock releases the exclusive lock.
-	// DEPRECATED: Use ReleaseWorkflowLock for per-workflow locking.
+	// Deprecated: Use ReleaseWorkflowLock for per-workflow locking.
 	ReleaseLock(ctx context.Context) error
 
 	// AcquireWorkflowLock obtains an exclusive lock for a specific workflow.
@@ -283,7 +283,7 @@ type DuplicateWorkflowInfo struct {
 type WorkflowState struct {
 	Version         int                   `json:"version"`
 	WorkflowID      WorkflowID            `json:"workflow_id"`
-	ExecutionID     int                   `json:"execution_id"`     // Increments on each Run/Resume to distinguish event sets
+	ExecutionID     int                   `json:"execution_id"` // Increments on each Run/Resume to distinguish event sets
 	Title           string                `json:"title,omitempty"`
 	Status          WorkflowStatus        `json:"status"`
 	CurrentPhase    Phase                 `json:"current_phase"`
@@ -575,7 +575,6 @@ const (
 	WorktreeStatusStale   WorktreeStatus = "stale"
 	WorktreeStatusCleaned WorktreeStatus = "cleaned"
 )
-
 
 // =============================================================================
 // GitHubClient Port (T030)
