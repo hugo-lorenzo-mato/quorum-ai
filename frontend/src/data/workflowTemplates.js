@@ -10,7 +10,7 @@ export const workflowTemplates = [
     category: 'Code Analysis',
     name: 'Technical Debt Analysis',
     description: 'Identify technical debt hotspots: code complexity, duplications, antipatterns, and prioritize remediation',
-    icon: '📊',
+    icon: 'analysis',
     prompt: `Analyze the codebase for technical debt:
 
 1. **Code Complexity**: Identify functions/classes with high cyclomatic complexity
@@ -28,7 +28,7 @@ Provide actionable recommendations with specific file locations and suggested re
     category: 'Code Analysis',
     name: 'Dead Code Detector',
     description: 'Find unused code: unreferenced functions, unused imports, orphaned files, and calculate cleanup impact',
-    icon: '🗑️',
+    icon: 'trash',
     prompt: `Scan the codebase for dead code:
 
 1. **Unreferenced Functions**: Find functions/methods that are never called
@@ -47,7 +47,7 @@ Provide a prioritized list with safe-to-remove candidates vs. needs-investigatio
     category: 'Code Analysis',
     name: 'Complexity Hotspots',
     description: 'Analyze cyclomatic complexity, cognitive complexity, nesting depth and highlight functions needing refactoring',
-    icon: '🔥',
+    icon: 'flame',
     prompt: `Analyze code complexity metrics:
 
 1. **Cyclomatic Complexity**: Calculate complexity score for all functions (target: <10)
@@ -68,7 +68,7 @@ For each hotspot, provide:
     category: 'Code Analysis',
     name: 'Dependency Health Check',
     description: 'Audit dependencies: outdated packages, known CVEs, license issues, bundle size impact',
-    icon: '📦',
+    icon: 'package',
     prompt: `Perform a comprehensive dependency audit:
 
 1. **Outdated Packages**: List dependencies with available updates (minor, major, breaking)
@@ -87,7 +87,7 @@ Prioritize by risk level: Critical CVEs > Major version behind > High bundle imp
     category: 'Code Analysis',
     name: 'Architecture Conformance',
     description: 'Validate if code follows intended architecture (hexagonal/clean/layered) and identify boundary violations',
-    icon: '🏛️',
+    icon: 'architecture',
     prompt: `Analyze architectural conformance:
 
 1. **Architecture Detection**: Identify the intended architecture pattern (layered, hexagonal, clean, etc.)
@@ -108,7 +108,7 @@ For each violation, explain why it's problematic and suggest the correct approac
     category: 'Performance Analysis',
     name: 'Database Query Analysis',
     description: 'Detect N+1 queries, missing indexes, inefficient joins, and suggest optimizations',
-    icon: '🗄️',
+    icon: 'database',
     prompt: `Analyze database query performance:
 
 1. **N+1 Query Detection**: Find loops that trigger individual queries (use batch loading instead)
@@ -130,7 +130,7 @@ For each finding, provide:
     category: 'Performance Analysis',
     name: 'Bundle Size Analyzer',
     description: 'Analyze JS bundle: heavy dependencies, code splitting opportunities, tree-shaking issues',
-    icon: '📦',
+    icon: 'bundle',
     prompt: `Analyze JavaScript bundle size:
 
 1. **Heavy Dependencies**: Identify largest dependencies and their impact
@@ -152,7 +152,7 @@ Provide:
     category: 'Performance Analysis',
     name: 'Memory Leak Detector',
     description: 'Scan for memory leak patterns: event listeners not cleaned, closures holding references, DOM leaks',
-    icon: '💧',
+    icon: 'memory',
     prompt: `Scan for memory leak patterns:
 
 1. **Event Listeners**: Find addEventListener without removeEventListener
@@ -174,7 +174,7 @@ For each potential leak:
     category: 'Performance Analysis',
     name: 'React Performance Audit',
     description: 'Find unnecessary re-renders, missing memoization, expensive computations in render',
-    icon: '⚛️',
+    icon: 'react',
     prompt: `Audit React performance:
 
 1. **Unnecessary Re-renders**: Components re-rendering when props haven't changed
@@ -199,7 +199,7 @@ For each issue:
     category: 'Security Analysis',
     name: 'Secrets & Credentials Scan',
     description: 'Find hardcoded secrets, API keys, passwords, tokens, certificates',
-    icon: '🔐',
+    icon: 'lock',
     prompt: `Scan for exposed secrets and credentials:
 
 1. **Hardcoded Secrets**: API keys, passwords, tokens in code
@@ -221,7 +221,7 @@ For each finding:
     category: 'Security Analysis',
     name: 'Input Validation Audit',
     description: 'Identify missing input validation, SQL injection risks, XSS vulnerabilities, command injection',
-    icon: '🛡️',
+    icon: 'shield',
     prompt: `Audit input validation and injection vulnerabilities:
 
 1. **SQL Injection**: Find string concatenation in SQL queries (use parameterized queries)
@@ -243,7 +243,7 @@ For each vulnerability:
     category: 'Security Analysis',
     name: 'Auth & Authorization Review',
     description: 'Analyze authentication flow, session management, JWT handling, RBAC implementation',
-    icon: '🔑',
+    icon: 'key',
     prompt: `Review authentication and authorization:
 
 1. **Authentication Flow**: Analyze login/logout implementation, weak points
@@ -266,7 +266,7 @@ For each issue:
     category: 'Security Analysis',
     name: 'API Security Checklist',
     description: 'Review API endpoints: rate limiting, CORS, authentication, input validation, error disclosure',
-    icon: '🌐',
+    icon: 'globe',
     prompt: `Audit API security:
 
 1. **Rate Limiting**: Check if endpoints have rate limiting to prevent abuse
@@ -292,7 +292,7 @@ For each endpoint, assess:
     category: 'Testing Analysis',
     name: 'Test Coverage Gap Analysis',
     description: 'Identify critical paths without tests, edge cases not covered, missing integration tests',
-    icon: '🎯',
+    icon: 'target',
     prompt: `Analyze test coverage gaps:
 
 1. **Critical Paths**: Identify business-critical code without test coverage
@@ -314,7 +314,7 @@ For each gap:
     category: 'Testing Analysis',
     name: 'Flaky Test Detector',
     description: 'Analyze test failures: race conditions, timing issues, shared state, non-deterministic behavior',
-    icon: '🎲',
+    icon: 'dices',
     prompt: `Detect flaky test patterns:
 
 1. **Race Conditions**: Tests depending on timing or async operations without proper awaits
@@ -336,7 +336,7 @@ For each flaky pattern:
     category: 'Testing Analysis',
     name: 'Test Quality Assessment',
     description: 'Evaluate test quality: assertions effectiveness, test isolation, mocking patterns, maintainability',
-    icon: '✅',
+    icon: 'check',
     prompt: `Assess test quality:
 
 1. **Assertion Effectiveness**: Check if tests actually verify behavior (no assertions = red flag)
@@ -361,7 +361,7 @@ For each quality issue:
     category: 'Infrastructure Analysis',
     name: 'Docker Image Optimizer',
     description: 'Analyze Dockerfile: multi-stage builds, layer caching, base image size, security scanning',
-    icon: '🐳',
+    icon: 'container',
     prompt: `Optimize Docker images:
 
 1. **Multi-Stage Builds**: Check if using multi-stage to reduce final image size
@@ -384,7 +384,7 @@ Provide:
     category: 'Infrastructure Analysis',
     name: 'CI/CD Pipeline Audit',
     description: 'Review GitHub Actions/CI: workflow optimization, caching strategies, parallelization, secret management',
-    icon: '🔄',
+    icon: 'refresh',
     prompt: `Audit CI/CD pipeline:
 
 1. **Caching Strategies**: Check if dependencies are cached (npm, Maven, Docker layers)
@@ -409,7 +409,7 @@ For each optimization:
     category: 'Observability Analysis',
     name: 'Logging Coverage Analysis',
     description: 'Identify missing logs in critical paths, inconsistent log levels, PII in logs, structured logging',
-    icon: '📝',
+    icon: 'logging',
     prompt: `Analyze logging coverage:
 
 1. **Missing Logs**: Identify critical operations without logging (errors, business events)
@@ -432,7 +432,7 @@ For each finding:
     category: 'Observability Analysis',
     name: 'Error Handling Assessment',
     description: 'Find uncaught exceptions, missing error boundaries, poor error messages, error recovery gaps',
-    icon: '⚠️',
+    icon: 'warning',
     prompt: `Assess error handling:
 
 1. **Uncaught Exceptions**: Find try-catch blocks missing or errors not handled
@@ -455,7 +455,7 @@ For each gap:
     category: 'Observability Analysis',
     name: 'Monitoring Gaps Detector',
     description: 'Identify missing metrics, alerting opportunities, SLO/SLI coverage, trace missing in critical flows',
-    icon: '📈',
+    icon: 'monitoring',
     prompt: `Detect monitoring gaps:
 
 1. **Missing Metrics**: Identify critical operations without metrics (latency, throughput, errors)
@@ -480,7 +480,7 @@ For each gap:
     category: 'Migration Analysis',
     name: 'Framework Migration Planner',
     description: 'Analyze codebase for migration (React, Vue, Angular): breaking changes, deprecations, effort estimation',
-    icon: '🔄',
+    icon: 'refresh',
     prompt: `Plan framework migration:
 
 1. **Breaking Changes**: Identify code affected by breaking changes in new version
@@ -503,7 +503,7 @@ Provide:
     category: 'Migration Analysis',
     name: 'JavaScript to TypeScript',
     description: 'Analyze JS codebase: type inference suggestions, any type candidates, interface extraction',
-    icon: '🔷',
+    icon: 'typescript',
     prompt: `Plan JavaScript to TypeScript migration:
 
 1. **Type Inference**: Suggest explicit types where inference fails
@@ -526,7 +526,7 @@ Provide:
     category: 'Migration Analysis',
     name: 'Change Impact Analysis',
     description: 'Analyze proposed change impact: affected modules, breaking changes, required updates, rollback strategy',
-    icon: '🎯',
+    icon: 'target',
     prompt: `Analyze impact of proposed change:
 
 1. **Affected Modules**: Identify all modules that depend on changed code
@@ -551,7 +551,7 @@ Provide:
     category: 'UX/Accessibility Analysis',
     name: 'Accessibility Audit (WCAG)',
     description: 'Review for WCAG 2.1 AA: ARIA labels, keyboard navigation, color contrast, screen reader support',
-    icon: '♿',
+    icon: 'accessibility',
     prompt: `Audit accessibility compliance (WCAG 2.1 AA):
 
 1. **ARIA Labels**: Check interactive elements have proper labels
@@ -574,7 +574,7 @@ For each violation:
     category: 'UX/Accessibility Analysis',
     name: 'Mobile Responsiveness Check',
     description: 'Analyze responsive design: breakpoint coverage, touch targets, viewport config, mobile-specific UX',
-    icon: '📱',
+    icon: 'mobile',
     prompt: `Audit mobile responsiveness:
 
 1. **Breakpoint Coverage**: Check layout works at common breakpoints (320px, 375px, 768px, 1024px)
@@ -597,7 +597,7 @@ For each issue:
     category: 'UX/Accessibility Analysis',
     name: 'User Journey Analysis',
     description: 'Map user flows, identify friction points, dead ends, confusing navigation, conversion blockers',
-    icon: '🗺️',
+    icon: 'map',
     prompt: `Analyze user journeys:
 
 1. **Flow Mapping**: Map out key user journeys (sign-up, purchase, onboarding)
@@ -622,7 +622,7 @@ For each journey:
     category: 'Consistency Analysis',
     name: 'API Design Consistency',
     description: 'Review REST/GraphQL consistency: naming conventions, HTTP verbs, response structures, error formats',
-    icon: '🔗',
+    icon: 'link',
     prompt: `Audit API design consistency:
 
 1. **Naming Conventions**: Check consistent resource naming (plural/singular, camelCase/snake_case)
@@ -645,7 +645,7 @@ For each inconsistency:
     category: 'Consistency Analysis',
     name: 'Code Style Inconsistencies',
     description: 'Find pattern violations: naming conventions, file structure, import order, component patterns',
-    icon: '🎨',
+    icon: 'palette',
     prompt: `Detect code style inconsistencies:
 
 1. **Naming Conventions**: Find violations (camelCase, PascalCase, SCREAMING_SNAKE_CASE)
@@ -670,7 +670,7 @@ For each inconsistency:
     category: 'Java/Spring Boot',
     name: 'Spring Boot Best Practices',
     description: 'Audit Spring Boot app: proper annotations, dependency injection, configuration, exception handling',
-    icon: '🍃',
+    icon: 'leaf',
     prompt: `Audit Spring Boot best practices:
 
 1. **Annotation Usage**: Check proper use of @Service, @Repository, @Component, @Controller
@@ -693,7 +693,7 @@ For each issue:
     category: 'Java/Spring Boot',
     name: 'JPA/Hibernate Optimization',
     description: 'Analyze JPA usage: N+1 queries, lazy loading, fetch strategies, entity relationships, caching',
-    icon: '💾',
+    icon: 'save',
     prompt: `Optimize JPA/Hibernate usage:
 
 1. **N+1 Query Detection**: Find @OneToMany/@ManyToOne causing N+1 queries (use JOIN FETCH)
@@ -716,7 +716,7 @@ For each issue:
     category: 'Java/Spring Boot',
     name: 'Java Concurrency Review',
     description: 'Audit thread safety: shared mutable state, synchronization issues, race conditions, deadlocks',
-    icon: '🔀',
+    icon: 'shuffle',
     prompt: `Review Java concurrency and thread safety:
 
 1. **Shared Mutable State**: Find fields accessed by multiple threads without synchronization
@@ -739,7 +739,7 @@ For each issue:
     category: 'Java/Spring Boot',
     name: 'Java Exception Handling',
     description: 'Review exception handling: checked vs unchecked, exception swallowing, resource cleanup, custom exceptions',
-    icon: '⚡',
+    icon: 'zap',
     prompt: `Audit Java exception handling:
 
 1. **Exception Swallowing**: Find empty catch blocks or catching Exception/Throwable
@@ -762,7 +762,7 @@ For each issue:
     category: 'Java/Spring Boot',
     name: 'Spring Security Audit',
     description: 'Review Spring Security config: authentication, authorization, CSRF, CORS, session management, JWT',
-    icon: '🔒',
+    icon: 'lock',
     prompt: `Audit Spring Security configuration:
 
 1. **Authentication**: Review UserDetailsService, password encoding (BCrypt), authentication providers
@@ -785,7 +785,7 @@ For each security issue:
     category: 'Java/Spring Boot',
     name: 'Java Stream API Best Practices',
     description: 'Review Stream usage: performance pitfalls, proper collectors, parallel streams, primitive streams',
-    icon: '🌊',
+    icon: 'activity',
     prompt: `Audit Java Stream API usage:
 
 1. **Performance Pitfalls**: Find boxed streams where primitive streams should be used (IntStream)
@@ -808,7 +808,7 @@ For each issue:
     category: 'Java/Spring Boot',
     name: 'Spring Boot Actuator Setup',
     description: 'Review Actuator config: enabled endpoints, security, health indicators, custom metrics, monitoring integration',
-    icon: '📊',
+    icon: 'analysis',
     prompt: `Audit Spring Boot Actuator configuration:
 
 1. **Enabled Endpoints**: Check which endpoints are exposed (health, metrics, info) via management.endpoints

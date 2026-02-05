@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="url(#quorum-gradient)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <defs>
+    <linearGradient id="quorum-gradient" x1="2" y1="2" x2="22" y2="22" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#6366f1" /> <!-- Indigo 500 -->
+      <stop offset="50%" stop-color="#8b5cf6" /> <!-- Violet 500 -->
+      <stop offset="100%" stop-color="#06b6d4" /> <!-- Cyan 500 -->
+    </linearGradient>
+    <linearGradient id="quorum-fill" x1="2" y1="2" x2="22" y2="22" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#6366f1" stop-opacity="0.2" />
+      <stop offset="100%" stop-color="#06b6d4" stop-opacity="0.2" />
+    </linearGradient>
+  </defs>
+  
+  <!-- The Hexagonal Q Structure -->
+  <path d="M12 2L4 7v10l8 5 5.5-2.75" /> <!-- Left and Bottom -->
+  <path d="M12 2l8 5v5" /> <!-- Top Right -->
+  <path d="M19 16l3 2" /> <!-- The Q Tail -->
+  
+  <!-- The Central Neural Nexus -->
+  <circle cx="12" cy="12" r="2" fill="url(#quorum-fill)" stroke="none" />
+  <path d="M12 12L8 8" stroke-width="1.5" stroke-opacity="0.7" />
+  <path d="M12 12l4-4" stroke-width="1.5" stroke-opacity="0.7" />
+  <path d="M12 12v5" stroke-width="1.5" stroke-opacity="0.7" />
+  
+  <!-- Nodes -->
+  <circle cx="8" cy="8" r="1" fill="currentColor" stroke="none" />
+  <circle cx="16" cy="8" r="1" fill="currentColor" stroke="none" />
+  <circle cx="12" cy="17" r="1" fill="currentColor" stroke="none" />
+</svg>
