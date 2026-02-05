@@ -156,7 +156,7 @@ function TemplateCard({ template, onUse, onPreview }) {
 export default function Templates() {
   const navigate = useNavigate(); const [selectedCategory, setSelectedCategory] = useState('All'); const [searchQuery, setSearchQuery] = useState(''); const [previewTemplate, setPreviewTemplate] = useState(null);
   const filteredTemplates = useMemo(() => workflowTemplates.filter((t) => (selectedCategory === 'All' || t.category === selectedCategory) && (!searchQuery || t.name.toLowerCase().includes(searchQuery.toLowerCase()) || t.description.toLowerCase().includes(searchQuery.toLowerCase()) || t.tags.some((tag) => tag.toLowerCase().includes(searchQuery.toLowerCase())))), [selectedCategory, searchQuery]);
-  const useTemplate = (t) => navigate('/workflows', { state: { template: { prompt: t.prompt, executionStrategy: t.executionStrategy, name: t.name } } });
+  const useTemplate = (t) => navigate('/workflows/new', { state: { template: { prompt: t.prompt, executionStrategy: t.executionStrategy, name: t.name } } });
 
   return (
     <div className="space-y-6 animate-fade-in pb-10">
