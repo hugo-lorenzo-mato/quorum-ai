@@ -128,29 +128,27 @@ export default function Templates() {
         </div>
       </div>
 
-      {/* Search and Filters */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Search templates..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10 h-10 rounded-xl border-border/50 bg-background/50 backdrop-blur-sm focus:ring-2 focus:ring-primary/20"
-          />
-        </div>
+      {/* Search Bar */}
+      <div className="relative max-w-md">
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          placeholder="Search templates..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-10 h-9 rounded-lg border-border/50 bg-background/50 backdrop-blur-sm focus:ring-2 focus:ring-primary/20"
+        />
       </div>
 
-      {/* Category Tabs - Enhanced */}
+      {/* Category Filters */}
       <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin">
         {templateCategories.map((category) => (
           <button
             key={category}
             onClick={() => setSelectedCategory(category)}
-            className={`h-8 px-3 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${
+            className={`h-9 px-4 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${
               selectedCategory === category 
-                ? 'bg-primary/10 text-primary border border-primary/20 shadow-sm' 
-                : 'bg-background/50 text-muted-foreground border border-border hover:bg-accent hover:text-foreground hover:border-border'
+                ? 'bg-primary/10 text-primary border border-primary/20' 
+                : 'bg-background/50 text-muted-foreground border border-border hover:bg-accent hover:text-foreground'
             }`}
           >
             {category}
@@ -213,13 +211,13 @@ export default function Templates() {
             <div className="flex gap-2 p-4 border-t border-border/30 bg-gradient-to-r from-transparent via-muted/5 to-transparent">
               <button
                 onClick={() => useTemplate(template)} 
-                className="flex-1 h-9 px-3 rounded-lg text-sm font-medium bg-primary/90 text-primary-foreground hover:bg-primary transition-colors shadow-sm"
+                className="flex-1 h-9 px-4 rounded-lg text-sm font-medium bg-primary/90 text-primary-foreground hover:bg-primary transition-colors"
               >
                 Use Template
               </button>
               <button
                 onClick={() => setPreviewTemplate(template)}
-                className="h-9 px-3 rounded-lg text-sm font-medium border border-border bg-background/50 hover:bg-accent hover:text-foreground transition-colors"
+                className="h-9 px-4 rounded-lg text-sm font-medium border border-border bg-background/50 hover:bg-accent hover:text-foreground transition-colors"
               >
                 Preview
               </button>
