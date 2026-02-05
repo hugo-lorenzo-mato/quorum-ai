@@ -252,17 +252,6 @@
   -webkit-backdrop-filter: blur(12px);
 }
 
-/* Dot pattern background utility - Ultra subtle */
-.bg-dot-pattern {
-  background-image: radial-gradient(var(--foreground) 0.5px, transparent 0.5px);
-  background-size: 32px 32px;
-  opacity: 0.02;
-}
-
-.shadow-soft {
-  shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.03), 0 2px 8px -1px rgba(0, 0, 0, 0.02);
-}
-
 /* Subtle animations */
 @keyframes fade-in {
   from { opacity: 0; }
@@ -270,7 +259,7 @@
 }
 
 @keyframes fade-up {
-  from { opacity: 0; transform: translateY(10px); }
+  from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
@@ -289,29 +278,6 @@
 
 .animate-slide-in {
   animation: slide-in-left 0.2s ease-out;
-}
-
-@keyframes shake {
-  0%, 100% { transform: translateX(0); }
-  25% { transform: translateX(-4px); }
-  75% { transform: translateX(4px); }
-}
-
-.animate-shake {
-  animation: shake 0.2s ease-in-out 0s 2;
-}
-
-/* Mask utilities for smooth scrolling fades */
-.mask-fade-bottom {
-  mask-image: linear-gradient(to bottom, black 85%, transparent 100%);
-}
-
-.mask-fade-right {
-  mask-image: linear-gradient(to right, black 85%, transparent 100%);
-}
-
-.mask-linear-fade {
-  mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent);
 }
 
 /* Line clamp utilities (no Tailwind plugin needed) */

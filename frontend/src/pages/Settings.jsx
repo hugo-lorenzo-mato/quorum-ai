@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useConfigStore } from '../stores/configStore';
-import { Search, ArrowLeft, ChevronRight, X, Settings as SettingsIcon, GitBranch as GitIcon, Terminal as AdvancedIcon, Workflow as WorkflowIcon, Bot as AgentsIcon, ListOrdered as PhasesIcon, Ticket as IssuesIcon, Sliders, Info, RefreshCw, Loader2 } from 'lucide-react';
+import { Search, ArrowLeft, ChevronRight, X, Settings as SettingsIcon, GitBranch as GitIcon, Terminal as AdvancedIcon, Workflow as WorkflowIcon, Bot as AgentsIcon, ListOrdered as PhasesIcon, Ticket as IssuesIcon } from 'lucide-react';
 import {
   SettingsToolbar,
   ConflictDialog,
@@ -12,115 +12,356 @@ import {
   IssuesTab,
   AdvancedTab,
 } from '../components/config';
-import { Button } from '../components/ui/Button';
-import { Input } from '../components/ui/Input';
-import { Badge } from '../components/ui/Badge';
 
 const TABS = [
-  { id: 'general', label: 'General', group: 'System', icon: SettingsIcon, component: GeneralTab, description: 'App behaviors and global preferences', keywords: ['log', 'logging', 'chat', 'report', 'markdown', 'output'] },
-  { id: 'git', label: 'Git Integration', group: 'System', icon: GitIcon, component: GitTab, description: 'Repository management and automation', keywords: ['commit', 'push', 'pr', 'pull request', 'merge', 'github', 'branch'] },
-  { id: 'advanced', label: 'Advanced', group: 'System', icon: AdvancedIcon, component: AdvancedTab, description: 'System diagnostics and tracing', keywords: ['trace', 'debug', 'server', 'port', 'host', 'reset', 'danger'] },
-  { id: 'workflow', label: 'Workflow Defaults', group: 'Project', icon: WorkflowIcon, component: WorkflowTab, description: 'Execution parameters and safety', keywords: ['timeout', 'retry', 'dry run', 'sandbox', 'state', 'database', 'backend'] },
-  { id: 'agents', label: 'Agents & Models', group: 'Project', icon: AgentsIcon, component: AgentsTab, description: 'Provider keys and model orchestration', keywords: ['model', 'temperature', 'provider', 'token', 'context'] },
-  { id: 'phases', label: 'Execution Phases', group: 'Project', icon: PhasesIcon, component: PhasesTab, description: 'Orchestration step sequence', keywords: ['step', 'order', 'execution'] },
-  { id: 'issues', label: 'Issue Generation', group: 'Project', icon: IssuesIcon, component: IssuesTab, description: 'Ticketing system export configuration', keywords: ['github', 'gitlab', 'issue', 'ticket', 'label', 'assignee', 'template'] },
+  // System Group
+  { 
+    id: 'general', 
+    label: 'General', 
+    group: 'System',
+    icon: SettingsIcon, 
+    component: GeneralTab,
+    keywords: ['log', 'logging', 'chat', 'report', 'markdown', 'output'] 
+  },
+  {
+    id: 'git',
+    label: 'Git Integration',
+    group: 'System',
+    icon: GitIcon,
+    component: GitTab,
+    keywords: ['commit', 'push', 'pr', 'pull request', 'merge', 'github', 'branch']
+  },
+  {
+    id: 'advanced',
+    label: 'Advanced',
+    group: 'System',
+    icon: AdvancedIcon,
+    component: AdvancedTab,
+    keywords: ['trace', 'debug', 'server', 'port', 'host', 'reset', 'danger']
+  },
+  // Project Group
+  { 
+    id: 'workflow', 
+    label: 'Workflow Defaults', 
+    group: 'Project',
+    icon: WorkflowIcon, 
+    component: WorkflowTab,
+    keywords: ['timeout', 'retry', 'dry run', 'sandbox', 'state', 'database', 'backend'] 
+  },
+  { 
+    id: 'agents', 
+    label: 'Agents & Models', 
+    group: 'Project',
+    icon: AgentsIcon, 
+    component: AgentsTab,
+    keywords: ['model', 'temperature', 'provider', 'token', 'context'] 
+  },
+  { 
+    id: 'phases', 
+    label: 'Execution Phases', 
+    group: 'Project',
+    icon: PhasesIcon, 
+    component: PhasesTab,
+    keywords: ['step', 'order', 'execution'] 
+  },
+  {
+    id: 'issues',
+    label: 'Issue Generation',
+    group: 'Project',
+    icon: IssuesIcon,
+    component: IssuesTab,
+    keywords: ['github', 'gitlab', 'issue', 'ticket', 'label', 'assignee', 'template']
+  },
 ];
 
-const getTabDirty = (id, local) => {
-  const keys = Object.keys(local);
-  const map = { general: ['log', 'chat', 'report'], workflow: ['workflow', 'state'], agents: ['agents'], phases: ['phases'], git: ['git', 'github'], issues: ['issues'], advanced: ['trace', 'server'] };
-  return keys.some(k => (map[id] || []).includes(k));
+// Helper to determine if a tab has dirty fields
+const getTabDirty = (tabId, localChanges) => {
+  const dirtyKeys = Object.keys(localChanges);
+  if (dirtyKeys.length === 0) return false;
+
+  const tabMappings = {
+    general: ['log', 'chat', 'report'],
+    workflow: ['workflow', 'state'],
+    agents: ['agents'],
+    phases: ['phases'],
+    git: ['git', 'github'],
+    issues: ['issues'],
+    advanced: ['trace', 'server'],
+  };
+
+  const relevantKeys = tabMappings[tabId] || [];
+  return dirtyKeys.some(key => relevantKeys.includes(key));
 };
 
 export default function Settings() {
   const [activeTab, setActiveTab] = useState('general');
   const [searchQuery, setSearchQuery] = useState('');
-  const [mobileView, setMobileView] = useState('menu');
-  const { loadConfig, loadMetadata, isLoading, error, config, localChanges } = useConfigStore();
+  
+  // Mobile navigation state
+  const [mobileView, setMobileView] = useState('menu'); // 'menu' | 'content'
+  const [showMobileSearch, setShowMobileSearch] = useState(false);
+  
+  const loadConfig = useConfigStore((state) => state.loadConfig);
+  const loadMetadata = useConfigStore((state) => state.loadMetadata);
+  const isLoading = useConfigStore((state) => state.isLoading);
+  const error = useConfigStore((state) => state.error);
+  const config = useConfigStore((state) => state.config);
+  const localChanges = useConfigStore((state) => state.localChanges);
 
-  useEffect(() => { loadConfig(); loadMetadata(); }, [loadConfig, loadMetadata]);
+  // Load config and metadata on mount
+  useEffect(() => {
+    loadConfig();
+    loadMetadata();
+  }, [loadConfig, loadMetadata]);
 
+  // Filter tabs based on search
   const filteredTabs = useMemo(() => {
     if (!searchQuery) return TABS;
-    const q = searchQuery.toLowerCase();
-    return TABS.filter(t => t.label.toLowerCase().includes(q) || t.description.toLowerCase().includes(q) || (t.keywords && t.keywords.some(k => k.includes(q))));
+    const lowerQuery = searchQuery.toLowerCase();
+    return TABS.filter(tab => 
+      tab.label.toLowerCase().includes(lowerQuery) || 
+      (tab.keywords && tab.keywords.some(k => k.includes(lowerQuery)))
+    );
   }, [searchQuery]);
 
-  const activeTabData = TABS.find((t) => t.id === activeTab);
-  const ActiveComponent = activeTabData?.component;
+  const handleSearchChange = (e) => {
+    const query = e.target.value;
+    setSearchQuery(query);
+    
+    // Auto-switch tab if current becomes hidden (Desktop behavior)
+    if (window.innerWidth >= 768 && query) {
+      const lowerQuery = query.toLowerCase();
+      const matching = TABS.filter(tab => 
+        tab.label.toLowerCase().includes(lowerQuery) || 
+        (tab.keywords && tab.keywords.some(k => k.includes(lowerQuery)))
+      );
+      
+      if (matching.length > 0 && !matching.find(t => t.id === activeTab)) {
+        setActiveTab(matching[0].id);
+      }
+    }
+  };
+
+  const handleTabClick = (tabId) => {
+    setActiveTab(tabId);
+    setMobileView('content');
+  };
+
+  const handleMobileBack = () => {
+    setMobileView('menu');
+  };
+
+  const ActiveComponent = TABS.find((t) => t.id === activeTab)?.component;
+  const activeTabLabel = TABS.find((t) => t.id === activeTab)?.label;
+
   const groups = ['System', 'Project'];
 
   return (
-    <div className="relative min-h-full space-y-8 pb-12 animate-fade-in">
-      <div className="absolute inset-0 bg-dot-pattern pointer-events-none -z-10" />
+    <div className="flex flex-col md:h-[calc(100vh-4rem)] bg-background z-0 pb-10">
+      {/* Header */}
+      <header className="flex-none px-6 py-4 border-b border-border bg-card/50 backdrop-blur-sm z-10">
+        <div className={`flex items-center justify-between gap-4 ${mobileView === 'content' ? 'hidden md:flex' : 'flex'}`}>
+          <div className={showMobileSearch ? 'hidden md:block' : 'block'}>
+            <h1 className="text-2xl font-bold text-foreground tracking-tight">Settings</h1>
+            <p className="hidden md:block text-sm text-muted-foreground mt-1">
+              Manage your global configuration and preferences
+            </p>
+          </div>
+          
+          {/* Mobile Search Toggle */}
+          <div className="flex md:hidden items-center justify-end w-full gap-2">
+             {showMobileSearch ? (
+               <div className="flex-1 animate-slide-in relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <input
+                    type="text"
+                    placeholder="Search settings..."
+                    value={searchQuery}
+                    onChange={handleSearchChange}
+                    autoFocus
+                    className="h-9 w-full pl-9 pr-8 rounded-lg border border-border bg-background text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background"
+                  />
+                  <button 
+                    onClick={() => {
+                      setShowMobileSearch(false);
+                      setSearchQuery('');
+                    }}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+               </div>
+             ) : (
+               <button 
+                 onClick={() => setShowMobileSearch(true)}
+                 className="p-2 -mr-2 rounded-lg hover:bg-accent text-muted-foreground hover:text-foreground"
+               >
+                 <Search className="w-5 h-5" />
+               </button>
+             )}
+          </div>
 
-      <header className="flex flex-col md:flex-row md:items-end justify-between gap-6 pt-4 pb-2 border-b border-border/20">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2 text-primary"><div className="w-1 h-1 rounded-full bg-current" /><span className="text-[10px] font-bold uppercase tracking-[0.2em] opacity-70">Engine Params</span></div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">System <span className="text-muted-foreground/40 font-medium">Settings</span></h1>
+          {/* Desktop Search Input */}
+          <div className="hidden md:block relative w-72">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <input
+              type="text"
+              placeholder="Search settings..."
+              value={searchQuery}
+              onChange={handleSearchChange}
+              className="h-10 w-full pl-10 pr-4 rounded-lg border border-border bg-secondary/50 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background transition-all placeholder:text-muted-foreground/50 hover:bg-secondary/80 focus:bg-background"
+            />
+          </div>
         </div>
-        <div className="relative group"><Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground/30 group-focus-within:text-primary/60 transition-colors" /><Input placeholder="Search parameters..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="h-10 pl-10 pr-4 bg-card/20 border-border/30 rounded-2xl text-xs shadow-sm transition-all" /></div>
+
+        {/* Mobile Content Header */}
+        <div className={`md:hidden items-center gap-3 ${mobileView === 'content' ? 'flex animate-slide-in' : 'hidden'}`}>
+          <button 
+            onClick={handleMobileBack}
+            className="p-2 -ml-2 rounded-lg hover:bg-accent text-muted-foreground"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <h2 className="text-lg font-semibold text-foreground">{activeTabLabel}</h2>
+        </div>
       </header>
 
-      <div className="flex flex-col md:flex-row gap-8 items-start">
-        <aside className="hidden md:flex flex-col w-64 lg:w-72 space-y-8 sticky top-24 z-20">
-          <nav className="space-y-8">
-            {groups.map(g => {
-              const gTabs = filteredTabs.filter(t => t.group === g); if (!gTabs.length) return null;
-              return (
-                <div key={g} className="space-y-3">
-                  <h3 className="px-2 text-[10px] font-bold text-muted-foreground/40 uppercase tracking-widest">{g} Infrastructure</h3>
-                  <div className="space-y-1">
-                    {gTabs.map((t) => (
-                      <button key={t.id} onClick={() => setActiveTab(t.id)} className={`w-full flex items-center justify-between p-3 text-xs font-bold rounded-xl transition-all duration-300 border ${activeTab === t.id ? 'bg-primary/[0.03] border-primary/20 text-primary' : 'text-muted-foreground/60 border-transparent hover:bg-accent/40'}`}>
-                        <div className="flex items-center gap-3"><div className={`p-1.5 rounded-lg transition-colors ${activeTab === t.id ? 'bg-primary/10' : 'bg-muted/30 group-hover:bg-muted/50'}`}><t.icon className="w-3.5 h-3.5" /></div><span>{t.label}</span></div>
-                        {getTabDirty(t.id, localChanges) && <span className="w-1 h-1 rounded-full bg-warning animate-pulse" />}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-          </nav>
-        </aside>
+      {/* Main Layout */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Desktop Sidebar */}
+        <nav className="hidden md:block w-64 lg:w-72 border-r border-border bg-card/30 overflow-y-auto p-4 space-y-8">
+          {groups.map(group => {
+            const groupTabs = filteredTabs.filter(tab => tab.group === group);
+            if (groupTabs.length === 0) return null;
 
-        <main className={`flex-1 w-full min-w-0 ${mobileView === 'content' ? 'block' : 'hidden md:block'}`}>
-          <div className="bg-card/10 backdrop-blur-xl border border-border/30 rounded-3xl overflow-hidden shadow-soft">
-            {isLoading && !config ? <div className="flex flex-col items-center justify-center py-32 gap-4"><Loader2 className="w-8 h-8 animate-spin text-primary/40" /><p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/40">Syncing Node</p></div>
-            : error ? <div className="p-12 text-center space-y-6"><h3 className="text-lg font-bold text-foreground/80">Sync Error</h3><Button onClick={loadConfig} variant="outline" className="rounded-xl border-border/60">Retry</Button></div>
-            : <div className="animate-fade-in">
-                 <header className="px-8 py-6 border-b border-border/20 bg-background/20 flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                       <button onClick={() => setMobileView('menu')} className="md:hidden p-2 -ml-2 text-muted-foreground/60"><ArrowLeft className="w-5 h-5" /></button>
-                       <div><h2 className="text-lg font-bold text-foreground tracking-tight leading-none">{activeTabLabel}</h2><p className="text-[11px] text-muted-foreground/50 font-medium mt-1">{activeTabData.description}</p></div>
-                    </div>
-                    {getTabDirty(activeTab, localChanges) && <Badge variant="secondary" className="bg-warning/5 text-warning/70 border-warning/10 text-[9px] font-bold">Modified</Badge>}
-                 </header>
-                 <div className="p-8"><ActiveComponent /></div>
-              </div>}
+            return (
+              <div key={group} className="space-y-2">
+                <h3 className="px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  {group}
+                </h3>
+                <div className="space-y-1">
+                  {groupTabs.map((tab) => {
+                    const Icon = tab.icon;
+                    const isActive = activeTab === tab.id;
+                    const isDirty = getTabDirty(tab.id, localChanges);
+                    
+                    return (
+                      <button
+                        key={tab.id}
+                        onClick={() => setActiveTab(tab.id)}
+                        className={`w-full flex items-center justify-between px-3 py-2 text-sm font-medium rounded-lg transition-all ${
+                          isActive
+                            ? 'bg-primary text-primary-foreground shadow-md shadow-primary/20'
+                            : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <Icon className={`w-4 h-4 ${isActive ? 'text-primary-foreground' : 'text-muted-foreground'}`} />
+                          {tab.label}
+                        </div>
+                        {isDirty && (
+                          <span className={`w-2 h-2 rounded-full ${isActive ? 'bg-white' : 'bg-warning'}`} />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </nav>
+
+        {/* Content Area */}
+        <main className={`flex-1 overflow-y-auto bg-background p-4 sm:p-8 ${mobileView === 'content' ? 'block' : 'hidden md:block'}`}>
+          <div className="max-w-4xl mx-auto space-y-6 pb-24">
+            {isLoading && !config ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+              </div>
+            ) : error ? (
+              <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-xl text-destructive flex items-center justify-between">
+                <span>{error}</span>
+                <button onClick={loadConfig} className="text-sm font-medium underline hover:no-underline">Retry</button>
+              </div>
+            ) : !ActiveComponent ? (
+              <div className="text-center py-12 text-muted-foreground">
+                Select a setting category to get started
+              </div>
+            ) : (
+              <div className="animate-fade-in">
+                 {/* Desktop Title for the active section */}
+                 <div className="hidden md:block mb-6 pb-4 border-b border-border">
+                    <h2 className="text-2xl font-semibold text-foreground">{activeTabLabel}</h2>
+                    <p className="text-muted-foreground text-sm mt-1">
+                      Customize settings for {activeTabLabel.toLowerCase()}
+                    </p>
+                 </div>
+                 <ActiveComponent />
+              </div>
+            )}
           </div>
         </main>
 
-        <div className={`md:hidden flex-1 space-y-8 animate-fade-in ${mobileView === 'menu' ? 'block' : 'hidden'}`}>
-          {groups.map(g => {
-            const gTabs = filteredTabs.filter(t => t.group === g); if (!gTabs.length) return null;
+        {/* Mobile Menu List */}
+        <div className={`md:hidden flex-1 overflow-y-auto p-4 space-y-6 bg-background ${mobileView === 'menu' ? 'block animate-fade-in' : 'hidden'}`}>
+          {filteredTabs.length === 0 && (
+            <div className="text-center py-8 text-muted-foreground">
+              No settings found matching "{searchQuery}"
+            </div>
+          )}
+          
+          {groups.map(group => {
+            const groupTabs = filteredTabs.filter(tab => tab.group === group);
+            if (groupTabs.length === 0) return null;
+
             return (
-              <div key={g} className="space-y-3">
-                <h3 className="px-2 text-[10px] font-bold text-muted-foreground/40 uppercase tracking-widest">{g} Core</h3>
-                <div className="grid grid-cols-1 gap-2">
-                  {gTabs.map((t) => (
-                    <button key={t.id} onClick={() => handleTabClick(t.id)} className="w-full flex items-center justify-between p-4 rounded-2xl border border-border/30 bg-card/20 backdrop-blur-md active:scale-[0.98] transition-all">
-                      <div className="flex items-center gap-4"><div className="p-2.5 rounded-xl bg-background border border-border/60 text-primary/60 shadow-inner"><t.icon className="w-5 h-5" /></div><span className="font-bold text-sm text-foreground/80">{t.label}</span></div>
-                      <ChevronRight className="w-4 h-4 text-muted-foreground/20" />
-                    </button>
-                  ))}
+              <div key={group} className="space-y-2">
+                <h3 className="px-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  {group}
+                </h3>
+                <div className="space-y-1">
+                  {groupTabs.map((tab) => {
+                    const Icon = tab.icon;
+                    const isDirty = getTabDirty(tab.id, localChanges);
+                    return (
+                      <button
+                        key={tab.id}
+                        onClick={() => handleTabClick(tab.id)}
+                        className="w-full flex items-center justify-between p-3 rounded-xl border border-border bg-card hover:bg-accent active:scale-[0.98] transition-all"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 rounded-lg bg-secondary text-foreground">
+                            <Icon className="w-5 h-5" />
+                          </div>
+                          <span className="font-medium text-foreground">{tab.label}</span>
+                          {isDirty && (
+                            <span className="w-2 h-2 bg-warning rounded-full" />
+                          )}
+                        </div>
+                        <ChevronRight className="w-5 h-5 text-muted-foreground" />
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             );
           })}
         </div>
       </div>
-      <SettingsToolbar /><ConflictDialog />
+
+      {/* Floating Toolbar */}
+      <SettingsToolbar />
+
+      {/* Conflict Dialog */}
+      <ConflictDialog />
     </div>
+  );
+}
+
+function Loader2({ className }) {
+  return (
+    <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+    </svg>
   );
 }

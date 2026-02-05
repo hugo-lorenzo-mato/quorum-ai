@@ -1,84 +1,192 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useKanbanStore, KANBAN_COLUMNS } from '../stores';
 import { getStatusColor, KANBAN_COLUMN_COLORS } from '../lib/theme';
-import { 
-  Search, 
-  ChevronLeft, 
-  ChevronRight, 
-  X, 
-  ChevronDown, 
-  GitPullRequest, 
-  ListTodo, 
-  Play, 
-  AlertCircle, 
-  Clock, 
-  Inbox, 
-  FolderKanban, 
-  Sparkles, 
-  Info,
-  Settings,
-  Cpu,
-  Zap,
-  LayoutDashboard,
-  MoreVertical
-} from 'lucide-react';
-import { Badge } from '../components/ui/Badge';
-import { Input } from '../components/ui/Input';
-import { Button } from '../components/ui/Button';
+import { Search, ChevronLeft, ChevronRight, X, MoreVertical, GitPullRequest, ListTodo, Play, AlertCircle, Clock, Inbox } from 'lucide-react';
 
+// Bottom Sheet Component for Mobile Actions
 function MobileActionSheet({ isOpen, onClose, workflow, onMoveTo }) {
   if (!isOpen || !workflow) return null;
+
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center md:hidden">
-      <div className="absolute inset-0 bg-background/60 backdrop-blur-md animate-fade-in" onClick={onClose} />
-      <div className="relative w-full bg-card rounded-t-3xl border-t border-border/20 p-8 animate-fade-up max-w-md mx-auto">
-        <div className="w-10 h-1 bg-muted rounded-full mx-auto mb-8 opacity-20" />
-        <h3 className="text-lg font-bold text-foreground tracking-tight mb-6">{workflow.title || workflow.id}</h3>
-        <div className="space-y-2">
+      {/* Backdrop */}
+      <div 
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in"
+        onClick={onClose}
+      />
+      
+      {/* Sheet Content */}
+      <div className="relative w-full bg-card rounded-t-2xl shadow-xl border-t border-border p-4 animate-fade-up max-w-md mx-auto">
+        <div className="w-12 h-1.5 bg-muted rounded-full mx-auto mb-6" />
+        
+        <div className="mb-6">
+          <h3 className="text-lg font-semibold text-foreground mb-1">Move Workflow</h3>
+          <p className="text-sm text-muted-foreground line-clamp-1">
+            {workflow.title || workflow.id}
+          </p>
+        </div>
+
+        <div className="space-y-2.5">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Select Status</p>
           {KANBAN_COLUMNS.map(col => {
              const isCurrent = workflow.kanban_column === col.id;
              const accent = KANBAN_COLUMN_COLORS[col.id] || KANBAN_COLUMN_COLORS.default;
+             
              return (
-               <button key={col.id} onClick={() => { if (!isCurrent) { onMoveTo(col.id); onClose(); } }} disabled={isCurrent} className={`w-full flex items-center justify-between p-4 rounded-xl border transition-all ${isCurrent ? 'bg-muted/30 border-transparent opacity-30 grayscale' : 'bg-background/50 border-border/40 hover:border-primary/20 active:scale-[0.98]'}`}>
-                 <div className="flex items-center gap-3"><div className={`w-1.5 h-1.5 rounded-full ${accent.dot}`} /><span className="font-bold text-sm text-foreground/80">{col.name}</span></div>
-                 {isCurrent && <Badge variant="outline" className="text-[8px] uppercase font-bold opacity-40">Active</Badge>}
+               <button
+                 key={col.id}
+                 onClick={() => {
+                   if (!isCurrent) {
+                     onMoveTo(col.id);
+                     onClose();
+                   }
+                 }}
+                 disabled={isCurrent}
+                 className={`w-full flex items-center gap-3 p-3 rounded-xl border transition-all ${
+                   isCurrent 
+                     ? 'bg-secondary/50 border-transparent opacity-50 cursor-default' 
+                     : 'bg-background border-border hover:bg-accent active:scale-[0.98]'
+                 }`}
+               >
+                 <span className={`w-3 h-3 rounded-full ${accent.dot}`} />
+                 <span className="font-medium text-foreground">{col.name}</span>
+                 {isCurrent && <span className="ml-auto text-xs text-muted-foreground">(Current)</span>}
                </button>
              );
           })}
         </div>
-        <Button variant="ghost" onClick={onClose} className="w-full mt-8 h-12 rounded-xl text-xs font-bold text-muted-foreground/40">Cancel</Button>
+
+        <button 
+          onClick={onClose}
+          className="w-full mt-6 p-3 rounded-xl font-medium text-muted-foreground hover:bg-secondary transition-colors"
+        >
+          Cancel
+        </button>
       </div>
     </div>
   );
 }
 
+// Column component
 function KanbanColumn({ column, workflows, isMobile, onOpenMobileMenu }) {
-  const { moveWorkflow, setDraggedWorkflow, clearDraggedWorkflow, engine, draggedWorkflow } = useKanbanStore();
-  const navigate = useNavigate(); const dragDepth = useRef(0); const [isOver, setIsOver] = useState(false);
+  const {
+    moveWorkflow,
+    setDraggedWorkflow,
+    clearDraggedWorkflow,
+    engine,
+    draggedWorkflow,
+  } = useKanbanStore();
+  const navigate = useNavigate();
+  const dragDepth = useRef(0);
+  const [isOver, setIsOver] = useState(false);
+
   const canDrop = Boolean(draggedWorkflow && draggedWorkflow.kanban_column !== column.id);
-  useEffect(() => { const reset = () => { dragDepth.current = 0; setIsOver(false); }; window.addEventListener('dragend', reset); window.addEventListener('drop', reset); return () => { window.removeEventListener('dragend', reset); window.removeEventListener('drop', reset); }; }, []);
-  const handleDragOver = (e) => { e.preventDefault(); e.dataTransfer.dropEffect = canDrop ? 'move' : 'none'; };
-  const handleDrop = (e) => { e.preventDefault(); dragDepth.current = 0; setIsOver(false); if (!canDrop) { clearDraggedWorkflow(); return; } const id = e.dataTransfer.getData('text/plain'); if (id) moveWorkflow(id, column.id); clearDraggedWorkflow(); };
-  const handleDragEnter = (e) => { e.preventDefault(); if (!canDrop) return; dragDepth.current += 1; setIsOver(true); };
-  const handleDragLeave = (e) => { e.preventDefault(); if (!canDrop) return; dragDepth.current = Math.max(0, dragDepth.current - 1); if (dragDepth.current === 0) setIsOver(false); };
+
+  useEffect(() => {
+    const reset = () => {
+      dragDepth.current = 0;
+      setIsOver(false);
+    };
+
+    window.addEventListener('dragend', reset);
+    window.addEventListener('drop', reset);
+    return () => {
+      window.removeEventListener('dragend', reset);
+      window.removeEventListener('drop', reset);
+    };
+  }, []);
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = canDrop ? 'move' : 'none';
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    dragDepth.current = 0;
+    setIsOver(false);
+
+    if (!canDrop) {
+      clearDraggedWorkflow();
+      return;
+    }
+
+    const workflowId = e.dataTransfer.getData('text/plain');
+    if (workflowId) {
+      moveWorkflow(workflowId, column.id);
+    }
+    clearDraggedWorkflow();
+  };
+
+  const handleDragEnter = (e) => {
+    e.preventDefault();
+    if (!canDrop) return;
+    dragDepth.current += 1;
+    setIsOver(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    if (!canDrop) return;
+    dragDepth.current = Math.max(0, dragDepth.current - 1);
+    if (dragDepth.current === 0) setIsOver(false);
+  };
+
+  // Accent color for the column header
   const accent = KANBAN_COLUMN_COLORS[column.id] || KANBAN_COLUMN_COLORS.default;
 
+  // On mobile, use the column's tint color for better visual distinction
+  const bgClass = isMobile ? accent.tint : 'bg-secondary/30';
+
   return (
-    <div onDragOver={handleDragOver} onDrop={handleDrop} onDragEnter={handleDragEnter} onDragLeave={handleDragLeave} className={`flex flex-col ${isMobile ? 'w-[85vw] flex-shrink-0 snap-center h-full mx-2 first:ml-4 last:mr-4' : 'min-w-[300px] max-w-[340px] flex-1'} h-full transition-all duration-500 rounded-3xl border border-border/30 bg-card/5 backdrop-blur-xl overflow-hidden ${isOver && canDrop ? 'ring-1 ring-primary/20 bg-primary/[0.01]' : ''}`}>
-      <div className={`flex items-center justify-between px-5 py-4 border-b border-border/20 bg-card/30 border-t-2 ${accent.border}`}>
+    <div
+      className={`flex flex-col ${isMobile ? 'w-[85vw] flex-shrink-0 snap-center h-full mx-2 first:ml-4 last:mr-4' : 'min-w-[280px] max-w-[320px]'} h-full transition-all duration-200 rounded-xl border border-border/50 ${bgClass} backdrop-blur-sm ${
+        isOver && canDrop ? 'ring-2 ring-primary/20 bg-secondary/50' : ''
+      }`}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+    >
+      {/* Column header - Structured & Clean */}
+      <div className="flex items-center justify-between p-3 border-b border-border/40">
         <div className="flex items-center gap-2.5">
-          <div className={`w-1.5 h-1.5 rounded-full ${accent.dot} opacity-40`} />
-          <h3 className="font-bold text-foreground/60 text-[10px] uppercase tracking-widest">{column.name}</h3>
+          <div className={`w-2.5 h-2.5 rounded-full ${accent.dot} shadow-sm`} />
+          <h3 className="font-semibold text-foreground text-sm tracking-tight">{column.name}</h3>
         </div>
-        <span className="text-[10px] font-bold text-muted-foreground/40">{workflows.length}</span>
+        <span className="px-2 py-0.5 rounded-md bg-background/50 border border-border/40 text-[10px] font-mono text-muted-foreground">
+            {workflows.length}
+        </span>
       </div>
-      <div className="flex-1 p-3 space-y-3 overflow-y-auto min-h-0 scrollbar-none">
-        {workflows.map((w) => <KanbanCard key={w.id} workflow={w} isExecuting={engine.currentWorkflowId === w.id} onDragStart={() => setDraggedWorkflow(w)} onDragEnd={() => clearDraggedWorkflow()} onClick={() => navigate(`/workflows/${w.id}`)} onMoveTo={(t) => moveWorkflow(w.id, t)} onOpenMenu={() => onOpenMobileMenu(w)} />)}
+
+      {/* Workflow cards container */}
+      <div className="flex-1 p-2 space-y-2.5 overflow-y-auto min-h-0 scrollbar-thin">
+        {workflows.map((workflow) => (
+          <KanbanCard
+            key={workflow.id}
+            workflow={workflow}
+            isExecuting={engine.currentWorkflowId === workflow.id}
+            onDragStart={() => setDraggedWorkflow(workflow)}
+            onDragEnd={() => clearDraggedWorkflow()}
+            onClick={() => navigate(`/workflows/${workflow.id}`)}
+            onMoveTo={(targetCol) => moveWorkflow(workflow.id, targetCol)}
+            onOpenMenu={() => onOpenMobileMenu(workflow)}
+          />
+        ))}
+        
+        {/* Empty State - Subtle but visible */}
         {workflows.length === 0 && (
-          <div className={`flex flex-col items-center justify-center py-16 rounded-2xl border border-dashed transition-all duration-700 ${isOver && canDrop ? 'border-primary/20 bg-primary/[0.01]' : 'border-border/10 bg-transparent opacity-10'}`}>
-             <Clock className="w-8 h-8 mb-2" />
-             <span className="text-[9px] font-bold uppercase tracking-widest">Idle</span>
+          <div className={`flex flex-col items-center justify-center py-12 rounded-lg border border-dashed transition-all ${
+            isOver && canDrop 
+              ? 'border-primary/40 bg-primary/5 scale-[0.98]' 
+              : 'border-border/30 bg-transparent text-muted-foreground/30'
+          }`}>
+             {isOver && canDrop ? (
+                 <Inbox className="w-8 h-8 text-primary/50 mb-2 animate-bounce" />
+             ) : (
+                 <span className="text-xs font-medium">No items</span>
+             )}
           </div>
         )}
       </div>
@@ -86,88 +194,396 @@ function KanbanColumn({ column, workflows, isMobile, onOpenMobileMenu }) {
   );
 }
 
+// Card component - Structured, Top Border Accent, Status Badge
 function KanbanCard({ workflow, isExecuting, onDragStart, onDragEnd, onClick, onOpenMenu }) {
-  const handleDragStart = (e) => { e.dataTransfer.setData('text/plain', workflow.id); e.dataTransfer.effectAllowed = 'move'; onDragStart(); };
+  const handleDragStart = (e) => {
+    e.dataTransfer.setData('text/plain', workflow.id);
+    e.dataTransfer.effectAllowed = 'move';
+    onDragStart();
+  };
+
   const statusColor = getStatusColor(workflow.status);
-  const cardStyle = { borderLeftColor: statusColor.borderStrip ? `var(--${statusColor.borderStrip.split('-')[1]})` : 'transparent', borderLeftWidth: '2px' };
+  const isCompleted = workflow.status === 'completed';
+  // Use the border color for the top accent, but skip for completed items
+  const topAccentColor = isCompleted ? '' : `border-t-[3px] ${statusColor.borderStrip || 'border-border'}`;
 
   return (
-    <div draggable onDragStart={handleDragStart} onDragEnd={onDragEnd} onClick={onClick} className={`group relative flex flex-col gap-4 rounded-xl border border-border/30 bg-card/60 p-4 shadow-sm transition-all duration-500 hover:shadow-soft hover:-translate-y-0.5 cursor-grab active:cursor-grabbing ${isExecuting ? 'ring-1 ring-primary/20 shadow-primary/5' : 'hover:border-primary/20'}`} style={cardStyle} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onClick?.(); }}>
-      {isExecuting && <div className="absolute top-3 right-3 flex items-center gap-1.5 text-[8px] font-bold text-primary/60 bg-primary/5 px-2 py-0.5 rounded-lg border border-primary/10 animate-fade-in"><Zap className="w-2.5 h-2.5 fill-current animate-pulse" /> RUNNING</div>}
-      <div className="space-y-1.5">
-         <h4 className="font-bold text-foreground/90 text-sm leading-tight line-clamp-2 pr-10 group-hover:text-primary transition-colors">{workflow.title || "Untitled Execution"}</h4>
-         <p className="text-muted-foreground/40 text-[10px] line-clamp-2 italic border-l border-border/40 pl-2">&ldquo;{workflow.prompt}&rdquo;</p>
-      </div>
-      <div className="flex items-center justify-between pt-3 border-t border-border/20">
-        <div className="flex items-center gap-3 text-muted-foreground/30">
-            {workflow.pr_url && <a href={workflow.pr_url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="flex items-center gap-1.5 text-[10px] font-bold hover:text-primary transition-all"><GitPullRequest className="w-3 h-3 opacity-60" /><span>#{workflow.pr_number}</span></a>}
-            {workflow.task_count > 0 && <div className="flex items-center gap-1.5 text-[10px] font-bold" title={`${workflow.task_count} sub-tasks`}><ListTodo className="w-3 h-3 opacity-60" /><span>{workflow.task_count}</span></div>}
+    <div
+      draggable
+      onDragStart={handleDragStart}
+      onDragEnd={onDragEnd}
+      onClick={onClick}
+      className={`group relative flex flex-col gap-3 rounded-lg border border-border bg-card p-3.5 shadow-sm transition-all hover:shadow-md hover:border-primary/30 hover:-translate-y-0.5 cursor-grab active:cursor-grabbing ${topAccentColor} ${
+        isExecuting 
+          ? 'shadow-info/10 ring-1 ring-info/20' 
+          : ''
+      }`}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') onClick?.();
+      }}
+    >
+      {/* Execution Indicator */}
+      {isExecuting && (
+        <div className="absolute top-3 right-3 flex items-center gap-1.5 text-[10px] font-bold text-info bg-info/5 px-2 py-0.5 rounded-full">
+          <Play className="w-3 h-3 fill-current animate-pulse" />
+          RUNNING
         </div>
-        <Badge variant="outline" className={`text-[8px] py-0 font-bold uppercase tracking-widest border-current opacity-40 ${statusColor.text}`}>{workflow.status || 'pending'}</Badge>
+      )}
+
+      {/* Header & Title */}
+      <div className="space-y-1.5">
+         <h4 className="font-semibold text-foreground text-sm leading-snug line-clamp-2 pr-16">
+            {workflow.title || "Untitled Workflow"}
+         </h4>
+         <p className="text-muted-foreground text-xs line-clamp-2 font-mono opacity-80">
+            {workflow.prompt}
+         </p>
       </div>
-      <button onClick={(e) => { e.stopPropagation(); onOpenMenu(); }} className="absolute top-3 right-3 md:hidden p-1 text-muted-foreground/20 hover:text-foreground"><MoreVertical className="w-4 h-4" /></button>
+
+      {/* Footer - Metadata & Status */}
+      <div className="flex items-center justify-between pt-2 mt-1 border-t border-border/30">
+        <div className="flex items-center gap-3 text-muted-foreground">
+            {/* PR Link */}
+            {workflow.pr_url && (
+                <a
+                    href={workflow.pr_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="flex items-center gap-1 text-[11px] hover:text-foreground transition-colors"
+                    title={`PR #${workflow.pr_number}`}
+                >
+                <GitPullRequest className="w-3 h-3" />
+                <span>#{workflow.pr_number}</span>
+                </a>
+            )}
+
+            {/* Tasks */}
+            {workflow.task_count > 0 && (
+                <div className="flex items-center gap-1 text-[11px]" title={`${workflow.task_count} tasks`}>
+                    <ListTodo className="w-3 h-3" />
+                    <span>{workflow.task_count}</span>
+                </div>
+            )}
+        </div>
+
+        {/* Status Badge */}
+        <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-medium uppercase tracking-wide ${statusColor.bg} ${statusColor.text}`}>
+            {workflow.status || 'pending'}
+        </div>
+      </div>
+      
+      {/* Mobile Menu Trigger */}
+      <button 
+          onClick={(e) => {
+              e.stopPropagation();
+              onOpenMenu();
+          }}
+          className="absolute top-2 right-2 md:hidden p-2 text-muted-foreground/50 hover:text-foreground"
+      >
+          <MoreVertical className="w-4 h-4" />
+      </button>
     </div>
   );
 }
 
+// Engine controls component
 function EngineControls() {
-  const { engine, enableEngine, disableEngine, resetCircuitBreaker } = useKanbanStore(); const [isToggling, setIsToggling] = useState(false);
-  const handleToggle = async () => { setIsToggling(true); try { if (engine.enabled) await disableEngine(); else await enableEngine(); } finally { setIsToggling(false); } };
+  const {
+    engine,
+    enableEngine,
+    disableEngine,
+    resetCircuitBreaker,
+  } = useKanbanStore();
+
+  const [isToggling, setIsToggling] = useState(false);
+
+  const handleToggle = async () => {
+    setIsToggling(true);
+    try {
+      if (engine.enabled) {
+        await disableEngine();
+      } else {
+        await enableEngine();
+      }
+    } finally {
+      setIsToggling(false);
+    }
+  };
+
+  const handleReset = async () => {
+    await resetCircuitBreaker();
+  };
+
   return (
-    <div className="flex items-center gap-4 rounded-xl border border-border/20 bg-card/20 backdrop-blur-xl px-4 py-2 shrink-0">
-      <div className="flex items-center gap-3">
-        <div className={`p-1.5 rounded-lg border transition-all ${engine.enabled ? 'bg-success/5 border-success/20 text-success/60' : 'bg-muted/20 border-border/20 text-muted-foreground/20'}`}><Cpu className={`w-4 h-4 ${engine.enabled ? 'animate-pulse' : ''}`} /></div>
-        <div className="hidden lg:block"><p className="text-[9px] font-bold uppercase tracking-widest text-foreground/60">Neural Engine</p></div>
-        <button onClick={handleToggle} disabled={isToggling || engine.circuitBreakerOpen} className={`relative inline-flex h-5 w-10 items-center rounded-full transition-all duration-500 ${engine.enabled ? 'bg-success shadow-lg shadow-success/10' : 'bg-muted/30'} ${isToggling || engine.circuitBreakerOpen ? 'opacity-30' : 'cursor-pointer hover:scale-105'}`}><span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-background shadow-sm transition-transform duration-500 ${engine.enabled ? 'translate-x-5.5' : 'translate-x-1'}`} /></button>
+    <div
+      className="flex items-center justify-between gap-2 rounded-xl border border-border bg-card/50 glass px-3 py-2 sm:px-4 sm:py-3 shrink-0"
+      title="Auto-execute workflows from Todo column"
+    >
+      {/* Engine toggle */}
+      <div className="flex items-center gap-2">
+        <Play className={`w-3.5 h-3.5 ${engine.enabled ? 'text-success' : 'text-muted-foreground'}`} />
+        <span className="text-xs font-medium text-foreground">Auto</span>
+        <button
+          onClick={handleToggle}
+          disabled={isToggling || engine.circuitBreakerOpen}
+          role="switch"
+          aria-checked={engine.enabled}
+          aria-label="Toggle auto-execution of workflows"
+          className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+            engine.enabled ? 'bg-success/80' : 'bg-muted'
+          } ${isToggling || engine.circuitBreakerOpen ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+        >
+          <span
+            className={`inline-block h-4 w-4 transform rounded-full bg-background shadow-sm transition-transform ${
+              engine.enabled ? 'translate-x-4' : 'translate-x-0.5'
+            }`}
+          />
+        </button>
       </div>
-      {engine.circuitBreakerOpen && <button onClick={() => resetCircuitBreaker()} className="px-2 py-1 text-[8px] font-bold uppercase tracking-widest bg-error/10 text-error rounded-md hover:bg-error/20 transition-all">Reset Fault</button>}
+
+      {/* Status indicators - Hidden on mobile for cleaner look */}
+      <div className="hidden sm:flex flex-wrap items-center gap-2 text-sm">
+        {engine.currentWorkflowId && (
+          <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-info/10 text-info text-xs font-medium">
+            <span className="w-1.5 h-1.5 bg-info rounded-full animate-pulse" aria-hidden="true" />
+            Executing
+          </span>
+        )}
+        {engine.circuitBreakerOpen && (
+          <span className="inline-flex items-center gap-2 px-2 py-1 rounded-full bg-error/10 text-error text-xs font-medium">
+            <span className="w-1.5 h-1.5 bg-error rounded-full" aria-hidden="true" />
+            Circuit breaker open ({engine.consecutiveFailures} failures)
+            <button
+              onClick={handleReset}
+              className="text-xs px-2 py-0.5 rounded-md bg-error/10 hover:bg-error/20 transition-colors"
+              type="button"
+            >
+              Reset
+            </button>
+          </span>
+        )}
+      </div>
     </div>
   );
 }
 
+// Filter Component
+function KanbanFilters({ filter, setFilter }) {
+  return (
+    <div className="relative w-full sm:w-64">
+      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+      <input
+        type="text"
+        placeholder="Filter workflows..."
+        value={filter}
+        onChange={(e) => setFilter(e.target.value)}
+        className="h-9 w-full pl-9 pr-4 rounded-lg border border-border bg-background text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/20 transition-all"
+      />
+    </div>
+  );
+}
+
+// Mobile Column Navigator
+function MobileColumnNav({ columns, activeIndex, onChange }) {
+  return (
+    <div className="md:hidden flex items-center justify-center bg-background/80 backdrop-blur-md py-2 border-b border-border mb-2 sticky top-14 z-20">
+      <div className="flex gap-2 items-center">
+        {columns.map((col, idx) => {
+          const accent = KANBAN_COLUMN_COLORS[col.id] || KANBAN_COLUMN_COLORS.default;
+          const isActive = idx === activeIndex;
+          
+          return (
+            <button
+              key={col.id}
+              onClick={() => onChange(idx)}
+              className={`h-1.5 rounded-full transition-all duration-300 ${
+                isActive 
+                  ? `w-12 ${accent.dot}` // Active: Longer and colored
+                  : 'w-6 bg-muted hover:bg-muted-foreground/30' // Inactive: Shorter and gray
+              }`}
+              title={col.name}
+              aria-label={`Go to ${col.name} column`}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// Main Kanban page
 export default function Kanban() {
-  const { columns, fetchBoard, moveWorkflow, loading, error, clearError } = useKanbanStore();
-  const [filter, setFilter] = useState(''); const [activeColIndex, setActiveColIndex] = useState(0); const [mobileMenuOpen, setMobileMenuOpen] = useState(false); const [selectedWorkflow, setSelectedWorkflow] = useState(null); const scrollRef = useRef(null);
-  useEffect(() => { fetchBoard(); }, [fetchBoard]);
-  const handleScroll = (e) => { const c = e.target; const index = Math.floor((c.scrollLeft + c.clientWidth / 2) / c.scrollWidth * KANBAN_COLUMNS.length); if (index !== activeColIndex && index >= 0 && index < KANBAN_COLUMNS.length) setActiveColIndex(index); };
-  const handleNavClick = (i) => { setActiveColIndex(i); if (scrollRef.current) { const child = scrollRef.current.children[i]; if (child) child.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' }); } };
+  const {
+    columns,
+    fetchBoard,
+    moveWorkflow,
+    loading,
+    error,
+    clearError,
+  } = useKanbanStore();
+
+  const [filter, setFilter] = useState('');
+  const [activeColIndex, setActiveColIndex] = useState(0);
+  
+  // Mobile Menu State
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [selectedWorkflow, setSelectedWorkflow] = useState(null);
+  
+  const scrollRef = useRef(null);
+
+  useEffect(() => {
+    fetchBoard();
+  }, [fetchBoard]);
+
+  const handleOpenMobileMenu = (workflow) => {
+    setSelectedWorkflow(workflow);
+    setMobileMenuOpen(true);
+  };
+
+  const handleMoveFromSheet = (targetColumnId) => {
+    if (selectedWorkflow) {
+      moveWorkflow(selectedWorkflow.id, targetColumnId);
+    }
+  };
+
+  // Handle scroll to update active index
+  const handleScroll = (e) => {
+    const container = e.target;
+    const scrollLeft = container.scrollLeft;
+    const width = container.clientWidth;
+    const totalWidth = container.scrollWidth;
+    const progress = (scrollLeft + width / 2) / totalWidth;
+    const index = Math.floor(progress * KANBAN_COLUMNS.length);
+    if (index !== activeColIndex && index >= 0 && index < KANBAN_COLUMNS.length) {
+      setActiveColIndex(index);
+    }
+  };
+
+  const handleNavClick = (index) => {
+    setActiveColIndex(index);
+    if (scrollRef.current) {
+        const container = scrollRef.current;
+        // Scroll to the child element
+        const child = container.children[index];
+        if (child) {
+            child.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+        }
+    }
+  };
+
+  // Filter workflows
   const filteredColumns = useMemo(() => {
-    if (!filter) return columns; const f = filter.toLowerCase(); const res = {};
-    Object.keys(columns).forEach(k => { res[k] = columns[k].filter(w => (w.title && w.title.toLowerCase().includes(f)) || (w.id && w.id.toLowerCase().includes(f)) || (w.prompt && w.prompt.toLowerCase().includes(f))); });
-    return res;
+    if (!filter) return columns;
+    const lowerFilter = filter.toLowerCase();
+    
+    const newColumns = {};
+    Object.keys(columns).forEach(key => {
+      newColumns[key] = columns[key].filter(w => 
+        (w.title && w.title.toLowerCase().includes(lowerFilter)) ||
+        (w.id && w.id.toLowerCase().includes(lowerFilter)) ||
+        (w.prompt && w.prompt.toLowerCase().includes(lowerFilter))
+      );
+    });
+    return newColumns;
   }, [columns, filter]);
 
-  if (loading && Object.values(columns).every(col => col.length === 0)) return <div className="relative min-h-full"><div className="absolute inset-0 bg-dot-pattern pointer-events-none -z-10" /><div className="flex items-center justify-center py-60 animate-fade-in"><Loader2 className="w-10 h-10 animate-spin text-primary/20" /></div></div>;
+  if (loading && Object.values(columns).every(col => col.length === 0)) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-muted-foreground animate-pulse">Loading board...</div>
+      </div>
+    );
+  }
 
   return (
-    <div className="relative min-h-full space-y-8 pb-12 animate-fade-in flex flex-col">
-      <div className="absolute inset-0 bg-dot-pattern pointer-events-none -z-10" />
-      
-      <header className="flex flex-col md:flex-row md:items-end justify-between gap-6 pt-4 pb-2 border-b border-border/20">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2 text-primary"><div className="w-1 h-1 rounded-full bg-current" /><span className="text-[10px] font-bold uppercase tracking-widest opacity-70">Architecture Node</span></div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">Operational <span className="text-muted-foreground/40 font-medium">Board</span></h1>
+    <div className="flex flex-col space-y-2 md:space-y-6 animate-fade-in pb-10">
+      {/* Header */}
+      <div className="flex items-center justify-between gap-3 px-4 py-2 shrink-0 relative z-10 border-b border-border/50 lg:border-none">
+        <div className="hidden lg:block text-left">
+          <h1 className="text-2xl font-semibold text-foreground tracking-tight">Kanban</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Visualize and manage workflow execution
+          </p>
         </div>
-        <div className="flex items-center gap-4">
-           <div className="relative group"><Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground/30 group-focus-within:text-primary/60 transition-colors" /><Input placeholder="Query board..." value={filter} onChange={(e) => setFilter(e.target.value)} className="h-10 pl-10 pr-4 bg-card/20 border-border/30 rounded-2xl text-xs shadow-sm transition-all" /></div>
-           <EngineControls />
-        </div>
-      </header>
-
-      <div className="md:hidden flex items-center justify-center bg-background/80 backdrop-blur-xl py-4 border-b border-border/10 mb-6 sticky top-14 z-20">
-        <div className="flex gap-3 items-center">
-          {KANBAN_COLUMNS.map((col, idx) => <button key={col.id} onClick={() => handleNavClick(idx)} className={`h-1 rounded-full transition-all duration-500 ${idx === activeColIndex ? `w-14 bg-primary/60` : 'w-6 bg-muted/40'}`} />)}
+        <div className="flex items-center gap-2 w-full lg:w-auto">
+          <KanbanFilters filter={filter} setFilter={setFilter} />
+          <EngineControls />
         </div>
       </div>
 
-      <div className="flex-1 min-h-[65vh]">
-        <div className="hidden md:flex gap-6 overflow-x-auto pb-8 h-full scrollbar-none">{KANBAN_COLUMNS.map((col) => <KanbanColumn key={col.id} column={col} workflows={filteredColumns[col.id] || []} onOpenMobileMenu={(w) => { setSelectedWorkflow(w); setMobileMenuOpen(true); }} />)}</div>
-        <div ref={scrollRef} onScroll={handleScroll} className="md:hidden flex overflow-x-auto snap-x snap-mandatory h-full pb-8 scrollbar-none">{KANBAN_COLUMNS.map((col) => <KanbanColumn key={col.id} column={col} workflows={filteredColumns[col.id] || []} isMobile={true} onOpenMobileMenu={(w) => { setSelectedWorkflow(w); setMobileMenuOpen(true); }} />)}</div>
+      {error && (
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 bg-error/10 border border-error/20 rounded-xl shrink-0">
+          <p className="text-error text-sm">{error}</p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={fetchBoard}
+              className="px-3 py-1.5 rounded-lg bg-background text-foreground text-sm font-medium hover:bg-accent transition-colors"
+              type="button"
+            >
+              Retry
+            </button>
+            <button
+              onClick={clearError}
+              className="px-3 py-1.5 rounded-lg text-error hover:bg-error/10 transition-colors"
+              type="button"
+              aria-label="Dismiss error"
+              title="Dismiss"
+            >
+              &times;
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Mobile Column Navigation */}
+      <MobileColumnNav 
+        columns={KANBAN_COLUMNS} 
+        activeIndex={activeColIndex} 
+        onChange={handleNavClick} 
+      />
+
+      {/* Columns Container */}
+      <div className="flex-1 min-h-0">
+        {/* Desktop View */}
+        <div className="hidden md:flex gap-4 overflow-x-auto pb-4 h-full">
+          {KANBAN_COLUMNS.map((column) => (
+            <KanbanColumn
+              key={column.id}
+              column={column}
+              workflows={filteredColumns[column.id] || []}
+              onOpenMobileMenu={handleOpenMobileMenu}
+            />
+          ))}
+        </div>
+
+        {/* Mobile View - Scroll Snap Carousel */}
+        <div 
+            ref={scrollRef}
+            onScroll={handleScroll}
+            className="md:hidden flex overflow-x-auto snap-x snap-mandatory h-full pb-4 scrollbar-none"
+        >
+          {KANBAN_COLUMNS.map((column) => (
+            <KanbanColumn
+              key={column.id}
+              column={column}
+              workflows={filteredColumns[column.id] || []}
+              isMobile={true}
+              onOpenMobileMenu={handleOpenMobileMenu}
+            />
+          ))}
+        </div>
       </div>
 
-      <MobileActionSheet isOpen={mobileMenuOpen} onClose={() => setMobileMenuOpen(false)} workflow={selectedWorkflow} onMoveTo={(id) => moveWorkflow(selectedWorkflow.id, id)} />
+      {/* Mobile Action Sheet */}
+      <MobileActionSheet 
+        isOpen={mobileMenuOpen}
+        onClose={() => setMobileMenuOpen(false)}
+        workflow={selectedWorkflow}
+        onMoveTo={handleMoveFromSheet}
+      />
     </div>
   );
 }
-
-function Loader2({ className }) { return <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56" /></svg>; }
