@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { workflowTemplates, templateCategories } from '../data/workflowTemplates';
 import { Badge } from '../components/ui/Badge';
-import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Search, Sparkles, X, Network, Zap } from 'lucide-react';
 
@@ -19,9 +18,12 @@ function TemplatePreviewModal({ template, onClose, onUseTemplate }) {
               <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">{template.description}</p>
             </div>
           </div>
-          <Button variant="ghost" size="sm" onClick={onClose}>
+          <button
+            onClick={onClose}
+            className="p-2 rounded-lg hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
+          >
             <X className="h-4 w-4" />
-          </Button>
+          </button>
         </div>
 
         {/* Content */}
@@ -63,12 +65,18 @@ function TemplatePreviewModal({ template, onClose, onUseTemplate }) {
 
         {/* Footer */}
         <div className="flex justify-end gap-3 p-6 border-t border-border/30 bg-gradient-to-r from-transparent via-muted/5 to-transparent">
-          <Button variant="outline" onClick={onClose}>
+          <button
+            onClick={onClose}
+            className="h-9 px-4 rounded-lg text-sm font-medium border border-border bg-background/50 hover:bg-accent hover:text-foreground transition-colors"
+          >
             Close
-          </Button>
-          <Button onClick={() => onUseTemplate(template)} className="shadow-sm">
+          </button>
+          <button
+            onClick={() => onUseTemplate(template)}
+            className="h-9 px-4 rounded-lg text-sm font-medium bg-primary/90 text-primary-foreground hover:bg-primary transition-colors shadow-sm"
+          >
             Use This Template
-          </Button>
+          </button>
         </div>
       </div>
     </div>
@@ -136,19 +144,17 @@ export default function Templates() {
       {/* Category Tabs - Enhanced */}
       <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin">
         {templateCategories.map((category) => (
-          <Button
+          <button
             key={category}
-            variant={selectedCategory === category ? 'default' : 'outline'}
-            size="sm"
             onClick={() => setSelectedCategory(category)}
-            className={`whitespace-nowrap rounded-lg transition-all ${
+            className={`h-8 px-3 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${
               selectedCategory === category 
-                ? 'shadow-sm shadow-primary/20' 
-                : 'hover:border-primary/30'
+                ? 'bg-primary/10 text-primary border border-primary/20 shadow-sm' 
+                : 'bg-background/50 text-muted-foreground border border-border hover:bg-accent hover:text-foreground hover:border-border'
             }`}
           >
             {category}
-          </Button>
+          </button>
         ))}
       </div>
 
@@ -205,20 +211,18 @@ export default function Templates() {
 
             {/* Actions */}
             <div className="flex gap-2 p-4 border-t border-border/30 bg-gradient-to-r from-transparent via-muted/5 to-transparent">
-              <Button 
+              <button
                 onClick={() => useTemplate(template)} 
-                className="flex-1 shadow-sm"
-                size="sm"
+                className="flex-1 h-9 px-3 rounded-lg text-sm font-medium bg-primary/90 text-primary-foreground hover:bg-primary transition-colors shadow-sm"
               >
                 Use Template
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
+              </button>
+              <button
                 onClick={() => setPreviewTemplate(template)}
+                className="h-9 px-3 rounded-lg text-sm font-medium border border-border bg-background/50 hover:bg-accent hover:text-foreground transition-colors"
               >
                 Preview
-              </Button>
+              </button>
             </div>
           </div>
         ))}
