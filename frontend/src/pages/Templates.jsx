@@ -168,20 +168,25 @@ export default function Templates() {
           <p className="text-sm text-muted-foreground mt-1">Jumpstart your workflow with pre-configured blueprints</p>
         </div>
         <div className="relative w-full md:w-72">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input placeholder="Search library..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-10 h-10 bg-card rounded-xl" />
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input 
+            placeholder="Search library..." 
+            value={searchQuery} 
+            onChange={(e) => setSearchQuery(e.target.value)} 
+            className="pl-9 pr-4 h-10 bg-background rounded-lg border border-border focus:ring-2 focus:ring-ring/20 transition-all hover:border-border/80" 
+          />
         </div>
       </div>
 
-      <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2">
+      <div className="flex items-center gap-1 p-1 rounded-lg bg-muted/50 overflow-x-auto no-scrollbar">
         {templateCategories.map((c) => (
           <button
             key={c}
             onClick={() => setSelectedCategory(c)}
-            className={`whitespace-nowrap px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
+            className={`whitespace-nowrap px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-200 ${
               selectedCategory === c
-                ? 'bg-primary text-primary-foreground shadow-lg'
-                : 'bg-card border border-border text-muted-foreground hover:border-primary/30'
+                ? 'bg-background text-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
             }`}
           >
             {c}
