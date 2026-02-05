@@ -252,10 +252,11 @@
   -webkit-backdrop-filter: blur(12px);
 }
 
-/* Dot pattern background utility */
+/* Dot pattern background utility - Matches IssuesEditor style */
 .bg-dot-pattern {
-  background-image: radial-gradient(var(--border-color) 1px, transparent 1px);
-  background-size: 20px 20px;
+  background-image: radial-gradient(var(--foreground) 1px, transparent 1px);
+  background-size: 16px 16px;
+  opacity: 0.02;
 }
 
 /* Subtle animations */

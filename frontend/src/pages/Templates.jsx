@@ -269,11 +269,14 @@ export default function Templates() {
   };
 
   return (
-    <div className="min-h-full space-y-8 pb-12 bg-dot-pattern animate-fade-in">
+    <div className="relative min-h-full space-y-8 pb-12 animate-fade-in">
+      {/* Background Pattern - Fixed to match rest of app */}
+      <div className="absolute inset-0 bg-dot-pattern pointer-events-none -z-10" />
+
       {/* Hero Header */}
-      <div className="relative overflow-hidden rounded-3xl border border-border bg-card/40 backdrop-blur-md p-8 sm:p-12 shadow-inner">
+      <div className="relative overflow-hidden rounded-3xl border border-border bg-card/30 backdrop-blur-md p-8 sm:p-12 shadow-sm">
         <div className="absolute top-0 right-0 -translate-y-1/2 translate-x-1/3 w-96 h-96 bg-primary/5 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute bottom-0 left-0 translate-y-1/2 -translate-x-1/3 w-64 h-64 bg-primary/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute bottom-0 left-0 translate-y-1/2 -translate-x-1/3 w-64 h-64 bg-primary/5 rounded-full blur-3xl pointer-events-none" />
         
         <div className="relative z-10 max-w-2xl space-y-4">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-[10px] font-bold uppercase tracking-widest">
