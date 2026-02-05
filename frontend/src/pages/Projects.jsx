@@ -146,10 +146,10 @@ function ProjectCard({
 
   return (
     <div
-      className={`relative p-4 rounded-xl border transition-all overflow-hidden ${
+      className={`relative p-4 rounded-xl border transition-all duration-300 overflow-hidden ${
         isSelected
           ? 'border-primary bg-primary/5 ring-2 ring-primary/20'
-          : 'border-border bg-card hover:border-border/80 hover:shadow-md'
+          : 'border-border bg-card hover:border-primary/40 hover:shadow-xl hover:shadow-primary/5 hover:-translate-y-1 hover:scale-[1.01]'
       }`}
     >
       {/* Header row */}
@@ -486,17 +486,19 @@ export default function Projects() {
   const projectToDelete = projects.find((p) => p.id === deleteConfirmId);
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between px-6">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Projects</h1>
-          <p className="text-muted-foreground mt-1">
+          <h1 className="text-2xl font-semibold text-foreground tracking-tight">Projects</h1>
+          <p className="text-sm text-muted-foreground mt-1">
             Manage your registered projects. Each project has isolated workflows, chat sessions, and settings.
           </p>
         </div>
       </div>
 
+      {/* Content container with padding */}
+      <div className="px-6 space-y-6">
       {/* Global error */}
       {error && (
         <div className="p-4 rounded-xl bg-destructive/10 text-destructive flex items-center justify-between">
@@ -577,6 +579,7 @@ export default function Projects() {
         confirmText="Remove"
         variant="danger"
       />
+      </div>
     </div>
   );
 }
