@@ -148,13 +148,13 @@ function TemplatePreviewModal({ template, onClose, onUseTemplate }) {
         <div className="flex justify-end items-center gap-3 p-6 border-t border-border/50 bg-muted/5">
           <button
             onClick={onClose}
-            className="h-9 px-4 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-all"
+            className="h-8 px-4 rounded-md text-xs font-medium border border-border bg-background text-muted-foreground hover:text-foreground hover:bg-accent hover:shadow-sm transition-all active:scale-[0.97]"
           >
             Cancel
           </button>
           <button
             onClick={() => onUseTemplate(template)}
-            className="h-9 px-5 rounded-md text-sm font-medium bg-foreground text-background hover:bg-foreground/90 transition-all shadow-sm active:scale-[0.98]"
+            className="h-8 px-5 rounded-md text-xs font-bold bg-primary text-primary-foreground hover:bg-primary/90 hover:shadow-md hover:-translate-y-0.5 hover:scale-[1.02] transition-all shadow-sm active:scale-[0.97]"
           >
             Use This Template
           </button>
@@ -190,7 +190,7 @@ export default function Templates() {
   });
 
   const useTemplate = (template) => {
-    navigate('/workflows', {
+    navigate('/workflows/new', {
       state: {
         template: {
           prompt: template.prompt,
@@ -249,9 +249,9 @@ export default function Templates() {
         {/* Template Grid */}
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
         {filteredTemplates.map((template) => (
-          <div 
+          <div
             key={template.id}
-            onClick={() => useTemplate(template)}
+            onClick={() => setPreviewTemplate(template)}
             className="group flex flex-col rounded-xl border border-border bg-card cursor-pointer transition-all duration-200 hover:border-foreground/20 hover:shadow-xl hover:-translate-y-1 overflow-hidden"
           >
             <div className="flex-1 p-5 pb-4">
@@ -283,27 +283,16 @@ export default function Templates() {
 
             {/* Compact Actions Footer */}
             <div className="flex items-center justify-between p-3.5 border-t border-border/50 bg-muted/5 mt-auto">
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    useTemplate(template);
-                  }}
-                  className="h-7.5 px-3 rounded-md text-[10.5px] font-bold bg-primary text-primary-foreground hover:bg-primary/90 hover:shadow-md hover:-translate-y-0.5 hover:scale-[1.02] transition-all active:scale-[0.97] shadow-sm flex items-center justify-center"
-                >
-                  Use Template
-                </button>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setPreviewTemplate(template);
-                  }}
-                  className="h-7.5 px-3 rounded-md text-[10.5px] font-medium border border-border bg-background text-muted-foreground hover:text-foreground hover:bg-accent transition-all active:scale-[0.97] flex items-center justify-center"
-                >
-                  Preview
-                </button>
-              </div>
-              
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  useTemplate(template);
+                }}
+                className="h-7.5 px-3 rounded-md text-[10.5px] font-bold bg-primary text-primary-foreground hover:bg-primary/90 hover:shadow-md hover:-translate-y-0.5 hover:scale-[1.02] transition-all active:scale-[0.97] shadow-sm flex items-center justify-center"
+              >
+                Use Template
+              </button>
+
               <Badge variant="outline" className="text-[8.5px] px-1.5 py-0 h-4 font-bold border-border/50 opacity-60 tracking-tight">
                 {template.executionStrategy === 'multi-agent-consensus' ? 'MULTI' : 'SINGLE'}
               </Badge>
