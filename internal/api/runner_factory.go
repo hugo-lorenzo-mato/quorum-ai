@@ -51,6 +51,8 @@ func (f *RunnerFactory) WithHeartbeat(hb *workflow.HeartbeatManager) *RunnerFact
 
 // CreateRunner creates a new workflow.Runner for executing a workflow.
 // It creates all necessary dependencies and adapters for the web context.
+// The StateManager is obtained from the context if a ProjectContext is available,
+// otherwise falls back to the factory's default StateManager.
 //
 // Parameters:
 //   - ctx: Context for the runner (should have appropriate timeout)
@@ -63,8 +65,11 @@ func (f *RunnerFactory) WithHeartbeat(hb *workflow.HeartbeatManager) *RunnerFact
 //   - *webadapters.WebOutputNotifier: The notifier (for lifecycle events)
 //   - error: Any error during setup
 func (f *RunnerFactory) CreateRunner(ctx context.Context, workflowID string, cp *control.ControlPlane, wfConfig *core.WorkflowConfig) (*workflow.Runner, *webadapters.WebOutputNotifier, error) {
+	// Get project-scoped StateManager if available
+	stateManager := GetStateManagerFromContext(ctx, f.stateManager)
+
 	// Validate prerequisites
-	if f.stateManager == nil {
+	if stateManager == nil {
 		return nil, nil, fmt.Errorf("state manager not configured")
 	}
 	if f.agentRegistry == nil {
@@ -83,13 +88,16 @@ func (f *RunnerFactory) CreateRunner(ctx context.Context, workflowID string, cp 
 		return nil, nil, fmt.Errorf("loading config: %w", err)
 	}
 
+	// Get project-scoped EventBus if available
+	eventBus := GetEventBusFromContext(ctx, f.eventBus)
+
 	// Create web output notifier (bridges to EventBus)
-	outputNotifier := webadapters.NewWebOutputNotifier(f.eventBus, workflowID)
+	outputNotifier := webadapters.NewWebOutputNotifier(eventBus, workflowID)
 
 	// Build runner using RunnerBuilder (Task-6 unification)
 	builder := workflow.NewRunnerBuilder().
 		WithConfig(cfg).
-		WithStateManager(f.stateManager).
+		WithStateManager(stateManager).
 		WithAgentRegistry(f.agentRegistry).
 		WithLogger(f.logger).
 		WithOutputNotifier(outputNotifier).

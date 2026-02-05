@@ -10,6 +10,34 @@ import (
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/project"
 )
 
+// GetStateManagerFromContext extracts the project-scoped StateManager from the context.
+// If a ProjectContext is available and has a StateManager, it returns that.
+// Otherwise, it returns the provided fallback StateManager.
+// This function is used by components that need to operate on project-specific state
+// but may also be called in contexts without a project (e.g., TUI/CLI mode).
+func GetStateManagerFromContext(ctx context.Context, fallback core.StateManager) core.StateManager {
+	pc := middleware.GetProjectContext(ctx)
+	if pc != nil {
+		if projectCtx, ok := pc.(*project.ProjectContext); ok && projectCtx.StateManager != nil {
+			return projectCtx.StateManager
+		}
+	}
+	return fallback
+}
+
+// GetEventBusFromContext extracts the project-scoped EventBus from the context.
+// If a ProjectContext is available and has an EventBus, it returns that.
+// Otherwise, it returns the provided fallback EventBus.
+func GetEventBusFromContext(ctx context.Context, fallback *events.EventBus) *events.EventBus {
+	pc := middleware.GetProjectContext(ctx)
+	if pc != nil {
+		if projectCtx, ok := pc.(*project.ProjectContext); ok && projectCtx.EventBus != nil {
+			return projectCtx.EventBus
+		}
+	}
+	return fallback
+}
+
 // getProjectStateManager extracts the project-scoped StateManager from request context.
 // If a ProjectContext is available and has a StateManager, it returns that.
 // Otherwise, it falls back to the server's global StateManager.

@@ -137,6 +137,8 @@ func NewUnifiedTracker(
 // 4. Starts heartbeat tracking
 //
 // Returns an ExecutionHandle that the caller uses to coordinate with the goroutine.
+// The StateManager is obtained from the context if a ProjectContext is available,
+// otherwise falls back to the tracker's default StateManager.
 func (t *UnifiedTracker) StartExecution(ctx context.Context, workflowID core.WorkflowID) (*ExecutionHandle, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -145,6 +147,9 @@ func (t *UnifiedTracker) StartExecution(ctx context.Context, workflowID core.Wor
 	if _, exists := t.handles[workflowID]; exists {
 		return nil, fmt.Errorf("workflow is already running (in memory)")
 	}
+
+	// Get project-scoped StateManager if available, otherwise use default
+	stateManager := GetStateManagerFromContext(ctx, t.stateManager)
 
 	// Create handle before transaction (so we can rollback)
 	handle := &ExecutionHandle{
@@ -157,7 +162,7 @@ func (t *UnifiedTracker) StartExecution(ctx context.Context, workflowID core.Wor
 	}
 
 	// Atomic transaction: check DB + mark running
-	err := t.stateManager.ExecuteAtomically(ctx, func(atomic core.AtomicStateContext) error {
+	err := stateManager.ExecuteAtomically(ctx, func(atomic core.AtomicStateContext) error {
 		// Check if running in DB (another process might have started it)
 		isRunning, err := atomic.IsWorkflowRunning(workflowID)
 		if err != nil {
@@ -219,6 +224,7 @@ func (t *UnifiedTracker) StartExecution(ctx context.Context, workflowID core.Wor
 // 1. Clears running status in DB
 // 2. Removes in-memory handle
 // 3. Stops heartbeat tracking
+// The StateManager is obtained from the context if a ProjectContext is available.
 func (t *UnifiedTracker) FinishExecution(ctx context.Context, workflowID core.WorkflowID) error {
 	t.mu.Lock()
 	handle, exists := t.handles[workflowID]
@@ -237,8 +243,11 @@ func (t *UnifiedTracker) FinishExecution(ctx context.Context, workflowID core.Wo
 		t.heartbeat.Stop(workflowID)
 	}
 
+	// Get project-scoped StateManager if available
+	stateManager := GetStateManagerFromContext(ctx, t.stateManager)
+
 	// Clear running status in DB
-	if err := t.stateManager.ClearWorkflowRunning(ctx, workflowID); err != nil {
+	if err := stateManager.ClearWorkflowRunning(ctx, workflowID); err != nil {
 		t.logger.Warn("failed to clear running status in DB",
 			"workflow_id", workflowID,
 			"error", err)
@@ -254,6 +263,7 @@ func (t *UnifiedTracker) FinishExecution(ctx context.Context, workflowID core.Wo
 
 // IsRunning checks if a workflow is currently running.
 // Checks in-memory first (fast path), then DB (authoritative).
+// The StateManager is obtained from the context if a ProjectContext is available.
 func (t *UnifiedTracker) IsRunning(ctx context.Context, workflowID core.WorkflowID) bool {
 	// Fast path: check in-memory
 	t.mu.RLock()
@@ -264,8 +274,11 @@ func (t *UnifiedTracker) IsRunning(ctx context.Context, workflowID core.Workflow
 		return true
 	}
 
+	// Get project-scoped StateManager if available
+	stateManager := GetStateManagerFromContext(ctx, t.stateManager)
+
 	// Slow path: check DB (another process might be running it)
-	isRunning, err := t.stateManager.IsWorkflowRunning(ctx, workflowID)
+	isRunning, err := stateManager.IsWorkflowRunning(ctx, workflowID)
 	if err != nil {
 		t.logger.Warn("failed to check running status in DB",
 			"workflow_id", workflowID,
@@ -367,6 +380,7 @@ func (t *UnifiedTracker) WaitForConfirmation(workflowID core.WorkflowID) error {
 
 // RollbackExecution cleans up a failed execution start.
 // This should be called if StartExecution succeeded but the goroutine failed to start.
+// The StateManager is obtained from the context if a ProjectContext is available.
 func (t *UnifiedTracker) RollbackExecution(ctx context.Context, workflowID core.WorkflowID, failureReason string) error {
 	t.logger.Warn("rolling back execution",
 		"workflow_id", workflowID,
@@ -379,8 +393,11 @@ func (t *UnifiedTracker) RollbackExecution(ctx context.Context, workflowID core.
 			"error", err)
 	}
 
+	// Get project-scoped StateManager if available
+	stateManager := GetStateManagerFromContext(ctx, t.stateManager)
+
 	// Update workflow state to failed
-	err := t.stateManager.ExecuteAtomically(ctx, func(atomic core.AtomicStateContext) error {
+	err := stateManager.ExecuteAtomically(ctx, func(atomic core.AtomicStateContext) error {
 		state, err := atomic.LoadByID(workflowID)
 		if err != nil {
 			return err

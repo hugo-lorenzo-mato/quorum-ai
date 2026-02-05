@@ -71,6 +71,8 @@ func (e *WorkflowExecutor) Resume(ctx context.Context, workflowID core.WorkflowI
 }
 
 // execute handles both run and resume operations.
+// The StateManager is obtained from the context if a ProjectContext is available,
+// otherwise falls back to the executor's default StateManager.
 func (e *WorkflowExecutor) execute(ctx context.Context, workflowID core.WorkflowID, isResume bool) error {
 	id := string(workflowID)
 
@@ -79,8 +81,11 @@ func (e *WorkflowExecutor) execute(ctx context.Context, workflowID core.Workflow
 		return fmt.Errorf("workflow execution not available: missing tracker")
 	}
 
-	// Load workflow state
-	state, err := e.stateManager.LoadByID(ctx, workflowID)
+	// Get project-scoped StateManager if available
+	stateManager := GetStateManagerFromContext(ctx, e.stateManager)
+
+	// Load workflow state using project-scoped StateManager
+	state, err := stateManager.LoadByID(ctx, workflowID)
 	if err != nil {
 		return fmt.Errorf("loading workflow: %w", err)
 	}
@@ -126,10 +131,10 @@ func (e *WorkflowExecutor) execute(ctx context.Context, workflowID core.Workflow
 
 	// Connect notifier to state for agent event persistence
 	notifier.SetState(state)
-	notifier.SetStateSaver(e.stateManager)
+	notifier.SetStateSaver(stateManager)
 
 	// Reload state to get atomic updates from StartExecution
-	state, err = e.stateManager.LoadByID(ctx, workflowID)
+	state, err = stateManager.LoadByID(ctx, workflowID)
 	if err != nil {
 		cancel()
 		if rollbackErr := e.unifiedTracker.RollbackExecution(ctx, workflowID, err.Error()); rollbackErr != nil && e.logger != nil {
