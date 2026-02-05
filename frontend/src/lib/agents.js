@@ -216,7 +216,7 @@ function formatModelLabel(model) {
   if (model.startsWith('claude-')) {
     const parts = model.replace('claude-', '').split('-');
     const variant = parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
-    const version = parts.slice(1, -1).join('.');
+    const version = parts.slice(1).join('.');
     return `${variant} ${version}`;
   }
 
