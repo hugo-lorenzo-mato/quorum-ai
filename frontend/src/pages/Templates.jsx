@@ -37,9 +37,15 @@ function TemplatePreviewModal({ template, onClose, onUseTemplate }) {
             <h3 className="text-sm font-semibold text-foreground mb-2">Execution Strategy</h3>
             <Badge variant={template.executionStrategy === 'multi-agent-consensus' ? 'default' : 'outline'}>
               {template.executionStrategy === 'multi-agent-consensus' ? (
-                <><Network className="w-3 h-3 mr-1" /> Multi-Agent Consensus</>
+                <span className="inline-flex items-center gap-1.5">
+                  <Network className="w-3 h-3" />
+                  <span>Multi-Agent Consensus</span>
+                </span>
               ) : (
-                <><Zap className="w-3 h-3 mr-1" /> Single Agent</>
+                <span className="inline-flex items-center gap-1.5">
+                  <Zap className="w-3 h-3" />
+                  <span>Single Agent</span>
+                </span>
               )}
             </Badge>
           </div>
@@ -67,13 +73,13 @@ function TemplatePreviewModal({ template, onClose, onUseTemplate }) {
         <div className="flex justify-end gap-3 p-6 border-t border-border/30 bg-gradient-to-r from-transparent via-muted/5 to-transparent">
           <button
             onClick={onClose}
-            className="h-9 px-4 rounded-lg text-sm font-medium border border-border bg-background/50 hover:bg-accent hover:text-foreground transition-colors"
+            className="h-8 px-3 rounded-lg text-xs font-medium border border-border bg-background/50 hover:bg-accent hover:text-foreground transition-colors"
           >
             Close
           </button>
           <button
             onClick={() => onUseTemplate(template)}
-            className="h-9 px-4 rounded-lg text-sm font-medium bg-primary/90 text-primary-foreground hover:bg-primary transition-colors shadow-sm"
+            className="h-8 px-4 rounded-lg text-xs font-medium bg-primary/90 text-primary-foreground hover:bg-primary transition-colors"
           >
             Use This Template
           </button>
@@ -135,7 +141,7 @@ export default function Templates() {
           placeholder="Search templates..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-10 h-9 rounded-lg border-border/50 bg-background/50 backdrop-blur-sm focus:ring-2 focus:ring-primary/20"
+          className="pl-10 h-8 rounded-lg border-border/50 bg-background/50 backdrop-blur-sm focus:ring-2 focus:ring-primary/20 text-sm"
         />
       </div>
 
@@ -145,7 +151,7 @@ export default function Templates() {
           <button
             key={category}
             onClick={() => setSelectedCategory(category)}
-            className={`h-9 px-4 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${
+            className={`h-8 px-3 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
               selectedCategory === category 
                 ? 'bg-primary/10 text-primary border border-primary/20' 
                 : 'bg-background/50 text-muted-foreground border border-border hover:bg-accent hover:text-foreground'
@@ -197,27 +203,33 @@ export default function Templates() {
               {/* Execution Strategy */}
               <Badge 
                 variant={template.executionStrategy === 'multi-agent-consensus' ? 'default' : 'outline'}
-                className="inline-flex items-center gap-1.5"
+                className="inline-flex items-center gap-1"
               >
                 {template.executionStrategy === 'multi-agent-consensus' ? (
-                  <><Network className="w-3 h-3" /> Multi-Agent</>
+                  <>
+                    <Network className="w-3 h-3" />
+                    <span>Multi-Agent</span>
+                  </>
                 ) : (
-                  <><Zap className="w-3 h-3" /> Single-Agent</>
+                  <>
+                    <Zap className="w-3 h-3" />
+                    <span>Single-Agent</span>
+                  </>
                 )}
               </Badge>
             </div>
 
             {/* Actions */}
-            <div className="flex gap-2 p-4 border-t border-border/30 bg-gradient-to-r from-transparent via-muted/5 to-transparent">
+            <div className="flex gap-2 p-3 border-t border-border/30 bg-gradient-to-r from-transparent via-muted/5 to-transparent">
               <button
                 onClick={() => useTemplate(template)} 
-                className="flex-1 h-9 px-4 rounded-lg text-sm font-medium bg-primary/90 text-primary-foreground hover:bg-primary transition-colors"
+                className="flex-1 h-8 px-3 rounded-lg text-xs font-medium bg-primary/90 text-primary-foreground hover:bg-primary transition-colors"
               >
                 Use Template
               </button>
               <button
                 onClick={() => setPreviewTemplate(template)}
-                className="h-9 px-4 rounded-lg text-sm font-medium border border-border bg-background/50 hover:bg-accent hover:text-foreground transition-colors"
+                className="h-8 px-3 rounded-lg text-xs font-medium border border-border bg-background/50 hover:bg-accent hover:text-foreground transition-colors"
               >
                 Preview
               </button>
