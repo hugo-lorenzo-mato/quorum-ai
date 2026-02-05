@@ -9,12 +9,20 @@ const FALLBACK_AGENTS = AGENTS.map(a => a.value);
 
 export function AgentsTab() {
   const defaultAgent = useConfigField('agents.default');
-  const agents = useConfigStore((state) => state.enums?.agents) || FALLBACK_AGENTS;
+  const agentsFromEnum = useConfigStore((state) => state.enums?.agents) || FALLBACK_AGENTS;
   const config = useConfigStore((state) => state.config);
 
+  // Get all agents: union of agents from enum and agents in config
+  const allAgents = useMemo(() => {
+    const enumSet = new Set(agentsFromEnum);
+    const configAgents = config?.agents ? Object.keys(config.agents).filter(k => k !== 'default') : [];
+    const combined = new Set([...enumSet, ...configAgents]);
+    return Array.from(combined);
+  }, [agentsFromEnum, config]);
+
   const agentOptions = useMemo(
-    () => agents.map((a) => ({ value: a, label: a.charAt(0).toUpperCase() + a.slice(1) })),
-    [agents]
+    () => allAgents.map((a) => ({ value: a, label: a.charAt(0).toUpperCase() + a.slice(1) })),
+    [allAgents]
   );
 
   const defaultEnabled = config?.agents?.[defaultAgent.value]?.enabled;
@@ -49,7 +57,7 @@ export function AgentsTab() {
       </SettingSection>
 
       <div className="grid gap-6 md:grid-cols-2">
-        {agents.map((agentKey) => (
+        {allAgents.map((agentKey) => (
           <AgentCard key={agentKey} agentKey={agentKey} />
         ))}
       </div>
