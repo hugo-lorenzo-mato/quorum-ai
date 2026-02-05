@@ -38,6 +38,17 @@ func GetEventBusFromContext(ctx context.Context, fallback *events.EventBus) *eve
 	return fallback
 }
 
+// GetProjectRootFromContext extracts the project root directory from the context.
+// If a ProjectContext is available, returns its root path.
+// Otherwise, returns an empty string (caller should use fallback behavior).
+func GetProjectRootFromContext(ctx context.Context) string {
+	pc := middleware.GetProjectContext(ctx)
+	if pc != nil {
+		return pc.ProjectRoot()
+	}
+	return ""
+}
+
 // getProjectStateManager extracts the project-scoped StateManager from request context.
 // If a ProjectContext is available and has a StateManager, it returns that.
 // Otherwise, it falls back to the server's global StateManager.

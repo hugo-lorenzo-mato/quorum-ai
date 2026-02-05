@@ -295,9 +295,12 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 	}
 
 	// Build context, including any workflow attachments with paths reachable from the execution directory.
+	// Priority: worktree workDir > project root > current working directory
 	displayWorkDir := workDir
 	if strings.TrimSpace(displayWorkDir) == "" {
-		if wd, err := os.Getwd(); err == nil {
+		if wctx.ProjectRoot != "" {
+			displayWorkDir = wctx.ProjectRoot
+		} else if wd, err := os.Getwd(); err == nil {
 			displayWorkDir = wd
 		}
 	}

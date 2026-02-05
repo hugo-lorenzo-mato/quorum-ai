@@ -157,6 +157,7 @@ type Runner struct {
 	modeEnforcer      ModeEnforcerInterface
 	control           *control.ControlPlane
 	heartbeat         *HeartbeatManager
+	projectRoot       string // Project root directory for multi-project support
 }
 
 // RunnerDeps holds dependencies for creating a Runner.
@@ -184,6 +185,7 @@ type RunnerDeps struct {
 	ModeEnforcer      ModeEnforcerInterface
 	Control           *control.ControlPlane
 	Heartbeat         *HeartbeatManager
+	ProjectRoot       string // Project root directory for multi-project support
 }
 
 // NewRunner creates a new workflow runner with all dependencies.
@@ -229,6 +231,7 @@ func NewRunner(deps RunnerDeps) *Runner {
 		modeEnforcer:      deps.ModeEnforcer,
 		control:           deps.Control,
 		heartbeat:         deps.Heartbeat,
+		projectRoot:       deps.ProjectRoot,
 	}
 }
 
@@ -858,6 +861,7 @@ func (r *Runner) createContext(state *core.WorkflowState) *Context {
 			SingleAgent:            r.config.SingleAgent,
 			Finalization:           finalizationCfg,
 		},
+		ProjectRoot: r.projectRoot,
 	}
 }
 

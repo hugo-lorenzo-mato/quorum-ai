@@ -78,6 +78,10 @@ type Context struct {
 	// Workflow-level Git isolation
 	WorkflowWorktrees core.WorkflowWorktreeManager // Workflow-scoped worktree manager
 	GitIsolation      *GitIsolationConfig          // Git isolation configuration
+
+	// Project root directory for multi-project support.
+	// Used as fallback working directory when worktrees are not enabled.
+	ProjectRoot string
 }
 
 // ModeEnforcerInterface provides mode enforcement capabilities.

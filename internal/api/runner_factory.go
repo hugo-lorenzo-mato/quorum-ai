@@ -91,6 +91,9 @@ func (f *RunnerFactory) CreateRunner(ctx context.Context, workflowID string, cp 
 	// Get project-scoped EventBus if available
 	eventBus := GetEventBusFromContext(ctx, f.eventBus)
 
+	// Get project root for multi-project support
+	projectRoot := GetProjectRootFromContext(ctx)
+
 	// Create web output notifier (bridges to EventBus)
 	outputNotifier := webadapters.NewWebOutputNotifier(eventBus, workflowID)
 
@@ -102,7 +105,8 @@ func (f *RunnerFactory) CreateRunner(ctx context.Context, workflowID string, cp 
 		WithLogger(f.logger).
 		WithOutputNotifier(outputNotifier).
 		WithControlPlane(cp).
-		WithHeartbeat(f.heartbeat)
+		WithHeartbeat(f.heartbeat).
+		WithProjectRoot(projectRoot)
 
 	// Apply workflow-level overrides if provided
 	if wfConfig != nil {

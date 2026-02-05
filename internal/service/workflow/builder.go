@@ -102,6 +102,9 @@ type RunnerBuilder struct {
 	// Disable auto-creation of git components
 	skipGitAutoCreate bool
 
+	// Project root directory (for multi-project support)
+	projectRoot string
+
 	// Error tracking
 	errors []error
 }
@@ -273,6 +276,13 @@ func (b *RunnerBuilder) WithWorktreeManager(wm WorktreeManager) *RunnerBuilder {
 	return b
 }
 
+// WithProjectRoot sets the project root directory for workflow execution.
+// This is used when running workflows in a different project than the server's CWD.
+func (b *RunnerBuilder) WithProjectRoot(root string) *RunnerBuilder {
+	b.projectRoot = root
+	return b
+}
+
 // WithWorkflowConfig sets workflow-specific configuration overrides.
 // When provided, these settings take precedence over global application config.
 // This enables per-workflow execution mode selection (single-agent vs multi-agent).
@@ -427,6 +437,7 @@ func (b *RunnerBuilder) Build(ctx context.Context) (*Runner, error) {
 		ModeEnforcer:      modeEnforcerAdapter,
 		Control:           b.controlPlane,
 		Heartbeat:         b.heartbeat,
+		ProjectRoot:       b.projectRoot,
 	}
 
 	// Create the runner
@@ -636,19 +647,35 @@ func buildAgentPhaseModels(agents config.AgentsConfig) map[string]map[string]str
 func (b *RunnerBuilder) createGitComponents(logger *logging.Logger) (WorktreeManager, core.GitClient, core.GitHubClient, GitClientFactory) {
 	cfg := b.config
 
+	// Determine the root directory for git operations:
+	// 1. Use projectRoot if explicitly set (multi-project mode)
+	// 2. Fall back to current working directory (single-project/CLI mode)
+	var rootDir string
+	if b.projectRoot != "" {
+		rootDir = b.projectRoot
+		if logger != nil {
+			logger.Debug("using project root for git operations", "root", rootDir)
+		}
+	} else {
+		var err error
+		rootDir, err = os.Getwd()
+		if err != nil {
+			if logger != nil {
+				logger.Warn("failed to get working directory", "error", err)
+			}
+			return nil, nil, nil, createGitClientFactory()
+		}
+	}
+
 	// Create git client and worktree manager (optional, may fail)
 	var worktreeManager WorktreeManager
 	var gitClient core.GitClient
-	cwd, err := os.Getwd()
-	if err == nil {
-		// Import git package dynamically to avoid import cycle
-		gc, gitErr := createGitClient(cwd)
-		if gitErr == nil && gc != nil {
-			gitClient = gc
-			worktreeManager = createWorktreeManager(gc, cfg.Git.Worktree.Dir, logger)
-		} else if logger != nil {
-			logger.Warn("git client unavailable, worktree isolation disabled", "error", gitErr)
-		}
+	gc, gitErr := createGitClient(rootDir)
+	if gitErr == nil && gc != nil {
+		gitClient = gc
+		worktreeManager = createWorktreeManager(gc, cfg.Git.Worktree.Dir, logger)
+	} else if logger != nil {
+		logger.Warn("git client unavailable, worktree isolation disabled", "error", gitErr)
 	}
 
 	// Create GitHub client for PR creation (only if auto_pr is enabled)
