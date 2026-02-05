@@ -272,7 +272,7 @@ export default function Templates() {
               </div>
 
               <div className="space-y-2">
-                <h3 className="text-[15px] font-bold text-foreground leading-tight group-hover:text-primary transition-colors">
+                <h3 className="text-[14px] font-bold text-foreground leading-tight group-hover:text-primary transition-colors">
                   {template.name}
                 </h3>
                 <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed h-8">
@@ -281,33 +281,32 @@ export default function Templates() {
               </div>
             </div>
 
-            <div className="px-5 pb-5 pt-2 flex items-center justify-between mt-auto">
-              <div className="flex items-center gap-3">
+            {/* Compact Actions Footer */}
+            <div className="flex items-center justify-between p-3 border-t border-border/50 bg-muted/5 mt-auto">
+              <div className="flex items-center gap-2">
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     useTemplate(template);
                   }}
-                  className="h-8 px-4 rounded-md text-[11px] font-bold bg-foreground text-background hover:bg-foreground/90 transition-all active:scale-95"
+                  className="h-7 px-3 rounded-md text-[10px] font-bold bg-foreground text-background hover:bg-foreground/90 transition-all active:scale-95"
                 >
-                  Use Template
+                  Use
                 </button>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     setPreviewTemplate(template);
                   }}
-                  className="h-8 px-3 rounded-md text-[11px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-all"
+                  className="h-7 px-2.5 rounded-md text-[10px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-all"
                 >
                   Preview
                 </button>
               </div>
               
-              <div className="flex items-center gap-1.5">
-                <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 font-bold border-border/50">
-                  {template.executionStrategy === 'multi-agent-consensus' ? 'MULTI' : 'SINGLE'}
-                </Badge>
-              </div>
+              <Badge variant="outline" className="text-[8px] px-1.5 py-0 h-3.5 font-bold border-border/50 opacity-60">
+                {template.executionStrategy === 'multi-agent-consensus' ? 'MULTI' : 'SINGLE'}
+              </Badge>
             </div>
           </div>
         ))}
