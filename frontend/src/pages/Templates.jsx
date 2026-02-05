@@ -103,7 +103,7 @@ function TemplateIcon({ name, className = "h-5 w-5" }) {
 function TemplatePreviewModal({ template, onClose, onUseTemplate }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-      <div className="bg-card border border-border rounded-xl shadow-2xl max-w-3xl w-full max-h-[85vh] overflow-hidden flex flex-col animate-fade-up">
+      <div className="bg-card border border-border rounded-2xl shadow-2xl max-w-3xl w-full max-h-[85vh] overflow-hidden flex flex-col animate-fade-up">
         {/* Header */}
         <div className="flex items-start justify-between p-6 border-b border-border bg-muted/30">
           <div className="flex items-center gap-4 flex-1">
@@ -113,25 +113,25 @@ function TemplatePreviewModal({ template, onClose, onUseTemplate }) {
             <div>
               <h2 className="text-xl font-bold text-foreground tracking-tight">{template.name}</h2>
               <div className="flex items-center gap-2 mt-1">
-                <Badge variant="secondary" className="text-[10px] uppercase tracking-wider font-bold bg-primary/10 text-primary border-primary/20">
+                <Badge variant="secondary" className="text-[9px] uppercase tracking-widest font-black bg-primary/10 text-primary border-primary/20">
                   {template.category}
                 </Badge>
-                <Badge variant="outline" className="text-[10px] uppercase tracking-wider font-bold">
-                  {template.executionStrategy === 'multi-agent-consensus' ? 'Multi-Agent Consensus' : 'Single Agent'}
+                <Badge variant="outline" className="text-[9px] uppercase tracking-widest font-black opacity-70">
+                  {template.executionStrategy === 'multi-agent-consensus' ? 'Multi-Agent' : 'Single Agent'}
                 </Badge>
               </div>
             </div>
           </div>
-          <Button variant="ghost" size="icon" onClick={onClose} className="rounded-full">
-            <X className="h-5 w-5" />
+          <Button variant="ghost" size="icon" onClick={onClose} className="rounded-full h-8 w-8">
+            <X className="h-4 w-4" />
           </Button>
         </div>
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
           <section className="space-y-2">
-             <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                <Info className="h-4 w-4 text-muted-foreground" />
+             <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                <Info className="h-3.5 w-3.5" />
                 Description
              </h3>
              <p className="text-muted-foreground text-sm leading-relaxed">
@@ -140,25 +140,25 @@ function TemplatePreviewModal({ template, onClose, onUseTemplate }) {
           </section>
 
           <section className="space-y-2">
-             <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                <Terminal className="h-4 w-4 text-muted-foreground" />
+             <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                <Terminal className="h-3.5 w-3.5" />
                 Prompt Template
              </h3>
              <div className="relative group">
                 <div className="absolute inset-0 bg-primary/5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
-                <pre className="bg-muted/50 border border-border rounded-lg p-4 text-xs font-mono whitespace-pre-wrap text-muted-foreground max-h-96 overflow-y-auto leading-relaxed scrollbar-thin">
+                <pre className="bg-muted/50 border border-border rounded-lg p-4 text-[11px] font-mono whitespace-pre-wrap text-muted-foreground max-h-96 overflow-y-auto leading-relaxed scrollbar-thin">
                     {template.prompt}
                 </pre>
              </div>
           </section>
 
           <section className="space-y-2">
-            <h3 className="text-sm font-semibold text-foreground">Tags</h3>
+            <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Tags</h3>
             <div className="flex flex-wrap gap-2">
               {template.tags.map((tag) => (
-                <Badge key={tag} variant="secondary" className="text-[10px] px-2 py-0.5 bg-secondary/50 text-secondary-foreground">
-                  {tag}
-                </Badge>
+                <span key={tag} className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground">
+                  #{tag}
+                </span>
               ))}
             </div>
           </section>
@@ -166,10 +166,10 @@ function TemplatePreviewModal({ template, onClose, onUseTemplate }) {
 
         {/* Footer */}
         <div className="flex justify-end gap-3 p-6 border-t border-border bg-muted/10">
-          <Button variant="outline" onClick={onClose} className="rounded-lg">
+          <Button variant="outline" onClick={onClose} className="rounded-lg text-xs font-bold">
             Cancel
           </Button>
-          <Button onClick={() => onUseTemplate(template)} className="rounded-lg px-6 shadow-sm shadow-primary/20">
+          <Button onClick={() => onUseTemplate(template)} className="rounded-lg px-6 text-xs font-bold shadow-sm shadow-primary/20">
             Use This Template
           </Button>
         </div>
@@ -221,14 +221,14 @@ function TemplateCard({ template, onUse, onPreview }) {
           variant="outline" 
           size="sm"
           onClick={() => onPreview(template)}
-          className="flex-1 rounded-lg text-xs font-semibold"
+          className="flex-1 rounded-lg text-xs font-semibold h-9"
         >
           Details
         </Button>
         <Button 
           size="sm"
           onClick={() => onUse(template)}
-          className="flex-1 rounded-lg text-xs font-bold shadow-sm shadow-primary/10"
+          className="flex-1 rounded-lg text-xs font-bold h-9 shadow-sm shadow-primary/10"
         >
           Use Template
           <ChevronRight className="ml-1 h-3 w-3" />

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import {
   FolderPlus,
   Trash2,
@@ -11,11 +11,17 @@ import {
   X,
   Search,
   MoreVertical,
-  Plus
+  Plus,
+  ChevronRight,
+  Info,
+  Layers
 } from 'lucide-react';
 import { useProjectStore } from '../stores';
 import ColorPicker, { PROJECT_COLORS } from '../components/ui/ColorPicker';
 import { ConfirmDialog } from '../components/config/ConfirmDialog';
+import { Button } from '../components/ui/Button';
+import { Badge } from '../components/ui/Badge';
+import { Input } from '../components/ui/Input';
 
 /**
  * Generate a project name from a path (same logic as backend).
@@ -44,7 +50,7 @@ function StatusBadge({ status }) {
   return (
     <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-opacity-10 ${config.textColor}`} style={{ backgroundColor: `${config.color}20` }}>
       <div className={`w-1.5 h-1.5 rounded-full ${config.color}`} />
-      <span className="text-xs font-medium capitalize">{config.label}</span>
+      <span className="text-[10px] font-bold uppercase tracking-wide">{config.label}</span>
     </div>
   );
 }
@@ -112,9 +118,6 @@ function InlineEdit({ value, onSave, placeholder, className = '', inputClassName
       title="Click to edit"
     >
       {value || <span className="text-muted-foreground italic">{placeholder}</span>}
-      <span className="ml-2 text-xs text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity hidden sm:inline">
-        
-      </span>
     </div>
   );
 }
@@ -163,22 +166,24 @@ function ProjectCard({
     }
   };
 
+  // Convert tailwind color class or hex to border class
+  const borderStyle = {
+    borderLeftColor: project.color || '#71717a',
+    borderLeftWidth: '4px'
+  };
+
   return (
     <div
-      className={`relative group flex flex-col h-full rounded-xl border transition-all duration-200 overflow-hidden ${
-        isSelected
-          ? 'border-primary bg-primary/5 ring-1 ring-primary/20 shadow-md'
-          : 'border-border bg-card hover:border-primary/30 hover:shadow-lg'
+      className={`group flex flex-col h-full rounded-xl border border-border bg-card/50 backdrop-blur-sm transition-all duration-300 hover:shadow-xl hover:-translate-y-1 overflow-hidden ${
+        isSelected ? 'ring-1 ring-primary/20 shadow-md' : ''
       }`}
+      style={borderStyle}
     >
-      {/* Header / Main Click Area */}
-      <div 
-        className="flex-1 p-5 cursor-pointer"
-        onClick={() => onSelect(project.id)}
-      >
-        <div className="flex items-start justify-between gap-3 mb-3">
+      {/* Header Area */}
+      <div className="flex-1 p-5 space-y-4">
+        <div className="flex items-start justify-between gap-3">
           {/* Color & Icon */}
-          <div className="flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+          <div className="flex-shrink-0 p-2 rounded-lg bg-background border border-border shadow-sm group-hover:border-primary/30 transition-colors">
              <ColorPicker
                 value={project.color || PROJECT_COLORS[0]}
                 onChange={handleColorChange}
@@ -186,7 +191,7 @@ function ProjectCard({
           </div>
 
           {/* Menu */}
-          <div className="relative" ref={menuRef} onClick={(e) => e.stopPropagation()}>
+          <div className="relative" ref={menuRef}>
             <button
               onClick={() => setShowMenu(!showMenu)}
               className="p-1.5 rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
@@ -243,56 +248,75 @@ function ProjectCard({
         </div>
 
         {/* Title & Path */}
-        <div className="space-y-1 mb-4">
+        <div className="space-y-2">
           <div className="flex items-center gap-2">
             <InlineEdit
               value={project.name}
               onSave={handleNameSave}
               placeholder="Project name"
-              className="font-semibold text-lg text-foreground truncate"
+              className="font-bold text-lg text-foreground truncate group-hover:text-primary transition-colors"
             />
             {isDefault && (
               <Star className="w-4 h-4 fill-yellow-500 text-yellow-500 flex-shrink-0" title="Default Project" />
             )}
           </div>
           
-          <div className="flex items-center gap-1.5 text-muted-foreground text-xs font-mono" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center gap-1.5 text-muted-foreground text-xs font-mono">
             <Folder className="w-3.5 h-3.5 flex-shrink-0" />
             <InlineEdit
               value={project.path}
               onSave={handlePathSave}
               placeholder="/path/to/project"
-              className="truncate"
+              className="truncate opacity-70 group-hover:opacity-100 transition-opacity"
               inputClassName="font-mono text-xs py-0 h-6"
             />
           </div>
         </div>
 
-        {/* Status */}
-         <div className="flex items-center justify-between mt-auto">
-             <StatusBadge status={project.status} />
-             
-             {isSelected && (
-              <span className="flex items-center gap-1 text-xs font-medium text-primary bg-primary/10 px-2 py-0.5 rounded-full">
-                <Check className="w-3 h-3" /> Active
-              </span>
-             )}
-         </div>
+        {/* Status Indicators */}
+        <div className="flex items-center justify-between pt-2">
+           <StatusBadge status={project.status} />
+           {isSelected && (
+              <Badge variant="secondary" className="text-[9px] uppercase tracking-widest font-black bg-primary/10 text-primary border-primary/20">
+                Active
+              </Badge>
+           )}
+        </div>
 
         {/* Status Message */}
         {project.status_message && (
-          <div className="mt-3 p-2 rounded bg-yellow-500/10 text-yellow-700 text-xs flex items-start gap-1.5">
-            <AlertCircle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+          <div className="mt-3 p-2 rounded-lg bg-yellow-500/5 border border-yellow-500/10 text-yellow-700 dark:text-yellow-400 text-[10px] leading-relaxed flex items-start gap-1.5">
+            <AlertCircle className="w-3 h-3 mt-0.5 flex-shrink-0" />
             <span className="line-clamp-2">{project.status_message}</span>
           </div>
         )}
+      </div>
+
+      {/* Footer Actions */}
+      <div className="p-4 pt-0 mt-auto flex gap-2">
+        <Button 
+          variant="outline" 
+          size="sm"
+          onClick={() => onSelect(project.id)}
+          className="flex-1 rounded-lg text-xs font-semibold h-9"
+        >
+          Open
+        </Button>
+        <Button 
+          size="sm"
+          onClick={() => onValidate(project.id)}
+          className="flex-1 rounded-lg text-xs font-bold h-9 shadow-sm shadow-primary/10"
+        >
+          Validate
+          <ChevronRight className="ml-1 h-3 w-3" />
+        </Button>
       </div>
     </div>
   );
 }
 
 /**
- * Add project form component - Card Style
+ * Add project card component.
  */
 function AddProjectCard({ onAdd }) {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -326,84 +350,89 @@ function AddProjectCard({ onAdd }) {
     return (
       <button
         onClick={() => setIsExpanded(true)}
-        className="flex flex-col items-center justify-center h-full min-h-[200px] p-6 rounded-xl border-2 border-dashed border-border hover:border-primary/50 hover:bg-primary/5 transition-all group text-muted-foreground hover:text-primary"
+        className="flex flex-col items-center justify-center h-full min-h-[220px] p-6 rounded-xl border-2 border-dashed border-border hover:border-primary/50 hover:bg-primary/5 transition-all group text-muted-foreground hover:text-primary bg-card/20"
       >
         <div className="w-12 h-12 rounded-full bg-muted group-hover:bg-primary/10 flex items-center justify-center mb-3 transition-colors">
           <Plus className="w-6 h-6" />
         </div>
-        <span className="font-medium">Add New Project</span>
+        <span className="font-bold tracking-tight">Add New Project</span>
+        <p className="text-xs mt-1 opacity-60">Register existing directory</p>
       </button>
     );
   }
 
   return (
-    <div className="h-full min-h-[200px] p-5 rounded-xl border border-primary/30 bg-primary/5 flex flex-col">
+    <div className="h-full min-h-[220px] p-5 rounded-xl border border-primary/30 bg-primary/5 backdrop-blur-sm flex flex-col animate-fade-in shadow-lg">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="font-semibold text-foreground flex items-center gap-2">
-          <FolderPlus className="w-4 h-4" /> New Project
+        <h3 className="font-bold text-foreground flex items-center gap-2">
+          <FolderPlus className="w-4 h-4 text-primary" /> 
+          New Project
         </h3>
         <button
           onClick={() => {
             setIsExpanded(false);
             setError(null);
           }}
-          className="text-muted-foreground hover:text-foreground"
+          className="p-1 rounded-md hover:bg-primary/10 text-muted-foreground hover:text-foreground transition-colors"
         >
           <X className="w-4 h-4" />
         </button>
       </div>
 
       <form onSubmit={handleSubmit} className="flex-1 flex flex-col gap-3">
-        <div>
-           <label className="text-xs font-medium ml-1">Path <span className="text-destructive">*</span></label>
+        <div className="space-y-1">
+           <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground ml-1">Path</label>
            <input
             type="text"
             value={newPath}
             onChange={(e) => setNewPath(e.target.value)}
             placeholder="/path/to/project"
             autoFocus
-            className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm font-mono focus:ring-2 focus:ring-primary/20 outline-none"
+            className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm font-mono focus:ring-2 focus:ring-primary/20 outline-none transition-shadow shadow-sm"
           />
         </div>
        
-        <div className="relative">
-          <label className="text-xs font-medium ml-1">Name (Optional)</label>
+        <div className="relative space-y-1">
+          <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground ml-1">Name (Optional)</label>
           <input
             type="text"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
             placeholder={autoGeneratedName || "My Project"}
-            className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm focus:ring-2 focus:ring-primary/20 outline-none"
+            className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-shadow shadow-sm"
           />
            {!newName && autoGeneratedName && (
-              <span className="absolute right-3 top-7 text-xs text-muted-foreground/50 pointer-events-none">
+              <span className="absolute right-3 top-8 text-[10px] text-muted-foreground/40 pointer-events-none font-medium">
                 Auto: {autoGeneratedName}
               </span>
             )}
         </div>
 
         {error && (
-          <p className="text-xs text-destructive flex items-center gap-1">
-            <AlertCircle className="w-3 h-3" /> {error}
+          <p className="text-[11px] text-destructive flex items-center gap-1.5 font-medium bg-destructive/10 p-2 rounded-md border border-destructive/20 animate-shake">
+            <AlertCircle className="w-3.5 h-3.5" /> {error}
           </p>
         )}
 
-        <div className="mt-auto pt-2 flex justify-end gap-2">
-           <button
+        <div className="mt-auto pt-4 flex justify-end gap-2">
+           <Button
              type="button"
+             variant="ghost"
+             size="sm"
              onClick={() => setIsExpanded(false)}
-             className="px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground"
+             className="text-xs font-bold"
            >
              Cancel
-           </button>
-           <button
+           </Button>
+           <Button
              type="submit"
+             size="sm"
              disabled={creating || !newPath.trim()}
-             className="px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 disabled:opacity-50 flex items-center gap-1.5"
+             className="px-4 rounded-lg text-xs font-bold shadow-sm shadow-primary/20"
            >
-             {creating ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
-             Add
-           </button>
+             {creating ? <RefreshCw className="w-3 h-3 animate-spin mr-1.5" /> : <Plus className="w-3 h-3 mr-1.5" />}
+             Register
+           </Button>
         </div>
       </form>
     </div>
@@ -411,7 +440,7 @@ function AddProjectCard({ onAdd }) {
 }
 
 /**
- * Projects page - Dedicated section for project management.
+ * Projects page component.
  */
 export default function Projects() {
   const {
@@ -457,53 +486,84 @@ export default function Projects() {
   const projectToDelete = projects.find((p) => p.id === deleteConfirmId);
 
   // Filter projects
-  const filteredProjects = projects.filter(p => {
-    const q = searchQuery.toLowerCase();
-    return p.name?.toLowerCase().includes(q) || p.path?.toLowerCase().includes(q);
-  });
+  const filteredProjects = useMemo(() => {
+    return projects.filter(p => {
+      const q = searchQuery.toLowerCase();
+      return p.name?.toLowerCase().includes(q) || p.path?.toLowerCase().includes(q);
+    });
+  }, [projects, searchQuery]);
 
   return (
-    <div className="max-w-7xl mx-auto p-4 md:p-8 space-y-8">
-      {/* Header & Controls */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground tracking-tight">Projects</h1>
-          <p className="text-muted-foreground mt-1 text-lg">
-            Manage your workspaces and isolated environments.
-          </p>
-        </div>
+    <div className="relative min-h-full space-y-8 pb-12 animate-fade-in">
+      {/* Background Pattern - Consistent across app */}
+      <div className="absolute inset-0 bg-dot-pattern pointer-events-none -z-10" />
+
+      {/* Hero Header - Unified style with Templates */}
+      <div className="relative overflow-hidden rounded-3xl border border-border bg-card/30 backdrop-blur-md p-8 sm:p-12 shadow-sm">
+        <div className="absolute top-0 right-0 -translate-y-1/2 translate-x-1/3 w-96 h-96 bg-primary/5 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute bottom-0 left-0 translate-y-1/2 -translate-x-1/3 w-64 h-64 bg-primary/5 rounded-full blur-3xl pointer-events-none" />
         
-        <div className="flex items-center gap-3 w-full md:w-auto">
-           <div className="relative flex-1 md:w-64">
-             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-             <input 
-               type="text"
-               placeholder="Search projects..."
-               value={searchQuery}
-               onChange={(e) => setSearchQuery(e.target.value)}
-               className="w-full pl-9 pr-4 py-2 rounded-lg border border-input bg-background focus:ring-2 focus:ring-primary/20 outline-none transition-shadow"
-             />
-           </div>
+        <div className="relative z-10 max-w-2xl space-y-4">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-[10px] font-bold uppercase tracking-widest">
+            <Layers className="h-3 w-3" />
+            Workspace Manager
+          </div>
+          <h1 className="text-4xl sm:text-5xl font-black text-foreground tracking-tight leading-tight">
+            Active <span className="text-primary">Projects</span>
+          </h1>
+          <p className="text-lg text-muted-foreground leading-relaxed max-w-xl">
+            Manage your isolated development environments. Switch between projects to maintain dedicated context, agents, and workflows.
+          </p>
         </div>
       </div>
 
-      {/* Global Error */}
-      {error && (
-        <div className="p-4 rounded-xl bg-destructive/10 text-destructive flex items-center justify-between border border-destructive/20">
-          <div className="flex items-center gap-2">
-            <AlertCircle className="w-5 h-5" />
-            <span>{error}</span>
+      {/* Control Bar - Unified style with Templates */}
+      <div className="sticky top-14 z-30 flex flex-col gap-4 bg-background/80 backdrop-blur-md py-4 border-b border-border/50">
+        <div className="flex flex-col md:flex-row gap-4 md:items-center justify-between">
+          {/* Search */}
+          <div className="relative flex-1 max-w-md">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Filter projects by name or path..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 h-11 bg-background border-border rounded-xl shadow-sm focus-visible:ring-primary/20"
+            />
+            {searchQuery && (
+              <button 
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
           </div>
-          <button onClick={clearError} className="text-sm font-medium hover:underline">
+
+          {/* Stats */}
+          <div className="hidden sm:flex items-center gap-2 text-xs font-medium text-muted-foreground bg-muted/50 px-3 py-2 rounded-lg border border-border/50">
+            <Info className="h-3.5 w-3.5" />
+            <span>{projects.length} Registered Workspaces</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Global Error Display */}
+      {error && (
+        <div className="p-4 rounded-xl bg-destructive/5 text-destructive flex items-center justify-between border border-destructive/20 animate-fade-in shadow-sm">
+          <div className="flex items-center gap-3">
+            <AlertCircle className="w-5 h-5" />
+            <span className="text-sm font-medium">{error}</span>
+          </div>
+          <Button variant="ghost" size="sm" onClick={clearError} className="text-xs font-bold hover:bg-destructive/10">
             Dismiss
-          </button>
+          </Button>
         </div>
       )}
 
       {/* Projects Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-        {/* Add New Card - Always first */}
-        <AddProjectCard onAdd={createProject} />
+        {/* Add New Project Card - Always visible unless filtered to zero result */}
+        {!searchQuery && <AddProjectCard onAdd={createProject} />}
 
         {/* Project Cards */}
         {filteredProjects.map((project) => (
@@ -519,44 +579,60 @@ export default function Projects() {
             onSelect={selectProject}
           />
         ))}
+
+        {/* Empty State for Search */}
+        {filteredProjects.length === 0 && searchQuery && (
+           <div className="col-span-full flex flex-col items-center justify-center py-20 text-center space-y-4 rounded-3xl border border-dashed border-border bg-muted/5">
+              <div className="p-4 rounded-full bg-muted border border-border">
+                <Search className="h-8 w-8 text-muted-foreground/30" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-xl font-bold text-foreground">No projects found</h3>
+                <p className="text-muted-foreground max-w-xs mx-auto">
+                  We couldn't find any workspace matching &quot;{searchQuery}&quot;.
+                </p>
+              </div>
+              <Button variant="outline" onClick={() => setSearchQuery('')} className="rounded-xl">
+                Clear search
+              </Button>
+           </div>
+        )}
       </div>
 
-      {/* Empty State (Search Results) */}
-      {filteredProjects.length === 0 && projects.length > 0 && (
-         <div className="text-center py-12 text-muted-foreground">
-            <Search className="w-12 h-12 mx-auto mb-3 opacity-20" />
-            <p>No projects match &quot;{searchQuery}&quot;</p>
-         </div>
-      )}
-
-      {/* Empty State (No Projects) */}
-      {projects.length === 0 && (
-        <div className="col-span-full hidden"> {/* Hidden because AddProjectCard is visible */} </div>
-      )}
-
-       {/* CLI Hint Footer */}
-      <div className="mt-8 pt-8 border-t border-border">
-          <h3 className="text-sm font-medium text-foreground mb-3 flex items-center gap-2">
-            <div className="w-1.5 h-1.5 rounded-full bg-primary" />
+       {/* CLI Quick Reference Footer */}
+      <div className="mt-12 pt-12 border-t border-border/50">
+          <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-6 flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-primary/40" />
             CLI Quick Reference
           </h3>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
-             <div className="p-3 rounded-lg bg-muted/50 border border-border">
-               <code className="text-primary font-mono block mb-1">quorum add .</code>
-               <span className="text-muted-foreground text-xs">Register current directory</span>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+             <div className="group p-4 rounded-2xl bg-muted/30 border border-border/50 hover:border-primary/30 transition-all hover:bg-muted/50">
+               <div className="flex items-center gap-2 mb-2">
+                  <div className="w-1.5 h-1.5 rounded-full bg-primary" />
+                  <code className="text-primary font-mono text-sm font-bold">quorum add .</code>
+               </div>
+               <span className="text-muted-foreground text-xs leading-relaxed">Instantly register and switch to the current terminal directory.</span>
              </div>
-             <div className="p-3 rounded-lg bg-muted/50 border border-border">
-               <code className="text-primary font-mono block mb-1">quorum project list</code>
-               <span className="text-muted-foreground text-xs">View all projects</span>
+             
+             <div className="group p-4 rounded-2xl bg-muted/30 border border-border/50 hover:border-primary/30 transition-all hover:bg-muted/50">
+               <div className="flex items-center gap-2 mb-2">
+                  <div className="w-1.5 h-1.5 rounded-full bg-primary" />
+                  <code className="text-primary font-mono text-sm font-bold">quorum project list</code>
+               </div>
+               <span className="text-muted-foreground text-xs leading-relaxed">View a detailed list of all managed environments and their status.</span>
              </div>
-             <div className="p-3 rounded-lg bg-muted/50 border border-border">
-               <code className="text-primary font-mono block mb-1">quorum project default &lt;id&gt;</code>
-               <span className="text-muted-foreground text-xs">Set default project</span>
+
+             <div className="group p-4 rounded-2xl bg-muted/30 border border-border/50 hover:border-primary/30 transition-all hover:bg-muted/50">
+               <div className="flex items-center gap-2 mb-2">
+                  <div className="w-1.5 h-1.5 rounded-full bg-primary" />
+                  <code className="text-primary font-mono text-sm font-bold">quorum project default</code>
+               </div>
+               <span className="text-muted-foreground text-xs leading-relaxed">Set your preferred workspace for the current terminal session.</span>
              </div>
           </div>
       </div>
 
-      {/* Delete Dialog */}
+      {/* Delete Confirmation Dialog */}
       <ConfirmDialog
         isOpen={deleteConfirmId !== null}
         onClose={() => setDeleteConfirmId(null)}
@@ -564,10 +640,10 @@ export default function Projects() {
         title="Remove Project"
         message={
           projectToDelete
-            ? `Remove "${projectToDelete.name}" from the registry? The project files will not be deleted.`
+            ? `Are you sure you want to remove "${projectToDelete.name}"? This action only removes the entry from Quorum AI, your project files will remain untouched.`
             : ''
         }
-        confirmText="Remove"
+        confirmText="Remove Project"
         variant="danger"
       />
     </div>
