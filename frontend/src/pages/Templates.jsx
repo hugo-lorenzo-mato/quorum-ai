@@ -289,7 +289,7 @@ export default function Templates() {
                     e.stopPropagation();
                     useTemplate(template);
                   }}
-                  className="h-7.5 px-3 rounded-md text-[10.5px] font-bold bg-foreground text-background hover:bg-foreground/90 transition-all active:scale-[0.97] shadow-sm flex items-center justify-center"
+                  className="h-7.5 px-3 rounded-md text-[10.5px] font-bold bg-primary text-primary-foreground hover:bg-primary/90 transition-all active:scale-[0.97] shadow-sm flex items-center justify-center"
                 >
                   Use Template
                 </button>
