@@ -146,120 +146,113 @@ function ProjectCard({
 
   return (
     <div
-      className={`group relative p-5 rounded-xl border transition-all duration-300 overflow-hidden backdrop-blur-sm shadow-sm ${
+      className={`group flex flex-col rounded-xl border transition-all duration-200 overflow-hidden shadow-sm ${
         isSelected
-          ? 'border-primary/40 bg-gradient-to-br from-primary/5 via-card to-card ring-2 ring-primary/20 shadow-lg'
-          : 'border-border/50 bg-gradient-to-br from-card via-card to-card hover:border-primary/30 hover:shadow-lg hover:-translate-y-0.5'
+          ? 'border-primary/50 bg-primary/5 ring-1 ring-primary/20 shadow-md'
+          : 'border-border bg-card hover:border-foreground/20 hover:shadow-xl hover:-translate-y-1'
       }`}
     >
-      {/* Top accent */}
-      <div className={`absolute top-0 left-4 right-4 h-0.5 ${
-        isSelected 
-          ? 'bg-gradient-to-r from-transparent via-primary to-transparent' 
-          : 'bg-gradient-to-r from-transparent via-muted-foreground/20 to-transparent'
-      }`} />
-      {/* Header row */}
-      <div className="flex flex-col sm:flex-row items-start gap-4 mb-4">
-        {/* Color picker */}
-        <div className="flex-shrink-0 pt-1">
-          <ColorPicker
-            value={project.color || PROJECT_COLORS[0]}
-            onChange={handleColorChange}
-          />
-        </div>
-
-        {/* Project info */}
-        <div className="flex-1 min-w-0 w-full">
-          <div className="flex flex-wrap items-center gap-2 mb-1">
-            <InlineEdit
-              value={project.name}
-              onSave={handleNameSave}
-              placeholder="Project name"
-              className="text-lg font-semibold text-foreground block truncate"
+      <div className="flex-1 p-5 pb-4">
+        {/* Header: Color & Status */}
+        <div className="flex items-start justify-between mb-4">
+          <div className="p-1 rounded-lg bg-muted/50 border border-transparent group-hover:bg-background/80 transition-all duration-300">
+             <ColorPicker
+              value={project.color || PROJECT_COLORS[0]}
+              onChange={handleColorChange}
             />
+          </div>
+          <div className="flex items-center gap-2">
             {isDefault && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-yellow-500/10 text-yellow-600 text-xs font-medium whitespace-nowrap">
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-yellow-500/10 text-yellow-600 border border-yellow-500/20">
                 <Star className="w-3 h-3 fill-yellow-500" />
                 Default
               </span>
             )}
-            {isSelected && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-medium whitespace-nowrap">
-                <Check className="w-3 h-3" />
-                Active
-              </span>
-            )}
+            <StatusBadge status={project.status} />
           </div>
-          <StatusBadge status={project.status} />
         </div>
-      </div>
 
-      {/* Path row */}
-      <div className="flex items-center gap-2 mb-4 p-3 rounded-lg bg-muted/30 overflow-hidden">
-        <Folder className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-        <InlineEdit
-          value={project.path}
-          onSave={handlePathSave}
-          placeholder="/path/to/project"
-          className="text-sm text-muted-foreground font-mono flex-1 truncate"
-          inputClassName="font-mono text-sm w-full"
-        />
-      </div>
-
-      {/* Actions row */}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:flex-wrap">
-        {!isSelected && (
-          <button
-            onClick={() => onSelect(project.id)}
-            className="w-full sm:w-auto px-4 py-2 rounded-lg text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors flex items-center justify-center gap-2"
-          >
-            <FolderOpen className="w-4 h-4" />
-            Open Project
-          </button>
+        {/* Content: Name & Path */}
+        <div className="space-y-3">
+          <div className="group/edit">
+            <InlineEdit
+              value={project.name}
+              onSave={handleNameSave}
+              placeholder="Project name"
+              className="text-base font-bold text-foreground block truncate w-full group-hover:text-primary transition-colors"
+              inputClassName="font-bold text-base w-full"
+            />
+          </div>
+          
+          <div className="flex items-center gap-2 text-xs text-muted-foreground group/path">
+            <Folder className="w-3.5 h-3.5 flex-shrink-0 opacity-70" />
+            <InlineEdit
+              value={project.path}
+              onSave={handlePathSave}
+              placeholder="/path/to/project"
+              className="font-mono truncate flex-1 hover:text-foreground transition-colors"
+              inputClassName="font-mono text-xs w-full"
+            />
+          </div>
+        </div>
+        
+        {/* Status Message */}
+        {project.status_message && (
+          <div className="mt-4 p-2 rounded-lg bg-yellow-500/10 text-yellow-700 text-xs flex items-start gap-2 break-words border border-yellow-500/20">
+            <AlertCircle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+            <span className="min-w-0 leading-relaxed">{project.status_message}</span>
+          </div>
         )}
+      </div>
 
-        <div className="flex gap-2 w-full sm:w-auto sm:flex-1">
+      {/* Footer: Actions */}
+      <div className="flex items-center justify-between p-3.5 border-t border-border/50 bg-muted/5 mt-auto">
+        <div className="flex items-center gap-1">
           {!isDefault && (
-            <button
+             <button
               onClick={() => onSetDefault(project.id)}
               disabled={loading}
-              className="flex-1 px-3 py-2 rounded-lg text-sm font-medium border border-border hover:bg-accent transition-colors flex items-center justify-center gap-2 text-muted-foreground hover:text-foreground"
+              className="p-1.5 rounded-md text-muted-foreground hover:text-yellow-600 hover:bg-yellow-500/10 transition-colors"
+              title="Set as Default"
             >
               <Star className="w-4 h-4" />
-              <span className="sm:hidden lg:inline">Set Default</span>
-              <span className="hidden sm:inline lg:hidden">Default</span>
             </button>
           )}
-
+          
           <button
             onClick={() => onValidate(project.id)}
             disabled={loading}
-            className="flex-1 px-3 py-2 rounded-lg text-sm font-medium border border-border hover:bg-accent transition-colors flex items-center justify-center gap-2 text-muted-foreground hover:text-foreground"
+            className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-background transition-colors"
+            title="Validate Project"
           >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-            Validate
+             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+
+          <button
+            onClick={() => onDelete(project.id)}
+            disabled={loading}
+            className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+            title="Remove Project"
+          >
+            <Trash2 className="w-4 h-4" />
           </button>
         </div>
 
-        <div className="hidden sm:block sm:flex-1" />
-
-        <button
-          onClick={() => onDelete(project.id)}
-          disabled={loading}
-          className="w-full sm:w-auto px-3 py-2 rounded-lg text-sm font-medium border border-border hover:bg-destructive/10 hover:border-destructive/50 hover:text-destructive transition-colors flex items-center justify-center gap-2 text-muted-foreground"
-        >
-          <Trash2 className="w-4 h-4" />
-          Remove
-        </button>
+        {isSelected ? (
+           <div className="h-7.5 px-3 rounded-md text-[10.5px] font-bold bg-primary/10 text-primary border border-primary/20 flex items-center gap-1.5 cursor-default">
+             <Check className="w-3.5 h-3.5" />
+             Active
+           </div>
+        ) : (
+          <button
+            onClick={() => onSelect(project.id)}
+            className="h-7.5 px-3 rounded-md text-[10.5px] font-bold bg-background/50 border border-border/60 text-foreground/70 hover:border-primary hover:text-primary hover:bg-primary/5 hover:-translate-y-0.5 hover:scale-[1.02] transition-all active:scale-[0.97] shadow-sm flex items-center justify-center gap-1.5"
+          >
+            <FolderOpen className="w-3.5 h-3.5" />
+            Open
+          </button>
+        )}
       </div>
-
-      {/* Status message if any */}
-      {project.status_message && (
-        <div className="mt-3 p-2 rounded-lg bg-yellow-500/10 text-yellow-700 text-sm flex items-start gap-2 break-words">
-          <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-          <span className="min-w-0">{project.status_message}</span>
-        </div>
-      )}
     </div>
   );
 }

@@ -51,9 +51,8 @@ export default function ChatMarkdown({ content, isUser }) {
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
-      className="prose prose-sm dark:prose-invert max-w-none break-words"
       components={{
-        p: ({ children }) => <p className="mb-2 last:mb-0 leading-relaxed">{children}</p>,
+        p: ({ children }) => <p className="mb-2 last:mb-0 leading-relaxed text-sm">{children}</p>,
         a: ({ children, href }) => (
           <a
             href={href}
