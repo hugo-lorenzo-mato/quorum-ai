@@ -473,7 +473,7 @@ export default function Dashboard() {
             <Link to="/workflows" className="p-2 rounded-lg hover:bg-primary/5 text-muted-foreground/40 hover:text-primary transition-all"><ArrowUpRight className="w-4 h-4" /></Link>
           </div>
 
-          {recentWorkflows.length > 0 ? <div className="space-y-3 flex-1">{recentWorkflows.map((w) => <WorkflowItem key={workflow.id} workflow={w} />)}</div> : <EmptyState />}
+          {recentWorkflows.length > 0 ? <div className="space-y-3 flex-1">{recentWorkflows.map((w) => <WorkflowItem key={w.id} workflow={w} />)}</div> : <EmptyState />}
           
           <div className="mt-8 pt-6 border-t border-border/30">
              <Link to="/kanban" className="flex items-center justify-between p-4 rounded-2xl bg-primary/[0.02] border border-primary/5 hover:border-primary/20 hover:bg-primary/[0.04] transition-all group">
