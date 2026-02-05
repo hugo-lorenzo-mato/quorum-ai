@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { workflowTemplates, templateCategories } from '../data/workflowTemplates';
 import { Badge } from '../components/ui/Badge';
@@ -170,6 +170,15 @@ export default function Templates() {
   const [searchQuery, setSearchQuery] = useState('');
   const [previewTemplate, setPreviewTemplate] = useState(null);
 
+  // Calculate counts per category
+  const categoryCounts = useMemo(() => {
+    const counts = { All: workflowTemplates.length };
+    workflowTemplates.forEach(t => {
+      counts[t.category] = (counts[t.category] || 0) + 1;
+    });
+    return counts;
+  }, []);
+
   const filteredTemplates = workflowTemplates.filter((template) => {
     const matchesCategory = selectedCategory === 'All' || template.category === selectedCategory;
     const matchesSearch =
@@ -194,12 +203,12 @@ export default function Templates() {
 
   return (
     <div className="space-y-6 animate-fade-in pb-10">
-      <div className="px-4 sm:px-6 space-y-6">
-        <div className="flex flex-col gap-4">
+      <div className="px-4 sm:px-6 space-y-8">
+        <div className="flex flex-col gap-6">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h1 className="text-2xl font-semibold text-foreground tracking-tight">Workflow Templates</h1>
-              <p className="text-sm text-muted-foreground mt-1">Pre-configured workflows for common software development tasks</p>
+              <p className="text-sm text-muted-foreground mt-1">Select a pre-configured workflow to accelerate your tasks</p>
             </div>
             
             <div className="relative w-full sm:w-64">
@@ -209,96 +218,95 @@ export default function Templates() {
                 placeholder="Search templates..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="h-10 w-full pl-9 pr-4 rounded-lg border border-border bg-background text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/20 hover:border-border/80 transition-all"
+                className="h-9 w-full pl-9 pr-4 rounded-md border border-border bg-background text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/10 hover:border-border/80 transition-all"
               />
             </div>
           </div>
 
-          {/* Category Filter Tabs */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/50 pb-4">
-            <div className="flex items-center gap-1 p-1 rounded-lg bg-muted/50 overflow-x-auto no-scrollbar max-w-full">
-              {templateCategories.map((category) => (
-                <button
-                  key={category}
-                  onClick={() => setSelectedCategory(category)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium whitespace-nowrap transition-all duration-200 ${
-                    selectedCategory === category
-                      ? 'bg-background text-foreground shadow-sm'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
-                  }`}
-                >
-                  {category}
-                </button>
-              ))}
-            </div>
-            {selectedCategory !== 'All' && (
-              <div className="hidden sm:block text-xs text-muted-foreground whitespace-nowrap px-1">
-                Showing {filteredTemplates.length} {selectedCategory} template{filteredTemplates.length !== 1 ? 's' : ''}
-              </div>
-            )}
+          {/* Segmented/Tabs Filters with Counts */}
+          <div className="flex items-center gap-1 p-1 rounded-lg bg-muted/30 overflow-x-auto no-scrollbar max-w-full border border-border/50">
+            {templateCategories.map((category) => (
+              <button
+                key={category}
+                onClick={() => setSelectedCategory(category)}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium whitespace-nowrap transition-all duration-200 ${
+                  selectedCategory === category
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+                }`}
+              >
+                {category}
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+                  selectedCategory === category ? 'bg-muted text-foreground' : 'bg-muted/50 text-muted-foreground'
+                }`}>
+                  {categoryCounts[category] || 0}
+                </span>
+              </button>
+            ))}
           </div>
         </div>
 
         {/* Template Grid */}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
         {filteredTemplates.map((template) => (
           <div 
             key={template.id}
             onClick={() => useTemplate(template)}
-            className="group relative flex flex-col rounded-xl border border-border bg-card cursor-pointer transition-all duration-200 hover:border-primary/50 hover:shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:hover:shadow-[0_8px_30px_rgb(0,0,0,0.2)] overflow-hidden"
+            className="group flex flex-col rounded-xl border border-border bg-card cursor-pointer transition-all duration-200 hover:border-foreground/20 hover:shadow-xl hover:-translate-y-1 overflow-hidden"
           >
-            {/* Discrete Preview Action */}
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setPreviewTemplate(template);
-              }}
-              className="absolute top-3 right-3 z-10 p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent opacity-0 group-hover:opacity-100 transition-all duration-200"
-              title="Preview template"
-            >
-              <Globe className="w-4 h-4" />
-            </button>
-
-            <div className="flex-1 p-5">
-              <div className="flex items-start gap-4 mb-4">
-                <div className="p-2.5 rounded-lg bg-muted/50 text-muted-foreground group-hover:text-primary group-hover:bg-primary/5 transition-colors duration-200">
+            <div className="flex-1 p-5 pb-4">
+              <div className="flex items-start justify-between mb-4">
+                <div className="p-2.5 rounded-lg bg-muted/50 text-muted-foreground group-hover:text-foreground group-hover:bg-muted transition-colors">
                   <TemplateIcon name={template.icon} className="w-5 h-5" />
                 </div>
-                <div className="flex-1 min-w-0 pr-6">
-                  <h3 className="text-sm font-semibold text-foreground leading-snug line-clamp-2 group-hover:text-primary transition-colors">
-                    {template.name}
-                  </h3>
-                  <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/50 mt-1">
-                    {template.category}
-                  </p>
+                <div className="flex gap-1.5">
+                  {template.tags.slice(0, 2).map((tag) => (
+                    <Badge key={tag} variant="secondary" className="text-[10px] px-1.5 py-0 h-4 font-normal lowercase bg-muted/30 border-none">
+                      {tag}
+                    </Badge>
+                  ))}
+                  {template.tags.length > 2 && (
+                    <span className="text-[10px] text-muted-foreground/50 self-center">+{template.tags.length - 2}</span>
+                  )}
                 </div>
               </div>
 
-              <p className="text-xs text-muted-foreground line-clamp-3 leading-relaxed mb-6">
-                {template.description}
-              </p>
+              <div className="space-y-2">
+                <h3 className="text-[15px] font-bold text-foreground leading-tight group-hover:text-primary transition-colors">
+                  {template.name}
+                </h3>
+                <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed h-8">
+                  {template.description}
+                </p>
+              </div>
+            </div>
 
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Badge 
-                    variant={template.executionStrategy === 'multi-agent-consensus' ? 'default' : 'outline'}
-                    className="text-[9px] px-1.5 py-0 h-4 uppercase font-bold tracking-tighter"
-                  >
-                    {template.executionStrategy === 'multi-agent-consensus' ? 'Multi' : 'Single'}
-                  </Badge>
-                  <div className="flex gap-1">
-                    {template.tags.slice(0, 1).map((tag) => (
-                      <span key={tag} className="text-[10px] text-muted-foreground/60 bg-muted/30 px-1.5 py-0.5 rounded">
-                        #{tag}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-                
-                <div className="flex items-center gap-1 text-[11px] font-medium text-primary opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300">
-                  <span>Use</span>
-                  <Zap className="w-3 h-3 fill-current" />
-                </div>
+            <div className="px-5 pb-5 pt-2 flex items-center justify-between mt-auto">
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    useTemplate(template);
+                  }}
+                  className="h-8 px-4 rounded-md text-[11px] font-bold bg-foreground text-background hover:bg-foreground/90 transition-all active:scale-95"
+                >
+                  Use Template
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setPreviewTemplate(template);
+                  }}
+                  className="h-8 px-3 rounded-md text-[11px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-all"
+                >
+                  Preview
+                </button>
+              </div>
+              
+              <div className="flex items-center gap-1.5">
+                <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 font-bold border-border/50">
+                  {template.executionStrategy === 'multi-agent-consensus' ? 'MULTI' : 'SINGLE'}
+                </Badge>
               </div>
             </div>
           </div>
