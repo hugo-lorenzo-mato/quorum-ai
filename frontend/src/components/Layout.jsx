@@ -195,22 +195,21 @@ export default function Layout({ children }) {
   // Check if we're on the chat or settings page - they need full control of their layout
   const isFullLayoutPage = location.pathname === '/chat' || location.pathname === '/settings';
 
-  // Close sidebar on route change on mobile
+  // Close sidebar when resizing to mobile viewport (only triggers on actual resize)
   useEffect(() => {
     const handleResize = () => {
-      if (window.innerWidth < 768 && sidebarOpen) {
+      if (window.innerWidth < 768) {
         setSidebarOpen(false);
       }
     };
 
     window.addEventListener('resize', handleResize);
-    handleResize();
-
     return () => {
       window.removeEventListener('resize', handleResize);
     };
-  }, [sidebarOpen, setSidebarOpen]);
+  }, [setSidebarOpen]);
 
+  // Close sidebar on route change on mobile
   useEffect(() => {
     if (window.innerWidth < 768) {
       setSidebarOpen(false);
