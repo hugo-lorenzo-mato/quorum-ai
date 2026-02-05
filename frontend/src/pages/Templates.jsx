@@ -81,8 +81,14 @@ function TemplateIcon({ name, className = "" }) {
 
 function TemplatePreviewModal({ template, onClose, onUseTemplate }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-fade-in">
-      <div className="bg-card border border-border shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col rounded-2xl animate-fade-up">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-fade-in"
+      onClick={onClose}
+    >
+      <div
+        className="bg-card border border-border shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col rounded-2xl animate-fade-up"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
         <div className="relative flex items-start justify-between p-6 border-b border-border/50 bg-muted/5">
           <div className="absolute top-0 left-6 right-6 h-0.5 rounded-full bg-gradient-to-r from-transparent via-primary to-transparent" />
@@ -261,12 +267,15 @@ export default function Templates() {
                 </div>
                 <div className="flex gap-1.5">
                   {template.tags.slice(0, 2).map((tag) => (
-                    <Badge key={tag} variant="secondary" className="text-[10px] px-1.5 py-0 h-4 font-normal lowercase bg-muted/30 border-none">
+                    <span 
+                      key={tag} 
+                      className="text-[10px] px-1.5 py-0 h-4 font-normal lowercase bg-muted/30 text-muted-foreground/70 rounded border border-transparent group-hover:border-primary/20 group-hover:text-primary group-hover:bg-primary/5 transition-all duration-300"
+                    >
                       {tag}
-                    </Badge>
+                    </span>
                   ))}
                   {template.tags.length > 2 && (
-                    <span className="text-[10px] text-muted-foreground/50 self-center">+{template.tags.length - 2}</span>
+                    <span className="text-[10px] text-muted-foreground/40 self-center">+{template.tags.length - 2}</span>
                   )}
                 </div>
               </div>
@@ -293,9 +302,16 @@ export default function Templates() {
                 Use Template
               </button>
 
-              <Badge variant="outline" className="text-[8.5px] px-1.5 py-0 h-4 font-bold border-border/50 opacity-60 tracking-tight">
-                {template.executionStrategy === 'multi-agent-consensus' ? 'MULTI' : 'SINGLE'}
-              </Badge>
+              <div 
+                className="flex items-center justify-center w-6 h-6 rounded-full border border-border/50 bg-background/50 text-muted-foreground/60 group-hover:text-primary group-hover:border-primary/30 group-hover:bg-primary/5 transition-all duration-300"
+                title={template.executionStrategy === 'multi-agent-consensus' ? 'Multi-Agent' : 'Single-Agent'}
+              >
+                {template.executionStrategy === 'multi-agent-consensus' ? (
+                  <Network className="w-3.5 h-3.5" />
+                ) : (
+                  <Zap className="w-3.5 h-3.5" />
+                )}
+              </div>
             </div>
           </div>
         ))}
