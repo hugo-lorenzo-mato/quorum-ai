@@ -275,7 +275,7 @@ function SystemResources({ data, loading, onRefresh, timeAgo }) {
           </div>
         </div>
       </div>
-    </div>
+    </BentoCard>
   );
 }
 
