@@ -192,8 +192,8 @@ export default function Layout({ children }) {
   const location = useLocation();
   const { sidebarOpen, toggleSidebar, setSidebarOpen } = useUIStore();
   
-  // Check if we're on the chat page - chat needs full control of its layout
-  const isChatPage = location.pathname === '/chat';
+  // Check if we're on the chat or settings page - they need full control of their layout
+  const isFullLayoutPage = location.pathname === '/chat' || location.pathname === '/settings';
 
   // Close sidebar on route change on mobile
   useEffect(() => {
@@ -364,7 +364,7 @@ export default function Layout({ children }) {
         </header>
 
         {/* Page content */}
-        <div className={isChatPage ? '' : 'px-3 pt-3 pb-0 sm:p-6'}>
+        <div className={isFullLayoutPage ? '' : 'px-3 pt-3 pb-0 sm:p-6'}>
           {children}
         </div>
       </main>

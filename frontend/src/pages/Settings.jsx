@@ -157,7 +157,7 @@ export default function Settings() {
   const groups = ['System', 'Project'];
 
   return (
-    <div className="flex flex-col md:h-[calc(100vh-4rem)] bg-background z-0 pb-10">
+    <div className="flex flex-col h-[calc(100vh-3.5rem)] bg-background overflow-hidden">{/* 3.5rem = h-14 del header */}
       {/* Header */}
       <header className="flex-none px-6 py-4 border-b border-border bg-card/50 backdrop-blur-sm z-10">
         <div className={`flex items-center justify-between gap-4 ${mobileView === 'content' ? 'hidden md:flex' : 'flex'}`}>
@@ -273,7 +273,7 @@ export default function Settings() {
 
         {/* Content Area */}
         <main className={`flex-1 overflow-y-auto bg-background p-4 sm:p-8 ${mobileView === 'content' ? 'block' : 'hidden md:block'}`}>
-          <div className="max-w-6xl mx-auto space-y-6 pb-24">
+          <div className="space-y-6 pb-24">
             {isLoading && !config ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="w-8 h-8 animate-spin text-primary" />
