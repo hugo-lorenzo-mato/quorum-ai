@@ -252,42 +252,47 @@ export default function Templates() {
           <div
             key={template.id}
             onClick={() => setPreviewTemplate(template)}
-            className="group flex flex-col rounded-xl border border-border bg-card cursor-pointer transition-all duration-200 hover:border-foreground/20 hover:shadow-xl hover:-translate-y-1 overflow-hidden"
+            className="group flex flex-col rounded-xl border border-border bg-card transition-all duration-200 overflow-hidden shadow-sm hover:shadow-md hover:border-foreground/20 hover:-translate-y-0.5 cursor-pointer"
           >
-            <div className="flex-1 p-5 pb-4">
-              <div className="flex items-start justify-between mb-4">
-                <div className="p-2.5 rounded-lg bg-muted/50 text-muted-foreground border border-transparent group-hover:text-primary group-hover:bg-primary/10 group-hover:border-primary/20 transition-all duration-300">
-                  <TemplateIcon name={template.icon} className="w-5 h-5" />
+            <div className="flex-1 p-4">
+              {/* Header: Icon, Name, Tags */}
+              <div className="flex items-start justify-between gap-3 mb-1.5">
+                <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                  <div className="flex-shrink-0 p-1 rounded-lg bg-muted/50 text-muted-foreground border border-transparent group-hover:text-primary group-hover:bg-primary/10 group-hover:border-primary/20 transition-all duration-300">
+                    <TemplateIcon name={template.icon} className="w-4 h-4" />
+                  </div>
+                  <h3 className="text-sm font-bold text-foreground leading-tight truncate group-hover:text-primary transition-colors">
+                    {template.name}
+                  </h3>
                 </div>
-                <div className="flex gap-1.5">
+                
+                <div className="flex gap-1 flex-shrink-0 flex-wrap justify-end max-w-[40%]">
                   {template.tags.slice(0, 2).map((tag) => (
                     <span 
                       key={tag} 
-                      className="text-[10px] px-1.5 py-0 h-4 font-normal lowercase bg-muted/30 text-muted-foreground/70 rounded border border-transparent group-hover:border-primary/20 group-hover:text-primary group-hover:bg-primary/5 transition-all duration-300"
+                      className="text-[9px] px-1.5 py-0.5 font-medium lowercase bg-muted/50 text-muted-foreground/80 rounded border border-transparent group-hover:border-primary/20 group-hover:text-primary group-hover:bg-primary/5 transition-all duration-300"
                     >
                       {tag}
                     </span>
                   ))}
                   {template.tags.length > 2 && (
-                    <span className="text-[10px] text-muted-foreground/40 self-center">+{template.tags.length - 2}</span>
+                    <span className="text-[9px] text-muted-foreground/40 self-center">+{template.tags.length - 2}</span>
                   )}
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <h3 className="text-[14px] font-bold text-foreground leading-tight group-hover:text-primary transition-colors">
-                  {template.name}
-                </h3>
-                <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed h-8">
+              {/* Description */}
+              <div className="pl-[34px]">
+                <p className="text-xs text-muted-foreground/80 line-clamp-2 leading-relaxed h-8">
                   {template.description}
                 </p>
               </div>
             </div>
 
             {/* Compact Actions Footer */}
-            <div className="flex items-center justify-between p-3.5 border-t border-border/50 bg-muted/5 mt-auto">
+            <div className="flex items-center justify-between px-3 py-2 border-t border-border/40 bg-muted/5 mt-auto h-10">
               <div 
-                className="flex items-center justify-center w-6 h-6 rounded-full border border-border/50 bg-background/50 text-muted-foreground/60 group-hover:text-primary group-hover:border-primary/30 group-hover:bg-primary/5 transition-all duration-300"
+                className="flex items-center justify-center gap-1.5 text-[10px] text-muted-foreground/60 group-hover:text-primary transition-colors duration-300"
                 title={template.executionStrategy === 'multi-agent-consensus' ? 'Multi-Agent' : 'Single-Agent'}
               >
                 {template.executionStrategy === 'multi-agent-consensus' ? (
@@ -295,6 +300,9 @@ export default function Templates() {
                 ) : (
                   <Zap className="w-3.5 h-3.5" />
                 )}
+                <span className="hidden sm:inline font-medium">
+                  {template.executionStrategy === 'multi-agent-consensus' ? 'Multi-Agent' : 'Single-Agent'}
+                </span>
               </div>
 
               <button
@@ -302,7 +310,7 @@ export default function Templates() {
                   e.stopPropagation();
                   handleUseTemplate(template);
                 }}
-                className="h-7.5 px-3 rounded-md text-[10.5px] font-bold bg-background/50 border border-border/60 text-foreground/70 hover:border-primary hover:text-primary hover:bg-primary/5 hover:-translate-y-0.5 hover:scale-[1.02] transition-all active:scale-[0.97] shadow-sm flex items-center justify-center"
+                className="h-6 px-2.5 rounded text-[10px] font-bold bg-background/50 border border-border/60 text-foreground/70 hover:border-primary hover:text-primary hover:bg-primary/5 hover:-translate-y-0.5 transition-all active:scale-[0.97] shadow-sm flex items-center justify-center"
               >
                 Use Template
               </button>

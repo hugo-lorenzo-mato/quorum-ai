@@ -1,8 +1,11 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import { chatApi } from '../lib/api';
 import { DEFAULT_AGENT, DEFAULT_REASONING } from '../lib/agents';
 
-const useChatStore = create((set, get) => ({
+const useChatStore = create(
+  persist(
+    (set, get) => ({
   // State
   sessions: [],
   activeSessionId: null,
@@ -10,6 +13,7 @@ const useChatStore = create((set, get) => ({
   loading: false,
   sending: false,
   error: null,
+  sidebarCollapsed: true,
 
   // Per-message options (reset after send)
   currentAgent: DEFAULT_AGENT,
@@ -227,6 +231,17 @@ const useChatStore = create((set, get) => ({
     currentReasoningEffort: DEFAULT_REASONING,
     attachments: [],
   }),
-}));
+
+  // Sidebar controls
+  toggleSidebar: () => set(state => ({ sidebarCollapsed: !state.sidebarCollapsed })),
+  setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
+})),
+{
+  name: 'quorum-chat-store',
+  partialize: (state) => ({
+    sidebarCollapsed: state.sidebarCollapsed,
+  }),
+}
+);
 
 export default useChatStore;

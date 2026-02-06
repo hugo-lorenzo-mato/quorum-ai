@@ -15,6 +15,8 @@ import {
   Copy,
   CheckCircle2,
   ArrowLeft,
+  PanelLeftClose,
+  PanelLeft,
 } from 'lucide-react';
 import Logo from '../components/Logo';
 import {
@@ -27,14 +29,14 @@ import ChatMarkdown from '../components/ChatMarkdown';
 
 function TypingIndicator() {
   return (
-    <div className="flex items-center gap-3 p-4">
-      <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-        <Bot className="w-4 h-4 text-primary" />
+    <div className="flex items-center gap-2 px-0.5">
+      <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center mt-1">
+        <Bot className="w-3 h-3 text-primary" />
       </div>
       <div className="flex gap-1">
-        <span className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-        <span className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-        <span className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+        <span className="w-1.5 h-1.5 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+        <span className="w-1.5 h-1.5 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+        <span className="w-1.5 h-1.5 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
       </div>
     </div>
   );
@@ -56,35 +58,35 @@ function MessageBubble({ message, isLast }) {
   };
 
   return (
-    <div className={`flex gap-3 ${isUser ? 'flex-row-reverse' : ''} ${isLast ? 'animate-fade-up' : ''}`}>
-      <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+    <div className={`flex gap-2 ${isUser ? 'flex-row-reverse' : ''} ${isLast ? 'animate-fade-up' : ''}`}>
+      <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-1 ${
         isUser ? 'bg-primary' : 'bg-muted'
       }`}>
         {isUser ? (
-          <User className="w-4 h-4 text-primary-foreground" />
+          <User className="w-3 h-3 text-primary-foreground" />
         ) : (
-          <Logo className="w-4 h-4 text-muted-foreground" />
+          <Logo className="w-3 h-3 text-muted-foreground" />
         )}
       </div>
-      <div className={`max-w-[70%] rounded-2xl px-4 py-3 min-w-[200px] ${
+      <div className={`max-w-[80%] rounded-lg px-3 py-2 min-w-[120px] ${
         isUser
-          ? 'bg-primary text-primary-foreground rounded-br-md ml-auto'
-          : 'bg-card border border-border rounded-bl-md mr-auto'
+          ? 'bg-primary text-primary-foreground rounded-br-sm ml-auto'
+          : 'bg-card border border-border rounded-bl-sm mr-auto'
       }`}>
         {!isUser && message.agent && (
-          <p className="text-xs font-mono font-medium text-primary mb-1">{agentName}</p>
+          <p className="text-[10px] font-mono font-medium text-primary mb-1">{agentName}</p>
         )}
-        <div className={`text-sm ${isUser ? 'text-primary-foreground' : 'text-foreground'}`}>
+        <div className={`text-sm leading-relaxed ${isUser ? 'text-primary-foreground' : 'text-foreground'}`}>
           <ChatMarkdown content={message.content} isUser={isUser} />
         </div>
-        <div className="flex items-center justify-between mt-2 pt-1 border-t border-white/10 opacity-70">
-          <p className={`text-[10px] font-mono ${isUser ? 'text-primary-foreground/80' : 'text-muted-foreground'}`}>
+        <div className="flex items-center justify-between mt-1.5 pt-1 border-t border-white/10 opacity-70">
+          <p className={`text-[9px] font-mono ${isUser ? 'text-primary-foreground/80' : 'text-muted-foreground'}`}>
             {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
           </p>
           <button
             type="button"
             onClick={handleCopy}
-            className={`p-1 rounded hover:bg-white/10 transition-colors ${copied ? 'text-green-300' : ''}`}
+            className={`p-0.5 rounded hover:bg-white/10 transition-colors ${copied ? 'text-green-300' : ''}`}
             title={copied ? 'Copied!' : 'Copy message'}
           >
             {copied ? (
@@ -217,9 +219,9 @@ function EmptyChat({ onCreateSession }) {
 
 export default function Chat() {
   const {
-    sessions, activeSessionId, loading, sending, error,
+    sessions, activeSessionId, loading, sending, error, sidebarCollapsed,
     fetchSessions, createSession, selectSession, deleteSession, updateSession,
-    sendMessage, getActiveMessages, clearError,
+    sendMessage, getActiveMessages, clearError, toggleSidebar,
     // Per-message options
     currentAgent, currentModel, currentReasoningEffort, attachments,
     setCurrentAgent, setCurrentModel, setCurrentReasoningEffort,
@@ -265,38 +267,86 @@ export default function Chat() {
   return (
     <div className="h-[calc(100vh-3.5rem)] flex overflow-hidden animate-fade-in">{/* 3.5rem = h-14 del header */}
       {/* Sessions sidebar */}
-      <div className={`w-full md:w-80 flex-shrink-0 flex flex-col gap-4 p-4 bg-card border-r border-border ${activeSession ? 'hidden md:flex' : 'flex'}`}>
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-foreground">Chats</h2>
-          <button
-            onClick={handleCreateSession}
-            disabled={loading}
-            className="flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
-          >
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-            New
-          </button>
+      <div className={`transition-all duration-300 ease-in-out flex-shrink-0 flex flex-col gap-4 p-4 bg-card border-r border-border ${
+        activeSession ? 'hidden md:flex' : 'flex'
+      } ${
+        sidebarCollapsed ? 'w-0 md:w-16 overflow-hidden' : 'w-full md:w-80'
+      }`}>
+        <div className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'justify-between'}`}>
+          {!sidebarCollapsed && (
+            <h2 className="text-lg font-semibold text-foreground animate-fade-in">Chats</h2>
+          )}
+          <div className="flex items-center gap-2">
+            {!sidebarCollapsed && (
+              <button
+                onClick={handleCreateSession}
+                disabled={loading}
+                className="flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors animate-fade-in"
+              >
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                New
+              </button>
+            )}
+            <button
+              onClick={toggleSidebar}
+              className="hidden md:flex p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+              title={sidebarCollapsed ? "Expand chat list" : "Collapse chat list"}
+            >
+              {sidebarCollapsed ? <PanelLeft className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
+            </button>
+          </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto space-y-1 min-h-0 pr-2">
-          {sessions.length > 0 ? (
-            sessions.map((session) => (
-              <SessionItem
-                key={session.id}
-                session={session}
-                isActive={activeSessionId === session.id}
-                onClick={() => selectSession(session.id)}
-                onDelete={deleteSession}
-                onRename={handleRenameSession}
-              />
-            ))
-          ) : (
-            <div className="text-center py-12">
-              <MessageSquare className="w-12 h-12 mx-auto mb-3 text-muted-foreground opacity-50" />
-              <p className="text-sm text-muted-foreground">No chats yet</p>
+        {!sidebarCollapsed && (
+          <div className="flex-1 overflow-y-auto space-y-1 min-h-0 pr-2 animate-fade-in">
+            {sessions.length > 0 ? (
+              sessions.map((session) => (
+                <SessionItem
+                  key={session.id}
+                  session={session}
+                  isActive={activeSessionId === session.id}
+                  onClick={() => selectSession(session.id)}
+                  onDelete={deleteSession}
+                  onRename={handleRenameSession}
+                />
+              ))
+            ) : (
+              <div className="text-center py-12">
+                <MessageSquare className="w-12 h-12 mx-auto mb-3 text-muted-foreground opacity-50" />
+                <p className="text-sm text-muted-foreground">No chats yet</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {sidebarCollapsed && (
+          <div className="flex-1 flex flex-col items-center gap-3 overflow-hidden">
+            <button
+              onClick={handleCreateSession}
+              disabled={loading}
+              className="p-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
+              title="New chat"
+            >
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+            </button>
+            <div className="flex flex-col gap-1 overflow-y-auto">
+              {sessions.slice(0, 8).map((session) => (
+                <button
+                  key={session.id}
+                  onClick={() => selectSession(session.id)}
+                  className={`p-2 rounded-lg transition-all ${
+                    activeSessionId === session.id
+                      ? 'bg-accent text-accent-foreground'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
+                  }`}
+                  title={session.title || `${session.agent || 'Claude'} Session`}
+                >
+                  <Sparkles className={`w-4 h-4 ${activeSessionId === session.id ? 'text-primary' : ''}`} />
+                </button>
+              ))}
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* Chat area */}
@@ -304,29 +354,29 @@ export default function Chat() {
         {activeSession ? (
           <>
             {/* Header */}
-            <div className="px-4 py-3 md:px-6 md:py-4 border-b border-border bg-card backdrop-blur-sm z-10 flex items-center justify-between gap-3 shrink-0">
-              <div className="flex items-center gap-3 overflow-hidden flex-1">
+            <div className="px-3 py-2.5 md:px-4 md:py-3 border-b border-border bg-card backdrop-blur-sm z-10 flex items-center justify-between gap-3 shrink-0">
+              <div className="flex items-center gap-2.5 overflow-hidden flex-1">
                 <button 
                   onClick={handleBackToList}
-                  className="md:hidden p-2 -ml-2 rounded-lg hover:bg-accent text-muted-foreground"
+                  className="md:hidden p-1.5 -ml-1 rounded-lg hover:bg-accent text-muted-foreground"
                 >
-                  <ArrowLeft className="w-5 h-5" />
+                  <ArrowLeft className="w-4 h-4" />
                 </button>
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center flex-shrink-0">
-                  <Sparkles className="w-5 h-5 text-primary" />
+                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center flex-shrink-0">
+                  <Sparkles className="w-4 h-4 text-primary" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <h3 className="font-semibold text-foreground truncate">
+                  <h3 className="font-semibold text-foreground truncate text-sm">
                     {activeSession.title || `${activeSession.agent || 'Claude'} Chat`}
                   </h3>
-                  <p className="text-xs text-muted-foreground truncate">
+                  <p className="text-[11px] text-muted-foreground truncate">
                     {activeSession.agent || 'Claude'} · {new Date(activeSession.created_at).toLocaleDateString()}
                   </p>
                 </div>
               </div>
               <button
                 onClick={() => deleteSession(activeSession.id)}
-                className="p-2 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors flex-shrink-0"
+                className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors flex-shrink-0"
               >
                 <Trash2 className="w-4 h-4" />
               </button>
@@ -335,7 +385,7 @@ export default function Chat() {
             {/* Messages */}
             <div className="flex-1 min-h-0 overflow-y-auto flex flex-col">
               {activeMessages.length > 0 ? (
-                <div className="max-w-5xl mx-auto px-4 md:px-8 py-6 space-y-6 w-full">
+                <div className="w-full px-3 md:px-6 py-3 space-y-3">
                   {activeMessages.map((message, index) => (
                     <MessageBubble
                       key={message.id || index}
@@ -344,7 +394,7 @@ export default function Chat() {
                     />
                   ))}
                   {sending && <TypingIndicator />}
-                  <div ref={messagesEndRef} className="h-4" />
+                  <div ref={messagesEndRef} className="h-1" />
                 </div>
               ) : (
                 <div className="flex items-center justify-center flex-1">
@@ -361,9 +411,9 @@ export default function Chat() {
 
             {/* Input */}
             <div className="shrink-0 border-t border-border bg-card backdrop-blur-sm">
-              <div className="max-w-5xl mx-auto px-4 md:px-8 py-4">
+              <div className="w-full px-3 md:px-6 py-3">
               {error && (
-                <div className="mb-3 p-3 bg-destructive/10 text-destructive text-sm rounded-lg flex items-center justify-between">
+                <div className="mb-3 p-2.5 bg-destructive/10 text-destructive text-sm rounded-lg flex items-center justify-between">
                   <span>{error}</span>
                   <button onClick={clearError} className="p-1 hover:bg-destructive/20 rounded">
                     <X className="w-4 h-4" />
@@ -400,7 +450,7 @@ export default function Chat() {
                 />
               </div>
 
-              <form onSubmit={handleSend} className="flex gap-3 items-end">
+              <form onSubmit={handleSend} className="flex gap-2.5 items-end">
                 <textarea
                   ref={inputRef}
                   value={input}
@@ -418,14 +468,14 @@ export default function Chat() {
                   placeholder={`Message ${currentAgent}...`}
                   disabled={sending}
                   rows={1}
-                  className="flex-1 min-h-[44px] max-h-[140px] py-2.5 px-4 border border-input rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background disabled:opacity-50 transition-all text-base resize-none overflow-y-auto"
+                  className="flex-1 min-h-[42px] max-h-[140px] py-2.5 px-3.5 border border-input rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background disabled:opacity-50 transition-all text-sm resize-none overflow-y-auto"
                 />
                 <button
                   type="submit"
                   disabled={sending || !input.trim()}
-                  className="h-11 w-11 md:h-10 md:w-auto md:px-4 flex items-center justify-center rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors shrink-0 mb-0.5"
+                  className="h-[42px] w-[42px] md:h-10 md:w-auto md:px-4 flex items-center justify-center rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors shrink-0"
                 >
-                  {sending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+                  {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                 </button>
               </form>
               </div>
