@@ -110,7 +110,7 @@ func TestCheckStatus_IsPending(t *testing.T) {
 
 func TestNewWorkflowState(t *testing.T) {
 	bp := &Blueprint{
-		Consensus: BlueprintConsensus{Threshold: 0.8},
+		Consensus:  BlueprintConsensus{Threshold: 0.8},
 		MaxRetries: 5,
 	}
 	wf := NewWorkflow("test-wf", "test prompt", bp)

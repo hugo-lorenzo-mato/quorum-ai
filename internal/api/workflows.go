@@ -315,7 +315,7 @@ func (s *Server) handleCreateWorkflow(w http.ResponseWriter, r *http.Request) {
 							time.Since(dup.CreatedAt).Round(time.Second),
 							dup.WorkflowID,
 							dup.Status,
-							(deduplicationWindow - time.Since(dup.CreatedAt)).Round(time.Second)))
+							(deduplicationWindow-time.Since(dup.CreatedAt)).Round(time.Second)))
 					return
 				}
 			}

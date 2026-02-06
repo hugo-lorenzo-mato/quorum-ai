@@ -534,6 +534,10 @@ func (m *mockAgentRegistryIntegration) AvailableForPhase(_ context.Context, _ st
 	return m.available
 }
 
+func (m *mockAgentRegistryIntegration) AvailableForPhaseWithConfig(_ context.Context, _ string, _ map[string][]string) []string {
+	return m.available
+}
+
 // mockAgent is a fast-completing agent for testing.
 // Implements core.Agent interface.
 type mockAgent struct {

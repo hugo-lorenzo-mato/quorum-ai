@@ -165,14 +165,20 @@ phases:
       agent: claude
 
 state:
-  backend: json
-  path: .quorum/state.json
+  path: .quorum/state/state.db
   lock_ttl: 5m
 
 git:
-  worktree_dir: .quorum/worktrees
-  auto_commit: false
-  auto_push: false
+  worktree:
+    dir: .quorum/worktrees
+    mode: disabled
+    auto_clean: false
+  task:
+    auto_commit: false
+  finalization:
+    auto_push: false
+    auto_pr: false
+    auto_merge: false
 
 github:
   remote: origin
@@ -271,13 +277,16 @@ phases:
       agent: gemini
 
 state:
-  backend: json
-  path: .quorum/state.json
+  path: .quorum/state/state.db
   lock_ttl: 5m
 
 git:
-  worktree_dir: .quorum/worktrees
-  auto_commit: false
+  worktree:
+    dir: .quorum/worktrees
+    mode: disabled
+    auto_clean: false
+  task:
+    auto_commit: false
 
 github:
   remote: origin

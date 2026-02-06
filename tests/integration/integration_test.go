@@ -6,6 +6,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -20,10 +21,11 @@ func TestIntegration_StateManager(t *testing.T) {
 	dir := testutil.TempDir(t)
 	statePath := filepath.Join(dir, ".quorum", "state", "workflow.json")
 
-	sm, err := state.NewStateManager("json", statePath)
+	sm, err := state.NewStateManager(statePath)
 	if err != nil {
 		t.Fatalf("create state manager: %v", err)
 	}
+	defer state.CloseStateManager(sm)
 	ctx := context.Background()
 
 	// Create and save state
@@ -216,79 +218,44 @@ func TestIntegration_WorkflowCreation(t *testing.T) {
 }
 
 // TestIntegration_BackendSelection tests the factory function creates correct backend types.
-func TestIntegration_BackendSelection(t *testing.T) {
-	tests := []struct {
-		name        string
-		backend     string
-		wantJSON    bool
-		wantSQLite  bool
-		wantErr     bool
-		errContains string
-	}{
-		{
-			name:     "empty defaults to json",
-			backend:  "",
-			wantJSON: true,
-		},
-		{
-			name:     "explicit json backend",
-			backend:  "json",
-			wantJSON: true,
-		},
-		{
-			name:       "sqlite backend",
-			backend:    "sqlite",
-			wantSQLite: true,
-		},
-		{
-			name:       "SQLite backend (mixed case)",
-			backend:    "SQLite",
-			wantSQLite: true,
-		},
-		{
-			name:        "unsupported backend fails",
-			backend:     "postgres",
-			wantErr:     true,
-			errContains: "unsupported state backend",
+func TestIntegration_StateManager_SQLiteOnly(t *testing.T) {
+	dir := testutil.TempDir(t)
+	legacyPath := filepath.Join(dir, "state.legacy") // intentionally not .db
+
+	sm, err := state.NewStateManager(legacyPath)
+	testutil.AssertNoError(t, err)
+	defer state.CloseStateManager(sm)
+
+	// Runtime is SQLite-only now.
+	if _, ok := sm.(*state.SQLiteStateManager); !ok {
+		t.Fatalf("expected SQLiteStateManager, got %T", sm)
+	}
+
+	normalizedDBPath := strings.TrimSuffix(legacyPath, filepath.Ext(legacyPath)) + ".db"
+	if _, err := os.Stat(normalizedDBPath); err != nil {
+		t.Fatalf("expected sqlite db to exist at %s: %v", normalizedDBPath, err)
+	}
+	if _, err := os.Stat(legacyPath); err == nil {
+		t.Fatalf("did not expect non-db path to exist at %s", legacyPath)
+	} else if !os.IsNotExist(err) {
+		t.Fatalf("unexpected stat error for %s: %v", legacyPath, err)
+	}
+
+	// Verify the manager works by saving and loading
+	ctx := context.Background()
+	ws := &core.WorkflowState{
+		WorkflowDefinition: core.WorkflowDefinition{WorkflowID: "test-wf"},
+		WorkflowRun: core.WorkflowRun{
+			CurrentPhase: core.PhaseAnalyze,
+			Status:       core.WorkflowStatusRunning,
+			Tasks:        make(map[core.TaskID]*core.TaskState),
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			dir := testutil.TempDir(t)
-			statePath := filepath.Join(dir, "state.json")
-
-			sm, err := state.NewStateManager(tt.backend, statePath)
-
-			if tt.wantErr {
-				if err == nil {
-					t.Error("expected error, got nil")
-				} else if tt.errContains != "" {
-					testutil.AssertContains(t, err.Error(), tt.errContains)
-				}
-				return
-			}
-
-			testutil.AssertNoError(t, err)
-			defer state.CloseStateManager(sm)
-
-			// Verify the manager works by saving and loading
-			ctx := context.Background()
-			ws := &core.WorkflowState{
-				WorkflowDefinition: core.WorkflowDefinition{WorkflowID: "test-wf"},
-				WorkflowRun: core.WorkflowRun{
-					CurrentPhase: core.PhaseAnalyze,
-					Status:       core.WorkflowStatusRunning,
-					Tasks:        make(map[core.TaskID]*core.TaskState),
-				},
-			}
-
-			testutil.AssertNoError(t, sm.Save(ctx, ws))
-			loaded, err := sm.Load(ctx)
-			testutil.AssertNoError(t, err)
-			testutil.AssertEqual(t, loaded.WorkflowID, "test-wf")
-		})
-	}
+	testutil.AssertNoError(t, sm.Save(ctx, ws))
+	loaded, err := sm.Load(ctx)
+	testutil.AssertNoError(t, err)
+	testutil.AssertEqual(t, loaded.WorkflowID, "test-wf")
 }
 
 // TestIntegration_SQLiteStateManager_CRUD tests SQLite-specific CRUD operations.
@@ -296,7 +263,7 @@ func TestIntegration_SQLiteStateManager_CRUD(t *testing.T) {
 	dir := testutil.TempDir(t)
 	dbPath := filepath.Join(dir, "workflow.db")
 
-	sm, err := state.NewStateManager("sqlite", dbPath)
+	sm, err := state.NewStateManager(dbPath)
 	testutil.AssertNoError(t, err)
 	defer state.CloseStateManager(sm)
 
@@ -421,7 +388,7 @@ func TestIntegration_SQLiteMultipleWorkflows(t *testing.T) {
 	dir := testutil.TempDir(t)
 	dbPath := filepath.Join(dir, "multi-workflow.db")
 
-	sm, err := state.NewStateManager("sqlite", dbPath)
+	sm, err := state.NewStateManager(dbPath)
 	testutil.AssertNoError(t, err)
 	defer state.CloseStateManager(sm)
 
@@ -485,86 +452,12 @@ func TestIntegration_SQLiteMultipleWorkflows(t *testing.T) {
 }
 
 // TestIntegration_BackendFromConfig tests creating state manager from config.
-func TestIntegration_BackendFromConfig(t *testing.T) {
-	tests := []struct {
-		name     string
-		config   string
-		validate func(t *testing.T, sm core.StateManager)
-	}{
-		{
-			name: "json backend from config",
-			config: `state:
-  backend: json
-`,
-			validate: func(t *testing.T, sm core.StateManager) {
-				ctx := context.Background()
-				ws := &core.WorkflowState{
-					WorkflowDefinition: core.WorkflowDefinition{WorkflowID: "cfg-test-json"},
-					WorkflowRun: core.WorkflowRun{
-						Status: core.WorkflowStatusPending,
-						Tasks:  make(map[core.TaskID]*core.TaskState),
-					},
-				}
-				testutil.AssertNoError(t, sm.Save(ctx, ws))
-				loaded, err := sm.Load(ctx)
-				testutil.AssertNoError(t, err)
-				testutil.AssertEqual(t, loaded.WorkflowID, "cfg-test-json")
-			},
-		},
-		{
-			name: "sqlite backend from config",
-			config: `state:
-  backend: sqlite
-`,
-			validate: func(t *testing.T, sm core.StateManager) {
-				ctx := context.Background()
-				ws := &core.WorkflowState{
-					WorkflowDefinition: core.WorkflowDefinition{WorkflowID: "cfg-test-sqlite"},
-					WorkflowRun: core.WorkflowRun{
-						Status: core.WorkflowStatusPending,
-						Tasks:  make(map[core.TaskID]*core.TaskState),
-					},
-				}
-				testutil.AssertNoError(t, sm.Save(ctx, ws))
-				loaded, err := sm.Load(ctx)
-				testutil.AssertNoError(t, err)
-				testutil.AssertEqual(t, loaded.WorkflowID, "cfg-test-sqlite")
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			dir := testutil.TempDir(t)
-
-			// Write config file
-			configPath := filepath.Join(dir, ".quorum.yaml")
-			testutil.AssertNoError(t, os.WriteFile(configPath, []byte(tt.config), 0o644))
-
-			// Load config
-			loader := config.NewLoader().WithConfigFile(configPath)
-			cfg, err := loader.Load()
-			testutil.AssertNoError(t, err)
-
-			// Create state manager from config
-			backend := cfg.State.EffectiveBackend()
-			statePath := filepath.Join(dir, ".quorum", "state", "workflow.json")
-
-			sm, err := state.NewStateManager(backend, statePath)
-			testutil.AssertNoError(t, err)
-			defer state.CloseStateManager(sm)
-
-			tt.validate(t, sm)
-		})
-	}
-}
-
 // TestIntegration_SQLiteBackupRestore tests SQLite backup and restore functionality.
 func TestIntegration_SQLiteBackupRestore(t *testing.T) {
 	dir := testutil.TempDir(t)
 	dbPath := filepath.Join(dir, "backup-test.db")
 
-	sm, err := state.NewStateManager("sqlite", dbPath)
+	sm, err := state.NewStateManager(dbPath)
 	testutil.AssertNoError(t, err)
 	defer state.CloseStateManager(sm)
 
@@ -609,29 +502,9 @@ func TestIntegration_SQLiteBackupRestore(t *testing.T) {
 func TestIntegration_StateManagerLifecycle(t *testing.T) {
 	dir := testutil.TempDir(t)
 
-	t.Run("json manager cleanup", func(t *testing.T) {
-		path := filepath.Join(dir, "lifecycle-json.json")
-		sm, err := state.NewStateManager("json", path)
-		testutil.AssertNoError(t, err)
-
-		// Save something
-		ctx := context.Background()
-		ws := &core.WorkflowState{
-			WorkflowDefinition: core.WorkflowDefinition{WorkflowID: "lifecycle-test"},
-			WorkflowRun: core.WorkflowRun{
-				Status: core.WorkflowStatusPending,
-				Tasks:  make(map[core.TaskID]*core.TaskState),
-			},
-		}
-		testutil.AssertNoError(t, sm.Save(ctx, ws))
-
-		// Close should not error for JSON
-		testutil.AssertNoError(t, state.CloseStateManager(sm))
-	})
-
 	t.Run("sqlite manager cleanup", func(t *testing.T) {
 		path := filepath.Join(dir, "lifecycle-sqlite.db")
-		sm, err := state.NewStateManager("sqlite", path)
+		sm, err := state.NewStateManager(path)
 		testutil.AssertNoError(t, err)
 
 		// Save something

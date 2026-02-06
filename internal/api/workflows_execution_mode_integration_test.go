@@ -232,7 +232,7 @@ func TestIntegration_ListWorkflows_IncludesExecutionMode(t *testing.T) {
 
 	for i, cfg := range configs {
 		reqBody := map[string]interface{}{
-			"prompt": "Test workflow " + string(rune('A'+i)),
+			"prompt":    "Test workflow " + string(rune('A'+i)),
 			"blueprint": cfg,
 		}
 		body, _ := json.Marshal(reqBody)

@@ -44,7 +44,7 @@ graph TB
             CODEX[Codex Adapter]
         end
         subgraph "State Adapter"
-            STATE[State Manager<br/>SQLite/JSON]
+            STATE[State Manager<br/>SQLite]
             LOCK[Process Lock]
         end
         subgraph "Git Adapters"
@@ -172,7 +172,6 @@ Implement ports by wrapping external systems.
 Responsibilities:
 
 - SQLite-based persistence (default) with transactional writes
-- JSON-based persistence (alternative) with atomic writes
 - Process lock management with stale detection
 
 #### Git Adapters (`internal/adapters/git/`)
@@ -246,7 +245,7 @@ User Input (prompt)
        |
        v
 +------+-------+
-| State Load   |  <- SQLite state manager (or JSON)
+| State Load   |  <- SQLite state manager
 +------+-------+
        |
        v
@@ -468,7 +467,8 @@ For detailed rationale behind architectural choices, see:
 
 - [ADR-0001: Hexagonal Architecture](adr/0001-hexagonal-architecture.md)
 - [ADR-0002: Consensus Protocol and Scoring](adr/0002-consensus-protocol.md)
-- [ADR-0003: JSON State Persistence for POC](adr/0003-state-persistence-json.md)
+- [ADR-0003: JSON State Persistence for POC (historical)](adr/0003-state-persistence-json.md)
+- [ADR-0009: SQLite as Default State Backend](adr/0009-sqlite-state-backend.md)
 - [ADR-0004: Worktree Isolation per Task](adr/0004-worktree-isolation.md)
 - [ADR-0007: Multilingual Prompt Support](adr/0007-multilingual-prompt-optimization.md)
 

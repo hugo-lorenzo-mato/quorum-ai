@@ -482,7 +482,6 @@ func configToFullResponse(cfg *config.Config) FullConfigResponse {
 			OpenCode: agentConfigToResponse(&cfg.Agents.OpenCode),
 		},
 		State: StateConfigResponse{
-			Backend:    cfg.State.Backend,
 			Path:       cfg.State.Path,
 			BackupPath: cfg.State.BackupPath,
 			LockTTL:    cfg.State.LockTTL,
@@ -869,9 +868,6 @@ func applyAgentUpdates(cfg *config.AgentConfig, update *FullAgentConfigUpdate) {
 }
 
 func applyStateUpdates(cfg *config.StateConfig, update *StateConfigUpdate) {
-	if update.Backend != nil {
-		cfg.Backend = *update.Backend
-	}
 	if update.Path != nil {
 		cfg.Path = *update.Path
 	}

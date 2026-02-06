@@ -11,7 +11,6 @@ type EnumsResponse struct {
 	LogLevels        []string `json:"log_levels"`
 	LogFormats       []string `json:"log_formats"`
 	TraceModes       []string `json:"trace_modes"`
-	StateBackends    []string `json:"state_backends"`
 	WorktreeModes    []string `json:"worktree_modes"`
 	MergeStrategies  []string `json:"merge_strategies"`
 	ReasoningEfforts []string `json:"reasoning_efforts"`
@@ -35,7 +34,6 @@ func (s *Server) handleGetEnums(w http.ResponseWriter, _ *http.Request) {
 		LogLevels:           core.LogLevels,
 		LogFormats:          core.LogFormats,
 		TraceModes:          core.TraceModes,
-		StateBackends:       core.StateBackends,
 		WorktreeModes:       core.WorktreeModes,
 		MergeStrategies:     core.MergeStrategies,
 		ReasoningEfforts:    core.AllReasoningEfforts,

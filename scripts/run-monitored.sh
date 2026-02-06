@@ -10,17 +10,15 @@ Options:
   -f, --file PATH          Read prompt from file.
   -c, --config PATH        Config file path to pass to quorum.
   --max-idle SECONDS       Stop if no new log output for this long. Default: 90.
-  --max-cost USD           Stop if total_cost_usd exceeds this. Default: 0.5.
   --max-runtime SECONDS    Stop after this total runtime (0 disables). Default: 0.
   --max-retries N          Max retries for quorum run. Default: 1.
   --log-dir DIR            Log directory. Default: .quorum/logs.
-  --state PATH             State file path. Default: .quorum/state/state.json.
   --quorum-cmd PATH         Quorum binary (default: ./bin/quorum if present, else quorum).
   -h, --help               Show help.
 
 Examples:
   scripts/run-monitored.sh -- "Write a short plan for updating docs"
-  scripts/run-monitored.sh -f prompt.txt --max-cost 1.0 --max-idle 120
+  scripts/run-monitored.sh -f prompt.txt --max-idle 120
 USAGE
 }
 
@@ -28,11 +26,9 @@ prompt=""
 prompt_file=""
 config_path=""
 max_idle=90
-max_cost=0.5
 max_runtime=0
 max_retries=1
 log_dir=".quorum/logs"
-state_path=".quorum/state/state.json"
 quorum_cmd=""
 
 if [ -x ./bin/quorum ]; then
@@ -61,10 +57,6 @@ while [ "$#" -gt 0 ]; do
       max_idle="$2"
       shift 2
       ;;
-    --max-cost)
-      max_cost="$2"
-      shift 2
-      ;;
     --max-runtime)
       max_runtime="$2"
       shift 2
@@ -75,10 +67,6 @@ while [ "$#" -gt 0 ]; do
       ;;
     --log-dir)
       log_dir="$2"
-      shift 2
-      ;;
-    --state)
-      state_path="$2"
       shift 2
       ;;
     --quorum-cmd)
@@ -113,13 +101,6 @@ fi
 
 mkdir -p "$log_dir"
 log_file="$log_dir/run-$(date +%Y%m%d-%H%M%S).log"
-
-jq_available=false
-if command -v jq >/dev/null 2>&1; then
-  jq_available=true
-else
-  echo "Warning: jq not found. Cost guard disabled." >&2
-fi
 
 cmd=("$quorum_cmd" run --max-retries "$max_retries")
 if [ -n "$config_path" ]; then
@@ -171,15 +152,6 @@ while kill -0 "$pid" 2>/dev/null; do
     echo "Max runtime ${max_runtime}s exceeded, sending SIGINT"
     kill -INT "$pid" || true
     break
-  fi
-
-  if $jq_available && [ -f "$state_path" ]; then
-    cost=$(jq -r ".metrics.total_cost_usd // 0" "$state_path" 2>/dev/null || echo 0)
-    if ! awk "BEGIN{exit !($cost <= $max_cost)}"; then
-      echo "Cost exceeded ($cost > $max_cost), sending SIGINT"
-      kill -INT "$pid" || true
-      break
-    fi
   fi
 
   sleep 5

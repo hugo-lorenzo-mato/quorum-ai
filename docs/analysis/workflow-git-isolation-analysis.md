@@ -617,7 +617,7 @@ func InitPhaseRunner(ctx context.Context, phase core.Phase, maxRetries int, dryR
     cfg, err := loader.Load()
 
     // 2. Create state manager
-    stateManager, err := state.NewStateManagerWithOptions(backend, statePath, stateOpts)
+    stateManager, err := state.NewStateManagerWithOptions(statePath, stateOpts)
 
     // 3. Create agent registry
     registry := cli.NewRegistry()

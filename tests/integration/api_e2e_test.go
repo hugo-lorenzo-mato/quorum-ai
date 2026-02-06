@@ -32,7 +32,7 @@ func newTestServer(t *testing.T) (*httptest.Server, *api.Server, core.StateManag
 	// 1. Setup StateManager (Real SQLite)
 	dir := testutil.TempDir(t)
 	dbPath := filepath.Join(dir, "workflow.db")
-	sm, err := state.NewStateManager("sqlite", dbPath)
+	sm, err := state.NewStateManager(dbPath)
 	testutil.AssertNoError(t, err)
 
 	// 2. Setup EventBus

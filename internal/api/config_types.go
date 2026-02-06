@@ -159,7 +159,6 @@ type FullAgentConfigResponse struct {
 
 // StateConfigResponse represents state persistence configuration.
 type StateConfigResponse struct {
-	Backend    string `json:"backend"`
 	Path       string `json:"path"`
 	BackupPath string `json:"backup_path"`
 	LockTTL    string `json:"lock_ttl"`
@@ -431,7 +430,6 @@ type FullAgentConfigUpdate struct {
 
 // StateConfigUpdate represents state configuration update.
 type StateConfigUpdate struct {
-	Backend    *string `json:"backend,omitempty"`
 	Path       *string `json:"path,omitempty"`
 	BackupPath *string `json:"backup_path,omitempty"`
 	LockTTL    *string `json:"lock_ttl,omitempty"`

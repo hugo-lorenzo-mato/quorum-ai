@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -46,7 +47,6 @@ type ProjectContext struct {
 // contextOptions holds configuration for context creation
 type contextOptions struct {
 	logger          *slog.Logger
-	stateBackend    string
 	eventBufferSize int
 }
 
@@ -57,13 +57,6 @@ type ContextOption func(*contextOptions)
 func WithContextLogger(logger *slog.Logger) ContextOption {
 	return func(o *contextOptions) {
 		o.logger = logger
-	}
-}
-
-// WithStateBackend sets the state backend type ("sqlite" or "json")
-func WithStateBackend(backend string) ContextOption {
-	return func(o *contextOptions) {
-		o.stateBackend = backend
 	}
 }
 
@@ -83,7 +76,6 @@ func NewProjectContext(id, root string, opts ...ContextOption) (*ProjectContext,
 	// Apply default options
 	options := &contextOptions{
 		logger:          slog.Default(),
-		stateBackend:    "sqlite",
 		eventBufferSize: 100,
 	}
 	for _, opt := range opts {
@@ -113,21 +105,22 @@ func NewProjectContext(id, root string, opts ...ContextOption) (*ProjectContext,
 	// Initialize all services in order
 	var initErr error
 
-	// 1. State Manager (critical - fail if unavailable)
-	if initErr = pc.initStateManager(options); initErr != nil {
-		return nil, fmt.Errorf("initializing state manager: %w", initErr)
-	}
-
-	// 2. Event Bus (critical)
-	if initErr = pc.initEventBus(options); initErr != nil {
-		pc.Close()
-		return nil, fmt.Errorf("initializing event bus: %w", initErr)
-	}
-
-	// 3. Config Loader (critical for operations)
+	// 1. Config Loader (critical for operations)
 	if initErr = pc.initConfigLoader(); initErr != nil {
 		pc.Close()
 		return nil, fmt.Errorf("initializing config loader: %w", initErr)
+	}
+
+	// 2. State Manager (critical - fail if unavailable)
+	if initErr = pc.initStateManager(options); initErr != nil {
+		pc.Close()
+		return nil, fmt.Errorf("initializing state manager: %w", initErr)
+	}
+
+	// 3. Event Bus (critical)
+	if initErr = pc.initEventBus(options); initErr != nil {
+		pc.Close()
+		return nil, fmt.Errorf("initializing event bus: %w", initErr)
 	}
 
 	// 4. Attachments (required for file handling)
@@ -143,7 +136,7 @@ func NewProjectContext(id, root string, opts ...ContextOption) (*ProjectContext,
 	}
 
 	pc.logger.Info("project context initialized",
-		"state_backend", options.stateBackend,
+		"state_backend", "sqlite",
 		"event_buffer_size", options.eventBufferSize)
 
 	return pc, nil
@@ -151,26 +144,51 @@ func NewProjectContext(id, root string, opts ...ContextOption) (*ProjectContext,
 
 // initStateManager creates the state manager for this project
 func (pc *ProjectContext) initStateManager(opts *contextOptions) error {
-	stateDir := filepath.Join(pc.Root, ".quorum", "state")
-	if err := os.MkdirAll(stateDir, 0o750); err != nil {
+	_ = opts // reserved for future pool-level overrides
+
+	// Default to project-local SQLite state DB.
+	statePath := filepath.Join(pc.Root, ".quorum", "state", "state.db")
+	backupPath := ""
+	var lockTTL time.Duration
+
+	// Best-effort: load config to honor state.path/backup_path/lock_ttl overrides.
+	if pc.ConfigLoader != nil {
+		if cfg, err := pc.ConfigLoader.Load(); err == nil && cfg != nil {
+			if strings.TrimSpace(cfg.State.Path) != "" {
+				statePath = cfg.State.Path
+			}
+			backupPath = cfg.State.BackupPath
+			if strings.TrimSpace(cfg.State.LockTTL) != "" {
+				if ttl, err := time.ParseDuration(cfg.State.LockTTL); err == nil {
+					lockTTL = ttl
+				} else {
+					pc.logger.Warn("invalid state.lock_ttl in project config, using default",
+						"value", cfg.State.LockTTL, "error", err)
+				}
+			}
+		} else if err != nil {
+			pc.logger.Warn("failed to load project config for state manager, using defaults", "error", err)
+		}
+	}
+
+	if err := os.MkdirAll(filepath.Dir(statePath), 0o750); err != nil {
 		return fmt.Errorf("creating state directory: %w", err)
 	}
 
-	var statePath string
-	switch opts.stateBackend {
-	case "json":
-		statePath = filepath.Join(stateDir, "state.json")
-	default:
-		statePath = filepath.Join(stateDir, "state.db")
+	smOpts := state.StateManagerOptions{
+		BackupPath: backupPath,
+	}
+	if lockTTL > 0 {
+		smOpts.LockTTL = lockTTL
 	}
 
-	sm, err := state.NewStateManager(opts.stateBackend, statePath)
+	sm, err := state.NewStateManagerWithOptions(statePath, smOpts)
 	if err != nil {
 		return fmt.Errorf("creating state manager at %s: %w", statePath, err)
 	}
 
 	pc.StateManager = sm
-	pc.logger.Debug("state manager initialized", "path", statePath, "backend", opts.stateBackend)
+	pc.logger.Debug("state manager initialized", "path", statePath, "backend", "sqlite")
 	return nil
 }
 
@@ -198,21 +216,24 @@ func (pc *ProjectContext) initAttachments() error {
 
 // initChatStore creates the chat store for this project
 func (pc *ProjectContext) initChatStore(opts *contextOptions) error {
-	var chatPath string
-	switch opts.stateBackend {
-	case "json":
-		chatPath = filepath.Join(pc.Root, ".quorum", "chat")
-	default:
-		chatPath = filepath.Join(pc.Root, ".quorum", "chat.db")
-	}
+	_ = opts // reserved for future pool-level overrides
 
-	cs, err := chat.NewChatStore(opts.stateBackend, chatPath)
+	// Place chat DB next to the workflow state DB (default: .quorum/state/chat.db).
+	statePath := filepath.Join(pc.Root, ".quorum", "state", "state.db")
+	if pc.ConfigLoader != nil {
+		if cfg, err := pc.ConfigLoader.Load(); err == nil && cfg != nil && strings.TrimSpace(cfg.State.Path) != "" {
+			statePath = cfg.State.Path
+		}
+	}
+	chatPath := filepath.Join(filepath.Dir(statePath), "chat.db")
+
+	cs, err := chat.NewChatStore(chatPath)
 	if err != nil {
 		return fmt.Errorf("creating chat store at %s: %w", chatPath, err)
 	}
 
 	pc.ChatStore = cs
-	pc.logger.Debug("chat store initialized", "path", chatPath, "backend", opts.stateBackend)
+	pc.logger.Debug("chat store initialized", "path", chatPath, "backend", "sqlite")
 	return nil
 }
 

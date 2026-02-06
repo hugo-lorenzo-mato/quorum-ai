@@ -53,7 +53,7 @@ type AgentEvent struct {
 
 	// Data contains optional structured data specific to the event type.
 	// For tool_use: {"tool": "read_file", "args": {...}}
-	// For completed: {"tokens_in": 1000, "tokens_out": 500, "cost_usd": 0.01}
+	// For completed: {"tokens_in": 1000, "tokens_out": 500}
 	// For error: {"code": "TIMEOUT", "details": "..."}
 	Data map[string]any `json:"data,omitempty"`
 

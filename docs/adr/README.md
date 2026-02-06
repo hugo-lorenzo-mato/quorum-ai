@@ -14,4 +14,4 @@ template in ADR-0000.
 | [0006](0006-error-handling-standardization.md) | Error Handling Standardization | Accepted | Standardize wrapping, logging, and validation |
 | [0007](0007-multilingual-prompt-optimization.md) | Multilingual Prompt Optimization | Accepted | Support multi-language prompts with LLM optimization |
 | [0008](0008-github-adapter-testability.md) | GitHub Adapter Testability | Accepted | Design GitHub adapter for testability |
-| [0009](0009-sqlite-state-backend.md) | SQLite as Default State Backend | Accepted | SQLite default with JSON fallback for state persistence |
+| [0009](0009-sqlite-state-backend.md) | SQLite as Default State Backend | Accepted | SQLite-only runtime persistence |

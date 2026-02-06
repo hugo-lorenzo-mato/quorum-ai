@@ -4,6 +4,8 @@
 
 Accepted (supersedes ADR-0003 as default)
 
+Updated (2026-02-06): runtime persistence is SQLite-only.
+
 ## Context
 
 ADR-0003 established JSON as the state persistence backend for the POC, citing
@@ -24,9 +26,7 @@ database that fits quorum-ai's local-first model.
 
 ## Decision
 
-Adopt SQLite as the default state backend. JSON remains available as an
-alternative for debugging, migration, or environments where SQLite is
-problematic.
+Adopt SQLite as the state backend for runtime persistence.
 
 ### Per-Project Database
 
@@ -44,31 +44,7 @@ rather than a global database. Rationale:
 
 ### Backward Compatibility
 
-The JSON backend is retained for:
-
-- Existing installations that already use JSON state files
-- Debugging scenarios where human-readable state is valuable
-- Environments with constraints on native dependencies
-
-Users can switch backends via configuration:
-
-```yaml
-state:
-  backend: json  # or sqlite (default)
-  path: .quorum/state/state.json
-```
-
-Path extensions are automatically adjusted when switching backends.
-
-### Future Considerations
-
-JSON backend may be deprecated in a future major version (v2+) if:
-
-- Maintenance burden of dual backends becomes significant
-- SQLite proves universally reliable across target platforms
-- Migration tooling matures sufficiently
-
-Any deprecation would include a migration path and advance notice.
+Not provided. SQLite is the only supported runtime persistence format.
 
 ## Consequences
 
@@ -88,7 +64,7 @@ Any deprecation would include a migration path and advance notice.
 ### Negative
 
 - **Binary format**: State files are not human-readable without tooling
-  (mitigated by `quorum state` commands and JSON export).
+  (mitigated by `quorum workflows`, API endpoints, and optional `sqlite3` inspection).
 - **Dependency size**: SQLite adds to binary size (~1-2MB with pure-Go
   implementation).
 - **Schema migrations**: Future schema changes require migration logic
@@ -96,7 +72,6 @@ Any deprecation would include a migration path and advance notice.
 
 ### Neutral
 
-- JSON backend remains available, so this is additive rather than breaking.
 - ADR-0003's decision was correct for POC scope; this extends rather than
   invalidates it.
 - Per-project databases prevent future options like cross-project queries,

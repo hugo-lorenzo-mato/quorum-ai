@@ -174,7 +174,7 @@ function MessageBubble({ message, isLast }) {
           <Logo className="w-3 h-3 text-muted-foreground" />
         )}
       </div>
-      <div className={`max-w-[80%] rounded-lg px-3 py-2 min-w-[120px] ${
+      <div className={`max-w-[90%] rounded-lg px-3 py-2 min-w-[120px] ${
         isUser
           ? 'bg-primary text-primary-foreground rounded-br-sm ml-auto'
           : 'bg-card border border-border rounded-bl-sm mr-auto'
@@ -563,7 +563,7 @@ export default function Chat() {
             {/* Messages */}
             <div className="flex-1 min-h-0 overflow-y-auto flex flex-col">
               {activeMessages.length > 0 ? (
-                <div className="w-full px-3 md:px-6 py-3 space-y-3">
+                <div className="w-full max-w-4xl mx-auto px-3 md:px-6 py-3 space-y-3">
                   {activeMessages.map((message, index) => (
                     <MessageBubble
                       key={message.id || index}
@@ -589,7 +589,7 @@ export default function Chat() {
 
             {/* Input */}
             <div className="shrink-0 border-t border-border bg-card backdrop-blur-sm">
-              <div className="w-full px-3 md:px-6 py-3">
+              <div className="w-full max-w-4xl mx-auto px-3 md:px-6 py-3">
               {error && (
                 <div className="mb-3 p-2.5 bg-destructive/10 text-destructive text-sm rounded-lg flex items-center justify-between">
                   <span>{error}</span>

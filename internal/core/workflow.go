@@ -30,7 +30,6 @@ type Workflow struct {
 	TaskOrder      []TaskID
 	Blueprint      *Blueprint
 	ConsensusScore float64
-	TotalCostUSD   float64
 	TotalTokensIn  int
 	TotalTokensOut int
 	CreatedAt      time.Time
@@ -182,11 +181,9 @@ func (w *Workflow) ReadyTasks() []*Task {
 
 // UpdateMetrics recalculates aggregated metrics.
 func (w *Workflow) UpdateMetrics() {
-	w.TotalCostUSD = 0
 	w.TotalTokensIn = 0
 	w.TotalTokensOut = 0
 	for _, task := range w.Tasks {
-		w.TotalCostUSD += task.CostUSD
 		w.TotalTokensIn += task.TokensIn
 		w.TotalTokensOut += task.TokensOut
 	}

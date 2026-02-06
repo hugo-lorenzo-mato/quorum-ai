@@ -309,16 +309,36 @@ func (m *SQLiteStateManager) migrate() error {
 	return nil
 }
 
+type saveOptions struct {
+	preserveUpdatedAt bool
+	disableAutoKanban bool
+	setActiveWorkflow bool
+}
+
 // Save persists workflow state atomically and sets it as the active workflow.
 func (m *SQLiteStateManager) Save(ctx context.Context, state *core.WorkflowState) error {
+	return m.saveWithOptions(ctx, state, saveOptions{
+		preserveUpdatedAt: false,
+		disableAutoKanban: false,
+		setActiveWorkflow: true,
+	})
+}
+
+func (m *SQLiteStateManager) saveWithOptions(ctx context.Context, state *core.WorkflowState, opts saveOptions) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	// Update timestamp
-	state.UpdatedAt = time.Now()
+	if opts.preserveUpdatedAt {
+		if state.UpdatedAt.IsZero() {
+			state.UpdatedAt = time.Now()
+		}
+	} else {
+		state.UpdatedAt = time.Now()
+	}
 
 	// Auto-move completed workflows to "to_verify" column if not already in to_verify or done
-	if state.Status == core.WorkflowStatusCompleted {
+	if !opts.disableAutoKanban && state.Status == core.WorkflowStatusCompleted {
 		if state.KanbanColumn != "to_verify" && state.KanbanColumn != "done" {
 			state.KanbanColumn = "to_verify"
 			now := time.Now()
@@ -458,15 +478,17 @@ func (m *SQLiteStateManager) Save(ctx context.Context, state *core.WorkflowState
 	}
 
 	// Set as active workflow
-	_, err = tx.ExecContext(ctx, `
-		INSERT INTO active_workflow (id, workflow_id, updated_at)
-		VALUES (1, ?, ?)
-		ON CONFLICT(id) DO UPDATE SET
-			workflow_id = excluded.workflow_id,
-			updated_at = excluded.updated_at
-	`, state.WorkflowID, time.Now())
-	if err != nil {
-		return fmt.Errorf("setting active workflow: %w", err)
+	if opts.setActiveWorkflow {
+		_, err = tx.ExecContext(ctx, `
+			INSERT INTO active_workflow (id, workflow_id, updated_at)
+			VALUES (1, ?, ?)
+			ON CONFLICT(id) DO UPDATE SET
+				workflow_id = excluded.workflow_id,
+				updated_at = excluded.updated_at
+		`, state.WorkflowID, time.Now())
+		if err != nil {
+			return fmt.Errorf("setting active workflow: %w", err)
+		}
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -1562,8 +1584,8 @@ func (m *SQLiteStateManager) DeactivateWorkflow(ctx context.Context) error {
 // ArchiveWorkflows preserves completed/failed workflows by exporting them to a JSON archive
 // and then removing them from the SQLite database (so they no longer appear in lists).
 //
-// This mirrors the JSON backend semantics: "archive" is non-destructive (data is retained),
-// while PurgeAllWorkflows() is the destructive operation.
+// "archive" is non-destructive (data is retained on disk), while PurgeAllWorkflows()
+// is the destructive operation.
 //
 // Returns the number of workflows archived.
 func (m *SQLiteStateManager) ArchiveWorkflows(ctx context.Context) (int, error) {
@@ -1603,7 +1625,7 @@ func (m *SQLiteStateManager) ArchiveWorkflows(ctx context.Context) (int, error) 
 		return 0, nil
 	}
 
-	// Ensure archive directory exists (next to the DB, same as JSON backend).
+	// Ensure archive directory exists (next to the DB).
 	archiveDir := filepath.Join(filepath.Dir(m.dbPath), "archive")
 	if err := os.MkdirAll(archiveDir, 0o750); err != nil {
 		return 0, fmt.Errorf("creating archive directory: %w", err)

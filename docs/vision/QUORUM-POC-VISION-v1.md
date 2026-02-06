@@ -293,7 +293,7 @@ The POC includes controlled experiments:
 This project is motivated by the observation that independently generated
 specifications from multiple models converge on a stable set of architectural
 decisions. The convergence is most apparent on core constraints such as
-hexagonal architecture, JSON state persistence for v1, CLI-first delivery, and
+hexagonal architecture, SQLite state persistence for v1, CLI-first delivery, and
 semantic arbiter-based consensus evaluation. While long-form comparative reports are not
 maintained in this repository, the key takeaway is preserved here: cross-model
 agreement on foundational decisions reduces subjective bias and improves

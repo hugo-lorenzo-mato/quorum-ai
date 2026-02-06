@@ -88,21 +88,12 @@ func InitPhaseRunner(ctx context.Context, phase core.Phase, maxRetries int, dryR
 	// Create state manager from unified config
 	statePath := cfg.State.Path
 	if statePath == "" {
-		statePath = ".quorum/state/state.json"
-	}
-
-	// Migrate state from legacy paths if needed (only for JSON backend)
-	backend := cfg.State.EffectiveBackend()
-	if backend == "json" {
-		if migrated, err := state.MigrateState(statePath, logger); err != nil {
-			logger.Warn("state migration failed", "error", err)
-		} else if migrated {
-			logger.Info("migrated state from legacy path to", "path", statePath)
-		}
+		statePath = ".quorum/state/state.db"
 	}
 
 	// Parse lock TTL from config
 	stateOpts := state.StateManagerOptions{}
+	stateOpts.BackupPath = cfg.State.BackupPath
 	if cfg.State.LockTTL != "" {
 		if lockTTL, err := time.ParseDuration(cfg.State.LockTTL); err == nil {
 			stateOpts.LockTTL = lockTTL
@@ -111,7 +102,7 @@ func InitPhaseRunner(ctx context.Context, phase core.Phase, maxRetries int, dryR
 		}
 	}
 
-	stateManager, err := state.NewStateManagerWithOptions(backend, statePath, stateOpts)
+	stateManager, err := state.NewStateManagerWithOptions(statePath, stateOpts)
 	if err != nil {
 		return nil, fmt.Errorf("creating state manager: %w", err)
 	}

@@ -32,7 +32,6 @@ type Task struct {
 	Outputs      []Artifact
 	TokensIn     int
 	TokensOut    int
-	CostUSD      float64
 	Retries      int
 	MaxRetries   int
 	StartedAt    *time.Time

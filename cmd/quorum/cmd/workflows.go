@@ -58,7 +58,7 @@ func runWorkflows(_ *cobra.Command, _ []string) error {
 	}
 
 	// Create state manager using factory
-	stateManager, err := state.NewStateManager(cfg.State.EffectiveBackend(), cfg.State.Path)
+	stateManager, err := state.NewStateManager(cfg.State.Path)
 	if err != nil {
 		return fmt.Errorf("creating state manager: %w", err)
 	}
@@ -218,7 +218,7 @@ func runDelete(_ *cobra.Command, args []string) error {
 	}
 
 	// Create state manager
-	stateManager, err := state.NewStateManager(cfg.State.EffectiveBackend(), cfg.State.Path)
+	stateManager, err := state.NewStateManager(cfg.State.Path)
 	if err != nil {
 		return fmt.Errorf("creating state manager: %w", err)
 	}

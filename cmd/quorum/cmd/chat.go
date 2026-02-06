@@ -311,9 +311,21 @@ func createWorkflowRunner(
 	// Create state manager
 	statePath := cfg.State.Path
 	if statePath == "" {
-		statePath = ".quorum/state/state.json"
+		statePath = ".quorum/state/state.db"
 	}
-	stateManager, err := state.NewStateManager(cfg.State.EffectiveBackend(), statePath)
+
+	stateOpts := state.StateManagerOptions{
+		BackupPath: cfg.State.BackupPath,
+	}
+	if cfg.State.LockTTL != "" {
+		if lockTTL, err := time.ParseDuration(cfg.State.LockTTL); err == nil {
+			stateOpts.LockTTL = lockTTL
+		} else {
+			logger.Warn("invalid state.lock_ttl, using default", "value", cfg.State.LockTTL, "error", err)
+		}
+	}
+
+	stateManager, err := state.NewStateManagerWithOptions(statePath, stateOpts)
 	if err != nil {
 		return nil, fmt.Errorf("creating state manager: %w", err)
 	}
@@ -639,9 +651,21 @@ func createWorkflowRunnerWithTrace(
 	// Create state manager
 	statePath := cfg.State.Path
 	if statePath == "" {
-		statePath = ".quorum/state/state.json"
+		statePath = ".quorum/state/state.db"
 	}
-	stateManager, err := state.NewStateManager(cfg.State.EffectiveBackend(), statePath)
+
+	stateOpts := state.StateManagerOptions{
+		BackupPath: cfg.State.BackupPath,
+	}
+	if cfg.State.LockTTL != "" {
+		if lockTTL, err := time.ParseDuration(cfg.State.LockTTL); err == nil {
+			stateOpts.LockTTL = lockTTL
+		} else {
+			logger.Warn("invalid state.lock_ttl, using default", "value", cfg.State.LockTTL, "error", err)
+		}
+	}
+
+	stateManager, err := state.NewStateManagerWithOptions(statePath, stateOpts)
 	if err != nil {
 		return nil, fmt.Errorf("creating state manager: %w", err)
 	}

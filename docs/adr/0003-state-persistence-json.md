@@ -4,8 +4,8 @@
 
 Superseded by [ADR-0009](0009-sqlite-state-backend.md)
 
-> **Note:** JSON remains available as an alternative backend, but SQLite is now
-> the default. This ADR documents the original POC decision.
+> **Note:** Runtime persistence is now SQLite-only. This ADR documents the
+> original POC decision to persist state in JSON.
 
 ## Context
 

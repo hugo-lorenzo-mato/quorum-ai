@@ -4,83 +4,35 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
 func TestNewStateManager(t *testing.T) {
-	tests := []struct {
-		name        string
-		backend     string
-		wantType    string
-		wantErr     bool
-		errContains string
-	}{
-		{
-			name:     "empty backend defaults to json",
-			backend:  "",
-			wantType: "*state.JSONStateManager",
-		},
-		{
-			name:     "json backend",
-			backend:  "json",
-			wantType: "*state.JSONStateManager",
-		},
-		{
-			name:     "JSON backend (uppercase)",
-			backend:  "JSON",
-			wantType: "*state.JSONStateManager",
-		},
-		{
-			name:     "sqlite backend",
-			backend:  "sqlite",
-			wantType: "*state.SQLiteStateManager",
-		},
-		{
-			name:     "SQLite backend (mixed case)",
-			backend:  "SQLite",
-			wantType: "*state.SQLiteStateManager",
-		},
-		{
-			name:        "unsupported backend",
-			backend:     "unknown",
-			wantErr:     true,
-			errContains: "unsupported state backend",
-		},
-	}
+	t.Run("creates sqlite manager and normalizes .db extension", func(t *testing.T) {
+		tmpDir, err := os.MkdirTemp("", "factory_test")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer os.RemoveAll(tmpDir)
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tmpDir, err := os.MkdirTemp("", "factory_test")
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer os.RemoveAll(tmpDir)
+		// Intentionally pass a non-.db path to verify normalization.
+		inPath := filepath.Join(tmpDir, "state.legacy")
+		wantDBPath := filepath.Join(tmpDir, "state.db")
 
-			path := filepath.Join(tmpDir, "state.json")
+		sm, err := NewStateManager(inPath)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		defer CloseStateManager(sm)
 
-			sm, err := NewStateManager(tt.backend, path)
-			if tt.wantErr {
-				if err == nil {
-					t.Error("expected error, got nil")
-				} else if tt.errContains != "" && !containsStr(err.Error(), tt.errContains) {
-					t.Errorf("error %q should contain %q", err.Error(), tt.errContains)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
+		if gotType := typeName(sm); gotType != "*state.SQLiteStateManager" {
+			t.Fatalf("got type %s, want %s", gotType, "*state.SQLiteStateManager")
+		}
 
-			// Clean up
-			CloseStateManager(sm)
-
-			gotType := typeName(sm)
-			if gotType != tt.wantType {
-				t.Errorf("got type %s, want %s", gotType, tt.wantType)
-			}
-		})
-	}
+		if _, err := os.Stat(wantDBPath); err != nil {
+			t.Fatalf("expected sqlite db at %s: %v", wantDBPath, err)
+		}
+	})
 }
 
 func TestCloseStateManager(t *testing.T) {
@@ -92,22 +44,10 @@ func TestCloseStateManager(t *testing.T) {
 
 	t.Run("closes sqlite manager", func(t *testing.T) {
 		path := filepath.Join(tmpDir, "close_sqlite.db")
-		sm, err := NewStateManager("sqlite", path)
+		sm, err := NewStateManager(path)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := CloseStateManager(sm); err != nil {
-			t.Errorf("CloseStateManager failed: %v", err)
-		}
-	})
-
-	t.Run("noop for json manager", func(t *testing.T) {
-		path := filepath.Join(tmpDir, "close_json.json")
-		sm, err := NewStateManager("json", path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		// Should not error
 		if err := CloseStateManager(sm); err != nil {
 			t.Errorf("CloseStateManager failed: %v", err)
 		}
@@ -120,34 +60,6 @@ func TestCloseStateManager(t *testing.T) {
 	})
 }
 
-func TestNormalizeBackend(t *testing.T) {
-	tests := []struct {
-		input    string
-		expected string
-	}{
-		{"", "json"},
-		{"json", "json"},
-		{"JSON", "json"},
-		{"  json  ", "json"},
-		{"sqlite", "sqlite"},
-		{"SQLite", "sqlite"},
-		{"  SQLITE  ", "sqlite"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.input, func(t *testing.T) {
-			got := normalizeBackend(tt.input)
-			if got != tt.expected {
-				t.Errorf("normalizeBackend(%q) = %q, want %q", tt.input, got, tt.expected)
-			}
-		})
-	}
-}
-
 func typeName(v interface{}) string {
 	return fmt.Sprintf("%T", v)
-}
-
-func containsStr(s, substr string) bool {
-	return strings.Contains(s, substr)
 }

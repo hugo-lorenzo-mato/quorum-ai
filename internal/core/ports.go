@@ -87,7 +87,6 @@ type ExecuteResult struct {
 	Parsed       map[string]interface{} // For JSON output
 	TokensIn     int
 	TokensOut    int
-	CostUSD      float64
 	Duration     time.Duration
 	Model        string
 	FinishReason string
@@ -313,8 +312,8 @@ type WorkflowRun struct {
 	UpdatedAt    time.Time             `json:"updated_at"`
 
 	// Infrastructure
-	Checksum   string     `json:"checksum,omitempty"`
-	ReportPath string     `json:"report_path,omitempty"` // Persisted report directory for resume
+	Checksum    string     `json:"checksum,omitempty"`
+	ReportPath  string     `json:"report_path,omitempty"`  // Persisted report directory for resume
 	HeartbeatAt *time.Time `json:"heartbeat_at,omitempty"` // Last heartbeat timestamp
 	ResumeCount int        `json:"resume_count,omitempty"` // Number of auto-resumes performed
 	MaxResumes  int        `json:"max_resumes,omitempty"`  // Maximum allowed auto-resumes (default: 3)
@@ -370,7 +369,6 @@ type TaskState struct {
 	Dependencies []TaskID   `json:"dependencies"`
 	TokensIn     int        `json:"tokens_in"`
 	TokensOut    int        `json:"tokens_out"`
-	CostUSD      float64    `json:"cost_usd"`
 	Retries      int        `json:"retries"`
 	Error        string     `json:"error,omitempty"`
 	WorktreePath string     `json:"worktree_path,omitempty"`
@@ -400,7 +398,6 @@ const MaxInlineOutputSize = 10000 // 10KB
 
 // StateMetrics holds aggregated workflow metrics.
 type StateMetrics struct {
-	TotalCostUSD   float64       `json:"total_cost_usd"`
 	TotalTokensIn  int           `json:"total_tokens_in"`
 	TotalTokensOut int           `json:"total_tokens_out"`
 	ConsensusScore float64       `json:"consensus_score"`
@@ -435,14 +432,13 @@ func NewWorkflowState(w *Workflow) *WorkflowState {
 			Status:       w.Status,
 			CurrentPhase: w.CurrentPhase,
 			Tasks:        make(map[TaskID]*TaskState),
-			TaskOrder:    w.TaskOrder,
-			Metrics: &StateMetrics{
-				TotalCostUSD:   w.TotalCostUSD,
-				TotalTokensIn:  w.TotalTokensIn,
-				TotalTokensOut: w.TotalTokensOut,
-				ConsensusScore: w.ConsensusScore,
-			},
-			Checkpoints: make([]Checkpoint, 0),
+				TaskOrder:    w.TaskOrder,
+				Metrics: &StateMetrics{
+					TotalTokensIn:  w.TotalTokensIn,
+					TotalTokensOut: w.TotalTokensOut,
+					ConsensusScore: w.ConsensusScore,
+				},
+				Checkpoints: make([]Checkpoint, 0),
 			UpdatedAt:   time.Now(),
 		},
 	}
@@ -455,15 +451,14 @@ func NewWorkflowState(w *Workflow) *WorkflowState {
 			Status:       task.Status,
 			CLI:          task.CLI,
 			Model:        task.Model,
-			Dependencies: task.Dependencies,
-			TokensIn:     task.TokensIn,
-			TokensOut:    task.TokensOut,
-			CostUSD:      task.CostUSD,
-			Retries:      task.Retries,
-			Error:        task.Error,
-			StartedAt:    task.StartedAt,
-			CompletedAt:  task.CompletedAt,
-		}
+				Dependencies: task.Dependencies,
+				TokensIn:     task.TokensIn,
+				TokensOut:    task.TokensOut,
+				Retries:      task.Retries,
+				Error:        task.Error,
+				StartedAt:    task.StartedAt,
+				CompletedAt:  task.CompletedAt,
+			}
 	}
 
 	return state
@@ -748,7 +743,7 @@ func (cs *CheckStatus) IsPending() bool {
 // =============================================================================
 
 // ChatStore defines the contract for chat session persistence.
-// Implementations can use JSON files or SQLite for storage.
+// Implementations use SQLite for storage.
 type ChatStore interface {
 	// SaveSession persists a chat session.
 	SaveSession(ctx context.Context, session *ChatSessionState) error
@@ -791,7 +786,6 @@ type ChatMessageState struct {
 	Timestamp time.Time `json:"timestamp"`
 	TokensIn  int       `json:"tokens_in,omitempty"`
 	TokensOut int       `json:"tokens_out,omitempty"`
-	CostUSD   float64   `json:"cost_usd,omitempty"`
 }
 
 // =============================================================================

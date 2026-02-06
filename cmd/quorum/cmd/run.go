@@ -195,20 +195,21 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 	// Create state manager from unified config
 	statePath := cfg.State.Path
 	if statePath == "" {
-		statePath = ".quorum/state/state.json"
+		statePath = ".quorum/state/state.db"
 	}
 
-	// Migrate state from legacy paths if needed (only for JSON backend)
-	backend := cfg.State.EffectiveBackend()
-	if backend == "json" {
-		if migrated, err := state.MigrateState(statePath, logger); err != nil {
-			logger.Warn("state migration failed", "error", err)
-		} else if migrated {
-			logger.Info("migrated state from legacy path to", "path", statePath)
+	stateOpts := state.StateManagerOptions{
+		BackupPath: cfg.State.BackupPath,
+	}
+	if cfg.State.LockTTL != "" {
+		if lockTTL, err := time.ParseDuration(cfg.State.LockTTL); err == nil {
+			stateOpts.LockTTL = lockTTL
+		} else {
+			logger.Warn("invalid state.lock_ttl, using default", "value", cfg.State.LockTTL, "error", err)
 		}
 	}
 
-	stateManager, err := state.NewStateManager(backend, statePath)
+	stateManager, err := state.NewStateManagerWithOptions(statePath, stateOpts)
 	if err != nil {
 		return fmt.Errorf("creating state manager: %w", err)
 	}

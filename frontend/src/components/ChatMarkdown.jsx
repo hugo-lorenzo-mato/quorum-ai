@@ -69,11 +69,14 @@ export default function ChatMarkdown({ content, isUser }) {
             {children}
           </a>
         ),
-        code: ({ children, className, inline, ...props }) => {
+        code: ({ children, className, ...props }) => {
           const match = /language-([a-zA-Z0-9_-]+)/.exec(className || '');
           const codeContent = String(children || '').replace(/\n$/, '');
+          // react-markdown v9 removed the inline prop; detect blocks by
+          // language class or multiline content
+          const isBlock = !!match || codeContent.includes('\n');
 
-          if (!inline && match) {
+          if (isBlock && match) {
             return (
               <div className="relative group my-2 rounded-md overflow-hidden border border-border/50">
                 <CodeCopyButton text={codeContent} />
@@ -91,7 +94,7 @@ export default function ChatMarkdown({ content, isUser }) {
             );
           }
 
-          if (!inline) {
+          if (isBlock) {
              return (
               <div className="relative group my-2 rounded-md overflow-hidden border border-border/50">
                 <CodeCopyButton text={codeContent} />

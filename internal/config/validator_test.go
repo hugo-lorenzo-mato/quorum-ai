@@ -44,8 +44,8 @@ func validConfig() *Config {
 			},
 		},
 		State: StateConfig{
-			Path:       ".quorum/state/state.json",
-			BackupPath: ".quorum/state/state.json.bak",
+			Path:       ".quorum/state/state.db",
+			BackupPath: ".quorum/state/state.db.bak",
 			LockTTL:    "1h",
 		},
 		Git: GitConfig{
@@ -466,70 +466,6 @@ func TestValidateConfig_Convenience(t *testing.T) {
 	err := ValidateConfig(cfg)
 	if err != nil {
 		t.Errorf("ValidateConfig() error = %v, want nil", err)
-	}
-}
-
-func TestValidator_StateBackendValid(t *testing.T) {
-	tests := []struct {
-		name    string
-		backend string
-		wantErr bool
-	}{
-		{"empty string is valid", "", false},
-		{"json is valid", "json", false},
-		{"JSON uppercase is valid", "JSON", false},
-		{"sqlite is valid", "sqlite", false},
-		{"SQLITE uppercase is valid", "SQLITE", false},
-		{"json with spaces is valid", "  json  ", false},
-		{"invalid value", "mysql", true},
-		{"invalid value postgres", "postgres", true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cfg := validConfig()
-			cfg.State.Backend = tt.backend
-
-			v := NewValidator()
-			err := v.Validate(cfg)
-
-			if tt.wantErr {
-				if err == nil {
-					t.Error("Validate() error = nil, want error for invalid backend")
-				} else if !strings.Contains(err.Error(), "state.backend") {
-					t.Errorf("error should mention state.backend, got: %v", err)
-				}
-			} else {
-				// May have other errors, but not state.backend
-				if err != nil && strings.Contains(err.Error(), "state.backend") {
-					t.Errorf("Validate() unexpected state.backend error: %v", err)
-				}
-			}
-		})
-	}
-}
-
-func TestStateConfig_EffectiveBackend(t *testing.T) {
-	tests := []struct {
-		name    string
-		backend string
-		want    string
-	}{
-		{"empty returns sqlite", "", "sqlite"},
-		{"json returns json", "json", "json"},
-		{"JSON uppercase returns json", "JSON", "json"},
-		{"sqlite returns sqlite", "sqlite", "sqlite"},
-		{"SQLITE uppercase returns sqlite", "SQLITE", "sqlite"},
-		{"with spaces returns trimmed", "  json  ", "json"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cfg := &StateConfig{Backend: tt.backend}
-			if got := cfg.EffectiveBackend(); got != tt.want {
-				t.Errorf("EffectiveBackend() = %v, want %v", got, tt.want)
-			}
-		})
 	}
 }
 

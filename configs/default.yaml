@@ -215,9 +215,7 @@ agents:
 
 # State persistence configuration
 state:
-  # Storage backend: "sqlite" (default, database) or "json" (file-based)
-  backend: sqlite
-  # Path to state database
+  # Path to state database (SQLite)
   path: .quorum/state/state.db
   # Path to backup file
   backup_path: .quorum/state/state.db.bak

@@ -50,7 +50,7 @@ Check the lock file contents and verify if the holding process is still alive:
 
 ```bash
 # View lock holder information
-cat .quorum/state/state.json.lock
+cat .quorum/state/state.db.lock
 
 # Example output:
 # {"pid":1320641,"hostname":"myhost","acquired_at":"2026-01-27T04:36:36.992Z"}
@@ -74,7 +74,7 @@ kill <PID>
 If the process is dead but the lock remains (stale lock):
 ```bash
 # Remove the stale lock file
-rm .quorum/state/state.json.lock
+rm .quorum/state/state.db.lock
 ```
 
 **Prevention:**
@@ -178,7 +178,8 @@ This can happen when:
 curl -s http://localhost:8080/api/v1/workflows | jq '.[] | select(.status == "running")'
 
 # Or check state file directly
-cat .quorum/state/state.json | jq '.status'
+# Or check the state DB directly (requires sqlite3)
+sqlite3 .quorum/state/state.db "select id,status,current_phase,updated_at from workflows where status = 'running';"
 ```
 
 **Solution:**
@@ -192,20 +193,14 @@ If manual intervention is needed:
    pkill -f "quorum"
    ```
 
-2. Edit the state file to fix the status:
+2. Clear the active workflow (keeps history, just deactivates):
    ```bash
-   # Backup first
-   cp .quorum/state/state.json .quorum/state/state.json.backup
-
-   # Edit status (using jq)
-   jq '.status = "failed" | .error = "Workflow interrupted (manual recovery)"' \
-     .quorum/state/state.json > /tmp/state.json && \
-     mv /tmp/state.json .quorum/state/state.json
+   quorum new
    ```
 
-3. Remove any stale locks:
+3. Remove any stale locks (if present):
    ```bash
-   rm -f .quorum/state/state.json.lock
+   rm -f .quorum/state/state.db.lock
    ```
 
 4. Restart quorum:

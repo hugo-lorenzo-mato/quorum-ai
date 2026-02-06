@@ -49,10 +49,9 @@ func runNew(cmd *cobra.Command, _ []string) error {
 
 	statePath := viper.GetString("state.path")
 	if statePath == "" {
-		statePath = ".quorum/state/state.json"
+		statePath = ".quorum/state/state.db"
 	}
-	backend := viper.GetString("state.backend")
-	stateManager, err := state.NewStateManager(backend, statePath)
+	stateManager, err := state.NewStateManager(statePath)
 	if err != nil {
 		return fmt.Errorf("creating state manager: %w", err)
 	}

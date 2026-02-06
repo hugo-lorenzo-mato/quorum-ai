@@ -204,14 +204,6 @@ func (b *BaseAdapter) ExecuteCommand(ctx context.Context, args []string, stdin, 
 		cmd.Dir = b.config.WorkDir
 	}
 
-	// Apply extra environment variables if set
-	if len(b.ExtraEnv) > 0 {
-		cmd.Env = os.Environ()
-		for k, v := range b.ExtraEnv {
-			cmd.Env = append(cmd.Env, k+"="+v)
-		}
-	}
-
 	// Set up stdin
 	if stdin != "" {
 		cmd.Stdin = strings.NewReader(stdin)
@@ -240,6 +232,11 @@ func (b *BaseAdapter) ExecuteCommand(ctx context.Context, args []string, stdin, 
 	// Set environment and identification
 	cmd.Env = os.Environ()
 	cmd.Env = append(cmd.Env, "QUORUM_MANAGED=true", fmt.Sprintf("QUORUM_AGENT=%s", b.config.Name))
+
+	// Apply extra environment variables (e.g. CLAUDE_CODE_EFFORT_LEVEL)
+	for k, v := range b.ExtraEnv {
+		cmd.Env = append(cmd.Env, k+"="+v)
+	}
 
 	// Log command execution start with truncated stdin for debugging
 	stdinPreview := stdin
@@ -525,14 +522,6 @@ func (b *BaseAdapter) executeWithJSONStreaming(
 		cmd.Dir = b.config.WorkDir
 	}
 
-	// Apply extra environment variables if set
-	if len(b.ExtraEnv) > 0 {
-		cmd.Env = os.Environ()
-		for k, v := range b.ExtraEnv {
-			cmd.Env = append(cmd.Env, k+"="+v)
-		}
-	}
-
 	if stdin != "" {
 		cmd.Stdin = strings.NewReader(stdin)
 	}
@@ -552,6 +541,11 @@ func (b *BaseAdapter) executeWithJSONStreaming(
 
 	cmd.Env = os.Environ()
 	cmd.Env = append(cmd.Env, "QUORUM_MANAGED=true", fmt.Sprintf("QUORUM_AGENT=%s", adapterName))
+
+	// Apply extra environment variables (e.g. CLAUDE_CODE_EFFORT_LEVEL)
+	for k, v := range b.ExtraEnv {
+		cmd.Env = append(cmd.Env, k+"="+v)
+	}
 
 	b.logger.Debug("executing command with JSON streaming",
 		"path", cmdPath,

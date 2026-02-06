@@ -253,25 +253,15 @@ func buildStateSection() SchemaSection {
 	return SchemaSection{
 		ID:          "state",
 		Title:       "State Persistence",
-		Description: "Configure workflow state storage",
+		Description: "Configure workflow state storage (SQLite-only)",
 		Tab:         "workflow",
 		Fields: []SchemaField{
-			{
-				Path:        "state.backend",
-				Type:        "string",
-				Title:       "Backend",
-				Description: "State storage backend",
-				Tooltip:     "'sqlite': recommended for large workflows and concurrent access. 'json': human-readable, good for debugging.",
-				Default:     "sqlite",
-				ValidValues: []string{"sqlite", "json"},
-				Category:    "advanced",
-			},
 			{
 				Path:        "state.path",
 				Type:        "string",
 				Title:       "State Path",
 				Description: "Path to state database",
-				Tooltip:     "Extension adjusted automatically based on backend.",
+				Tooltip:     "SQLite database file path.",
 				Default:     ".quorum/state/state.db",
 				Required:    true,
 				Category:    "advanced",

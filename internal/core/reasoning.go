@@ -8,7 +8,7 @@ var codexEffortRank = map[string]int{
 	"low":     1,
 	"medium":  2,
 	"high":    3,
-	"xhigh":  4,
+	"xhigh":   4,
 }
 
 // SupportedReasoningEffortsForModel returns the known reasoning effort values

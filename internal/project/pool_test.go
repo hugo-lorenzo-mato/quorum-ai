@@ -158,7 +158,6 @@ func TestStatePoolWithOptions(t *testing.T) {
 		WithMaxActiveContexts(10),
 		WithMinActiveContexts(3),
 		WithEvictionGracePeriod(10*time.Minute),
-		WithPoolStateBackend("json"),
 		WithPoolEventBufferSize(50),
 	)
 	defer pool.Close()

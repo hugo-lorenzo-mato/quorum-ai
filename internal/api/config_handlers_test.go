@@ -156,9 +156,6 @@ func TestHandleGetEnums(t *testing.T) {
 	if !containsString(enums.LogLevels, "debug") || !containsString(enums.LogLevels, "info") {
 		t.Error("expected log levels to include debug and info")
 	}
-	if !containsString(enums.StateBackends, "sqlite") {
-		t.Error("expected state backends to include sqlite")
-	}
 	if !containsString(enums.Agents, "copilot") {
 		t.Error("expected agents to include copilot")
 	}

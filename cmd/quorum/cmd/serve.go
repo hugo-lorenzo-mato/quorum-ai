@@ -101,35 +101,44 @@ func runServe(_ *cobra.Command, _ []string) error {
 	if quorumCfg != nil {
 		statePath := quorumCfg.State.Path
 		if statePath == "" {
-			statePath = ".quorum/state/state.json"
+			statePath = ".quorum/state/state.db"
 		}
-		// Path is already resolved to absolute by config loader
-		backend := quorumCfg.State.EffectiveBackend()
-		sm, err := state.NewStateManager(backend, statePath)
+
+		stateOpts := state.StateManagerOptions{
+			BackupPath: quorumCfg.State.BackupPath,
+		}
+		if quorumCfg.State.LockTTL != "" {
+			if lockTTL, err := time.ParseDuration(quorumCfg.State.LockTTL); err == nil {
+				stateOpts.LockTTL = lockTTL
+			} else {
+				logger.Warn("invalid state.lock_ttl, using default", slog.String("value", quorumCfg.State.LockTTL), slog.String("error", err.Error()))
+			}
+		}
+
+		sm, err := state.NewStateManagerWithOptions(statePath, stateOpts)
 		if err != nil {
 			logger.Warn("failed to create state manager", slog.String("error", err.Error()))
 		} else {
 			stateManager = sm
-			logger.Info("state manager initialized", slog.String("backend", backend), slog.String("path", statePath))
+			logger.Info("state manager initialized", slog.String("backend", "sqlite"), slog.String("path", statePath))
 		}
 	}
 
-	// Create chat store for chat session persistence (uses same backend as state)
+	// Create chat store for chat session persistence (SQLite DB next to the state DB)
 	var chatStore core.ChatStore
 	if quorumCfg != nil {
-		backend := quorumCfg.State.EffectiveBackend()
-		var chatPath string
-		if backend == "sqlite" {
-			chatPath = filepath.Join(filepath.Dir(quorumCfg.State.Path), "chat.db")
-		} else {
-			chatPath = filepath.Join(filepath.Dir(quorumCfg.State.Path), "chat")
+		statePath := quorumCfg.State.Path
+		if statePath == "" {
+			statePath = ".quorum/state/state.db"
 		}
-		cs, err := chat.NewChatStore(backend, chatPath)
+		chatPath := filepath.Join(filepath.Dir(statePath), "chat.db")
+
+		cs, err := chat.NewChatStore(chatPath)
 		if err != nil {
 			logger.Warn("failed to create chat store", slog.String("error", err.Error()))
 		} else {
 			chatStore = cs
-			logger.Info("chat store initialized", slog.String("backend", backend), slog.String("path", chatPath))
+			logger.Info("chat store initialized", slog.String("backend", "sqlite"), slog.String("path", chatPath))
 		}
 	}
 

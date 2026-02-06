@@ -33,7 +33,6 @@ type poolOptions struct {
 	maxActiveContexts   int
 	minActiveContexts   int
 	evictionGracePeriod time.Duration
-	stateBackend        string
 	eventBufferSize     int
 }
 
@@ -71,13 +70,6 @@ func WithEvictionGracePeriod(d time.Duration) PoolOption {
 		if d >= 0 {
 			o.evictionGracePeriod = d
 		}
-	}
-}
-
-// WithPoolStateBackend sets the state backend for new contexts
-func WithPoolStateBackend(backend string) PoolOption {
-	return func(o *poolOptions) {
-		o.stateBackend = backend
 	}
 }
 
@@ -123,7 +115,6 @@ func NewStatePool(registry Registry, opts ...PoolOption) *StatePool {
 		maxActiveContexts:   DefaultMaxActiveContexts,
 		minActiveContexts:   DefaultMinActiveContexts,
 		evictionGracePeriod: DefaultEvictionGracePeriod,
-		stateBackend:        "sqlite",
 		eventBufferSize:     DefaultEventBufferSize,
 	}
 
@@ -148,7 +139,7 @@ func NewStatePool(registry Registry, opts ...PoolOption) *StatePool {
 		"max_active", options.maxActiveContexts,
 		"min_active", options.minActiveContexts,
 		"eviction_grace", options.evictionGracePeriod,
-		"state_backend", options.stateBackend)
+		"state_backend", "sqlite")
 
 	return p
 }
@@ -226,7 +217,6 @@ func (p *StatePool) GetContext(ctx context.Context, projectID string) (*ProjectC
 	// Create new context
 	pc, err := NewProjectContext(projectID, project.Path,
 		WithContextLogger(p.logger),
-		WithStateBackend(p.opts.stateBackend),
 		WithEventBufferSize(p.opts.eventBufferSize),
 	)
 	if err != nil {

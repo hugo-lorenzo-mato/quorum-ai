@@ -424,7 +424,6 @@ Configures workflow state persistence.
 
 ```yaml
 state:
-  backend: sqlite
   path: .quorum/state/state.db
   backup_path: .quorum/state/state.db.bak
   lock_ttl: 1h
@@ -432,26 +431,13 @@ state:
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `backend` | string | `sqlite` | Storage: `sqlite` (database) or `json` (file) |
-| `path` | string | `.quorum/state/state.db` | State database path |
+| `path` | string | `.quorum/state/state.db` | SQLite state database path (normalized to `.db`) |
 | `backup_path` | string | `.quorum/state/state.db.bak` | Backup file path |
 | `lock_ttl` | duration | `1h` | Lock TTL before stale |
 
-**Backend comparison:**
+**Chat persistence (SQLite-only):**
 
-| Backend | Best For |
-|---------|----------|
-| `sqlite` | Large workflows, concurrent access, performance (default) |
-| `json` | Simple setups, debugging, human-readable |
-
-**Path extension handling:**
-
-Extensions are automatically adjusted when switching backends:
-
-| Configured | Backend | Actual |
-|------------|---------|--------|
-| `state.db` | `json` | `state.json` |
-| `state.json` | `sqlite` | `state.db` |
+Chat sessions are stored in a separate SQLite DB next to the state DB (default: `.quorum/state/chat.db`).
 
 ---
 

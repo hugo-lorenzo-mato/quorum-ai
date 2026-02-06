@@ -91,28 +91,10 @@ func TestNewProjectContextWithOptions(t *testing.T) {
 	defer cleanup()
 
 	ctx, err := NewProjectContext("test-id", projectDir,
-		WithStateBackend("sqlite"),
 		WithEventBufferSize(50),
 	)
 	if err != nil {
 		t.Fatalf("NewProjectContext failed: %v", err)
-	}
-	defer ctx.Close()
-
-	if ctx.StateManager == nil {
-		t.Error("expected non-nil StateManager")
-	}
-}
-
-func TestNewProjectContextJSONBackend(t *testing.T) {
-	projectDir, cleanup := setupTestProjectDir(t)
-	defer cleanup()
-
-	ctx, err := NewProjectContext("test-id", projectDir,
-		WithStateBackend("json"),
-	)
-	if err != nil {
-		t.Fatalf("NewProjectContext with json backend failed: %v", err)
 	}
 	defer ctx.Close()
 

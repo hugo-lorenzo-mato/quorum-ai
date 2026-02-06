@@ -1,7 +1,6 @@
-import { useConfigField, useConfigSelect } from '../../../hooks/useConfigField';
+import { useConfigField } from '../../../hooks/useConfigField';
 import {
   SettingSection,
-  SelectSetting,
   TextInputSetting,
   NumberInputSetting,
   DurationInputSetting,
@@ -172,28 +171,23 @@ function HeartbeatSection() {
 }
 
 function StateSection() {
-  const backend = useConfigSelect('state.backend', 'state_backends');
   const path = useConfigField('state.path');
   const lockTtl = useConfigField('state.lock_ttl');
 
   return (
     <SettingSection
       title="State Management"
-      description="Configure workflow state persistence"
+      description="Configure workflow state persistence (SQLite-only)"
     >
-      <SelectSetting
-        label="State Backend"
-        tooltip="'sqlite' for persistent SQLite database or 'json' for JSON file storage."
-        value={backend.value}
-        onChange={backend.onChange}
-        options={backend.options}
-        error={backend.error}
-        disabled={backend.disabled}
-      />
+      <div className="p-3 bg-muted/30 border border-border rounded-lg">
+        <p className="text-sm text-muted-foreground">
+          Runtime persistence uses <strong className="text-foreground">SQLite</strong>.
+        </p>
+      </div>
 
       <TextInputSetting
         label="State Path"
-        tooltip="Path for state storage. For sqlite: database file path. For json: JSON file path."
+        tooltip="SQLite database file path."
         placeholder=".quorum/state/state.db"
         value={path.value}
         onChange={path.onChange}

@@ -96,11 +96,11 @@ type ProjectRootResolver func(ctx context.Context) string
 
 // ChatHandler handles chat-related HTTP requests.
 type ChatHandler struct {
-	mu                  sync.RWMutex
-	agents              core.AgentRegistry
-	eventBus            *events.EventBus
-	sessions            map[string]*chatSessionState
-	loadedProjectRoots  map[string]bool // best-effort cache to avoid reloading persisted sessions repeatedly
+	mu                      sync.RWMutex
+	agents                  core.AgentRegistry
+	eventBus                *events.EventBus
+	sessions                map[string]*chatSessionState
+	loadedProjectRoots      map[string]bool // best-effort cache to avoid reloading persisted sessions repeatedly
 	attachmentStore         *attachments.Store
 	attachmentStoreResolver AttachmentStoreResolver // Per-request attachment store resolver
 	chatStore               core.ChatStore          // Fallback global store

@@ -44,7 +44,7 @@ var ValidCodexReasoningEfforts = map[string]bool{
 	"low":     true,
 	"medium":  true,
 	"high":    true,
-	"xhigh":  true,
+	"xhigh":   true,
 }
 
 // Claude effort levels (via CLAUDE_CODE_EFFORT_LEVEL env var)
@@ -68,8 +68,8 @@ var ValidReasoningEfforts = map[string]bool{
 	"low":     true,
 	"medium":  true,
 	"high":    true,
-	"xhigh":  true,
-	"max":    true,
+	"xhigh":   true,
+	"max":     true,
 }
 
 // IsValidReasoningEffort checks if the given reasoning effort is valid for any agent.
@@ -328,15 +328,6 @@ const (
 
 // TraceModes is the ordered list of trace modes.
 var TraceModes = []string{TraceModeOff, TraceModeSummary, TraceModeFull}
-
-// State backends
-const (
-	StateBackendSQLite = "sqlite"
-	StateBackendJSON   = "json"
-)
-
-// StateBackends is the ordered list of state backends.
-var StateBackends = []string{StateBackendSQLite, StateBackendJSON}
 
 // Worktree modes
 const (
