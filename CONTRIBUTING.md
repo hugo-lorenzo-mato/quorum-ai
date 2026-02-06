@@ -234,6 +234,10 @@ go test -v ./...
 - Update CHANGELOG.md following [Keep a Changelog](https://keepachangelog.com/) format
 - Add ADRs for significant architectural decisions in `docs/adr/`
 
+## Adding Agents, Models and Reasoning Levels
+
+If you need to add a new AI agent, a new model to an existing agent, or a new reasoning effort level, see [docs/ADDING_AGENTS.md](docs/ADDING_AGENTS.md). It lists every file you need to touch and the order to follow.
+
 ## Questions and Support
 
 - Open a [GitHub Issue](https://github.com/hugo-lorenzo-mato/quorum-ai/issues/new/choose) for bugs or features

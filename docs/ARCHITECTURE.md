@@ -461,6 +461,10 @@ quorum-ai/
 
 ---
 
+## Extending the Agent System
+
+To add a new agent, a new model, or a new reasoning effort level, follow the step-by-step guide in [ADDING_AGENTS.md](ADDING_AGENTS.md). It covers all seven layers from constants to frontend.
+
 ## Design Decisions
 
 For detailed rationale behind architectural choices, see:
