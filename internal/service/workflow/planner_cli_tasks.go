@@ -344,6 +344,7 @@ func (p *Planner) executeComprehensivePlanning(
 			Timeout: wctx.Config.PhaseTimeouts.Plan,
 			Sandbox: wctx.Config.Sandbox,
 			Phase:   core.PhasePlan,
+			WorkDir: wctx.ProjectRoot,
 		})
 		return execErr
 	})
