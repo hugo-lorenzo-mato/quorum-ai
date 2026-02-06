@@ -125,6 +125,7 @@ func (r *Refiner) Run(ctx context.Context, wctx *Context) error {
 			Timeout: 10 * time.Minute,
 			Sandbox: wctx.Config.Sandbox,
 			Phase:   core.PhaseRefine,
+			WorkDir: wctx.ProjectRoot,
 		})
 		return execErr
 	})

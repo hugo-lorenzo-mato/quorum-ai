@@ -131,6 +131,11 @@ type AgentRegistry interface {
 	// ListEnabledForPhase returns agent names that are configured and enabled for the given phase.
 	// Unlike AvailableForPhase, this does not ping agents - it only checks configuration.
 	ListEnabledForPhase(phase string) []string
+
+	// AvailableForPhaseWithConfig returns agents that pass Ping AND are enabled for the given phase,
+	// using project-specific phase configuration instead of global agent config.
+	// This is used in multi-project scenarios where each project may have different agent phases.
+	AvailableForPhaseWithConfig(ctx context.Context, phase string, projectPhases map[string][]string) []string
 }
 
 // =============================================================================

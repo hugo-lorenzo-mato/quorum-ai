@@ -309,7 +309,24 @@ func (s *Server) handleCreateWorkflow(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// Warn about inactive duplicates (completed/failed)
+		// Block creation if a workflow with identical prompt was completed recently (5 min deduplication window)
+		// This prevents accidental duplicate submissions
+		const deduplicationWindow = 5 * time.Minute
+		if len(inactiveDuplicates) > 0 {
+			for _, dup := range inactiveDuplicates {
+				if time.Since(dup.CreatedAt) < deduplicationWindow {
+					respondError(w, http.StatusConflict,
+						fmt.Sprintf("A workflow with identical prompt was created %s ago (workflow %s, status: %s). Please wait %s before creating another.",
+							time.Since(dup.CreatedAt).Round(time.Second),
+							dup.WorkflowID,
+							dup.Status,
+							(deduplicationWindow - time.Since(dup.CreatedAt)).Round(time.Second)))
+					return
+				}
+			}
+		}
+
+		// Warn about other inactive duplicates (completed/failed, older than deduplication window)
 		if len(inactiveDuplicates) > 0 {
 			duplicateWarning = fmt.Sprintf("Found %d completed/failed workflow(s) with identical prompt: ", len(inactiveDuplicates))
 			for i, dup := range inactiveDuplicates {
@@ -344,6 +361,16 @@ func (s *Server) handleCreateWorkflow(w http.ResponseWriter, r *http.Request) {
 
 	// Generate workflow ID
 	workflowID := generateWorkflowID()
+
+	// Create report directory eagerly to ensure it exists before execution
+	// This prevents issues where ReportPath is empty if execution fails early
+	projectRoot := s.getProjectRootPath(ctx)
+	reportPath := filepath.Join(".quorum", "runs", string(workflowID))
+	fullReportPath := filepath.Join(projectRoot, reportPath)
+	if err := os.MkdirAll(fullReportPath, 0o750); err != nil {
+		s.logger.Warn("failed to create report directory", "path", fullReportPath, "error", err)
+		// Continue anyway - the directory will be created during execution
+	}
 
 	// Build workflow config
 	config := &core.WorkflowConfig{
@@ -389,6 +416,7 @@ func (s *Server) handleCreateWorkflow(w http.ResponseWriter, r *http.Request) {
 		MaxResumes:     3, // Enable auto-resume with default max 3 attempts
 		KanbanColumn:   "refinement",
 		KanbanPosition: 0,
+		ReportPath:     reportPath, // Set eagerly to ensure it exists even if execution fails early
 	}
 
 	if err := stateManager.Save(ctx, state); err != nil {
@@ -899,9 +927,10 @@ func (s *Server) HandleRunWorkflow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create runner with execution context
-	// Use background context since the HTTP request will complete before workflow finishes
-	execCtx, cancel := context.WithTimeout(context.Background(), 4*time.Hour)
+	// Create runner with execution context that preserves ProjectContext values.
+	// context.WithoutCancel detaches from HTTP request cancellation while maintaining
+	// access to project-scoped resources (StateManager, EventBus, etc.)
+	execCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 4*time.Hour)
 
 	// Reload state (it was updated by StartExecution)
 	state, err = stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
@@ -972,13 +1001,17 @@ func (s *Server) executeWorkflowAsync(
 	workflowID string,
 	handle *ExecutionHandle,
 ) {
+	// Capture cleanup context at the start to preserve ProjectContext for FinishExecution.
+	// This ensures cleanup happens in the correct project's DB even if the execution times out.
+	cleanupCtx := context.WithoutCancel(ctx)
+
 	defer cancel()
 	defer notifier.FlushState() // Ensure all pending agent events are saved
 
 	// Cleanup tracking when done
 	if s.unifiedTracker != nil && handle != nil {
 		defer func() {
-			_ = s.unifiedTracker.FinishExecution(context.Background(), core.WorkflowID(workflowID))
+			_ = s.unifiedTracker.FinishExecution(cleanupCtx, core.WorkflowID(workflowID))
 		}()
 	}
 
@@ -1068,6 +1101,33 @@ func (s *Server) handleCancelWorkflow(w http.ResponseWriter, r *http.Request) {
 		ID:      workflowID,
 		Status:  "cancelling",
 		Message: "Workflow cancellation requested. The workflow will stop after the current task completes.",
+	})
+}
+
+// handleForceStopWorkflow forcibly stops a workflow, even if it doesn't have an active handle.
+// This is useful for zombie workflows that appear running in the DB but have no in-memory state.
+// POST /api/v1/workflows/{workflowID}/force-stop
+func (s *Server) handleForceStopWorkflow(w http.ResponseWriter, r *http.Request) {
+	workflowID := chi.URLParam(r, "workflowID")
+	if workflowID == "" {
+		respondError(w, http.StatusBadRequest, "workflow ID required")
+		return
+	}
+
+	if s.unifiedTracker == nil {
+		respondError(w, http.StatusServiceUnavailable, "workflow management not available")
+		return
+	}
+
+	if err := s.unifiedTracker.ForceStop(r.Context(), core.WorkflowID(workflowID)); err != nil {
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	respondJSON(w, http.StatusOK, WorkflowControlResponse{
+		ID:      workflowID,
+		Status:  "stopped",
+		Message: "Workflow has been forcibly stopped.",
 	})
 }
 
@@ -1260,8 +1320,10 @@ func (s *Server) HandleAnalyzeWorkflow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create execution context with timeout
-	execCtx, cancel := context.WithTimeout(context.Background(), 4*time.Hour)
+	// Create execution context that preserves ProjectContext values.
+	// context.WithoutCancel detaches from HTTP request cancellation while maintaining
+	// access to project-scoped resources (StateManager, EventBus, etc.)
+	execCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 4*time.Hour)
 
 	// Reload state (it was updated by StartExecution)
 	state, err = stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
@@ -1286,10 +1348,13 @@ func (s *Server) HandleAnalyzeWorkflow(w http.ResponseWriter, r *http.Request) {
 
 	// Execute analyze phase in background
 	go func() {
+		// Capture cleanup context to preserve ProjectContext for cleanup operations
+		cleanupCtx := context.WithoutCancel(execCtx)
+
 		defer cancel()
 		defer notifier.FlushState()
 		defer func() {
-			_ = s.unifiedTracker.FinishExecution(context.Background(), core.WorkflowID(workflowID))
+			_ = s.unifiedTracker.FinishExecution(cleanupCtx, core.WorkflowID(workflowID))
 		}()
 
 		handle.ConfirmStarted()
@@ -1303,7 +1368,7 @@ func (s *Server) HandleAnalyzeWorkflow(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Load final state and emit completion
-		finalState, _ := stateManager.LoadByID(context.Background(), core.WorkflowID(workflowID))
+		finalState, _ := stateManager.LoadByID(cleanupCtx, core.WorkflowID(workflowID))
 		if finalState != nil {
 			notifier.PhaseCompleted(string(core.PhaseAnalyze), time.Since(state.UpdatedAt))
 		}
@@ -1413,7 +1478,8 @@ func (s *Server) HandlePlanWorkflow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	execCtx, cancel := context.WithTimeout(context.Background(), 2*time.Hour)
+	// Create execution context that preserves ProjectContext values.
+	execCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Hour)
 
 	state, err = stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
 	if err != nil {
@@ -1435,10 +1501,13 @@ func (s *Server) HandlePlanWorkflow(w http.ResponseWriter, r *http.Request) {
 	notifier.SetStateSaver(stateManager)
 
 	go func() {
+		// Capture cleanup context to preserve ProjectContext for cleanup operations
+		cleanupCtx := context.WithoutCancel(execCtx)
+
 		defer cancel()
 		defer notifier.FlushState()
 		defer func() {
-			_ = s.unifiedTracker.FinishExecution(context.Background(), core.WorkflowID(workflowID))
+			_ = s.unifiedTracker.FinishExecution(cleanupCtx, core.WorkflowID(workflowID))
 		}()
 
 		handle.ConfirmStarted()
@@ -1560,7 +1629,8 @@ func (s *Server) HandleReplanWorkflow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	execCtx, cancel := context.WithTimeout(context.Background(), 2*time.Hour)
+	// Create execution context that preserves ProjectContext values.
+	execCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Hour)
 
 	state, err = stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
 	if err != nil {
@@ -1584,10 +1654,13 @@ func (s *Server) HandleReplanWorkflow(w http.ResponseWriter, r *http.Request) {
 	additionalContext := req.Context
 
 	go func() {
+		// Capture cleanup context to preserve ProjectContext for cleanup operations
+		cleanupCtx := context.WithoutCancel(execCtx)
+
 		defer cancel()
 		defer notifier.FlushState()
 		defer func() {
-			_ = s.unifiedTracker.FinishExecution(context.Background(), core.WorkflowID(workflowID))
+			_ = s.unifiedTracker.FinishExecution(cleanupCtx, core.WorkflowID(workflowID))
 		}()
 
 		handle.ConfirmStarted()
@@ -1710,7 +1783,8 @@ func (s *Server) HandleExecuteWorkflow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	execCtx, cancel := context.WithTimeout(context.Background(), 8*time.Hour)
+	// Create execution context that preserves ProjectContext values.
+	execCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 8*time.Hour)
 
 	state, err = stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
 	if err != nil {
@@ -1732,10 +1806,13 @@ func (s *Server) HandleExecuteWorkflow(w http.ResponseWriter, r *http.Request) {
 	notifier.SetStateSaver(stateManager)
 
 	go func() {
+		// Capture cleanup context to preserve ProjectContext for cleanup operations
+		cleanupCtx := context.WithoutCancel(execCtx)
+
 		defer cancel()
 		defer notifier.FlushState()
 		defer func() {
-			_ = s.unifiedTracker.FinishExecution(context.Background(), core.WorkflowID(workflowID))
+			_ = s.unifiedTracker.FinishExecution(cleanupCtx, core.WorkflowID(workflowID))
 		}()
 
 		handle.ConfirmStarted()
@@ -1748,7 +1825,7 @@ func (s *Server) HandleExecuteWorkflow(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		finalState, _ := stateManager.LoadByID(context.Background(), core.WorkflowID(workflowID))
+		finalState, _ := stateManager.LoadByID(cleanupCtx, core.WorkflowID(workflowID))
 		if finalState != nil && finalState.Status == core.WorkflowStatusCompleted {
 			notifier.WorkflowCompleted(time.Since(state.UpdatedAt), finalState.Metrics.TotalCostUSD)
 		}

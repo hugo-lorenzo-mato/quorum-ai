@@ -483,6 +483,17 @@ func recoverZombieWorkflows(ctx context.Context, stateManager core.StateManager,
 			continue
 		}
 
+		// Clear running_workflows entry to prevent zombie re-detection
+		if clearer, ok := stateManager.(interface {
+			ClearWorkflowRunning(context.Context, core.WorkflowID) error
+		}); ok {
+			if err := clearer.ClearWorkflowRunning(ctx, summary.WorkflowID); err != nil {
+				logger.Warn("failed to clear running_workflows entry",
+					slog.String("workflow_id", string(summary.WorkflowID)),
+					slog.String("error", err.Error()))
+			}
+		}
+
 		logger.Info("recovered zombie workflow",
 			slog.String("workflow_id", string(summary.WorkflowID)),
 			slog.String("phase", string(lastPhase)),

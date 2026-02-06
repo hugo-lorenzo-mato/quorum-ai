@@ -619,6 +619,7 @@ func BuildRunnerConfigFromConfig(cfg *config.Config) *RunnerConfig {
 			UseUTC:     cfg.Report.UseUTC,
 			IncludeRaw: cfg.Report.IncludeRaw,
 		},
+		ProjectAgentPhases: cfg.ExtractAgentPhases(),
 	}
 }
 

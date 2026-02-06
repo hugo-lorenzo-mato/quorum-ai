@@ -356,6 +356,64 @@ func (t *UnifiedTracker) Resume(workflowID core.WorkflowID) error {
 	return nil
 }
 
+// ForceStop forcibly stops a workflow, even if it doesn't have an active handle.
+// This is used for zombie workflows that appear running in the DB but have no in-memory state
+// (e.g., after server restart). Unlike Cancel, ForceStop works without a ControlPlane.
+func (t *UnifiedTracker) ForceStop(ctx context.Context, workflowID core.WorkflowID) error {
+	// Try graceful cancel if handle exists
+	t.mu.RLock()
+	handle, exists := t.handles[workflowID]
+	t.mu.RUnlock()
+
+	if exists && handle != nil {
+		if cp := handle.ControlPlane; cp != nil && !cp.IsCancelled() {
+			cp.Cancel()
+			t.logger.Info("workflow cancellation requested via force-stop", "workflow_id", workflowID)
+		}
+	}
+
+	// Get state manager from context or use default
+	stateManager := GetStateManagerFromContext(ctx, t.stateManager)
+
+	// Clear running_workflows entry
+	if clearer, ok := stateManager.(interface {
+		ClearWorkflowRunning(context.Context, core.WorkflowID) error
+	}); ok {
+		if err := clearer.ClearWorkflowRunning(ctx, workflowID); err != nil {
+			t.logger.Warn("failed to clear running_workflows entry", "workflow_id", workflowID, "error", err)
+		}
+	}
+
+	// Mark workflow as failed atomically
+	if err := stateManager.ExecuteAtomically(ctx, func(atomic core.AtomicStateContext) error {
+		state, err := atomic.LoadByID(workflowID)
+		if err != nil || state == nil {
+			return err
+		}
+
+		// Only update if still running
+		if state.Status == core.WorkflowStatusRunning {
+			state.Status = core.WorkflowStatusFailed
+			state.Error = "Workflow forcibly stopped (orphaned after server restart)"
+			state.UpdatedAt = time.Now()
+			state.Checkpoints = append(state.Checkpoints, core.Checkpoint{
+				ID:        fmt.Sprintf("force-stop-%d", time.Now().UnixNano()),
+				Type:      "force_stop",
+				Phase:     state.CurrentPhase,
+				Timestamp: time.Now(),
+				Message:   "Workflow was forcibly stopped",
+			})
+			return atomic.Save(state)
+		}
+		return nil
+	}); err != nil {
+		return fmt.Errorf("failed to update workflow state: %w", err)
+	}
+
+	t.logger.Info("workflow force-stopped", "workflow_id", workflowID)
+	return nil
+}
+
 // ListRunning returns all workflows currently tracked as running.
 func (t *UnifiedTracker) ListRunning() []core.WorkflowID {
 	t.mu.RLock()

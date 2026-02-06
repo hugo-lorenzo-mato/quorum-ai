@@ -561,6 +561,12 @@ func (r *MockRegistry) ListEnabledForPhase(_ string) []string {
 	return r.List()
 }
 
+// AvailableForPhaseWithConfig returns agents that pass Ping AND are enabled for the given phase,
+// using project-specific phase configuration.
+func (r *MockRegistry) AvailableForPhaseWithConfig(_ context.Context, _ string, _ map[string][]string) []string {
+	return r.List()
+}
+
 // Ensure interfaces are implemented
 var _ core.Agent = (*MockAgent)(nil)
 var _ core.StateManager = (*MockStateManager)(nil)

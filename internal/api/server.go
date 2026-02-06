@@ -235,6 +235,7 @@ func (s *Server) setupRouter() chi.Router {
 				r.Post("/cancel", s.handleCancelWorkflow)
 				r.Post("/pause", s.handlePauseWorkflow)
 				r.Post("/resume", s.handleResumeWorkflow)
+				r.Post("/force-stop", s.handleForceStopWorkflow)
 				r.Get("/download", s.handleDownloadWorkflow)
 
 				// Phase-specific execution endpoints

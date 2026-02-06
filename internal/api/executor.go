@@ -116,8 +116,10 @@ func (e *WorkflowExecutor) execute(ctx context.Context, workflowID core.Workflow
 		return fmt.Errorf("starting execution: %w", err)
 	}
 
-	// Create execution context
-	execCtx, cancel := context.WithTimeout(context.Background(), e.executionTimeout)
+	// Create execution context that preserves ProjectContext values but detaches from HTTP request cancellation.
+	// This ensures the workflow continues running after the HTTP request completes,
+	// while maintaining access to project-scoped resources (StateManager, EventBus, etc.)
+	execCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), e.executionTimeout)
 
 	// Create runner using the ControlPlane from the handle
 	runner, notifier, err := e.runnerFactory.CreateRunner(execCtx, id, handle.ControlPlane, state.Config)
@@ -174,11 +176,15 @@ func (e *WorkflowExecutor) executeAsync(
 	workflowID string,
 	handle *ExecutionHandle,
 ) {
+	// Capture cleanup context at the start to preserve ProjectContext for FinishExecution.
+	// This ensures cleanup happens in the correct project's DB even if the execution times out.
+	cleanupCtx := context.WithoutCancel(ctx)
+
 	defer cancel()
 	defer func() {
-		// Clean up via UnifiedTracker
+		// Clean up via UnifiedTracker using the preserved project context
 		if e.unifiedTracker != nil {
-			if finishErr := e.unifiedTracker.FinishExecution(context.Background(), core.WorkflowID(workflowID)); finishErr != nil && e.logger != nil {
+			if finishErr := e.unifiedTracker.FinishExecution(cleanupCtx, core.WorkflowID(workflowID)); finishErr != nil && e.logger != nil {
 				e.logger.Error("failed to finish execution", "workflow_id", workflowID, "error", finishErr)
 			}
 		}

@@ -118,5 +118,9 @@ func (m *mockAgentRegistry) AvailableForPhase(_ context.Context, _ string) []str
 	return nil
 }
 
+func (m *mockAgentRegistry) AvailableForPhaseWithConfig(_ context.Context, _ string, _ map[string][]string) []string {
+	return nil
+}
+
 // Note: TestBuildAgentPhaseModels moved to internal/service/workflow package
 // since buildAgentPhaseModels is now private to that package.

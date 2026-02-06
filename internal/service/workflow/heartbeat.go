@@ -297,6 +297,13 @@ func (h *HeartbeatManager) HandleZombie(state *core.WorkflowState, executor inte
 				"workflow_id", state.WorkflowID,
 				"error", err)
 		}
+
+		// Clear running_workflows entry to prevent zombie re-detection
+		if clearer, ok := h.stateManager.(interface {
+			ClearWorkflowRunning(context.Context, core.WorkflowID) error
+		}); ok {
+			_ = clearer.ClearWorkflowRunning(ctx, state.WorkflowID)
+		}
 	}
 }
 

@@ -670,3 +670,37 @@ type ReportConfig struct {
 	UseUTC     bool   `mapstructure:"use_utc" yaml:"use_utc"`
 	IncludeRaw bool   `mapstructure:"include_raw" yaml:"include_raw"`
 }
+
+// ExtractAgentPhases extracts the enabled phases for each agent.
+// Returns a map of agent name -> list of enabled phases.
+// An empty list means all phases are enabled.
+func (c *Config) ExtractAgentPhases() map[string][]string {
+	phases := make(map[string][]string)
+	agents := map[string]AgentConfig{
+		"claude":   c.Agents.Claude,
+		"gemini":   c.Agents.Gemini,
+		"codex":    c.Agents.Codex,
+		"copilot":  c.Agents.Copilot,
+		"opencode": c.Agents.OpenCode,
+	}
+	for name, cfg := range agents {
+		if !cfg.Enabled {
+			continue
+		}
+		// Extract enabled phases
+		if len(cfg.Phases) == 0 {
+			// Empty phases = all enabled (represented as empty slice)
+			phases[name] = []string{}
+		} else {
+			// Build list of enabled phases
+			enabledPhases := make([]string, 0)
+			for phase, enabled := range cfg.Phases {
+				if enabled {
+					enabledPhases = append(enabledPhases, phase)
+				}
+			}
+			phases[name] = enabledPhases
+		}
+	}
+	return phases
+}

@@ -200,6 +200,7 @@ func (a *Analyzer) runSingleAgentAnalysis(ctx context.Context, wctx *Context) er
 			Sandbox:         wctx.Config.Sandbox,
 			Phase:           core.PhaseAnalyze,
 			ReasoningEffort: wctx.Config.SingleAgent.ReasoningEffort,
+			WorkDir:         wctx.ProjectRoot,
 		})
 		return execErr
 	})
@@ -567,7 +568,13 @@ func (a *Analyzer) finalizeModeratorAnalysis(ctx context.Context, wctx *Context,
 // runVnRefinement runs a V(n) refinement round with all agents.
 func (a *Analyzer) runVnRefinement(ctx context.Context, wctx *Context, round int, previousOutputs []AnalysisOutput, evalResult *ModeratorEvaluationResult, agreements []string) ([]AnalysisOutput, error) {
 	// Use AvailableForPhase to only get agents enabled for analyze phase
-	agentNames := wctx.Agents.AvailableForPhase(ctx, "analyze")
+	// If project has specific phase config, use that; otherwise fallback to global config
+	var agentNames []string
+	if len(wctx.Config.ProjectAgentPhases) > 0 {
+		agentNames = wctx.Agents.AvailableForPhaseWithConfig(ctx, "analyze", wctx.Config.ProjectAgentPhases)
+	} else {
+		agentNames = wctx.Agents.AvailableForPhase(ctx, "analyze")
+	}
 	if len(agentNames) == 0 {
 		return nil, core.ErrValidation(core.CodeNoAgents, "no agents available for analyze phase")
 	}
@@ -704,6 +711,14 @@ func (a *Analyzer) runVnRefinementWithAgent(ctx context.Context, wctx *Context, 
 		return AnalysisOutput{}, fmt.Errorf("rate limit: %w", err)
 	}
 
+	// Ensure output directory exists before execution (file enforcement)
+	if outputFilePath != "" {
+		enforcement := NewFileEnforcement(wctx.Logger)
+		if err := enforcement.EnsureDirectory(outputFilePath); err != nil {
+			wctx.Logger.Warn("failed to ensure output directory", "path", outputFilePath, "error", err)
+		}
+	}
+
 	// Build divergence info for this agent (evalResult may be nil for V2 first refinement)
 	divergences := make([]VnDivergenceInfo, 0)
 	var consensusScore float64
@@ -772,6 +787,7 @@ func (a *Analyzer) runVnRefinementWithAgent(ctx context.Context, wctx *Context, 
 			Timeout: wctx.Config.PhaseTimeouts.Analyze,
 			Sandbox: wctx.Config.Sandbox,
 			Phase:   core.PhaseAnalyze,
+			WorkDir: wctx.ProjectRoot,
 		})
 		return execErr
 	})
@@ -802,6 +818,17 @@ func (a *Analyzer) runVnRefinementWithAgent(ctx context.Context, wctx *Context, 
 		})
 	}
 
+	// Ensure output file exists (file enforcement fallback)
+	if outputFilePath != "" && result != nil && result.Output != "" {
+		enforcement := NewFileEnforcement(wctx.Logger)
+		createdByLLM, verifyErr := enforcement.VerifyOrWriteFallback(outputFilePath, result.Output)
+		if verifyErr != nil {
+			wctx.Logger.Warn("file enforcement failed", "path", outputFilePath, "error", verifyErr)
+		} else if !createdByLLM {
+			wctx.Logger.Debug("created fallback file from stdout", "path", outputFilePath)
+		}
+	}
+
 	outputName := fmt.Sprintf("v%d-%s", round, agentName)
 	output := parseAnalysisOutputWithMetrics(outputName, model, result, durationMS)
 
@@ -819,7 +846,13 @@ func (a *Analyzer) runVnRefinementWithAgent(ctx context.Context, wctx *Context, 
 // It tolerates partial failures - continues as long as at least 2 agents succeed.
 func (a *Analyzer) runV1Analysis(ctx context.Context, wctx *Context) ([]AnalysisOutput, error) {
 	// Use AvailableForPhase to only get agents enabled for analyze phase
-	agentNames := wctx.Agents.AvailableForPhase(ctx, "analyze")
+	// If project has specific phase config, use that; otherwise fallback to global config
+	var agentNames []string
+	if len(wctx.Config.ProjectAgentPhases) > 0 {
+		agentNames = wctx.Agents.AvailableForPhaseWithConfig(ctx, "analyze", wctx.Config.ProjectAgentPhases)
+	} else {
+		agentNames = wctx.Agents.AvailableForPhase(ctx, "analyze")
+	}
 	if len(agentNames) == 0 {
 		return nil, core.ErrValidation(core.CodeNoAgents, "no agents available for analyze phase")
 	}
@@ -954,6 +987,14 @@ func (a *Analyzer) runAnalysisWithAgent(ctx context.Context, wctx *Context, agen
 		return AnalysisOutput{}, fmt.Errorf("rate limit: %w", err)
 	}
 
+	// Ensure output directory exists before execution (file enforcement)
+	if outputFilePath != "" {
+		enforcement := NewFileEnforcement(wctx.Logger)
+		if err := enforcement.EnsureDirectory(outputFilePath); err != nil {
+			wctx.Logger.Warn("failed to ensure output directory", "path", outputFilePath, "error", err)
+		}
+	}
+
 	// Render prompt (use optimized prompt if available)
 	prompt, err := wctx.Prompts.RenderAnalyzeV1(AnalyzeV1Params{
 		Prompt:         GetEffectivePrompt(wctx.State),
@@ -987,6 +1028,7 @@ func (a *Analyzer) runAnalysisWithAgent(ctx context.Context, wctx *Context, agen
 			Timeout: wctx.Config.PhaseTimeouts.Analyze,
 			Sandbox: wctx.Config.Sandbox,
 			Phase:   core.PhaseAnalyze,
+			WorkDir: wctx.ProjectRoot,
 		})
 		return execErr
 	})
@@ -1017,6 +1059,18 @@ func (a *Analyzer) runAnalysisWithAgent(ctx context.Context, wctx *Context, agen
 
 	// Calculate duration
 	durationMS := time.Since(startTime).Milliseconds()
+
+	// Ensure output file exists (file enforcement fallback)
+	// If LLM didn't write to the file, write stdout as fallback
+	if outputFilePath != "" && result != nil && result.Output != "" {
+		enforcement := NewFileEnforcement(wctx.Logger)
+		createdByLLM, verifyErr := enforcement.VerifyOrWriteFallback(outputFilePath, result.Output)
+		if verifyErr != nil {
+			wctx.Logger.Warn("file enforcement failed", "path", outputFilePath, "error", verifyErr)
+		} else if !createdByLLM {
+			wctx.Logger.Debug("created fallback file from stdout", "path", outputFilePath)
+		}
+	}
 
 	// Parse output with metrics
 	// Use v1-{agent} naming convention for V1 outputs
@@ -1131,6 +1185,7 @@ func (a *Analyzer) consolidateAnalysis(ctx context.Context, wctx *Context, outpu
 			Timeout: wctx.Config.PhaseTimeouts.Analyze,
 			Sandbox: wctx.Config.Sandbox,
 			Phase:   core.PhaseAnalyze,
+			WorkDir: wctx.ProjectRoot,
 		})
 		return execErr
 	})
@@ -1921,7 +1976,22 @@ func restoreAnalysisFromCheckpoint(meta *AnalysisCheckpointMetadata) (*AnalysisO
 }
 
 // createAnalysisCheckpoint creates a checkpoint after successful analysis execution.
+// It validates that the file exists before creating the checkpoint to prevent
+// downstream failures (e.g., moderator failing with "Missing analysis files").
 func createAnalysisCheckpoint(wctx *Context, agentName, model string, round int, filePath string, output AnalysisOutput, promptHash string) error {
+	// Validate file exists before creating checkpoint
+	if filePath != "" {
+		enforcement := NewFileEnforcement(wctx.Logger)
+		if err := enforcement.ValidateBeforeCheckpoint(filePath); err != nil {
+			wctx.Logger.Warn("skipping checkpoint due to missing file",
+				"agent", agentName,
+				"round", round,
+				"file_path", filePath,
+				"error", err)
+			return err
+		}
+	}
+
 	meta := map[string]interface{}{
 		"agent_name":   agentName,
 		"model":        model,

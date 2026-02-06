@@ -91,6 +91,10 @@ func (r *mockAgentRegistry) ListEnabledForPhase(_ string) []string {
 	return r.List()
 }
 
+func (r *mockAgentRegistry) AvailableForPhaseWithConfig(_ context.Context, _ string, _ map[string][]string) []string {
+	return r.List()
+}
+
 func setupTestRouter(h *ChatHandler) *chi.Mux {
 	r := chi.NewRouter()
 	h.RegisterRoutes(r)

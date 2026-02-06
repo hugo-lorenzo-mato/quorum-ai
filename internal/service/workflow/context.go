@@ -135,6 +135,9 @@ type Config struct {
 	SingleAgent SingleAgentConfig
 	// Finalization configures post-task git operations.
 	Finalization FinalizationConfig
+	// ProjectAgentPhases holds project-specific phase configuration per agent.
+	// Used in multi-project scenarios where each project may have different agent phases.
+	ProjectAgentPhases map[string][]string
 }
 
 // ModeratorConfig configures the semantic moderator LLM for consensus evaluation.

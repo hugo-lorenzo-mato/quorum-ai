@@ -75,6 +75,10 @@ type RunnerConfig struct {
 	SingleAgent SingleAgentConfig
 	// Finalization configures post-task git operations (commit, push, PR).
 	Finalization FinalizationConfig
+	// ProjectAgentPhases maps agent name -> enabled phases for the current project.
+	// This overrides the global agent phases from the server config.
+	// Empty list means all phases are enabled.
+	ProjectAgentPhases map[string][]string
 }
 
 // SynthesizerConfig configures the analysis synthesis phase.
@@ -860,6 +864,7 @@ func (r *Runner) createContext(state *core.WorkflowState) *Context {
 			Moderator:              r.config.Moderator,
 			SingleAgent:            r.config.SingleAgent,
 			Finalization:           finalizationCfg,
+			ProjectAgentPhases:     r.config.ProjectAgentPhases,
 		},
 		ProjectRoot: r.projectRoot,
 	}

@@ -401,6 +401,10 @@ func (m *mockResilienceRegistry) ListEnabledForPhase(_ string) []string {
 	return m.agents
 }
 
+func (m *mockResilienceRegistry) AvailableForPhaseWithConfig(_ context.Context, _ string, _ map[string][]string) []string {
+	return m.agents
+}
+
 // mockResilienceAgent implements a minimal Agent for tests.
 type mockResilienceAgent struct {
 	name string

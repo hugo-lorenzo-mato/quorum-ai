@@ -1766,22 +1766,33 @@ func (m *SQLiteStateManager) deleteReportDirectory(reportPath, workflowID string
 
 // UpdateHeartbeat updates the heartbeat timestamp for a running workflow.
 // This is used for zombie detection - workflows with stale heartbeats are considered dead.
+// IMPORTANT: Updates running_workflows.heartbeat_at (which FindZombieWorkflows queries),
+// and also workflows.heartbeat_at for compatibility.
 func (m *SQLiteStateManager) UpdateHeartbeat(ctx context.Context, id core.WorkflowID) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	now := time.Now().UTC()
+
 	return m.retryWrite(ctx, "updating heartbeat", func() error {
+		// Update running_workflows (the table that FindZombieWorkflows queries)
 		result, err := m.db.ExecContext(ctx,
-			`UPDATE workflows SET heartbeat_at = ? WHERE id = ? AND status = 'running'`,
-			time.Now().UTC(), string(id))
+			`UPDATE running_workflows SET heartbeat_at = ? WHERE workflow_id = ?`,
+			now, string(id))
 		if err != nil {
 			return fmt.Errorf("updating heartbeat: %w", err)
 		}
 
 		rowsAffected, _ := result.RowsAffected()
 		if rowsAffected == 0 {
-			return fmt.Errorf("workflow not found or not running: %s", id)
+			return fmt.Errorf("workflow not in running_workflows: %s", id)
 		}
+
+		// Also update workflows.heartbeat_at for backward compatibility
+		_, _ = m.db.ExecContext(ctx,
+			`UPDATE workflows SET heartbeat_at = ? WHERE id = ?`,
+			now, string(id))
+
 		return nil
 	})
 }
