@@ -212,7 +212,7 @@ const useChatStore = create(
   },
 
   // Per-message option setters
-  setCurrentAgent: (agent) => set({ currentAgent: agent, currentModel: '' }),
+  setCurrentAgent: (agent) => set({ currentAgent: agent, currentModel: '', currentReasoningEffort: DEFAULT_REASONING }),
   setCurrentModel: (model) => set({ currentModel: model }),
   setCurrentReasoningEffort: (effort) => set({ currentReasoningEffort: effort }),
   addAttachment: (path) => {

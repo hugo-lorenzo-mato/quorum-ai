@@ -1499,12 +1499,13 @@ function NewWorkflowForm({ onSubmit, onCancel, loading }) {
     : (enabledAgents[0]?.value || singleAgentName);
 
   const modelOptions = getModelsForAgent(effectiveSingleAgentName);
-  const reasoningLevels = getReasoningLevels(effectiveSingleAgentName);
   const agentSupportsReasoning = supportsReasoning(effectiveSingleAgentName);
 
   const effectiveSingleAgentModel = modelOptions.some((m) => m.value === singleAgentModel)
     ? singleAgentModel
     : '';
+
+  const reasoningLevels = getReasoningLevels(effectiveSingleAgentName, effectiveSingleAgentModel || undefined);
   const effectiveSingleAgentReasoningEffort = agentSupportsReasoning && reasoningLevels.some((r) => r.value === singleAgentReasoningEffort)
     ? singleAgentReasoningEffort
     : '';

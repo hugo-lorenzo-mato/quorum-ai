@@ -18,10 +18,11 @@ type EnumsResponse struct {
 	Phases           []string `json:"phases"`
 	PhaseModelKeys   []string `json:"phase_model_keys"`
 	// Model configuration (centralized source of truth)
-	AgentModels            map[string][]string `json:"agent_models"`
-	AgentDefaultModels     map[string]string   `json:"agent_default_models"`
-	AgentsWithReasoning    []string            `json:"agents_with_reasoning"`
-	AgentReasoningEfforts  map[string][]string `json:"agent_reasoning_efforts"`
+	AgentModels                 map[string][]string            `json:"agent_models"`
+	AgentDefaultModels          map[string]string              `json:"agent_default_models"`
+	AgentsWithReasoning         []string                       `json:"agents_with_reasoning"`
+	AgentReasoningEfforts       map[string][]string            `json:"agent_reasoning_efforts"`
+	AgentModelReasoningEfforts  map[string]map[string][]string `json:"agent_model_reasoning_efforts"`
 	// Issue configuration enums
 	IssueProviders    []string `json:"issue_providers"`
 	TemplateLanguages []string `json:"template_languages"`
@@ -45,10 +46,10 @@ func (s *Server) handleGetEnums(w http.ResponseWriter, _ *http.Request) {
 		AgentDefaultModels:  core.AgentDefaultModels,
 		AgentsWithReasoning: core.AgentsWithReasoning,
 		AgentReasoningEfforts: map[string][]string{
-			"claude":  core.ClaudeReasoningEfforts,
-			"codex":   core.CodexReasoningEfforts,
-			"copilot": core.CodexReasoningEfforts,
+			"claude": core.ClaudeReasoningEfforts,
+			"codex":  core.CodexReasoningEfforts,
 		},
+		AgentModelReasoningEfforts: core.AgentModelReasoningEfforts,
 		IssueProviders:      core.IssueProviders,
 		TemplateLanguages:   core.IssueLanguages,
 		TemplateTones:       core.IssueTones,

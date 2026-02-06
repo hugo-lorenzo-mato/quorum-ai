@@ -130,6 +130,12 @@ func TestNormalizeClaudeEffort(t *testing.T) {
 			in:     "xhigh",
 			expect: "max",
 		},
+		{
+			name:   "opus maps codex none to low",
+			model:  "claude-opus-4-6",
+			in:     "none",
+			expect: "low",
+		},
 	}
 
 	for _, tt := range tests {
@@ -147,7 +153,7 @@ func TestSupportedReasoningEffortsForModel(t *testing.T) {
 		model  string
 		expect []string
 	}{
-		{"gpt-5.3-codex", []string{"minimal", "low", "medium", "high", "xhigh"}},
+		{"gpt-5.3-codex", []string{"none", "minimal", "low", "medium", "high", "xhigh"}},
 		{"gpt-5.2-codex", []string{"low", "medium", "high", "xhigh"}},
 		{"gpt-5.1-codex", []string{"low", "medium", "high"}},
 		{"gpt-5", []string{"minimal", "low", "medium", "high"}},
@@ -190,6 +196,84 @@ func TestSupportedEffortsForClaudeModel(t *testing.T) {
 				if got[i] != tt.expect[i] {
 					t.Fatalf("SupportedEffortsForClaudeModel(%q)[%d] = %q, want %q", tt.model, i, got[i], tt.expect[i])
 				}
+			}
+		})
+	}
+}
+
+func TestGetModelReasoningEfforts(t *testing.T) {
+	tests := []struct {
+		name   string
+		agent  string
+		model  string
+		expect []string
+	}{
+		{"claude opus", AgentClaude, "claude-opus-4-6", []string{"low", "medium", "high", "max"}},
+		{"claude opus alias", AgentClaude, "opus", []string{"low", "medium", "high", "max"}},
+		{"claude unknown model", AgentClaude, "claude-sonnet-4-5-20250929", nil},
+		{"codex gpt-5.3", AgentCodex, "gpt-5.3-codex", []string{"none", "minimal", "low", "medium", "high", "xhigh"}},
+		{"codex gpt-5.2", AgentCodex, "gpt-5.2-codex", []string{"low", "medium", "high", "xhigh"}},
+		{"codex gpt-5.1", AgentCodex, "gpt-5.1-codex", []string{"low", "medium", "high"}},
+		{"codex gpt-5", AgentCodex, "gpt-5", []string{"minimal", "low", "medium", "high"}},
+		{"codex unknown model", AgentCodex, "unknown", nil},
+		{"unknown agent", "unknown", "gpt-5.3-codex", nil},
+		{"gemini has no reasoning", AgentGemini, "gemini-2.5-pro", nil},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := GetModelReasoningEfforts(tt.agent, tt.model)
+			if len(got) != len(tt.expect) {
+				t.Fatalf("GetModelReasoningEfforts(%q, %q) = %v, want %v", tt.agent, tt.model, got, tt.expect)
+			}
+			for i := range got {
+				if got[i] != tt.expect[i] {
+					t.Fatalf("GetModelReasoningEfforts(%q, %q)[%d] = %q, want %q", tt.agent, tt.model, i, got[i], tt.expect[i])
+				}
+			}
+		})
+	}
+}
+
+func TestGetMaxReasoningEffort(t *testing.T) {
+	tests := []struct {
+		model  string
+		expect string
+	}{
+		{"gpt-5.3-codex", "xhigh"},
+		{"gpt-5.2-codex", "xhigh"},
+		{"gpt-5.1-codex-max", "xhigh"},
+		{"gpt-5.1-codex", "high"},
+		{"gpt-5", "high"},
+		{"unknown", "high"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.model, func(t *testing.T) {
+			got := GetMaxReasoningEffort(tt.model)
+			if got != tt.expect {
+				t.Fatalf("GetMaxReasoningEffort(%q) = %q, want %q", tt.model, got, tt.expect)
+			}
+		})
+	}
+}
+
+func TestGetMaxClaudeEffort(t *testing.T) {
+	tests := []struct {
+		model  string
+		expect string
+	}{
+		{"claude-opus-4-6", "max"},
+		{"opus", "max"},
+		{"claude-sonnet-4-5-20250929", ""},
+		{"unknown", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.model, func(t *testing.T) {
+			got := GetMaxClaudeEffort(tt.model)
+			if got != tt.expect {
+				t.Fatalf("GetMaxClaudeEffort(%q) = %q, want %q", tt.model, got, tt.expect)
 			}
 		})
 	}

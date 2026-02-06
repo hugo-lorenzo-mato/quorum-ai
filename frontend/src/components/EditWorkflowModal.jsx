@@ -104,7 +104,7 @@ export default function EditWorkflowModal({ isOpen, onClose, workflow, onSave, c
           ? singleAgentModel
           : '';
 
-        const reasoningLevels = getReasoningLevels(effectiveSingleAgentName);
+        const reasoningLevels = getReasoningLevels(effectiveSingleAgentName, effectiveSingleAgentModel || undefined);
         const agentSupportsReasoning = supportsReasoning(effectiveSingleAgentName);
         const effectiveSingleAgentReasoningEffort = agentSupportsReasoning && reasoningLevels.some((r) => r.value === singleAgentReasoningEffort)
           ? singleAgentReasoningEffort
@@ -381,7 +381,7 @@ export default function EditWorkflowModal({ isOpen, onClose, workflow, onSave, c
                         className="w-full px-3 py-2 border border-input rounded-lg bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background"
                       >
                         <option value="">Default</option>
-                        {getReasoningLevels(singleAgentName).map((level) => (
+                        {getReasoningLevels(singleAgentName, singleAgentModel || undefined).map((level) => (
                           <option key={level.value} value={level.value}>
                             {level.label}
                           </option>

@@ -35,11 +35,12 @@ func IsValidAgent(agent string) bool {
 }
 
 // Codex reasoning effort levels (via -c model_reasoning_effort="level")
-// Official values: minimal, low, medium, high, xhigh
+// Official values: none, minimal, low, medium, high, xhigh
 // See: https://developers.openai.com/codex/config-reference/
-var CodexReasoningEfforts = []string{"minimal", "low", "medium", "high", "xhigh"}
+var CodexReasoningEfforts = []string{"none", "minimal", "low", "medium", "high", "xhigh"}
 
 var ValidCodexReasoningEfforts = map[string]bool{
+	"none":    true,
 	"minimal": true,
 	"low":     true,
 	"medium":  true,
@@ -61,9 +62,10 @@ var ValidClaudeReasoningEfforts = map[string]bool{
 
 // AllReasoningEfforts is the union of all valid effort values across agents.
 // Used only for config validation (any agent config can use any of these).
-var AllReasoningEfforts = []string{"minimal", "low", "medium", "high", "xhigh", "max"}
+var AllReasoningEfforts = []string{"none", "minimal", "low", "medium", "high", "xhigh", "max"}
 
 var ValidReasoningEfforts = map[string]bool{
+	"none":    true,
 	"minimal": true,
 	"low":     true,
 	"medium":  true,
@@ -95,54 +97,52 @@ func SupportsReasoning(agent string) bool {
 	return false
 }
 
-// CodexModelMaxReasoning maps Codex models to their maximum supported reasoning effort.
-// Models not in this map default to "high".
-var CodexModelMaxReasoning = map[string]string{
-	// These models support xhigh (maximum)
-	"gpt-5.3-codex":     "xhigh",
-	"gpt-5.2-codex":     "xhigh",
-	"gpt-5.2":           "xhigh",
-	"gpt-5.1-codex-max": "xhigh",
-	// These models support up to high
-	"gpt-5.1-codex":      "high",
-	"gpt-5.1-codex-mini": "high",
-	"gpt-5.1":            "high",
-	"gpt-5-codex":        "high",
-	"gpt-5-codex-mini":   "high",
-	"gpt-5":              "high",
+// AgentModelReasoningEfforts is the single source of truth for which reasoning effort
+// levels each agent+model combination supports. Used by the API, frontend, and adapters.
+var AgentModelReasoningEfforts = map[string]map[string][]string{
+	AgentClaude: {
+		"claude-opus-4-6": {"low", "medium", "high", "max"},
+		"opus":            {"low", "medium", "high", "max"},
+	},
+	AgentCodex: {
+		"gpt-5.3-codex":      {"none", "minimal", "low", "medium", "high", "xhigh"},
+		"gpt-5.2-codex":      {"low", "medium", "high", "xhigh"},
+		"gpt-5.2":            {"low", "medium", "high", "xhigh"},
+		"gpt-5.1-codex-max":  {"low", "medium", "high", "xhigh"},
+		"gpt-5.1-codex":      {"low", "medium", "high"},
+		"gpt-5.1-codex-mini": {"low", "medium", "high"},
+		"gpt-5.1":            {"low", "medium", "high"},
+		"gpt-5-codex":        {"minimal", "low", "medium", "high"},
+		"gpt-5-codex-mini":   {"minimal", "low", "medium", "high"},
+		"gpt-5":              {"minimal", "low", "medium", "high"},
+	},
 }
 
-// ClaudeEffortLevels defines the Claude CLI effort levels.
-// Claude Code CLI supports 4 levels: "low", "medium", "high" (default), "max" (Opus 4.6 only).
-// Configured via CLAUDE_CODE_EFFORT_LEVEL env var.
-const (
-	ClaudeEffortLow    = "low"
-	ClaudeEffortMedium = "medium"
-	ClaudeEffortHigh   = "high"
-	ClaudeEffortMax    = "max"
-)
-
-// ClaudeModelMaxEffort maps Claude models to their maximum supported effort level.
-// Only Opus 4.6 supports effort in the CLI (4 levels: low/medium/high/max).
-var ClaudeModelMaxEffort = map[string]string{
-	"claude-opus-4-6": ClaudeEffortMax,
-	"opus":            ClaudeEffortMax, // alias
+// GetModelReasoningEfforts returns the supported reasoning effort levels for an agent+model pair.
+// Returns nil if the agent or model is not found in the map.
+func GetModelReasoningEfforts(agent, model string) []string {
+	if models, ok := AgentModelReasoningEfforts[agent]; ok {
+		if efforts, ok := models[model]; ok {
+			return efforts
+		}
+	}
+	return nil
 }
 
 // GetMaxReasoningEffort returns the maximum reasoning effort supported by a Codex model.
-// Returns "high" as default if model is not found.
+// Derived from AgentModelReasoningEfforts (last element). Returns "high" if model is unknown.
 func GetMaxReasoningEffort(model string) string {
-	if maxReasoning, ok := CodexModelMaxReasoning[model]; ok {
-		return maxReasoning
+	if efforts := GetModelReasoningEfforts(AgentCodex, model); len(efforts) > 0 {
+		return efforts[len(efforts)-1]
 	}
 	return "high"
 }
 
 // GetMaxClaudeEffort returns the maximum effort level supported by a Claude model.
-// Returns empty string if the model does not support effort.
+// Derived from AgentModelReasoningEfforts (last element). Returns "" if model is unknown.
 func GetMaxClaudeEffort(model string) string {
-	if maxEffort, ok := ClaudeModelMaxEffort[model]; ok {
-		return maxEffort
+	if efforts := GetModelReasoningEfforts(AgentClaude, model); len(efforts) > 0 {
+		return efforts[len(efforts)-1]
 	}
 	return ""
 }

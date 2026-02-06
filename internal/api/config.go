@@ -315,6 +315,7 @@ func (s *Server) handleGetAgents(w http.ResponseWriter, _ *http.Request) {
 			"displayName": "Copilot",
 			// Synced with internal/adapters/cli/copilot.go
 			// Copilot supports multiple providers via GitHub subscription
+			// Note: Copilot CLI has no reasoning effort flag/env var/config
 			"models": []string{
 				// Anthropic Claude (via Copilot)
 				"claude-sonnet-4.5",
@@ -334,9 +335,7 @@ func (s *Server) handleGetAgents(w http.ResponseWriter, _ *http.Request) {
 				// Google Gemini (via Copilot)
 				"gemini-3-pro-preview",
 			},
-			"hasReasoningEffort": true,
-			"reasoningEfforts":   codexReasoningEfforts,
-			"available":          true,
+			"available": true,
 		},
 		{
 			"name":        "opencode",

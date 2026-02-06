@@ -19,8 +19,8 @@ let enumsListeners = [];
 
 // Fallback data (used before API loads)
 const FALLBACK_AGENTS = ['claude', 'gemini', 'codex', 'copilot', 'opencode'];
-const FALLBACK_REASONING_EFFORTS = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
-const FALLBACK_AGENTS_WITH_REASONING = ['claude', 'codex', 'copilot'];
+const FALLBACK_REASONING_EFFORTS = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
+const FALLBACK_AGENTS_WITH_REASONING = ['claude', 'codex'];
 
 /**
  * Subscribe to enums loaded event
@@ -297,6 +297,7 @@ export const AGENT_MODELS = new Proxy({}, {
 // =============================================================================
 
 const REASONING_LABELS = {
+  none: { label: 'None', description: 'No reasoning' },
   minimal: { label: 'Minimal', description: 'Quick responses' },
   low: { label: 'Low', description: 'Light reasoning' },
   medium: { label: 'Medium', description: 'Balanced' },
@@ -308,16 +309,54 @@ const REASONING_LABELS = {
 // Fallback per-agent reasoning efforts (used before API loads)
 const FALLBACK_AGENT_REASONING_EFFORTS = {
   claude: ['low', 'medium', 'high', 'max'],
-  codex: ['minimal', 'low', 'medium', 'high', 'xhigh'],
-  copilot: ['minimal', 'low', 'medium', 'high', 'xhigh'],
+  codex: ['none', 'minimal', 'low', 'medium', 'high', 'xhigh'],
+};
+
+// Fallback per-agent-per-model reasoning efforts (mirrors backend AgentModelReasoningEfforts)
+const FALLBACK_AGENT_MODEL_REASONING_EFFORTS = {
+  claude: {
+    'claude-opus-4-6': ['low', 'medium', 'high', 'max'],
+    'opus': ['low', 'medium', 'high', 'max'],
+  },
+  codex: {
+    'gpt-5.3-codex': ['none', 'minimal', 'low', 'medium', 'high', 'xhigh'],
+    'gpt-5.2-codex': ['low', 'medium', 'high', 'xhigh'],
+    'gpt-5.2': ['low', 'medium', 'high', 'xhigh'],
+    'gpt-5.1-codex-max': ['low', 'medium', 'high', 'xhigh'],
+    'gpt-5.1-codex': ['low', 'medium', 'high'],
+    'gpt-5.1-codex-mini': ['low', 'medium', 'high'],
+    'gpt-5.1': ['low', 'medium', 'high'],
+    'gpt-5-codex': ['minimal', 'low', 'medium', 'high'],
+    'gpt-5-codex-mini': ['minimal', 'low', 'medium', 'high'],
+    'gpt-5': ['minimal', 'low', 'medium', 'high'],
+  },
 };
 
 /**
- * Get available reasoning levels, optionally filtered by agent.
+ * Get available reasoning levels, optionally filtered by agent and model.
+ * When both agent and model are provided, returns only levels valid for that specific model.
+ * Falls back to agent-level efforts if the model is not in the per-model map.
  * @param {string} [agent] - If provided, returns only levels for that agent.
+ * @param {string} [model] - If provided with agent, returns model-specific levels.
  */
-export function getReasoningLevels(agent) {
+export function getReasoningLevels(agent, model) {
   let levels;
+
+  // Try per-model efforts first
+  if (agent && model) {
+    const perModel = enumsData?.agent_model_reasoning_efforts || FALLBACK_AGENT_MODEL_REASONING_EFFORTS;
+    const agentModels = perModel[agent];
+    if (agentModels && agentModels[model]) {
+      levels = agentModels[model];
+      return levels.map(value => ({
+        value,
+        label: REASONING_LABELS[value]?.label || value,
+        description: REASONING_LABELS[value]?.description || '',
+      }));
+    }
+    // Model not in map → fall through to agent-level efforts
+  }
+
   if (agent) {
     const perAgent = enumsData?.agent_reasoning_efforts || FALLBACK_AGENT_REASONING_EFFORTS;
     levels = perAgent[agent] || enumsData?.reasoning_efforts || FALLBACK_REASONING_EFFORTS;
@@ -386,8 +425,8 @@ export function getModelByValue(agent, value) {
   return models.find(m => m.value === value) || models[0];
 }
 
-export function getReasoningLevelByValue(value, agent) {
-  const levels = getReasoningLevels(agent);
+export function getReasoningLevelByValue(value, agent, model) {
+  const levels = getReasoningLevels(agent, model);
   return levels.find(r => r.value === value) || levels.find(r => r.value === 'medium') || levels[0];
 }
 

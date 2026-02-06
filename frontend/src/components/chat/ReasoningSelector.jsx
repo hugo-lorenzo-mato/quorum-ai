@@ -2,7 +2,7 @@ import { Brain, ChevronDown } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { getReasoningLevels, getReasoningLevelByValue, supportsReasoning, useEnums } from '../../lib/agents';
 
-export default function ReasoningSelector({ value, onChange, agent, disabled, direction = 'down' }) {
+export default function ReasoningSelector({ value, onChange, agent, model, disabled, direction = 'down' }) {
   const [isOpen, setIsOpen] = useState(false);
   const ref = useRef(null);
 
@@ -24,8 +24,8 @@ export default function ReasoningSelector({ value, onChange, agent, disabled, di
     return null;
   }
 
-  const levels = getReasoningLevels(agent);
-  const selected = getReasoningLevelByValue(value, agent);
+  const levels = getReasoningLevels(agent, model);
+  const selected = getReasoningLevelByValue(value, agent, model);
 
   const dropdownClasses = direction === 'up' 
     ? 'bottom-full mb-1' 

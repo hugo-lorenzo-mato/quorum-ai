@@ -589,6 +589,7 @@ export default function Chat() {
                   value={currentReasoningEffort}
                   onChange={setCurrentReasoningEffort}
                   agent={currentAgent}
+                  model={currentModel}
                   disabled={sending}
                 />
               </div>
@@ -657,7 +658,7 @@ export default function Chat() {
                   <AgentSelector value={currentAgent} onChange={setCurrentAgent} disabled={sending} direction="up" />
                   <ModelSelector value={currentModel} onChange={setCurrentModel} agent={currentAgent} disabled={sending} direction="up" />
                   {supportsReasoning(currentAgent) && (
-                    <ReasoningSelector value={currentReasoningEffort} onChange={setCurrentReasoningEffort} agent={currentAgent} disabled={sending} direction="up" />
+                    <ReasoningSelector value={currentReasoningEffort} onChange={setCurrentReasoningEffort} agent={currentAgent} model={currentModel} disabled={sending} direction="up" />
                   )}
                 </div>
               </div>
