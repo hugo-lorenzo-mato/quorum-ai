@@ -51,7 +51,7 @@ const useChatStore = create(
   },
 
   selectSession: async (sessionId) => {
-    set({ activeSessionId: sessionId });
+    set({ activeSessionId: sessionId, error: null });
     const { messages } = get();
     if (!messages[sessionId]) {
       await get().fetchMessages(sessionId);

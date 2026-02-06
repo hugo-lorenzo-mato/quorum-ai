@@ -265,7 +265,7 @@ export default function Chat() {
   };
 
   return (
-    <div className="h-[calc(100dvh-3.5rem)] md:h-[calc(100vh-3.5rem)] flex overflow-hidden animate-fade-in pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0">{/* 3.5rem = h-14 del header, pb for mobile nav + safe area */}
+    <div className="h-[calc(100dvh-3.5rem)] md:h-[calc(100vh-3.5rem)] flex overflow-hidden animate-fade-in pb-20 md:pb-0">{/* 3.5rem = h-14 del header, pb-20 (5rem) for mobile nav */}
       {/* Sessions sidebar */}
       <div className={`transition-all duration-300 ease-in-out flex-shrink-0 flex flex-col gap-4 p-4 bg-card border-r border-border ${
         activeSession ? 'hidden md:flex' : 'flex'
@@ -346,7 +346,7 @@ export default function Chat() {
       </div>
 
       {/* Chat area */}
-      <div className={`flex-1 flex flex-col bg-background ${!activeSession ? 'hidden md:flex' : 'flex'}`}>
+      <div className={`flex-1 flex flex-col bg-background min-w-0 w-full ${!activeSession ? 'hidden md:flex' : 'flex'}`}>
         {activeSession ? (
           <>
             {/* Header */}
