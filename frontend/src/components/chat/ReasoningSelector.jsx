@@ -24,8 +24,8 @@ export default function ReasoningSelector({ value, onChange, agent, disabled, di
     return null;
   }
 
-  const levels = getReasoningLevels();
-  const selected = getReasoningLevelByValue(value);
+  const levels = getReasoningLevels(agent);
+  const selected = getReasoningLevelByValue(value, agent);
 
   const dropdownClasses = direction === 'up' 
     ? 'bottom-full mb-1' 

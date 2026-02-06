@@ -3,7 +3,7 @@ import { Bot, Check, ChevronDown, ChevronUp } from 'lucide-react';
 import { useConfigField } from '../../hooks/useConfigField';
 import { useConfigStore } from '../../stores/configStore';
 import { TextInputSetting, ToggleSetting, SelectSetting } from './index';
-import { AGENT_INFO, PHASE_MODEL_KEYS, PHASE_LABELS, supportsReasoning, getModelsForAgent, useEnums } from '../../lib/agents';
+import { AGENT_INFO, PHASE_MODEL_KEYS, PHASE_LABELS, supportsReasoning, getModelsForAgent, getReasoningLevels, useEnums } from '../../lib/agents';
 
 function normalizeBoolMap(value) {
   if (!value || typeof value !== 'object') return {};
@@ -32,7 +32,8 @@ export function AgentCard({ agentKey }) {
   const reasoningEffortPhases = useConfigField(`${prefix}.reasoning_effort_phases`);
 
   const phaseKeys = useConfigStore((state) => state.enums?.phase_model_keys) || PHASE_MODEL_KEYS;
-  const reasoningEfforts = useConfigStore((state) => state.enums?.reasoning_efforts);
+  // Use per-agent reasoning efforts instead of the global union
+  const _enumsReady = useConfigStore((state) => state.enums);
 
   const [showOverrides, setShowOverrides] = useState(false);
 
@@ -47,8 +48,8 @@ export function AgentCard({ agentKey }) {
   // Check if this agent supports reasoning effort
   const hasReasoningEffort = supportsReasoning(agentKey);
   const reasoningEffortOptions = useMemo(() => {
-    return (reasoningEfforts || []).map((e) => ({ value: e, label: e.charAt(0).toUpperCase() + e.slice(1) }));
-  }, [reasoningEfforts]);
+    return getReasoningLevels(agentKey).map((l) => ({ value: l.value, label: l.label }));
+  }, [agentKey, _enumsReady]);
 
   const rawPhases = useMemo(
     () => (phases.value && typeof phases.value === 'object' ? phases.value : {}),

@@ -301,15 +301,29 @@ const REASONING_LABELS = {
   low: { label: 'Low', description: 'Light reasoning' },
   medium: { label: 'Medium', description: 'Balanced' },
   high: { label: 'High', description: 'Deep analysis (default)' },
-  xhigh: { label: 'XHigh', description: 'Maximum reasoning (Codex)' },
-  max: { label: 'Max', description: 'Maximum reasoning (Claude Opus 4.6)' },
+  xhigh: { label: 'XHigh', description: 'Maximum reasoning' },
+  max: { label: 'Max', description: 'Maximum reasoning' },
+};
+
+// Fallback per-agent reasoning efforts (used before API loads)
+const FALLBACK_AGENT_REASONING_EFFORTS = {
+  claude: ['low', 'medium', 'high', 'max'],
+  codex: ['minimal', 'low', 'medium', 'high', 'xhigh'],
+  copilot: ['minimal', 'low', 'medium', 'high', 'xhigh'],
 };
 
 /**
- * Get available reasoning levels
+ * Get available reasoning levels, optionally filtered by agent.
+ * @param {string} [agent] - If provided, returns only levels for that agent.
  */
-export function getReasoningLevels() {
-  const levels = enumsData?.reasoning_efforts || FALLBACK_REASONING_EFFORTS;
+export function getReasoningLevels(agent) {
+  let levels;
+  if (agent) {
+    const perAgent = enumsData?.agent_reasoning_efforts || FALLBACK_AGENT_REASONING_EFFORTS;
+    levels = perAgent[agent] || enumsData?.reasoning_efforts || FALLBACK_REASONING_EFFORTS;
+  } else {
+    levels = enumsData?.reasoning_efforts || FALLBACK_REASONING_EFFORTS;
+  }
   return levels.map(value => ({
     value,
     label: REASONING_LABELS[value]?.label || value,
@@ -372,8 +386,8 @@ export function getModelByValue(agent, value) {
   return models.find(m => m.value === value) || models[0];
 }
 
-export function getReasoningLevelByValue(value) {
-  const levels = getReasoningLevels();
+export function getReasoningLevelByValue(value, agent) {
+  const levels = getReasoningLevels(agent);
   return levels.find(r => r.value === value) || levels.find(r => r.value === 'medium') || levels[0];
 }
 
