@@ -265,9 +265,9 @@ export default function Chat() {
   };
 
   return (
-    <div className="h-[calc(100dvh-3.5rem)] md:h-[calc(100vh-3.5rem)] flex overflow-hidden animate-fade-in pb-20 md:pb-0">{/* 3.5rem = h-14 del header, pb-20 (5rem) for mobile nav */}
+    <div className="h-[calc(100dvh-3.5rem)] md:h-[calc(100vh-3.5rem)] flex overflow-hidden animate-fade-in">{/* 3.5rem = h-14 del header */}
       {/* Sessions sidebar */}
-      <div className={`transition-all duration-300 ease-in-out flex-shrink-0 flex flex-col gap-4 p-4 bg-card border-r border-border ${
+      <div className={`transition-all duration-300 ease-in-out flex-shrink-0 flex flex-col gap-4 p-4 bg-card border-r border-border pb-20 md:pb-4 ${
         activeSession ? 'hidden md:flex' : 'flex'
       } ${
         sidebarCollapsed ? 'w-full md:w-16 overflow-hidden' : 'w-full md:w-80'
@@ -406,7 +406,7 @@ export default function Chat() {
             </div>
 
             {/* Input */}
-            <div className="shrink-0 border-t border-border bg-card backdrop-blur-sm">
+            <div className="shrink-0 border-t border-border bg-card backdrop-blur-sm mb-16 md:mb-0">
               <div className="w-full px-3 md:px-6 py-3">
               {error && (
                 <div className="mb-3 p-2.5 bg-destructive/10 text-destructive text-sm rounded-lg flex items-center justify-between">
