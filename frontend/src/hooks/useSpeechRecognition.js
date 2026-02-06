@@ -1,13 +1,15 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 
+const isMobile = () =>
+  typeof navigator !== 'undefined' && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
 /**
- * Hook for Web Speech API speech recognition
- * @param {Object} options
- * @param {Function} options.onResult - Callback when speech is recognized
- * @param {Function} options.onError - Callback when an error occurs
- * @param {string} options.lang - Language code (default: 'es-ES')
- * @param {boolean} options.continuous - Keep listening after results (default: true)
- * @param {boolean} options.interimResults - Return interim results (default: true)
+ * Hook for Web Speech API speech recognition.
+ *
+ * On mobile (Android Chrome especially) continuous mode causes duplicate/
+ * triplicate words due to a known Chromium bug (crbug.com/40324711).
+ * We force continuous=false on mobile and re-start automatically after each
+ * final result so the UX stays seamless (push-to-talk style).
  */
 export function useSpeechRecognition({
   onResult,
@@ -19,8 +21,13 @@ export function useSpeechRecognition({
   const [isListening, setIsListening] = useState(false);
   const [error, setError] = useState(null);
   const recognitionRef = useRef(null);
+  const wantListeningRef = useRef(false);
   const onResultRef = useRef(onResult);
   const onErrorRef = useRef(onError);
+
+  const mobile = isMobile();
+  // Force continuous off on mobile to avoid the duplicate-words bug
+  const effectiveContinuous = mobile ? false : continuous;
 
   // Keep refs updated
   useEffect(() => {
@@ -40,7 +47,7 @@ export function useSpeechRecognition({
     const recognition = new SpeechRecognition();
 
     recognition.lang = lang;
-    recognition.continuous = continuous;
+    recognition.continuous = effectiveContinuous;
     recognition.interimResults = interimResults;
 
     recognition.onresult = (event) => {
@@ -77,6 +84,7 @@ export function useSpeechRecognition({
 
       setError(errorMessage);
       setIsListening(false);
+      wantListeningRef.current = false;
 
       if (onErrorRef.current) {
         onErrorRef.current(errorMessage);
@@ -84,20 +92,32 @@ export function useSpeechRecognition({
     };
 
     recognition.onend = () => {
+      // On mobile (non-continuous), auto-restart if user hasn't stopped
+      if (!effectiveContinuous && wantListeningRef.current) {
+        try {
+          recognition.start();
+          return; // keep isListening true
+        } catch {
+          // fall through to stop
+        }
+      }
       setIsListening(false);
+      wantListeningRef.current = false;
     };
 
     recognitionRef.current = recognition;
 
     return () => {
+      wantListeningRef.current = false;
       recognition.abort();
     };
-  }, [isSupported, lang, continuous, interimResults]);
+  }, [isSupported, lang, effectiveContinuous, interimResults]);
 
   const startListening = useCallback(() => {
     if (!recognitionRef.current || isListening) return;
 
     setError(null);
+    wantListeningRef.current = true;
     try {
       recognitionRef.current.start();
       setIsListening(true);
@@ -110,6 +130,7 @@ export function useSpeechRecognition({
   const stopListening = useCallback(() => {
     if (!recognitionRef.current || !isListening) return;
 
+    wantListeningRef.current = false;
     try {
       recognitionRef.current.stop();
     } catch (err) {
