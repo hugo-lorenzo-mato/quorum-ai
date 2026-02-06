@@ -7,7 +7,7 @@ export function SettingSection({ title, description, children, className = '', v
   const styleClasses = variantClasses[variant] || variantClasses.default;
 
   return (
-    <section className={`p-6 rounded-xl border ${styleClasses} ${className}`}>
+    <section className={`p-4 md:p-6 rounded-xl border ${styleClasses} ${className}`}>
       {(title || description) && (
         <div className="mb-4">
           {title && (

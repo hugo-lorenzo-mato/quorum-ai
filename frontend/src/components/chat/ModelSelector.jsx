@@ -2,7 +2,7 @@ import { Cpu, ChevronDown } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { getModelsForAgent, getModelByValue, useEnums } from '../../lib/agents';
 
-export default function ModelSelector({ value, onChange, agent, disabled }) {
+export default function ModelSelector({ value, onChange, agent, disabled, direction = 'down' }) {
   const [isOpen, setIsOpen] = useState(false);
   const ref = useRef(null);
 
@@ -22,6 +22,10 @@ export default function ModelSelector({ value, onChange, agent, disabled }) {
   const models = getModelsForAgent(agent);
   const selected = getModelByValue(agent, value);
 
+  const dropdownClasses = direction === 'up' 
+    ? 'bottom-full mb-1' 
+    : 'top-full mt-1';
+
   return (
     <div className="relative" ref={ref}>
       <button
@@ -36,7 +40,7 @@ export default function ModelSelector({ value, onChange, agent, disabled }) {
       </button>
 
       {isOpen && (
-        <div className="absolute bottom-full left-0 mb-1 z-50 min-w-[200px] rounded-lg border border-border bg-popover shadow-lg animate-fade-in">
+        <div className={`absolute left-0 z-50 min-w-[200px] rounded-lg border border-border bg-popover shadow-lg animate-fade-in ${dropdownClasses}`}>
           <div className="p-1 max-h-64 overflow-y-auto">
             {models.map((model) => (
               <button

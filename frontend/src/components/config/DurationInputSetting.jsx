@@ -85,7 +85,7 @@ export function DurationInputSetting({
           min="0"
           placeholder="0"
           className={`
-            flex-1 h-10 px-3
+            flex-1 min-w-[60px] h-10 px-3
             border rounded-lg bg-background text-foreground
             transition-colors
             focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent
@@ -96,7 +96,7 @@ export function DurationInputSetting({
           aria-invalid={!!error}
         />
 
-        <div className="flex rounded-lg border border-input overflow-hidden">
+        <div className="flex rounded-lg border border-input overflow-hidden flex-shrink-0">
           {units.map((unit) => (
             <button
               key={unit}
@@ -104,7 +104,7 @@ export function DurationInputSetting({
               onClick={() => handleUnitChange(unit)}
               disabled={disabled}
               className={`
-                px-3 h-10 text-sm font-medium transition-colors
+                px-2 sm:px-3 h-10 text-sm font-medium transition-colors
                 ${
                   parsed.unit === unit
                     ? 'bg-primary text-primary-foreground'

@@ -2,7 +2,7 @@ import { Bot, ChevronDown, Loader2 } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { getAgentByValue, useEnabledAgents } from '../../lib/agents';
 
-export default function AgentSelector({ value, onChange, disabled }) {
+export default function AgentSelector({ value, onChange, disabled, direction = 'down' }) {
   const [isOpen, setIsOpen] = useState(false);
   const ref = useRef(null);
 
@@ -29,6 +29,10 @@ export default function AgentSelector({ value, onChange, disabled }) {
     }
   }, [agents, value, onChange]);
 
+  const dropdownClasses = direction === 'up' 
+    ? 'bottom-full mb-1' 
+    : 'top-full mt-1';
+
   return (
     <div className="relative" ref={ref}>
       <button
@@ -47,7 +51,7 @@ export default function AgentSelector({ value, onChange, disabled }) {
       </button>
 
       {isOpen && (
-        <div className="absolute bottom-full left-0 mb-1 z-50 min-w-[180px] rounded-lg border border-border bg-popover shadow-lg animate-fade-in">
+        <div className={`absolute left-0 z-50 min-w-[180px] rounded-lg border border-border bg-popover shadow-lg animate-fade-in ${dropdownClasses}`}>
           <div className="p-1">
             {agents.map((agent) => (
               <button

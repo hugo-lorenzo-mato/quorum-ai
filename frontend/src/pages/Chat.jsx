@@ -28,6 +28,7 @@ import {
 } from '../components/chat';
 import ChatMarkdown from '../components/ChatMarkdown';
 import VoiceInputButton from '../components/VoiceInputButton';
+import { supportsReasoning } from '../lib/agents';
 
 // ---------------------------------------------------------------------------
 // Session avatar utilities
@@ -159,48 +160,63 @@ function MessageBubble({ message, isLast }) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      // Silent fail - copy button is a convenience feature
+      // Silent fail
     }
   };
 
-  return (
-    <div className={`flex gap-2 ${isUser ? 'flex-row-reverse' : ''} ${isLast ? 'animate-fade-up' : ''}`}>
-      <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-1 ${
-        isUser ? 'bg-primary' : 'bg-muted'
-      }`}>
-        {isUser ? (
-          <User className="w-3 h-3 text-primary-foreground" />
-        ) : (
-          <Logo className="w-3 h-3 text-muted-foreground" />
-        )}
-      </div>
-      <div className={`max-w-[90%] rounded-lg px-3 py-2 min-w-[120px] ${
-        isUser
-          ? 'bg-primary text-primary-foreground rounded-br-sm ml-auto'
-          : 'bg-card border border-border rounded-bl-sm mr-auto'
-      }`}>
-        {!isUser && message.agent && (
-          <p className="text-[10px] font-mono font-medium text-primary mb-1">{agentName}</p>
-        )}
-        <div className={`text-sm leading-relaxed ${isUser ? 'text-primary-foreground' : 'text-foreground'}`}>
-          <ChatMarkdown content={message.content} isUser={isUser} />
+  if (isUser) {
+    return (
+      <div className={`w-full py-4 flex flex-col items-end px-4 md:px-8 ${isLast ? 'animate-fade-up' : ''}`}>
+        <div className="max-w-[85%] md:max-w-[70%] bg-primary text-primary-foreground rounded-2xl rounded-tr-sm px-4 py-2.5 shadow-sm relative group">
+          <div className="text-sm leading-relaxed">
+            <ChatMarkdown content={message.content} isUser={true} />
+          </div>
+          <div className="absolute top-0 right-full mr-2 hidden group-hover:flex items-center gap-2 h-full">
+            <button
+              type="button"
+              onClick={handleCopy}
+              className="p-1.5 rounded-md hover:bg-muted text-muted-foreground transition-colors"
+              title="Copy message"
+            >
+              {copied ? <CheckCircle2 className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
+            </button>
+            <span className="text-[10px] text-muted-foreground whitespace-nowrap font-mono">
+              {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </span>
+          </div>
         </div>
-        <div className="flex items-center justify-between mt-1.5 pt-1 border-t border-white/10 opacity-70">
-          <p className={`text-[9px] font-mono ${isUser ? 'text-primary-foreground/80' : 'text-muted-foreground'}`}>
-            {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-          </p>
-          <button
-            type="button"
-            onClick={handleCopy}
-            className={`p-0.5 rounded hover:bg-white/10 transition-colors ${copied ? 'text-green-300' : ''}`}
-            title={copied ? 'Copied!' : 'Copy message'}
-          >
-            {copied ? (
-              <CheckCircle2 className="w-3 h-3" />
-            ) : (
-              <Copy className="w-3 h-3" />
-            )}
-          </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`w-full py-8 border-b border-border/30 bg-muted/5 ${isLast ? 'animate-fade-up' : ''}`}>
+      <div className="w-full px-4 md:px-8 flex gap-4 md:gap-6">
+        <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5 border border-primary/20">
+          <Logo className="w-4 h-4 text-primary" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between mb-2.5">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-primary bg-primary/5 px-2 py-0.5 rounded">
+                {agentName}
+              </span>
+              <span className="text-[10px] text-muted-foreground font-mono opacity-60">
+                {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={handleCopy}
+              className={`p-1.5 rounded-md hover:bg-muted transition-colors ${copied ? 'text-green-500' : 'text-muted-foreground'}`}
+              title="Copy response"
+            >
+              {copied ? <CheckCircle2 className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+            </button>
+          </div>
+          <div className="text-sm leading-relaxed text-foreground max-w-5xl">
+            <ChatMarkdown content={message.content} isUser={false} />
+          </div>
         </div>
       </div>
     </div>
@@ -304,11 +320,11 @@ function SessionItem({ session, isActive, onClick, onDelete, onRename }) {
 function EmptyChat({ onCreateSession }) {
   return (
     <div className="flex-1 flex items-center justify-center">
-      <div className="text-center">
+      <div className="text-center p-6">
         <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-primary/10 flex items-center justify-center">
-          <MessageSquare className="w-8 h-8 text-primary" />
+          <Sparkles className="w-8 h-8 text-primary" />
         </div>
-        <h3 className="text-lg font-semibold text-foreground mb-2">No session selected</h3>
+        <h3 className="text-lg font-semibold text-foreground mb-2">How can I help you?</h3>
         <p className="text-sm text-muted-foreground mb-4 max-w-sm">
           Create a new chat session or select an existing one to start chatting.
         </p>
@@ -344,6 +360,11 @@ export default function Chat() {
 
   const activeMessages = getActiveMessages();
   const activeSession = sessions.find((s) => s.id === activeSessionId);
+
+  // Collapse sidebar on mount
+  useEffect(() => {
+    useChatStore.getState().setSidebarCollapsed(true);
+  }, []);
 
   useEffect(() => { fetchSessions(); }, [fetchSessions]);
   useEffect(() => {
@@ -466,7 +487,7 @@ export default function Chat() {
         </div>
 
         {/* Full List - Always visible on mobile, hidden on desktop if collapsed */}
-        <div className={`flex-1 overflow-y-auto space-y-1 min-h-0 pr-2 animate-fade-in ${sidebarCollapsed ? 'md:hidden' : ''}`}>
+        <div className={`flex-1 overflow-y-auto space-y-1 min-h-0 pr-1 animate-fade-in ${sidebarCollapsed ? 'md:hidden' : ''}`}>
           {sessions.length > 0 ? (
             sessions.map((session) => (
               <SessionItem
@@ -513,20 +534,19 @@ export default function Chat() {
       </div>
 
       {/* Chat area */}
-      <div className={`flex-1 flex flex-col bg-background min-w-0 w-full ${!activeSession ? 'hidden md:flex' : 'flex'}`}>
+      <div className={`flex-1 flex flex-col bg-background min-w-0 w-full relative ${!activeSession ? 'hidden md:flex' : 'flex'}`}>
         {activeSession ? (
           <>
-            {/* Header */}
-            <div className="px-3 py-2.5 md:px-4 md:py-3 border-b border-border bg-card backdrop-blur-sm z-10 flex items-center justify-between gap-3 shrink-0">
-              <div className="flex items-center gap-2.5 overflow-hidden flex-1">
+            {/* Header - IDE style with selectors */}
+            <div className="h-14 px-3 md:px-4 border-b border-border bg-card flex items-center justify-between gap-2 md:gap-4 shrink-0 z-40">
+              <div className="flex items-center gap-2 md:gap-3 overflow-hidden flex-1">
                 <button 
                   onClick={handleBackToList}
                   className="md:hidden p-1.5 -ml-1 rounded-lg hover:bg-accent text-muted-foreground"
                 >
                   <ArrowLeft className="w-4 h-4" />
                 </button>
-                <SessionAvatar session={activeSession} size="lg" />
-                <div className="min-w-0 flex-1">
+                <div className="flex flex-col min-w-0">
                   {isEditingTitle ? (
                     <input
                       ref={titleInputRef}
@@ -535,97 +555,25 @@ export default function Chat() {
                       onChange={(e) => setEditTitleValue(e.target.value)}
                       onKeyDown={handleTitleKeyDown}
                       onBlur={handleSaveTitleEdit}
-                      placeholder="Session title"
-                      className="w-full text-sm font-semibold bg-background border border-input rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-ring"
+                      className="text-xs font-bold bg-background border border-input rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-ring"
                     />
                   ) : (
                     <h3
                       onClick={handleStartTitleEdit}
-                      className="font-semibold text-foreground truncate text-sm cursor-text hover:bg-accent/50 rounded px-1 -mx-1 transition-colors"
+                      className="font-bold text-foreground truncate text-sm cursor-text hover:bg-accent/50 rounded px-1 -mx-1 transition-colors"
                       title="Click to rename"
                     >
                       {activeSession.title || `${activeSession.agent || 'Claude'} Chat`}
                     </h3>
                   )}
-                  <p className="text-[11px] text-muted-foreground truncate">
+                  <p className="text-[10px] text-muted-foreground hidden sm:block truncate">
                     {activeSession.agent || 'Claude'} · {formatRelativeDate(activeSession.created_at)}
                   </p>
                 </div>
               </div>
-              <button
-                onClick={() => deleteSession(activeSession.id)}
-                className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors flex-shrink-0"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </div>
 
-            {/* Messages */}
-            <div className="flex-1 min-h-0 overflow-y-auto flex flex-col">
-              {activeMessages.length > 0 ? (
-                <div className="w-full max-w-4xl mx-auto px-3 md:px-6 py-3 space-y-3">
-                  {activeMessages.map((message, index) => (
-                    <MessageBubble
-                      key={message.id || index}
-                      message={message}
-                      isLast={index === activeMessages.length - 1}
-                    />
-                  ))}
-                  {sending && <TypingIndicator />}
-                  <div ref={messagesEndRef} className="h-1" />
-                </div>
-              ) : (
-                <div className="flex items-center justify-center flex-1">
-                  <div className="text-center">
-                    <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-primary/10 flex items-center justify-center">
-                      <Sparkles className="w-8 h-8 text-primary" />
-                    </div>
-                    <p className="text-foreground font-medium">Start a conversation</p>
-                    <p className="text-sm text-muted-foreground mt-1">Send a message to begin</p>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Input */}
-            <div className="shrink-0 border-t border-border bg-card backdrop-blur-sm">
-              <div className="w-full max-w-4xl mx-auto px-3 md:px-6 py-3">
-              {error && (
-                <div className="mb-3 p-2.5 bg-destructive/10 text-destructive text-sm rounded-lg flex items-center justify-between">
-                  <span>{error}</span>
-                  <button onClick={clearError} className="p-1 hover:bg-destructive/20 rounded">
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-              )}
-
-              {/* Image previews - above options bar */}
-              {imagePreviews.length > 0 && (
-                <div className="flex gap-2 mb-2 overflow-x-auto">
-                  {imagePreviews.map((img) => (
-                    <div key={img.path} className="relative group flex-shrink-0 w-16">
-                      <div className="relative overflow-hidden rounded-lg border border-border">
-                        <img
-                          src={img.previewUrl}
-                          alt={img.name}
-                          className="w-16 h-16 object-cover"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveImagePreview(img.path)}
-                          className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </div>
-                      <p className="text-[9px] text-muted-foreground truncate mt-0.5">{img.name}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Message options bar */}
-              <div className="flex items-center gap-2 mb-3 flex-wrap">
+              {/* Selectors in Header - Desktop */}
+              <div className="hidden md:flex items-center gap-2">
                 <AgentSelector
                   value={currentAgent}
                   onChange={setCurrentAgent}
@@ -643,51 +591,145 @@ export default function Chat() {
                   agent={currentAgent}
                   disabled={sending}
                 />
-                <div className="flex-1" />
-                <AttachmentPicker
-                  attachments={attachments}
-                  onAdd={addAttachment}
-                  onRemove={removeAttachment}
-                  onClear={clearAttachments}
-                  onUpload={uploadAttachments}
-                />
               </div>
 
-              <form onSubmit={handleSend} className="flex gap-2.5 items-end">
-                <div className="relative flex-1 flex flex-col">
-                  <textarea
-                    ref={inputRef}
-                    value={input}
-                    onChange={(e) => {
-                      setInput(e.target.value);
-                      e.target.style.height = 'auto';
-                      e.target.style.height = Math.min(e.target.scrollHeight, 140) + 'px';
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault();
-                        handleSend(e);
-                      }
-                    }}
-                    onPaste={handlePaste}
-                    placeholder={`Message ${currentAgent}...`}
-                    disabled={sending}
-                    rows={1}
-                    className="w-full min-h-[42px] max-h-[140px] py-2.5 px-3.5 pr-10 border border-input rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background disabled:opacity-50 transition-all text-sm resize-none overflow-y-auto"
-                  />
-                  <VoiceInputButton
-                    onTranscript={(text) => setInput((prev) => (prev ? prev + ' ' + text : text))}
-                    disabled={sending}
-                    className="absolute bottom-0 right-2 h-[42px] flex items-center"
-                  />
-                </div>
+              <div className="flex items-center gap-1">
                 <button
-                  type="submit"
-                  disabled={sending || (!input.trim() && imagePreviews.length === 0)}
-                  className="h-[42px] w-[42px] md:w-auto md:px-4 flex items-center justify-center rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors shrink-0"
+                  onClick={() => deleteSession(activeSession.id)}
+                  className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                  title="Delete chat"
                 >
-                  {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                  <Trash2 className="w-4 h-4" />
                 </button>
+              </div>
+            </div>
+
+            {/* Messages - Full Width */}
+            <div className="flex-1 min-h-0 overflow-y-auto flex flex-col scroll-smooth bg-background relative z-10">
+              {activeMessages.length > 0 ? (
+                <div className="w-full flex-1">
+                  {activeMessages.map((message, index) => (
+                    <MessageBubble
+                      key={message.id || index}
+                      message={message}
+                      isLast={index === activeMessages.length - 1}
+                    />
+                  ))}
+                  {sending && (
+                    <div className="w-full py-8 bg-muted/5 border-b border-border/30">
+                      <div className="px-4 md:px-8">
+                        <TypingIndicator />
+                      </div>
+                    </div>
+                  )}
+                  <div ref={messagesEndRef} className="h-24 md:h-12" />
+                </div>
+              ) : (
+                <div className="flex items-center justify-center flex-1">
+                  <div className="text-center p-6">
+                    <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-primary/5 border border-primary/10 flex items-center justify-center shadow-sm">
+                      <Sparkles className="w-8 h-8 text-primary" />
+                    </div>
+                    <p className="text-foreground font-semibold">How can I help you today?</p>
+                    <p className="text-xs text-muted-foreground mt-1 max-w-[200px] mx-auto">
+                      Select an agent and start a conversation.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Input - Integrated bar */}
+            <div className="shrink-0 border-t border-border bg-card p-3 md:p-4 pb-safe z-50 overflow-visible relative">
+              <div className="w-full mx-auto max-w-6xl overflow-visible relative">
+              {error && (
+                <div className="mb-3 p-2.5 bg-destructive/10 text-destructive text-sm rounded-lg flex items-center justify-between">
+                  <span>{error}</span>
+                  <button onClick={clearError} className="p-1 hover:bg-destructive/20 rounded">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+
+              {/* Mobile Selectors - Fixed visibility issues */}
+              <div className="flex md:hidden items-center gap-2 mb-3 relative z-[60]">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <AgentSelector value={currentAgent} onChange={setCurrentAgent} disabled={sending} direction="up" />
+                  <ModelSelector value={currentModel} onChange={setCurrentModel} agent={currentAgent} disabled={sending} direction="up" />
+                  {supportsReasoning(currentAgent) && (
+                    <ReasoningSelector value={currentReasoningEffort} onChange={setCurrentReasoningEffort} agent={currentAgent} disabled={sending} direction="up" />
+                  )}
+                </div>
+              </div>
+
+              {/* Image previews */}
+              {imagePreviews.length > 0 && (
+                <div className="flex gap-2 mb-3 overflow-x-auto py-1">
+                  {imagePreviews.map((img) => (
+                    <div key={img.path} className="relative group flex-shrink-0 w-16 h-16">
+                      <img
+                        src={img.previewUrl}
+                        alt={img.name}
+                        className="w-full h-full object-cover rounded-lg border border-border shadow-sm"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveImagePreview(img.path)}
+                        className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center shadow-md"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <form onSubmit={handleSend} className="relative flex flex-col gap-2 bg-background border border-input rounded-2xl p-2 focus-within:ring-2 focus-within:ring-primary/20 transition-all shadow-sm z-10">
+                <textarea
+                  ref={inputRef}
+                  value={input}
+                  onChange={(e) => {
+                    setInput(e.target.value);
+                    e.target.style.height = 'auto';
+                    e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px';
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSend(e);
+                    }
+                  }}
+                  onPaste={handlePaste}
+                  placeholder="Type a message..."
+                  disabled={sending}
+                  rows={1}
+                  className="w-full min-h-[44px] max-h-[200px] py-2 px-3 bg-transparent text-foreground placeholder:text-muted-foreground focus:outline-none text-sm resize-none"
+                />
+                
+                <div className="flex items-center justify-between border-t border-border/50 pt-2 px-1">
+                  <div className="flex items-center gap-1">
+                    <AttachmentPicker
+                      attachments={attachments}
+                      onAdd={addAttachment}
+                      onRemove={removeAttachment}
+                      onClear={clearAttachments}
+                      onUpload={uploadAttachments}
+                    />
+                    <VoiceInputButton
+                      onTranscript={(text) => setInput((prev) => (prev ? prev + ' ' + text : text))}
+                      disabled={sending}
+                    />
+                  </div>
+                  
+                  <button
+                    type="submit"
+                    disabled={sending || (!input.trim() && imagePreviews.length === 0)}
+                    className="h-9 px-4 flex items-center gap-2 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-all shadow-sm group"
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                    <span className="text-xs font-bold uppercase tracking-wider">Send</span>
+                  </button>
+                </div>
               </form>
               </div>
             </div>
