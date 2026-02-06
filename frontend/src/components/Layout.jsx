@@ -25,7 +25,6 @@ import {
   Ghost,
   MoonStar,
   Github,
-  FileText,
 } from 'lucide-react';
 
 const navItems = [
@@ -33,7 +32,6 @@ const navItems = [
   { path: '/workflows', label: 'Workflows', icon: GitBranch },
   { path: '/kanban', label: 'Kanban', icon: KanbanSquare },
   { path: '/chat', label: 'Chat', icon: MessageSquare },
-  { path: '/templates', label: 'Templates', icon: FileText },
   { path: '/settings', label: 'Settings', icon: Settings },
 ];
 
@@ -230,7 +228,7 @@ export default function Layout({ children }) {
 
       {/* Sidebar - Hidden on mobile, visible on desktop */}
       <aside
-        className={`fixed inset-y-0 left-0 z-[60] flex flex-col border-r border-border bg-card/50 glass transition-all duration-300 ease-in-out md:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-[60] flex flex-col border-r border-border bg-background/95 backdrop-blur-xl md:bg-card/50 md:glass transition-all duration-300 ease-in-out md:translate-x-0 ${
           sidebarOpen ? 'w-64 translate-x-0' : 'w-16 -translate-x-full md:translate-x-0'
         }`}
       >

@@ -265,7 +265,7 @@ export default function Chat() {
   };
 
   return (
-    <div className="h-[calc(100vh-3.5rem)] flex overflow-hidden animate-fade-in">{/* 3.5rem = h-14 del header */}
+    <div className="h-[calc(100dvh-3.5rem)] md:h-[calc(100vh-3.5rem)] flex overflow-hidden animate-fade-in pb-16 md:pb-0">{/* 3.5rem = h-14 del header, pb-16 for mobile nav */}
       {/* Sessions sidebar */}
       <div className={`transition-all duration-300 ease-in-out flex-shrink-0 flex flex-col gap-4 p-4 bg-card border-r border-border ${
         activeSession ? 'hidden md:flex' : 'flex'

@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useWorkflowStore } from '../stores';
+import { workflowTemplates } from '../data/workflowTemplates';
 import { getStatusColor } from '../lib/theme';
 import FAB from '../components/FAB';
 import Logo from '../components/Logo';
@@ -685,7 +686,7 @@ export default function Dashboard() {
       )}
 
       {/* Stats Grid - Mobile Carousel, Desktop Grid */}
-      <div className="flex overflow-x-auto pb-4 -mx-3 px-3 sm:mx-0 sm:px-0 gap-3 snap-x md:grid md:grid-cols-2 lg:grid-cols-5 md:gap-4 md:overflow-visible md:pb-0 scrollbar-none md:scrollbar-default">
+      <div className="flex overflow-x-auto pb-4 -mx-3 px-3 sm:mx-0 sm:px-0 gap-3 snap-x md:grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 md:gap-4 md:overflow-visible md:pb-0 scrollbar-none md:scrollbar-default">
         <StatCard
           title="Projects"
           value={projects.length}
@@ -693,7 +694,16 @@ export default function Dashboard() {
           icon={FolderKanban}
           color="primary"
           to="/projects"
-          className="min-w-[160px] md:min-w-0 snap-center"
+          className="min-w-[160px] md:min-w-0 snap-center h-full"
+        />
+        <StatCard
+          title="Templates"
+          value={workflowTemplates.length}
+          subtitle="Available"
+          icon={FileText}
+          color="primary"
+          to="/templates"
+          className="min-w-[160px] md:min-w-0 snap-center h-full"
         />
         <StatCard
           title="Workflows"
@@ -702,7 +712,7 @@ export default function Dashboard() {
           icon={GitBranch}
           color="primary"
           to="/workflows"
-          className="min-w-[160px] md:min-w-0 snap-center"
+          className="min-w-[160px] md:min-w-0 snap-center h-full"
         />
         <StatCard
           title="Completed"
@@ -711,7 +721,7 @@ export default function Dashboard() {
           icon={CheckCircle2}
           color="success"
           to="/workflows?status=completed"
-          className="min-w-[160px] md:min-w-0 snap-center"
+          className="min-w-[160px] md:min-w-0 snap-center h-full"
         />
         <StatCard
           title="Running"
@@ -720,7 +730,7 @@ export default function Dashboard() {
           icon={Activity}
           color="info"
           to="/workflows?status=running"
-          className="min-w-[160px] md:min-w-0 snap-center"
+          className="min-w-[160px] md:min-w-0 snap-center h-full"
         />
         <StatCard
           title="Failed"
@@ -729,7 +739,7 @@ export default function Dashboard() {
           icon={XCircle}
           color="error"
           to="/workflows?status=failed"
-          className="min-w-[160px] md:min-w-0 snap-center"
+          className="min-w-[160px] md:min-w-0 snap-center h-full"
         />
       </div>
 
