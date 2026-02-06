@@ -15,7 +15,7 @@
  * - Backdrop blur effects
  */
 
-import { cn } from '../lib/utils';
+import { cn } from '../../lib/utils';
 
 /**
  * Base Card Container
@@ -26,26 +26,38 @@ export function CardBase({
   onClick, 
   className,
   variant = 'default', // 'default' | 'selected' | 'executing' | 'completed' | 'failed'
+  accentColor, // 'primary' | 'blue' | 'emerald' | 'rose' | 'amber' | 'violet'
   hoverable = true,
   ...props 
 }) {
   const variantStyles = {
-    default: 'border-border/50 bg-gradient-to-br from-card via-card to-card hover:border-primary/30',
-    selected: 'border-primary/40 bg-primary/5 ring-2 ring-primary/20',
-    executing: 'border-status-running/40 bg-gradient-to-br from-status-running-bg via-card to-card shadow-lg shadow-status-running/10 ring-1 ring-status-running/20',
-    completed: 'border-border/50 bg-gradient-to-br from-card via-card to-status-success-bg/20 hover:border-status-success/30',
-    failed: 'border-border/50 bg-gradient-to-br from-card via-card to-status-error-bg/20 hover:border-status-error/30',
+    default: 'border-border/40 bg-card hover:border-border/80 shadow-sm',
+    selected: 'border-primary/40 bg-primary/5 ring-2 ring-primary/20 shadow-md',
+    executing: 'border-status-running/30 bg-gradient-to-br from-status-running-bg/30 via-card to-card shadow-lg shadow-status-running/5 ring-1 ring-status-running/10',
+    completed: 'border-border/40 bg-gradient-to-br from-card via-card to-status-success-bg/10 hover:border-status-success/30',
+    failed: 'border-border/40 bg-gradient-to-br from-card via-card to-status-error-bg/10 hover:border-status-error/30',
+  };
+
+  const accentStyles = {
+    primary: 'border-t-primary',
+    blue: 'border-t-status-running',
+    emerald: 'border-t-status-success',
+    rose: 'border-t-status-error',
+    amber: 'border-t-status-warning',
+    violet: 'border-t-violet-500',
   };
 
   const hoverStyles = hoverable 
-    ? 'hover:shadow-lg hover:-translate-y-0.5 active:scale-[0.98]' 
+    ? 'hover:shadow-premium hover:-translate-y-0.5 active:scale-[0.99] transition-all duration-300' 
     : '';
 
   return (
     <div
       onClick={onClick}
       className={cn(
-        'relative flex flex-col rounded-xl border transition-all duration-300 backdrop-blur-sm shadow-sm',
+        'relative flex flex-col rounded-xl border transition-all backdrop-blur-sm',
+        accentColor && 'border-t-2',
+        accentColor && accentStyles[accentColor],
         variantStyles[variant],
         hoverStyles,
         onClick && 'cursor-pointer',
@@ -242,32 +254,6 @@ export function CardAction({
       {Icon && <Icon className="w-4 h-4" />}
       {children}
     </button>
-  );
-}
-
-/**
- * Card Accent Line
- * Top decorative line indicating status/category
- */
-export function CardAccent({ className, color = 'primary', ...props }) {
-  const colorMap = {
-    primary: 'bg-gradient-to-r from-transparent via-primary to-transparent',
-    blue: 'bg-gradient-to-r from-transparent via-status-running to-transparent',
-    emerald: 'bg-gradient-to-r from-transparent via-status-success to-transparent',
-    rose: 'bg-gradient-to-r from-transparent via-status-error to-transparent',
-    amber: 'bg-gradient-to-r from-transparent via-status-warning to-transparent',
-    violet: 'bg-gradient-to-r from-transparent via-violet-500 to-transparent',
-  };
-
-  return (
-    <div 
-      className={cn(
-        'absolute top-0 left-4 right-4 h-0.5 rounded-full',
-        colorMap[color] || colorMap.primary,
-        className
-      )}
-      {...props}
-    />
   );
 }
 
