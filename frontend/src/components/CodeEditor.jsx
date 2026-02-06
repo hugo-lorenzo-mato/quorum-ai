@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { Editor } from '@monaco-editor/react';
 import { useUIStore } from '../stores';
 import { Loader2 } from 'lucide-react';
@@ -6,7 +7,11 @@ export default function CodeEditor({ value, language = 'markdown', readOnly = tr
   const theme = useUIStore((state) => state.theme);
   
   // Map our themes to Monaco themes
-  const editorTheme = theme === 'dark' || theme === 'midnight' ? 'vs-dark' : 'light';
+  const editorTheme = useMemo(() => {
+    if (theme === 'high-contrast') return 'hc-black';
+    if (['dark', 'midnight', 'dracula', 'nord', 'ocean'].includes(theme)) return 'vs-dark';
+    return 'light';
+  }, [theme]);
 
   return (
     <div className="h-full w-full min-h-[400px] border border-border rounded-lg overflow-hidden">

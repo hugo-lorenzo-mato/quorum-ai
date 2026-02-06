@@ -32,9 +32,9 @@ export function CardBase({
   const variantStyles = {
     default: 'border-border/50 bg-gradient-to-br from-card via-card to-card hover:border-primary/30',
     selected: 'border-primary/40 bg-primary/5 ring-2 ring-primary/20',
-    executing: 'border-blue-500/40 bg-gradient-to-br from-blue-500/5 via-card to-card shadow-lg shadow-blue-500/10 ring-1 ring-blue-500/20',
-    completed: 'border-border/50 bg-gradient-to-br from-card via-card to-emerald-500/5 hover:border-emerald-500/30',
-    failed: 'border-border/50 bg-gradient-to-br from-card via-card to-rose-500/5 hover:border-rose-500/30',
+    executing: 'border-status-running/40 bg-gradient-to-br from-status-running-bg via-card to-card shadow-lg shadow-status-running/10 ring-1 ring-status-running/20',
+    completed: 'border-border/50 bg-gradient-to-br from-card via-card to-status-success-bg/20 hover:border-status-success/30',
+    failed: 'border-border/50 bg-gradient-to-br from-card via-card to-status-error-bg/20 hover:border-status-error/30',
   };
 
   const hoverStyles = hoverable 
@@ -193,10 +193,10 @@ export function CardBadge({
   const variantStyles = {
     default: 'bg-muted/50 text-muted-foreground border-border/40',
     primary: 'bg-primary/10 text-primary border-primary/20',
-    success: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20',
-    warning: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20',
-    error: 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20',
-    info: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20',
+    success: 'bg-status-success-bg text-status-success border-status-success/20',
+    warning: 'bg-status-warning-bg text-status-warning border-status-warning/20',
+    error: 'bg-status-error-bg text-status-error border-status-error/20',
+    info: 'bg-status-running-bg text-status-running border-status-running/20',
   };
 
   return (
@@ -252,10 +252,10 @@ export function CardAction({
 export function CardAccent({ className, color = 'primary', ...props }) {
   const colorMap = {
     primary: 'bg-gradient-to-r from-transparent via-primary to-transparent',
-    blue: 'bg-gradient-to-r from-transparent via-blue-500 to-transparent',
-    emerald: 'bg-gradient-to-r from-transparent via-emerald-500 to-transparent',
-    rose: 'bg-gradient-to-r from-transparent via-rose-500 to-transparent',
-    amber: 'bg-gradient-to-r from-transparent via-amber-500 to-transparent',
+    blue: 'bg-gradient-to-r from-transparent via-status-running to-transparent',
+    emerald: 'bg-gradient-to-r from-transparent via-status-success to-transparent',
+    rose: 'bg-gradient-to-r from-transparent via-status-error to-transparent',
+    amber: 'bg-gradient-to-r from-transparent via-status-warning to-transparent',
     violet: 'bg-gradient-to-r from-transparent via-violet-500 to-transparent',
   };
 
@@ -279,10 +279,10 @@ export function CardIcon({ icon: Icon, className, color = 'default', ...props })
   const colorStyles = {
     default: 'bg-muted/50 border-border/50 text-muted-foreground',
     primary: 'bg-primary/10 border-primary/20 text-primary',
-    blue: 'bg-blue-500/10 border-blue-500/20 text-blue-500',
-    emerald: 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500',
-    rose: 'bg-rose-500/10 border-rose-500/20 text-rose-500',
-    amber: 'bg-amber-500/10 border-amber-500/20 text-amber-500',
+    blue: 'bg-status-running-bg border-status-running/20 text-status-running',
+    emerald: 'bg-status-success-bg border-status-success/20 text-status-success',
+    rose: 'bg-status-error-bg border-status-error/20 text-status-error',
+    amber: 'bg-status-warning-bg border-status-warning/20 text-status-warning',
     violet: 'bg-violet-500/10 border-violet-500/20 text-violet-500',
   };
 

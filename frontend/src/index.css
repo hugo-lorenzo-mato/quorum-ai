@@ -1,5 +1,5 @@
-/* Import Inter font */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+/* Import Inter font (Variable) */
+@import url('https://fonts.googleapis.com/css2?family=Inter:slnt,wght@-10..0,100..900&display=swap');
 /* Import JetBrains Mono font */
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap');
 
@@ -11,7 +11,7 @@
 /* Tailwind v4 Theme Configuration - Shadcn/Vercel Style */
 @theme {
   /* Font family */
-  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-sans: 'Inter Variable', 'Inter', system-ui, -apple-system, sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
 
   /* Border radius */
@@ -41,7 +41,19 @@
   --color-input: var(--input-color);
   --color-ring: var(--ring-color);
 
-  /* Status colors */
+  /* Semantic Status Colors */
+  --color-status-running: var(--status-running);
+  --color-status-running-bg: var(--status-running-bg);
+  --color-status-success: var(--status-success);
+  --color-status-success-bg: var(--status-success-bg);
+  --color-status-warning: var(--status-warning);
+  --color-status-warning-bg: var(--status-warning-bg);
+  --color-status-error: var(--status-error);
+  --color-status-error-bg: var(--status-error-bg);
+  --color-status-paused: var(--status-paused);
+  --color-status-paused-bg: var(--status-paused-bg);
+
+  /* Status colors (legacy support / basic) */
   --color-success: #22c55e;
   --color-warning: #eab308;
   --color-error: #ef4444;
@@ -69,6 +81,18 @@
   --border-color: #e4e4e7;
   --input-color: #e4e4e7;
   --ring-color: #18181b;
+
+  /* Status Colors - Light */
+  --status-running: #2563eb;
+  --status-running-bg: rgba(37, 99, 235, 0.1);
+  --status-success: #16a34a;
+  --status-success-bg: rgba(22, 163, 74, 0.1);
+  --status-warning: #d97706;
+  --status-warning-bg: rgba(217, 119, 6, 0.1);
+  --status-error: #dc2626;
+  --status-error-bg: rgba(220, 38, 38, 0.1);
+  --status-paused: #4b5563;
+  --status-paused-bg: rgba(75, 85, 99, 0.1);
 }
 
 /* Dark Mode - Deep zinc (Vercel/Linear style) */
@@ -92,52 +116,88 @@
   --border-color: #27272a;
   --input-color: #27272a;
   --ring-color: #d4d4d8;
+
+  /* Status Colors - Dark */
+  --status-running: #60a5fa;
+  --status-running-bg: rgba(96, 165, 250, 0.15);
+  --status-success: #4ade80;
+  --status-success-bg: rgba(74, 222, 128, 0.15);
+  --status-warning: #fbbf24;
+  --status-warning-bg: rgba(251, 191, 36, 0.15);
+  --status-error: #f87171;
+  --status-error-bg: rgba(248, 113, 113, 0.15);
+  --status-paused: #9ca3af;
+  --status-paused-bg: rgba(156, 163, 175, 0.15);
 }
 
-/* Midnight Mode - Pure Black (OLED) */
+/* Midnight Mode - Softened Black for OLED */
 .midnight {
-  --bg: #000000;
-  --fg: #fafafa;
-  --card-bg: #0a0a0a;
-  --card-fg: #fafafa;
-  --popover-bg: #0a0a0a;
-  --popover-fg: #fafafa;
-  --primary-bg: #fafafa;
-  --primary-fg: #09090b;
+  --bg: #020203;
+  --fg: #f4f4f5;
+  --card-bg: #09090b;
+  --card-fg: #f4f4f5;
+  --popover-bg: #09090b;
+  --popover-fg: #f4f4f5;
+  --primary-bg: #f4f4f5;
+  --primary-fg: #020203;
   --secondary-bg: #18181b;
-  --secondary-fg: #fafafa;
+  --secondary-fg: #f4f4f5;
   --muted-bg: #18181b;
-  --muted-fg: #a1a1aa;
+  --muted-fg: #71717a;
   --accent-bg: #18181b;
-  --accent-fg: #fafafa;
-  --destructive-bg: #7f1d1d;
-  --destructive-fg: #fafafa;
+  --accent-fg: #f4f4f5;
+  --destructive-bg: #991b1b;
+  --destructive-fg: #fef2f2;
   --border-color: #18181b;
   --input-color: #18181b;
-  --ring-color: #d4d4d8;
+  --ring-color: #a1a1aa;
+
+  /* Status Colors - Midnight */
+  --status-running: #3b82f6;
+  --status-running-bg: rgba(59, 130, 246, 0.1);
+  --status-success: #22c55e;
+  --status-success-bg: rgba(34, 197, 94, 0.1);
+  --status-warning: #f59e0b;
+  --status-warning-bg: rgba(245, 158, 11, 0.1);
+  --status-error: #ef4444;
+  --status-error-bg: rgba(239, 68, 68, 0.1);
+  --status-paused: #6b7280;
+  --status-paused-bg: rgba(107, 114, 128, 0.1);
 }
 
-/* Sepia Mode - Improved for readability (Warm Paper) */
+/* Sepia Mode - Optimized for long reading */
 .sepia {
-  --bg: #f5f2e7; /* Warmer, less yellow */
-  --fg: #433422; /* Dark brown for high contrast */
-  --card-bg: #eae6d9;
+  --bg: #fdf6e3;
+  --fg: #433422;
+  --card-bg: #f5ecd5;
   --card-fg: #433422;
-  --popover-bg: #eae6d9;
+  --popover-bg: #f5ecd5;
   --popover-fg: #433422;
   --primary-bg: #8c6a48;
-  --primary-fg: #ffffff;
-  --secondary-bg: #e0dcc7;
+  --primary-fg: #fdf6e3;
+  --secondary-bg: #eee8d5;
   --secondary-fg: #433422;
-  --muted-bg: #d3cbb7;
-  --muted-fg: #746656;
-  --accent-bg: #e0dcc7;
+  --muted-bg: #eee8d5;
+  --muted-fg: #839496;
+  --accent-bg: #eee8d5;
   --accent-fg: #433422;
-  --destructive-bg: #a63a26;
-  --destructive-fg: #ffffff;
+  --destructive-bg: #d33682;
+  --destructive-fg: #fdf6e3;
   --border-color: #d3cbb7;
   --input-color: #d3cbb7;
-  --ring-color: #8c6a48;
+  --ring-color: #b58900;
+
+  /* Status Colors - Sepia (Solarized inspired) */
+  --status-running: #268bd2;
+  --status-running-bg: rgba(38, 139, 210, 0.1);
+  --status-success: #859900;
+  --status-success-bg: rgba(133, 153, 0, 0.1);
+  --status-warning: #b58900;
+  --status-warning-bg: rgba(181, 137, 0, 0.1);
+  --status-error: #dc322f;
+  --status-error-bg: rgba(220, 50, 47, 0.1);
+  --status-paused: #586e75;
+  --status-paused-bg: rgba(88, 110, 117, 0.1);
 }
 
 /* Dracula Mode - High Contrast Neon */
@@ -148,7 +208,7 @@
   --card-fg: #f8f8f2;
   --popover-bg: #44475a;
   --popover-fg: #f8f8f2;
-  --primary-bg: #bd93f9; /* Purple */
+  --primary-bg: #bd93f9;
   --primary-fg: #282a36;
   --secondary-bg: #6272a4;
   --secondary-fg: #f8f8f2;
@@ -161,6 +221,18 @@
   --border-color: #6272a4;
   --input-color: #6272a4;
   --ring-color: #bd93f9;
+
+  /* Status Colors - Dracula Official */
+  --status-running: #8be9fd;
+  --status-running-bg: rgba(139, 233, 253, 0.15);
+  --status-success: #50fa7b;
+  --status-success-bg: rgba(80, 250, 123, 0.15);
+  --status-warning: #f1fa8c;
+  --status-warning-bg: rgba(241, 250, 140, 0.15);
+  --status-error: #ff5555;
+  --status-error-bg: rgba(255, 85, 85, 0.15);
+  --status-paused: #6272a4;
+  --status-paused-bg: rgba(98, 114, 164, 0.15);
 }
 
 /* Nord Mode - Arctic Blue/Grey */
@@ -171,7 +243,7 @@
   --card-fg: #eceff4;
   --popover-bg: #3b4252;
   --popover-fg: #eceff4;
-  --primary-bg: #88c0d0; /* Cyan */
+  --primary-bg: #88c0d0;
   --primary-fg: #2e3440;
   --secondary-bg: #434c5e;
   --secondary-fg: #d8dee9;
@@ -184,19 +256,31 @@
   --border-color: #4c566a;
   --input-color: #4c566a;
   --ring-color: #88c0d0;
+
+  /* Status Colors - Nord Official */
+  --status-running: #81a1c1;
+  --status-running-bg: rgba(129, 161, 193, 0.15);
+  --status-success: #a3be8c;
+  --status-success-bg: rgba(163, 190, 140, 0.15);
+  --status-warning: #ebcb8b;
+  --status-warning-bg: rgba(235, 203, 139, 0.15);
+  --status-error: #bf616a;
+  --status-error-bg: rgba(191, 97, 106, 0.15);
+  --status-paused: #4c566a;
+  --status-paused-bg: rgba(76, 86, 106, 0.15);
 }
 
 /* Ocean Mode - Deep Blue */
 .ocean {
-  --bg: #0f172a; /* Slate 900 */
+  --bg: #0f172a;
   --fg: #e2e8f0;
-  --card-bg: #1e293b; /* Slate 800 */
+  --card-bg: #1e293b;
   --card-fg: #f1f5f9;
   --popover-bg: #1e293b;
   --popover-fg: #f1f5f9;
-  --primary-bg: #38bdf8; /* Sky 400 */
+  --primary-bg: #38bdf8;
   --primary-fg: #0f172a;
-  --secondary-bg: #334155; /* Slate 700 */
+  --secondary-bg: #334155;
   --secondary-fg: #f1f5f9;
   --muted-bg: #334155;
   --muted-fg: #94a3b8;
@@ -207,6 +291,18 @@
   --border-color: #334155;
   --input-color: #334155;
   --ring-color: #38bdf8;
+
+  /* Status Colors - Ocean */
+  --status-running: #7dd3fc;
+  --status-running-bg: rgba(125, 211, 252, 0.15);
+  --status-success: #34d399;
+  --status-success-bg: rgba(52, 211, 153, 0.15);
+  --status-warning: #fbbf24;
+  --status-warning-bg: rgba(251, 191, 36, 0.15);
+  --status-error: #f87171;
+  --status-error-bg: rgba(248, 113, 113, 0.15);
+  --status-paused: #475569;
+  --status-paused-bg: rgba(71, 85, 105, 0.15);
 }
 
 @layer base {
@@ -220,9 +316,16 @@
   body {
     background-color: var(--bg);
     color: var(--fg);
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-family: 'Inter Variable', 'Inter', system-ui, -apple-system, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    letter-spacing: -0.01em;
+  }
+
+  /* Optical adjustment for dark themes: text "glows" more, so we reduce weight and tighten tracking */
+  :is(.dark, .midnight, .dracula, .ocean) body {
+    font-weight: 380; /* Slightly lighter than normal 400 */
+    letter-spacing: -0.02em;
   }
 
   /* Scrollbar styling */

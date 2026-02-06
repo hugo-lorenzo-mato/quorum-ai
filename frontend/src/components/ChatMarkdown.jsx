@@ -1,7 +1,7 @@
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import SyntaxHighlighter from '../lib/syntax';
-import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { oneDark, oneLight, dracula, nord } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { useUIStore } from '../stores';
 import { useState, useMemo } from 'react';
 import { Copy, CheckCircle2 } from 'lucide-react';
@@ -48,6 +48,12 @@ export default function ChatMarkdown({ content, isUser }) {
   // For user messages, we might want simpler rendering or different styling
   // But using the same renderer ensures code blocks still look good
   
+  const syntaxTheme = useMemo(() => {
+    if (theme === 'dracula') return dracula;
+    if (theme === 'nord') return nord;
+    return isDark ? oneDark : oneLight;
+  }, [theme, isDark]);
+
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
@@ -73,7 +79,7 @@ export default function ChatMarkdown({ content, isUser }) {
                 <CodeCopyButton text={codeContent} />
                 <SyntaxHighlighter
                   language={match[1]}
-                  style={isDark ? oneDark : oneLight}
+                  style={syntaxTheme}
                   PreTag="div"
                   customStyle={{ margin: 0, padding: '1rem', background: isUser ? 'rgba(0,0,0,0.1)' : undefined }}
                   codeTagProps={{ style: { fontFamily: 'var(--font-mono)' } }}

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import SyntaxHighlighter from '../lib/syntax';
-import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { oneDark, oneLight, dracula, nord } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { ChevronDown, ChevronRight, Copy, CheckCircle2 } from 'lucide-react';
 import { useUIStore } from '../stores';
 
@@ -185,6 +185,12 @@ export default function MarkdownViewer({ markdown }) {
               // In react-markdown v9, inline code has no className and no newlines
               const isInline = !className && !content.includes('\n');
 
+              const syntaxTheme = useMemo(() => {
+                if (theme === 'dracula') return dracula;
+                if (theme === 'nord') return nord;
+                return isDark ? oneDark : oneLight;
+              }, [theme, isDark]);
+
               if (match) {
                 // Block code with syntax highlighting
                 return (
@@ -193,7 +199,7 @@ export default function MarkdownViewer({ markdown }) {
                     <div className="p-4 overflow-x-auto">
                       <SyntaxHighlighter
                         language={match[1]}
-                        style={isDark ? oneDark : oneLight}
+                        style={syntaxTheme}
                         PreTag="div"
                         customStyle={{ margin: 0, background: 'transparent' }}
                         codeTagProps={{ style: { background: 'transparent' } }}
