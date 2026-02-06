@@ -52,6 +52,21 @@ import FileTree from '../components/FileTree';
 import CodeEditor from '../components/CodeEditor';
 import WorkflowGraph from '../components/WorkflowGraph';
 
+import {
+  CardBase,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+  CardFooter,
+  CardMeta,
+  CardMetaItem,
+  CardBadge,
+  CardAction,
+  CardIcon,
+  CardFloatingBadge,
+} from '../components/ui/UnifiedCard';
+
 function normalizeWhitespace(s) {
   return String(s || '').replace(/\s+/g, ' ').trim();
 }
@@ -136,7 +151,21 @@ function StatusBadge({ status }) {
 
 function WorkflowCard({ workflow, onClick, onDelete }) {
   const canDelete = workflow.status !== 'running';
-  const statusColor = getStatusColor(workflow.status);
+  
+  // Determine variant and accent based on status
+  let variant = 'default';
+  let accentColor = 'primary';
+  
+  if (workflow.status === 'running') {
+    variant = 'executing';
+    accentColor = 'blue';
+  } else if (workflow.status === 'completed') {
+    variant = 'completed';
+    accentColor = 'emerald';
+  } else if (workflow.status === 'failed') {
+    variant = 'failed';
+    accentColor = 'rose';
+  }
 
   const handleDeleteClick = (e) => {
     e.stopPropagation();
@@ -145,47 +174,22 @@ function WorkflowCard({ workflow, onClick, onDelete }) {
     }
   };
 
-  // Determine variant based on status
-  let variant = 'default';
-  if (workflow.status === 'running') variant = 'executing';
-  else if (workflow.status === 'completed') variant = 'completed';
-  else if (workflow.status === 'failed') variant = 'failed';
-
   return (
-    <div
+    <CardBase
       onClick={onClick}
-      className={`group relative w-full text-left p-4 rounded-xl border transition-all duration-300 cursor-pointer backdrop-blur-sm shadow-sm ${
-        variant === 'executing'
-          ? 'border-blue-500/40 bg-gradient-to-br from-blue-500/5 via-card to-card hover:shadow-lg hover:shadow-blue-500/10'
-          : variant === 'completed'
-          ? 'border-border/50 bg-gradient-to-br from-card via-card to-emerald-500/5 hover:border-emerald-500/30 hover:shadow-lg'
-          : variant === 'failed'
-          ? 'border-border/50 bg-gradient-to-br from-card via-card to-rose-500/5 hover:border-rose-500/30 hover:shadow-lg'
-          : 'border-border/50 bg-gradient-to-br from-card via-card to-card hover:border-primary/30 hover:shadow-lg'
-      } hover:-translate-y-0.5`}
+      variant={variant}
+      accentColor={accentColor}
+      className="group"
     >
-      {/* Top accent line */}
-      <div className={`absolute top-0 left-4 right-4 h-0.5 rounded-full ${
-        variant === 'executing' 
-          ? 'bg-gradient-to-r from-transparent via-blue-500 to-transparent' 
-          : variant === 'completed'
-          ? 'bg-gradient-to-r from-transparent via-emerald-500 to-transparent'
-          : variant === 'failed'
-          ? 'bg-gradient-to-r from-transparent via-rose-500 to-transparent'
-          : 'bg-gradient-to-r from-transparent via-primary to-transparent'
-      }`} />
-
-      <div className="flex items-start justify-between gap-3 mb-3">
+      <CardHeader className="pb-2">
         <div className="flex-1 min-w-0">
-          <p className="text-base font-semibold text-foreground line-clamp-2 leading-snug group-hover:text-primary transition-colors">
-            {deriveWorkflowTitle(workflow)}
-          </p>
-          <p className="text-xs text-muted-foreground mt-1.5 font-mono opacity-80">{workflow.id}</p>
+          <CardTitle>{deriveWorkflowTitle(workflow)}</CardTitle>
+          <p className="text-[10px] text-muted-foreground/60 mt-1 font-mono uppercase tracking-wider">{workflow.id}</p>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold uppercase tracking-wide border ${statusColor.bg} ${statusColor.text} ${statusColor.border}`}>
+        <div className="flex items-center gap-2">
+          <CardBadge variant={variant === 'default' ? 'info' : variant}>
             {workflow.status}
-          </span>
+          </CardBadge>
           {canDelete && (
             <button
               onClick={handleDeleteClick}
@@ -196,22 +200,22 @@ function WorkflowCard({ workflow, onClick, onDelete }) {
             </button>
           )}
         </div>
-      </div>
+      </CardHeader>
 
-      <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap pt-2 border-t border-border/30">
-        <div className="flex items-center gap-1.5">
-          <Layers className="w-3.5 h-3.5" />
-          <span className="font-medium">Phase: {workflow.current_phase || 'N/A'}</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <ListTodo className="w-3.5 h-3.5" />
-          <span className="font-medium">Tasks: {workflow.task_count || 0}</span>
-        </div>
-        <ExecutionModeBadge blueprint={workflow.blueprint} variant="inline" />
-      </div>
+      <CardContent>
+        <CardMeta className="pt-2 border-t border-border/30">
+          <CardMetaItem icon={Layers}>
+            Phase: {workflow.current_phase || 'N/A'}
+          </CardMetaItem>
+          <CardMetaItem icon={ListTodo}>
+            Tasks: {workflow.task_count || 0}
+          </CardMetaItem>
+          <ExecutionModeBadge blueprint={workflow.blueprint} variant="inline" />
+        </CardMeta>
+      </CardContent>
       
-      <ChevronRight className="absolute right-4 bottom-4 w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-    </div>
+      <ChevronRight className="absolute right-4 bottom-4 w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-all transform group-hover:translate-x-1" />
+    </CardBase>
   );
 }
 
@@ -2063,13 +2067,13 @@ export default function Workflows() {
       </div>
 
       {loading && workflows.length === 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {[...Array(6)].map((_, i) => (
             <div key={i} className="h-32 rounded-xl bg-muted animate-pulse" />
           ))}
         </div>
       ) : filteredWorkflows.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredWorkflows.map((workflow) => (
             <WorkflowCard
               key={workflow.id}

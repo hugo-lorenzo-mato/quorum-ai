@@ -199,15 +199,6 @@ func (c *ClaudeAdapter) extractUsage(result *CommandResult, execResult *core.Exe
 		}
 	}
 
-	// Pattern for cost
-	// Example: "cost: $0.0123"
-	costPattern := regexp.MustCompile(`cost:?\s*\$?([\d.]+)`)
-	if matches := costPattern.FindStringSubmatch(combined); len(matches) == 2 {
-		if cost, err := strconv.ParseFloat(matches[1], 64); err == nil {
-			execResult.CostUSD = cost
-		}
-	}
-
 	// Estimate tokens if not found
 	// Note: TokensIn should be based on INPUT (prompt), TokensOut on OUTPUT (response)
 	// Since we only have the output here, we estimate TokensOut from it
@@ -251,18 +242,6 @@ func (c *ClaudeAdapter) extractUsage(result *CommandResult, execResult *core.Exe
 		execResult.TokensOut = maxReasonableTokens
 	}
 
-	// Estimate cost if not found
-	if execResult.CostUSD == 0 {
-		execResult.CostUSD = c.estimateCost(execResult.TokensIn, execResult.TokensOut)
-	}
-}
-
-// estimateCost provides rough cost estimation.
-func (c *ClaudeAdapter) estimateCost(tokensIn, tokensOut int) float64 {
-	// Sonnet pricing (approximate): $3/MTok in, $15/MTok out
-	inputCost := float64(tokensIn) / 1000000 * 3
-	outputCost := float64(tokensOut) / 1000000 * 15
-	return inputCost + outputCost
 }
 
 // applyEffortEnv sets the CLAUDE_CODE_EFFORT_LEVEL env var based on reasoning effort config.

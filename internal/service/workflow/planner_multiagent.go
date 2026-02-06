@@ -28,7 +28,6 @@ type PlanOutput struct {
 	RawOutput  string
 	TokensIn   int
 	TokensOut  int
-	CostUSD    float64
 	DurationMS int64
 }
 
@@ -295,7 +294,6 @@ func (p *Planner) runPlanningWithAgent(ctx context.Context, wctx *Context, agent
 			"model":       result.Model,
 			"tokens_in":   result.TokensIn,
 			"tokens_out":  result.TokensOut,
-			"cost_usd":    result.CostUSD,
 			"duration_ms": durationMS,
 		})
 	}
@@ -308,7 +306,6 @@ func (p *Planner) runPlanningWithAgent(ctx context.Context, wctx *Context, agent
 			Content:    result.Output,
 			TokensIn:   result.TokensIn,
 			TokensOut:  result.TokensOut,
-			CostUSD:    result.CostUSD,
 			DurationMS: durationMS,
 		}); err != nil {
 			wctx.Logger.Warn("failed to write plan report", "error", err)
@@ -321,7 +318,6 @@ func (p *Planner) runPlanningWithAgent(ctx context.Context, wctx *Context, agent
 		RawOutput:  result.Output,
 		TokensIn:   result.TokensIn,
 		TokensOut:  result.TokensOut,
-		CostUSD:    result.CostUSD,
 		DurationMS: durationMS,
 	}, nil
 }
@@ -333,7 +329,6 @@ type ConsolidatedPlan struct {
 	Output     string
 	TokensIn   int
 	TokensOut  int
-	CostUSD    float64
 	DurationMS int64
 }
 
@@ -450,7 +445,6 @@ func (p *Planner) consolidatePlans(ctx context.Context, wctx *Context, plans []P
 			"plans_count": len(plans),
 			"tokens_in":   result.TokensIn,
 			"tokens_out":  result.TokensOut,
-			"cost_usd":    result.CostUSD,
 			"duration_ms": durationMS,
 		})
 	}
@@ -473,7 +467,6 @@ func (p *Planner) consolidatePlans(ctx context.Context, wctx *Context, plans []P
 		Output:     result.Output,
 		TokensIn:   result.TokensIn,
 		TokensOut:  result.TokensOut,
-		CostUSD:    result.CostUSD,
 		DurationMS: durationMS,
 	}, nil
 }

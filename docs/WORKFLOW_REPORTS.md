@@ -220,7 +220,6 @@ timestamp: 2024-01-15T14:30:52Z
 workflow_id: wf-1705329052-1
 tokens_in: 5432
 tokens_out: 2341
-cost_usd: "0.0234"
 duration_ms: 12543
 ---
 ```
@@ -229,7 +228,7 @@ duration_ms: 12543
 
 - **Metodología**: Descripción del enfoque utilizado para el análisis
 - **Contenido Principal**: El análisis, refinamiento o evaluación
-- **Métricas**: Tokens, costo y duración de la operación
+- **Métricas**: Tokens y duración de la operación
 - **Raw Output** (opcional): JSON completo de la respuesta del agente
 
 ## Principios del Análisis

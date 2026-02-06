@@ -34,8 +34,6 @@ type ModeratorEvaluationResult struct {
 	TokensIn int
 	// TokensOut is the output token count.
 	TokensOut int
-	// CostUSD is the cost of this evaluation.
-	CostUSD float64
 	// DurationMS is the execution time in milliseconds.
 	DurationMS int64
 }
@@ -210,7 +208,6 @@ func (m *SemanticModerator) EvaluateWithAgent(ctx context.Context, wctx *Context
 	evalResult := m.parseModeratorResponse(result.Output)
 	evalResult.TokensIn = result.TokensIn
 	evalResult.TokensOut = result.TokensOut
-	evalResult.CostUSD = result.CostUSD
 	evalResult.DurationMS = durationMS
 
 	// Validate moderator output - detect garbage/empty responses
@@ -254,7 +251,6 @@ func (m *SemanticModerator) EvaluateWithAgent(ctx context.Context, wctx *Context
 			"consensus_score": evalResult.Score,
 			"tokens_in":       result.TokensIn,
 			"tokens_out":      result.TokensOut,
-			"cost_usd":        result.CostUSD,
 			"duration_ms":     durationMS,
 		})
 	}
@@ -284,7 +280,6 @@ func (m *SemanticModerator) EvaluateWithAgent(ctx context.Context, wctx *Context
 			DivergencesCount: len(evalResult.Divergences),
 			TokensIn:         result.TokensIn,
 			TokensOut:        result.TokensOut,
-			CostUSD:          result.CostUSD,
 			DurationMS:       durationMS,
 		}); reportErr != nil {
 			wctx.Logger.Warn("failed to write moderator report", "round", round, "error", reportErr)

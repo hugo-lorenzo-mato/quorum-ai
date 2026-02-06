@@ -20,7 +20,6 @@ type TaskResponse struct {
 	Dependencies []string   `json:"dependencies"`
 	TokensIn     int        `json:"tokens_in"`
 	TokensOut    int        `json:"tokens_out"`
-	CostUSD      float64    `json:"cost_usd"`
 	Retries      int        `json:"retries"`
 	Error        string     `json:"error,omitempty"`
 	WorktreePath string     `json:"worktree_path,omitempty"`
@@ -130,7 +129,6 @@ func taskStateToResponse(task *core.TaskState) TaskResponse {
 		Dependencies: deps,
 		TokensIn:     task.TokensIn,
 		TokensOut:    task.TokensOut,
-		CostUSD:      task.CostUSD,
 		Retries:      task.Retries,
 		Error:        task.Error,
 		WorktreePath: task.WorktreePath,

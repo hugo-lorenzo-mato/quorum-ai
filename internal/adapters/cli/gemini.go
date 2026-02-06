@@ -201,17 +201,6 @@ func (g *GeminiAdapter) extractUsage(result *CommandResult, execResult *core.Exe
 		execResult.TokensOut = maxReasonableTokens
 	}
 
-	// Estimate cost
-	execResult.CostUSD = g.estimateCost(execResult.TokensIn, execResult.TokensOut)
-}
-
-// estimateCost provides rough cost estimation for Gemini.
-func (g *GeminiAdapter) estimateCost(tokensIn, tokensOut int) float64 {
-	// Gemini Flash pricing (approximate)
-	// Input: $0.075/1M tokens, Output: $0.30/1M tokens
-	inputCost := float64(tokensIn) / 1000000 * 0.075
-	outputCost := float64(tokensOut) / 1000000 * 0.30
-	return inputCost + outputCost
 }
 
 // Ensure GeminiAdapter implements core.Agent and core.StreamingCapable

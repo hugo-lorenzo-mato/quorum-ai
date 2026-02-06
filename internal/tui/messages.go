@@ -45,7 +45,6 @@ type DroppedEventsMsg struct {
 
 // MetricsUpdateMsg provides real-time metrics updates.
 type MetricsUpdateMsg struct {
-	TotalCostUSD   float64
 	TotalTokensIn  int
 	TotalTokensOut int
 	Duration       time.Duration
@@ -126,7 +125,6 @@ type AgentStatusUpdateMsg struct {
 type WorkflowProgressMsg struct {
 	Title      string
 	Percentage float64
-	Cost       float64
 	Requests   int
 }
 

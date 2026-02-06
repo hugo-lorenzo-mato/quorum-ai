@@ -80,18 +80,16 @@ type TaskCompletedEvent struct {
 	Duration  time.Duration `json:"duration"`
 	TokensIn  int           `json:"tokens_in"`
 	TokensOut int           `json:"tokens_out"`
-	CostUSD   float64       `json:"cost_usd"`
 }
 
 // NewTaskCompletedEvent creates a new task completed event.
-func NewTaskCompletedEvent(workflowID, projectID, taskID string, duration time.Duration, tokensIn, tokensOut int, costUSD float64) TaskCompletedEvent {
+func NewTaskCompletedEvent(workflowID, projectID, taskID string, duration time.Duration, tokensIn, tokensOut int) TaskCompletedEvent {
 	return TaskCompletedEvent{
 		BaseEvent: NewBaseEvent(TypeTaskCompleted, workflowID, projectID),
 		TaskID:    taskID,
 		Duration:  duration,
 		TokensIn:  tokensIn,
 		TokensOut: tokensOut,
-		CostUSD:   costUSD,
 	}
 }
 

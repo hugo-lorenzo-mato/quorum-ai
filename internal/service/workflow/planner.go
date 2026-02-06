@@ -69,7 +69,6 @@ func (p *Planner) RebuildDAGFromState(state *core.WorkflowState) error {
 			Dependencies: taskState.Dependencies,
 			TokensIn:     taskState.TokensIn,
 			TokensOut:    taskState.TokensOut,
-			CostUSD:      taskState.CostUSD,
 			Retries:      taskState.Retries,
 			StartedAt:    taskState.StartedAt,
 			CompletedAt:  taskState.CompletedAt,
@@ -206,7 +205,6 @@ func (p *Planner) runSingleAgentPlanning(ctx context.Context, wctx *Context) err
 			"model":       result.Model,
 			"tokens_in":   result.TokensIn,
 			"tokens_out":  result.TokensOut,
-			"cost_usd":    result.CostUSD,
 			"duration_ms": durationMS,
 		})
 	}
@@ -223,7 +221,6 @@ func (p *Planner) runSingleAgentPlanning(ctx context.Context, wctx *Context) err
 			Content:    result.Output,
 			TokensIn:   result.TokensIn,
 			TokensOut:  result.TokensOut,
-			CostUSD:    result.CostUSD,
 			DurationMS: durationMS,
 		}); err != nil {
 			wctx.Logger.Warn("failed to write plan report", "error", err)

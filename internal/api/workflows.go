@@ -48,7 +48,6 @@ type WorkflowResponse struct {
 
 // Metrics represents workflow metrics in API responses.
 type Metrics struct {
-	TotalCostUSD   float64 `json:"total_cost_usd"`
 	TotalTokensIn  int     `json:"total_tokens_in"`
 	TotalTokensOut int     `json:"total_tokens_out"`
 	ConsensusScore float64 `json:"consensus_score"`
@@ -671,7 +670,6 @@ func (s *Server) stateToWorkflowResponse(ctx context.Context, state *core.Workfl
 
 	if state.Metrics != nil {
 		resp.Metrics = &Metrics{
-			TotalCostUSD:   state.Metrics.TotalCostUSD,
 			TotalTokensIn:  state.Metrics.TotalTokensIn,
 			TotalTokensOut: state.Metrics.TotalTokensOut,
 			ConsensusScore: state.Metrics.ConsensusScore,
@@ -1031,13 +1029,7 @@ func (s *Server) executeWorkflowAsync(
 		runErr = runner.RunWithState(ctx, state)
 	}
 
-	// Get final state for metrics
-	finalState, _ := runner.GetState(ctx)
 	duration := time.Since(startTime)
-	var totalCost float64
-	if finalState != nil && finalState.Metrics != nil {
-		totalCost = finalState.Metrics.TotalCostUSD
-	}
 
 	// Emit lifecycle event
 	if runErr != nil {
@@ -1050,9 +1042,8 @@ func (s *Server) executeWorkflowAsync(
 		s.logger.Info("workflow execution completed",
 			"workflow_id", state.WorkflowID,
 			"duration", duration,
-			"cost", totalCost,
 		)
-		notifier.WorkflowCompleted(duration, totalCost)
+		notifier.WorkflowCompleted(duration)
 	}
 }
 
@@ -1832,7 +1823,7 @@ func (s *Server) HandleExecuteWorkflow(w http.ResponseWriter, r *http.Request) {
 
 		finalState, _ := stateManager.LoadByID(cleanupCtx, core.WorkflowID(workflowID))
 		if finalState != nil && finalState.Status == core.WorkflowStatusCompleted {
-			notifier.WorkflowCompleted(time.Since(state.UpdatedAt), finalState.Metrics.TotalCostUSD)
+			notifier.WorkflowCompleted(time.Since(state.UpdatedAt))
 		}
 	}()
 

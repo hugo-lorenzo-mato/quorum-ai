@@ -122,7 +122,7 @@ function ThemeSwitcher() {
   );
 }
 
-function ConnectionStatus({ compact = false }) {
+function ConnectionStatus({ compact = false, iconStrokeWidth = 2 }) {
   const { connectionMode, retrySSEFn } = useUIStore();
 
   const getStatusConfig = () => {
@@ -162,7 +162,7 @@ function ConnectionStatus({ compact = false }) {
   if (compact) {
     return (
       <div className={`p-1.5 rounded-md ${config.bgColor} ${config.color}`} title={config.label}>
-        <Icon className={`w-4 h-4 ${config.animate ? 'animate-spin' : ''}`} />
+        <Icon className={`w-4 h-4 ${config.animate ? 'animate-spin' : ''}`} strokeWidth={iconStrokeWidth} />
       </div>
     );
   }
@@ -171,7 +171,7 @@ function ConnectionStatus({ compact = false }) {
     <div
       className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg border text-xs font-medium ${config.bgColor} ${config.borderColor} ${config.color}`}
     >
-      <Icon className={`w-3.5 h-3.5 ${config.animate ? 'animate-spin' : ''}`} />
+      <Icon className={`w-3.5 h-3.5 ${config.animate ? 'animate-spin' : ''}`} strokeWidth={iconStrokeWidth} />
       <span>{config.label}</span>
       {connectionMode !== 'sse' && retrySSEFn && (
         <button
@@ -179,7 +179,7 @@ function ConnectionStatus({ compact = false }) {
           className="ml-1 p-0.5 rounded hover:bg-white/10 transition-colors"
           title="Retry connection"
         >
-          <RefreshCw className="w-3 h-3" />
+          <RefreshCw className="w-3 h-3" strokeWidth={iconStrokeWidth} />
         </button>
       )}
     </div>
@@ -188,8 +188,11 @@ function ConnectionStatus({ compact = false }) {
 
 export default function Layout({ children }) {
   const location = useLocation();
-  const { sidebarOpen, toggleSidebar, setSidebarOpen } = useUIStore();
+  const { sidebarOpen, toggleSidebar, setSidebarOpen, theme } = useUIStore();
   
+  // Dynamic icon weight based on theme for visual cleanliness
+  const iconStrokeWidth = ['dark', 'midnight', 'dracula', 'nord', 'ocean'].includes(theme) ? 1.6 : 2;
+
   // Check if we're on the chat, settings, or kanban page - they need full control of their layout
   const isFullLayoutPage = location.pathname === '/chat' || location.pathname === '/settings' || location.pathname === '/kanban';
 
@@ -287,7 +290,7 @@ export default function Layout({ children }) {
                 } ${!sidebarOpen ? 'justify-center' : ''}`}
                 title={!sidebarOpen ? item.label : undefined}
               >
-                <Icon className="w-5 h-5 flex-shrink-0" />
+                <Icon className="w-5 h-5 flex-shrink-0" strokeWidth={iconStrokeWidth} />
                 {sidebarOpen && (
                   <span className="animate-fade-in">{item.label}</span>
                 )}
@@ -300,12 +303,12 @@ export default function Layout({ children }) {
         <div className="p-3 border-t border-border space-y-3">
           {sidebarOpen ? (
             <>
-              <ConnectionStatus />
+              <ConnectionStatus iconStrokeWidth={iconStrokeWidth} />
               <ThemeSwitcher />
             </>
           ) : (
             <div className="flex flex-col items-center gap-2">
-              <ConnectionStatus compact />
+              <ConnectionStatus compact iconStrokeWidth={iconStrokeWidth} />
             </div>
           )}
         </div>
@@ -328,7 +331,7 @@ export default function Layout({ children }) {
                 className="md:hidden p-2 -ml-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
                 title="Toggle menu"
               >
-                <Menu className="w-5 h-5" />
+                <Menu className="w-5 h-5" strokeWidth={iconStrokeWidth} />
               </button>
 
               {/* Expand Toggle - Only visible when sidebar is collapsed */}
@@ -338,7 +341,7 @@ export default function Layout({ children }) {
                   className="hidden md:flex p-2 -ml-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
                   title="Expand sidebar"
                 >
-                  <PanelLeft className="w-5 h-5" />
+                  <PanelLeft className="w-5 h-5" strokeWidth={iconStrokeWidth} />
                 </button>
               )}
 
@@ -355,7 +358,7 @@ export default function Layout({ children }) {
                 className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
                 title="View on GitHub"
               >
-                <Github className="w-5 h-5" />
+                <Github className="w-5 h-5" strokeWidth={iconStrokeWidth} />
               </a>
             </div>
           </div>

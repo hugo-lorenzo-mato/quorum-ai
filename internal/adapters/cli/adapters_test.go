@@ -221,19 +221,6 @@ func TestClaudeAdapter_BuildArgs(t *testing.T) {
 	// not by buildArgs directly. This enables real-time progress monitoring.
 }
 
-func TestClaudeAdapter_EstimateCost(t *testing.T) {
-	adapter, _ := NewClaudeAdapter(AgentConfig{})
-	claude := adapter.(*ClaudeAdapter)
-
-	// 1M input tokens = $3, 1M output tokens = $15
-	cost := claude.estimateCost(1000000, 1000000)
-
-	expected := 18.0 // $3 + $15
-	if cost != expected {
-		t.Errorf("estimateCost(1M, 1M) = %v, want %v", cost, expected)
-	}
-}
-
 func TestClaudeAdapter_ExtractUsage(t *testing.T) {
 	adapter, _ := NewClaudeAdapter(AgentConfig{})
 	claude := adapter.(*ClaudeAdapter)
@@ -251,9 +238,6 @@ func TestClaudeAdapter_ExtractUsage(t *testing.T) {
 	}
 	if execResult.TokensOut != 50 {
 		t.Errorf("TokensOut = %d, want 50", execResult.TokensOut)
-	}
-	if execResult.CostUSD != 0.01 {
-		t.Errorf("CostUSD = %v, want 0.01", execResult.CostUSD)
 	}
 }
 
@@ -306,19 +290,6 @@ func TestGeminiAdapter_BuildArgs(t *testing.T) {
 	// not by buildArgs directly. This enables real-time progress monitoring.
 	if !containsString(args, "--approval-mode") {
 		t.Error("should include --approval-mode for headless execution")
-	}
-}
-
-func TestGeminiAdapter_EstimateCost(t *testing.T) {
-	adapter, _ := NewGeminiAdapter(AgentConfig{})
-	gemini := adapter.(*GeminiAdapter)
-
-	// 1M input = $0.075, 1M output = $0.30
-	cost := gemini.estimateCost(1000000, 1000000)
-
-	expected := 0.375
-	if cost != expected {
-		t.Errorf("estimateCost(1M, 1M) = %v, want %v", cost, expected)
 	}
 }
 
@@ -428,19 +399,6 @@ func TestCodexAdapter_BuildArgs_DisablesWebSearchForMinimal(t *testing.T) {
 	}
 	if !containsString(args, `web_search="disabled"`) {
 		t.Fatalf("expected web_search disabled for minimal reasoning effort, args=%v", args)
-	}
-}
-
-func TestCodexAdapter_EstimateCost(t *testing.T) {
-	adapter, _ := NewCodexAdapter(AgentConfig{})
-	codex := adapter.(*CodexAdapter)
-
-	// 1M input = $2.50, 1M output = $10.00
-	cost := codex.estimateCost(1000000, 1000000)
-
-	expected := 12.50
-	if cost != expected {
-		t.Errorf("estimateCost(1M, 1M) = %v, want %v", cost, expected)
 	}
 }
 

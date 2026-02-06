@@ -315,7 +315,6 @@ type Model struct {
 	workflowPhase  string // "idle", "running", "done"
 	totalTokensIn  int
 	totalTokensOut int
-	totalCost      float64
 
 	// Workflow runner for /plan and /run commands
 	runner      WorkflowRunner
@@ -2453,9 +2452,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.logsPanel.AddSuccess(strings.ToLower(a.Name), "Agent completed")
 			}
 		}
-		// Update costs from state
 		if msg.State != nil && msg.State.Metrics != nil {
-			m.totalCost = msg.State.Metrics.TotalCostUSD
 			m.totalTokensIn = msg.State.Metrics.TotalTokensIn
 			m.totalTokensOut = msg.State.Metrics.TotalTokensOut
 		}
@@ -2463,7 +2460,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		summaryParts := []string{fmt.Sprintf("✓ Workflow completed in %s", formatDuration(elapsed))}
 		if msg.State != nil && msg.State.Metrics != nil {
 			summaryParts = append(summaryParts, fmt.Sprintf("Tokens: %s in / %s out", formatTokens(m.totalTokensIn), formatTokens(m.totalTokensOut)))
-			summaryParts = append(summaryParts, fmt.Sprintf("Cost: $%.4f", m.totalCost))
 			if msg.State.Metrics.ConsensusScore > 0 {
 				summaryParts = append(summaryParts, fmt.Sprintf("Consensus: %.0f%%", msg.State.Metrics.ConsensusScore*100))
 			}
@@ -2608,9 +2604,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			if tokensIn > 0 || tokensOut > 0 {
 				stats = append(stats, fmt.Sprintf("↑%d ↓%d tok", tokensIn, tokensOut))
-			}
-			if cost, ok := msg.Data["cost_usd"].(float64); ok && cost > 0 {
-				stats = append(stats, fmt.Sprintf("$%.4f", cost))
 			}
 			if durationMS, ok := msg.Data["duration_ms"].(int64); ok {
 				if durationMS >= 1000 {
@@ -5257,9 +5250,6 @@ func formatWorkflowStatus(state *core.WorkflowState) string {
 			metrics = append(metrics, fmt.Sprintf("Tokens: %s/%s",
 				formatTokens(state.Metrics.TotalTokensIn),
 				formatTokens(state.Metrics.TotalTokensOut)))
-		}
-		if state.Metrics.TotalCostUSD > 0 {
-			metrics = append(metrics, fmt.Sprintf("Cost: $%.4f", state.Metrics.TotalCostUSD))
 		}
 	}
 	if len(metrics) > 0 {

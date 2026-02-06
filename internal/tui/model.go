@@ -41,7 +41,6 @@ type Model struct {
 	workflowPct   float64
 	workflowTitle string
 	showSidebar   bool
-	totalCost     float64
 	totalRequests int
 }
 
@@ -265,7 +264,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case WorkflowProgressMsg:
 		m.workflowTitle = msg.Title
 		m.workflowPct = msg.Percentage
-		m.totalCost = msg.Cost
 		m.totalRequests = msg.Requests
 		if m.eventAdapter != nil {
 			return m, waitForEventBusUpdate(m.eventAdapter)
@@ -394,7 +392,6 @@ func (m Model) renderSidebar() string {
 		Width:     24,
 		Height:    m.height - 8,
 		ShowStats: true,
-		TotalCost: m.totalCost,
 		TotalReqs: m.totalRequests,
 	}
 	return components.RenderSidebar(m.agents, m.spinner.bubblesSpinner, cfg)
@@ -469,13 +466,11 @@ func (m Model) renderHeader() string {
 	}
 
 	phaseIcon := lipgloss.NewStyle().Foreground(ColorPrimary).Render("⬡ ")
-	costIcon := lipgloss.NewStyle().Foreground(ColorWarning).Render("$ ")
 	reqIcon := lipgloss.NewStyle().Foreground(ColorSuccess).Render("↑ ")
 
 	right := dimStyle.Render(
 		phaseIcon + phase + "  │  " +
 			reqIcon + fmt.Sprintf("%d req", m.totalRequests) + "  │  " +
-			costIcon + fmt.Sprintf("%.3f", m.totalCost) + "  │  " +
 			status)
 
 	// Calculate gap for alignment

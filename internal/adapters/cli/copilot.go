@@ -407,19 +407,6 @@ func (c *CopilotAdapter) extractUsage(result *CommandResult, execResult *core.Ex
 		execResult.TokensOut = maxReasonableTokens
 	}
 
-	// Estimate cost (Copilot is subscription-based, but we estimate for tracking)
-	execResult.CostUSD = c.estimateCost(execResult.TokensIn, execResult.TokensOut)
-}
-
-// estimateCost provides rough cost estimate.
-// Note: Copilot CLI is included in GitHub Copilot subscription, so actual cost is $0
-// but we track usage for comparison purposes using Claude Sonnet pricing as proxy.
-func (c *CopilotAdapter) estimateCost(tokensIn, tokensOut int) float64 {
-	// Using Claude Sonnet 4.5 pricing as baseline since that's the default model
-	// Input: $3/MTok, Output: $15/MTok
-	inputCost := float64(tokensIn) * 3.0 / 1_000_000
-	outputCost := float64(tokensOut) * 15.0 / 1_000_000
-	return inputCost + outputCost
 }
 
 // cleanANSI removes ANSI escape sequences from output.

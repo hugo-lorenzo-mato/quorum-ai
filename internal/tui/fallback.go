@@ -92,8 +92,8 @@ func (f *FallbackOutput) TaskCompleted(task *core.Task, duration time.Duration) 
 	f.printf("%s [DONE] %s (%s)\n", icon, task.Name, duration.Round(time.Millisecond))
 
 	if f.verbose && task.TokensIn > 0 {
-		f.printf("    Tokens: %d in / %d out, Cost: $%.4f\n",
-			task.TokensIn, task.TokensOut, task.CostUSD)
+		f.printf("    Tokens: %d in / %d out\n",
+			task.TokensIn, task.TokensOut)
 	}
 }
 
@@ -417,7 +417,6 @@ func (j *JSONOutput) TaskCompleted(task *core.Task, duration time.Duration) {
 		"duration":   duration.Milliseconds(),
 		"tokens_in":  task.TokensIn,
 		"tokens_out": task.TokensOut,
-		"cost_usd":   task.CostUSD,
 	})
 }
 

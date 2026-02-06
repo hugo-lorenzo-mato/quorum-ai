@@ -669,7 +669,6 @@ func (e *Executor) handleExecutionSuccessValidated(ctx context.Context, wctx *Co
 		"model", result.Model,
 		"tokens_in", result.TokensIn,
 		"tokens_out", result.TokensOut,
-		"cost_usd", result.CostUSD,
 		"duration_ms", durationMS,
 		"finish_reason", result.FinishReason,
 		"tool_calls", len(result.ToolCalls),
@@ -683,7 +682,6 @@ func (e *Executor) handleExecutionSuccessValidated(ctx context.Context, wctx *Co
 			"model":         result.Model,
 			"tokens_in":     result.TokensIn,
 			"tokens_out":    result.TokensOut,
-			"cost_usd":      result.CostUSD,
 			"duration_ms":   durationMS,
 			"tool_calls":    len(result.ToolCalls),
 			"has_file_ops":  validation.HasFileOps,
@@ -694,7 +692,6 @@ func (e *Executor) handleExecutionSuccessValidated(ctx context.Context, wctx *Co
 	wctx.Lock()
 	taskState.TokensIn = result.TokensIn
 	taskState.TokensOut = result.TokensOut
-	taskState.CostUSD = result.CostUSD
 	taskState.Status = core.TaskStatusCompleted
 	completedAt := time.Now()
 	taskState.CompletedAt = &completedAt
@@ -715,7 +712,6 @@ func (e *Executor) handleExecutionSuccessValidated(ctx context.Context, wctx *Co
 	if wctx.State.Metrics != nil {
 		wctx.State.Metrics.TotalTokensIn += result.TokensIn
 		wctx.State.Metrics.TotalTokensOut += result.TokensOut
-		wctx.State.Metrics.TotalCostUSD += result.CostUSD
 	}
 	wctx.Unlock()
 
@@ -768,7 +764,7 @@ func (e *Executor) handleExecutionSuccessValidated(ctx context.Context, wctx *Co
 
 	if wctx.Output != nil {
 		wctx.Output.WorkflowStateUpdated(wctx.State)
-		wctx.Output.Log("success", "executor", fmt.Sprintf("Task completed: %s ($%.4f)", task.Name, result.CostUSD))
+		wctx.Output.Log("success", "executor", fmt.Sprintf("Task completed: %s", task.Name))
 	}
 
 	return nil

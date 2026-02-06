@@ -125,7 +125,7 @@ func TestFallbackOutput_TaskCompleted(t *testing.T) {
 		{
 			name:    "verbose with tokens",
 			verbose: true,
-			task:    &core.Task{ID: "task-1", Name: "Test Task", TokensIn: 100, TokensOut: 50, CostUSD: 0.01},
+			task:    &core.Task{ID: "task-1", Name: "Test Task", TokensIn: 100, TokensOut: 50},
 			want:    []string{"DONE", "Test Task", "Tokens:", "100", "50"},
 		},
 	}
@@ -190,9 +190,7 @@ func TestFallbackOutput_WorkflowCompleted(t *testing.T) {
 				"task-1": {Status: core.TaskStatusCompleted},
 				"task-2": {Status: core.TaskStatusCompleted},
 			},
-			Metrics: &core.StateMetrics{
-				TotalCostUSD: 0.05,
-			},
+			Metrics: &core.StateMetrics{},
 		},
 	}
 
@@ -417,7 +415,7 @@ func TestJSONOutput_TaskCompleted(t *testing.T) {
 	buf := &bytes.Buffer{}
 	j := NewJSONOutput().WithWriter(buf)
 
-	task := &core.Task{ID: "task-1", Name: "Test Task", TokensIn: 100, TokensOut: 50, CostUSD: 0.01}
+	task := &core.Task{ID: "task-1", Name: "Test Task", TokensIn: 100, TokensOut: 50}
 	j.TaskCompleted(task, 1*time.Second)
 
 	output := buf.String()
@@ -455,9 +453,7 @@ func TestJSONOutput_WorkflowCompleted(t *testing.T) {
 			Tasks: map[core.TaskID]*core.TaskState{
 				"task-1": {Status: core.TaskStatusCompleted},
 			},
-			Metrics: &core.StateMetrics{
-				TotalCostUSD: 0.05,
-			},
+			Metrics: &core.StateMetrics{},
 		},
 	}
 	j.WorkflowCompleted(state)

@@ -77,7 +77,6 @@ func (m *MockAgent) Execute(ctx context.Context, opts core.ExecuteOptions) (*cor
 		Output:    fmt.Sprintf("Mock response for: %s", promptPreview),
 		TokensIn:  100,
 		TokensOut: 50,
-		CostUSD:   0.001,
 		Duration:  time.Millisecond * 100,
 	}, nil
 }

@@ -278,7 +278,6 @@ func TestQuietOutput_AllMethods(t *testing.T) {
 		Description: "Description",
 		TokensIn:    100,
 		TokensOut:   50,
-		CostUSD:     0.01,
 	}
 
 	quiet.TaskStarted(task)

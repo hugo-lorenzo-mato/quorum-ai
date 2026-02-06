@@ -117,10 +117,8 @@ func TestNewWorkflowState(t *testing.T) {
 	task := NewTask("t1", "test task", PhaseAnalyze)
 	task.TokensIn = 100
 	task.TokensOut = 50
-	task.CostUSD = 0.01
 	_ = wf.AddTask(task)
 	wf.ConsensusScore = 0.9
-	wf.TotalCostUSD = 0.01
 	wf.TotalTokensIn = 100
 	wf.TotalTokensOut = 50
 
@@ -137,9 +135,6 @@ func TestNewWorkflowState(t *testing.T) {
 	}
 	if len(state.Tasks) != 1 {
 		t.Errorf("expected 1 task, got %d", len(state.Tasks))
-	}
-	if state.Metrics.TotalCostUSD != 0.01 {
-		t.Errorf("expected cost 0.01, got %f", state.Metrics.TotalCostUSD)
 	}
 	if state.Metrics.ConsensusScore != 0.9 {
 		t.Errorf("expected consensus score 0.9, got %f", state.Metrics.ConsensusScore)

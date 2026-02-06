@@ -549,7 +549,7 @@ func (a *OutputNotifierAdapter) AgentEvent(kind, agent, message string, _ map[st
 type TraceNotifier interface {
 	PhaseStarted(phase string)
 	TaskStarted(taskID, taskName, cli string)
-	TaskCompleted(taskID, taskName string, duration time.Duration, tokensIn, tokensOut int, costUSD float64)
+	TaskCompleted(taskID, taskName string, duration time.Duration, tokensIn, tokensOut int)
 	TaskFailed(taskID, taskName string, err error)
 	WorkflowStateUpdated(status string, totalTasks int)
 	Close() error
@@ -593,7 +593,7 @@ func (t *TracingOutputNotifierAdapter) TaskStarted(task *core.Task) {
 // TaskCompleted implements workflow.OutputNotifier.
 func (t *TracingOutputNotifierAdapter) TaskCompleted(task *core.Task, duration time.Duration) {
 	if t.tracer != nil {
-		t.tracer.TaskCompleted(string(task.ID), task.Name, duration, task.TokensIn, task.TokensOut, task.CostUSD)
+		t.tracer.TaskCompleted(string(task.ID), task.Name, duration, task.TokensIn, task.TokensOut)
 	}
 	if t.base != nil {
 		t.base.TaskCompleted(task, duration)

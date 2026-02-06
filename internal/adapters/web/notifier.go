@@ -127,7 +127,6 @@ func (n *WebOutputNotifier) TaskCompleted(task *core.Task, duration time.Duratio
 		duration,
 		task.TokensIn,
 		task.TokensOut,
-		task.CostUSD,
 	))
 }
 
@@ -207,8 +206,8 @@ func (n *WebOutputNotifier) WorkflowStarted(prompt string) {
 
 // WorkflowCompleted emits a workflow_completed event using priority channel.
 // NOTE: This is NOT part of the OutputNotifier interface but is needed for web context.
-func (n *WebOutputNotifier) WorkflowCompleted(duration time.Duration, totalCost float64) {
-	n.eventBus.PublishPriority(events.NewWorkflowCompletedEvent(n.workflowID, "", duration, totalCost))
+func (n *WebOutputNotifier) WorkflowCompleted(duration time.Duration) {
+	n.eventBus.PublishPriority(events.NewWorkflowCompletedEvent(n.workflowID, "", duration))
 }
 
 // WorkflowFailed emits a workflow_failed event using priority channel.

@@ -530,18 +530,18 @@ func (m *SQLiteStateManager) insertTask(ctx context.Context, tx *sql.Tx, workflo
 	}
 
 	_, err = tx.ExecContext(ctx, `
-		INSERT INTO tasks (
-			id, workflow_id, phase, name, description, status, cli, model,
-			dependencies, tokens_in, tokens_out, cost_usd, retries,
-			error, worktree_path, started_at, completed_at,
-			output, output_file, model_used, finish_reason, tool_calls,
-			last_commit, files_modified, branch, resumable, resume_hint,
-			merge_pending, merge_commit
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`,
+			INSERT INTO tasks (
+				id, workflow_id, phase, name, description, status, cli, model,
+				dependencies, tokens_in, tokens_out, retries,
+				error, worktree_path, started_at, completed_at,
+				output, output_file, model_used, finish_reason, tool_calls,
+				last_commit, files_modified, branch, resumable, resume_hint,
+				merge_pending, merge_commit
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`,
 		task.ID, workflowID, task.Phase, task.Name, nullableString([]byte(task.Description)), task.Status,
 		task.CLI, task.Model, string(depsJSON),
-		task.TokensIn, task.TokensOut, task.CostUSD, task.Retries,
+		task.TokensIn, task.TokensOut, task.Retries,
 		nullableString([]byte(task.Error)), nullableString([]byte(task.WorktreePath)),
 		nullableTime(task.StartedAt), nullableTime(task.CompletedAt),
 		nullableString([]byte(task.Output)), nullableString([]byte(task.OutputFile)),
@@ -691,13 +691,13 @@ func (m *SQLiteStateManager) loadWorkflowByID(ctx context.Context, id core.Workf
 	// Load tasks using read connection
 	state.Tasks = make(map[core.TaskID]*core.TaskState)
 	rows, err := m.readDB.QueryContext(ctx, `
-		SELECT id, phase, name, description, status, cli, model, dependencies,
-		       tokens_in, tokens_out, cost_usd, retries, error,
-		       worktree_path, started_at, completed_at, output,
-		       output_file, model_used, finish_reason, tool_calls,
-		       last_commit, files_modified, branch, resumable, resume_hint,
-		       merge_pending, merge_commit
-		FROM tasks WHERE workflow_id = ?
+			SELECT id, phase, name, description, status, cli, model, dependencies,
+			       tokens_in, tokens_out, retries, error,
+			       worktree_path, started_at, completed_at, output,
+			       output_file, model_used, finish_reason, tool_calls,
+			       last_commit, files_modified, branch, resumable, resume_hint,
+			       merge_pending, merge_commit
+			FROM tasks WHERE workflow_id = ?
 	`, id)
 	if err != nil {
 		return nil, fmt.Errorf("loading tasks: %w", err)
@@ -753,7 +753,7 @@ func (m *SQLiteStateManager) scanTask(rows *sql.Rows) (*core.TaskState, error) {
 	err := rows.Scan(
 		&task.ID, &task.Phase, &task.Name, &description, &task.Status,
 		&cli, &model, &depsJSON,
-		&task.TokensIn, &task.TokensOut, &task.CostUSD, &task.Retries,
+		&task.TokensIn, &task.TokensOut, &task.Retries,
 		&errorStr, &worktreePath, &startedAt, &completedAt,
 		&output, &outputFile, &modelUsed, &finishReason, &toolCallsJSON,
 		&lastCommit, &filesModifiedJSON, &branch, &resumable, &resumeHint,
@@ -2243,13 +2243,13 @@ func (a *sqliteAtomicContext) LoadByID(id core.WorkflowID) (*core.WorkflowState,
 	// Load tasks within transaction
 	state.Tasks = make(map[core.TaskID]*core.TaskState)
 	rows, err := a.tx.QueryContext(a.ctx, `
-		SELECT id, phase, name, description, status, cli, model, dependencies,
-		       tokens_in, tokens_out, cost_usd, retries, error,
-		       worktree_path, started_at, completed_at, output,
-		       output_file, model_used, finish_reason, tool_calls,
-		       last_commit, files_modified, branch, resumable, resume_hint,
-		       merge_pending, merge_commit
-		FROM tasks WHERE workflow_id = ?
+			SELECT id, phase, name, description, status, cli, model, dependencies,
+			       tokens_in, tokens_out, retries, error,
+			       worktree_path, started_at, completed_at, output,
+			       output_file, model_used, finish_reason, tool_calls,
+			       last_commit, files_modified, branch, resumable, resume_hint,
+			       merge_pending, merge_commit
+			FROM tasks WHERE workflow_id = ?
 	`, id)
 	if err != nil {
 		return nil, fmt.Errorf("loading tasks: %w", err)

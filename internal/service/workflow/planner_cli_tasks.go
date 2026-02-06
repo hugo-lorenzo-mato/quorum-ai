@@ -369,7 +369,6 @@ func (p *Planner) executeComprehensivePlanning(
 			"model":       result.Model,
 			"tokens_in":   result.TokensIn,
 			"tokens_out":  result.TokensOut,
-			"cost_usd":    result.CostUSD,
 			"duration_ms": durationMS,
 		})
 	}
@@ -378,7 +377,6 @@ func (p *Planner) executeComprehensivePlanning(
 	wctx.UpdateMetrics(func(m *core.StateMetrics) {
 		m.TotalTokensIn += result.TokensIn
 		m.TotalTokensOut += result.TokensOut
-		m.TotalCostUSD += result.CostUSD
 	})
 
 	// Generate manifest from filesystem (robust approach)

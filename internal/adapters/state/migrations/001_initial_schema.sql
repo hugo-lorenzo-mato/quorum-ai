@@ -44,7 +44,6 @@ CREATE TABLE IF NOT EXISTS tasks (
     dependencies TEXT,       -- JSON array of task IDs
     tokens_in INTEGER NOT NULL DEFAULT 0,
     tokens_out INTEGER NOT NULL DEFAULT 0,
-    cost_usd REAL NOT NULL DEFAULT 0.0,
     retries INTEGER NOT NULL DEFAULT 0,
     error TEXT,
     worktree_path TEXT,

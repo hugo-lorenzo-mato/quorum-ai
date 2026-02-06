@@ -156,7 +156,6 @@ func (r *Refiner) Run(ctx context.Context, wctx *Context) error {
 				"model":           result.Model,
 				"tokens_in":       result.TokensIn,
 				"tokens_out":      result.TokensOut,
-				"cost_usd":        result.CostUSD,
 				"duration_ms":     durationMS,
 				"original_length": len(wctx.State.Prompt),
 				"refined_length":  len(result.Output),

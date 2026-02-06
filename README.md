@@ -256,7 +256,7 @@ Trace modes:
 
 Example `trace.jsonl` entry:
 ```json
-{"seq":1,"ts":"2026-01-13T00:00:00Z","event_type":"prompt","phase":"analyze","step":"v1","agent":"claude","model":"claude-sonnet-4-20250514","tokens_in":120,"tokens_out":0,"cost_usd":0.0023,"hash_raw":"...","hash_stored":"..."}
+{"seq":1,"ts":"2026-01-13T00:00:00Z","event_type":"prompt","phase":"analyze","step":"v1","agent":"claude","model":"claude-sonnet-4-20250514","tokens_in":120,"tokens_out":0,"hash_raw":"...","hash_stored":"..."}
 ```
 
 Example `run.json` (trimmed):
@@ -281,7 +281,6 @@ Example `run.json` (trimmed):
     "total_prompts": 6,
     "total_tokens_in": 1234,
     "total_tokens_out": 987,
-    "total_cost_usd": 0.0421,
     "total_files": 0,
     "total_bytes": 0
   }

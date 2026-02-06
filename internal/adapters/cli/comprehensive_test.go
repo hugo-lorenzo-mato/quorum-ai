@@ -255,19 +255,6 @@ func TestGeminiAdapter_ExtractUsageTokens(t *testing.T) {
 // Note: TestGeminiAdapter_ExtractContentScenarios removed - geminiJSONResponse and extractContent
 // were removed as part of the stream-json migration (JSON parsing no longer needed)
 
-func TestGeminiAdapter_EstimateCostCalc(t *testing.T) {
-	adapter, _ := NewGeminiAdapter(AgentConfig{Path: "gemini"})
-	gemini := adapter.(*GeminiAdapter)
-
-	cost := gemini.estimateCost(1000000, 1000000)
-	// Input: 1M tokens * $0.075/MTok = $0.075
-	// Output: 1M tokens * $0.30/MTok = $0.30
-	// Total: $0.375
-	if cost < 0.35 || cost > 0.40 {
-		t.Errorf("estimateCost(1M, 1M) = %f, expected ~0.375", cost)
-	}
-}
-
 func TestGeminiAdapter_ParseOutputFormats(t *testing.T) {
 	adapter, _ := NewGeminiAdapter(AgentConfig{Path: "gemini"})
 	gemini := adapter.(*GeminiAdapter)
@@ -422,19 +409,6 @@ func TestCodexAdapter_ParseOutput(t *testing.T) {
 	}
 }
 
-func TestCodexAdapter_EstimateCostCalc(t *testing.T) {
-	adapter, _ := NewCodexAdapter(AgentConfig{Path: "codex"})
-	codex := adapter.(*CodexAdapter)
-
-	cost := codex.estimateCost(1000000, 1000000)
-	// Input: 1M tokens * $2.50/MTok = $2.50
-	// Output: 1M tokens * $10.00/MTok = $10.00
-	// Total: $12.50
-	if cost < 12.0 || cost > 13.0 {
-		t.Errorf("estimateCost(1M, 1M) = %f, expected ~12.50", cost)
-	}
-}
-
 // Test ClaudeAdapter specific functions not covered elsewhere
 
 func TestClaudeAdapter_ExtractUsagePatterns(t *testing.T) {
@@ -447,7 +421,6 @@ func TestClaudeAdapter_ExtractUsagePatterns(t *testing.T) {
 		stderr     string
 		wantIn     int
 		wantOut    int
-		wantCost   float64
 		hasNumbers bool
 	}{
 		{
@@ -462,7 +435,6 @@ func TestClaudeAdapter_ExtractUsagePatterns(t *testing.T) {
 			name:       "with cost info",
 			stdout:     "cost: $0.05",
 			stderr:     "",
-			wantCost:   0.05,
 			hasNumbers: false,
 		},
 		{
@@ -486,9 +458,6 @@ func TestClaudeAdapter_ExtractUsagePatterns(t *testing.T) {
 				if execResult.TokensOut != tt.wantOut {
 					t.Errorf("TokensOut = %d, want %d", execResult.TokensOut, tt.wantOut)
 				}
-			}
-			if tt.wantCost > 0 && execResult.CostUSD != tt.wantCost {
-				t.Errorf("CostUSD = %f, want %f", execResult.CostUSD, tt.wantCost)
 			}
 		})
 	}
@@ -548,20 +517,6 @@ func TestClaudeAdapter_ParseOutputFormats(t *testing.T) {
 	}
 }
 
-func TestClaudeAdapter_EstimateCostCalc(t *testing.T) {
-	adapter, _ := NewClaudeAdapter(AgentConfig{Path: "claude"})
-	claude := adapter.(*ClaudeAdapter)
-
-	// Test cost estimation
-	cost := claude.estimateCost(1000, 500)
-	// Input: 1000 tokens * $3/MTok = $0.003
-	// Output: 500 tokens * $15/MTok = $0.0075
-	// Total: ~$0.0105
-	if cost < 0.01 || cost > 0.02 {
-		t.Errorf("estimateCost(1000, 500) = %f, expected ~0.0105", cost)
-	}
-}
-
 // Test CopilotAdapter specific functions not covered elsewhere
 
 func TestCopilotAdapter_CleanANSIExtended(t *testing.T) {
@@ -608,20 +563,6 @@ func TestCopilotAdapter_EstimateTokensShort(t *testing.T) {
 	want := 2 // 11 chars / 4 = 2
 	if got != want {
 		t.Errorf("estimateTokens() = %d, want %d", got, want)
-	}
-}
-
-func TestCopilotAdapter_EstimateCost(t *testing.T) {
-	adapter, _ := NewCopilotAdapter(AgentConfig{Path: "copilot"})
-	copilot := adapter.(*CopilotAdapter)
-
-	// Test cost estimation using Claude Sonnet 4.5 pricing as baseline
-	cost := copilot.estimateCost(1000000, 1000000)
-	// Input: 1M tokens * $3/MTok = $3.00
-	// Output: 1M tokens * $15/MTok = $15.00
-	// Total: $18.00
-	if cost < 17.0 || cost > 19.0 {
-		t.Errorf("estimateCost(1M, 1M) = %f, expected ~18.00", cost)
 	}
 }
 

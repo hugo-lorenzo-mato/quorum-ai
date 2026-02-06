@@ -297,7 +297,6 @@ func TestIntegration_SQLiteStateManager_CRUD(t *testing.T) {
 					Dependencies: []core.TaskID{},
 					TokensIn:     500,
 					TokensOut:    200,
-					CostUSD:      float64(0.05),
 					Output:       "Analysis complete",
 				},
 				"task-2": {
@@ -310,7 +309,6 @@ func TestIntegration_SQLiteStateManager_CRUD(t *testing.T) {
 			},
 			TaskOrder: []core.TaskID{"task-1", "task-2"},
 			Metrics: &core.StateMetrics{
-				TotalCostUSD:   0.05,
 				TotalTokensIn:  500,
 				TotalTokensOut: 200,
 			},
@@ -350,7 +348,6 @@ func TestIntegration_SQLiteStateManager_CRUD(t *testing.T) {
 	testutil.AssertEqual(t, task1.Status, core.TaskStatusCompleted)
 	testutil.AssertEqual(t, task1.Output, "Analysis complete")
 	testutil.AssertEqual(t, task1.TokensIn, 500)
-	testutil.AssertEqual(t, task1.CostUSD, 0.05)
 
 	task2 := loaded.Tasks["task-2"]
 	testutil.AssertLen(t, task2.Dependencies, 1)
@@ -361,7 +358,8 @@ func TestIntegration_SQLiteStateManager_CRUD(t *testing.T) {
 	testutil.AssertEqual(t, loaded.Blueprint.MaxRetries, 3)
 
 	// Verify metrics
-	testutil.AssertEqual(t, loaded.Metrics.TotalCostUSD, 0.05)
+	testutil.AssertEqual(t, loaded.Metrics.TotalTokensIn, 500)
+	testutil.AssertEqual(t, loaded.Metrics.TotalTokensOut, 200)
 
 	// Verify checkpoints
 	testutil.AssertLen(t, loaded.Checkpoints, 1)

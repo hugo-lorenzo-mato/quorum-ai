@@ -52,7 +52,6 @@ type TraceRunSummary struct {
 	TotalPrompts   int
 	TotalTokensIn  int
 	TotalTokensOut int
-	TotalCostUSD   float64
 	TotalFiles     int
 	TotalBytes     int64
 	Dir            string
@@ -71,7 +70,6 @@ type TraceEvent struct {
 	Content   []byte
 	TokensIn  int
 	TokensOut int
-	CostUSD   float64
 	Metadata  map[string]interface{}
 }
 
@@ -137,7 +135,6 @@ type fileTraceWriter struct {
 	totalPrompts   int
 	totalTokensIn  int
 	totalTokensOut int
-	totalCostUSD   float64
 }
 
 func (w *fileTraceWriter) Enabled() bool { return w.enabled }
@@ -193,7 +190,6 @@ func (w *fileTraceWriter) Record(_ context.Context, event TraceEvent) error {
 	}
 	w.totalTokensIn += event.TokensIn
 	w.totalTokensOut += event.TokensOut
-	w.totalCostUSD += event.CostUSD
 
 	record := traceRecord{
 		Seq:       seq,
@@ -207,7 +203,6 @@ func (w *fileTraceWriter) Record(_ context.Context, event TraceEvent) error {
 		TaskName:  event.TaskName,
 		TokensIn:  event.TokensIn,
 		TokensOut: event.TokensOut,
-		CostUSD:   event.CostUSD,
 		Metadata:  event.Metadata,
 	}
 
@@ -261,7 +256,6 @@ func (w *fileTraceWriter) EndRun(_ context.Context) TraceRunSummary {
 		TotalPrompts:   w.totalPrompts,
 		TotalTokensIn:  w.totalTokensIn,
 		TotalTokensOut: w.totalTokensOut,
-		TotalCostUSD:   w.totalCostUSD,
 		TotalFiles:     w.fileCount,
 		TotalBytes:     w.totalBytes,
 		Dir:            w.dir,
@@ -539,7 +533,6 @@ type traceRecord struct {
 	TaskName         string                 `json:"task_name,omitempty"`
 	TokensIn         int                    `json:"tokens_in,omitempty"`
 	TokensOut        int                    `json:"tokens_out,omitempty"`
-	CostUSD          float64                `json:"cost_usd,omitempty"`
 	File             string                 `json:"file,omitempty"`
 	HashRaw          string                 `json:"hash_raw,omitempty"`
 	HashStored       string                 `json:"hash_stored,omitempty"`
@@ -570,7 +563,7 @@ type traceManifest struct {
 type TraceOutputNotifierDelegate interface {
 	PhaseStarted(phase string)
 	TaskStarted(taskID, taskName, cli string)
-	TaskCompleted(taskID, taskName string, duration time.Duration, tokensIn, tokensOut int, costUSD float64)
+	TaskCompleted(taskID, taskName string, duration time.Duration, tokensIn, tokensOut int)
 	TaskFailed(taskID, taskName string, err error)
 	WorkflowStateUpdated(status string, totalTasks int)
 }
@@ -622,7 +615,7 @@ func (t *TraceOutputNotifier) TaskStarted(taskID, taskName, cli string) {
 }
 
 // TaskCompleted records a task completed event.
-func (t *TraceOutputNotifier) TaskCompleted(taskID, taskName string, duration time.Duration, tokensIn, tokensOut int, costUSD float64) {
+func (t *TraceOutputNotifier) TaskCompleted(taskID, taskName string, duration time.Duration, tokensIn, tokensOut int) {
 	if t.writer == nil || !t.writer.Enabled() {
 		return
 	}
@@ -633,7 +626,6 @@ func (t *TraceOutputNotifier) TaskCompleted(taskID, taskName string, duration ti
 		TaskName:  taskName,
 		TokensIn:  tokensIn,
 		TokensOut: tokensOut,
-		CostUSD:   costUSD,
 		Metadata: map[string]interface{}{
 			"duration": duration.String(),
 		},

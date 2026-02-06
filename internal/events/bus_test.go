@@ -253,7 +253,7 @@ func TestEventBus_SubscribeForProjectWithTypes(t *testing.T) {
 	bus.Publish(event1)
 
 	// Publish non-matching type (same project)
-	event2 := NewWorkflowCompletedEvent("wf-1", "proj-a", 0, 0)
+	event2 := NewWorkflowCompletedEvent("wf-1", "proj-a", 0)
 	bus.Publish(event2)
 
 	// Publish non-matching project (same type)

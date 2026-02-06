@@ -57,7 +57,6 @@ func TestWebOutputNotifier_TaskCompleted(t *testing.T) {
 		Name:      "Test Task",
 		TokensIn:  100,
 		TokensOut: 50,
-		CostUSD:   0.005,
 	}
 	notifier.TaskCompleted(task, 5*time.Second)
 
@@ -95,7 +94,7 @@ func TestWebOutputNotifier_TaskCompleted_ZeroMetrics(t *testing.T) {
 		if !ok {
 			t.Fatal("event is not TaskCompletedEvent")
 		}
-		if e.TokensIn != 0 || e.TokensOut != 0 || e.CostUSD != 0 {
+		if e.TokensIn != 0 || e.TokensOut != 0 {
 			t.Errorf("expected zero metrics for zero-valued task fields")
 		}
 	case <-time.After(100 * time.Millisecond):
@@ -242,7 +241,7 @@ func TestWebOutputNotifier_WorkflowLifecycle(t *testing.T) {
 	}
 
 	// Test WorkflowCompleted (uses priority channel)
-	notifier.WorkflowCompleted(10*time.Second, 0.05)
+	notifier.WorkflowCompleted(10 * time.Second)
 	event = <-ch
 	if event.EventType() != events.TypeWorkflowCompleted {
 		t.Errorf("expected %s, got %s", events.TypeWorkflowCompleted, event.EventType())

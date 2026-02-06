@@ -41,6 +41,12 @@
   --color-input: var(--input-color);
   --color-ring: var(--ring-color);
 
+  /* Surface steps for tiered hierarchy */
+  --color-bg-step-0: var(--bg-step-0);
+  --color-bg-step-1: var(--bg-step-1);
+  --color-bg-step-2: var(--bg-step-2);
+  --color-bg-step-3: var(--bg-step-3);
+
   /* Semantic Status Colors */
   --color-status-running: var(--status-running);
   --color-status-running-bg: var(--status-running-bg);
@@ -53,6 +59,8 @@
   --color-status-paused: var(--status-paused);
   --color-status-paused-bg: var(--status-paused-bg);
 
+  --shadow-premium: var(--shadow-premium);
+
   /* Status colors (legacy support / basic) */
   --color-success: #22c55e;
   --color-warning: #eab308;
@@ -60,99 +68,120 @@
   --color-info: #3b82f6;
 }
 
-/* Light Mode (default) - Clean whites and zinc grays */
+/* Light Mode (default) - Refined zinc/slate hierarchy */
 :root {
-  --bg: #ffffff;
+  --bg-step-0: #fbfbfb; /* Background */
+  --bg-step-1: #ffffff; /* Containers/Sidebar */
+  --bg-step-2: #f4f4f5; /* Hover/Active states */
+  --bg-step-3: #e4e4e7; /* Deep accents */
+  
+  --bg: var(--bg-step-0);
   --fg: #09090b;
-  --card-bg: #ffffff;
+  --card-bg: var(--bg-step-1);
   --card-fg: #09090b;
-  --popover-bg: #ffffff;
+  --popover-bg: var(--bg-step-1);
   --popover-fg: #09090b;
   --primary-bg: #18181b;
   --primary-fg: #fafafa;
-  --secondary-bg: #f4f4f5;
+  --secondary-bg: var(--bg-step-2);
   --secondary-fg: #18181b;
-  --muted-bg: #f4f4f5;
+  --muted-bg: var(--bg-step-2);
   --muted-fg: #71717a;
-  --accent-bg: #f4f4f5;
+  --accent-bg: var(--bg-step-2);
   --accent-fg: #18181b;
   --destructive-bg: #ef4444;
   --destructive-fg: #fafafa;
-  --border-color: #e4e4e7;
+  --border-color: rgba(228, 228, 231, 0.6); /* Softer borders */
   --input-color: #e4e4e7;
   --ring-color: #18181b;
 
-  /* Status Colors - Light */
+  --shadow-color: rgba(0, 0, 0, 0.05);
+  --shadow-premium: 0 4px 6px -1px var(--shadow-color), 0 2px 4px -2px var(--shadow-color);
+
+  /* Status Colors - Clean Light */
   --status-running: #2563eb;
-  --status-running-bg: rgba(37, 99, 235, 0.1);
+  --status-running-bg: rgba(37, 99, 235, 0.08);
   --status-success: #16a34a;
-  --status-success-bg: rgba(22, 163, 74, 0.1);
+  --status-success-bg: rgba(22, 163, 74, 0.08);
   --status-warning: #d97706;
-  --status-warning-bg: rgba(217, 119, 6, 0.1);
+  --status-warning-bg: rgba(217, 119, 6, 0.08);
   --status-error: #dc2626;
-  --status-error-bg: rgba(220, 38, 38, 0.1);
+  --status-error-bg: rgba(220, 38, 38, 0.08);
   --status-paused: #4b5563;
-  --status-paused-bg: rgba(75, 85, 99, 0.1);
+  --status-paused-bg: rgba(75, 85, 99, 0.08);
 }
 
-/* Dark Mode - Deep zinc (Vercel/Linear style) */
+/* Dark Mode - Professional Deep Zinc */
 .dark {
-  --bg: #09090b;
+  --bg-step-0: #09090b;
+  --bg-step-1: #121215;
+  --bg-step-2: #18181b;
+  --bg-step-3: #27272a;
+
+  --bg: var(--bg-step-0);
   --fg: #fafafa;
-  --card-bg: #18181b;
+  --card-bg: var(--bg-step-1);
   --card-fg: #fafafa;
-  --popover-bg: #18181b;
+  --popover-bg: var(--bg-step-1);
   --popover-fg: #fafafa;
   --primary-bg: #fafafa;
   --primary-fg: #18181b;
-  --secondary-bg: #27272a;
+  --secondary-bg: var(--bg-step-2);
   --secondary-fg: #fafafa;
-  --muted-bg: #27272a;
+  --muted-bg: var(--bg-step-2);
   --muted-fg: #a1a1aa;
-  --accent-bg: #27272a;
+  --accent-bg: var(--bg-step-2);
   --accent-fg: #fafafa;
   --destructive-bg: #7f1d1d;
   --destructive-fg: #fafafa;
-  --border-color: #27272a;
+  --border-color: rgba(39, 39, 42, 0.8);
   --input-color: #27272a;
   --ring-color: #d4d4d8;
 
-  /* Status Colors - Dark */
+  --shadow-color: rgba(0, 0, 0, 0.3);
+  --shadow-premium: 0 10px 15px -3px var(--shadow-color), 0 4px 6px -4px var(--shadow-color);
+
+  /* Status Colors - Vibrant Dark */
   --status-running: #60a5fa;
-  --status-running-bg: rgba(96, 165, 250, 0.15);
+  --status-running-bg: rgba(96, 165, 250, 0.12);
   --status-success: #4ade80;
-  --status-success-bg: rgba(74, 222, 128, 0.15);
+  --status-success-bg: rgba(74, 222, 128, 0.12);
   --status-warning: #fbbf24;
-  --status-warning-bg: rgba(251, 191, 36, 0.15);
+  --status-warning-bg: rgba(251, 191, 36, 0.12);
   --status-error: #f87171;
-  --status-error-bg: rgba(248, 113, 113, 0.15);
+  --status-error-bg: rgba(248, 113, 113, 0.12);
   --status-paused: #9ca3af;
-  --status-paused-bg: rgba(156, 163, 175, 0.15);
+  --status-paused-bg: rgba(156, 163, 175, 0.12);
 }
 
-/* Midnight Mode - Softened Black for OLED */
+/* Midnight Mode - OLED Optimized with Rim Light */
 .midnight {
-  --bg: #020203;
+  --bg-step-0: #000000;
+  --bg-step-1: #050507;
+  --bg-step-2: #09090b;
+  --bg-step-3: #18181b;
+
+  --bg: var(--bg-step-0);
   --fg: #f4f4f5;
-  --card-bg: #09090b;
+  --card-bg: var(--bg-step-1);
   --card-fg: #f4f4f5;
-  --popover-bg: #09090b;
+  --popover-bg: var(--bg-step-1);
   --popover-fg: #f4f4f5;
   --primary-bg: #f4f4f5;
   --primary-fg: #020203;
-  --secondary-bg: #18181b;
+  --secondary-bg: var(--bg-step-2);
   --secondary-fg: #f4f4f5;
-  --muted-bg: #18181b;
+  --muted-bg: var(--bg-step-2);
   --muted-fg: #71717a;
-  --accent-bg: #18181b;
+  --accent-bg: var(--bg-step-2);
   --accent-fg: #f4f4f5;
   --destructive-bg: #991b1b;
   --destructive-fg: #fef2f2;
-  --border-color: #18181b;
+  --border-color: rgba(255, 255, 255, 0.05); /* Very subtle rim light */
   --input-color: #18181b;
   --ring-color: #a1a1aa;
 
-  /* Status Colors - Midnight */
+  /* Status Colors - High Contrast Midnight */
   --status-running: #3b82f6;
   --status-running-bg: rgba(59, 130, 246, 0.1);
   --status-success: #22c55e;
@@ -165,144 +194,164 @@
   --status-paused-bg: rgba(107, 114, 128, 0.1);
 }
 
-/* Sepia Mode - Optimized for long reading */
+/* Sepia Mode - Warm & Organic */
 .sepia {
-  --bg: #fdf6e3;
+  --bg-step-0: #fdf6e3;
+  --bg-step-1: #f5ecd5;
+  --bg-step-2: #eee8d5;
+  --bg-step-3: #e0d9c1;
+
+  --bg: var(--bg-step-0);
   --fg: #433422;
-  --card-bg: #f5ecd5;
+  --card-bg: var(--bg-step-1);
   --card-fg: #433422;
-  --popover-bg: #f5ecd5;
+  --popover-bg: var(--bg-step-1);
   --popover-fg: #433422;
   --primary-bg: #8c6a48;
   --primary-fg: #fdf6e3;
-  --secondary-bg: #eee8d5;
+  --secondary-bg: var(--bg-step-2);
   --secondary-fg: #433422;
-  --muted-bg: #eee8d5;
+  --muted-bg: var(--bg-step-2);
   --muted-fg: #839496;
-  --accent-bg: #eee8d5;
+  --accent-bg: var(--bg-step-2);
   --accent-fg: #433422;
   --destructive-bg: #d33682;
   --destructive-fg: #fdf6e3;
-  --border-color: #d3cbb7;
+  --border-color: rgba(140, 106, 72, 0.15);
   --input-color: #d3cbb7;
   --ring-color: #b58900;
 
-  /* Status Colors - Sepia (Solarized inspired) */
+  /* Status Colors - Earthy Sepia */
   --status-running: #268bd2;
-  --status-running-bg: rgba(38, 139, 210, 0.1);
+  --status-running-bg: rgba(38, 139, 210, 0.08);
   --status-success: #859900;
-  --status-success-bg: rgba(133, 153, 0, 0.1);
+  --status-success-bg: rgba(133, 153, 0, 0.08);
   --status-warning: #b58900;
-  --status-warning-bg: rgba(181, 137, 0, 0.1);
+  --status-warning-bg: rgba(181, 137, 0, 0.08);
   --status-error: #dc322f;
-  --status-error-bg: rgba(220, 50, 47, 0.1);
+  --status-error-bg: rgba(220, 50, 47, 0.08);
   --status-paused: #586e75;
-  --status-paused-bg: rgba(88, 110, 117, 0.1);
+  --status-paused-bg: rgba(88, 110, 117, 0.08);
 }
 
 /* Dracula Mode - High Contrast Neon */
 .dracula {
-  --bg: #282a36;
+  --bg-step-0: #282a36;
+  --bg-step-1: #343746;
+  --bg-step-2: #44475a;
+  --bg-step-3: #6272a4;
+
+  --bg: var(--bg-step-0);
   --fg: #f8f8f2;
-  --card-bg: #44475a;
+  --card-bg: var(--bg-step-1);
   --card-fg: #f8f8f2;
-  --popover-bg: #44475a;
+  --popover-bg: var(--bg-step-1);
   --popover-fg: #f8f8f2;
   --primary-bg: #bd93f9;
   --primary-fg: #282a36;
-  --secondary-bg: #6272a4;
+  --secondary-bg: var(--bg-step-2);
   --secondary-fg: #f8f8f2;
-  --muted-bg: #6272a4;
+  --muted-bg: var(--bg-step-2);
   --muted-fg: #bfbfbf;
   --accent-bg: #44475a;
   --accent-fg: #f8f8f2;
   --destructive-bg: #ff5555;
   --destructive-fg: #f8f8f2;
-  --border-color: #6272a4;
+  --border-color: rgba(98, 114, 164, 0.4);
   --input-color: #6272a4;
   --ring-color: #bd93f9;
 
-  /* Status Colors - Dracula Official */
+  /* Status Colors - Dracula Neon */
   --status-running: #8be9fd;
-  --status-running-bg: rgba(139, 233, 253, 0.15);
+  --status-running-bg: rgba(139, 233, 253, 0.12);
   --status-success: #50fa7b;
-  --status-success-bg: rgba(80, 250, 123, 0.15);
+  --status-success-bg: rgba(80, 250, 123, 0.12);
   --status-warning: #f1fa8c;
-  --status-warning-bg: rgba(241, 250, 140, 0.15);
+  --status-warning-bg: rgba(241, 250, 140, 0.12);
   --status-error: #ff5555;
-  --status-error-bg: rgba(255, 85, 85, 0.15);
+  --status-error-bg: rgba(255, 85, 85, 0.12);
   --status-paused: #6272a4;
-  --status-paused-bg: rgba(98, 114, 164, 0.15);
+  --status-paused-bg: rgba(98, 114, 164, 0.12);
 }
 
-/* Nord Mode - Arctic Blue/Grey */
+/* Nord Mode - Arctic Cool */
 .nord {
-  --bg: #2e3440;
+  --bg-step-0: #2e3440;
+  --bg-step-1: #3b4252;
+  --bg-step-2: #434c5e;
+  --bg-step-3: #4c566a;
+
+  --bg: var(--bg-step-0);
   --fg: #d8dee9;
-  --card-bg: #3b4252;
+  --card-bg: var(--bg-step-1);
   --card-fg: #eceff4;
-  --popover-bg: #3b4252;
+  --popover-bg: var(--bg-step-1);
   --popover-fg: #eceff4;
   --primary-bg: #88c0d0;
   --primary-fg: #2e3440;
-  --secondary-bg: #434c5e;
+  --secondary-bg: var(--bg-step-2);
   --secondary-fg: #d8dee9;
-  --muted-bg: #434c5e;
+  --muted-bg: var(--bg-step-2);
   --muted-fg: #949aae;
   --accent-bg: #434c5e;
   --accent-fg: #d8dee9;
   --destructive-bg: #bf616a;
   --destructive-fg: #eceff4;
-  --border-color: #4c566a;
+  --border-color: rgba(76, 86, 106, 0.4);
   --input-color: #4c566a;
   --ring-color: #88c0d0;
 
-  /* Status Colors - Nord Official */
+  /* Status Colors - Nord Frost */
   --status-running: #81a1c1;
-  --status-running-bg: rgba(129, 161, 193, 0.15);
+  --status-running-bg: rgba(129, 161, 193, 0.12);
   --status-success: #a3be8c;
-  --status-success-bg: rgba(163, 190, 140, 0.15);
+  --status-success-bg: rgba(163, 190, 140, 0.12);
   --status-warning: #ebcb8b;
-  --status-warning-bg: rgba(235, 203, 139, 0.15);
+  --status-warning-bg: rgba(235, 203, 139, 0.12);
   --status-error: #bf616a;
-  --status-error-bg: rgba(191, 97, 106, 0.15);
+  --status-error-bg: rgba(191, 97, 106, 0.12);
   --status-paused: #4c566a;
-  --status-paused-bg: rgba(76, 86, 106, 0.15);
+  --status-paused-bg: rgba(76, 86, 106, 0.12);
 }
 
-/* Ocean Mode - Deep Blue */
+/* Ocean Mode - Deep Sea */
 .ocean {
-  --bg: #0f172a;
+  --bg-step-0: #0f172a;
+  --bg-step-1: #1e293b;
+  --bg-step-2: #334155;
+  --bg-step-3: #475569;
+
+  --bg: var(--bg-step-0);
   --fg: #e2e8f0;
-  --card-bg: #1e293b;
+  --card-bg: var(--bg-step-1);
   --card-fg: #f1f5f9;
-  --popover-bg: #1e293b;
+  --popover-bg: var(--bg-step-1);
   --popover-fg: #f1f5f9;
   --primary-bg: #38bdf8;
   --primary-fg: #0f172a;
-  --secondary-bg: #334155;
+  --secondary-bg: var(--bg-step-2);
   --secondary-fg: #f1f5f9;
-  --muted-bg: #334155;
+  --muted-bg: var(--bg-step-2);
   --muted-fg: #94a3b8;
   --accent-bg: #334155;
   --accent-fg: #f1f5f9;
   --destructive-bg: #ef4444;
   --destructive-fg: #f1f5f9;
-  --border-color: #334155;
+  --border-color: rgba(51, 65, 85, 0.6);
   --input-color: #334155;
   --ring-color: #38bdf8;
 
-  /* Status Colors - Ocean */
+  /* Status Colors - Ocean Clarity */
   --status-running: #7dd3fc;
-  --status-running-bg: rgba(125, 211, 252, 0.15);
+  --status-running-bg: rgba(125, 211, 252, 0.12);
   --status-success: #34d399;
-  --status-success-bg: rgba(52, 211, 153, 0.15);
+  --status-success-bg: rgba(52, 211, 153, 0.12);
   --status-warning: #fbbf24;
-  --status-warning-bg: rgba(251, 191, 36, 0.15);
+  --status-warning-bg: rgba(251, 191, 36, 0.12);
   --status-error: #f87171;
-  --status-error-bg: rgba(248, 113, 113, 0.15);
+  --status-error-bg: rgba(248, 113, 113, 0.12);
   --status-paused: #475569;
-  --status-paused-bg: rgba(71, 85, 105, 0.15);
+  --status-paused-bg: rgba(71, 85, 105, 0.12);
 }
 
 @layer base {
@@ -328,10 +377,10 @@
     letter-spacing: -0.02em;
   }
 
-  /* Scrollbar styling */
+  /* Scrollbar styling - Minimalist and tiered */
   *::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+    width: 5px;
+    height: 5px;
   }
 
   *::-webkit-scrollbar-track {
@@ -339,8 +388,9 @@
   }
 
   *::-webkit-scrollbar-thumb {
-    background: var(--muted-bg);
-    border-radius: 4px;
+    background: var(--bg-step-3);
+    border-radius: 10px;
+    opacity: 0.2;
   }
 
   *::-webkit-scrollbar-thumb:hover {

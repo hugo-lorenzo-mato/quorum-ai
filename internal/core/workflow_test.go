@@ -33,8 +33,6 @@ func TestWorkflow_UpdateMetricsAndProgress(t *testing.T) {
 	wf := NewWorkflow("w1", "prompt", nil)
 	t1 := NewTask("t1", "task", PhaseAnalyze)
 	t2 := NewTask("t2", "task", PhaseAnalyze)
-	t1.CostUSD = 1.25
-	t2.CostUSD = 2.75
 	t1.TokensIn = 10
 	t1.TokensOut = 20
 	t2.TokensIn = 30
@@ -43,9 +41,6 @@ func TestWorkflow_UpdateMetricsAndProgress(t *testing.T) {
 	_ = wf.AddTask(t2)
 
 	wf.UpdateMetrics()
-	if wf.TotalCostUSD != 4.0 {
-		t.Fatalf("expected total cost 4.0, got %.2f", wf.TotalCostUSD)
-	}
 	if wf.TotalTokensIn != 40 || wf.TotalTokensOut != 60 {
 		t.Fatalf("unexpected token totals: in=%d out=%d", wf.TotalTokensIn, wf.TotalTokensOut)
 	}

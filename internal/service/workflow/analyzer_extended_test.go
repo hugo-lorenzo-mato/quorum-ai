@@ -219,7 +219,6 @@ func TestGetAnalysisCheckpoint_Found(t *testing.T) {
 		PromptHash:  promptHash,
 		TokensIn:    1000,
 		TokensOut:   500,
-		CostUSD:     0.05,
 		DurationMS:  5000,
 		ContentHash: "xyz789",
 	}
@@ -247,9 +246,6 @@ func TestGetAnalysisCheckpoint_Found(t *testing.T) {
 	}
 	if result.TokensIn != 1000 {
 		t.Errorf("TokensIn = %d, want 1000", result.TokensIn)
-	}
-	if result.CostUSD != 0.05 {
-		t.Errorf("CostUSD = %f, want 0.05", result.CostUSD)
 	}
 }
 
@@ -354,7 +350,6 @@ func TestRestoreAnalysisFromCheckpoint_Success(t *testing.T) {
 		PromptHash:  "abc123",
 		TokensIn:    1500,
 		TokensOut:   800,
-		CostUSD:     0.08,
 		DurationMS:  7500,
 		ContentHash: computeContentHash(content), // Correct hash
 	}
@@ -372,9 +367,6 @@ func TestRestoreAnalysisFromCheckpoint_Success(t *testing.T) {
 	}
 	if output.TokensOut != 800 {
 		t.Errorf("TokensOut = %d, want 800", output.TokensOut)
-	}
-	if output.CostUSD != 0.08 {
-		t.Errorf("CostUSD = %f, want 0.08", output.CostUSD)
 	}
 	if output.DurationMS != 7500 {
 		t.Errorf("DurationMS = %d, want 7500", output.DurationMS)

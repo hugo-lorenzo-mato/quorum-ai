@@ -34,9 +34,8 @@ type ChatMessage struct {
 
 // TokenInfo contains token usage information.
 type TokenInfo struct {
-	Input   int     `json:"input"`
-	Output  int     `json:"output"`
-	CostUSD float64 `json:"cost_usd,omitempty"`
+	Input  int `json:"input"`
+	Output int `json:"output"`
 }
 
 // ChatSession represents a chat session.
@@ -233,9 +232,8 @@ func (h *ChatHandler) ensureSessionLoaded(ctx context.Context, sessionID string)
 			Content:   msg.Content,
 			Timestamp: msg.Timestamp,
 			Tokens: &TokenInfo{
-				Input:   msg.TokensIn,
-				Output:  msg.TokensOut,
-				CostUSD: msg.CostUSD,
+				Input:  msg.TokensIn,
+				Output: msg.TokensOut,
 			},
 		})
 	}
@@ -331,9 +329,8 @@ func (h *ChatHandler) loadPersistedSessions() {
 				Content:   msg.Content,
 				Timestamp: msg.Timestamp,
 				Tokens: &TokenInfo{
-					Input:   msg.TokensIn,
-					Output:  msg.TokensOut,
-					CostUSD: msg.CostUSD,
+					Input:  msg.TokensIn,
+					Output: msg.TokensOut,
 				},
 			})
 		}
@@ -390,9 +387,8 @@ func (h *ChatHandler) loadPersistedSessionsFromStore(ctx context.Context, store 
 				Content:   msg.Content,
 				Timestamp: msg.Timestamp,
 				Tokens: &TokenInfo{
-					Input:   msg.TokensIn,
-					Output:  msg.TokensOut,
-					CostUSD: msg.CostUSD,
+					Input:  msg.TokensIn,
+					Output: msg.TokensOut,
 				},
 			})
 		}
@@ -804,11 +800,9 @@ func (h *ChatHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 	// Persist agent message (reuse chatStore from earlier in this function)
 	if chatStore != nil {
 		var tokensIn, tokensOut int
-		var costUSD float64
 		if agentMsg.Tokens != nil {
 			tokensIn = agentMsg.Tokens.Input
 			tokensOut = agentMsg.Tokens.Output
-			costUSD = agentMsg.Tokens.CostUSD
 		}
 		persistedMsg := &core.ChatMessageState{
 			ID:        agentMsg.ID,
@@ -819,7 +813,6 @@ func (h *ChatHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 			Timestamp: agentMsg.Timestamp,
 			TokensIn:  tokensIn,
 			TokensOut: tokensOut,
-			CostUSD:   costUSD,
 		}
 		_ = chatStore.SaveMessage(ctx, persistedMsg)
 	}
@@ -966,9 +959,8 @@ Respond helpfully and concisely.`, contextBuilder, fileContext, lastContent)
 		Content:   result.Output,
 		Timestamp: time.Now(),
 		Tokens: &TokenInfo{
-			Input:   result.TokensIn,
-			Output:  result.TokensOut,
-			CostUSD: result.CostUSD,
+			Input:  result.TokensIn,
+			Output: result.TokensOut,
 		},
 	}
 

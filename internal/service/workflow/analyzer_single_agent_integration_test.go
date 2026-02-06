@@ -32,7 +32,6 @@ func TestIntegration_Analyzer_SingleAgentMode_BypassesConsensus(t *testing.T) {
 			Model:     "claude-test",
 			TokensIn:  100,
 			TokensOut: 200,
-			CostUSD:   0.001,
 		},
 	}
 	registry.Register("claude", mockClaude)

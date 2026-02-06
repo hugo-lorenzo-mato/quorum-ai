@@ -504,7 +504,7 @@ func (n *chatOutputNotifier) TaskStarted(task *core.Task) {
 
 func (n *chatOutputNotifier) TaskCompleted(task *core.Task, duration time.Duration) {
 	if n.eventBus != nil && task != nil {
-		n.eventBus.Publish(events.NewTaskCompletedEvent("", "", string(task.ID), duration, task.TokensIn, task.TokensOut, task.CostUSD))
+		n.eventBus.Publish(events.NewTaskCompletedEvent("", "", string(task.ID), duration, task.TokensIn, task.TokensOut))
 	}
 }
 
@@ -629,7 +629,6 @@ func createWorkflowRunnerWithTracing(
 				"events", summary.TotalEvents,
 				"tokens_in", summary.TotalTokensIn,
 				"tokens_out", summary.TotalTokensOut,
-				"cost_usd", summary.TotalCostUSD,
 				"dir", summary.Dir)
 		}
 	}
@@ -847,7 +846,7 @@ func (n *tracingChatOutputNotifier) TaskStarted(task *core.Task) {
 
 func (n *tracingChatOutputNotifier) TaskCompleted(task *core.Task, duration time.Duration) {
 	if n.tracer != nil {
-		n.tracer.TaskCompleted(string(task.ID), task.Name, duration, task.TokensIn, task.TokensOut, task.CostUSD)
+		n.tracer.TaskCompleted(string(task.ID), task.Name, duration, task.TokensIn, task.TokensOut)
 	}
 }
 

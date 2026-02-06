@@ -167,11 +167,11 @@ func readTraceManifest(path string) (*traceManifestView, error) {
 
 func renderTraceList(entries []traceEntry) error {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "RUN ID\tWORKFLOW\tSTARTED\tENDED\tPROMPTS\tTOKENS IN\tTOKENS OUT\tCOST")
-	fmt.Fprintln(w, "------\t--------\t-------\t-----\t-------\t---------\t----------\t----")
+	fmt.Fprintln(w, "RUN ID\tWORKFLOW\tSTARTED\tENDED\tPROMPTS\tTOKENS IN\tTOKENS OUT")
+	fmt.Fprintln(w, "------\t--------\t-------\t-----\t-------\t---------\t----------")
 
 	for _, entry := range entries {
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%d\t%d\t%d\t$%.4f\n",
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%d\t%d\t%d\n",
 			entry.RunID,
 			entry.WorkflowID,
 			formatTime(entry.StartedAt),
@@ -179,7 +179,6 @@ func renderTraceList(entries []traceEntry) error {
 			entry.Summary.TotalPrompts,
 			entry.Summary.TotalTokensIn,
 			entry.Summary.TotalTokensOut,
-			entry.Summary.TotalCostUSD,
 		)
 	}
 
@@ -198,7 +197,6 @@ func renderTraceSummary(manifest *traceManifestView, runDir string) error {
 	fmt.Printf("Prompts: %d\n", manifest.Summary.TotalPrompts)
 	fmt.Printf("Tokens in: %d\n", manifest.Summary.TotalTokensIn)
 	fmt.Printf("Tokens out: %d\n", manifest.Summary.TotalTokensOut)
-	fmt.Printf("Cost: $%.4f\n", manifest.Summary.TotalCostUSD)
 	fmt.Printf("Files: %d\n", manifest.Summary.TotalFiles)
 	fmt.Printf("Bytes: %d\n", manifest.Summary.TotalBytes)
 	fmt.Println()
@@ -253,10 +251,9 @@ type traceConfigView struct {
 }
 
 type traceSummaryView struct {
-	TotalPrompts   int     `json:"total_prompts"`
-	TotalTokensIn  int     `json:"total_tokens_in"`
-	TotalTokensOut int     `json:"total_tokens_out"`
-	TotalCostUSD   float64 `json:"total_cost_usd"`
-	TotalFiles     int     `json:"total_files"`
-	TotalBytes     int64   `json:"total_bytes"`
+	TotalPrompts   int   `json:"total_prompts"`
+	TotalTokensIn  int   `json:"total_tokens_in"`
+	TotalTokensOut int   `json:"total_tokens_out"`
+	TotalFiles     int   `json:"total_files"`
+	TotalBytes     int64 `json:"total_bytes"`
 }

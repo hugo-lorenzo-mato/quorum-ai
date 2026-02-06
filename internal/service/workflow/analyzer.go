@@ -29,7 +29,6 @@ type AnalysisOutput struct {
 	Recommendations []string
 	TokensIn        int
 	TokensOut       int
-	CostUSD         float64
 	DurationMS      int64
 }
 
@@ -228,7 +227,6 @@ func (a *Analyzer) runSingleAgentAnalysis(ctx context.Context, wctx *Context) er
 			"mode":        "single_agent",
 			"tokens_in":   result.TokensIn,
 			"tokens_out":  result.TokensOut,
-			"cost_usd":    result.CostUSD,
 			"duration_ms": durationMS,
 		})
 	}
@@ -238,7 +236,6 @@ func (a *Analyzer) runSingleAgentAnalysis(ctx context.Context, wctx *Context) er
 		"model", result.Model,
 		"tokens_in", result.TokensIn,
 		"tokens_out", result.TokensOut,
-		"cost_usd", result.CostUSD,
 		"duration_ms", durationMS,
 	)
 
@@ -246,7 +243,6 @@ func (a *Analyzer) runSingleAgentAnalysis(ctx context.Context, wctx *Context) er
 	wctx.UpdateMetrics(func(m *core.StateMetrics) {
 		m.TotalTokensIn += result.TokensIn
 		m.TotalTokensOut += result.TokensOut
-		m.TotalCostUSD += result.CostUSD
 		// No consensus score in single-agent mode
 		m.ConsensusScore = 0
 	})
@@ -263,7 +259,6 @@ func (a *Analyzer) runSingleAgentAnalysis(ctx context.Context, wctx *Context) er
 		"model":       result.Model,
 		"tokens_in":   result.TokensIn,
 		"tokens_out":  result.TokensOut,
-		"cost_usd":    result.CostUSD,
 		"duration_ms": durationMS,
 	}); err != nil {
 		return fmt.Errorf("creating consolidated_analysis checkpoint: %w", err)
@@ -678,7 +673,6 @@ func (a *Analyzer) runVnRefinementWithAgent(ctx context.Context, wctx *Context, 
 				"agent", agentName,
 				"round", round,
 				"tokens_in", output.TokensIn,
-				"cost_usd", output.CostUSD,
 			)
 			if wctx.Output != nil {
 				wctx.Output.Log("info", "analyzer", fmt.Sprintf("Restored V%d analysis for %s from checkpoint (cached)", round, agentName))
@@ -813,7 +807,6 @@ func (a *Analyzer) runVnRefinementWithAgent(ctx context.Context, wctx *Context, 
 			"round":       round,
 			"tokens_in":   result.TokensIn,
 			"tokens_out":  result.TokensOut,
-			"cost_usd":    result.CostUSD,
 			"duration_ms": durationMS,
 		})
 	}
@@ -955,7 +948,6 @@ func (a *Analyzer) runAnalysisWithAgent(ctx context.Context, wctx *Context, agen
 			wctx.Logger.Info("restored V1 analysis from checkpoint",
 				"agent", agentName,
 				"tokens_in", output.TokensIn,
-				"cost_usd", output.CostUSD,
 			)
 			if wctx.Output != nil {
 				wctx.Output.Log("info", "analyzer", fmt.Sprintf("Restored V1 analysis for %s from checkpoint (cached)", agentName))
@@ -1052,7 +1044,6 @@ func (a *Analyzer) runAnalysisWithAgent(ctx context.Context, wctx *Context, agen
 			"model":       result.Model,
 			"tokens_in":   result.TokensIn,
 			"tokens_out":  result.TokensOut,
-			"cost_usd":    result.CostUSD,
 			"duration_ms": time.Since(startTime).Milliseconds(),
 		})
 	}
@@ -1217,7 +1208,6 @@ func (a *Analyzer) consolidateAnalysis(ctx context.Context, wctx *Context, outpu
 			"analyses_count": len(outputs),
 			"tokens_in":      result.TokensIn,
 			"tokens_out":     result.TokensOut,
-			"cost_usd":       result.CostUSD,
 			"duration_ms":    durationMS,
 		})
 	}
@@ -1236,7 +1226,6 @@ func (a *Analyzer) consolidateAnalysis(ctx context.Context, wctx *Context, outpu
 		"model":       model,
 		"tokens_in":   result.TokensIn,
 		"tokens_out":  result.TokensOut,
-		"cost_usd":    result.CostUSD,
 	})
 }
 
@@ -1273,7 +1262,6 @@ func parseAnalysisOutputWithMetrics(agentName, model string, result *core.Execut
 		RawOutput:  result.Output,
 		TokensIn:   result.TokensIn,
 		TokensOut:  result.TokensOut,
-		CostUSD:    result.CostUSD,
 		DurationMS: durationMS,
 	}
 
@@ -1895,16 +1883,15 @@ func loadExistingAnalysis(path, agentName, model string) (*AnalysisOutput, error
 // AnalysisCheckpointMetadata stores metadata for analysis_complete checkpoints.
 // This enables cache validation and metrics restoration on resume.
 type AnalysisCheckpointMetadata struct {
-	AgentName   string  `json:"agent_name"`
-	Model       string  `json:"model"`
-	Round       int     `json:"round"`       // 1 for V1, 2 for V2, etc.
-	FilePath    string  `json:"file_path"`   // Path to analysis file on disk
-	PromptHash  string  `json:"prompt_hash"` // SHA256 of effective prompt for cache invalidation
-	TokensIn    int     `json:"tokens_in"`
-	TokensOut   int     `json:"tokens_out"`
-	CostUSD     float64 `json:"cost_usd"`
-	DurationMS  int64   `json:"duration_ms"`
-	ContentHash string  `json:"content_hash"` // SHA256 of file content for integrity
+	AgentName   string `json:"agent_name"`
+	Model       string `json:"model"`
+	Round       int    `json:"round"`       // 1 for V1, 2 for V2, etc.
+	FilePath    string `json:"file_path"`   // Path to analysis file on disk
+	PromptHash  string `json:"prompt_hash"` // SHA256 of effective prompt for cache invalidation
+	TokensIn    int    `json:"tokens_in"`
+	TokensOut   int    `json:"tokens_out"`
+	DurationMS  int64  `json:"duration_ms"`
+	ContentHash string `json:"content_hash"` // SHA256 of file content for integrity
 }
 
 // computePromptHash returns SHA256 hash of effective prompt for cache invalidation.
@@ -1968,7 +1955,6 @@ func restoreAnalysisFromCheckpoint(meta *AnalysisCheckpointMetadata) (*AnalysisO
 		Model:     meta.Model,
 		TokensIn:  meta.TokensIn,
 		TokensOut: meta.TokensOut,
-		CostUSD:   meta.CostUSD,
 	}
 
 	output := parseAnalysisOutputWithMetrics(meta.AgentName, meta.Model, result, meta.DurationMS)
@@ -2000,7 +1986,6 @@ func createAnalysisCheckpoint(wctx *Context, agentName, model string, round int,
 		"prompt_hash":  promptHash,
 		"tokens_in":    output.TokensIn,
 		"tokens_out":   output.TokensOut,
-		"cost_usd":     output.CostUSD,
 		"duration_ms":  output.DurationMS,
 		"content_hash": computeContentHash(output.RawOutput),
 	}

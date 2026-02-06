@@ -18,7 +18,6 @@ CREATE TABLE IF NOT EXISTS chat_messages (
     timestamp TEXT NOT NULL,
     tokens_in INTEGER DEFAULT 0,
     tokens_out INTEGER DEFAULT 0,
-    cost_usd REAL DEFAULT 0,
     FOREIGN KEY (session_id) REFERENCES chat_sessions(id) ON DELETE CASCADE
 );
 

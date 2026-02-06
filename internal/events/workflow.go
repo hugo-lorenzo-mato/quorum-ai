@@ -53,16 +53,14 @@ func NewWorkflowStateUpdatedEvent(workflowID, projectID, phase string, total, co
 // CRITICAL: This should only be emitted ONCE per workflow.
 type WorkflowCompletedEvent struct {
 	BaseEvent
-	Duration  time.Duration `json:"duration"`
-	TotalCost float64       `json:"total_cost"`
+	Duration time.Duration `json:"duration"`
 }
 
 // NewWorkflowCompletedEvent creates a new workflow completed event.
-func NewWorkflowCompletedEvent(workflowID, projectID string, duration time.Duration, totalCost float64) WorkflowCompletedEvent {
+func NewWorkflowCompletedEvent(workflowID, projectID string, duration time.Duration) WorkflowCompletedEvent {
 	return WorkflowCompletedEvent{
 		BaseEvent: NewBaseEvent(TypeWorkflowCompleted, workflowID, projectID),
 		Duration:  duration,
-		TotalCost: totalCost,
 	}
 }
 

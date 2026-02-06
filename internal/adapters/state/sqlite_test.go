@@ -39,12 +39,10 @@ func newTestStateSQLite() *core.WorkflowState {
 					Dependencies: []core.TaskID{},
 					TokensIn:     100,
 					TokensOut:    50,
-					CostUSD:      0.01,
 				},
 			},
 			TaskOrder: []core.TaskID{"task-1"},
 			Metrics: &core.StateMetrics{
-				TotalCostUSD:   0.05,
 				TotalTokensIn:  1000,
 				TotalTokensOut: 500,
 			},
@@ -487,7 +485,6 @@ func TestSQLiteStateManager_Tasks(t *testing.T) {
 			Dependencies: []core.TaskID{},
 			TokensIn:     100,
 			TokensOut:    50,
-			CostUSD:      0.01,
 			Output:       "Analysis result",
 			ToolCalls: []core.ToolCall{
 				{ID: "tc-1", Name: "read_file", Arguments: map[string]interface{}{"path": "/test"}, Result: "content"},
@@ -708,7 +705,6 @@ func TestSQLiteStateManager_ConfigAndMetrics(t *testing.T) {
 		Sandbox:    true,
 	}
 	state.Metrics = &core.StateMetrics{
-		TotalCostUSD:   1.25,
 		TotalTokensIn:  10000,
 		TotalTokensOut: 5000,
 		ConsensusScore: 0.95,
@@ -741,9 +737,6 @@ func TestSQLiteStateManager_ConfigAndMetrics(t *testing.T) {
 	// Verify metrics
 	if loaded.Metrics == nil {
 		t.Fatal("Metrics should not be nil")
-	}
-	if loaded.Metrics.TotalCostUSD != 1.25 {
-		t.Errorf("TotalCostUSD = %f, want 1.25", loaded.Metrics.TotalCostUSD)
 	}
 	if loaded.Metrics.ConsensusScore != 0.95 {
 		t.Errorf("ConsensusScore = %f, want 0.95", loaded.Metrics.ConsensusScore)

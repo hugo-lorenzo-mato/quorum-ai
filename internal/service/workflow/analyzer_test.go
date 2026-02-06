@@ -732,7 +732,6 @@ func TestAnalyzer_Run_SingleAgentMode(t *testing.T) {
 			TokensIn:  100,
 			TokensOut: 50,
 			Model:     "claude-3-sonnet",
-			CostUSD:   0.01,
 		},
 	}
 	registry.Register("claude", agent)
@@ -923,7 +922,6 @@ func TestAnalyzer_Run_SingleAgentMode_WithModelOverride(t *testing.T) {
 			TokensIn:  100,
 			TokensOut: 50,
 			Model:     "claude-opus-4", // Will be returned in result
-			CostUSD:   0.05,
 		},
 	}
 	// Wrap to capture the model

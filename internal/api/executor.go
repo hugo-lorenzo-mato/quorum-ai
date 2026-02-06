@@ -167,7 +167,7 @@ func (e *WorkflowExecutor) executeAsync(
 	runner *workflow.Runner,
 	notifier interface {
 		WorkflowStarted(prompt string)
-		WorkflowCompleted(duration time.Duration, totalCost float64)
+		WorkflowCompleted(duration time.Duration)
 		WorkflowFailed(phase string, err error)
 		FlushState()
 	},
@@ -207,13 +207,7 @@ func (e *WorkflowExecutor) executeAsync(
 		runErr = runner.RunWithState(ctx, state)
 	}
 
-	// Get final state for metrics
-	finalState, _ := runner.GetState(ctx)
 	duration := time.Since(startTime)
-	var totalCost float64
-	if finalState != nil && finalState.Metrics != nil {
-		totalCost = finalState.Metrics.TotalCostUSD
-	}
 
 	// Emit lifecycle event
 	if runErr != nil {
@@ -231,13 +225,12 @@ func (e *WorkflowExecutor) executeAsync(
 		e.logger.Info("workflow execution completed",
 			"workflow_id", state.WorkflowID,
 			"duration", duration,
-			"cost", totalCost,
 		)
-		notifier.WorkflowCompleted(duration, totalCost)
+		notifier.WorkflowCompleted(duration)
 
 		// Publish SSE event
 		if e.eventBus != nil {
-			e.eventBus.Publish(events.NewWorkflowCompletedEvent(workflowID, "", duration, totalCost))
+			e.eventBus.Publish(events.NewWorkflowCompletedEvent(workflowID, "", duration))
 		}
 	}
 }

@@ -23,7 +23,6 @@ type WorkflowMetrics struct {
 	TotalDuration  time.Duration `json:"total_duration"`
 	TotalTokensIn  int           `json:"total_tokens_in"`
 	TotalTokensOut int           `json:"total_tokens_out"`
-	TotalCostUSD   float64       `json:"total_cost_usd"`
 	TasksTotal     int           `json:"tasks_total"`
 	TasksCompleted int           `json:"tasks_completed"`
 	TasksFailed    int           `json:"tasks_failed"`
@@ -43,7 +42,6 @@ type TaskMetrics struct {
 	Duration  time.Duration `json:"duration"`
 	TokensIn  int           `json:"tokens_in"`
 	TokensOut int           `json:"tokens_out"`
-	CostUSD   float64       `json:"cost_usd"`
 	Retries   int           `json:"retries"`
 	Success   bool          `json:"success"`
 	ErrorMsg  string        `json:"error,omitempty"`
@@ -55,7 +53,6 @@ type AgentMetrics struct {
 	Invocations    int           `json:"invocations"`
 	TotalTokensIn  int           `json:"total_tokens_in"`
 	TotalTokensOut int           `json:"total_tokens_out"`
-	TotalCostUSD   float64       `json:"total_cost_usd"`
 	TotalDuration  time.Duration `json:"total_duration"`
 	AvgDuration    time.Duration `json:"avg_duration"`
 	Errors         int           `json:"errors"`
@@ -72,7 +69,6 @@ type ArbiterMetrics struct {
 	AgreementCount  int        `json:"agreement_count"`
 	TokensIn        int        `json:"tokens_in"`
 	TokensOut       int        `json:"tokens_out"`
-	CostUSD         float64    `json:"cost_usd"`
 	DurationMS      int64      `json:"duration_ms"`
 	Timestamp       time.Time  `json:"timestamp"`
 }
@@ -84,7 +80,6 @@ type ArbiterMetricsInput struct {
 	AgreementCount  int
 	TokensIn        int
 	TokensOut       int
-	CostUSD         float64
 	DurationMS      int64
 }
 
@@ -143,11 +138,9 @@ func (m *MetricsCollector) EndTask(taskID core.TaskID, result *core.ExecuteResul
 	if result != nil {
 		tm.TokensIn = result.TokensIn
 		tm.TokensOut = result.TokensOut
-		tm.CostUSD = result.CostUSD
 
 		m.workflow.TotalTokensIn += result.TokensIn
 		m.workflow.TotalTokensOut += result.TokensOut
-		m.workflow.TotalCostUSD += result.CostUSD
 
 		// Update agent metrics
 		m.updateAgentMetrics(tm.Agent, result, tm.Duration, err != nil)
@@ -187,7 +180,6 @@ func (m *MetricsCollector) RecordArbiterEvaluation(input ArbiterMetricsInput, ph
 		AgreementCount:  input.AgreementCount,
 		TokensIn:        input.TokensIn,
 		TokensOut:       input.TokensOut,
-		CostUSD:         input.CostUSD,
 		DurationMS:      input.DurationMS,
 		Timestamp:       time.Now(),
 	}
@@ -214,7 +206,6 @@ func (m *MetricsCollector) updateAgentMetrics(agent string, result *core.Execute
 	am.Invocations++
 	am.TotalTokensIn += result.TokensIn
 	am.TotalTokensOut += result.TokensOut
-	am.TotalCostUSD += result.CostUSD
 	am.TotalDuration += duration
 	am.AvgDuration = am.TotalDuration / time.Duration(am.Invocations)
 	am.AvgTokensIn = am.TotalTokensIn / am.Invocations

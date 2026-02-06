@@ -150,7 +150,6 @@ func TestFallbackOutput_TaskCompleted(t *testing.T) {
 		Name:      "Test Task",
 		TokensIn:  100,
 		TokensOut: 50,
-		CostUSD:   0.01,
 	}
 
 	output.TaskCompleted(task, 500*time.Millisecond)

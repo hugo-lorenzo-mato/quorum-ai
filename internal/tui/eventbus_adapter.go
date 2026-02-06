@@ -23,7 +23,6 @@ type EventBusAdapter struct {
 	// State tracking for agent mapping
 	taskToAgent   map[string]string    // taskID -> agentID
 	agentDuration map[string]time.Time // agentID -> start time
-	totalCost     float64
 	totalRequests int
 }
 
@@ -166,7 +165,6 @@ func (a *EventBusAdapter) eventToMsg(event events.Event) tea.Msg {
 		agentID := a.taskToAgent[e.TaskID]
 		startTime := a.agentDuration[agentID]
 		duration := time.Since(startTime)
-		a.totalCost += e.CostUSD
 		a.mu.Unlock()
 
 		// Return both task update and agent status update
@@ -214,7 +212,6 @@ func (a *EventBusAdapter) eventToMsg(event events.Event) tea.Msg {
 
 	case events.MetricsUpdateEvent:
 		a.mu.Lock()
-		a.totalCost = e.TotalCostUSD
 		requests := a.totalRequests
 		a.mu.Unlock()
 
@@ -222,12 +219,10 @@ func (a *EventBusAdapter) eventToMsg(event events.Event) tea.Msg {
 		a.sendMsg(WorkflowProgressMsg{
 			Title:      "workflow",
 			Percentage: 0.5, // TODO: calculate from task progress
-			Cost:       e.TotalCostUSD,
 			Requests:   requests,
 		})
 
 		return MetricsUpdateMsg{
-			TotalCostUSD:   e.TotalCostUSD,
 			TotalTokensIn:  e.TotalTokensIn,
 			TotalTokensOut: e.TotalTokensOut,
 			Duration:       e.Duration,

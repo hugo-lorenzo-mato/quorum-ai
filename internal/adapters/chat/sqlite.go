@@ -309,9 +309,9 @@ func (s *SQLiteChatStore) SaveMessage(ctx context.Context, msg *core.ChatMessage
 
 		// Insert message
 		_, err = tx.ExecContext(ctx, `
-			INSERT INTO chat_messages (id, session_id, role, agent, content, timestamp, tokens_in, tokens_out, cost_usd)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-		`,
+				INSERT INTO chat_messages (id, session_id, role, agent, content, timestamp, tokens_in, tokens_out)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+			`,
 			msg.ID,
 			msg.SessionID,
 			msg.Role,
@@ -320,7 +320,6 @@ func (s *SQLiteChatStore) SaveMessage(ctx context.Context, msg *core.ChatMessage
 			msg.Timestamp.UTC().Format(time.RFC3339Nano),
 			msg.TokensIn,
 			msg.TokensOut,
-			msg.CostUSD,
 		)
 		if err != nil {
 			_ = tx.Rollback()
@@ -346,7 +345,7 @@ func (s *SQLiteChatStore) LoadMessages(ctx context.Context, sessionID string) ([
 	defer s.mu.RUnlock()
 
 	rows, err := s.readDB.QueryContext(ctx, `
-		SELECT id, session_id, role, agent, content, timestamp, tokens_in, tokens_out, cost_usd
+		SELECT id, session_id, role, agent, content, timestamp, tokens_in, tokens_out
 		FROM chat_messages
 		WHERE session_id = ?
 		ORDER BY timestamp ASC
@@ -362,7 +361,7 @@ func (s *SQLiteChatStore) LoadMessages(ctx context.Context, sessionID string) ([
 		var timestamp string
 		var agent sql.NullString
 
-		if err := rows.Scan(&msg.ID, &msg.SessionID, &msg.Role, &agent, &msg.Content, &timestamp, &msg.TokensIn, &msg.TokensOut, &msg.CostUSD); err != nil {
+		if err := rows.Scan(&msg.ID, &msg.SessionID, &msg.Role, &agent, &msg.Content, &timestamp, &msg.TokensIn, &msg.TokensOut); err != nil {
 			return nil, fmt.Errorf("scanning message: %w", err)
 		}
 

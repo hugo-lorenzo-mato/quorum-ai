@@ -160,7 +160,6 @@ The arbiter outputs a semantic consensus score (0.0 - 1.0) based on:
 |--------|--------|-------------|
 | Workflow Success Rate | >= 80% | completed / total |
 | Average Consensus Score | >= 75% | avg(consensus.score) |
-| Cost per Workflow | <= $5 USD | sum(cost_usd) |
 | PRs Without Manual Changes | >= 60% | automated / total PRs |
 | Test Coverage | >= 80% | go test -cover |
 
@@ -180,7 +179,7 @@ The POC includes controlled experiments:
 
 1. **Threshold Sensitivity**: Test consensus thresholds (0.80, 0.85, 0.90, 0.95)
 2. **Single vs Multi-Agent**: Compare error rates between single and ensemble execution
-3. **Cost Analysis**: Measure token usage and cost per workflow phase
+3. **Token Analysis**: Measure token usage per workflow phase
 4. **Refinement Effectiveness**: Measure quality improvement from iterative rounds
 
 ---

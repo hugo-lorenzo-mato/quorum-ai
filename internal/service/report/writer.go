@@ -233,7 +233,6 @@ type PromptMetrics struct {
 	OptimizedCharCount int
 	ImprovementRatio   float64
 	TokensUsed         int
-	CostUSD            float64
 	DurationMS         int64
 	OptimizerAgent     string
 	OptimizerModel     string
@@ -287,7 +286,6 @@ type AnalysisData struct {
 	Recommendations []string
 	TokensIn        int
 	TokensOut       int
-	CostUSD         float64
 	DurationMS      int64
 }
 
@@ -371,7 +369,6 @@ type ConsolidationData struct {
 	ConsensusScore  float64
 	TotalTokensIn   int
 	TotalTokensOut  int
-	TotalCostUSD    float64
 	TotalDurationMS int64
 }
 
@@ -386,7 +383,6 @@ type ModeratorData struct {
 	DivergencesCount int
 	TokensIn         int
 	TokensOut        int
-	CostUSD          float64
 	DurationMS       int64
 }
 
@@ -419,7 +415,6 @@ func (w *WorkflowReportWriter) WriteModeratorReport(data ModeratorData) error {
 	fm.Set("divergences_count", data.DivergencesCount)
 	fm.Set("tokens_in", data.TokensIn)
 	fm.Set("tokens_out", data.TokensOut)
-	fm.Set("cost_usd", fmt.Sprintf("%.4f", data.CostUSD))
 	fm.Set("duration_ms", data.DurationMS)
 
 	content := renderModeratorTemplate(data, w.config.IncludeRaw)
@@ -435,7 +430,6 @@ type VnAnalysisData struct {
 	RawOutput  string
 	TokensIn   int
 	TokensOut  int
-	CostUSD    float64
 	DurationMS int64
 }
 
@@ -486,7 +480,6 @@ type PlanData struct {
 	Content    string
 	TokensIn   int
 	TokensOut  int
-	CostUSD    float64
 	DurationMS int64
 }
 
@@ -516,7 +509,6 @@ func (w *WorkflowReportWriter) WritePlan(data PlanData) error {
 	fm.Set("workflow_id", w.workflowID)
 	fm.Set("tokens_in", data.TokensIn)
 	fm.Set("tokens_out", data.TokensOut)
-	fm.Set("cost_usd", fmt.Sprintf("%.4f", data.CostUSD))
 	fm.Set("duration_ms", data.DurationMS)
 
 	content := renderPlanTemplate(data)
@@ -715,7 +707,6 @@ type TaskResultData struct {
 	Error      string
 	TokensIn   int
 	TokensOut  int
-	CostUSD    float64
 	DurationMS int64
 }
 
@@ -742,7 +733,6 @@ func (w *WorkflowReportWriter) WriteTaskResult(data TaskResultData) error {
 	fm.Set("workflow_id", w.workflowID)
 	fm.Set("tokens_in", data.TokensIn)
 	fm.Set("tokens_out", data.TokensOut)
-	fm.Set("cost_usd", fmt.Sprintf("%.4f", data.CostUSD))
 	fm.Set("duration_ms", data.DurationMS)
 
 	content := renderTaskResultTemplate(data)
@@ -758,7 +748,6 @@ type ExecutionSummaryData struct {
 	SkippedTasks    int
 	TotalTokensIn   int
 	TotalTokensOut  int
-	TotalCostUSD    float64
 	TotalDurationMS int64
 	Tasks           []TaskResultData
 }
@@ -782,7 +771,6 @@ func (w *WorkflowReportWriter) WriteExecutionSummary(data ExecutionSummaryData) 
 	fm.Set("completed_tasks", data.CompletedTasks)
 	fm.Set("failed_tasks", data.FailedTasks)
 	fm.Set("skipped_tasks", data.SkippedTasks)
-	fm.Set("total_cost_usd", fmt.Sprintf("%.4f", data.TotalCostUSD))
 	fm.Set("total_duration_ms", data.TotalDurationMS)
 
 	content := renderExecutionSummaryTemplate(data)
@@ -801,7 +789,6 @@ type WorkflowMetadata struct {
 	CompletedAt    time.Time
 	Status         string
 	PhasesExecuted []string
-	TotalCostUSD   float64
 	TotalTokensIn  int
 	TotalTokensOut int
 	ConsensusScore float64
@@ -824,7 +811,6 @@ func (w *WorkflowReportWriter) WriteMetadata(data WorkflowMetadata) error {
 	fm.Set("started_at", w.formatTime(data.StartedAt))
 	fm.Set("completed_at", w.formatTime(data.CompletedAt))
 	fm.Set("status", data.Status)
-	fm.Set("total_cost_usd", fmt.Sprintf("%.4f", data.TotalCostUSD))
 	fm.Set("consensus_score", fmt.Sprintf("%.4f", data.ConsensusScore))
 
 	content := renderMetadataTemplate(data)

@@ -13,7 +13,6 @@ type SidebarConfig struct {
 	Width     int
 	Height    int
 	ShowStats bool
-	TotalCost float64
 	TotalReqs int
 }
 
@@ -43,9 +42,6 @@ var (
 
 	statsLabelStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#6b7280"))
-
-	statsValueStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#f59e0b"))
 )
 
 // RenderSidebar renders the agent sidebar panel.
@@ -63,7 +59,6 @@ func RenderSidebar(agents []*Agent, sp spinner.Model, cfg SidebarConfig) string 
 		divider := sidebarDividerStyle.Render(strings.Repeat("─", cfg.Width-4))
 		sb.WriteString("\n" + divider + "\n")
 		sb.WriteString(statsLabelStyle.Render("Session: ") + fmt.Sprintf("%d req\n", cfg.TotalReqs))
-		sb.WriteString(statsLabelStyle.Render("Cost:    ") + statsValueStyle.Render(fmt.Sprintf("$%.3f", cfg.TotalCost)) + "\n")
 	}
 
 	return sidebarStyle.

@@ -322,12 +322,10 @@ func (r *Runner) Run(ctx context.Context, prompt string) error {
 		"workflow_id", workflowState.WorkflowID,
 		"total_tasks", len(workflowState.Tasks),
 		"duration", workflowState.Metrics.Duration,
-		"total_cost", workflowState.Metrics.TotalCostUSD,
 	)
 	if r.output != nil {
-		r.output.Log("success", "workflow", fmt.Sprintf("Workflow completed: %d tasks, $%.4f, %s",
+		r.output.Log("success", "workflow", fmt.Sprintf("Workflow completed: %d tasks, %s",
 			len(workflowState.Tasks),
-			workflowState.Metrics.TotalCostUSD,
 			workflowState.Metrics.Duration.Round(time.Second)))
 	}
 
@@ -458,12 +456,10 @@ func (r *Runner) RunWithState(ctx context.Context, state *core.WorkflowState) er
 		"workflow_id", workflowState.WorkflowID,
 		"total_tasks", len(workflowState.Tasks),
 		"duration", workflowState.Metrics.Duration,
-		"total_cost", workflowState.Metrics.TotalCostUSD,
 	)
 	if r.output != nil {
-		r.output.Log("success", "workflow", fmt.Sprintf("Workflow completed: %d tasks, $%.4f, %s",
+		r.output.Log("success", "workflow", fmt.Sprintf("Workflow completed: %d tasks, %s",
 			len(workflowState.Tasks),
-			workflowState.Metrics.TotalCostUSD,
 			workflowState.Metrics.Duration.Round(time.Second)))
 	}
 
@@ -567,12 +563,11 @@ func (r *Runner) Resume(ctx context.Context) error {
 	r.logger.Info("workflow resumed and completed",
 		"workflow_id", workflowState.WorkflowID,
 		"duration", workflowState.Metrics.Duration,
-		"total_cost", workflowState.Metrics.TotalCostUSD,
 	)
 	if r.output != nil {
-		r.output.Log("success", "workflow", fmt.Sprintf("Resumed workflow completed: %d tasks, $%.4f",
+		r.output.Log("success", "workflow", fmt.Sprintf("Resumed workflow completed: %d tasks, %s",
 			len(workflowState.Tasks),
-			workflowState.Metrics.TotalCostUSD))
+			workflowState.Metrics.Duration.Round(time.Second)))
 	}
 
 	return r.state.Save(ctx, workflowState)
@@ -669,12 +664,11 @@ func (r *Runner) ResumeWithState(ctx context.Context, state *core.WorkflowState)
 	r.logger.Info("workflow resumed and completed",
 		"workflow_id", state.WorkflowID,
 		"duration", state.Metrics.Duration,
-		"total_cost", state.Metrics.TotalCostUSD,
 	)
 	if r.output != nil {
-		r.output.Log("success", "workflow", fmt.Sprintf("Resumed workflow completed: %d tasks, $%.4f",
+		r.output.Log("success", "workflow", fmt.Sprintf("Resumed workflow completed: %d tasks, %s",
 			len(state.Tasks),
-			state.Metrics.TotalCostUSD))
+			state.Metrics.Duration.Round(time.Second)))
 	}
 
 	return r.state.Save(ctx, state)
@@ -1179,13 +1173,11 @@ func (r *Runner) Analyze(ctx context.Context, prompt string) error {
 	r.logger.Info("analyze phase completed",
 		"workflow_id", workflowState.WorkflowID,
 		"duration", workflowState.Metrics.Duration,
-		"total_cost", workflowState.Metrics.TotalCostUSD,
 		"consensus_score", workflowState.Metrics.ConsensusScore,
 	)
 	if r.output != nil {
-		r.output.Log("success", "workflow", fmt.Sprintf("Analysis completed: consensus %.1f%%, $%.4f",
-			workflowState.Metrics.ConsensusScore*100,
-			workflowState.Metrics.TotalCostUSD))
+		r.output.Log("success", "workflow", fmt.Sprintf("Analysis completed: consensus %.1f%%",
+			workflowState.Metrics.ConsensusScore*100))
 	}
 
 	return r.state.Save(ctx, workflowState)
@@ -1258,12 +1250,10 @@ func (r *Runner) Plan(ctx context.Context) error {
 		"workflow_id", workflowState.WorkflowID,
 		"task_count", len(workflowState.Tasks),
 		"duration", workflowState.Metrics.Duration,
-		"total_cost", workflowState.Metrics.TotalCostUSD,
 	)
 	if r.output != nil {
-		r.output.Log("success", "workflow", fmt.Sprintf("Planning completed: %d tasks created, $%.4f",
-			len(workflowState.Tasks),
-			workflowState.Metrics.TotalCostUSD))
+		r.output.Log("success", "workflow", fmt.Sprintf("Planning completed: %d tasks created",
+			len(workflowState.Tasks)))
 	}
 
 	return r.state.Save(ctx, workflowState)

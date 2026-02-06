@@ -49,12 +49,6 @@ func (r *ReportGenerator) GenerateTextReport(w io.Writer) error {
 	fmt.Fprintf(w, "  Total Tokens:    %d\n", wm.TotalTokensIn+wm.TotalTokensOut)
 	fmt.Fprintln(w, "")
 
-	// Cost
-	fmt.Fprintln(w, "COST")
-	fmt.Fprintln(w, strings.Repeat("-", 40))
-	fmt.Fprintf(w, "  Total Cost:      $%.4f\n", wm.TotalCostUSD)
-	fmt.Fprintln(w, "")
-
 	// Agent breakdown
 	if err := r.writeAgentTable(w); err != nil {
 		return err
@@ -84,15 +78,14 @@ func (r *ReportGenerator) writeAgentTable(w io.Writer) error {
 	fmt.Fprintln(w, strings.Repeat("-", 40))
 
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "  Agent\tCalls\tTokens\tCost\tAvg Time")
-	fmt.Fprintln(tw, "  -----\t-----\t------\t----\t--------")
+	fmt.Fprintln(tw, "  Agent\tCalls\tTokens\tAvg Time")
+	fmt.Fprintln(tw, "  -----\t-----\t------\t--------")
 
 	for _, am := range agents {
-		fmt.Fprintf(tw, "  %s\t%d\t%d\t$%.4f\t%s\n",
+		fmt.Fprintf(tw, "  %s\t%d\t%d\t%s\n",
 			am.Name,
 			am.Invocations,
 			am.TotalTokensIn+am.TotalTokensOut,
-			am.TotalCostUSD,
 			am.AvgDuration.Round(time.Millisecond),
 		)
 	}
@@ -114,20 +107,19 @@ func (r *ReportGenerator) writeTaskTable(w io.Writer) error {
 	fmt.Fprintln(w, strings.Repeat("-", 40))
 
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "  Task\tPhase\tStatus\tDuration\tCost")
-	fmt.Fprintln(tw, "  ----\t-----\t------\t--------\t----")
+	fmt.Fprintln(tw, "  Task\tPhase\tStatus\tDuration")
+	fmt.Fprintln(tw, "  ----\t-----\t------\t--------")
 
 	for _, tm := range tasks {
 		status := "✓"
 		if !tm.Success {
 			status = "✗"
 		}
-		fmt.Fprintf(tw, "  %s\t%s\t%s\t%s\t$%.4f\n",
+		fmt.Fprintf(tw, "  %s\t%s\t%s\t%s\n",
 			truncate(tm.Name, 20),
 			tm.Phase,
 			status,
 			tm.Duration.Round(time.Millisecond),
-			tm.CostUSD,
 		)
 	}
 	if err := tw.Flush(); err != nil {
@@ -153,7 +145,6 @@ func (r *ReportGenerator) writeConsensusSummary(w io.Writer) {
 		fmt.Fprintf(w, "    Agreements:   %d\n", am.AgreementCount)
 		fmt.Fprintf(w, "    Divergences:  %d\n", am.DivergenceCount)
 		fmt.Fprintf(w, "    Tokens:       %d in / %d out\n", am.TokensIn, am.TokensOut)
-		fmt.Fprintf(w, "    Cost:         $%.4f\n", am.CostUSD)
 		fmt.Fprintln(w, "")
 	}
 }
@@ -178,11 +169,10 @@ func (r *ReportGenerator) GenerateSummary() string {
 	wm := r.metrics.GetWorkflowMetrics()
 
 	return fmt.Sprintf(
-		"Duration: %s | Tasks: %d/%d | Cost: $%.4f | Arbiter: %d rounds",
+		"Duration: %s | Tasks: %d/%d | Arbiter: %d rounds",
 		wm.TotalDuration.Round(time.Second),
 		wm.TasksCompleted,
 		wm.TasksTotal,
-		wm.TotalCostUSD,
 		wm.ArbiterRounds,
 	)
 }

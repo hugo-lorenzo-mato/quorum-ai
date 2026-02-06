@@ -299,16 +299,6 @@ func (c *CodexAdapter) extractUsage(result *CommandResult, execResult *core.Exec
 		execResult.TokensOut = maxReasonableTokens
 	}
 
-	execResult.CostUSD = c.estimateCost(execResult.TokensIn, execResult.TokensOut)
-}
-
-// estimateCost provides rough cost estimation for Codex/GPT.
-func (c *CodexAdapter) estimateCost(tokensIn, tokensOut int) float64 {
-	// GPT-4o pricing (approximate)
-	// Input: $2.50/1M tokens, Output: $10.00/1M tokens
-	inputCost := float64(tokensIn) / 1000000 * 2.50
-	outputCost := float64(tokensOut) / 1000000 * 10.00
-	return inputCost + outputCost
 }
 
 // Ensure CodexAdapter implements core.Agent and core.StreamingCapable

@@ -39,7 +39,6 @@ func (m *mockAgent) Execute(ctx context.Context, opts core.ExecuteOptions) (*cor
 		Output:    "Test response",
 		TokensIn:  10,
 		TokensOut: 20,
-		CostUSD:   0.001,
 		Duration:  100 * time.Millisecond,
 	}, nil
 }

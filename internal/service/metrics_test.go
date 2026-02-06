@@ -38,7 +38,6 @@ func TestMetricsCollector_TaskTracking(t *testing.T) {
 		Output:    "test output",
 		TokensIn:  100,
 		TokensOut: 50,
-		CostUSD:   0.01,
 	}
 
 	collector.EndTask(task.ID, result, nil)
@@ -48,7 +47,6 @@ func TestMetricsCollector_TaskTracking(t *testing.T) {
 	testutil.AssertEqual(t, wm.TasksCompleted, 1)
 	testutil.AssertEqual(t, wm.TotalTokensIn, 100)
 	testutil.AssertEqual(t, wm.TotalTokensOut, 50)
-	testutil.AssertEqual(t, wm.TotalCostUSD, 0.01)
 }
 
 func TestMetricsCollector_TaskFailed(t *testing.T) {
@@ -98,7 +96,6 @@ func TestMetricsCollector_AgentMetrics(t *testing.T) {
 		collector.EndTask(task.ID, &core.ExecuteResult{
 			TokensIn:  100,
 			TokensOut: 50,
-			CostUSD:   0.01,
 		}, nil)
 	}
 
@@ -108,7 +105,7 @@ func TestMetricsCollector_AgentMetrics(t *testing.T) {
 	claude := agents["claude"]
 	testutil.AssertEqual(t, claude.Invocations, 3)
 	testutil.AssertEqual(t, claude.TotalTokensIn, 300)
-	testutil.AssertEqual(t, claude.TotalCostUSD, 0.03)
+	testutil.AssertEqual(t, claude.TotalTokensOut, 150)
 }
 
 func TestMetricsCollector_Arbiter(t *testing.T) {
@@ -120,7 +117,6 @@ func TestMetricsCollector_Arbiter(t *testing.T) {
 		AgreementCount:  5,
 		TokensIn:        500,
 		TokensOut:       300,
-		CostUSD:         0.05,
 		DurationMS:      1500,
 	}
 
@@ -169,7 +165,6 @@ func TestReportGenerator_TextReport(t *testing.T) {
 	collector.EndTask(task.ID, &core.ExecuteResult{
 		TokensIn:  100,
 		TokensOut: 50,
-		CostUSD:   0.01,
 	}, nil)
 
 	collector.EndWorkflow()
@@ -184,7 +179,6 @@ func TestReportGenerator_TextReport(t *testing.T) {
 	testutil.AssertContains(t, report, "WORKFLOW REPORT")
 	testutil.AssertContains(t, report, "SUMMARY")
 	testutil.AssertContains(t, report, "TOKEN USAGE")
-	testutil.AssertContains(t, report, "COST")
 }
 
 func TestReportGenerator_JSONReport(t *testing.T) {
@@ -196,7 +190,6 @@ func TestReportGenerator_JSONReport(t *testing.T) {
 	collector.EndTask(task.ID, &core.ExecuteResult{
 		TokensIn:  100,
 		TokensOut: 50,
-		CostUSD:   0.01,
 	}, nil)
 
 	collector.EndWorkflow()
@@ -219,7 +212,7 @@ func TestReportGenerator_Summary(t *testing.T) {
 
 	task := &core.Task{ID: "task-1", Name: "Test Task"}
 	collector.StartTask(task, "claude")
-	collector.EndTask(task.ID, &core.ExecuteResult{CostUSD: 0.01}, nil)
+	collector.EndTask(task.ID, &core.ExecuteResult{TokensIn: 100, TokensOut: 50}, nil)
 
 	collector.EndWorkflow()
 
@@ -228,5 +221,5 @@ func TestReportGenerator_Summary(t *testing.T) {
 
 	testutil.AssertContains(t, summary, "Duration:")
 	testutil.AssertContains(t, summary, "Tasks: 1/1")
-	testutil.AssertContains(t, summary, "Cost:")
+	testutil.AssertContains(t, summary, "Arbiter:")
 }

@@ -114,7 +114,6 @@ func (s *Server) sendEventToClient(w http.ResponseWriter, flusher http.Flusher, 
 		payload = map[string]interface{}{
 			"workflow_id": e.WorkflowID(),
 			"duration":    e.Duration.String(),
-			"total_cost":  e.TotalCost,
 			"timestamp":   e.Timestamp(),
 		}
 
@@ -178,7 +177,6 @@ func (s *Server) sendEventToClient(w http.ResponseWriter, flusher http.Flusher, 
 			"duration":    e.Duration.String(),
 			"tokens_in":   e.TokensIn,
 			"tokens_out":  e.TokensOut,
-			"cost_usd":    e.CostUSD,
 			"timestamp":   e.Timestamp(),
 		}
 

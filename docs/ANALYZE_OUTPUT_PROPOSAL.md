@@ -183,7 +183,6 @@ original_char_count: 1234
 optimized_char_count: 2456
 improvement_ratio: 1.99
 tokens_used: 892
-cost_usd: 0.0089
 ---
 
 # Prompt Optimizado
@@ -249,7 +248,6 @@ workflow_id: wf-abc123
 prompt_hash: sha256:abc123...
 tokens_in: 1234
 tokens_out: 5678
-cost_usd: 0.0234
 duration_ms: 12500
 ---
 
@@ -363,7 +361,6 @@ timestamp: 2024-01-15T14:33:00Z
 workflow_id: wf-abc123
 analyses_count: 3
 synthesized: true
-total_cost_usd: 0.1234
 total_tokens: 45678
 consensus_score: 0.82
 ---

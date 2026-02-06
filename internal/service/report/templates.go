@@ -147,7 +147,6 @@ func renderModeratorTemplate(data ModeratorData, includeRaw bool) string {
 	sb.WriteString("|---------|-------|\n")
 	sb.WriteString(fmt.Sprintf("| Tokens entrada | %d |\n", data.TokensIn))
 	sb.WriteString(fmt.Sprintf("| Tokens salida | %d |\n", data.TokensOut))
-	sb.WriteString(fmt.Sprintf("| Costo | $%.4f USD |\n", data.CostUSD))
 	sb.WriteString(fmt.Sprintf("| Duración | %s |\n", formatDuration(data.DurationMS)))
 
 	return sb.String()
@@ -167,7 +166,6 @@ func renderPlanTemplate(data PlanData) string {
 	sb.WriteString("|---------|-------|\n")
 	sb.WriteString(fmt.Sprintf("| Tokens entrada | %d |\n", data.TokensIn))
 	sb.WriteString(fmt.Sprintf("| Tokens salida | %d |\n", data.TokensOut))
-	sb.WriteString(fmt.Sprintf("| Costo | $%.4f USD |\n", data.CostUSD))
 	sb.WriteString(fmt.Sprintf("| Duración | %s |\n", formatDuration(data.DurationMS)))
 
 	return sb.String()
@@ -206,7 +204,6 @@ func renderTaskResultTemplate(data TaskResultData) string {
 	sb.WriteString("|---------|-------|\n")
 	sb.WriteString(fmt.Sprintf("| Tokens entrada | %d |\n", data.TokensIn))
 	sb.WriteString(fmt.Sprintf("| Tokens salida | %d |\n", data.TokensOut))
-	sb.WriteString(fmt.Sprintf("| Costo | $%.4f USD |\n", data.CostUSD))
 	sb.WriteString(fmt.Sprintf("| Duración | %s |\n", formatDuration(data.DurationMS)))
 
 	return sb.String()
@@ -231,13 +228,12 @@ func renderExecutionSummaryTemplate(data ExecutionSummaryData) string {
 	sb.WriteString("|---------|-------|\n")
 	sb.WriteString(fmt.Sprintf("| Tokens entrada | %d |\n", data.TotalTokensIn))
 	sb.WriteString(fmt.Sprintf("| Tokens salida | %d |\n", data.TotalTokensOut))
-	sb.WriteString(fmt.Sprintf("| Costo total | $%.4f USD |\n", data.TotalCostUSD))
 	sb.WriteString(fmt.Sprintf("| Duración total | %s |\n", formatDuration(data.TotalDurationMS)))
 
 	if len(data.Tasks) > 0 {
 		sb.WriteString("\n## Detalle de Tareas\n\n")
-		sb.WriteString("| ID | Nombre | Estado | Costo | Duración |\n")
-		sb.WriteString("|-------|--------|--------|-------|----------|\n")
+		sb.WriteString("| ID | Nombre | Estado | Duración |\n")
+		sb.WriteString("|-------|--------|--------|----------|\n")
 		for _, task := range data.Tasks {
 			statusEmoji := "✅"
 			if task.Status == "failed" {
@@ -245,8 +241,8 @@ func renderExecutionSummaryTemplate(data ExecutionSummaryData) string {
 			} else if task.Status == "skipped" {
 				statusEmoji = "⏭️"
 			}
-			sb.WriteString(fmt.Sprintf("| %s | %s | %s | $%.4f | %s |\n",
-				task.TaskID, task.TaskName, statusEmoji, task.CostUSD, formatDuration(task.DurationMS)))
+			sb.WriteString(fmt.Sprintf("| %s | %s | %s | %s |\n",
+				task.TaskID, task.TaskName, statusEmoji, formatDuration(task.DurationMS)))
 		}
 	}
 
@@ -284,7 +280,6 @@ func renderMetadataTemplate(data WorkflowMetadata) string {
 	}
 
 	sb.WriteString("\n## Métricas Totales\n\n")
-	sb.WriteString(fmt.Sprintf("- **Costo Total**: $%.4f USD\n", data.TotalCostUSD))
 	sb.WriteString(fmt.Sprintf("- **Tokens Entrada**: %d\n", data.TotalTokensIn))
 	sb.WriteString(fmt.Sprintf("- **Tokens Salida**: %d\n", data.TotalTokensOut))
 	sb.WriteString(fmt.Sprintf("- **Consenso Final**: %.2f%%\n", data.ConsensusScore*100))
@@ -331,7 +326,6 @@ func renderWorkflowSummaryTemplate(data WorkflowMetadata) string {
 	sb.WriteString("\n## Métricas Finales\n\n")
 	sb.WriteString("| Métrica | Valor |\n")
 	sb.WriteString("|---------|-------|\n")
-	sb.WriteString(fmt.Sprintf("| Costo Total | $%.4f USD |\n", data.TotalCostUSD))
 	sb.WriteString(fmt.Sprintf("| Tokens Totales | %d entrada / %d salida |\n", data.TotalTokensIn, data.TotalTokensOut))
 	sb.WriteString(fmt.Sprintf("| Consenso | %.2f%% |\n", data.ConsensusScore*100))
 

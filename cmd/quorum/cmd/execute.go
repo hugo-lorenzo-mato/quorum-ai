@@ -241,7 +241,6 @@ func runExecute(_ *cobra.Command, _ []string) error {
 					"name":      task.Name,
 					"status":    task.Status,
 					"tokens_in": task.TokensIn,
-					"cost_usd":  task.CostUSD,
 				})
 			}
 		}
@@ -259,9 +258,6 @@ func runExecute(_ *cobra.Command, _ []string) error {
 
 	fmt.Printf("Execute phase completed. Workflow ID: %s\n", workflowState.WorkflowID)
 	fmt.Printf("Completed %d/%d tasks.\n", countCompletedTasks(workflowState), len(workflowState.Tasks))
-	if workflowState.Metrics != nil && workflowState.Metrics.TotalCostUSD > 0 {
-		fmt.Printf("Total cost: $%.4f\n", workflowState.Metrics.TotalCostUSD)
-	}
 
 	return nil
 }

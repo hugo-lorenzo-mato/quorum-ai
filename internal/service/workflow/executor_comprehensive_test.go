@@ -741,7 +741,6 @@ func TestExecutor_Run_UpdatesMetrics(t *testing.T) {
 			Output:    "success",
 			TokensIn:  100,
 			TokensOut: 200,
-			CostUSD:   1.5,
 		},
 	}
 	registry := &mockAgentRegistry{}
@@ -786,10 +785,6 @@ func TestExecutor_Run_UpdatesMetrics(t *testing.T) {
 	if wctx.State.Metrics.TotalTokensOut != 200 {
 		t.Errorf("TotalTokensOut = %d, want 200", wctx.State.Metrics.TotalTokensOut)
 	}
-	if wctx.State.Metrics.TotalCostUSD != 1.5 {
-		t.Errorf("TotalCostUSD = %v, want 1.5", wctx.State.Metrics.TotalCostUSD)
-	}
-
 	// Check task metrics
 	taskState := wctx.State.Tasks["task-1"]
 	if taskState.TokensIn != 100 {
@@ -797,9 +792,6 @@ func TestExecutor_Run_UpdatesMetrics(t *testing.T) {
 	}
 	if taskState.TokensOut != 200 {
 		t.Errorf("task TokensOut = %d, want 200", taskState.TokensOut)
-	}
-	if taskState.CostUSD != 1.5 {
-		t.Errorf("task CostUSD = %v, want 1.5", taskState.CostUSD)
 	}
 }
 
