@@ -17,7 +17,7 @@ func TestFullConfigResponse_Marshaling(t *testing.T) {
 			Default: "claude",
 			Claude: FullAgentConfigResponse{
 				Enabled: true,
-				Model:   "claude-opus-4-5-20251101",
+				Model:   "claude-opus-4-6",
 				Path:    "claude",
 			},
 			Copilot: FullAgentConfigResponse{

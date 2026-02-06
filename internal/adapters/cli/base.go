@@ -43,8 +43,9 @@ type AgentConfig struct {
 	// Keys: "refine", "analyze", "moderate", "synthesize", "plan", "execute"
 	// If nil, agent is available for all phases.
 	Phases map[string]bool
-	// ReasoningEffort is the default reasoning effort for all phases (Codex-specific).
-	// Valid values: minimal, low, medium, high, xhigh.
+	// ReasoningEffort is the default reasoning effort for all phases.
+	// Codex: minimal, low, medium, high, xhigh.
+	// Claude: low, medium, high, max (via CLAUDE_CODE_EFFORT_LEVEL env var, Opus 4.6 only).
 	ReasoningEffort string
 	// ReasoningEffortPhases allows per-phase overrides of reasoning effort.
 	ReasoningEffortPhases map[string]string
@@ -91,6 +92,10 @@ type BaseAdapter struct {
 	logCallback  LogCallback
 	eventHandler core.AgentEventHandler
 	aggregator   *EventAggregator
+
+	// ExtraEnv holds additional environment variables to set for command execution.
+	// Values are applied on top of the current process environment.
+	ExtraEnv map[string]string
 
 	// Diagnostics integration for resource monitoring and crash recovery
 	safeExec   *diagnostics.SafeExecutor
@@ -197,6 +202,14 @@ func (b *BaseAdapter) ExecuteCommand(ctx context.Context, args []string, stdin, 
 		cmd.Dir = workDir
 	} else if b.config.WorkDir != "" {
 		cmd.Dir = b.config.WorkDir
+	}
+
+	// Apply extra environment variables if set
+	if len(b.ExtraEnv) > 0 {
+		cmd.Env = os.Environ()
+		for k, v := range b.ExtraEnv {
+			cmd.Env = append(cmd.Env, k+"="+v)
+		}
 	}
 
 	// Set up stdin
@@ -512,6 +525,14 @@ func (b *BaseAdapter) executeWithJSONStreaming(
 		cmd.Dir = b.config.WorkDir
 	}
 
+	// Apply extra environment variables if set
+	if len(b.ExtraEnv) > 0 {
+		cmd.Env = os.Environ()
+		for k, v := range b.ExtraEnv {
+			cmd.Env = append(cmd.Env, k+"="+v)
+		}
+	}
+
 	if stdin != "" {
 		cmd.Stdin = strings.NewReader(stdin)
 	}
@@ -751,6 +772,14 @@ func (b *BaseAdapter) executeWithLogFileStreaming(
 		cmd.Dir = workDir
 	} else if b.config.WorkDir != "" {
 		cmd.Dir = b.config.WorkDir
+	}
+
+	// Apply extra environment variables if set
+	if len(b.ExtraEnv) > 0 {
+		cmd.Env = os.Environ()
+		for k, v := range b.ExtraEnv {
+			cmd.Env = append(cmd.Env, k+"="+v)
+		}
 	}
 
 	if stdin != "" {

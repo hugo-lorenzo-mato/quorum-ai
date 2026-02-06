@@ -2,48 +2,45 @@ package core
 
 import "strings"
 
-var reasoningRank = map[string]int{
-	ReasoningNone:    0,
-	ReasoningMinimal: 0,
-	ReasoningLow:     1,
-	ReasoningMedium:  2,
-	ReasoningHigh:    3,
-	ReasoningXHigh:   4,
+// codexEffortRank maps Codex reasoning effort levels to numeric ranks for normalization.
+var codexEffortRank = map[string]int{
+	"minimal": 0,
+	"low":     1,
+	"medium":  2,
+	"high":    3,
+	"xhigh":  4,
 }
 
-// SupportedReasoningEffortsForModel returns the known set of reasoning effort values
+// SupportedReasoningEffortsForModel returns the known reasoning effort values
 // supported by a given Codex/OpenAI model when used through the Codex CLI.
 //
-// Notes:
-//   - Some models support `minimal` (e.g. gpt-5), some support `none` (e.g. gpt-5.1),
-//     and some support neither (older codex variants).
-//   - The returned slice is ordered from lowest to highest effort.
+// Official Codex levels: minimal, low, medium, high, xhigh.
+// See: https://developers.openai.com/codex/config-reference/
 func SupportedReasoningEffortsForModel(model string) []string {
 	switch strings.TrimSpace(model) {
-	// Latest codex
+	// GPT-5.3 codex — supports full range
 	case "gpt-5.3-codex":
-		return []string{ReasoningNone, ReasoningLow, ReasoningMedium, ReasoningHigh, ReasoningXHigh}
+		return []string{"minimal", "low", "medium", "high", "xhigh"}
 
-	// Codex variants (generally do not support none/minimal)
-	case "gpt-5.2-codex", "gpt-5.1-codex-max":
-		return []string{ReasoningLow, ReasoningMedium, ReasoningHigh, ReasoningXHigh}
-	case "gpt-5.1-codex", "gpt-5.1-codex-mini", "gpt-5-codex", "gpt-5-codex-mini":
-		return []string{ReasoningLow, ReasoningMedium, ReasoningHigh}
+	// GPT-5.2 family — supports low through xhigh
+	case "gpt-5.2-codex", "gpt-5.2", "gpt-5.1-codex-max":
+		return []string{"low", "medium", "high", "xhigh"}
 
-	// Base GPT-5 family
-	case "gpt-5.2":
-		return []string{ReasoningNone, ReasoningLow, ReasoningMedium, ReasoningHigh, ReasoningXHigh}
-	case "gpt-5.1":
-		return []string{ReasoningNone, ReasoningLow, ReasoningMedium, ReasoningHigh}
-	case "gpt-5":
-		return []string{ReasoningMinimal, ReasoningLow, ReasoningMedium, ReasoningHigh}
+	// GPT-5.1 family — supports low through high
+	case "gpt-5.1-codex", "gpt-5.1-codex-mini", "gpt-5.1":
+		return []string{"low", "medium", "high"}
+
+	// GPT-5 family — supports minimal through high
+	case "gpt-5-codex", "gpt-5-codex-mini", "gpt-5":
+		return []string{"minimal", "low", "medium", "high"}
+
 	default:
 		return nil
 	}
 }
 
 // NormalizeReasoningEffortForModel picks the closest supported reasoning effort for the
-// given model, to prevent Codex CLI/API errors when a config requests an unsupported effort.
+// given Codex model, to prevent Codex CLI errors when a config requests an unsupported effort.
 //
 // If the model is unknown (no supported set), it returns effort unchanged.
 func NormalizeReasoningEffortForModel(model, effort string) string {
@@ -64,17 +61,26 @@ func NormalizeReasoningEffortForModel(model, effort string) string {
 		}
 	}
 
-	reqRank, ok := reasoningRank[effort]
+	// Map Claude-style "max" to Codex "xhigh"
+	if effort == "max" {
+		for _, a := range allowed {
+			if a == "xhigh" {
+				return "xhigh"
+			}
+		}
+		return allowed[len(allowed)-1] // highest available
+	}
+
+	reqRank, ok := codexEffortRank[effort]
 	if !ok {
-		// Unknown value; keep as-is (it will be validated elsewhere).
 		return effort
 	}
 
-	// Find closest effort by rank. If requested is outside the allowed range, clamp.
+	// Find closest effort by rank
 	best := allowed[0]
-	bestDiff := int(^uint(0) >> 1) // max int
+	bestDiff := int(^uint(0) >> 1)
 	for _, a := range allowed {
-		r, ok := reasoningRank[a]
+		r, ok := codexEffortRank[a]
 		if !ok {
 			continue
 		}
@@ -88,24 +94,82 @@ func NormalizeReasoningEffortForModel(model, effort string) string {
 		}
 	}
 
-	// Prefer "none" over "minimal" (and vice-versa) when both share the same rank and
-	// the requested effort was one of those values.
-	if reqRank == 0 {
-		if effort == ReasoningNone {
-			for _, a := range allowed {
-				if a == ReasoningNone {
-					return ReasoningNone
-				}
-			}
-		}
-		if effort == ReasoningMinimal {
-			for _, a := range allowed {
-				if a == ReasoningMinimal {
-					return ReasoningMinimal
-				}
-			}
+	return best
+}
+
+// =============================================================================
+// Claude Effort Support
+// =============================================================================
+
+// claudeEffortRank maps Claude effort levels to a numeric rank for normalization.
+var claudeEffortRank = map[string]int{
+	"low":    0,
+	"medium": 1,
+	"high":   2,
+	"max":    3,
+}
+
+// SupportedEffortsForClaudeModel returns the effort levels supported by a Claude model.
+// Opus 4.6 supports 4 levels: low, medium, high, max (via CLAUDE_CODE_EFFORT_LEVEL).
+// See: https://platform.claude.com/docs/en/build-with-claude/effort
+func SupportedEffortsForClaudeModel(model string) []string {
+	switch strings.TrimSpace(model) {
+	case "claude-opus-4-6", "opus":
+		return []string{"low", "medium", "high", "max"}
+	default:
+		return nil
+	}
+}
+
+// NormalizeClaudeEffort picks the closest supported effort level for the given Claude model.
+// If the model is unknown or doesn't support effort, returns the effort unchanged.
+func NormalizeClaudeEffort(model, effort string) string {
+	effort = strings.TrimSpace(strings.ToLower(effort))
+	if effort == "" {
+		return ""
+	}
+
+	allowed := SupportedEffortsForClaudeModel(model)
+	if len(allowed) == 0 {
+		return effort
+	}
+
+	// Exact match
+	for _, a := range allowed {
+		if effort == a {
+			return effort
 		}
 	}
 
+	// Map Codex-style reasoning levels to Claude effort for cross-agent compatibility
+	switch effort {
+	case "minimal":
+		return "low"
+	case "xhigh":
+		return "max"
+	}
+
+	reqRank, ok := claudeEffortRank[effort]
+	if !ok {
+		return effort
+	}
+
+	// Clamp to nearest supported level
+	best := allowed[0]
+	bestDiff := int(^uint(0) >> 1)
+	for _, a := range allowed {
+		r, ok := claudeEffortRank[a]
+		if !ok {
+			continue
+		}
+		diff := r - reqRank
+		if diff < 0 {
+			diff = -diff
+		}
+		if diff < bestDiff {
+			best = a
+			bestDiff = diff
+		}
+	}
 	return best
 }

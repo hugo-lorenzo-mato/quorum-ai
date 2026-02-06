@@ -299,8 +299,8 @@ func TestHandleResetConfig(t *testing.T) {
 	if !response.Config.Agents.Claude.Enabled {
 		t.Error("expected agents.claude.enabled to be true")
 	}
-	if response.Config.Agents.Claude.Model != "claude-opus-4-5-20251101" {
-		t.Errorf("expected agents.claude.model 'claude-opus-4-5-20251101', got %q", response.Config.Agents.Claude.Model)
+	if response.Config.Agents.Claude.Model != "claude-opus-4-6" {
+		t.Errorf("expected agents.claude.model 'claude-opus-4-6', got %q", response.Config.Agents.Claude.Model)
 	}
 	if !response.Config.Phases.Analyze.Refiner.Enabled {
 		t.Error("expected phases.analyze.refiner.enabled to be true")

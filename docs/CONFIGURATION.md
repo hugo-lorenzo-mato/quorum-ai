@@ -266,7 +266,7 @@ agents:
   claude:
     enabled: true
     path: claude
-    model: claude-opus-4-5-20251101
+    model: claude-opus-4-6
     phase_models:
       execute: claude-sonnet-4-5-20250929
     phases:
@@ -664,7 +664,7 @@ Override any configuration via `QUORUM_` prefix:
 ```bash
 QUORUM_LOG_LEVEL=debug
 QUORUM_WORKFLOW_TIMEOUT=4h
-QUORUM_AGENTS_CLAUDE_MODEL=claude-opus-4-5-20251101
+QUORUM_AGENTS_CLAUDE_MODEL=claude-opus-4-6
 QUORUM_PHASES_ANALYZE_MODERATOR_THRESHOLD=0.95
 ```
 

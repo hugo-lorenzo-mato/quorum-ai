@@ -878,11 +878,32 @@ func (h *ChatHandler) executeAgent(ctx context.Context, opts executeAgentOptions
 	if len(allFiles) > 0 {
 		fileContext = "\n## Attached Files\n\n"
 		for filePath := range allFiles {
-			content, err := h.loadFileContent(filePath, opts.projectRoot)
-			if err != nil {
-				fileContext += fmt.Sprintf("[File: %s]\nError loading file: %s\n\n", filePath, err.Error())
+			// Uploaded attachments (.quorum/attachments/) live under the attachment
+			// store root, which may differ from the project root. Resolve accordingly.
+			resolveRoot := opts.projectRoot
+			if strings.HasPrefix(filePath, ".quorum/") && h.attachmentStore != nil {
+				resolveRoot = h.attachmentStore.Root()
+			}
+
+			if isImageFile(filePath) {
+				absPath := filePath
+				if !filepath.IsAbs(filePath) {
+					root := resolveRoot
+					if root == "" {
+						root, _ = os.Getwd()
+					}
+					if root != "" {
+						absPath = filepath.Join(root, filePath)
+					}
+				}
+				fileContext += fmt.Sprintf("[Attached Image: %s]\nThe user has pasted/attached an image. The image file is at: %s\n\n", filepath.Base(filePath), absPath)
 			} else {
-				fileContext += fmt.Sprintf("[File: %s]\n```\n%s\n```\n\n", filePath, content)
+				content, err := h.loadFileContent(filePath, resolveRoot)
+				if err != nil {
+					fileContext += fmt.Sprintf("[File: %s]\nError loading file: %s\n\n", filePath, err.Error())
+				} else {
+					fileContext += fmt.Sprintf("[File: %s]\n```\n%s\n```\n\n", filePath, content)
+				}
 			}
 		}
 	}
@@ -1073,6 +1094,15 @@ func parseFileReferences(content string) []string {
 		}
 	}
 	return result
+}
+
+// isImageFile checks if a file path refers to an image by its extension.
+func isImageFile(path string) bool {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".svg", ".ico", ".tiff":
+		return true
+	}
+	return false
 }
 
 // loadFileContent loads a file's content, ensuring it's within the project root.

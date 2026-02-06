@@ -15,19 +15,23 @@ export function ArrayInputSetting({
   placeholder = 'Add item...',
   id,
   maxItems,
+  suggestions = [],
 }) {
   const inputId = id || `array-${label?.replace(/\s+/g, '-').toLowerCase()}`;
   const [newItem, setNewItem] = useState('');
 
+  // Ensure items is always an array
+  const items = Array.isArray(value) ? value : [];
+
   const handleAdd = () => {
-    if (newItem.trim() && !value.includes(newItem.trim())) {
-      onChange([...value, newItem.trim()]);
+    if (newItem.trim() && !items.includes(newItem.trim())) {
+      onChange([...items, newItem.trim()]);
       setNewItem('');
     }
   };
 
   const handleRemove = (index) => {
-    const newValue = [...value];
+    const newValue = [...items];
     newValue.splice(index, 1);
     onChange(newValue);
   };
@@ -39,7 +43,7 @@ export function ArrayInputSetting({
     }
   };
 
-  const canAdd = !disabled && (!maxItems || value.length < maxItems);
+  const canAdd = !disabled && (!maxItems || items.length < maxItems);
 
   return (
     <div className="py-3">
@@ -58,7 +62,7 @@ export function ArrayInputSetting({
         </div>
         {maxItems && (
           <span className="text-xs text-muted-foreground">
-            {value.length} / {maxItems}
+            {items.length} / {maxItems}
           </span>
         )}
       </div>
@@ -68,9 +72,9 @@ export function ArrayInputSetting({
       )}
 
       {/* Current items */}
-      {value.length > 0 && (
+      {items.length > 0 && (
         <div className="flex flex-wrap gap-2 mb-2">
-          {value.map((item, index) => (
+          {items.map((item, index) => (
             <span
               key={index}
               className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-muted text-sm"
@@ -101,6 +105,7 @@ export function ArrayInputSetting({
           onKeyDown={handleKeyDown}
           disabled={!canAdd}
           placeholder={placeholder}
+          list={suggestions.length > 0 ? `${inputId}-suggestions` : undefined}
           className={`
             flex-1 h-10 px-3
             border rounded-lg bg-background text-foreground
@@ -111,6 +116,13 @@ export function ArrayInputSetting({
             ${error ? 'border-error' : 'border-input hover:border-muted-foreground'}
           `}
         />
+        {suggestions.length > 0 && (
+          <datalist id={`${inputId}-suggestions`}>
+            {suggestions.map((s) => (
+              <option key={s} value={s} />
+            ))}
+          </datalist>
+        )}
         <button
           type="button"
           onClick={handleAdd}

@@ -44,6 +44,11 @@ func (s *Store) BaseDir() string {
 	return s.baseDir
 }
 
+// Root returns the project root directory used by this store.
+func (s *Store) Root() string {
+	return s.root
+}
+
 func (s *Store) EnsureBaseDir() error {
 	return os.MkdirAll(s.baseDir, 0o750)
 }

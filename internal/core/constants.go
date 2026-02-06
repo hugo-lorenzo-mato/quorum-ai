@@ -34,44 +34,54 @@ func IsValidAgent(agent string) bool {
 	return ValidAgents[agent]
 }
 
-// Reasoning effort levels
-const (
-	ReasoningNone    = "none"
-	ReasoningMinimal = "minimal"
-	ReasoningLow     = "low"
-	ReasoningMedium  = "medium"
-	ReasoningHigh    = "high"
-	ReasoningXHigh   = "xhigh"
-)
+// Codex reasoning effort levels (via -c model_reasoning_effort="level")
+// Official values: minimal, low, medium, high, xhigh
+// See: https://developers.openai.com/codex/config-reference/
+var CodexReasoningEfforts = []string{"minimal", "low", "medium", "high", "xhigh"}
 
-// ReasoningEfforts is the ordered list of reasoning effort levels.
-var ReasoningEfforts = []string{
-	ReasoningNone,
-	ReasoningMinimal,
-	ReasoningLow,
-	ReasoningMedium,
-	ReasoningHigh,
-	ReasoningXHigh,
+var ValidCodexReasoningEfforts = map[string]bool{
+	"minimal": true,
+	"low":     true,
+	"medium":  true,
+	"high":    true,
+	"xhigh":  true,
 }
 
-// ValidReasoningEfforts is a map for O(1) reasoning effort validation.
+// Claude effort levels (via CLAUDE_CODE_EFFORT_LEVEL env var)
+// Official values: low, medium, high, max (Opus 4.6 only)
+// See: https://platform.claude.com/docs/en/build-with-claude/effort
+var ClaudeReasoningEfforts = []string{"low", "medium", "high", "max"}
+
+var ValidClaudeReasoningEfforts = map[string]bool{
+	"low":    true,
+	"medium": true,
+	"high":   true,
+	"max":    true,
+}
+
+// AllReasoningEfforts is the union of all valid effort values across agents.
+// Used only for config validation (any agent config can use any of these).
+var AllReasoningEfforts = []string{"minimal", "low", "medium", "high", "xhigh", "max"}
+
 var ValidReasoningEfforts = map[string]bool{
-	ReasoningNone:    true,
-	ReasoningMinimal: true,
-	ReasoningLow:     true,
-	ReasoningMedium:  true,
-	ReasoningHigh:    true,
-	ReasoningXHigh:   true,
+	"minimal": true,
+	"low":     true,
+	"medium":  true,
+	"high":    true,
+	"xhigh":  true,
+	"max":    true,
 }
 
-// IsValidReasoningEffort checks if the given reasoning effort is valid.
+// IsValidReasoningEffort checks if the given reasoning effort is valid for any agent.
 func IsValidReasoningEffort(effort string) bool {
 	return ValidReasoningEfforts[effort]
 }
 
 // AgentsWithReasoning lists agents that support extended thinking/reasoning effort.
-// Only Codex CLI exposes reasoning effort configuration via -c model_reasoning_effort="level"
+// - Codex CLI: via -c model_reasoning_effort="level"
+// - Claude CLI: via CLAUDE_CODE_EFFORT_LEVEL env var (low/medium/high/max)
 var AgentsWithReasoning = []string{
+	AgentClaude,
 	AgentCodex,
 }
 
@@ -89,17 +99,34 @@ func SupportsReasoning(agent string) bool {
 // Models not in this map default to "high".
 var CodexModelMaxReasoning = map[string]string{
 	// These models support xhigh (maximum)
-	"gpt-5.3-codex":     ReasoningXHigh,
-	"gpt-5.2-codex":     ReasoningXHigh,
-	"gpt-5.2":           ReasoningXHigh,
-	"gpt-5.1-codex-max": ReasoningXHigh,
+	"gpt-5.3-codex":     "xhigh",
+	"gpt-5.2-codex":     "xhigh",
+	"gpt-5.2":           "xhigh",
+	"gpt-5.1-codex-max": "xhigh",
 	// These models support up to high
-	"gpt-5.1-codex":      ReasoningHigh,
-	"gpt-5.1-codex-mini": ReasoningHigh,
-	"gpt-5.1":            ReasoningHigh,
-	"gpt-5-codex":        ReasoningHigh,
-	"gpt-5-codex-mini":   ReasoningHigh,
-	"gpt-5":              ReasoningHigh,
+	"gpt-5.1-codex":      "high",
+	"gpt-5.1-codex-mini": "high",
+	"gpt-5.1":            "high",
+	"gpt-5-codex":        "high",
+	"gpt-5-codex-mini":   "high",
+	"gpt-5":              "high",
+}
+
+// ClaudeEffortLevels defines the Claude CLI effort levels.
+// Claude Code CLI supports 4 levels: "low", "medium", "high" (default), "max" (Opus 4.6 only).
+// Configured via CLAUDE_CODE_EFFORT_LEVEL env var.
+const (
+	ClaudeEffortLow    = "low"
+	ClaudeEffortMedium = "medium"
+	ClaudeEffortHigh   = "high"
+	ClaudeEffortMax    = "max"
+)
+
+// ClaudeModelMaxEffort maps Claude models to their maximum supported effort level.
+// Only Opus 4.6 supports effort in the CLI (4 levels: low/medium/high/max).
+var ClaudeModelMaxEffort = map[string]string{
+	"claude-opus-4-6": ClaudeEffortMax,
+	"opus":            ClaudeEffortMax, // alias
 }
 
 // GetMaxReasoningEffort returns the maximum reasoning effort supported by a Codex model.
@@ -108,7 +135,16 @@ func GetMaxReasoningEffort(model string) string {
 	if maxReasoning, ok := CodexModelMaxReasoning[model]; ok {
 		return maxReasoning
 	}
-	return ReasoningHigh
+	return "high"
+}
+
+// GetMaxClaudeEffort returns the maximum effort level supported by a Claude model.
+// Returns empty string if the model does not support effort.
+func GetMaxClaudeEffort(model string) string {
+	if maxEffort, ok := ClaudeModelMaxEffort[model]; ok {
+		return maxEffort
+	}
+	return ""
 }
 
 // Task/role identifiers (not workflow phases, but config keys for models/reasoning)
@@ -125,8 +161,9 @@ const (
 // This is the single source of truth for model availability.
 var AgentModels = map[string][]string{
 	AgentClaude: {
-		// Claude 4.5 family (latest)
-		"claude-opus-4-5-20251101",   // Most powerful model
+		// Claude 4.6 (latest opus)
+		"claude-opus-4-6", // Most powerful model, supports effort (low/medium/high/max)
+		// Claude 4.5 family
 		"claude-sonnet-4-5-20250929", // Best balance of intelligence, speed, and cost
 		"claude-haiku-4-5-20251001",  // Fastest model with near-frontier performance
 		// Claude 4 family
@@ -134,7 +171,7 @@ var AgentModels = map[string][]string{
 		"claude-opus-4-1-20250805",
 		"claude-sonnet-4-20250514",
 		// Aliases (shortcuts accepted by claude CLI)
-		"opus",   // Maps to latest opus model
+		"opus",   // Maps to latest opus model (currently Opus 4.6)
 		"sonnet", // Maps to latest sonnet model
 		"haiku",  // Maps to latest haiku model
 	},
@@ -169,8 +206,7 @@ var AgentModels = map[string][]string{
 	AgentCopilot: {
 		// Anthropic Claude models (via Copilot) - from copilot --help
 		"claude-sonnet-4.5", // Best balance, strong reasoning (default)
-		"claude-opus-4.6",   // Latest opus - most powerful Claude
-		"claude-opus-4.5",   // Most powerful Claude
+		"claude-opus-4.6",   // Latest opus - most powerful Claude, supports effort
 		"claude-haiku-4.5",  // Fast, efficient
 		"claude-sonnet-4",   // Previous gen sonnet
 		// OpenAI GPT models (via Copilot) - from copilot --help

@@ -19,8 +19,8 @@ let enumsListeners = [];
 
 // Fallback data (used before API loads)
 const FALLBACK_AGENTS = ['claude', 'gemini', 'codex', 'copilot', 'opencode'];
-const FALLBACK_REASONING_EFFORTS = ['minimal', 'low', 'medium', 'high', 'xhigh'];
-const FALLBACK_AGENTS_WITH_REASONING = ['codex', 'copilot'];
+const FALLBACK_REASONING_EFFORTS = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
+const FALLBACK_AGENTS_WITH_REASONING = ['claude', 'codex', 'copilot'];
 
 /**
  * Subscribe to enums loaded event
@@ -299,9 +299,10 @@ export const AGENT_MODELS = new Proxy({}, {
 const REASONING_LABELS = {
   minimal: { label: 'Minimal', description: 'Quick responses' },
   low: { label: 'Low', description: 'Light reasoning' },
-  medium: { label: 'Medium', description: 'Balanced (default)' },
-  high: { label: 'High', description: 'Deep analysis' },
-  xhigh: { label: 'Max', description: 'Maximum reasoning' },
+  medium: { label: 'Medium', description: 'Balanced' },
+  high: { label: 'High', description: 'Deep analysis (default)' },
+  xhigh: { label: 'XHigh', description: 'Maximum reasoning (Codex)' },
+  max: { label: 'Max', description: 'Maximum reasoning (Claude Opus 4.6)' },
 };
 
 /**

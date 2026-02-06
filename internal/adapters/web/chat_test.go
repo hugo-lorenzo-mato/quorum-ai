@@ -461,7 +461,7 @@ func TestSetModel(t *testing.T) {
 		session: ChatSession{ID: "session-1"},
 	}
 
-	req := httptest.NewRequest(http.MethodPut, "/chat/sessions/session-1/model", bytes.NewBufferString(`{"model": "claude-opus-4-5"}`))
+	req := httptest.NewRequest(http.MethodPut, "/chat/sessions/session-1/model", bytes.NewBufferString(`{"model": "claude-opus-4-6"}`))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 
@@ -472,8 +472,8 @@ func TestSetModel(t *testing.T) {
 	}
 
 	// Verify the model was set
-	if h.sessions["session-1"].model != "claude-opus-4-5" {
-		t.Errorf("got model %q, want %q", h.sessions["session-1"].model, "claude-opus-4-5")
+	if h.sessions["session-1"].model != "claude-opus-4-6" {
+		t.Errorf("got model %q, want %q", h.sessions["session-1"].model, "claude-opus-4-6")
 	}
 }
 

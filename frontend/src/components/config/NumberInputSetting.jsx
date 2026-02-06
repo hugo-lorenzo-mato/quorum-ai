@@ -20,14 +20,26 @@ export function NumberInputSetting({
   const inputId = id || `number-${label?.replace(/\s+/g, '-').toLowerCase()}`;
 
   const handleIncrement = () => {
-    const newValue = (value || 0) + step;
+    let newValue = (value || 0) + step;
+    // Fix floating point precision
+    const precision = (step.toString().split('.')[1] || '').length;
+    if (precision > 0) {
+      newValue = parseFloat(newValue.toFixed(precision));
+    }
+
     if (max === undefined || newValue <= max) {
       onChange(newValue);
     }
   };
 
   const handleDecrement = () => {
-    const newValue = (value || 0) - step;
+    let newValue = (value || 0) - step;
+    // Fix floating point precision
+    const precision = (step.toString().split('.')[1] || '').length;
+    if (precision > 0) {
+      newValue = parseFloat(newValue.toFixed(precision));
+    }
+
     if (min === undefined || newValue >= min) {
       onChange(newValue);
     }

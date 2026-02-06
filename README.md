@@ -184,9 +184,9 @@ agents:
     enabled: true
     path: claude
     phase_models:
-      refine: claude-opus-4-5-20251101
-      analyze: claude-opus-4-5-20251101
-      plan: claude-opus-4-5-20251101
+      refine: claude-opus-4-6
+      analyze: claude-opus-4-6
+      plan: claude-opus-4-6
   gemini:
     enabled: true
     path: gemini

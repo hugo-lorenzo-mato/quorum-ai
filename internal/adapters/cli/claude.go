@@ -77,6 +77,10 @@ func (c *ClaudeAdapter) Ping(ctx context.Context) error {
 func (c *ClaudeAdapter) Execute(ctx context.Context, opts core.ExecuteOptions) (*core.ExecuteResult, error) {
 	args := c.buildArgs(opts)
 
+	// Set Claude effort level via env var if reasoning effort is configured.
+	// Claude CLI uses CLAUDE_CODE_EFFORT_LEVEL env var (low/medium/high/max).
+	c.applyEffortEnv(opts)
+
 	// Build the full prompt, including conversation history if provided
 	// Pass via stdin for robustness with long prompts and special characters
 	fullPrompt := c.buildPromptWithHistory(opts)
@@ -259,6 +263,51 @@ func (c *ClaudeAdapter) estimateCost(tokensIn, tokensOut int) float64 {
 	inputCost := float64(tokensIn) / 1000000 * 3
 	outputCost := float64(tokensOut) / 1000000 * 15
 	return inputCost + outputCost
+}
+
+// applyEffortEnv sets the CLAUDE_CODE_EFFORT_LEVEL env var based on reasoning effort config.
+// Priority: per-message opts > phase-specific config > default config.
+func (c *ClaudeAdapter) applyEffortEnv(opts core.ExecuteOptions) {
+	effort := c.getEffortLevel(opts)
+	if effort == "" {
+		return
+	}
+
+	// Resolve the model to normalize effort
+	model := opts.Model
+	if model == "" {
+		model = c.config.Model
+	}
+
+	// Normalize to Claude-supported effort level
+	effort = core.NormalizeClaudeEffort(model, effort)
+	if effort == "" {
+		return
+	}
+
+	if c.ExtraEnv == nil {
+		c.ExtraEnv = make(map[string]string)
+	}
+	c.ExtraEnv["CLAUDE_CODE_EFFORT_LEVEL"] = effort
+}
+
+// getEffortLevel determines the effort level from options and config.
+// Priority: per-message > phase-specific > default config.
+func (c *ClaudeAdapter) getEffortLevel(opts core.ExecuteOptions) string {
+	// Per-message override (from chat or workflow)
+	if opts.ReasoningEffort != "" {
+		return opts.ReasoningEffort
+	}
+
+	// Phase-specific override
+	if opts.Phase != "" {
+		if effort := c.config.GetReasoningEffort(string(opts.Phase)); effort != "" {
+			return effort
+		}
+	}
+
+	// Default reasoning effort from config
+	return c.config.ReasoningEffort
 }
 
 // Ensure ClaudeAdapter implements core.Agent and core.StreamingCapable

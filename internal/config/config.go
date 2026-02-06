@@ -366,8 +366,9 @@ type AgentConfig struct {
 	// If nil or empty, agent is available for all phases (backward compatible).
 	// Keys: "refine", "analyze", "moderate", "synthesize", "plan", "execute"
 	Phases map[string]bool `mapstructure:"phases" yaml:"phases"`
-	// ReasoningEffort is the default reasoning effort for all phases (Codex-specific).
-	// Valid values: minimal, low, medium, high, xhigh.
+	// ReasoningEffort is the default reasoning effort for all phases.
+	// Codex values: none, minimal, low, medium, high, xhigh.
+	// Claude values: low, medium, high, max (Opus 4.6 only).
 	ReasoningEffort string `mapstructure:"reasoning_effort" yaml:"reasoning_effort"`
 	// ReasoningEffortPhases allows per-phase overrides of reasoning effort.
 	// Keys: "refine", "analyze", "moderate", "synthesize", "plan", "execute"

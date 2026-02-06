@@ -217,7 +217,7 @@ func runChat(_ *cobra.Command, _ []string) error {
 	if cfg.Agents.Claude.Enabled {
 		availableAgents = append(availableAgents, "claude")
 		agentModels["claude"] = []string{
-			"claude-opus-4-5-20251101",
+			"claude-opus-4-6",
 			"claude-sonnet-4-5-20250929",
 			"claude-haiku-4-5-20251001",
 			"claude-sonnet-4-20250514",
@@ -255,8 +255,8 @@ func runChat(_ *cobra.Command, _ []string) error {
 		availableAgents = append(availableAgents, "copilot")
 		agentModels["copilot"] = []string{
 			"claude-sonnet-4.5",
+			"claude-opus-4.6",
 			"claude-haiku-4.5",
-			"claude-opus-4.5",
 			"claude-sonnet-4",
 			"gpt-5.2-codex",
 			"gpt-5.1-codex-max",

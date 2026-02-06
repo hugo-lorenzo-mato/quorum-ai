@@ -126,16 +126,23 @@ agents:
     enabled: true
     path: claude
     # Default model
-    model: claude-opus-4-5-20251101
+    model: claude-opus-4-6
+    # Claude-specific: effort level (low/medium/high/max). Only supported on Opus 4.6.
+    reasoning_effort: high
     # Per-task model overrides. Only specify phases that need a different model.
     # Unspecified phases use the default model above.
     phase_models:
-      refine: claude-opus-4-5-20251101
-      analyze: claude-opus-4-5-20251101
-      moderate: claude-opus-4-5-20251101
-      synthesize: claude-opus-4-5-20251101
-      plan: claude-opus-4-5-20251101
-      execute: claude-opus-4-5-20251101
+      refine: claude-opus-4-6
+      analyze: claude-opus-4-6
+      moderate: claude-opus-4-6
+      synthesize: claude-opus-4-6
+      plan: claude-opus-4-6
+      execute: claude-opus-4-6
+    # Per-phase effort overrides (optional)
+    reasoning_effort_phases:
+      refine: max
+      analyze: max
+      plan: max
     # No phases specified = enabled for all phases
 
   # Gemini CLI configuration
@@ -180,7 +187,7 @@ agents:
     enabled: false
     path: copilot
     model: claude-sonnet-4-5
-    # Available models: claude-sonnet-4-5 (default), claude-opus-4-6, claude-opus-4-5, claude-sonnet-4, gpt-5
+    # Available models: claude-sonnet-4-5 (default), claude-opus-4.6, claude-haiku-4.5, claude-sonnet-4, gpt-5
     phase_models:
       refine: claude-sonnet-4-5
       analyze: claude-sonnet-4-5

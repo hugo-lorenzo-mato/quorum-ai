@@ -190,8 +190,8 @@ export default function Layout({ children }) {
   const location = useLocation();
   const { sidebarOpen, toggleSidebar, setSidebarOpen } = useUIStore();
   
-  // Check if we're on the chat or settings page - they need full control of their layout
-  const isFullLayoutPage = location.pathname === '/chat' || location.pathname === '/settings';
+  // Check if we're on the chat, settings, or kanban page - they need full control of their layout
+  const isFullLayoutPage = location.pathname === '/chat' || location.pathname === '/settings' || location.pathname === '/kanban';
 
   // Close sidebar when resizing to mobile viewport (only triggers on actual resize)
   useEffect(() => {

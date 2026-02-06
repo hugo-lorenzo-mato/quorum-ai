@@ -88,7 +88,7 @@ Cuando se activa el modo single-agent (`--single-agent` o `single_agent.enabled:
     │   ├── 01-optimized-prompt.md
     │   │
     │   ├── single-agent/                # Análisis de un solo agente
-    │   │   └── {agent}-{model}.md       # Ej: claude-claude-opus-4-5.md
+    │   │   └── {agent}-{model}.md       # Ej: claude-claude-opus-4-6.md
     │   │
     │   └── consolidated.md              # Igual formato, metadata indica mode: "single_agent"
     │

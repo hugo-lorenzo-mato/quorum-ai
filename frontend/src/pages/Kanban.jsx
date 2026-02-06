@@ -439,7 +439,7 @@ function KanbanFilters({ filter, setFilter }) {
 // Mobile Column Navigator - Enhanced
 function MobileColumnNav({ columns, activeIndex, onChange }) {
   return (
-    <div className="md:hidden flex items-center justify-center bg-gradient-to-b from-background/95 to-background/80 backdrop-blur-xl py-3 border-b border-border/50 mb-2 sticky top-14 z-20 shadow-sm">
+    <div className="md:hidden flex items-center justify-center bg-background/80 backdrop-blur-xl py-3 border-b border-border/50 shrink-0 z-20">
       <div className="flex gap-2.5 items-center px-4">
         {columns.map((col, idx) => {
           const accent = KANBAN_COLUMN_COLORS[col.id] || KANBAN_COLUMN_COLORS.default;
@@ -551,9 +551,12 @@ export default function Kanban() {
   }
 
   return (
-    <div className="flex flex-col gap-4 md:gap-6 animate-fade-in pb-10 h-full">
+    <div className="fixed inset-x-0 top-14 bottom-[calc(4rem+env(safe-area-inset-bottom))] md:static md:h-[calc(100vh-3.5rem)] md:inset-auto flex flex-col overflow-hidden animate-fade-in bg-background relative">
+      {/* Background Pattern */}
+      <div className="absolute inset-0 bg-dot-pattern pointer-events-none opacity-50" />
+      
       {/* Header - Enhanced Vercel style */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 px-4 py-3 shrink-0 relative z-10">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 px-4 py-3 shrink-0 relative z-10 border-b border-border/50 bg-card/30">
         <div className="hidden lg:block">
           <h1 className="text-3xl font-bold text-foreground tracking-tight bg-clip-text bg-gradient-to-r from-foreground to-foreground/70">
             Kanban Board
@@ -600,7 +603,7 @@ export default function Kanban() {
       />
 
       {/* Columns Container */}
-      <div className="flex-1 min-h-0 px-4">
+      <div className="flex-1 min-h-0 px-4 pt-4">
         {/* Desktop View - Better spacing */}
         <div className="hidden md:flex gap-4 overflow-x-auto pb-4 h-full">
           {KANBAN_COLUMNS.map((column) => (

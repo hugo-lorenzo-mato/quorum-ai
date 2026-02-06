@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useChatStore } from '../stores';
 import {
   Send,
@@ -26,6 +27,111 @@ import {
   AttachmentPicker,
 } from '../components/chat';
 import ChatMarkdown from '../components/ChatMarkdown';
+import VoiceInputButton from '../components/VoiceInputButton';
+
+// ---------------------------------------------------------------------------
+// Session avatar utilities
+// ---------------------------------------------------------------------------
+
+const SESSION_COLORS = [
+  { bg: 'bg-rose-500/15', text: 'text-rose-500' },
+  { bg: 'bg-sky-500/15', text: 'text-sky-500' },
+  { bg: 'bg-emerald-500/15', text: 'text-emerald-500' },
+  { bg: 'bg-violet-500/15', text: 'text-violet-500' },
+  { bg: 'bg-amber-500/15', text: 'text-amber-500' },
+  { bg: 'bg-cyan-500/15', text: 'text-cyan-500' },
+  { bg: 'bg-fuchsia-500/15', text: 'text-fuchsia-500' },
+  { bg: 'bg-teal-500/15', text: 'text-teal-500' },
+];
+
+function hashCode(str) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) - hash) + str.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash);
+}
+
+function getSessionColor(sessionId) {
+  return SESSION_COLORS[hashCode(sessionId || '') % SESSION_COLORS.length];
+}
+
+function getSessionInitials(title) {
+  if (!title) return '?';
+  const words = title.trim().split(/\s+/).filter(w => w.length > 0);
+  if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase();
+  return words[0].substring(0, 2).toUpperCase();
+}
+
+function formatRelativeDate(dateString) {
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffMs = now - date;
+  const diffMin = Math.floor(diffMs / 60000);
+  const diffHour = Math.floor(diffMin / 60);
+  const diffDay = Math.floor(diffHour / 24);
+  if (diffMin < 1) return 'Just now';
+  if (diffMin < 60) return `${diffMin}m ago`;
+  if (diffHour < 24) return `${diffHour}h ago`;
+  if (diffDay === 1) return 'Yesterday';
+  if (diffDay < 7) return `${diffDay}d ago`;
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+function SessionAvatar({ session, size = 'sm' }) {
+  const displayTitle = session.title || `${session.agent || 'Claude'} Session`;
+  const initials = getSessionInitials(displayTitle);
+  const color = getSessionColor(session.id);
+  const sizeClass = size === 'lg' ? 'w-8 h-8 text-xs' : 'w-7 h-7 text-[10px]';
+  return (
+    <div className={`${sizeClass} rounded-lg ${color.bg} flex items-center justify-center flex-shrink-0 font-bold tracking-wide ${color.text}`}>
+      {initials}
+    </div>
+  );
+}
+
+function CollapsedSessionButton({ session, isActive, onSelect }) {
+  const [tooltip, setTooltip] = useState(null);
+  const ref = useRef(null);
+
+  const displayTitle = session.title || `${session.agent || 'Claude'} Session`;
+  const color = getSessionColor(session.id);
+  const initials = getSessionInitials(displayTitle);
+
+  const handleMouseEnter = () => {
+    const rect = ref.current?.getBoundingClientRect();
+    if (rect) setTooltip({ top: rect.top + rect.height / 2, left: rect.right + 8 });
+  };
+
+  return (
+    <>
+      <button
+        ref={ref}
+        onClick={onSelect}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={() => setTooltip(null)}
+        className={`w-8 h-8 rounded-lg flex items-center justify-center text-[10px] font-bold tracking-wide transition-all ${
+          isActive
+            ? `${color.bg} ${color.text} ring-2 ring-inset ring-primary/50`
+            : `${color.bg} ${color.text} opacity-60 hover:opacity-100`
+        }`}
+      >
+        {initials}
+      </button>
+      {tooltip && createPortal(
+        <div
+          className="fixed z-[100] px-3 py-2 bg-popover text-popover-foreground border border-border rounded-lg shadow-lg pointer-events-none animate-fade-in"
+          style={{ top: tooltip.top, left: tooltip.left, transform: 'translateY(-50%)' }}
+        >
+          <p className="text-xs font-medium truncate max-w-[200px]">{displayTitle}</p>
+          <p className="text-[10px] text-muted-foreground">{formatRelativeDate(session.created_at)}</p>
+        </div>,
+        document.body
+      )}
+    </>
+  );
+}
 
 function TypingIndicator() {
   return (
@@ -142,7 +248,7 @@ function SessionItem({ session, isActive, onClick, onDelete, onRename }) {
     >
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3 flex-1 min-w-0">
-          <Sparkles className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-primary' : ''}`} />
+          <SessionAvatar session={session} />
           <div className="flex-1 min-w-0">
             {isEditing ? (
               <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
@@ -169,7 +275,7 @@ function SessionItem({ session, isActive, onClick, onDelete, onRename }) {
               </p>
             )}
             <p className="text-xs text-muted-foreground">
-              {new Date(session.created_at).toLocaleDateString()}
+              {formatRelativeDate(session.created_at)}
             </p>
           </div>
         </div>
@@ -229,8 +335,12 @@ export default function Chat() {
   } = useChatStore();
 
   const [input, setInput] = useState('');
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [editTitleValue, setEditTitleValue] = useState('');
+  const [imagePreviews, setImagePreviews] = useState([]); // [{path, previewUrl, name}]
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
+  const titleInputRef = useRef(null);
 
   const activeMessages = getActiveMessages();
   const activeSession = sessions.find((s) => s.id === activeSessionId);
@@ -242,13 +352,16 @@ export default function Chat() {
 
   const handleSend = async (e) => {
     e.preventDefault();
-    if (!input.trim() || sending) return;
+    if ((!input.trim() && imagePreviews.length === 0) || sending) return;
     const msg = input.trim();
     setInput('');
     if (inputRef.current) {
       inputRef.current.style.height = 'auto';
     }
     await sendMessage(msg);
+    // Clean up image preview blob URLs
+    imagePreviews.forEach((p) => { if (p.previewUrl) URL.revokeObjectURL(p.previewUrl); });
+    setImagePreviews([]);
     inputRef.current?.focus();
   };
 
@@ -260,8 +373,67 @@ export default function Chat() {
     await updateSession(sessionId, { title: newTitle });
   };
 
+  const handleStartTitleEdit = () => {
+    if (!activeSession) return;
+    setEditTitleValue(activeSession.title || '');
+    setIsEditingTitle(true);
+    setTimeout(() => titleInputRef.current?.focus(), 0);
+  };
+
+  const handleSaveTitleEdit = () => {
+    const newTitle = editTitleValue.trim();
+    if (activeSession && newTitle !== (activeSession.title || '')) {
+      handleRenameSession(activeSession.id, newTitle);
+    }
+    setIsEditingTitle(false);
+  };
+
+  const handleTitleKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      handleSaveTitleEdit();
+    } else if (e.key === 'Escape') {
+      setIsEditingTitle(false);
+    }
+  };
+
   const handleBackToList = () => {
     selectSession(null);
+  };
+
+  const handlePaste = async (e) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    const imageFiles = [];
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        const file = item.getAsFile();
+        if (file) imageFiles.push(file);
+      }
+    }
+    if (imageFiles.length === 0) return;
+
+    e.preventDefault();
+    const uploaded = await uploadAttachments(imageFiles);
+    if (!uploaded || uploaded.length === 0) return;
+
+    const newPreviews = uploaded
+      .filter((att) => att.path)
+      .map((att) => ({
+        path: att.path,
+        name: att.name,
+        previewUrl: URL.createObjectURL(imageFiles.find((f) => f.name === att.name) || imageFiles[0]),
+      }));
+    setImagePreviews((prev) => [...prev, ...newPreviews]);
+  };
+
+  const handleRemoveImagePreview = (path) => {
+    setImagePreviews((prev) => {
+      const removed = prev.find((p) => p.path === path);
+      if (removed?.previewUrl) URL.revokeObjectURL(removed.previewUrl);
+      return prev.filter((p) => p.path !== path);
+    });
+    removeAttachment(path);
   };
 
   return (
@@ -270,7 +442,7 @@ export default function Chat() {
       <div className={`transition-all duration-300 ease-in-out flex-shrink-0 flex flex-col gap-4 p-4 bg-card border-r border-border ${
         activeSession ? 'hidden md:flex' : 'flex'
       } ${
-        sidebarCollapsed ? 'w-full md:w-16 overflow-hidden' : 'w-full md:w-80'
+        sidebarCollapsed ? 'w-full md:w-[4.5rem] overflow-hidden' : 'w-full md:w-80'
       }`}>
         <div className={`flex items-center ${sidebarCollapsed ? 'justify-between md:justify-center' : 'justify-between'}`}>
           <h2 className={`text-lg font-semibold text-foreground animate-fade-in ${sidebarCollapsed ? 'md:hidden' : ''}`}>Chats</h2>
@@ -316,29 +488,24 @@ export default function Chat() {
 
         {/* Collapsed List - Hidden on mobile, visible on desktop if collapsed */}
         {sidebarCollapsed && (
-          <div className="hidden md:flex flex-1 flex-col items-center gap-3 overflow-hidden">
+          <div className="hidden md:flex flex-1 flex-col items-center gap-2 pt-1">
             <button
               onClick={handleCreateSession}
               disabled={loading}
-              className="p-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
+              className="w-8 h-8 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors flex items-center justify-center"
               title="New chat"
             >
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
             </button>
-            <div className="flex flex-col gap-1 overflow-y-auto">
-              {sessions.slice(0, 8).map((session) => (
-                <button
+            <div className="w-8 border-t border-border" />
+            <div className="flex flex-col items-center gap-1.5 overflow-y-auto flex-1 min-h-0">
+              {sessions.map((session) => (
+                <CollapsedSessionButton
                   key={session.id}
-                  onClick={() => selectSession(session.id)}
-                  className={`p-2 rounded-lg transition-all ${
-                    activeSessionId === session.id
-                      ? 'bg-accent text-accent-foreground'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
-                  }`}
-                  title={session.title || `${session.agent || 'Claude'} Session`}
-                >
-                  <Sparkles className={`w-4 h-4 ${activeSessionId === session.id ? 'text-primary' : ''}`} />
-                </button>
+                  session={session}
+                  isActive={activeSessionId === session.id}
+                  onSelect={() => selectSession(session.id)}
+                />
               ))}
             </div>
           </div>
@@ -358,15 +525,30 @@ export default function Chat() {
                 >
                   <ArrowLeft className="w-4 h-4" />
                 </button>
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center flex-shrink-0">
-                  <Sparkles className="w-4 h-4 text-primary" />
-                </div>
+                <SessionAvatar session={activeSession} size="lg" />
                 <div className="min-w-0 flex-1">
-                  <h3 className="font-semibold text-foreground truncate text-sm">
-                    {activeSession.title || `${activeSession.agent || 'Claude'} Chat`}
-                  </h3>
+                  {isEditingTitle ? (
+                    <input
+                      ref={titleInputRef}
+                      type="text"
+                      value={editTitleValue}
+                      onChange={(e) => setEditTitleValue(e.target.value)}
+                      onKeyDown={handleTitleKeyDown}
+                      onBlur={handleSaveTitleEdit}
+                      placeholder="Session title"
+                      className="w-full text-sm font-semibold bg-background border border-input rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-ring"
+                    />
+                  ) : (
+                    <h3
+                      onClick={handleStartTitleEdit}
+                      className="font-semibold text-foreground truncate text-sm cursor-text hover:bg-accent/50 rounded px-1 -mx-1 transition-colors"
+                      title="Click to rename"
+                    >
+                      {activeSession.title || `${activeSession.agent || 'Claude'} Chat`}
+                    </h3>
+                  )}
                   <p className="text-[11px] text-muted-foreground truncate">
-                    {activeSession.agent || 'Claude'} · {new Date(activeSession.created_at).toLocaleDateString()}
+                    {activeSession.agent || 'Claude'} · {formatRelativeDate(activeSession.created_at)}
                   </p>
                 </div>
               </div>
@@ -417,6 +599,31 @@ export default function Chat() {
                 </div>
               )}
 
+              {/* Image previews - above options bar */}
+              {imagePreviews.length > 0 && (
+                <div className="flex gap-2 mb-2 overflow-x-auto">
+                  {imagePreviews.map((img) => (
+                    <div key={img.path} className="relative group flex-shrink-0 w-16">
+                      <div className="relative overflow-hidden rounded-lg border border-border">
+                        <img
+                          src={img.previewUrl}
+                          alt={img.name}
+                          className="w-16 h-16 object-cover"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveImagePreview(img.path)}
+                          className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                      <p className="text-[9px] text-muted-foreground truncate mt-0.5">{img.name}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               {/* Message options bar */}
               <div className="flex items-center gap-2 mb-3 flex-wrap">
                 <AgentSelector
@@ -447,29 +654,37 @@ export default function Chat() {
               </div>
 
               <form onSubmit={handleSend} className="flex gap-2.5 items-end">
-                <textarea
-                  ref={inputRef}
-                  value={input}
-                  onChange={(e) => {
-                    setInput(e.target.value);
-                    e.target.style.height = 'auto';
-                    e.target.style.height = Math.min(e.target.scrollHeight, 140) + 'px';
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      handleSend(e);
-                    }
-                  }}
-                  placeholder={`Message ${currentAgent}...`}
-                  disabled={sending}
-                  rows={1}
-                  className="flex-1 min-h-[42px] max-h-[140px] py-2.5 px-3.5 border border-input rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background disabled:opacity-50 transition-all text-sm resize-none overflow-y-auto"
-                />
+                <div className="relative flex-1">
+                  <textarea
+                    ref={inputRef}
+                    value={input}
+                    onChange={(e) => {
+                      setInput(e.target.value);
+                      e.target.style.height = 'auto';
+                      e.target.style.height = Math.min(e.target.scrollHeight, 140) + 'px';
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSend(e);
+                      }
+                    }}
+                    onPaste={handlePaste}
+                    placeholder={`Message ${currentAgent}...`}
+                    disabled={sending}
+                    rows={1}
+                    className="w-full min-h-[42px] max-h-[140px] py-2.5 px-3.5 pr-10 border border-input rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background disabled:opacity-50 transition-all text-sm resize-none overflow-y-auto"
+                  />
+                  <VoiceInputButton
+                    onTranscript={(text) => setInput((prev) => (prev ? prev + ' ' + text : text))}
+                    disabled={sending}
+                    className="absolute bottom-2.5 right-2"
+                  />
+                </div>
                 <button
                   type="submit"
-                  disabled={sending || !input.trim()}
-                  className="h-[42px] w-[42px] md:h-10 md:w-auto md:px-4 flex items-center justify-center rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors shrink-0"
+                  disabled={sending || (!input.trim() && imagePreviews.length === 0)}
+                  className="self-end h-[42px] w-[42px] md:w-auto md:px-4 flex items-center justify-center rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors shrink-0"
                 >
                   {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                 </button>

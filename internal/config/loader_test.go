@@ -428,11 +428,11 @@ func TestValidate_ValidConfig(t *testing.T) {
 			Default: "claude",
 			Claude: AgentConfig{
 				Enabled: true,
-				Model:   "claude-opus-4-5",
+				Model:   "claude-opus-4-6",
 				PhaseModels: map[string]string{
-					"refine":  "claude-opus-4-5",
-					"analyze": "claude-opus-4-5",
-					"plan":    "claude-opus-4-5",
+					"refine":  "claude-opus-4-6",
+					"analyze": "claude-opus-4-6",
+					"plan":    "claude-opus-4-6",
 				},
 			},
 		},
@@ -498,7 +498,7 @@ func TestValidate_RefinerAgentMissing(t *testing.T) {
 			Default: "claude",
 			Claude: AgentConfig{
 				Enabled: true,
-				Model:   "claude-opus-4-5",
+				Model:   "claude-opus-4-6",
 			},
 		},
 		Phases: PhasesConfig{
@@ -548,7 +548,7 @@ func TestValidate_ModeratorAgentMissing(t *testing.T) {
 			Default: "claude",
 			Claude: AgentConfig{
 				Enabled: true,
-				Model:   "claude-opus-4-5",
+				Model:   "claude-opus-4-6",
 			},
 		},
 		Phases: PhasesConfig{

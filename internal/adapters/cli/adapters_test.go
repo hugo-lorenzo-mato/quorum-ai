@@ -399,12 +399,12 @@ func TestCodexAdapter_BuildArgs_NormalizesReasoningEffort(t *testing.T) {
 	codex := adapter.(*CodexAdapter)
 
 	opts := core.ExecuteOptions{
-		ReasoningEffort: core.ReasoningNone, // not supported by gpt-5.2-codex
+		ReasoningEffort: "minimal", // not directly supported by gpt-5.2-codex, normalizes to low
 	}
 
 	args := codex.buildArgs(opts)
 
-	// gpt-5.2-codex supports low/medium/high/xhigh; none should normalize to low.
+	// gpt-5.2-codex supports low/medium/high/xhigh; minimal should normalize to low.
 	if !containsString(args, `model_reasoning_effort="low"`) {
 		t.Fatalf("expected model_reasoning_effort to normalize to low, args=%v", args)
 	}
@@ -418,7 +418,7 @@ func TestCodexAdapter_BuildArgs_DisablesWebSearchForMinimal(t *testing.T) {
 	codex := adapter.(*CodexAdapter)
 
 	opts := core.ExecuteOptions{
-		ReasoningEffort: core.ReasoningMinimal,
+		ReasoningEffort: "minimal",
 	}
 
 	args := codex.buildArgs(opts)

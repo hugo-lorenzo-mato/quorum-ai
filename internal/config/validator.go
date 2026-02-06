@@ -215,7 +215,7 @@ func (v *Validator) validateReasoningEffortDefault(prefix, effort string) {
 	}
 
 	if !core.IsValidReasoningEffort(effort) {
-		v.addError(prefix, effort, "invalid reasoning effort (valid: none, minimal, low, medium, high, xhigh)")
+		v.addError(prefix, effort, "invalid reasoning effort (valid: minimal, low, medium, high, xhigh, max)")
 	}
 }
 
@@ -230,7 +230,7 @@ func (v *Validator) validateReasoningEffortPhases(prefix string, phases map[stri
 			continue
 		}
 		if !core.IsValidReasoningEffort(effort) {
-			v.addError(prefix+"."+key, effort, "invalid reasoning effort (valid: none, minimal, low, medium, high, xhigh)")
+			v.addError(prefix+"."+key, effort, "invalid reasoning effort (valid: minimal, low, medium, high, xhigh, max)")
 		}
 	}
 }

@@ -120,7 +120,7 @@ func (c *CodexAdapter) buildArgs(opts core.ExecuteOptions) []string {
 
 	// `minimal` reasoning effort is incompatible with web_search; disable it explicitly
 	// to avoid Codex API errors when users have web_search enabled in ~/.codex/config.toml.
-	if reasoningEffort == core.ReasoningMinimal {
+	if reasoningEffort == "minimal" {
 		args = append(args, "-c", `web_search="disabled"`)
 	}
 

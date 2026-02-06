@@ -234,8 +234,8 @@ func (s *Server) handleResetConfig(w http.ResponseWriter, r *http.Request) {
 // Models are synced with internal/adapters/cli/*.go SupportedModels.
 // Reasoning efforts synced with internal/core/constants.go.
 func (s *Server) handleGetAgents(w http.ResponseWriter, _ *http.Request) {
-	// Common reasoning efforts for agents that support it
-	reasoningEfforts := core.ReasoningEfforts
+	// Codex reasoning efforts
+	codexReasoningEfforts := core.CodexReasoningEfforts
 
 	agents := []map[string]interface{}{
 		{
@@ -249,8 +249,9 @@ func (s *Server) handleGetAgents(w http.ResponseWriter, _ *http.Request) {
 				"opus",
 				"sonnet",
 				"haiku",
+				// Claude 4.6 (latest opus)
+				"claude-opus-4-6",
 				// Claude 4.5 family
-				"claude-opus-4-5-20251101",
 				"claude-sonnet-4-5-20250929",
 				"claude-haiku-4-5-20251001",
 				// Claude 4 family
@@ -258,7 +259,9 @@ func (s *Server) handleGetAgents(w http.ResponseWriter, _ *http.Request) {
 				"claude-opus-4-1-20250805",
 				"claude-sonnet-4-20250514",
 			},
-			"available": true,
+			"hasReasoningEffort": true,
+			"reasoningEfforts":   []string{"low", "medium", "high", "max"},
+			"available":          true,
 		},
 		{
 			"name":        "gemini",
@@ -304,7 +307,7 @@ func (s *Server) handleGetAgents(w http.ResponseWriter, _ *http.Request) {
 				"gpt-4.1",
 			},
 			"hasReasoningEffort": true,
-			"reasoningEfforts":   reasoningEfforts,
+			"reasoningEfforts":   codexReasoningEfforts,
 			"available":          true,
 		},
 		{
@@ -315,8 +318,8 @@ func (s *Server) handleGetAgents(w http.ResponseWriter, _ *http.Request) {
 			"models": []string{
 				// Anthropic Claude (via Copilot)
 				"claude-sonnet-4.5",
+				"claude-opus-4.6",
 				"claude-haiku-4.5",
-				"claude-opus-4.5",
 				"claude-sonnet-4",
 				// OpenAI GPT (via Copilot)
 				"gpt-5.2-codex",
@@ -332,7 +335,7 @@ func (s *Server) handleGetAgents(w http.ResponseWriter, _ *http.Request) {
 				"gemini-3-pro-preview",
 			},
 			"hasReasoningEffort": true,
-			"reasoningEfforts":   reasoningEfforts,
+			"reasoningEfforts":   codexReasoningEfforts,
 			"available":          true,
 		},
 		{

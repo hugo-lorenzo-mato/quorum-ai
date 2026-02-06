@@ -38,7 +38,7 @@ func (s *Server) handleGetEnums(w http.ResponseWriter, _ *http.Request) {
 		StateBackends:       core.StateBackends,
 		WorktreeModes:       core.WorktreeModes,
 		MergeStrategies:     core.MergeStrategies,
-		ReasoningEfforts:    core.ReasoningEfforts,
+		ReasoningEfforts:    core.AllReasoningEfforts,
 		Agents:              core.Agents,
 		Phases:              core.Phases,
 		PhaseModelKeys:      core.PhaseModelKeys,
