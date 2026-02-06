@@ -272,21 +272,17 @@ export default function Chat() {
       } ${
         sidebarCollapsed ? 'w-full md:w-16 overflow-hidden' : 'w-full md:w-80'
       }`}>
-        <div className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'justify-between'}`}>
-          {!sidebarCollapsed && (
-            <h2 className="text-lg font-semibold text-foreground animate-fade-in">Chats</h2>
-          )}
+        <div className={`flex items-center ${sidebarCollapsed ? 'justify-between md:justify-center' : 'justify-between'}`}>
+          <h2 className={`text-lg font-semibold text-foreground animate-fade-in ${sidebarCollapsed ? 'md:hidden' : ''}`}>Chats</h2>
           <div className="flex items-center gap-2">
-            {!sidebarCollapsed && (
-              <button
-                onClick={handleCreateSession}
-                disabled={loading}
-                className="flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors animate-fade-in"
-              >
-                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                New
-              </button>
-            )}
+            <button
+              onClick={handleCreateSession}
+              disabled={loading}
+              className={`flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors animate-fade-in ${sidebarCollapsed ? 'md:hidden' : ''}`}
+            >
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+              New
+            </button>
             <button
               onClick={toggleSidebar}
               className="hidden md:flex p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
@@ -297,30 +293,30 @@ export default function Chat() {
           </div>
         </div>
 
-        {!sidebarCollapsed && (
-          <div className="flex-1 overflow-y-auto space-y-1 min-h-0 pr-2 animate-fade-in">
-            {sessions.length > 0 ? (
-              sessions.map((session) => (
-                <SessionItem
-                  key={session.id}
-                  session={session}
-                  isActive={activeSessionId === session.id}
-                  onClick={() => selectSession(session.id)}
-                  onDelete={deleteSession}
-                  onRename={handleRenameSession}
-                />
-              ))
-            ) : (
-              <div className="text-center py-12">
-                <MessageSquare className="w-12 h-12 mx-auto mb-3 text-muted-foreground opacity-50" />
-                <p className="text-sm text-muted-foreground">No chats yet</p>
-              </div>
-            )}
-          </div>
-        )}
+        {/* Full List - Always visible on mobile, hidden on desktop if collapsed */}
+        <div className={`flex-1 overflow-y-auto space-y-1 min-h-0 pr-2 animate-fade-in ${sidebarCollapsed ? 'md:hidden' : ''}`}>
+          {sessions.length > 0 ? (
+            sessions.map((session) => (
+              <SessionItem
+                key={session.id}
+                session={session}
+                isActive={activeSessionId === session.id}
+                onClick={() => selectSession(session.id)}
+                onDelete={deleteSession}
+                onRename={handleRenameSession}
+              />
+            ))
+          ) : (
+            <div className="text-center py-12">
+              <MessageSquare className="w-12 h-12 mx-auto mb-3 text-muted-foreground opacity-50" />
+              <p className="text-sm text-muted-foreground">No chats yet</p>
+            </div>
+          )}
+        </div>
 
+        {/* Collapsed List - Hidden on mobile, visible on desktop if collapsed */}
         {sidebarCollapsed && (
-          <div className="flex-1 flex flex-col items-center gap-3 overflow-hidden">
+          <div className="hidden md:flex flex-1 flex-col items-center gap-3 overflow-hidden">
             <button
               onClick={handleCreateSession}
               disabled={loading}
