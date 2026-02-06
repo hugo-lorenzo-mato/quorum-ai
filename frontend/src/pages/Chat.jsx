@@ -270,7 +270,7 @@ export default function Chat() {
       <div className={`transition-all duration-300 ease-in-out flex-shrink-0 flex flex-col gap-4 p-4 bg-card border-r border-border ${
         activeSession ? 'hidden md:flex' : 'flex'
       } ${
-        sidebarCollapsed ? 'w-0 md:w-16 overflow-hidden' : 'w-full md:w-80'
+        sidebarCollapsed ? 'w-full md:w-16 overflow-hidden' : 'w-full md:w-80'
       }`}>
         <div className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'justify-between'}`}>
           {!sidebarCollapsed && (
