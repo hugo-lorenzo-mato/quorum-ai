@@ -7,7 +7,7 @@ describe('workflowApi', () => {
   });
 
   describe('create', () => {
-    it('sends config in request body', async () => {
+    it('sends blueprint in request body', async () => {
       global.fetch.mockResolvedValue({
         ok: true,
         status: 200,
@@ -16,7 +16,7 @@ describe('workflowApi', () => {
 
       await workflowApi.create('Test prompt', {
         title: 'Test',
-        config: {
+        blueprint: {
           execution_mode: 'single_agent',
           single_agent_name: 'claude',
         },
@@ -32,7 +32,7 @@ describe('workflowApi', () => {
           body: JSON.stringify({
             prompt: 'Test prompt',
             title: 'Test',
-            config: {
+            blueprint: {
               execution_mode: 'single_agent',
               single_agent_name: 'claude',
             },
@@ -41,7 +41,7 @@ describe('workflowApi', () => {
       );
     });
 
-    it('omits config when empty object', async () => {
+    it('omits blueprint when empty object', async () => {
       global.fetch.mockResolvedValue({
         ok: true,
         status: 200,
@@ -52,11 +52,11 @@ describe('workflowApi', () => {
 
       const callBody = JSON.parse(global.fetch.mock.calls[0][1].body);
       expect(callBody).toEqual({ prompt: 'Test prompt' });
-      expect(callBody.config).toBeUndefined();
+      expect(callBody.blueprint).toBeUndefined();
       expect(callBody.title).toBeUndefined();
     });
 
-    it('omits config when not provided', async () => {
+    it('omits blueprint when not provided', async () => {
       global.fetch.mockResolvedValue({
         ok: true,
         status: 200,
@@ -67,10 +67,10 @@ describe('workflowApi', () => {
 
       const callBody = JSON.parse(global.fetch.mock.calls[0][1].body);
       expect(callBody).toEqual({ prompt: 'Test prompt' });
-      expect(callBody.config).toBeUndefined();
+      expect(callBody.blueprint).toBeUndefined();
     });
 
-    it('sends title without config', async () => {
+    it('sends title without blueprint', async () => {
       global.fetch.mockResolvedValue({
         ok: true,
         status: 200,
@@ -86,7 +86,7 @@ describe('workflowApi', () => {
         prompt: 'Test prompt',
         title: 'My Workflow',
       });
-      expect(callBody.config).toBeUndefined();
+      expect(callBody.blueprint).toBeUndefined();
     });
 
     it('sends files when provided', async () => {
@@ -129,7 +129,7 @@ describe('workflowApi', () => {
       await workflowApi.create('Test prompt', {
         title: 'Complete Workflow',
         files: ['doc.pdf'],
-        config: {
+        blueprint: {
           execution_mode: 'single_agent',
           single_agent_name: 'claude',
           single_agent_model: 'claude-3-opus',
@@ -141,7 +141,7 @@ describe('workflowApi', () => {
         prompt: 'Test prompt',
         title: 'Complete Workflow',
         files: ['doc.pdf'],
-        config: {
+        blueprint: {
           execution_mode: 'single_agent',
           single_agent_name: 'claude',
           single_agent_model: 'claude-3-opus',
@@ -160,7 +160,7 @@ describe('workflowApi', () => {
       });
 
       await expect(workflowApi.create('Test', {
-        config: { execution_mode: 'single_agent' },
+        blueprint: { execution_mode: 'single_agent' },
       })).rejects.toThrow("single_agent_name required when execution_mode is 'single_agent'");
     });
 

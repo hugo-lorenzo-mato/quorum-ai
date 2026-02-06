@@ -46,11 +46,11 @@ export default function EditWorkflowModal({ isOpen, onClose, workflow, onSave, c
     if (isOpen && workflow) {
       setTitle(workflow.title || '');
       setPrompt(workflow.prompt || '');
-      const mode = workflow.config?.execution_mode === 'single_agent' ? 'single_agent' : 'multi_agent';
+      const mode = workflow.blueprint?.execution_mode === 'single_agent' ? 'single_agent' : 'multi_agent';
       setExecutionMode(mode);
-      setSingleAgentName(workflow.config?.single_agent_name || 'claude');
-      setSingleAgentModel(workflow.config?.single_agent_model || '');
-      setSingleAgentReasoningEffort(workflow.config?.single_agent_reasoning_effort || '');
+      setSingleAgentName(workflow.blueprint?.single_agent_name || 'claude');
+      setSingleAgentModel(workflow.blueprint?.single_agent_model || '');
+      setSingleAgentReasoningEffort(workflow.blueprint?.single_agent_reasoning_effort || '');
       setError(null);
       // Focus title input after a short delay for animation
       setTimeout(() => titleRef.current?.focus(), 100);
@@ -92,7 +92,7 @@ export default function EditWorkflowModal({ isOpen, onClose, workflow, onSave, c
 
       // Allow editing execution mode + single-agent config only when pending.
       if (canEditConfig) {
-        const originalMode = workflow.config?.execution_mode === 'single_agent' ? 'single_agent' : 'multi_agent';
+        const originalMode = workflow.blueprint?.execution_mode === 'single_agent' ? 'single_agent' : 'multi_agent';
         const nextMode = executionMode === 'single_agent' ? 'single_agent' : 'multi_agent';
 
         const effectiveSingleAgentName = AGENT_OPTIONS.some((a) => a.value === singleAgentName)
@@ -110,9 +110,9 @@ export default function EditWorkflowModal({ isOpen, onClose, workflow, onSave, c
           ? singleAgentReasoningEffort
           : '';
 
-        const originalAgent = workflow.config?.single_agent_name || '';
-        const originalModel = workflow.config?.single_agent_model || '';
-        const originalEffort = workflow.config?.single_agent_reasoning_effort || '';
+        const originalAgent = workflow.blueprint?.single_agent_name || '';
+        const originalModel = workflow.blueprint?.single_agent_model || '';
+        const originalEffort = workflow.blueprint?.single_agent_reasoning_effort || '';
 
         const configChanged = (() => {
           if (originalMode !== nextMode) return true;
@@ -125,7 +125,7 @@ export default function EditWorkflowModal({ isOpen, onClose, workflow, onSave, c
         })();
 
         if (configChanged) {
-          updates.config = nextMode === 'single_agent'
+          updates.blueprint = nextMode === 'single_agent'
             ? {
                 execution_mode: 'single_agent',
                 single_agent_name: effectiveSingleAgentName,

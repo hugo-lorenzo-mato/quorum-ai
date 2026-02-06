@@ -145,11 +145,13 @@ func TestWebOutputNotifier_WorkflowStateUpdated(t *testing.T) {
 
 	notifier := NewWebOutputNotifier(bus, "wf-test-123")
 	state := &core.WorkflowState{
-		CurrentPhase: core.PhaseExecute,
-		Tasks: map[core.TaskID]*core.TaskState{
-			"task-1": {Status: core.TaskStatusCompleted},
-			"task-2": {Status: core.TaskStatusRunning},
-			"task-3": {Status: core.TaskStatusFailed},
+		WorkflowRun: core.WorkflowRun{
+			CurrentPhase: core.PhaseExecute,
+			Tasks: map[core.TaskID]*core.TaskState{
+				"task-1": {Status: core.TaskStatusCompleted},
+				"task-2": {Status: core.TaskStatusRunning},
+				"task-3": {Status: core.TaskStatusFailed},
+			},
 		},
 	}
 	notifier.WorkflowStateUpdated(state)

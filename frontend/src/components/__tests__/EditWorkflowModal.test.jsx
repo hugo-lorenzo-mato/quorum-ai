@@ -73,7 +73,7 @@ describe('EditWorkflowModal', () => {
         workflow={{
           ...workflow,
           status: 'pending',
-          config: { execution_mode: 'multi_agent' },
+          blueprint: { execution_mode: 'multi_agent' },
         }}
       />
     );
@@ -83,7 +83,7 @@ describe('EditWorkflowModal', () => {
 
     await waitFor(() => {
       expect(onSave).toHaveBeenCalledWith({
-        config: {
+        blueprint: {
           execution_mode: 'single_agent',
           single_agent_name: 'claude',
           single_agent_model: '',

@@ -4,7 +4,7 @@ import { test, expect } from '@playwright/test';
  * E2E tests for workflow execution mode feature.
  * Tests the display of execution mode in workflow list and detail views.
  *
- * Note: These tests verify that the API returns execution mode config correctly
+ * Note: These tests verify that the API returns execution mode blueprint correctly
  * and that the UI displays it. The NewWorkflowForm execution mode selector
  * is tested separately (when form enhancements are implemented).
  */
@@ -42,7 +42,7 @@ test.describe('Workflow Execution Mode Display', () => {
       data: {
         prompt: 'Test single-agent workflow for E2E',
         title: 'E2E Single Agent Test',
-        config: {
+        blueprint: {
           execution_mode: 'single_agent',
           single_agent_name: 'claude',
         },
@@ -83,7 +83,7 @@ test.describe('Workflow Execution Mode Display', () => {
       data: {
         prompt: 'Test multi-agent workflow for E2E',
         title: 'E2E Multi Agent Test',
-        config: {
+        blueprint: {
           execution_mode: 'multi_agent',
         },
       },
@@ -114,12 +114,12 @@ test.describe('Workflow Execution Mode Display', () => {
     await request.delete(`/api/v1/workflows/${workflow.id}`);
   });
 
-  test('workflow API returns config with execution mode', async ({ request }) => {
-    // Create workflow with single-agent config
+  test('workflow API returns blueprint with execution mode', async ({ request }) => {
+    // Create workflow with single-agent blueprint
     const createResponse = await request.post('/api/v1/workflows', {
       data: {
         prompt: 'API test workflow',
-        config: {
+        blueprint: {
           execution_mode: 'single_agent',
           single_agent_name: 'claude',
           single_agent_model: 'claude-3-haiku',
@@ -140,20 +140,20 @@ test.describe('Workflow Execution Mode Display', () => {
     expect(getResponse.ok()).toBeTruthy();
 
     const workflow = await getResponse.json();
-    expect(workflow.config).toBeTruthy();
-    expect(workflow.config.execution_mode).toBe('single_agent');
-    expect(workflow.config.single_agent_name).toBe('claude');
+    expect(workflow.blueprint).toBeTruthy();
+    expect(workflow.blueprint.execution_mode).toBe('single_agent');
+    expect(workflow.blueprint.single_agent_name).toBe('claude');
 
     // Clean up
     await request.delete(`/api/v1/workflows/${created.id}`);
   });
 
-  test('workflow list API returns config for each workflow', async ({ request }) => {
+  test('workflow list API returns blueprint for each workflow', async ({ request }) => {
     // Create a test workflow
     const createResponse = await request.post('/api/v1/workflows', {
       data: {
         prompt: 'List test workflow',
-        config: {
+        blueprint: {
           execution_mode: 'single_agent',
           single_agent_name: 'gemini',
         },
@@ -174,10 +174,10 @@ test.describe('Workflow Execution Mode Display', () => {
     const workflows = await listResponse.json();
     expect(Array.isArray(workflows)).toBeTruthy();
 
-    // Find our workflow and verify config
+    // Find our workflow and verify blueprint
     const ourWorkflow = workflows.find((w: { id: string }) => w.id === created.id);
-    if (ourWorkflow && ourWorkflow.config) {
-      expect(ourWorkflow.config.execution_mode).toBe('single_agent');
+    if (ourWorkflow && ourWorkflow.blueprint) {
+      expect(ourWorkflow.blueprint.execution_mode).toBe('single_agent');
     }
 
     // Clean up
@@ -196,7 +196,7 @@ test.describe('Workflow Execution Mode - Dark Mode', () => {
     const createResponse = await request.post('/api/v1/workflows', {
       data: {
         prompt: 'Dark mode test workflow',
-        config: {
+        blueprint: {
           execution_mode: 'single_agent',
           single_agent_name: 'claude',
         },
@@ -236,7 +236,7 @@ test.describe('Workflow Execution Mode - Error Handling', () => {
     const response = await request.post('/api/v1/workflows', {
       data: {
         prompt: 'Invalid mode test',
-        config: {
+        blueprint: {
           execution_mode: 'invalid_mode',
         },
       },
@@ -256,7 +256,7 @@ test.describe('Workflow Execution Mode - Error Handling', () => {
     const response = await request.post('/api/v1/workflows', {
       data: {
         prompt: 'Missing agent name test',
-        config: {
+        blueprint: {
           execution_mode: 'single_agent',
           // Missing: single_agent_name
         },

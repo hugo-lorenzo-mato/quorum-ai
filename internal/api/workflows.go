@@ -43,7 +43,7 @@ type WorkflowResponse struct {
 	Metrics         *Metrics          `json:"metrics,omitempty"`
 	AgentEvents     []core.AgentEvent `json:"agent_events,omitempty"` // Persisted agent activity
 	Tasks           []TaskResponse    `json:"tasks,omitempty"`        // Persisted task state for reload
-	Config          *WorkflowConfig   `json:"config,omitempty"`       // NEW: Workflow configuration
+	Blueprint       *BlueprintDTO     `json:"blueprint,omitempty"`    // Workflow orchestration blueprint
 }
 
 // Metrics represents workflow metrics in API responses.
@@ -56,13 +56,13 @@ type Metrics struct {
 
 // CreateWorkflowRequest is the request body for creating a workflow.
 type CreateWorkflowRequest struct {
-	Prompt string          `json:"prompt"`
-	Title  string          `json:"title,omitempty"`
-	Config *WorkflowConfig `json:"config,omitempty"`
+	Prompt    string        `json:"prompt"`
+	Title     string        `json:"title,omitempty"`
+	Blueprint *BlueprintDTO `json:"blueprint,omitempty"`
 }
 
-// WorkflowConfig represents workflow configuration in API requests.
-type WorkflowConfig struct {
+// BlueprintDTO represents the workflow blueprint in API requests/responses.
+type BlueprintDTO struct {
 	ConsensusThreshold float64 `json:"consensus_threshold,omitempty"`
 	MaxRetries         int     `json:"max_retries,omitempty"`
 	TimeoutSeconds     int     `json:"timeout_seconds,omitempty"`
@@ -71,41 +71,36 @@ type WorkflowConfig struct {
 
 	// ExecutionMode determines whether to use multi-agent consensus or single-agent mode.
 	// Valid values: "multi_agent" (default), "single_agent"
-	// When empty, defaults to multi-agent mode (existing behavior).
 	ExecutionMode string `json:"execution_mode,omitempty"`
 
 	// SingleAgentName is the name of the agent to use when execution_mode is "single_agent".
-	// Required when execution_mode is "single_agent".
-	// Must be a configured and enabled agent (e.g., "claude", "gemini", "codex").
 	SingleAgentName string `json:"single_agent_name,omitempty"`
 
 	// SingleAgentModel is an optional model override for the single agent.
-	// If empty, the agent's default phase model is used.
 	SingleAgentModel string `json:"single_agent_model,omitempty"`
 
 	// SingleAgentReasoningEffort is an optional reasoning effort override for the single agent.
-	// If empty, the agent's configured defaults are used.
 	SingleAgentReasoningEffort string `json:"single_agent_reasoning_effort,omitempty"`
 }
 
-type workflowConfigPatch struct {
+type blueprintPatch struct {
 	ExecutionMode              *string `json:"execution_mode,omitempty"`
 	SingleAgentName            *string `json:"single_agent_name,omitempty"`
 	SingleAgentModel           *string `json:"single_agent_model,omitempty"`
 	SingleAgentReasoningEffort *string `json:"single_agent_reasoning_effort,omitempty"`
 }
 
-// IsSingleAgentMode returns true if the workflow is configured for single-agent execution.
-func (c *WorkflowConfig) IsSingleAgentMode() bool {
-	return c != nil && c.ExecutionMode == "single_agent"
+// IsSingleAgentMode returns true if the blueprint specifies single-agent execution.
+func (b *BlueprintDTO) IsSingleAgentMode() bool {
+	return b != nil && b.ExecutionMode == "single_agent"
 }
 
 // GetExecutionMode returns the execution mode, defaulting to "multi_agent" if not specified.
-func (c *WorkflowConfig) GetExecutionMode() string {
-	if c == nil || c.ExecutionMode == "" {
+func (b *BlueprintDTO) GetExecutionMode() string {
+	if b == nil || b.ExecutionMode == "" {
 		return "multi_agent"
 	}
-	return c.ExecutionMode
+	return b.ExecutionMode
 }
 
 // RunWorkflowResponse is the response for starting a workflow.
@@ -343,14 +338,14 @@ func (s *Server) handleCreateWorkflow(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate execution mode configuration
-	if req.Config != nil {
+	if req.Blueprint != nil {
 		cfg, err := s.loadConfigForContext(ctx)
 		if err != nil {
 			s.logger.Error("failed to load config for validation", "error", err)
 			respondError(w, http.StatusInternalServerError, "failed to load configuration")
 			return
 		}
-		if validationErr := ValidateWorkflowConfig(req.Config, cfg.Agents); validationErr != nil {
+		if validationErr := ValidateBlueprint(req.Blueprint, cfg.Agents); validationErr != nil {
 			respondJSON(w, http.StatusBadRequest, ValidationErrorResponse{
 				Message: "Workflow configuration validation failed",
 				Errors:  []ValidationFieldError{*validationErr},
@@ -372,51 +367,59 @@ func (s *Server) handleCreateWorkflow(w http.ResponseWriter, r *http.Request) {
 		// Continue anyway - the directory will be created during execution
 	}
 
-	// Build workflow config
-	config := &core.WorkflowConfig{
-		ConsensusThreshold: 0.75,
-		MaxRetries:         3,
-		Timeout:            time.Hour,
+	// Build workflow blueprint
+	blueprint := &core.Blueprint{
+		Consensus: core.BlueprintConsensus{
+			Threshold: 0.75,
+		},
+		MaxRetries: 3,
+		Timeout:    time.Hour,
 	}
 
-	if req.Config != nil {
-		if req.Config.ConsensusThreshold > 0 {
-			config.ConsensusThreshold = req.Config.ConsensusThreshold
+	if req.Blueprint != nil {
+		if req.Blueprint.ConsensusThreshold > 0 {
+			blueprint.Consensus.Threshold = req.Blueprint.ConsensusThreshold
 		}
-		if req.Config.MaxRetries > 0 {
-			config.MaxRetries = req.Config.MaxRetries
+		if req.Blueprint.MaxRetries > 0 {
+			blueprint.MaxRetries = req.Blueprint.MaxRetries
 		}
-		if req.Config.TimeoutSeconds > 0 {
-			config.Timeout = time.Duration(req.Config.TimeoutSeconds) * time.Second
+		if req.Blueprint.TimeoutSeconds > 0 {
+			blueprint.Timeout = time.Duration(req.Blueprint.TimeoutSeconds) * time.Second
 		}
-		config.DryRun = req.Config.DryRun
-		config.Sandbox = req.Config.Sandbox
-		config.ExecutionMode = req.Config.ExecutionMode
-		config.SingleAgentName = req.Config.SingleAgentName
-		config.SingleAgentModel = req.Config.SingleAgentModel
-		config.SingleAgentReasoningEffort = req.Config.SingleAgentReasoningEffort
+		blueprint.DryRun = req.Blueprint.DryRun
+		blueprint.Sandbox = req.Blueprint.Sandbox
+		blueprint.ExecutionMode = req.Blueprint.ExecutionMode
+		blueprint.SingleAgent = core.BlueprintSingleAgent{
+			Agent:           req.Blueprint.SingleAgentName,
+			Model:           req.Blueprint.SingleAgentModel,
+			ReasoningEffort: req.Blueprint.SingleAgentReasoningEffort,
+		}
 	}
 
 	// Create workflow state
 	state := &core.WorkflowState{
-		Version:        core.CurrentStateVersion,
-		WorkflowID:     workflowID,
-		Title:          req.Title,
-		Status:         core.WorkflowStatusPending,
-		CurrentPhase:   core.PhaseAnalyze,
-		Prompt:         req.Prompt,
-		Tasks:          make(map[core.TaskID]*core.TaskState),
-		TaskOrder:      make([]core.TaskID, 0),
-		Config:         config,
-		Metrics:        &core.StateMetrics{},
-		Checkpoints:    make([]core.Checkpoint, 0),
-		CreatedAt:      time.Now(),
-		UpdatedAt:      time.Now(),
-		ResumeCount:    0,
-		MaxResumes:     3, // Enable auto-resume with default max 3 attempts
-		KanbanColumn:   "refinement",
-		KanbanPosition: 0,
-		ReportPath:     reportPath, // Set eagerly to ensure it exists even if execution fails early
+		WorkflowDefinition: core.WorkflowDefinition{
+			Version:    core.CurrentStateVersion,
+			WorkflowID: workflowID,
+			Title:      req.Title,
+			Prompt:     req.Prompt,
+			Blueprint:  blueprint,
+			CreatedAt:  time.Now(),
+		},
+		WorkflowRun: core.WorkflowRun{
+			Status:         core.WorkflowStatusPending,
+			CurrentPhase:   core.PhaseAnalyze,
+			Tasks:          make(map[core.TaskID]*core.TaskState),
+			TaskOrder:      make([]core.TaskID, 0),
+			Metrics:        &core.StateMetrics{},
+			Checkpoints:    make([]core.Checkpoint, 0),
+			UpdatedAt:      time.Now(),
+			ResumeCount:    0,
+			MaxResumes:     3, // Enable auto-resume with default max 3 attempts
+			KanbanColumn:   "refinement",
+			KanbanPosition: 0,
+			ReportPath:     reportPath, // Set eagerly to ensure it exists even if execution fails early
+		},
 	}
 
 	if err := stateManager.Save(ctx, state); err != nil {
@@ -462,11 +465,11 @@ func (s *Server) handleUpdateWorkflow(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Title  string               `json:"title,omitempty"`
-		Prompt string               `json:"prompt,omitempty"`
-		Status string               `json:"status,omitempty"`
-		Phase  string               `json:"phase,omitempty"`
-		Config *workflowConfigPatch `json:"config,omitempty"`
+		Title     string          `json:"title,omitempty"`
+		Prompt    string          `json:"prompt,omitempty"`
+		Status    string          `json:"status,omitempty"`
+		Phase     string          `json:"phase,omitempty"`
+		Blueprint *blueprintPatch `json:"blueprint,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, "invalid request body")
@@ -483,8 +486,8 @@ func (s *Server) handleUpdateWorkflow(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusConflict, "cannot edit title while workflow is running")
 		return
 	}
-	if req.Config != nil && state.Status != core.WorkflowStatusPending {
-		respondError(w, http.StatusConflict, "cannot edit workflow config after workflow has started")
+	if req.Blueprint != nil && state.Status != core.WorkflowStatusPending {
+		respondError(w, http.StatusConflict, "cannot edit workflow blueprint after workflow has started")
 		return
 	}
 
@@ -494,32 +497,34 @@ func (s *Server) handleUpdateWorkflow(w http.ResponseWriter, r *http.Request) {
 	if req.Prompt != "" {
 		state.Prompt = req.Prompt
 	}
-	if req.Config != nil {
-		if state.Config == nil {
-			state.Config = &core.WorkflowConfig{
-				ConsensusThreshold: 0.75,
-				MaxRetries:         3,
-				Timeout:            time.Hour,
+	if req.Blueprint != nil {
+		if state.Blueprint == nil {
+			state.Blueprint = &core.Blueprint{
+				Consensus: core.BlueprintConsensus{
+					Threshold: 0.75,
+				},
+				MaxRetries: 3,
+				Timeout:    time.Hour,
 			}
 		}
 
-		merged := &WorkflowConfig{
-			ExecutionMode:              state.Config.ExecutionMode,
-			SingleAgentName:            state.Config.SingleAgentName,
-			SingleAgentModel:           state.Config.SingleAgentModel,
-			SingleAgentReasoningEffort: state.Config.SingleAgentReasoningEffort,
+		merged := &BlueprintDTO{
+			ExecutionMode:              state.Blueprint.ExecutionMode,
+			SingleAgentName:            state.Blueprint.SingleAgent.Agent,
+			SingleAgentModel:           state.Blueprint.SingleAgent.Model,
+			SingleAgentReasoningEffort: state.Blueprint.SingleAgent.ReasoningEffort,
 		}
-		if req.Config.ExecutionMode != nil {
-			merged.ExecutionMode = *req.Config.ExecutionMode
+		if req.Blueprint.ExecutionMode != nil {
+			merged.ExecutionMode = *req.Blueprint.ExecutionMode
 		}
-		if req.Config.SingleAgentName != nil {
-			merged.SingleAgentName = *req.Config.SingleAgentName
+		if req.Blueprint.SingleAgentName != nil {
+			merged.SingleAgentName = *req.Blueprint.SingleAgentName
 		}
-		if req.Config.SingleAgentModel != nil {
-			merged.SingleAgentModel = *req.Config.SingleAgentModel
+		if req.Blueprint.SingleAgentModel != nil {
+			merged.SingleAgentModel = *req.Blueprint.SingleAgentModel
 		}
-		if req.Config.SingleAgentReasoningEffort != nil {
-			merged.SingleAgentReasoningEffort = *req.Config.SingleAgentReasoningEffort
+		if req.Blueprint.SingleAgentReasoningEffort != nil {
+			merged.SingleAgentReasoningEffort = *req.Blueprint.SingleAgentReasoningEffort
 		}
 
 		cfg, err := s.loadConfigForContext(ctx)
@@ -528,7 +533,7 @@ func (s *Server) handleUpdateWorkflow(w http.ResponseWriter, r *http.Request) {
 			respondError(w, http.StatusInternalServerError, "failed to load configuration")
 			return
 		}
-		if validationErr := ValidateWorkflowConfig(merged, cfg.Agents); validationErr != nil {
+		if validationErr := ValidateBlueprint(merged, cfg.Agents); validationErr != nil {
 			respondJSON(w, http.StatusBadRequest, ValidationErrorResponse{
 				Message: "Workflow configuration validation failed",
 				Errors:  []ValidationFieldError{*validationErr},
@@ -536,10 +541,10 @@ func (s *Server) handleUpdateWorkflow(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		state.Config.ExecutionMode = merged.ExecutionMode
-		state.Config.SingleAgentName = merged.SingleAgentName
-		state.Config.SingleAgentModel = merged.SingleAgentModel
-		state.Config.SingleAgentReasoningEffort = merged.SingleAgentReasoningEffort
+		state.Blueprint.ExecutionMode = merged.ExecutionMode
+		state.Blueprint.SingleAgent.Agent = merged.SingleAgentName
+		state.Blueprint.SingleAgent.Model = merged.SingleAgentModel
+		state.Blueprint.SingleAgent.ReasoningEffort = merged.SingleAgentReasoningEffort
 	}
 	if req.Status != "" {
 		state.Status = core.WorkflowStatus(req.Status)
@@ -683,17 +688,17 @@ func (s *Server) stateToWorkflowResponse(ctx context.Context, state *core.Workfl
 		}
 	}
 
-	if state.Config != nil {
-		resp.Config = &WorkflowConfig{
-			ConsensusThreshold:         state.Config.ConsensusThreshold,
-			MaxRetries:                 state.Config.MaxRetries,
-			TimeoutSeconds:             int(state.Config.Timeout.Seconds()),
-			DryRun:                     state.Config.DryRun,
-			Sandbox:                    state.Config.Sandbox,
-			ExecutionMode:              state.Config.ExecutionMode,
-			SingleAgentName:            state.Config.SingleAgentName,
-			SingleAgentModel:           state.Config.SingleAgentModel,
-			SingleAgentReasoningEffort: state.Config.SingleAgentReasoningEffort,
+	if state.Blueprint != nil {
+		resp.Blueprint = &BlueprintDTO{
+			ConsensusThreshold:         state.Blueprint.Consensus.Threshold,
+			MaxRetries:                 state.Blueprint.MaxRetries,
+			TimeoutSeconds:             int(state.Blueprint.Timeout.Seconds()),
+			DryRun:                     state.Blueprint.DryRun,
+			Sandbox:                    state.Blueprint.Sandbox,
+			ExecutionMode:              state.Blueprint.ExecutionMode,
+			SingleAgentName:            state.Blueprint.SingleAgent.Agent,
+			SingleAgentModel:           state.Blueprint.SingleAgent.Model,
+			SingleAgentReasoningEffort: state.Blueprint.SingleAgent.ReasoningEffort,
 		}
 	}
 
@@ -941,7 +946,7 @@ func (s *Server) HandleRunWorkflow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	runner, notifier, err := factory.CreateRunner(execCtx, workflowID, handle.ControlPlane, state.Config)
+	runner, notifier, err := factory.CreateRunner(execCtx, workflowID, handle.ControlPlane, state.Blueprint)
 	if err != nil {
 		cancel()
 		_ = s.unifiedTracker.RollbackExecution(ctx, core.WorkflowID(workflowID), "failed to create runner: "+err.Error())
@@ -1334,7 +1339,7 @@ func (s *Server) HandleAnalyzeWorkflow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	runner, notifier, err := factory.CreateRunner(execCtx, workflowID, handle.ControlPlane, state.Config)
+	runner, notifier, err := factory.CreateRunner(execCtx, workflowID, handle.ControlPlane, state.Blueprint)
 	if err != nil {
 		cancel()
 		_ = s.unifiedTracker.RollbackExecution(ctx, core.WorkflowID(workflowID), "failed to create runner: "+err.Error())
@@ -1489,7 +1494,7 @@ func (s *Server) HandlePlanWorkflow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	runner, notifier, err := factory.CreateRunner(execCtx, workflowID, handle.ControlPlane, state.Config)
+	runner, notifier, err := factory.CreateRunner(execCtx, workflowID, handle.ControlPlane, state.Blueprint)
 	if err != nil {
 		cancel()
 		_ = s.unifiedTracker.RollbackExecution(ctx, core.WorkflowID(workflowID), "failed to create runner: "+err.Error())
@@ -1640,7 +1645,7 @@ func (s *Server) HandleReplanWorkflow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	runner, notifier, err := factory.CreateRunner(execCtx, workflowID, handle.ControlPlane, state.Config)
+	runner, notifier, err := factory.CreateRunner(execCtx, workflowID, handle.ControlPlane, state.Blueprint)
 	if err != nil {
 		cancel()
 		_ = s.unifiedTracker.RollbackExecution(ctx, core.WorkflowID(workflowID), "failed to create runner: "+err.Error())
@@ -1794,7 +1799,7 @@ func (s *Server) HandleExecuteWorkflow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	runner, notifier, err := factory.CreateRunner(execCtx, workflowID, handle.ControlPlane, state.Config)
+	runner, notifier, err := factory.CreateRunner(execCtx, workflowID, handle.ControlPlane, state.Blueprint)
 	if err != nil {
 		cancel()
 		_ = s.unifiedTracker.RollbackExecution(ctx, core.WorkflowID(workflowID), "failed to create runner: "+err.Error())

@@ -7,12 +7,7 @@ import (
 )
 
 func TestBuildContextString_EmptyState(t *testing.T) {
-	state := &core.WorkflowState{
-		WorkflowID:   "",
-		CurrentPhase: "",
-		Tasks:        nil,
-		TaskOrder:    nil,
-	}
+	state := &core.WorkflowState{}
 
 	result := BuildContextString(state)
 	if result == "" {
@@ -22,12 +17,16 @@ func TestBuildContextString_EmptyState(t *testing.T) {
 
 func TestBuildContextString_NilTask(t *testing.T) {
 	state := &core.WorkflowState{
-		WorkflowID:   "wf-test",
-		CurrentPhase: core.PhaseExecute,
-		Tasks: map[core.TaskID]*core.TaskState{
-			"task-1": nil, // nil task should be handled
+		WorkflowDefinition: core.WorkflowDefinition{
+			WorkflowID: "wf-test",
 		},
-		TaskOrder: []core.TaskID{"task-1"},
+		WorkflowRun: core.WorkflowRun{
+			CurrentPhase: core.PhaseExecute,
+			Tasks: map[core.TaskID]*core.TaskState{
+				"task-1": nil, // nil task should be handled
+			},
+			TaskOrder: []core.TaskID{"task-1"},
+		},
 	}
 
 	// Should not panic
@@ -39,15 +38,19 @@ func TestBuildContextString_NilTask(t *testing.T) {
 
 func TestBuildContextString_MixedTaskStatuses(t *testing.T) {
 	state := &core.WorkflowState{
-		WorkflowID:   "wf-test",
-		CurrentPhase: core.PhaseExecute,
-		Tasks: map[core.TaskID]*core.TaskState{
-			"task-1": {ID: "task-1", Name: "Completed Task", Status: core.TaskStatusCompleted},
-			"task-2": {ID: "task-2", Name: "Running Task", Status: core.TaskStatusRunning},
-			"task-3": {ID: "task-3", Name: "Pending Task", Status: core.TaskStatusPending},
-			"task-4": {ID: "task-4", Name: "Failed Task", Status: core.TaskStatusFailed},
+		WorkflowDefinition: core.WorkflowDefinition{
+			WorkflowID: "wf-test",
 		},
-		TaskOrder: []core.TaskID{"task-1", "task-2", "task-3", "task-4"},
+		WorkflowRun: core.WorkflowRun{
+			CurrentPhase: core.PhaseExecute,
+			Tasks: map[core.TaskID]*core.TaskState{
+				"task-1": {ID: "task-1", Name: "Completed Task", Status: core.TaskStatusCompleted},
+				"task-2": {ID: "task-2", Name: "Running Task", Status: core.TaskStatusRunning},
+				"task-3": {ID: "task-3", Name: "Pending Task", Status: core.TaskStatusPending},
+				"task-4": {ID: "task-4", Name: "Failed Task", Status: core.TaskStatusFailed},
+			},
+			TaskOrder: []core.TaskID{"task-1", "task-2", "task-3", "task-4"},
+		},
 	}
 
 	result := BuildContextString(state)

@@ -107,14 +107,18 @@ func TestExecutor_Run_AllTasksCompleted(t *testing.T) {
 	output := &mockOutputNotifier{}
 	wctx := &Context{
 		State: &core.WorkflowState{
-			WorkflowID:   "wf-test",
-			CurrentPhase: core.PhaseExecute,
-			Tasks: map[core.TaskID]*core.TaskState{
-				"task-1": {ID: "task-1", Name: "Test", Status: core.TaskStatusPending},
+			WorkflowDefinition: core.WorkflowDefinition{
+				WorkflowID: "wf-test",
 			},
-			TaskOrder:   []core.TaskID{"task-1"},
-			Checkpoints: []core.Checkpoint{},
-			Metrics:     &core.StateMetrics{},
+			WorkflowRun: core.WorkflowRun{
+				CurrentPhase: core.PhaseExecute,
+				Tasks: map[core.TaskID]*core.TaskState{
+					"task-1": {ID: "task-1", Name: "Test", Status: core.TaskStatusPending},
+				},
+				TaskOrder:   []core.TaskID{"task-1"},
+				Checkpoints: []core.Checkpoint{},
+				Metrics:     &core.StateMetrics{},
+			},
 		},
 		Agents:     registry,
 		Prompts:    &mockPromptRenderer{},
@@ -162,14 +166,18 @@ func TestExecutor_Run_DryRunMode(t *testing.T) {
 
 	wctx := &Context{
 		State: &core.WorkflowState{
-			WorkflowID:   "wf-test",
-			CurrentPhase: core.PhaseExecute,
-			Tasks: map[core.TaskID]*core.TaskState{
-				"task-1": {ID: "task-1", Name: "Test", Status: core.TaskStatusPending},
+			WorkflowDefinition: core.WorkflowDefinition{
+				WorkflowID: "wf-test",
 			},
-			TaskOrder:   []core.TaskID{"task-1"},
-			Checkpoints: []core.Checkpoint{},
-			Metrics:     &core.StateMetrics{},
+			WorkflowRun: core.WorkflowRun{
+				CurrentPhase: core.PhaseExecute,
+				Tasks: map[core.TaskID]*core.TaskState{
+					"task-1": {ID: "task-1", Name: "Test", Status: core.TaskStatusPending},
+				},
+				TaskOrder:   []core.TaskID{"task-1"},
+				Checkpoints: []core.Checkpoint{},
+				Metrics:     &core.StateMetrics{},
+			},
 		},
 		Agents:     registry,
 		Prompts:    &mockPromptRenderer{},
@@ -207,14 +215,18 @@ func TestExecutor_Run_NoReadyTasks(t *testing.T) {
 
 	wctx := &Context{
 		State: &core.WorkflowState{
-			WorkflowID:   "wf-test",
-			CurrentPhase: core.PhaseExecute,
-			Tasks: map[core.TaskID]*core.TaskState{
-				"task-1": {ID: "task-1", Name: "Test", Status: core.TaskStatusPending},
+			WorkflowDefinition: core.WorkflowDefinition{
+				WorkflowID: "wf-test",
 			},
-			TaskOrder:   []core.TaskID{"task-1"},
-			Checkpoints: []core.Checkpoint{},
-			Metrics:     &core.StateMetrics{},
+			WorkflowRun: core.WorkflowRun{
+				CurrentPhase: core.PhaseExecute,
+				Tasks: map[core.TaskID]*core.TaskState{
+					"task-1": {ID: "task-1", Name: "Test", Status: core.TaskStatusPending},
+				},
+				TaskOrder:   []core.TaskID{"task-1"},
+				Checkpoints: []core.Checkpoint{},
+				Metrics:     &core.StateMetrics{},
+			},
 		},
 		Agents:     registry,
 		Prompts:    &mockPromptRenderer{},
@@ -252,14 +264,18 @@ func TestExecutor_Run_AgentExecutionFails(t *testing.T) {
 
 	wctx := &Context{
 		State: &core.WorkflowState{
-			WorkflowID:   "wf-test",
-			CurrentPhase: core.PhaseExecute,
-			Tasks: map[core.TaskID]*core.TaskState{
-				"task-1": {ID: "task-1", Name: "Test", Status: core.TaskStatusPending},
+			WorkflowDefinition: core.WorkflowDefinition{
+				WorkflowID: "wf-test",
 			},
-			TaskOrder:   []core.TaskID{"task-1"},
-			Checkpoints: []core.Checkpoint{},
-			Metrics:     &core.StateMetrics{},
+			WorkflowRun: core.WorkflowRun{
+				CurrentPhase: core.PhaseExecute,
+				Tasks: map[core.TaskID]*core.TaskState{
+					"task-1": {ID: "task-1", Name: "Test", Status: core.TaskStatusPending},
+				},
+				TaskOrder:   []core.TaskID{"task-1"},
+				Checkpoints: []core.Checkpoint{},
+				Metrics:     &core.StateMetrics{},
+			},
 		},
 		Agents:     registry,
 		Prompts:    &mockPromptRenderer{},
@@ -309,14 +325,18 @@ func TestExecutor_Run_WithWorktrees(t *testing.T) {
 
 	wctx := &Context{
 		State: &core.WorkflowState{
-			WorkflowID:   "wf-test",
-			CurrentPhase: core.PhaseExecute,
-			Tasks: map[core.TaskID]*core.TaskState{
-				"task-1": {ID: "task-1", Name: "Test", Status: core.TaskStatusPending},
+			WorkflowDefinition: core.WorkflowDefinition{
+				WorkflowID: "wf-test",
 			},
-			TaskOrder:   []core.TaskID{"task-1"},
-			Checkpoints: []core.Checkpoint{},
-			Metrics:     &core.StateMetrics{},
+			WorkflowRun: core.WorkflowRun{
+				CurrentPhase: core.PhaseExecute,
+				Tasks: map[core.TaskID]*core.TaskState{
+					"task-1": {ID: "task-1", Name: "Test", Status: core.TaskStatusPending},
+				},
+				TaskOrder:   []core.TaskID{"task-1"},
+				Checkpoints: []core.Checkpoint{},
+				Metrics:     &core.StateMetrics{},
+			},
 		},
 		Agents:     registry,
 		Prompts:    &mockPromptRenderer{},
@@ -368,14 +388,18 @@ func TestExecutor_Run_WorktreeCreateFails(t *testing.T) {
 
 	wctx := &Context{
 		State: &core.WorkflowState{
-			WorkflowID:   "wf-test",
-			CurrentPhase: core.PhaseExecute,
-			Tasks: map[core.TaskID]*core.TaskState{
-				"task-1": {ID: "task-1", Name: "Test", Status: core.TaskStatusPending},
+			WorkflowDefinition: core.WorkflowDefinition{
+				WorkflowID: "wf-test",
 			},
-			TaskOrder:   []core.TaskID{"task-1"},
-			Checkpoints: []core.Checkpoint{},
-			Metrics:     &core.StateMetrics{},
+			WorkflowRun: core.WorkflowRun{
+				CurrentPhase: core.PhaseExecute,
+				Tasks: map[core.TaskID]*core.TaskState{
+					"task-1": {ID: "task-1", Name: "Test", Status: core.TaskStatusPending},
+				},
+				TaskOrder:   []core.TaskID{"task-1"},
+				Checkpoints: []core.Checkpoint{},
+				Metrics:     &core.StateMetrics{},
+			},
 		},
 		Agents:     registry,
 		Prompts:    &mockPromptRenderer{},
@@ -414,14 +438,18 @@ func TestExecutor_Run_RateLimitFails(t *testing.T) {
 
 	wctx := &Context{
 		State: &core.WorkflowState{
-			WorkflowID:   "wf-test",
-			CurrentPhase: core.PhaseExecute,
-			Tasks: map[core.TaskID]*core.TaskState{
-				"task-1": {ID: "task-1", Name: "Test", Status: core.TaskStatusPending},
+			WorkflowDefinition: core.WorkflowDefinition{
+				WorkflowID: "wf-test",
 			},
-			TaskOrder:   []core.TaskID{"task-1"},
-			Checkpoints: []core.Checkpoint{},
-			Metrics:     &core.StateMetrics{},
+			WorkflowRun: core.WorkflowRun{
+				CurrentPhase: core.PhaseExecute,
+				Tasks: map[core.TaskID]*core.TaskState{
+					"task-1": {ID: "task-1", Name: "Test", Status: core.TaskStatusPending},
+				},
+				TaskOrder:   []core.TaskID{"task-1"},
+				Checkpoints: []core.Checkpoint{},
+				Metrics:     &core.StateMetrics{},
+			},
 		},
 		Agents:     registry,
 		Prompts:    &mockPromptRenderer{},
@@ -460,14 +488,18 @@ func TestExecutor_Run_PromptRenderFails(t *testing.T) {
 
 	wctx := &Context{
 		State: &core.WorkflowState{
-			WorkflowID:   "wf-test",
-			CurrentPhase: core.PhaseExecute,
-			Tasks: map[core.TaskID]*core.TaskState{
-				"task-1": {ID: "task-1", Name: "Test", Status: core.TaskStatusPending},
+			WorkflowDefinition: core.WorkflowDefinition{
+				WorkflowID: "wf-test",
 			},
-			TaskOrder:   []core.TaskID{"task-1"},
-			Checkpoints: []core.Checkpoint{},
-			Metrics:     &core.StateMetrics{},
+			WorkflowRun: core.WorkflowRun{
+				CurrentPhase: core.PhaseExecute,
+				Tasks: map[core.TaskID]*core.TaskState{
+					"task-1": {ID: "task-1", Name: "Test", Status: core.TaskStatusPending},
+				},
+				TaskOrder:   []core.TaskID{"task-1"},
+				Checkpoints: []core.Checkpoint{},
+				Metrics:     &core.StateMetrics{},
+			},
 		},
 		Agents:     registry,
 		Prompts:    failingPrompts,
@@ -502,14 +534,18 @@ func TestExecutor_Run_AgentNotFound(t *testing.T) {
 
 	wctx := &Context{
 		State: &core.WorkflowState{
-			WorkflowID:   "wf-test",
-			CurrentPhase: core.PhaseExecute,
-			Tasks: map[core.TaskID]*core.TaskState{
-				"task-1": {ID: "task-1", Name: "Test", Status: core.TaskStatusPending, CLI: "unknown-agent"},
+			WorkflowDefinition: core.WorkflowDefinition{
+				WorkflowID: "wf-test",
 			},
-			TaskOrder:   []core.TaskID{"task-1"},
-			Checkpoints: []core.Checkpoint{},
-			Metrics:     &core.StateMetrics{},
+			WorkflowRun: core.WorkflowRun{
+				CurrentPhase: core.PhaseExecute,
+				Tasks: map[core.TaskID]*core.TaskState{
+					"task-1": {ID: "task-1", Name: "Test", Status: core.TaskStatusPending, CLI: "unknown-agent"},
+				},
+				TaskOrder:   []core.TaskID{"task-1"},
+				Checkpoints: []core.Checkpoint{},
+				Metrics:     &core.StateMetrics{},
+			},
 		},
 		Agents:     registry,
 		Prompts:    &mockPromptRenderer{},
@@ -554,15 +590,19 @@ func TestExecutor_Run_ParallelTasks(t *testing.T) {
 
 	wctx := &Context{
 		State: &core.WorkflowState{
-			WorkflowID:   "wf-test",
-			CurrentPhase: core.PhaseExecute,
-			Tasks: map[core.TaskID]*core.TaskState{
-				"task-1": {ID: "task-1", Name: "Test 1", Status: core.TaskStatusPending},
-				"task-2": {ID: "task-2", Name: "Test 2", Status: core.TaskStatusPending},
+			WorkflowDefinition: core.WorkflowDefinition{
+				WorkflowID: "wf-test",
 			},
-			TaskOrder:   []core.TaskID{"task-1", "task-2"},
-			Checkpoints: []core.Checkpoint{},
-			Metrics:     &core.StateMetrics{},
+			WorkflowRun: core.WorkflowRun{
+				CurrentPhase: core.PhaseExecute,
+				Tasks: map[core.TaskID]*core.TaskState{
+					"task-1": {ID: "task-1", Name: "Test 1", Status: core.TaskStatusPending},
+					"task-2": {ID: "task-2", Name: "Test 2", Status: core.TaskStatusPending},
+				},
+				TaskOrder:   []core.TaskID{"task-1", "task-2"},
+				Checkpoints: []core.Checkpoint{},
+				Metrics:     &core.StateMetrics{},
+			},
 		},
 		Agents:     registry,
 		Prompts:    &mockPromptRenderer{},
@@ -606,14 +646,18 @@ func TestExecutor_Run_SkipsAlreadyCompletedTasks(t *testing.T) {
 
 	wctx := &Context{
 		State: &core.WorkflowState{
-			WorkflowID:   "wf-test",
-			CurrentPhase: core.PhaseExecute,
-			Tasks: map[core.TaskID]*core.TaskState{
-				"task-1": {ID: "task-1", Name: "Test", Status: core.TaskStatusCompleted}, // Already done
+			WorkflowDefinition: core.WorkflowDefinition{
+				WorkflowID: "wf-test",
 			},
-			TaskOrder:   []core.TaskID{"task-1"},
-			Checkpoints: []core.Checkpoint{},
-			Metrics:     &core.StateMetrics{},
+			WorkflowRun: core.WorkflowRun{
+				CurrentPhase: core.PhaseExecute,
+				Tasks: map[core.TaskID]*core.TaskState{
+					"task-1": {ID: "task-1", Name: "Test", Status: core.TaskStatusCompleted}, // Already done
+				},
+				TaskOrder:   []core.TaskID{"task-1"},
+				Checkpoints: []core.Checkpoint{},
+				Metrics:     &core.StateMetrics{},
+			},
 		},
 		Agents:     registry,
 		Prompts:    &mockPromptRenderer{},
@@ -651,14 +695,18 @@ func TestExecutor_Run_UsesDefaultAgentWhenNoCLI(t *testing.T) {
 
 	wctx := &Context{
 		State: &core.WorkflowState{
-			WorkflowID:   "wf-test",
-			CurrentPhase: core.PhaseExecute,
-			Tasks: map[core.TaskID]*core.TaskState{
-				"task-1": {ID: "task-1", Name: "Test", Status: core.TaskStatusPending, CLI: ""},
+			WorkflowDefinition: core.WorkflowDefinition{
+				WorkflowID: "wf-test",
 			},
-			TaskOrder:   []core.TaskID{"task-1"},
-			Checkpoints: []core.Checkpoint{},
-			Metrics:     &core.StateMetrics{},
+			WorkflowRun: core.WorkflowRun{
+				CurrentPhase: core.PhaseExecute,
+				Tasks: map[core.TaskID]*core.TaskState{
+					"task-1": {ID: "task-1", Name: "Test", Status: core.TaskStatusPending, CLI: ""},
+				},
+				TaskOrder:   []core.TaskID{"task-1"},
+				Checkpoints: []core.Checkpoint{},
+				Metrics:     &core.StateMetrics{},
+			},
 		},
 		Agents:     registry,
 		Prompts:    &mockPromptRenderer{},
@@ -701,14 +749,18 @@ func TestExecutor_Run_UpdatesMetrics(t *testing.T) {
 
 	wctx := &Context{
 		State: &core.WorkflowState{
-			WorkflowID:   "wf-test",
-			CurrentPhase: core.PhaseExecute,
-			Tasks: map[core.TaskID]*core.TaskState{
-				"task-1": {ID: "task-1", Name: "Test", Status: core.TaskStatusPending},
+			WorkflowDefinition: core.WorkflowDefinition{
+				WorkflowID: "wf-test",
 			},
-			TaskOrder:   []core.TaskID{"task-1"},
-			Checkpoints: []core.Checkpoint{},
-			Metrics:     &core.StateMetrics{},
+			WorkflowRun: core.WorkflowRun{
+				CurrentPhase: core.PhaseExecute,
+				Tasks: map[core.TaskID]*core.TaskState{
+					"task-1": {ID: "task-1", Name: "Test", Status: core.TaskStatusPending},
+				},
+				TaskOrder:   []core.TaskID{"task-1"},
+				Checkpoints: []core.Checkpoint{},
+				Metrics:     &core.StateMetrics{},
+			},
 		},
 		Agents:     registry,
 		Prompts:    &mockPromptRenderer{},
@@ -768,14 +820,18 @@ func TestExecutor_Run_SaveStateFails(t *testing.T) {
 
 	wctx := &Context{
 		State: &core.WorkflowState{
-			WorkflowID:   "wf-test",
-			CurrentPhase: core.PhaseExecute,
-			Tasks: map[core.TaskID]*core.TaskState{
-				"task-1": {ID: "task-1", Name: "Test", Status: core.TaskStatusPending},
+			WorkflowDefinition: core.WorkflowDefinition{
+				WorkflowID: "wf-test",
 			},
-			TaskOrder:   []core.TaskID{"task-1"},
-			Checkpoints: []core.Checkpoint{},
-			Metrics:     &core.StateMetrics{},
+			WorkflowRun: core.WorkflowRun{
+				CurrentPhase: core.PhaseExecute,
+				Tasks: map[core.TaskID]*core.TaskState{
+					"task-1": {ID: "task-1", Name: "Test", Status: core.TaskStatusPending},
+				},
+				TaskOrder:   []core.TaskID{"task-1"},
+				Checkpoints: []core.Checkpoint{},
+				Metrics:     &core.StateMetrics{},
+			},
 		},
 		Agents:     registry,
 		Prompts:    &mockPromptRenderer{},
@@ -807,12 +863,16 @@ func TestExecutor_Run_NoTasks(t *testing.T) {
 
 	wctx := &Context{
 		State: &core.WorkflowState{
-			WorkflowID:   "wf-test",
-			CurrentPhase: core.PhasePlan, // Previous phase
-			Tasks:        map[core.TaskID]*core.TaskState{},
-			TaskOrder:    []core.TaskID{},
-			Checkpoints:  []core.Checkpoint{},
-			Metrics:      &core.StateMetrics{},
+			WorkflowDefinition: core.WorkflowDefinition{
+				WorkflowID: "wf-test",
+			},
+			WorkflowRun: core.WorkflowRun{
+				CurrentPhase: core.PhasePlan, // Previous phase
+				Tasks:        map[core.TaskID]*core.TaskState{},
+				TaskOrder:    []core.TaskID{},
+				Checkpoints:  []core.Checkpoint{},
+				Metrics:      &core.StateMetrics{},
+			},
 		},
 		Agents:     registry,
 		Prompts:    &mockPromptRenderer{},

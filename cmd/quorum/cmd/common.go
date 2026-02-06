@@ -398,39 +398,71 @@ func EnsureWorkflowGitIsolation(ctx context.Context, deps *PhaseRunnerDeps, stat
 }
 
 // InitializeWorkflowState creates a new workflow state for a fresh run.
-func InitializeWorkflowState(prompt string, config *core.WorkflowConfig) *core.WorkflowState {
+func InitializeWorkflowState(prompt string, bp *core.Blueprint) *core.WorkflowState {
 	return &core.WorkflowState{
-		Version:      core.CurrentStateVersion,
-		WorkflowID:   core.WorkflowID(generateCmdWorkflowID()),
-		Status:       core.WorkflowStatusRunning,
-		CurrentPhase: core.PhaseRefine,
-		Prompt:       prompt,
-		Tasks:        make(map[core.TaskID]*core.TaskState),
-		TaskOrder:    make([]core.TaskID, 0),
-		Config:       config,
-		Checkpoints:  make([]core.Checkpoint, 0),
-		Metrics:      &core.StateMetrics{},
-		CreatedAt:    time.Now(),
-		UpdatedAt:    time.Now(),
+		WorkflowDefinition: core.WorkflowDefinition{
+			Version:    core.CurrentStateVersion,
+			WorkflowID: core.WorkflowID(generateCmdWorkflowID()),
+			Prompt:     prompt,
+			Blueprint:  bp,
+			CreatedAt:  time.Now(),
+		},
+		WorkflowRun: core.WorkflowRun{
+			Status:       core.WorkflowStatusRunning,
+			CurrentPhase: core.PhaseRefine,
+			Tasks:        make(map[core.TaskID]*core.TaskState),
+			TaskOrder:    make([]core.TaskID, 0),
+			Checkpoints:  make([]core.Checkpoint, 0),
+			Metrics:      &core.StateMetrics{},
+			UpdatedAt:    time.Now(),
+		},
 	}
 }
 
-// buildCoreWorkflowConfig creates a core.WorkflowConfig from RunnerConfig.
-func buildCoreWorkflowConfig(runnerCfg *workflow.RunnerConfig) *core.WorkflowConfig {
+// buildBlueprint creates a core.Blueprint from RunnerConfig.
+func buildBlueprint(runnerCfg *workflow.RunnerConfig) *core.Blueprint {
 	mode := "multi_agent"
 	if runnerCfg.SingleAgent.Enabled {
 		mode = "single_agent"
 	}
 
-	return &core.WorkflowConfig{
-		ConsensusThreshold: runnerCfg.Moderator.Threshold,
-		MaxRetries:         runnerCfg.MaxRetries,
-		Timeout:            runnerCfg.Timeout,
-		DryRun:             runnerCfg.DryRun,
-		Sandbox:            runnerCfg.Sandbox,
-		ExecutionMode:      mode,
-		SingleAgentName:    runnerCfg.SingleAgent.Agent,
-		SingleAgentModel:   runnerCfg.SingleAgent.Model,
+	return &core.Blueprint{
+		ExecutionMode: mode,
+		SingleAgent: core.BlueprintSingleAgent{
+			Agent:           runnerCfg.SingleAgent.Agent,
+			Model:           runnerCfg.SingleAgent.Model,
+			ReasoningEffort: runnerCfg.SingleAgent.ReasoningEffort,
+		},
+		Consensus: core.BlueprintConsensus{
+			Enabled:             runnerCfg.Moderator.Enabled,
+			Agent:               runnerCfg.Moderator.Agent,
+			Threshold:           runnerCfg.Moderator.Threshold,
+			Thresholds:          runnerCfg.Moderator.Thresholds,
+			MinRounds:           runnerCfg.Moderator.MinRounds,
+			MaxRounds:           runnerCfg.Moderator.MaxRounds,
+			WarningThreshold:    runnerCfg.Moderator.WarningThreshold,
+			StagnationThreshold: runnerCfg.Moderator.StagnationThreshold,
+		},
+		Refiner: core.BlueprintRefiner{
+			Enabled: runnerCfg.Refiner.Enabled,
+			Agent:   runnerCfg.Refiner.Agent,
+		},
+		Synthesizer: core.BlueprintSynthesizer{
+			Agent: runnerCfg.Synthesizer.Agent,
+		},
+		PlanSynthesizer: core.BlueprintPlanSynthesizer{
+			Enabled: runnerCfg.PlanSynthesizer.Enabled,
+			Agent:   runnerCfg.PlanSynthesizer.Agent,
+		},
+		Phases: core.BlueprintPhases{
+			Analyze: core.BlueprintPhaseTimeout{Timeout: runnerCfg.PhaseTimeouts.Analyze},
+			Plan:    core.BlueprintPhaseTimeout{Timeout: runnerCfg.PhaseTimeouts.Plan},
+			Execute: core.BlueprintPhaseTimeout{Timeout: runnerCfg.PhaseTimeouts.Execute},
+		},
+		MaxRetries: runnerCfg.MaxRetries,
+		Timeout:    runnerCfg.Timeout,
+		DryRun:     runnerCfg.DryRun,
+		Sandbox:    runnerCfg.Sandbox,
 	}
 }
 

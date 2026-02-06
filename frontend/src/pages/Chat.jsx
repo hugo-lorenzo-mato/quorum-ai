@@ -654,7 +654,7 @@ export default function Chat() {
               </div>
 
               <form onSubmit={handleSend} className="flex gap-2.5 items-end">
-                <div className="relative flex-1">
+                <div className="relative flex-1 flex flex-col">
                   <textarea
                     ref={inputRef}
                     value={input}
@@ -678,13 +678,13 @@ export default function Chat() {
                   <VoiceInputButton
                     onTranscript={(text) => setInput((prev) => (prev ? prev + ' ' + text : text))}
                     disabled={sending}
-                    className="absolute bottom-2.5 right-2"
+                    className="absolute bottom-0 right-2 h-[42px] flex items-center"
                   />
                 </div>
                 <button
                   type="submit"
                   disabled={sending || (!input.trim() && imagePreviews.length === 0)}
-                  className="self-end h-[42px] w-[42px] md:w-auto md:px-4 flex items-center justify-center rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors shrink-0"
+                  className="h-[42px] w-[42px] md:w-auto md:px-4 flex items-center justify-center rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors shrink-0"
                 >
                   {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                 </button>

@@ -682,34 +682,71 @@ func (r *Runner) ResumeWithState(ctx context.Context, state *core.WorkflowState)
 
 // initializeState creates initial workflow state.
 func (r *Runner) initializeState(prompt string) *core.WorkflowState {
+	return &core.WorkflowState{
+		WorkflowDefinition: core.WorkflowDefinition{
+			Version:    core.CurrentStateVersion,
+			WorkflowID: core.WorkflowID(generateWorkflowID()),
+			Prompt:     prompt,
+			Blueprint:  r.buildBlueprint(),
+			CreatedAt:  time.Now(),
+		},
+		WorkflowRun: core.WorkflowRun{
+			ExecutionID:  1, // First execution
+			Status:       core.WorkflowStatusRunning,
+			CurrentPhase: core.PhaseRefine,
+			Tasks:        make(map[core.TaskID]*core.TaskState),
+			TaskOrder:    make([]core.TaskID, 0),
+			Checkpoints:  make([]core.Checkpoint, 0),
+			Metrics:      &core.StateMetrics{},
+			UpdatedAt:    time.Now(),
+		},
+	}
+}
+
+// buildBlueprint constructs a Blueprint from the runner configuration.
+func (r *Runner) buildBlueprint() *core.Blueprint {
 	mode := "multi_agent"
 	if r.config.SingleAgent.Enabled {
 		mode = "single_agent"
 	}
 
-	return &core.WorkflowState{
-		Version:      core.CurrentStateVersion,
-		WorkflowID:   core.WorkflowID(generateWorkflowID()),
-		ExecutionID:  1, // First execution
-		Status:       core.WorkflowStatusRunning,
-		CurrentPhase: core.PhaseRefine,
-		Prompt:       prompt,
-		Tasks:        make(map[core.TaskID]*core.TaskState),
-		TaskOrder:    make([]core.TaskID, 0),
-		Config: &core.WorkflowConfig{
-			ConsensusThreshold: r.config.Moderator.Threshold,
-			MaxRetries:         r.config.MaxRetries,
-			Timeout:            r.config.Timeout,
-			DryRun:             r.config.DryRun,
-			Sandbox:            r.config.Sandbox,
-			ExecutionMode:      mode,
-			SingleAgentName:    r.config.SingleAgent.Agent,
-			SingleAgentModel:   r.config.SingleAgent.Model,
+	return &core.Blueprint{
+		ExecutionMode: mode,
+		SingleAgent: core.BlueprintSingleAgent{
+			Agent:           r.config.SingleAgent.Agent,
+			Model:           r.config.SingleAgent.Model,
+			ReasoningEffort: r.config.SingleAgent.ReasoningEffort,
 		},
-		Checkpoints: make([]core.Checkpoint, 0),
-		Metrics:     &core.StateMetrics{},
-		CreatedAt:   time.Now(),
-		UpdatedAt:   time.Now(),
+		Consensus: core.BlueprintConsensus{
+			Enabled:             r.config.Moderator.Enabled,
+			Agent:               r.config.Moderator.Agent,
+			Threshold:           r.config.Moderator.Threshold,
+			Thresholds:          r.config.Moderator.Thresholds,
+			MinRounds:           r.config.Moderator.MinRounds,
+			MaxRounds:           r.config.Moderator.MaxRounds,
+			WarningThreshold:    r.config.Moderator.WarningThreshold,
+			StagnationThreshold: r.config.Moderator.StagnationThreshold,
+		},
+		Refiner: core.BlueprintRefiner{
+			Enabled: r.config.Refiner.Enabled,
+			Agent:   r.config.Refiner.Agent,
+		},
+		Synthesizer: core.BlueprintSynthesizer{
+			Agent: r.config.Synthesizer.Agent,
+		},
+		PlanSynthesizer: core.BlueprintPlanSynthesizer{
+			Enabled: r.config.PlanSynthesizer.Enabled,
+			Agent:   r.config.PlanSynthesizer.Agent,
+		},
+		Phases: core.BlueprintPhases{
+			Analyze: core.BlueprintPhaseTimeout{Timeout: r.config.PhaseTimeouts.Analyze},
+			Plan:    core.BlueprintPhaseTimeout{Timeout: r.config.PhaseTimeouts.Plan},
+			Execute: core.BlueprintPhaseTimeout{Timeout: r.config.PhaseTimeouts.Execute},
+		},
+		MaxRetries: r.config.MaxRetries,
+		Timeout:    r.config.Timeout,
+		DryRun:     r.config.DryRun,
+		Sandbox:    r.config.Sandbox,
 	}
 }
 

@@ -246,7 +246,7 @@ func TestValidationErrorCodes(t *testing.T) {
 	}
 }
 
-func TestValidateWorkflowConfig(t *testing.T) {
+func TestValidateBlueprint(t *testing.T) {
 	// Setup agents config with enabled and disabled agents
 	agents := config.AgentsConfig{
 		Claude: config.AgentConfig{Enabled: true},
@@ -256,32 +256,32 @@ func TestValidateWorkflowConfig(t *testing.T) {
 
 	tests := []struct {
 		name          string
-		config        *WorkflowConfig
+		bp            *BlueprintDTO
 		expectError   bool
 		errorField    string
 		errorCode     string
 		errorContains string
 	}{
 		{
-			name:        "nil config is valid",
-			config:      nil,
+			name:        "nil blueprint is valid",
+			bp:          nil,
 			expectError: false,
 		},
 		{
-			name:        "empty config is valid",
-			config:      &WorkflowConfig{},
+			name:        "empty blueprint is valid",
+			bp:          &BlueprintDTO{},
 			expectError: false,
 		},
 		{
 			name: "multi_agent mode is valid",
-			config: &WorkflowConfig{
+			bp: &BlueprintDTO{
 				ExecutionMode: "multi_agent",
 			},
 			expectError: false,
 		},
 		{
 			name: "single_agent with valid agent is valid",
-			config: &WorkflowConfig{
+			bp: &BlueprintDTO{
 				ExecutionMode:   "single_agent",
 				SingleAgentName: "claude",
 			},
@@ -289,7 +289,7 @@ func TestValidateWorkflowConfig(t *testing.T) {
 		},
 		{
 			name: "single_agent with model override is valid",
-			config: &WorkflowConfig{
+			bp: &BlueprintDTO{
 				ExecutionMode:    "single_agent",
 				SingleAgentName:  "gemini",
 				SingleAgentModel: "gemini-pro",
@@ -298,7 +298,7 @@ func TestValidateWorkflowConfig(t *testing.T) {
 		},
 		{
 			name: "invalid execution_mode value",
-			config: &WorkflowConfig{
+			bp: &BlueprintDTO{
 				ExecutionMode: "invalid_mode",
 			},
 			expectError:   true,
@@ -308,7 +308,7 @@ func TestValidateWorkflowConfig(t *testing.T) {
 		},
 		{
 			name: "single_agent without agent name",
-			config: &WorkflowConfig{
+			bp: &BlueprintDTO{
 				ExecutionMode: "single_agent",
 			},
 			expectError:   true,
@@ -318,7 +318,7 @@ func TestValidateWorkflowConfig(t *testing.T) {
 		},
 		{
 			name: "single_agent with empty agent name",
-			config: &WorkflowConfig{
+			bp: &BlueprintDTO{
 				ExecutionMode:   "single_agent",
 				SingleAgentName: "   ", // Whitespace only
 			},
@@ -329,7 +329,7 @@ func TestValidateWorkflowConfig(t *testing.T) {
 		},
 		{
 			name: "single_agent with non-existent agent",
-			config: &WorkflowConfig{
+			bp: &BlueprintDTO{
 				ExecutionMode:   "single_agent",
 				SingleAgentName: "nonexistent",
 			},
@@ -340,7 +340,7 @@ func TestValidateWorkflowConfig(t *testing.T) {
 		},
 		{
 			name: "single_agent with disabled agent",
-			config: &WorkflowConfig{
+			bp: &BlueprintDTO{
 				ExecutionMode:   "single_agent",
 				SingleAgentName: "codex", // Disabled in test config
 			},
@@ -351,7 +351,7 @@ func TestValidateWorkflowConfig(t *testing.T) {
 		},
 		{
 			name: "multi_agent ignores single_agent_name",
-			config: &WorkflowConfig{
+			bp: &BlueprintDTO{
 				ExecutionMode:   "multi_agent",
 				SingleAgentName: "nonexistent", // Should be ignored
 			},
@@ -359,7 +359,7 @@ func TestValidateWorkflowConfig(t *testing.T) {
 		},
 		{
 			name: "empty execution_mode defaults to multi_agent behavior",
-			config: &WorkflowConfig{
+			bp: &BlueprintDTO{
 				ExecutionMode:   "",
 				SingleAgentName: "nonexistent", // Should be ignored
 			},
@@ -369,7 +369,7 @@ func TestValidateWorkflowConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := ValidateWorkflowConfig(tt.config, agents)
+			err := ValidateBlueprint(tt.bp, agents)
 
 			if tt.expectError {
 				require.NotNil(t, err, "expected validation error")

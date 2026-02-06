@@ -79,20 +79,20 @@ export const workflowApi = {
    * @param {Object} options - Additional options
    * @param {string} [options.title] - Optional workflow title
    * @param {string[]} [options.files] - Optional file paths
-   * @param {Object} [options.config] - Optional workflow configuration
-   * @param {string} [options.config.execution_mode] - 'multi_agent' or 'single_agent'
-   * @param {string} [options.config.single_agent_name] - Agent name for single-agent mode
-   * @param {string} [options.config.single_agent_model] - Optional model override
+   * @param {Object} [options.blueprint] - Optional workflow blueprint
+   * @param {string} [options.blueprint.execution_mode] - 'multi_agent' or 'single_agent'
+   * @param {string} [options.blueprint.single_agent_name] - Agent name for single-agent mode
+   * @param {string} [options.blueprint.single_agent_model] - Optional model override
    */
   create: (prompt, options = {}) => {
-    const { title, files, config } = options;
+    const { title, files, blueprint } = options;
 
     const body = { prompt };
 
     // Add optional fields only if they have values
     if (title) body.title = title;
     if (files && files.length > 0) body.files = files;
-    if (config && Object.keys(config).length > 0) body.config = config;
+    if (blueprint && Object.keys(blueprint).length > 0) body.blueprint = blueprint;
 
     return request('/workflows/', {
       method: 'POST',

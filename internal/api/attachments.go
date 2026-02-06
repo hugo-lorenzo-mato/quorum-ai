@@ -14,10 +14,8 @@ import (
 
 // handleListWorkflowAttachments lists attachments associated with a workflow.
 func (s *Server) handleListWorkflowAttachments(w http.ResponseWriter, r *http.Request) {
-	if s.stateManager == nil {
-		respondError(w, http.StatusServiceUnavailable, "workflow management not available")
-		return
-	}
+	ctx := r.Context()
+	stateManager := s.getProjectStateManager(ctx)
 
 	workflowID := chi.URLParam(r, "workflowID")
 	if workflowID == "" {
@@ -25,7 +23,7 @@ func (s *Server) handleListWorkflowAttachments(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	state, err := s.stateManager.LoadByID(r.Context(), core.WorkflowID(workflowID))
+	state, err := stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
 	if err != nil {
 		s.logger.Error("failed to load workflow", "workflow_id", workflowID, "error", err)
 		respondError(w, http.StatusInternalServerError, "failed to load workflow")
@@ -41,11 +39,10 @@ func (s *Server) handleListWorkflowAttachments(w http.ResponseWriter, r *http.Re
 
 // handleUploadWorkflowAttachments uploads one or more files as workflow attachments.
 func (s *Server) handleUploadWorkflowAttachments(w http.ResponseWriter, r *http.Request) {
-	if s.stateManager == nil {
-		respondError(w, http.StatusServiceUnavailable, "workflow management not available")
-		return
-	}
-	if s.attachments == nil {
+	ctx := r.Context()
+	stateManager := s.getProjectStateManager(ctx)
+	store := s.getProjectAttachmentStore(ctx)
+	if store == nil {
 		respondError(w, http.StatusServiceUnavailable, "attachments store not available")
 		return
 	}
@@ -56,8 +53,7 @@ func (s *Server) handleUploadWorkflowAttachments(w http.ResponseWriter, r *http.
 		return
 	}
 
-	ctx := r.Context()
-	state, err := s.stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
+	state, err := stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
 	if err != nil {
 		s.logger.Error("failed to load workflow", "workflow_id", workflowID, "error", err)
 		respondError(w, http.StatusInternalServerError, "failed to load workflow")
@@ -98,7 +94,7 @@ func (s *Server) handleUploadWorkflowAttachments(w http.ResponseWriter, r *http.
 			respondError(w, http.StatusBadRequest, "failed to open uploaded file")
 			return
 		}
-		att, err := s.attachments.Save(attachments.OwnerWorkflow, workflowID, f, fh.Filename)
+		att, err := store.Save(attachments.OwnerWorkflow, workflowID, f, fh.Filename)
 		_ = f.Close()
 		if err != nil {
 			respondError(w, http.StatusBadRequest, err.Error())
@@ -110,7 +106,7 @@ func (s *Server) handleUploadWorkflowAttachments(w http.ResponseWriter, r *http.
 	// Persist in workflow state (canonical for prompting).
 	state.Attachments = append(state.Attachments, saved...)
 	state.UpdatedAt = time.Now()
-	if err := s.stateManager.Save(ctx, state); err != nil {
+	if err := stateManager.Save(ctx, state); err != nil {
 		s.logger.Error("failed to save workflow with attachments", "workflow_id", workflowID, "error", err)
 		respondError(w, http.StatusInternalServerError, "failed to persist attachments")
 		return
@@ -121,7 +117,8 @@ func (s *Server) handleUploadWorkflowAttachments(w http.ResponseWriter, r *http.
 
 // handleDownloadWorkflowAttachment downloads a workflow attachment.
 func (s *Server) handleDownloadWorkflowAttachment(w http.ResponseWriter, r *http.Request) {
-	if s.attachments == nil {
+	store := s.getProjectAttachmentStore(r.Context())
+	if store == nil {
 		respondError(w, http.StatusServiceUnavailable, "attachments store not available")
 		return
 	}
@@ -133,7 +130,7 @@ func (s *Server) handleDownloadWorkflowAttachment(w http.ResponseWriter, r *http
 		return
 	}
 
-	meta, absPath, err := s.attachments.Resolve(attachments.OwnerWorkflow, workflowID, attachmentID)
+	meta, absPath, err := store.Resolve(attachments.OwnerWorkflow, workflowID, attachmentID)
 	if err != nil {
 		if os.IsNotExist(err) {
 			respondError(w, http.StatusNotFound, "attachment not found")
@@ -151,11 +148,10 @@ func (s *Server) handleDownloadWorkflowAttachment(w http.ResponseWriter, r *http
 
 // handleDeleteWorkflowAttachment deletes a workflow attachment.
 func (s *Server) handleDeleteWorkflowAttachment(w http.ResponseWriter, r *http.Request) {
-	if s.stateManager == nil {
-		respondError(w, http.StatusServiceUnavailable, "workflow management not available")
-		return
-	}
-	if s.attachments == nil {
+	ctx := r.Context()
+	stateManager := s.getProjectStateManager(ctx)
+	store := s.getProjectAttachmentStore(ctx)
+	if store == nil {
 		respondError(w, http.StatusServiceUnavailable, "attachments store not available")
 		return
 	}
@@ -167,8 +163,7 @@ func (s *Server) handleDeleteWorkflowAttachment(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	ctx := r.Context()
-	state, err := s.stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
+	state, err := stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
 	if err != nil {
 		s.logger.Error("failed to load workflow", "workflow_id", workflowID, "error", err)
 		respondError(w, http.StatusInternalServerError, "failed to load workflow")
@@ -183,7 +178,7 @@ func (s *Server) handleDeleteWorkflowAttachment(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	if err := s.attachments.Delete(attachments.OwnerWorkflow, workflowID, attachmentID); err != nil {
+	if err := store.Delete(attachments.OwnerWorkflow, workflowID, attachmentID); err != nil {
 		if os.IsNotExist(err) {
 			respondError(w, http.StatusNotFound, "attachment not found")
 			return
@@ -202,7 +197,7 @@ func (s *Server) handleDeleteWorkflowAttachment(w http.ResponseWriter, r *http.R
 	}
 	state.Attachments = filtered
 	state.UpdatedAt = time.Now()
-	if err := s.stateManager.Save(ctx, state); err != nil {
+	if err := stateManager.Save(ctx, state); err != nil {
 		s.logger.Error("failed to save workflow after deleting attachment", "workflow_id", workflowID, "error", err)
 		respondError(w, http.StatusInternalServerError, "failed to persist attachment deletion")
 		return

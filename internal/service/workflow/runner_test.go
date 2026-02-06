@@ -190,7 +190,9 @@ func TestRunner_createContext(t *testing.T) {
 	}
 
 	state := &core.WorkflowState{
-		WorkflowID: "wf-test",
+		WorkflowDefinition: core.WorkflowDefinition{
+			WorkflowID: "wf-test",
+		},
 	}
 
 	ctx := runner.createContext(state)
@@ -434,8 +436,12 @@ func TestRunner_SetDryRun(t *testing.T) {
 
 func TestRunner_GetState(t *testing.T) {
 	expectedState := &core.WorkflowState{
-		WorkflowID: "wf-test",
-		Status:     core.WorkflowStatusCompleted,
+		WorkflowDefinition: core.WorkflowDefinition{
+			WorkflowID: "wf-test",
+		},
+		WorkflowRun: core.WorkflowRun{
+			Status: core.WorkflowStatusCompleted,
+		},
 	}
 
 	stateManager := &mockStateManager{state: expectedState}
@@ -455,8 +461,12 @@ func TestRunner_GetState(t *testing.T) {
 
 func TestFinalizeMetrics_CalculatesDuration(t *testing.T) {
 	state := &core.WorkflowState{
-		Metrics:   &core.StateMetrics{},
-		CreatedAt: time.Now().Add(-5 * time.Minute),
+		WorkflowDefinition: core.WorkflowDefinition{
+			CreatedAt: time.Now().Add(-5 * time.Minute),
+		},
+		WorkflowRun: core.WorkflowRun{
+			Metrics: &core.StateMetrics{},
+		},
 	}
 
 	runner := &Runner{}
@@ -470,8 +480,9 @@ func TestFinalizeMetrics_CalculatesDuration(t *testing.T) {
 
 func TestFinalizeMetrics_InitializesNilMetrics(t *testing.T) {
 	state := &core.WorkflowState{
-		Metrics:   nil,
-		CreatedAt: time.Now(),
+		WorkflowDefinition: core.WorkflowDefinition{
+			CreatedAt: time.Now(),
+		},
 	}
 
 	runner := &Runner{}

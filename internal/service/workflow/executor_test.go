@@ -35,8 +35,10 @@ func TestExecutor_ModeEnforcerBlocks(t *testing.T) {
 	// Create context with blocking mode enforcer
 	wctx := &Context{
 		State: &core.WorkflowState{
-			Tasks: map[core.TaskID]*core.TaskState{
-				"task-1": {ID: "task-1", Status: core.TaskStatusPending},
+			WorkflowRun: core.WorkflowRun{
+				Tasks: map[core.TaskID]*core.TaskState{
+					"task-1": {ID: "task-1", Status: core.TaskStatusPending},
+				},
 			},
 		},
 		ModeEnforcer: &mockModeEnforcer{blocked: true},
@@ -60,8 +62,10 @@ func TestExecutor_ModeEnforcerAllows(t *testing.T) {
 	// Create context with permissive mode enforcer
 	wctx := &Context{
 		State: &core.WorkflowState{
-			Tasks: map[core.TaskID]*core.TaskState{
-				"task-1": {ID: "task-1", Status: core.TaskStatusPending},
+			WorkflowRun: core.WorkflowRun{
+				Tasks: map[core.TaskID]*core.TaskState{
+					"task-1": {ID: "task-1", Status: core.TaskStatusPending},
+				},
 			},
 		},
 		ModeEnforcer: &mockModeEnforcer{blocked: false},
@@ -91,8 +95,10 @@ func TestExecutor_NilModeEnforcer(t *testing.T) {
 	// Create context without mode enforcer (nil)
 	wctx := &Context{
 		State: &core.WorkflowState{
-			Tasks: map[core.TaskID]*core.TaskState{
-				"task-1": {ID: "task-1", Status: core.TaskStatusPending},
+			WorkflowRun: core.WorkflowRun{
+				Tasks: map[core.TaskID]*core.TaskState{
+					"task-1": {ID: "task-1", Status: core.TaskStatusPending},
+				},
 			},
 		},
 		ModeEnforcer: nil, // No mode enforcer
@@ -128,8 +134,10 @@ func TestExecutor_SavesTaskOutput(t *testing.T) {
 	executor := NewExecutor(nil, nil, nil)
 	wctx := &Context{
 		State: &core.WorkflowState{
-			Tasks: map[core.TaskID]*core.TaskState{
-				"task-1": {ID: "task-1", Status: core.TaskStatusPending},
+			WorkflowRun: core.WorkflowRun{
+				Tasks: map[core.TaskID]*core.TaskState{
+					"task-1": {ID: "task-1", Status: core.TaskStatusPending},
+				},
 			},
 		},
 		Agents:     mockRegistry,

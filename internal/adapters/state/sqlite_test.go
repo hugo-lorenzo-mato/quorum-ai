@@ -14,39 +14,43 @@ import (
 func newTestStateSQLite() *core.WorkflowState {
 	now := time.Now().Truncate(time.Second) // SQLite stores with second precision
 	return &core.WorkflowState{
-		Version:      1,
-		WorkflowID:   "wf-test-123",
-		Status:       core.WorkflowStatusRunning,
-		CurrentPhase: core.PhaseAnalyze,
-		Prompt:       "Test workflow prompt",
-		Tasks: map[core.TaskID]*core.TaskState{
-			"task-1": {
-				ID:           "task-1",
-				Phase:        core.PhaseAnalyze,
-				Name:         "Test Task",
-				Status:       core.TaskStatusPending,
-				CLI:          "claude",
-				Model:        "opus",
-				Dependencies: []core.TaskID{},
-				TokensIn:     100,
-				TokensOut:    50,
-				CostUSD:      0.01,
+		WorkflowDefinition: core.WorkflowDefinition{
+			Version:    1,
+			WorkflowID: "wf-test-123",
+			Prompt:     "Test workflow prompt",
+			Blueprint: &core.Blueprint{
+				Consensus:  core.BlueprintConsensus{Threshold: 0.75},
+				MaxRetries: 3,
+				Timeout:    time.Hour,
 			},
+			CreatedAt: now,
 		},
-		TaskOrder: []core.TaskID{"task-1"},
-		Config: &core.WorkflowConfig{
-			ConsensusThreshold: 0.75,
-			MaxRetries:         3,
-			Timeout:            time.Hour,
+		WorkflowRun: core.WorkflowRun{
+			Status:       core.WorkflowStatusRunning,
+			CurrentPhase: core.PhaseAnalyze,
+			Tasks: map[core.TaskID]*core.TaskState{
+				"task-1": {
+					ID:           "task-1",
+					Phase:        core.PhaseAnalyze,
+					Name:         "Test Task",
+					Status:       core.TaskStatusPending,
+					CLI:          "claude",
+					Model:        "opus",
+					Dependencies: []core.TaskID{},
+					TokensIn:     100,
+					TokensOut:    50,
+					CostUSD:      0.01,
+				},
+			},
+			TaskOrder: []core.TaskID{"task-1"},
+			Metrics: &core.StateMetrics{
+				TotalCostUSD:   0.05,
+				TotalTokensIn:  1000,
+				TotalTokensOut: 500,
+			},
+			Checkpoints: []core.Checkpoint{},
+			UpdatedAt:   now,
 		},
-		Metrics: &core.StateMetrics{
-			TotalCostUSD:   0.05,
-			TotalTokensIn:  1000,
-			TotalTokensOut: 500,
-		},
-		Checkpoints: []core.Checkpoint{},
-		CreatedAt:   now,
-		UpdatedAt:   now,
 	}
 }
 
@@ -289,12 +293,16 @@ func TestSQLiteStateManager_ActiveWorkflow(t *testing.T) {
 
 	// Manual set to an existing workflow - first create it
 	manualState := &core.WorkflowState{
-		WorkflowID:   "wf-manual",
-		Status:       core.WorkflowStatusRunning,
-		CurrentPhase: core.PhaseAnalyze,
-		Prompt:       "Manual workflow prompt",
-		CreatedAt:    time.Now(),
-		UpdatedAt:    time.Now(),
+		WorkflowDefinition: core.WorkflowDefinition{
+			WorkflowID: "wf-manual",
+			Prompt:     "Manual workflow prompt",
+			CreatedAt:  time.Now(),
+		},
+		WorkflowRun: core.WorkflowRun{
+			Status:       core.WorkflowStatusRunning,
+			CurrentPhase: core.PhaseAnalyze,
+			UpdatedAt:    time.Now(),
+		},
 	}
 	if err := manager.Save(ctx, manualState); err != nil {
 		t.Fatalf("Save(manualState) error = %v", err)
@@ -360,13 +368,17 @@ func TestSQLiteStateManager_ActiveWorkflow_CleansUpFailed(t *testing.T) {
 
 	// Create a failed workflow
 	state := &core.WorkflowState{
-		WorkflowID:   "wf-failed",
-		Status:       core.WorkflowStatusFailed,
-		CurrentPhase: core.PhaseAnalyze,
-		Prompt:       "Failed workflow prompt",
-		Error:        "test error",
-		CreatedAt:    time.Now(),
-		UpdatedAt:    time.Now(),
+		WorkflowDefinition: core.WorkflowDefinition{
+			WorkflowID: "wf-failed",
+			Prompt:     "Failed workflow prompt",
+			CreatedAt:  time.Now(),
+		},
+		WorkflowRun: core.WorkflowRun{
+			Status:       core.WorkflowStatusFailed,
+			CurrentPhase: core.PhaseAnalyze,
+			Error:        "test error",
+			UpdatedAt:    time.Now(),
+		},
 	}
 	if err := manager.Save(ctx, state); err != nil {
 		t.Fatalf("Save() error = %v", err)
@@ -401,13 +413,17 @@ func TestSQLiteStateManager_CleanupOnStartup_GhostWorkflow(t *testing.T) {
 
 	// Create a failed workflow
 	state := &core.WorkflowState{
-		WorkflowID:   "wf-ghost-startup",
-		Status:       core.WorkflowStatusFailed,
-		CurrentPhase: core.PhaseAnalyze,
-		Prompt:       "Ghost workflow for startup test",
-		Error:        "test error",
-		CreatedAt:    time.Now(),
-		UpdatedAt:    time.Now(),
+		WorkflowDefinition: core.WorkflowDefinition{
+			WorkflowID: "wf-ghost-startup",
+			Prompt:     "Ghost workflow for startup test",
+			CreatedAt:  time.Now(),
+		},
+		WorkflowRun: core.WorkflowRun{
+			Status:       core.WorkflowStatusFailed,
+			CurrentPhase: core.PhaseAnalyze,
+			Error:        "test error",
+			UpdatedAt:    time.Now(),
+		},
 	}
 	if err := manager1.Save(ctx, state); err != nil {
 		t.Fatalf("Save() error = %v", err)
@@ -684,12 +700,12 @@ func TestSQLiteStateManager_ConfigAndMetrics(t *testing.T) {
 	ctx := context.Background()
 
 	state := newTestStateSQLite()
-	state.Config = &core.WorkflowConfig{
-		ConsensusThreshold: 0.85,
-		MaxRetries:         5,
-		Timeout:            2 * time.Hour,
-		DryRun:             true,
-		Sandbox:            true,
+	state.Blueprint = &core.Blueprint{
+		Consensus:  core.BlueprintConsensus{Threshold: 0.85},
+		MaxRetries: 5,
+		Timeout:    2 * time.Hour,
+		DryRun:     true,
+		Sandbox:    true,
 	}
 	state.Metrics = &core.StateMetrics{
 		TotalCostUSD:   1.25,
@@ -708,17 +724,17 @@ func TestSQLiteStateManager_ConfigAndMetrics(t *testing.T) {
 		t.Fatalf("Load() error = %v", err)
 	}
 
-	// Verify config
-	if loaded.Config == nil {
-		t.Fatal("Config should not be nil")
+	// Verify blueprint
+	if loaded.Blueprint == nil {
+		t.Fatal("Blueprint should not be nil")
 	}
-	if loaded.Config.ConsensusThreshold != 0.85 {
-		t.Errorf("ConsensusThreshold = %f, want 0.85", loaded.Config.ConsensusThreshold)
+	if loaded.Blueprint.Consensus.Threshold != 0.85 {
+		t.Errorf("Consensus.Threshold = %f, want 0.85", loaded.Blueprint.Consensus.Threshold)
 	}
-	if loaded.Config.MaxRetries != 5 {
-		t.Errorf("MaxRetries = %d, want 5", loaded.Config.MaxRetries)
+	if loaded.Blueprint.MaxRetries != 5 {
+		t.Errorf("MaxRetries = %d, want 5", loaded.Blueprint.MaxRetries)
 	}
-	if !loaded.Config.DryRun {
+	if !loaded.Blueprint.DryRun {
 		t.Error("DryRun should be true")
 	}
 

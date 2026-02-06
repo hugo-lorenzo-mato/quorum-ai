@@ -185,12 +185,14 @@ func TestFallbackOutput_WorkflowCompleted(t *testing.T) {
 	f := NewFallbackOutput(false, false).WithWriter(buf)
 
 	state := &core.WorkflowState{
-		Tasks: map[core.TaskID]*core.TaskState{
-			"task-1": {Status: core.TaskStatusCompleted},
-			"task-2": {Status: core.TaskStatusCompleted},
-		},
-		Metrics: &core.StateMetrics{
-			TotalCostUSD: 0.05,
+		WorkflowRun: core.WorkflowRun{
+			Tasks: map[core.TaskID]*core.TaskState{
+				"task-1": {Status: core.TaskStatusCompleted},
+				"task-2": {Status: core.TaskStatusCompleted},
+			},
+			Metrics: &core.StateMetrics{
+				TotalCostUSD: 0.05,
+			},
 		},
 	}
 
@@ -345,11 +347,13 @@ func TestFallbackOutput_CountCompleted(t *testing.T) {
 	f := NewFallbackOutput(false, false)
 
 	state := &core.WorkflowState{
-		Tasks: map[core.TaskID]*core.TaskState{
-			"task-1": {Status: core.TaskStatusCompleted},
-			"task-2": {Status: core.TaskStatusCompleted},
-			"task-3": {Status: core.TaskStatusPending},
-			"task-4": {Status: core.TaskStatusFailed},
+		WorkflowRun: core.WorkflowRun{
+			Tasks: map[core.TaskID]*core.TaskState{
+				"task-1": {Status: core.TaskStatusCompleted},
+				"task-2": {Status: core.TaskStatusCompleted},
+				"task-3": {Status: core.TaskStatusPending},
+				"task-4": {Status: core.TaskStatusFailed},
+			},
 		},
 	}
 
@@ -447,11 +451,13 @@ func TestJSONOutput_WorkflowCompleted(t *testing.T) {
 	j := NewJSONOutput().WithWriter(buf)
 
 	state := &core.WorkflowState{
-		Tasks: map[core.TaskID]*core.TaskState{
-			"task-1": {Status: core.TaskStatusCompleted},
-		},
-		Metrics: &core.StateMetrics{
-			TotalCostUSD: 0.05,
+		WorkflowRun: core.WorkflowRun{
+			Tasks: map[core.TaskID]*core.TaskState{
+				"task-1": {Status: core.TaskStatusCompleted},
+			},
+			Metrics: &core.StateMetrics{
+				TotalCostUSD: 0.05,
+			},
 		},
 	}
 	j.WorkflowCompleted(state)

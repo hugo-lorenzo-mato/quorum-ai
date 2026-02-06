@@ -80,7 +80,9 @@ func TestRunner_ensureWorkflowGitIsolation_SetsWorkflowBranch(t *testing.T) {
 		logger:            logging.NewNop(),
 	}
 
-	state := &core.WorkflowState{WorkflowID: "wf-001"}
+	state := &core.WorkflowState{
+		WorkflowDefinition: core.WorkflowDefinition{WorkflowID: "wf-001"},
+	}
 
 	changed, err := r.ensureWorkflowGitIsolation(context.Background(), state)
 	if err != nil {
@@ -115,8 +117,12 @@ func TestRunner_createContext_DisablesTaskPRsUnderIsolation(t *testing.T) {
 	}
 
 	state := &core.WorkflowState{
-		WorkflowID:     "wf-001",
-		WorkflowBranch: "quorum/wf-001",
+		WorkflowDefinition: core.WorkflowDefinition{
+			WorkflowID: "wf-001",
+		},
+		WorkflowRun: core.WorkflowRun{
+			WorkflowBranch: "quorum/wf-001",
+		},
 	}
 
 	wctx := r.createContext(state)

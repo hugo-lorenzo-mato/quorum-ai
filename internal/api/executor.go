@@ -122,7 +122,7 @@ func (e *WorkflowExecutor) execute(ctx context.Context, workflowID core.Workflow
 	execCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), e.executionTimeout)
 
 	// Create runner using the ControlPlane from the handle
-	runner, notifier, err := e.runnerFactory.CreateRunner(execCtx, id, handle.ControlPlane, state.Config)
+	runner, notifier, err := e.runnerFactory.CreateRunner(execCtx, id, handle.ControlPlane, state.Blueprint)
 	if err != nil {
 		cancel()
 		if rollbackErr := e.unifiedTracker.RollbackExecution(ctx, workflowID, err.Error()); rollbackErr != nil && e.logger != nil {

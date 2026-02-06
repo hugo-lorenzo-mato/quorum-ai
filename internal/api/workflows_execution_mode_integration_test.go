@@ -33,7 +33,7 @@ func TestIntegration_CreateWorkflow_WithExecutionMode(t *testing.T) {
 		reqBody := map[string]interface{}{
 			"prompt": "Test single-agent workflow",
 			"title":  "Single Agent Test",
-			"config": map[string]interface{}{
+			"blueprint": map[string]interface{}{
 				"execution_mode":     "single_agent",
 				"single_agent_name":  "claude",
 				"single_agent_model": "test-model",
@@ -60,8 +60,8 @@ func TestIntegration_CreateWorkflow_WithExecutionMode(t *testing.T) {
 			t.Fatalf("failed to decode response: %v", err)
 		}
 
-		// Verify config is returned
-		config, ok := result["config"].(map[string]interface{})
+		// Verify blueprint is returned
+		config, ok := result["blueprint"].(map[string]interface{})
 		if !ok {
 			t.Fatal("expected config in response")
 		}
@@ -77,7 +77,7 @@ func TestIntegration_CreateWorkflow_WithExecutionMode(t *testing.T) {
 	t.Run("create workflow with multi-agent mode (default)", func(t *testing.T) {
 		reqBody := map[string]interface{}{
 			"prompt": "Test multi-agent workflow",
-			"config": map[string]interface{}{
+			"blueprint": map[string]interface{}{
 				"execution_mode": "multi_agent",
 			},
 		}
@@ -102,7 +102,7 @@ func TestIntegration_CreateWorkflow_WithExecutionMode(t *testing.T) {
 			t.Fatalf("failed to decode response: %v", err)
 		}
 
-		config, ok := result["config"].(map[string]interface{})
+		config, ok := result["blueprint"].(map[string]interface{})
 		if !ok {
 			t.Fatal("expected config in response")
 		}
@@ -154,7 +154,7 @@ func TestIntegration_GetWorkflow_IncludesExecutionMode(t *testing.T) {
 	// Create a workflow with single-agent mode
 	reqBody := map[string]interface{}{
 		"prompt": "Test workflow",
-		"config": map[string]interface{}{
+		"blueprint": map[string]interface{}{
 			"execution_mode":    "single_agent",
 			"single_agent_name": "claude",
 		},
@@ -201,7 +201,7 @@ func TestIntegration_GetWorkflow_IncludesExecutionMode(t *testing.T) {
 	}
 
 	// Verify config is returned
-	config, ok := result["config"].(map[string]interface{})
+	config, ok := result["blueprint"].(map[string]interface{})
 	if !ok {
 		t.Fatal("expected config in response")
 	}
@@ -233,7 +233,7 @@ func TestIntegration_ListWorkflows_IncludesExecutionMode(t *testing.T) {
 	for i, cfg := range configs {
 		reqBody := map[string]interface{}{
 			"prompt": "Test workflow " + string(rune('A'+i)),
-			"config": cfg,
+			"blueprint": cfg,
 		}
 		body, _ := json.Marshal(reqBody)
 
@@ -270,7 +270,7 @@ func TestIntegration_ListWorkflows_IncludesExecutionMode(t *testing.T) {
 
 	// Verify each workflow has config
 	for _, wf := range workflows {
-		config, ok := wf["config"].(map[string]interface{})
+		config, ok := wf["blueprint"].(map[string]interface{})
 		if !ok {
 			continue // Some workflows may not have config
 		}
@@ -290,7 +290,7 @@ func TestIntegration_WorkflowConfigPersistence(t *testing.T) {
 	t.Run("full config is persisted", func(t *testing.T) {
 		reqBody := map[string]interface{}{
 			"prompt": "Test config persistence",
-			"config": map[string]interface{}{
+			"blueprint": map[string]interface{}{
 				"execution_mode":      "single_agent",
 				"single_agent_name":   "claude",
 				"single_agent_model":  "test-model-v1",
@@ -333,7 +333,7 @@ func TestIntegration_WorkflowConfigPersistence(t *testing.T) {
 		var result map[string]interface{}
 		json.NewDecoder(getResp.Body).Decode(&result)
 
-		config := result["config"].(map[string]interface{})
+		config := result["blueprint"].(map[string]interface{})
 
 		// Verify all fields
 		if config["execution_mode"] != "single_agent" {
@@ -359,18 +359,22 @@ func TestIntegration_WorkflowState_ConfigMapping(t *testing.T) {
 
 	// Directly set a workflow state with config
 	wfState := &core.WorkflowState{
-		WorkflowID:   "wf-config-map-test",
-		Status:       core.WorkflowStatusPending,
-		CurrentPhase: core.PhaseAnalyze,
-		Prompt:       "Test prompt",
-		Config: &core.WorkflowConfig{
-			ExecutionMode:   "single_agent",
-			SingleAgentName: "claude",
+		WorkflowDefinition: core.WorkflowDefinition{
+			WorkflowID: "wf-config-map-test",
+			Prompt:     "Test prompt",
+			Blueprint: &core.Blueprint{
+				ExecutionMode: "single_agent",
+				SingleAgent:   core.BlueprintSingleAgent{Agent: "claude"},
+			},
+			CreatedAt: time.Now(),
 		},
-		Tasks:     make(map[core.TaskID]*core.TaskState),
-		TaskOrder: []core.TaskID{},
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		WorkflowRun: core.WorkflowRun{
+			Status:       core.WorkflowStatusPending,
+			CurrentPhase: core.PhaseAnalyze,
+			Tasks:        make(map[core.TaskID]*core.TaskState),
+			TaskOrder:    []core.TaskID{},
+			UpdatedAt:    time.Now(),
+		},
 	}
 
 	if err := sm.Save(context.Background(), wfState); err != nil {
@@ -383,14 +387,14 @@ func TestIntegration_WorkflowState_ConfigMapping(t *testing.T) {
 		t.Fatalf("failed to load: %v", err)
 	}
 
-	if loaded.Config == nil {
-		t.Fatal("expected config to be loaded")
+	if loaded.Blueprint == nil {
+		t.Fatal("expected blueprint to be loaded")
 	}
 
-	if loaded.Config.ExecutionMode != "single_agent" {
-		t.Errorf("ExecutionMode mismatch: got %s", loaded.Config.ExecutionMode)
+	if loaded.Blueprint.ExecutionMode != "single_agent" {
+		t.Errorf("ExecutionMode mismatch: got %s", loaded.Blueprint.ExecutionMode)
 	}
-	if loaded.Config.SingleAgentName != "claude" {
-		t.Errorf("SingleAgentName mismatch: got %s", loaded.Config.SingleAgentName)
+	if loaded.Blueprint.SingleAgent.Agent != "claude" {
+		t.Errorf("SingleAgent.Agent mismatch: got %s", loaded.Blueprint.SingleAgent.Agent)
 	}
 }

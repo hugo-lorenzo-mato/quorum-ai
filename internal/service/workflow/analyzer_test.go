@@ -296,13 +296,17 @@ func TestAnalyzer_Run_WithModeratorDisabled_ReturnsError(t *testing.T) {
 
 	wctx := &Context{
 		State: &core.WorkflowState{
-			WorkflowID:   "wf-test",
-			CurrentPhase: core.PhaseAnalyze,
-			Prompt:       "test prompt",
-			Tasks:        make(map[core.TaskID]*core.TaskState),
-			TaskOrder:    []core.TaskID{},
-			Checkpoints:  []core.Checkpoint{},
-			Metrics:      &core.StateMetrics{},
+			WorkflowDefinition: core.WorkflowDefinition{
+				WorkflowID: "wf-test",
+				Prompt:     "test prompt",
+			},
+			WorkflowRun: core.WorkflowRun{
+				CurrentPhase: core.PhaseAnalyze,
+				Tasks:        make(map[core.TaskID]*core.TaskState),
+				TaskOrder:    []core.TaskID{},
+				Checkpoints:  []core.Checkpoint{},
+				Metrics:      &core.StateMetrics{},
+			},
 		},
 		Agents:     registry,
 		Prompts:    &mockPromptRenderer{},
@@ -341,8 +345,10 @@ func TestAnalyzer_Run_NoAgents(t *testing.T) {
 
 	wctx := &Context{
 		State: &core.WorkflowState{
-			WorkflowID: "wf-test",
-			Prompt:     "test prompt",
+			WorkflowDefinition: core.WorkflowDefinition{
+				WorkflowID: "wf-test",
+				Prompt:     "test prompt",
+			},
 		},
 		Agents:     registry,
 		Prompts:    &mockPromptRenderer{},
@@ -518,17 +524,21 @@ func TestGetConsolidatedAnalysis(t *testing.T) {
 		{
 			name: "no checkpoints",
 			state: &core.WorkflowState{
-				Checkpoints: []core.Checkpoint{},
+				WorkflowRun: core.WorkflowRun{
+					Checkpoints: []core.Checkpoint{},
+				},
 			},
 			wantContent: "",
 		},
 		{
 			name: "with consolidated analysis checkpoint",
 			state: &core.WorkflowState{
-				Checkpoints: []core.Checkpoint{
-					{
-						Type: "consolidated_analysis",
-						Data: []byte(`{"content":"analysis content","agent_count":2}`),
+				WorkflowRun: core.WorkflowRun{
+					Checkpoints: []core.Checkpoint{
+						{
+							Type: "consolidated_analysis",
+							Data: []byte(`{"content":"analysis content","agent_count":2}`),
+						},
 					},
 				},
 			},
@@ -537,18 +547,20 @@ func TestGetConsolidatedAnalysis(t *testing.T) {
 		{
 			name: "multiple checkpoints, returns latest",
 			state: &core.WorkflowState{
-				Checkpoints: []core.Checkpoint{
-					{
-						Type: "consolidated_analysis",
-						Data: []byte(`{"content":"old analysis"}`),
-					},
-					{
-						Type: "other",
-						Data: []byte(`{"foo":"bar"}`),
-					},
-					{
-						Type: "consolidated_analysis",
-						Data: []byte(`{"content":"new analysis"}`),
+				WorkflowRun: core.WorkflowRun{
+					Checkpoints: []core.Checkpoint{
+						{
+							Type: "consolidated_analysis",
+							Data: []byte(`{"content":"old analysis"}`),
+						},
+						{
+							Type: "other",
+							Data: []byte(`{"foo":"bar"}`),
+						},
+						{
+							Type: "consolidated_analysis",
+							Data: []byte(`{"content":"new analysis"}`),
+						},
 					},
 				},
 			},
@@ -582,12 +594,16 @@ func TestAnalyzer_Run_SkipsWhenPhaseCompleted(t *testing.T) {
 	// Create a state that has a phase_complete checkpoint for analyze
 	wctx := &Context{
 		State: &core.WorkflowState{
-			WorkflowID: "wf-test",
-			Prompt:     "test prompt",
-			Checkpoints: []core.Checkpoint{
-				{
-					Type:  "phase_complete",
-					Phase: core.PhaseAnalyze,
+			WorkflowDefinition: core.WorkflowDefinition{
+				WorkflowID: "wf-test",
+				Prompt:     "test prompt",
+			},
+			WorkflowRun: core.WorkflowRun{
+				Checkpoints: []core.Checkpoint{
+					{
+						Type:  "phase_complete",
+						Phase: core.PhaseAnalyze,
+					},
 				},
 			},
 		},
@@ -624,7 +640,9 @@ func TestIsPhaseCompleted(t *testing.T) {
 		{
 			name: "no checkpoints",
 			state: &core.WorkflowState{
-				Checkpoints: []core.Checkpoint{},
+				WorkflowRun: core.WorkflowRun{
+					Checkpoints: []core.Checkpoint{},
+				},
 			},
 			phase:      core.PhaseAnalyze,
 			wantResult: false,
@@ -632,9 +650,11 @@ func TestIsPhaseCompleted(t *testing.T) {
 		{
 			name: "has phase_complete for analyze",
 			state: &core.WorkflowState{
-				Checkpoints: []core.Checkpoint{
-					{Type: "phase_start", Phase: core.PhaseAnalyze},
-					{Type: "phase_complete", Phase: core.PhaseAnalyze},
+				WorkflowRun: core.WorkflowRun{
+					Checkpoints: []core.Checkpoint{
+						{Type: "phase_start", Phase: core.PhaseAnalyze},
+						{Type: "phase_complete", Phase: core.PhaseAnalyze},
+					},
 				},
 			},
 			phase:      core.PhaseAnalyze,
@@ -643,8 +663,10 @@ func TestIsPhaseCompleted(t *testing.T) {
 		{
 			name: "has phase_complete for different phase",
 			state: &core.WorkflowState{
-				Checkpoints: []core.Checkpoint{
-					{Type: "phase_complete", Phase: core.PhaseRefine},
+				WorkflowRun: core.WorkflowRun{
+					Checkpoints: []core.Checkpoint{
+						{Type: "phase_complete", Phase: core.PhaseRefine},
+					},
 				},
 			},
 			phase:      core.PhaseAnalyze,
@@ -653,8 +675,10 @@ func TestIsPhaseCompleted(t *testing.T) {
 		{
 			name: "only has phase_start",
 			state: &core.WorkflowState{
-				Checkpoints: []core.Checkpoint{
-					{Type: "phase_start", Phase: core.PhaseAnalyze},
+				WorkflowRun: core.WorkflowRun{
+					Checkpoints: []core.Checkpoint{
+						{Type: "phase_start", Phase: core.PhaseAnalyze},
+					},
 				},
 			},
 			phase:      core.PhaseAnalyze,
@@ -663,13 +687,15 @@ func TestIsPhaseCompleted(t *testing.T) {
 		{
 			name: "phase_complete exists among multiple checkpoints",
 			state: &core.WorkflowState{
-				Checkpoints: []core.Checkpoint{
-					{Type: "phase_start", Phase: core.PhaseRefine},
-					{Type: "phase_complete", Phase: core.PhaseRefine},
-					{Type: "phase_start", Phase: core.PhaseAnalyze},
-					{Type: "consolidated_analysis", Phase: core.PhaseAnalyze},
-					{Type: "phase_complete", Phase: core.PhaseAnalyze},
-					{Type: "phase_start", Phase: core.PhaseAnalyze}, // Extra (should still find phase_complete)
+				WorkflowRun: core.WorkflowRun{
+					Checkpoints: []core.Checkpoint{
+						{Type: "phase_start", Phase: core.PhaseRefine},
+						{Type: "phase_complete", Phase: core.PhaseRefine},
+						{Type: "phase_start", Phase: core.PhaseAnalyze},
+						{Type: "consolidated_analysis", Phase: core.PhaseAnalyze},
+						{Type: "phase_complete", Phase: core.PhaseAnalyze},
+						{Type: "phase_start", Phase: core.PhaseAnalyze}, // Extra (should still find phase_complete)
+					},
 				},
 			},
 			phase:      core.PhaseAnalyze,
@@ -715,13 +741,17 @@ func TestAnalyzer_Run_SingleAgentMode(t *testing.T) {
 
 	wctx := &Context{
 		State: &core.WorkflowState{
-			WorkflowID:   "wf-test",
-			CurrentPhase: core.PhaseRefine, // Starts from refine
-			Prompt:       "test prompt",
-			Tasks:        make(map[core.TaskID]*core.TaskState),
-			TaskOrder:    []core.TaskID{},
-			Checkpoints:  []core.Checkpoint{},
-			Metrics:      &core.StateMetrics{},
+			WorkflowDefinition: core.WorkflowDefinition{
+				WorkflowID: "wf-test",
+				Prompt:     "test prompt",
+			},
+			WorkflowRun: core.WorkflowRun{
+				CurrentPhase: core.PhaseRefine, // Starts from refine
+				Tasks:        make(map[core.TaskID]*core.TaskState),
+				TaskOrder:    []core.TaskID{},
+				Checkpoints:  []core.Checkpoint{},
+				Metrics:      &core.StateMetrics{},
+			},
 		},
 		Agents:     registry,
 		Prompts:    &mockPromptRenderer{},
@@ -791,12 +821,16 @@ func TestAnalyzer_Run_SingleAgentMode_NoAgentSpecified(t *testing.T) {
 
 	wctx := &Context{
 		State: &core.WorkflowState{
-			WorkflowID:  "wf-test",
-			Prompt:      "test prompt",
-			Tasks:       make(map[core.TaskID]*core.TaskState),
-			TaskOrder:   []core.TaskID{},
-			Checkpoints: []core.Checkpoint{},
-			Metrics:     &core.StateMetrics{},
+			WorkflowDefinition: core.WorkflowDefinition{
+				WorkflowID: "wf-test",
+				Prompt:     "test prompt",
+			},
+			WorkflowRun: core.WorkflowRun{
+				Tasks:       make(map[core.TaskID]*core.TaskState),
+				TaskOrder:   []core.TaskID{},
+				Checkpoints: []core.Checkpoint{},
+				Metrics:     &core.StateMetrics{},
+			},
 		},
 		Agents:     registry,
 		Prompts:    &mockPromptRenderer{},
@@ -835,12 +869,16 @@ func TestAnalyzer_Run_SingleAgentMode_AgentNotFound(t *testing.T) {
 
 	wctx := &Context{
 		State: &core.WorkflowState{
-			WorkflowID:  "wf-test",
-			Prompt:      "test prompt",
-			Tasks:       make(map[core.TaskID]*core.TaskState),
-			TaskOrder:   []core.TaskID{},
-			Checkpoints: []core.Checkpoint{},
-			Metrics:     &core.StateMetrics{},
+			WorkflowDefinition: core.WorkflowDefinition{
+				WorkflowID: "wf-test",
+				Prompt:     "test prompt",
+			},
+			WorkflowRun: core.WorkflowRun{
+				Tasks:       make(map[core.TaskID]*core.TaskState),
+				TaskOrder:   []core.TaskID{},
+				Checkpoints: []core.Checkpoint{},
+				Metrics:     &core.StateMetrics{},
+			},
 		},
 		Agents:     registry,
 		Prompts:    &mockPromptRenderer{},
@@ -897,12 +935,16 @@ func TestAnalyzer_Run_SingleAgentMode_WithModelOverride(t *testing.T) {
 
 	wctx := &Context{
 		State: &core.WorkflowState{
-			WorkflowID:  "wf-test",
-			Prompt:      "test prompt",
-			Tasks:       make(map[core.TaskID]*core.TaskState),
-			TaskOrder:   []core.TaskID{},
-			Checkpoints: []core.Checkpoint{},
-			Metrics:     &core.StateMetrics{},
+			WorkflowDefinition: core.WorkflowDefinition{
+				WorkflowID: "wf-test",
+				Prompt:     "test prompt",
+			},
+			WorkflowRun: core.WorkflowRun{
+				Tasks:       make(map[core.TaskID]*core.TaskState),
+				TaskOrder:   []core.TaskID{},
+				Checkpoints: []core.Checkpoint{},
+				Metrics:     &core.StateMetrics{},
+			},
 		},
 		Agents:     registry,
 		Prompts:    &mockPromptRenderer{},

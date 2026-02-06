@@ -28,10 +28,12 @@ func TestIntegration_StateManager(t *testing.T) {
 
 	// Create and save state
 	ws := &core.WorkflowState{
-		WorkflowID:   "test-workflow-1",
-		CurrentPhase: core.PhaseAnalyze,
-		Status:       core.WorkflowStatusRunning,
-		Tasks:        make(map[core.TaskID]*core.TaskState),
+		WorkflowDefinition: core.WorkflowDefinition{WorkflowID: "test-workflow-1"},
+		WorkflowRun: core.WorkflowRun{
+			CurrentPhase: core.PhaseAnalyze,
+			Status:       core.WorkflowStatusRunning,
+			Tasks:        make(map[core.TaskID]*core.TaskState),
+		},
 	}
 	ws.Tasks["task-1"] = &core.TaskState{
 		ID:    "task-1",
@@ -273,10 +275,12 @@ func TestIntegration_BackendSelection(t *testing.T) {
 			// Verify the manager works by saving and loading
 			ctx := context.Background()
 			ws := &core.WorkflowState{
-				WorkflowID:   "test-wf",
-				CurrentPhase: core.PhaseAnalyze,
-				Status:       core.WorkflowStatusRunning,
-				Tasks:        make(map[core.TaskID]*core.TaskState),
+				WorkflowDefinition: core.WorkflowDefinition{WorkflowID: "test-wf"},
+				WorkflowRun: core.WorkflowRun{
+					CurrentPhase: core.PhaseAnalyze,
+					Status:       core.WorkflowStatusRunning,
+					Tasks:        make(map[core.TaskID]*core.TaskState),
+				},
 			}
 
 			testutil.AssertNoError(t, sm.Save(ctx, ws))
@@ -301,56 +305,60 @@ func TestIntegration_SQLiteStateManager_CRUD(t *testing.T) {
 	// Test 1: Create and save workflow with tasks
 	now := time.Now().Truncate(time.Second)
 	ws := &core.WorkflowState{
-		Version:      1,
-		WorkflowID:   "wf-integration-test",
-		Status:       core.WorkflowStatusRunning,
-		CurrentPhase: core.PhaseAnalyze,
-		Prompt:       "Integration test prompt",
-		Tasks: map[core.TaskID]*core.TaskState{
-			"task-1": {
-				ID:           "task-1",
-				Phase:        core.PhaseAnalyze,
-				Name:         "Analyze Task",
-				Status:       core.TaskStatusCompleted,
-				CLI:          "claude",
-				Model:        "opus",
-				Dependencies: []core.TaskID{},
-				TokensIn:     500,
-				TokensOut:    200,
-				CostUSD:      float64(0.05),
-				Output:       "Analysis complete",
+		WorkflowDefinition: core.WorkflowDefinition{
+			Version:    1,
+			WorkflowID: "wf-integration-test",
+			Prompt:     "Integration test prompt",
+			Blueprint: &core.Blueprint{
+				Consensus:  core.BlueprintConsensus{Threshold: 0.8},
+				MaxRetries: 3,
+				Timeout:    time.Hour,
 			},
-			"task-2": {
-				ID:           "task-2",
-				Phase:        core.PhasePlan,
-				Name:         "Plan Task",
-				Status:       core.TaskStatusPending,
-				Dependencies: []core.TaskID{"task-1"},
+			CreatedAt: now,
+		},
+		WorkflowRun: core.WorkflowRun{
+			Status:       core.WorkflowStatusRunning,
+			CurrentPhase: core.PhaseAnalyze,
+			Tasks: map[core.TaskID]*core.TaskState{
+				"task-1": {
+					ID:           "task-1",
+					Phase:        core.PhaseAnalyze,
+					Name:         "Analyze Task",
+					Status:       core.TaskStatusCompleted,
+					CLI:          "claude",
+					Model:        "opus",
+					Dependencies: []core.TaskID{},
+					TokensIn:     500,
+					TokensOut:    200,
+					CostUSD:      float64(0.05),
+					Output:       "Analysis complete",
+				},
+				"task-2": {
+					ID:           "task-2",
+					Phase:        core.PhasePlan,
+					Name:         "Plan Task",
+					Status:       core.TaskStatusPending,
+					Dependencies: []core.TaskID{"task-1"},
+				},
 			},
-		},
-		TaskOrder: []core.TaskID{"task-1", "task-2"},
-		Config: &core.WorkflowConfig{
-			ConsensusThreshold: 0.8,
-			MaxRetries:         3,
-			Timeout:            time.Hour,
-		},
-		Metrics: &core.StateMetrics{
-			TotalCostUSD:   0.05,
-			TotalTokensIn:  500,
-			TotalTokensOut: 200,
-		},
-		Checkpoints: []core.Checkpoint{
-			{
-				ID:        "cp-1",
-				Type:      "task_complete",
-				Phase:     core.PhaseAnalyze,
-				TaskID:    "task-1",
-				Timestamp: now,
-				Message:   "Task completed",
+			TaskOrder: []core.TaskID{"task-1", "task-2"},
+			Metrics: &core.StateMetrics{
+				TotalCostUSD:   0.05,
+				TotalTokensIn:  500,
+				TotalTokensOut: 200,
 			},
+			Checkpoints: []core.Checkpoint{
+				{
+					ID:        "cp-1",
+					Type:      "task_complete",
+					Phase:     core.PhaseAnalyze,
+					TaskID:    "task-1",
+					Timestamp: now,
+					Message:   "Task completed",
+				},
+			},
+			UpdatedAt: now,
 		},
-		CreatedAt: now,
-		UpdatedAt: now,
 	}
 
 	err = sm.Save(ctx, ws)
@@ -381,9 +389,9 @@ func TestIntegration_SQLiteStateManager_CRUD(t *testing.T) {
 	testutil.AssertLen(t, task2.Dependencies, 1)
 	testutil.AssertEqual(t, task2.Dependencies[0], core.TaskID("task-1"))
 
-	// Verify config
-	testutil.AssertEqual(t, loaded.Config.ConsensusThreshold, 0.8)
-	testutil.AssertEqual(t, loaded.Config.MaxRetries, 3)
+	// Verify blueprint
+	testutil.AssertEqual(t, loaded.Blueprint.Consensus.Threshold, 0.8)
+	testutil.AssertEqual(t, loaded.Blueprint.MaxRetries, 3)
 
 	// Verify metrics
 	testutil.AssertEqual(t, loaded.Metrics.TotalCostUSD, 0.05)
@@ -421,21 +429,29 @@ func TestIntegration_SQLiteMultipleWorkflows(t *testing.T) {
 
 	// Create first workflow
 	ws1 := &core.WorkflowState{
-		WorkflowID:   "wf-1",
-		Status:       core.WorkflowStatusCompleted,
-		CurrentPhase: core.PhaseExecute,
-		Prompt:       "First workflow",
-		Tasks:        make(map[core.TaskID]*core.TaskState),
+		WorkflowDefinition: core.WorkflowDefinition{
+			WorkflowID: "wf-1",
+			Prompt:     "First workflow",
+		},
+		WorkflowRun: core.WorkflowRun{
+			Status:       core.WorkflowStatusCompleted,
+			CurrentPhase: core.PhaseExecute,
+			Tasks:        make(map[core.TaskID]*core.TaskState),
+		},
 	}
 	testutil.AssertNoError(t, sm.Save(ctx, ws1))
 
 	// Create second workflow
 	ws2 := &core.WorkflowState{
-		WorkflowID:   "wf-2",
-		Status:       core.WorkflowStatusRunning,
-		CurrentPhase: core.PhaseAnalyze,
-		Prompt:       "Second workflow",
-		Tasks:        make(map[core.TaskID]*core.TaskState),
+		WorkflowDefinition: core.WorkflowDefinition{
+			WorkflowID: "wf-2",
+			Prompt:     "Second workflow",
+		},
+		WorkflowRun: core.WorkflowRun{
+			Status:       core.WorkflowStatusRunning,
+			CurrentPhase: core.PhaseAnalyze,
+			Tasks:        make(map[core.TaskID]*core.TaskState),
+		},
 	}
 	testutil.AssertNoError(t, sm.Save(ctx, ws2))
 
@@ -483,9 +499,11 @@ func TestIntegration_BackendFromConfig(t *testing.T) {
 			validate: func(t *testing.T, sm core.StateManager) {
 				ctx := context.Background()
 				ws := &core.WorkflowState{
-					WorkflowID: "cfg-test-json",
-					Status:     core.WorkflowStatusPending,
-					Tasks:      make(map[core.TaskID]*core.TaskState),
+					WorkflowDefinition: core.WorkflowDefinition{WorkflowID: "cfg-test-json"},
+					WorkflowRun: core.WorkflowRun{
+						Status: core.WorkflowStatusPending,
+						Tasks:  make(map[core.TaskID]*core.TaskState),
+					},
 				}
 				testutil.AssertNoError(t, sm.Save(ctx, ws))
 				loaded, err := sm.Load(ctx)
@@ -501,9 +519,11 @@ func TestIntegration_BackendFromConfig(t *testing.T) {
 			validate: func(t *testing.T, sm core.StateManager) {
 				ctx := context.Background()
 				ws := &core.WorkflowState{
-					WorkflowID: "cfg-test-sqlite",
-					Status:     core.WorkflowStatusPending,
-					Tasks:      make(map[core.TaskID]*core.TaskState),
+					WorkflowDefinition: core.WorkflowDefinition{WorkflowID: "cfg-test-sqlite"},
+					WorkflowRun: core.WorkflowRun{
+						Status: core.WorkflowStatusPending,
+						Tasks:  make(map[core.TaskID]*core.TaskState),
+					},
 				}
 				testutil.AssertNoError(t, sm.Save(ctx, ws))
 				loaded, err := sm.Load(ctx)
@@ -553,11 +573,15 @@ func TestIntegration_SQLiteBackupRestore(t *testing.T) {
 
 	// Create initial state
 	ws := &core.WorkflowState{
-		WorkflowID:   "wf-backup",
-		Status:       core.WorkflowStatusRunning,
-		CurrentPhase: core.PhaseAnalyze,
-		Prompt:       "Original state",
-		Tasks:        make(map[core.TaskID]*core.TaskState),
+		WorkflowDefinition: core.WorkflowDefinition{
+			WorkflowID: "wf-backup",
+			Prompt:     "Original state",
+		},
+		WorkflowRun: core.WorkflowRun{
+			Status:       core.WorkflowStatusRunning,
+			CurrentPhase: core.PhaseAnalyze,
+			Tasks:        make(map[core.TaskID]*core.TaskState),
+		},
 	}
 	testutil.AssertNoError(t, sqliteSM.Save(ctx, ws))
 
@@ -593,9 +617,11 @@ func TestIntegration_StateManagerLifecycle(t *testing.T) {
 		// Save something
 		ctx := context.Background()
 		ws := &core.WorkflowState{
-			WorkflowID: "lifecycle-test",
-			Status:     core.WorkflowStatusPending,
-			Tasks:      make(map[core.TaskID]*core.TaskState),
+			WorkflowDefinition: core.WorkflowDefinition{WorkflowID: "lifecycle-test"},
+			WorkflowRun: core.WorkflowRun{
+				Status: core.WorkflowStatusPending,
+				Tasks:  make(map[core.TaskID]*core.TaskState),
+			},
 		}
 		testutil.AssertNoError(t, sm.Save(ctx, ws))
 
@@ -611,9 +637,11 @@ func TestIntegration_StateManagerLifecycle(t *testing.T) {
 		// Save something
 		ctx := context.Background()
 		ws := &core.WorkflowState{
-			WorkflowID: "lifecycle-test",
-			Status:     core.WorkflowStatusPending,
-			Tasks:      make(map[core.TaskID]*core.TaskState),
+			WorkflowDefinition: core.WorkflowDefinition{WorkflowID: "lifecycle-test"},
+			WorkflowRun: core.WorkflowRun{
+				Status: core.WorkflowStatusPending,
+				Tasks:  make(map[core.TaskID]*core.TaskState),
+			},
 		}
 		testutil.AssertNoError(t, sm.Save(ctx, ws))
 

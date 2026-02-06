@@ -28,7 +28,7 @@ type Workflow struct {
 	Prompt         string
 	Tasks          map[TaskID]*Task
 	TaskOrder      []TaskID
-	Config         *WorkflowConfig
+	Blueprint      *Blueprint
 	ConsensusScore float64
 	TotalCostUSD   float64
 	TotalTokensIn  int
@@ -39,35 +39,79 @@ type Workflow struct {
 	Error          string
 }
 
-// WorkflowConfig holds workflow-specific configuration.
-type WorkflowConfig struct {
-	ConsensusThreshold float64
-	MaxRetries         int
-	Timeout            time.Duration
-	DryRun             bool
-	Sandbox            bool
+// Blueprint captures the complete orchestration recipe for a workflow.
+// It replaces the former WorkflowConfig with richer, structured sub-sections.
+type Blueprint struct {
+	ExecutionMode   string                   `json:"execution_mode"`
+	SingleAgent     BlueprintSingleAgent     `json:"single_agent,omitempty"`
+	Phases          BlueprintPhases          `json:"phases"`
+	Consensus       BlueprintConsensus       `json:"consensus"`
+	Refiner         BlueprintRefiner         `json:"refiner"`
+	Synthesizer     BlueprintSynthesizer     `json:"synthesizer"`
+	PlanSynthesizer BlueprintPlanSynthesizer `json:"plan_synthesizer"`
+	MaxRetries      int                      `json:"max_retries"`
+	Timeout         time.Duration            `json:"timeout"`
+	DryRun          bool                     `json:"dry_run"`
+	Sandbox         bool                     `json:"sandbox"`
+}
 
-	// ExecutionMode determines whether to use multi-agent consensus or single-agent mode.
-	ExecutionMode string
+// BlueprintSingleAgent configures single-agent execution mode.
+type BlueprintSingleAgent struct {
+	Agent           string `json:"agent,omitempty"`
+	Model           string `json:"model,omitempty"`
+	ReasoningEffort string `json:"reasoning_effort,omitempty"`
+}
 
-	// SingleAgentName is the name of the agent to use when execution_mode is "single_agent".
-	SingleAgentName string
+// BlueprintPhases holds per-phase timeout configuration.
+type BlueprintPhases struct {
+	Analyze BlueprintPhaseTimeout `json:"analyze"`
+	Plan    BlueprintPhaseTimeout `json:"plan"`
+	Execute BlueprintPhaseTimeout `json:"execute"`
+}
 
-	// SingleAgentModel is an optional model override for the single agent.
-	SingleAgentModel string
+// BlueprintPhaseTimeout holds timeout for a single phase.
+type BlueprintPhaseTimeout struct {
+	Timeout time.Duration `json:"timeout"`
+}
 
-	// SingleAgentReasoningEffort is an optional reasoning effort override for the single agent.
-	// If empty, the agent's configured defaults are used.
-	SingleAgentReasoningEffort string
+// BlueprintConsensus configures multi-agent consensus evaluation.
+type BlueprintConsensus struct {
+	Enabled             bool               `json:"enabled"`
+	Agent               string             `json:"agent"`
+	Threshold           float64            `json:"threshold"`
+	Thresholds          map[string]float64 `json:"thresholds,omitempty"`
+	MinRounds           int                `json:"min_rounds"`
+	MaxRounds           int                `json:"max_rounds"`
+	WarningThreshold    float64            `json:"warning_threshold"`
+	StagnationThreshold float64            `json:"stagnation_threshold"`
+}
+
+// BlueprintRefiner configures the prompt refinement phase.
+type BlueprintRefiner struct {
+	Enabled bool   `json:"enabled"`
+	Agent   string `json:"agent"`
+}
+
+// BlueprintSynthesizer configures the analysis synthesis phase.
+type BlueprintSynthesizer struct {
+	Agent string `json:"agent"`
+}
+
+// BlueprintPlanSynthesizer configures multi-agent plan synthesis.
+type BlueprintPlanSynthesizer struct {
+	Enabled bool   `json:"enabled"`
+	Agent   string `json:"agent"`
 }
 
 // NewWorkflow creates a new workflow instance.
-func NewWorkflow(id WorkflowID, prompt string, config *WorkflowConfig) *Workflow {
-	if config == nil {
-		config = &WorkflowConfig{
-			ConsensusThreshold: 0.75,
-			MaxRetries:         3,
-			Timeout:            time.Hour,
+func NewWorkflow(id WorkflowID, prompt string, bp *Blueprint) *Workflow {
+	if bp == nil {
+		bp = &Blueprint{
+			Consensus: BlueprintConsensus{
+				Threshold: 0.75,
+			},
+			MaxRetries: 3,
+			Timeout:    time.Hour,
 		}
 	}
 	return &Workflow{
@@ -77,7 +121,7 @@ func NewWorkflow(id WorkflowID, prompt string, config *WorkflowConfig) *Workflow
 		Prompt:       prompt,
 		Tasks:        make(map[TaskID]*Task),
 		TaskOrder:    make([]TaskID, 0),
-		Config:       config,
+		Blueprint:    bp,
 		CreatedAt:    time.Now(),
 	}
 }

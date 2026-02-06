@@ -103,7 +103,7 @@ func TestContext_UseWorkflowIsolation(t *testing.T) {
 			ctx: &Context{
 				GitIsolation:      &GitIsolationConfig{Enabled: true},
 				WorkflowWorktrees: &mockWorkflowWorktreeManager{},
-				State:             &core.WorkflowState{WorkflowBranch: "quorum/wf-001"},
+				State:             &core.WorkflowState{WorkflowRun: core.WorkflowRun{WorkflowBranch: "quorum/wf-001"}},
 			},
 			expected: true,
 		},
@@ -112,7 +112,7 @@ func TestContext_UseWorkflowIsolation(t *testing.T) {
 			ctx: &Context{
 				GitIsolation:      &GitIsolationConfig{Enabled: false},
 				WorkflowWorktrees: &mockWorkflowWorktreeManager{},
-				State:             &core.WorkflowState{WorkflowBranch: "quorum/wf-001"},
+				State:             &core.WorkflowState{WorkflowRun: core.WorkflowRun{WorkflowBranch: "quorum/wf-001"}},
 			},
 			expected: false,
 		},
@@ -120,7 +120,7 @@ func TestContext_UseWorkflowIsolation(t *testing.T) {
 			name: "nil git isolation",
 			ctx: &Context{
 				WorkflowWorktrees: &mockWorkflowWorktreeManager{},
-				State:             &core.WorkflowState{WorkflowBranch: "quorum/wf-001"},
+				State:             &core.WorkflowState{WorkflowRun: core.WorkflowRun{WorkflowBranch: "quorum/wf-001"}},
 			},
 			expected: false,
 		},
@@ -128,7 +128,7 @@ func TestContext_UseWorkflowIsolation(t *testing.T) {
 			name: "missing worktree manager",
 			ctx: &Context{
 				GitIsolation: &GitIsolationConfig{Enabled: true},
-				State:        &core.WorkflowState{WorkflowBranch: "quorum/wf-001"},
+				State:        &core.WorkflowState{WorkflowRun: core.WorkflowRun{WorkflowBranch: "quorum/wf-001"}},
 			},
 			expected: false,
 		},
@@ -175,8 +175,11 @@ func TestExecutor_setupWorkflowScopedWorktree_Isolation(t *testing.T) {
 	wctx := &Context{
 		GitIsolation:      &GitIsolationConfig{Enabled: true},
 		WorkflowWorktrees: mockWtMgr,
-		State:             &core.WorkflowState{WorkflowID: "wf-001", WorkflowBranch: "quorum/wf-001"},
-		Logger:            logging.NewNop(),
+		State: &core.WorkflowState{
+			WorkflowDefinition: core.WorkflowDefinition{WorkflowID: "wf-001"},
+			WorkflowRun:        core.WorkflowRun{WorkflowBranch: "quorum/wf-001"},
+		},
+		Logger: logging.NewNop(),
 	}
 	task := &core.Task{ID: "task-001", Name: "Test Task"}
 	taskState := &core.TaskState{}
@@ -213,7 +216,7 @@ func TestExecutor_setupWorkflowScopedWorktree_Fallback(t *testing.T) {
 	wctx := &Context{
 		GitIsolation: nil, // Not enabled
 		Worktrees:    mockLegacyMgr,
-		State:        &core.WorkflowState{WorkflowID: "wf-001"},
+		State:        &core.WorkflowState{WorkflowDefinition: core.WorkflowDefinition{WorkflowID: "wf-001"}},
 		Logger:       logging.NewNop(),
 	}
 	task := &core.Task{ID: "task-001", Name: "Test Task"}
@@ -235,7 +238,7 @@ func TestExecutor_setupWorkflowScopedWorktree_NotEnabled(t *testing.T) {
 	wctx := &Context{
 		GitIsolation:      &GitIsolationConfig{Enabled: true},
 		WorkflowWorktrees: &mockWorkflowWorktreeManager{},
-		State:             &core.WorkflowState{WorkflowBranch: "quorum/wf-001"},
+		State:             &core.WorkflowState{WorkflowRun: core.WorkflowRun{WorkflowBranch: "quorum/wf-001"}},
 		Logger:            logging.NewNop(),
 	}
 	task := &core.Task{ID: "task-001", Name: "Test Task"}
@@ -259,8 +262,11 @@ func TestExecutor_mergeTaskToWorkflow_Success(t *testing.T) {
 	wctx := &Context{
 		GitIsolation:      &GitIsolationConfig{Enabled: true, MergeStrategy: "sequential"},
 		WorkflowWorktrees: mockWtMgr,
-		State:             &core.WorkflowState{WorkflowID: "wf-001", WorkflowBranch: "quorum/wf-001"},
-		Logger:            logging.NewNop(),
+		State: &core.WorkflowState{
+			WorkflowDefinition: core.WorkflowDefinition{WorkflowID: "wf-001"},
+			WorkflowRun:        core.WorkflowRun{WorkflowBranch: "quorum/wf-001"},
+		},
+		Logger: logging.NewNop(),
 	}
 	task := &core.Task{ID: "task-001", Name: "Test Task"}
 
@@ -285,8 +291,11 @@ func TestExecutor_mergeTaskToWorkflow_DefaultStrategy(t *testing.T) {
 	wctx := &Context{
 		GitIsolation:      &GitIsolationConfig{Enabled: true, MergeStrategy: ""}, // Empty strategy
 		WorkflowWorktrees: mockWtMgr,
-		State:             &core.WorkflowState{WorkflowID: "wf-001", WorkflowBranch: "quorum/wf-001"},
-		Logger:            logging.NewNop(),
+		State: &core.WorkflowState{
+			WorkflowDefinition: core.WorkflowDefinition{WorkflowID: "wf-001"},
+			WorkflowRun:        core.WorkflowRun{WorkflowBranch: "quorum/wf-001"},
+		},
+		Logger: logging.NewNop(),
 	}
 	task := &core.Task{ID: "task-001", Name: "Test Task"}
 
@@ -311,9 +320,11 @@ func TestExecutor_mergeTaskToWorkflow_Conflict(t *testing.T) {
 		GitIsolation:      &GitIsolationConfig{Enabled: true, MergeStrategy: "sequential"},
 		WorkflowWorktrees: mockWtMgr,
 		State: &core.WorkflowState{
-			WorkflowID:     "wf-001",
-			WorkflowBranch: "quorum/wf-001",
-			Tasks:          map[core.TaskID]*core.TaskState{"task-001": {}},
+			WorkflowDefinition: core.WorkflowDefinition{WorkflowID: "wf-001"},
+			WorkflowRun: core.WorkflowRun{
+				WorkflowBranch: "quorum/wf-001",
+				Tasks:          map[core.TaskID]*core.TaskState{"task-001": {}},
+			},
 		},
 		Logger: logging.NewNop(),
 	}
@@ -341,7 +352,7 @@ func TestExecutor_mergeTaskToWorkflow_NoIsolation(t *testing.T) {
 	wctx := &Context{
 		GitIsolation:      nil, // Not enabled
 		WorkflowWorktrees: mockWtMgr,
-		State:             &core.WorkflowState{WorkflowID: "wf-001"},
+		State:             &core.WorkflowState{WorkflowDefinition: core.WorkflowDefinition{WorkflowID: "wf-001"}},
 		Logger:            logging.NewNop(),
 	}
 	task := &core.Task{ID: "task-001", Name: "Test Task"}
@@ -364,8 +375,11 @@ func TestExecutor_cleanupWorkflowScopedWorktree_Isolation(t *testing.T) {
 	wctx := &Context{
 		GitIsolation:      &GitIsolationConfig{Enabled: true},
 		WorkflowWorktrees: mockWtMgr,
-		State:             &core.WorkflowState{WorkflowID: "wf-001", WorkflowBranch: "quorum/wf-001"},
-		Logger:            logging.NewNop(),
+		State: &core.WorkflowState{
+			WorkflowDefinition: core.WorkflowDefinition{WorkflowID: "wf-001"},
+			WorkflowRun:        core.WorkflowRun{WorkflowBranch: "quorum/wf-001"},
+		},
+		Logger: logging.NewNop(),
 	}
 	task := &core.Task{ID: "task-001", Name: "Test Task"}
 
@@ -388,8 +402,11 @@ func TestExecutor_cleanupWorkflowScopedWorktree_NotCreated(t *testing.T) {
 	wctx := &Context{
 		GitIsolation:      &GitIsolationConfig{Enabled: true},
 		WorkflowWorktrees: mockWtMgr,
-		State:             &core.WorkflowState{WorkflowID: "wf-001", WorkflowBranch: "quorum/wf-001"},
-		Logger:            logging.NewNop(),
+		State: &core.WorkflowState{
+			WorkflowDefinition: core.WorkflowDefinition{WorkflowID: "wf-001"},
+			WorkflowRun:        core.WorkflowRun{WorkflowBranch: "quorum/wf-001"},
+		},
+		Logger: logging.NewNop(),
 	}
 	task := &core.Task{ID: "task-001", Name: "Test Task"}
 
@@ -411,8 +428,11 @@ func TestExecutor_setupWorktreeWithIsolation_CreateError(t *testing.T) {
 	wctx := &Context{
 		GitIsolation:      &GitIsolationConfig{Enabled: true},
 		WorkflowWorktrees: mockWtMgr,
-		State:             &core.WorkflowState{WorkflowID: "wf-001", WorkflowBranch: "quorum/wf-001"},
-		Logger:            logging.NewNop(),
+		State: &core.WorkflowState{
+			WorkflowDefinition: core.WorkflowDefinition{WorkflowID: "wf-001"},
+			WorkflowRun:        core.WorkflowRun{WorkflowBranch: "quorum/wf-001"},
+		},
+		Logger: logging.NewNop(),
 	}
 	task := &core.Task{ID: "task-001", Name: "Test Task"}
 	taskState := &core.TaskState{}

@@ -203,27 +203,31 @@ func (a *mockAtomicContext) IsWorkflowRunning(id core.WorkflowID) (bool, error) 
 
 func newTestWorkflowState() *core.WorkflowState {
 	return &core.WorkflowState{
-		Version:      1,
-		WorkflowID:   "wf-test",
-		Status:       core.WorkflowStatusRunning,
-		CurrentPhase: core.PhaseAnalyze,
-		Prompt:       "Test prompt",
-		Tasks: map[core.TaskID]*core.TaskState{
-			"task-1": {
-				ID:     "task-1",
-				Name:   "Test Task 1",
-				Status: core.TaskStatusPending,
-			},
-			"task-2": {
-				ID:     "task-2",
-				Name:   "Test Task 2",
-				Status: core.TaskStatusCompleted,
-			},
+		WorkflowDefinition: core.WorkflowDefinition{
+			Version:    1,
+			WorkflowID: "wf-test",
+			Prompt:     "Test prompt",
+			CreatedAt:  time.Now(),
 		},
-		TaskOrder:   []core.TaskID{"task-1", "task-2"},
-		Checkpoints: []core.Checkpoint{},
-		CreatedAt:   time.Now(),
-		UpdatedAt:   time.Now(),
+		WorkflowRun: core.WorkflowRun{
+			Status:       core.WorkflowStatusRunning,
+			CurrentPhase: core.PhaseAnalyze,
+			Tasks: map[core.TaskID]*core.TaskState{
+				"task-1": {
+					ID:     "task-1",
+					Name:   "Test Task 1",
+					Status: core.TaskStatusPending,
+				},
+				"task-2": {
+					ID:     "task-2",
+					Name:   "Test Task 2",
+					Status: core.TaskStatusCompleted,
+				},
+			},
+			TaskOrder:   []core.TaskID{"task-1", "task-2"},
+			Checkpoints: []core.Checkpoint{},
+			UpdatedAt:   time.Now(),
+		},
 	}
 }
 

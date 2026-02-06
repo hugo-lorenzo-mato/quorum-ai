@@ -154,25 +154,25 @@ func (s *Server) handleValidateConfig(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// ValidateWorkflowConfig validates the execution mode configuration in WorkflowConfig.
+// ValidateBlueprint validates the execution mode configuration in a BlueprintDTO.
 // It checks:
 // 1. execution_mode is a valid value ("multi_agent", "single_agent", or empty)
 // 2. single_agent_name is provided when execution_mode is "single_agent"
 // 3. The specified agent exists and is enabled in the application config
 //
 // Parameters:
-//   - wfConfig: The workflow configuration to validate (can be nil)
+//   - bp: The blueprint DTO to validate (can be nil)
 //   - agents: The agents configuration from the application config
 //
 // Returns nil if valid, or a ValidationFieldError describing the validation failure.
-func ValidateWorkflowConfig(wfConfig *WorkflowConfig, agents config.AgentsConfig) *ValidationFieldError {
-	// Nil config is valid (uses defaults)
-	if wfConfig == nil {
+func ValidateBlueprint(bp *BlueprintDTO, agents config.AgentsConfig) *ValidationFieldError {
+	// Nil blueprint is valid (uses defaults)
+	if bp == nil {
 		return nil
 	}
 
 	// Validate execution_mode value
-	mode := strings.TrimSpace(wfConfig.ExecutionMode)
+	mode := strings.TrimSpace(bp.ExecutionMode)
 	validModes := map[string]bool{
 		"":             true, // Empty defaults to multi-agent
 		"multi_agent":  true,
@@ -190,7 +190,7 @@ func ValidateWorkflowConfig(wfConfig *WorkflowConfig, agents config.AgentsConfig
 
 	// If single-agent mode, validate agent configuration
 	if mode == "single_agent" {
-		if err := validateSingleAgentConfig(wfConfig, agents); err != nil {
+		if err := validateSingleAgentBlueprint(bp, agents); err != nil {
 			return err
 		}
 	}
@@ -201,9 +201,9 @@ func ValidateWorkflowConfig(wfConfig *WorkflowConfig, agents config.AgentsConfig
 	return nil
 }
 
-// validateSingleAgentConfig validates the agent configuration for single-agent mode.
-func validateSingleAgentConfig(wfConfig *WorkflowConfig, agents config.AgentsConfig) *ValidationFieldError {
-	agentName := strings.TrimSpace(wfConfig.SingleAgentName)
+// validateSingleAgentBlueprint validates the agent configuration for single-agent mode.
+func validateSingleAgentBlueprint(bp *BlueprintDTO, agents config.AgentsConfig) *ValidationFieldError {
+	agentName := strings.TrimSpace(bp.SingleAgentName)
 
 	// Agent name is required for single-agent mode
 	if agentName == "" {
@@ -247,7 +247,7 @@ func validateSingleAgentConfig(wfConfig *WorkflowConfig, agents config.AgentsCon
 	}
 
 	// Validate optional reasoning effort override
-	effort := strings.TrimSpace(wfConfig.SingleAgentReasoningEffort)
+	effort := strings.TrimSpace(bp.SingleAgentReasoningEffort)
 	if effort != "" {
 		if !core.SupportsReasoning(agentName) {
 			return &ValidationFieldError{

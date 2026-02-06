@@ -128,11 +128,15 @@ func TestRunner_handleError(t *testing.T) {
 	}
 
 	workflowState := &core.WorkflowState{
-		WorkflowID:   "wf-test",
-		CurrentPhase: core.PhaseAnalyze,
-		Status:       core.WorkflowStatusRunning,
-		Metrics:      &core.StateMetrics{},
-		Checkpoints:  []core.Checkpoint{},
+		WorkflowDefinition: core.WorkflowDefinition{
+			WorkflowID: "wf-test",
+		},
+		WorkflowRun: core.WorkflowRun{
+			CurrentPhase: core.PhaseAnalyze,
+			Status:       core.WorkflowStatusRunning,
+			Metrics:      &core.StateMetrics{},
+			Checkpoints:  []core.Checkpoint{},
+		},
 	}
 
 	testErr := errors.New("test error")

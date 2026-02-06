@@ -43,13 +43,17 @@ func TestIntegration_Analyzer_SingleAgentMode_BypassesConsensus(t *testing.T) {
 	// Create workflow context with single-agent enabled
 	wctx := &Context{
 		State: &core.WorkflowState{
-			WorkflowID:   "wf-single-agent-test",
-			CurrentPhase: core.PhaseAnalyze,
-			Prompt:       "Analyze this test prompt",
-			Tasks:        make(map[core.TaskID]*core.TaskState),
-			TaskOrder:    []core.TaskID{},
-			Checkpoints:  []core.Checkpoint{},
-			Metrics:      &core.StateMetrics{},
+			WorkflowDefinition: core.WorkflowDefinition{
+				WorkflowID: "wf-single-agent-test",
+				Prompt:     "Analyze this test prompt",
+			},
+			WorkflowRun: core.WorkflowRun{
+				CurrentPhase: core.PhaseAnalyze,
+				Tasks:        make(map[core.TaskID]*core.TaskState),
+				TaskOrder:    []core.TaskID{},
+				Checkpoints:  []core.Checkpoint{},
+				Metrics:      &core.StateMetrics{},
+			},
 		},
 		Agents:     registry,
 		Prompts:    &mockPromptRenderer{},
@@ -141,13 +145,17 @@ func TestIntegration_Analyzer_SingleAgentMode_UsesSpecifiedAgent(t *testing.T) {
 	checkpointer := &mockCheckpointCreator{}
 	wctx := &Context{
 		State: &core.WorkflowState{
-			WorkflowID:   "wf-agent-selection-test",
-			CurrentPhase: core.PhaseAnalyze,
-			Prompt:       "Test prompt",
-			Tasks:        make(map[core.TaskID]*core.TaskState),
-			TaskOrder:    []core.TaskID{},
-			Checkpoints:  []core.Checkpoint{},
-			Metrics:      &core.StateMetrics{},
+			WorkflowDefinition: core.WorkflowDefinition{
+				WorkflowID: "wf-agent-selection-test",
+				Prompt:     "Test prompt",
+			},
+			WorkflowRun: core.WorkflowRun{
+				CurrentPhase: core.PhaseAnalyze,
+				Tasks:        make(map[core.TaskID]*core.TaskState),
+				TaskOrder:    []core.TaskID{},
+				Checkpoints:  []core.Checkpoint{},
+				Metrics:      &core.StateMetrics{},
+			},
 		},
 		Agents:     registry,
 		Prompts:    &mockPromptRenderer{},
@@ -209,13 +217,17 @@ func TestIntegration_Analyzer_SingleAgentMode_ModelOverride(t *testing.T) {
 	checkpointer := &mockCheckpointCreator{}
 	wctx := &Context{
 		State: &core.WorkflowState{
-			WorkflowID:   "wf-model-override-test",
-			CurrentPhase: core.PhaseAnalyze,
-			Prompt:       "Test prompt",
-			Tasks:        make(map[core.TaskID]*core.TaskState),
-			TaskOrder:    []core.TaskID{},
-			Checkpoints:  []core.Checkpoint{},
-			Metrics:      &core.StateMetrics{},
+			WorkflowDefinition: core.WorkflowDefinition{
+				WorkflowID: "wf-model-override-test",
+				Prompt:     "Test prompt",
+			},
+			WorkflowRun: core.WorkflowRun{
+				CurrentPhase: core.PhaseAnalyze,
+				Tasks:        make(map[core.TaskID]*core.TaskState),
+				TaskOrder:    []core.TaskID{},
+				Checkpoints:  []core.Checkpoint{},
+				Metrics:      &core.StateMetrics{},
+			},
 		},
 		Agents:     registry,
 		Prompts:    &mockPromptRenderer{},
@@ -262,13 +274,17 @@ func TestIntegration_Analyzer_SingleAgentMode_MissingAgent(t *testing.T) {
 
 	wctx := &Context{
 		State: &core.WorkflowState{
-			WorkflowID:   "wf-missing-agent-test",
-			CurrentPhase: core.PhaseAnalyze,
-			Prompt:       "Test prompt",
-			Tasks:        make(map[core.TaskID]*core.TaskState),
-			TaskOrder:    []core.TaskID{},
-			Checkpoints:  []core.Checkpoint{},
-			Metrics:      &core.StateMetrics{},
+			WorkflowDefinition: core.WorkflowDefinition{
+				WorkflowID: "wf-missing-agent-test",
+				Prompt:     "Test prompt",
+			},
+			WorkflowRun: core.WorkflowRun{
+				CurrentPhase: core.PhaseAnalyze,
+				Tasks:        make(map[core.TaskID]*core.TaskState),
+				TaskOrder:    []core.TaskID{},
+				Checkpoints:  []core.Checkpoint{},
+				Metrics:      &core.StateMetrics{},
+			},
 		},
 		Agents:     registry,
 		Prompts:    &mockPromptRenderer{},
@@ -340,13 +356,17 @@ func TestIntegration_Analyzer_MultiAgentMode_UsesModerator(t *testing.T) {
 	checkpointer := &mockCheckpointCreator{}
 	wctx := &Context{
 		State: &core.WorkflowState{
-			WorkflowID:   "wf-multi-agent-test",
-			CurrentPhase: core.PhaseAnalyze,
-			Prompt:       "Test prompt",
-			Tasks:        make(map[core.TaskID]*core.TaskState),
-			TaskOrder:    []core.TaskID{},
-			Checkpoints:  []core.Checkpoint{},
-			Metrics:      &core.StateMetrics{},
+			WorkflowDefinition: core.WorkflowDefinition{
+				WorkflowID: "wf-multi-agent-test",
+				Prompt:     "Test prompt",
+			},
+			WorkflowRun: core.WorkflowRun{
+				CurrentPhase: core.PhaseAnalyze,
+				Tasks:        make(map[core.TaskID]*core.TaskState),
+				TaskOrder:    []core.TaskID{},
+				Checkpoints:  []core.Checkpoint{},
+				Metrics:      &core.StateMetrics{},
+			},
 		},
 		Agents:     registry,
 		Prompts:    &mockPromptRenderer{},

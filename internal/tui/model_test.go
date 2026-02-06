@@ -22,7 +22,7 @@ func TestModel_PhaseUpdateMsg(t *testing.T) {
 func TestRenderHeader_ShowsCurrentPhase(t *testing.T) {
 	model := Model{
 		currentPhase: core.PhaseExecute,
-		workflow:     &core.WorkflowState{Status: core.WorkflowStatusRunning},
+		workflow:     &core.WorkflowState{WorkflowRun: core.WorkflowRun{Status: core.WorkflowStatusRunning}},
 		width:        80,
 	}
 
@@ -134,12 +134,14 @@ func TestProgressStats_Percentage(t *testing.T) {
 
 func TestBuildTaskViews_UsesTaskOrder(t *testing.T) {
 	state := &core.WorkflowState{
-		Tasks: map[core.TaskID]*core.TaskState{
-			"task-3": {ID: "task-3", Name: "Third"},
-			"task-1": {ID: "task-1", Name: "First"},
-			"task-2": {ID: "task-2", Name: "Second"},
+		WorkflowRun: core.WorkflowRun{
+			Tasks: map[core.TaskID]*core.TaskState{
+				"task-3": {ID: "task-3", Name: "Third"},
+				"task-1": {ID: "task-1", Name: "First"},
+				"task-2": {ID: "task-2", Name: "Second"},
+			},
+			TaskOrder: []core.TaskID{"task-1", "task-2", "task-3"},
 		},
-		TaskOrder: []core.TaskID{"task-1", "task-2", "task-3"},
 	}
 
 	model := New()
@@ -160,14 +162,16 @@ func TestBuildTaskViews_UsesTaskOrder(t *testing.T) {
 
 func TestBuildTaskViews_StableAcrossRenders(t *testing.T) {
 	state := &core.WorkflowState{
-		Tasks: map[core.TaskID]*core.TaskState{
-			"a": {ID: "a", Name: "Task A"},
-			"b": {ID: "b", Name: "Task B"},
-			"c": {ID: "c", Name: "Task C"},
-			"d": {ID: "d", Name: "Task D"},
-			"e": {ID: "e", Name: "Task E"},
+		WorkflowRun: core.WorkflowRun{
+			Tasks: map[core.TaskID]*core.TaskState{
+				"a": {ID: "a", Name: "Task A"},
+				"b": {ID: "b", Name: "Task B"},
+				"c": {ID: "c", Name: "Task C"},
+				"d": {ID: "d", Name: "Task D"},
+				"e": {ID: "e", Name: "Task E"},
+			},
+			TaskOrder: []core.TaskID{"a", "b", "c", "d", "e"},
 		},
-		TaskOrder: []core.TaskID{"a", "b", "c", "d", "e"},
 	}
 
 	model := New()
@@ -187,10 +191,12 @@ func TestBuildTaskViews_StableAcrossRenders(t *testing.T) {
 func TestBuildTaskViews_HandlesEmptyTaskOrder(t *testing.T) {
 	// Old state file without TaskOrder
 	state := &core.WorkflowState{
-		Tasks: map[core.TaskID]*core.TaskState{
-			"task-1": {ID: "task-1", Name: "Task 1"},
+		WorkflowRun: core.WorkflowRun{
+			Tasks: map[core.TaskID]*core.TaskState{
+				"task-1": {ID: "task-1", Name: "Task 1"},
+			},
+			TaskOrder: nil, // Empty
 		},
-		TaskOrder: nil, // Empty
 	}
 
 	model := New()
@@ -205,10 +211,12 @@ func TestBuildTaskViews_HandlesEmptyTaskOrder(t *testing.T) {
 func TestBuildTaskViews_HandlesMissingTask(t *testing.T) {
 	// TaskOrder references a task that doesn't exist
 	state := &core.WorkflowState{
-		Tasks: map[core.TaskID]*core.TaskState{
-			"task-1": {ID: "task-1", Name: "Task 1"},
+		WorkflowRun: core.WorkflowRun{
+			Tasks: map[core.TaskID]*core.TaskState{
+				"task-1": {ID: "task-1", Name: "Task 1"},
+			},
+			TaskOrder: []core.TaskID{"task-1", "task-missing"},
 		},
-		TaskOrder: []core.TaskID{"task-1", "task-missing"},
 	}
 
 	model := New()

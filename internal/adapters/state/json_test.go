@@ -15,34 +15,38 @@ import (
 func newTestState() *core.WorkflowState {
 	now := time.Now()
 	return &core.WorkflowState{
-		Version:      1,
-		WorkflowID:   "wf-test-123",
-		Status:       core.WorkflowStatusRunning,
-		CurrentPhase: core.PhaseAnalyze,
-		Prompt:       "Test workflow prompt",
-		Tasks: map[core.TaskID]*core.TaskState{
-			"task-1": {
-				ID:     "task-1",
-				Phase:  core.PhaseAnalyze,
-				Name:   "Test Task",
-				Status: core.TaskStatusPending,
-				CLI:    "claude",
+		WorkflowDefinition: core.WorkflowDefinition{
+			Version:    1,
+			WorkflowID: "wf-test-123",
+			Prompt:     "Test workflow prompt",
+			Blueprint: &core.Blueprint{
+				Consensus:  core.BlueprintConsensus{Threshold: 0.75},
+				MaxRetries: 3,
+				Timeout:    time.Hour,
 			},
+			CreatedAt: now,
 		},
-		TaskOrder: []core.TaskID{"task-1"},
-		Config: &core.WorkflowConfig{
-			ConsensusThreshold: 0.75,
-			MaxRetries:         3,
-			Timeout:            time.Hour,
+		WorkflowRun: core.WorkflowRun{
+			Status:       core.WorkflowStatusRunning,
+			CurrentPhase: core.PhaseAnalyze,
+			Tasks: map[core.TaskID]*core.TaskState{
+				"task-1": {
+					ID:     "task-1",
+					Phase:  core.PhaseAnalyze,
+					Name:   "Test Task",
+					Status: core.TaskStatusPending,
+					CLI:    "claude",
+				},
+			},
+			TaskOrder: []core.TaskID{"task-1"},
+			Metrics: &core.StateMetrics{
+				TotalCostUSD:   0.05,
+				TotalTokensIn:  1000,
+				TotalTokensOut: 500,
+			},
+			Checkpoints: []core.Checkpoint{},
+			UpdatedAt:   now,
 		},
-		Metrics: &core.StateMetrics{
-			TotalCostUSD:   0.05,
-			TotalTokensIn:  1000,
-			TotalTokensOut: 500,
-		},
-		Checkpoints: []core.Checkpoint{},
-		CreatedAt:   now,
-		UpdatedAt:   now,
 	}
 }
 

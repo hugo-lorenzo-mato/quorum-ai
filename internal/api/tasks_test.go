@@ -14,27 +14,31 @@ import (
 func TestHandleGetTask_IncludesOutputFile(t *testing.T) {
 	sm := newMockStateManager()
 	sm.workflows[core.WorkflowID("wf-1")] = &core.WorkflowState{
-		WorkflowID:   "wf-1",
-		Status:       core.WorkflowStatusCompleted,
-		CurrentPhase: core.PhaseExecute,
-		Prompt:       "test",
-		Tasks: map[core.TaskID]*core.TaskState{
-			"task-1": {
-				ID:          "task-1",
-				Phase:       core.PhaseExecute,
-				Name:        "Task 1",
-				Status:      core.TaskStatusCompleted,
-				CLI:         "claude",
-				Model:       "test-model",
-				Output:      "short output",
-				OutputFile:  ".quorum/runs/wf-1/execute-phase/outputs/task-1.md",
-				StartedAt:   ptrTime(time.Now().Add(-1 * time.Minute)),
-				CompletedAt: ptrTime(time.Now()),
-			},
+		WorkflowDefinition: core.WorkflowDefinition{
+			WorkflowID: "wf-1",
+			Prompt:     "test",
+			CreatedAt:  time.Now().Add(-2 * time.Hour),
 		},
-		TaskOrder: []core.TaskID{"task-1"},
-		CreatedAt: time.Now().Add(-2 * time.Hour),
-		UpdatedAt: time.Now(),
+		WorkflowRun: core.WorkflowRun{
+			Status:       core.WorkflowStatusCompleted,
+			CurrentPhase: core.PhaseExecute,
+			Tasks: map[core.TaskID]*core.TaskState{
+				"task-1": {
+					ID:          "task-1",
+					Phase:       core.PhaseExecute,
+					Name:        "Task 1",
+					Status:      core.TaskStatusCompleted,
+					CLI:         "claude",
+					Model:       "test-model",
+					Output:      "short output",
+					OutputFile:  ".quorum/runs/wf-1/execute-phase/outputs/task-1.md",
+					StartedAt:   ptrTime(time.Now().Add(-1 * time.Minute)),
+					CompletedAt: ptrTime(time.Now()),
+				},
+			},
+			TaskOrder: []core.TaskID{"task-1"},
+			UpdatedAt: time.Now(),
+		},
 	}
 
 	eb := events.New(100)

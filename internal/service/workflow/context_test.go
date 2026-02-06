@@ -15,31 +15,39 @@ func TestBuildContextString(t *testing.T) {
 		{
 			name: "basic state",
 			state: &core.WorkflowState{
-				WorkflowID:   "wf-123",
-				CurrentPhase: core.PhaseAnalyze,
-				Tasks:        make(map[core.TaskID]*core.TaskState),
-				TaskOrder:    []core.TaskID{},
+				WorkflowDefinition: core.WorkflowDefinition{
+					WorkflowID: "wf-123",
+				},
+				WorkflowRun: core.WorkflowRun{
+					CurrentPhase: core.PhaseAnalyze,
+					Tasks:        make(map[core.TaskID]*core.TaskState),
+					TaskOrder:    []core.TaskID{},
+				},
 			},
 			contains: []string{"wf-123", "analyze"},
 		},
 		{
 			name: "with completed tasks",
 			state: &core.WorkflowState{
-				WorkflowID:   "wf-456",
-				CurrentPhase: core.PhaseExecute,
-				Tasks: map[core.TaskID]*core.TaskState{
-					"task-1": {
-						ID:     "task-1",
-						Name:   "Setup",
-						Status: core.TaskStatusCompleted,
-					},
-					"task-2": {
-						ID:     "task-2",
-						Name:   "Build",
-						Status: core.TaskStatusRunning,
-					},
+				WorkflowDefinition: core.WorkflowDefinition{
+					WorkflowID: "wf-456",
 				},
-				TaskOrder: []core.TaskID{"task-1", "task-2"},
+				WorkflowRun: core.WorkflowRun{
+					CurrentPhase: core.PhaseExecute,
+					Tasks: map[core.TaskID]*core.TaskState{
+						"task-1": {
+							ID:     "task-1",
+							Name:   "Setup",
+							Status: core.TaskStatusCompleted,
+						},
+						"task-2": {
+							ID:     "task-2",
+							Name:   "Build",
+							Status: core.TaskStatusRunning,
+						},
+					},
+					TaskOrder: []core.TaskID{"task-1", "task-2"},
+				},
 			},
 			contains: []string{"wf-456", "execute", "Setup"},
 		},

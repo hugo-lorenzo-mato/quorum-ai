@@ -369,14 +369,18 @@ func TestGetWorkflow(t *testing.T) {
 	// Create a workflow first
 	wfID := core.WorkflowID("wf-test-123")
 	state := &core.WorkflowState{
-		WorkflowID:   wfID,
-		Status:       core.WorkflowStatusRunning,
-		CurrentPhase: core.PhasePlan,
-		Prompt:       "Test prompt",
-		Tasks:        make(map[core.TaskID]*core.TaskState),
-		TaskOrder:    []core.TaskID{},
-		CreatedAt:    time.Now(),
-		UpdatedAt:    time.Now(),
+		WorkflowDefinition: core.WorkflowDefinition{
+			WorkflowID: wfID,
+			Prompt:     "Test prompt",
+			CreatedAt:  time.Now(),
+		},
+		WorkflowRun: core.WorkflowRun{
+			Status:       core.WorkflowStatusRunning,
+			CurrentPhase: core.PhasePlan,
+			Tasks:        make(map[core.TaskID]*core.TaskState),
+			TaskOrder:    []core.TaskID{},
+			UpdatedAt:    time.Now(),
+		},
 	}
 	sm.workflows[wfID] = state
 	sm.activeID = wfID
@@ -428,23 +432,27 @@ func TestListTasks(t *testing.T) {
 	wfID := core.WorkflowID("wf-test-tasks")
 	taskID := core.TaskID("task-1")
 	state := &core.WorkflowState{
-		WorkflowID:   wfID,
-		Status:       core.WorkflowStatusRunning,
-		CurrentPhase: core.PhaseExecute,
-		Prompt:       "Test prompt",
-		Tasks: map[core.TaskID]*core.TaskState{
-			taskID: {
-				ID:     taskID,
-				Phase:  core.PhaseExecute,
-				Name:   "Test Task",
-				Status: core.TaskStatusCompleted,
-				CLI:    "claude",
-				Model:  "opus",
-			},
+		WorkflowDefinition: core.WorkflowDefinition{
+			WorkflowID: wfID,
+			Prompt:     "Test prompt",
+			CreatedAt:  time.Now(),
 		},
-		TaskOrder: []core.TaskID{taskID},
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		WorkflowRun: core.WorkflowRun{
+			Status:       core.WorkflowStatusRunning,
+			CurrentPhase: core.PhaseExecute,
+			Tasks: map[core.TaskID]*core.TaskState{
+				taskID: {
+					ID:     taskID,
+					Phase:  core.PhaseExecute,
+					Name:   "Test Task",
+					Status: core.TaskStatusCompleted,
+					CLI:    "claude",
+					Model:  "opus",
+				},
+			},
+			TaskOrder: []core.TaskID{taskID},
+			UpdatedAt: time.Now(),
+		},
 	}
 	sm.workflows[wfID] = state
 
@@ -480,24 +488,28 @@ func TestGetTask(t *testing.T) {
 	wfID := core.WorkflowID("wf-test-get-task")
 	taskID := core.TaskID("task-get-1")
 	state := &core.WorkflowState{
-		WorkflowID:   wfID,
-		Status:       core.WorkflowStatusRunning,
-		CurrentPhase: core.PhaseExecute,
-		Prompt:       "Test prompt",
-		Tasks: map[core.TaskID]*core.TaskState{
-			taskID: {
-				ID:       taskID,
-				Phase:    core.PhaseExecute,
-				Name:     "Get Task Test",
-				Status:   core.TaskStatusRunning,
-				CLI:      "gemini",
-				Model:    "pro",
-				TokensIn: 100,
-			},
+		WorkflowDefinition: core.WorkflowDefinition{
+			WorkflowID: wfID,
+			Prompt:     "Test prompt",
+			CreatedAt:  time.Now(),
 		},
-		TaskOrder: []core.TaskID{taskID},
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		WorkflowRun: core.WorkflowRun{
+			Status:       core.WorkflowStatusRunning,
+			CurrentPhase: core.PhaseExecute,
+			Tasks: map[core.TaskID]*core.TaskState{
+				taskID: {
+					ID:       taskID,
+					Phase:    core.PhaseExecute,
+					Name:     "Get Task Test",
+					Status:   core.TaskStatusRunning,
+					CLI:      "gemini",
+					Model:    "pro",
+					TokensIn: 100,
+				},
+			},
+			TaskOrder: []core.TaskID{taskID},
+			UpdatedAt: time.Now(),
+		},
 	}
 	sm.workflows[wfID] = state
 
@@ -532,14 +544,18 @@ func TestGetTaskNotFound(t *testing.T) {
 	// Create a workflow without the requested task
 	wfID := core.WorkflowID("wf-test-no-task")
 	state := &core.WorkflowState{
-		WorkflowID:   wfID,
-		Status:       core.WorkflowStatusRunning,
-		CurrentPhase: core.PhaseExecute,
-		Prompt:       "Test prompt",
-		Tasks:        make(map[core.TaskID]*core.TaskState),
-		TaskOrder:    []core.TaskID{},
-		CreatedAt:    time.Now(),
-		UpdatedAt:    time.Now(),
+		WorkflowDefinition: core.WorkflowDefinition{
+			WorkflowID: wfID,
+			Prompt:     "Test prompt",
+			CreatedAt:  time.Now(),
+		},
+		WorkflowRun: core.WorkflowRun{
+			Status:       core.WorkflowStatusRunning,
+			CurrentPhase: core.PhaseExecute,
+			Tasks:        make(map[core.TaskID]*core.TaskState),
+			TaskOrder:    []core.TaskID{},
+			UpdatedAt:    time.Now(),
+		},
 	}
 	sm.workflows[wfID] = state
 
@@ -563,22 +579,30 @@ func TestActivateWorkflow(t *testing.T) {
 	wfID2 := core.WorkflowID("wf-2")
 
 	sm.workflows[wfID1] = &core.WorkflowState{
-		WorkflowID: wfID1,
-		Status:     core.WorkflowStatusCompleted,
-		Prompt:     "First workflow",
-		Tasks:      make(map[core.TaskID]*core.TaskState),
-		TaskOrder:  []core.TaskID{},
-		CreatedAt:  time.Now(),
-		UpdatedAt:  time.Now(),
+		WorkflowDefinition: core.WorkflowDefinition{
+			WorkflowID: wfID1,
+			Prompt:     "First workflow",
+			CreatedAt:  time.Now(),
+		},
+		WorkflowRun: core.WorkflowRun{
+			Status:    core.WorkflowStatusCompleted,
+			Tasks:     make(map[core.TaskID]*core.TaskState),
+			TaskOrder: []core.TaskID{},
+			UpdatedAt: time.Now(),
+		},
 	}
 	sm.workflows[wfID2] = &core.WorkflowState{
-		WorkflowID: wfID2,
-		Status:     core.WorkflowStatusPending,
-		Prompt:     "Second workflow",
-		Tasks:      make(map[core.TaskID]*core.TaskState),
-		TaskOrder:  []core.TaskID{},
-		CreatedAt:  time.Now(),
-		UpdatedAt:  time.Now(),
+		WorkflowDefinition: core.WorkflowDefinition{
+			WorkflowID: wfID2,
+			Prompt:     "Second workflow",
+			CreatedAt:  time.Now(),
+		},
+		WorkflowRun: core.WorkflowRun{
+			Status:    core.WorkflowStatusPending,
+			Tasks:     make(map[core.TaskID]*core.TaskState),
+			TaskOrder: []core.TaskID{},
+			UpdatedAt: time.Now(),
+		},
 	}
 	sm.activeID = wfID1
 
@@ -614,14 +638,18 @@ func TestUpdateWorkflow(t *testing.T) {
 	// Create a workflow
 	wfID := core.WorkflowID("wf-update")
 	state := &core.WorkflowState{
-		WorkflowID:   wfID,
-		Status:       core.WorkflowStatusPending,
-		CurrentPhase: core.PhaseAnalyze,
-		Prompt:       "Test prompt",
-		Tasks:        make(map[core.TaskID]*core.TaskState),
-		TaskOrder:    []core.TaskID{},
-		CreatedAt:    time.Now(),
-		UpdatedAt:    time.Now(),
+		WorkflowDefinition: core.WorkflowDefinition{
+			WorkflowID: wfID,
+			Prompt:     "Test prompt",
+			CreatedAt:  time.Now(),
+		},
+		WorkflowRun: core.WorkflowRun{
+			Status:       core.WorkflowStatusPending,
+			CurrentPhase: core.PhaseAnalyze,
+			Tasks:        make(map[core.TaskID]*core.TaskState),
+			TaskOrder:    []core.TaskID{},
+			UpdatedAt:    time.Now(),
+		},
 	}
 	sm.workflows[wfID] = state
 
@@ -664,14 +692,18 @@ func TestGetActiveWorkflow(t *testing.T) {
 	// Create and activate a workflow
 	wfID := core.WorkflowID("wf-active-test")
 	state := &core.WorkflowState{
-		WorkflowID:   wfID,
-		Status:       core.WorkflowStatusRunning,
-		CurrentPhase: core.PhaseExecute,
-		Prompt:       "Active workflow",
-		Tasks:        make(map[core.TaskID]*core.TaskState),
-		TaskOrder:    []core.TaskID{},
-		CreatedAt:    time.Now(),
-		UpdatedAt:    time.Now(),
+		WorkflowDefinition: core.WorkflowDefinition{
+			WorkflowID: wfID,
+			Prompt:     "Active workflow",
+			CreatedAt:  time.Now(),
+		},
+		WorkflowRun: core.WorkflowRun{
+			Status:       core.WorkflowStatusRunning,
+			CurrentPhase: core.PhaseExecute,
+			Tasks:        make(map[core.TaskID]*core.TaskState),
+			TaskOrder:    []core.TaskID{},
+			UpdatedAt:    time.Now(),
+		},
 	}
 	sm.workflows[wfID] = state
 	sm.activeID = wfID

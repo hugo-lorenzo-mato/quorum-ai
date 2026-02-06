@@ -29,13 +29,17 @@ func TestAnalyzer_Run_AgentExecutionError(t *testing.T) {
 
 	wctx := &Context{
 		State: &core.WorkflowState{
-			WorkflowID:   "wf-test",
-			CurrentPhase: core.PhaseAnalyze,
-			Prompt:       "test prompt",
-			Tasks:        make(map[core.TaskID]*core.TaskState),
-			TaskOrder:    []core.TaskID{},
-			Checkpoints:  []core.Checkpoint{},
-			Metrics:      &core.StateMetrics{},
+			WorkflowDefinition: core.WorkflowDefinition{
+				WorkflowID: "wf-test",
+				Prompt:     "test prompt",
+			},
+			WorkflowRun: core.WorkflowRun{
+				CurrentPhase: core.PhaseAnalyze,
+				Tasks:        make(map[core.TaskID]*core.TaskState),
+				TaskOrder:    []core.TaskID{},
+				Checkpoints:  []core.Checkpoint{},
+				Metrics:      &core.StateMetrics{},
+			},
 		},
 		Agents:     registry,
 		Prompts:    &mockPromptRenderer{},
@@ -124,10 +128,12 @@ func TestParseAnalysisOutput_MalformedJSON(t *testing.T) {
 
 func TestGetConsolidatedAnalysis_InvalidJSON(t *testing.T) {
 	state := &core.WorkflowState{
-		Checkpoints: []core.Checkpoint{
-			{
-				Type: "consolidated_analysis",
-				Data: []byte(`invalid json`),
+		WorkflowRun: core.WorkflowRun{
+			Checkpoints: []core.Checkpoint{
+				{
+					Type: "consolidated_analysis",
+					Data: []byte(`invalid json`),
+				},
 			},
 		},
 	}
@@ -140,10 +146,12 @@ func TestGetConsolidatedAnalysis_InvalidJSON(t *testing.T) {
 
 func TestGetConsolidatedAnalysis_MissingContent(t *testing.T) {
 	state := &core.WorkflowState{
-		Checkpoints: []core.Checkpoint{
-			{
-				Type: "consolidated_analysis",
-				Data: []byte(`{"agent_count": 2}`), // content field is missing
+		WorkflowRun: core.WorkflowRun{
+			Checkpoints: []core.Checkpoint{
+				{
+					Type: "consolidated_analysis",
+					Data: []byte(`{"agent_count": 2}`), // content field is missing
+				},
 			},
 		},
 	}
@@ -160,7 +168,9 @@ func TestGetConsolidatedAnalysis_MissingContent(t *testing.T) {
 
 func TestComputePromptHash_Deterministic(t *testing.T) {
 	state := &core.WorkflowState{
-		Prompt: "Analyze this codebase",
+		WorkflowDefinition: core.WorkflowDefinition{
+			Prompt: "Analyze this codebase",
+		},
 	}
 
 	hash1 := computePromptHash(state)
@@ -177,8 +187,8 @@ func TestComputePromptHash_Deterministic(t *testing.T) {
 }
 
 func TestComputePromptHash_DifferentPrompts(t *testing.T) {
-	state1 := &core.WorkflowState{Prompt: "Analyze this"}
-	state2 := &core.WorkflowState{Prompt: "Analyze that"}
+	state1 := &core.WorkflowState{WorkflowDefinition: core.WorkflowDefinition{Prompt: "Analyze this"}}
+	state2 := &core.WorkflowState{WorkflowDefinition: core.WorkflowDefinition{Prompt: "Analyze that"}}
 
 	hash1 := computePromptHash(state1)
 	hash2 := computePromptHash(state2)
@@ -216,11 +226,13 @@ func TestGetAnalysisCheckpoint_Found(t *testing.T) {
 	metaBytes, _ := json.Marshal(meta)
 
 	state := &core.WorkflowState{
-		Checkpoints: []core.Checkpoint{
-			{
-				Type:  string(service.CheckpointAnalysisComplete),
-				Phase: core.PhaseAnalyze,
-				Data:  metaBytes,
+		WorkflowRun: core.WorkflowRun{
+			Checkpoints: []core.Checkpoint{
+				{
+					Type:  string(service.CheckpointAnalysisComplete),
+					Phase: core.PhaseAnalyze,
+					Data:  metaBytes,
+				},
 			},
 		},
 	}
@@ -250,11 +262,13 @@ func TestGetAnalysisCheckpoint_PromptHashMismatch(t *testing.T) {
 	metaBytes, _ := json.Marshal(meta)
 
 	state := &core.WorkflowState{
-		Checkpoints: []core.Checkpoint{
-			{
-				Type:  string(service.CheckpointAnalysisComplete),
-				Phase: core.PhaseAnalyze,
-				Data:  metaBytes,
+		WorkflowRun: core.WorkflowRun{
+			Checkpoints: []core.Checkpoint{
+				{
+					Type:  string(service.CheckpointAnalysisComplete),
+					Phase: core.PhaseAnalyze,
+					Data:  metaBytes,
+				},
 			},
 		},
 	}
@@ -276,11 +290,13 @@ func TestGetAnalysisCheckpoint_WrongAgent(t *testing.T) {
 	metaBytes, _ := json.Marshal(meta)
 
 	state := &core.WorkflowState{
-		Checkpoints: []core.Checkpoint{
-			{
-				Type:  string(service.CheckpointAnalysisComplete),
-				Phase: core.PhaseAnalyze,
-				Data:  metaBytes,
+		WorkflowRun: core.WorkflowRun{
+			Checkpoints: []core.Checkpoint{
+				{
+					Type:  string(service.CheckpointAnalysisComplete),
+					Phase: core.PhaseAnalyze,
+					Data:  metaBytes,
+				},
 			},
 		},
 	}
@@ -302,11 +318,13 @@ func TestGetAnalysisCheckpoint_WrongRound(t *testing.T) {
 	metaBytes, _ := json.Marshal(meta)
 
 	state := &core.WorkflowState{
-		Checkpoints: []core.Checkpoint{
-			{
-				Type:  string(service.CheckpointAnalysisComplete),
-				Phase: core.PhaseAnalyze,
-				Data:  metaBytes,
+		WorkflowRun: core.WorkflowRun{
+			Checkpoints: []core.Checkpoint{
+				{
+					Type:  string(service.CheckpointAnalysisComplete),
+					Phase: core.PhaseAnalyze,
+					Data:  metaBytes,
+				},
 			},
 		},
 	}

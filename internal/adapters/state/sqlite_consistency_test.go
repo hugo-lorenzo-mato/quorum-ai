@@ -27,14 +27,18 @@ func TestSQLiteStateManager_GetActiveWorkflowID_DetectsGhostWorkflow(t *testing.
 	// Create a failed workflow
 	now := time.Now().Truncate(time.Second)
 	state := &core.WorkflowState{
-		Version:      1,
-		WorkflowID:   "wf-ghost-test-001",
-		Status:       core.WorkflowStatusFailed,
-		CurrentPhase: core.PhaseAnalyze,
-		Prompt:       "test prompt that failed",
-		Error:        "simulated error for testing ghost workflow detection",
-		CreatedAt:    now,
-		UpdatedAt:    now,
+		WorkflowDefinition: core.WorkflowDefinition{
+			Version:    1,
+			WorkflowID: "wf-ghost-test-001",
+			Prompt:     "test prompt that failed",
+			CreatedAt:  now,
+		},
+		WorkflowRun: core.WorkflowRun{
+			Status:       core.WorkflowStatusFailed,
+			CurrentPhase: core.PhaseAnalyze,
+			Error:        "simulated error for testing ghost workflow detection",
+			UpdatedAt:    now,
+		},
 	}
 	if err := manager.Save(ctx, state); err != nil {
 		t.Fatalf("Save() error = %v", err)
@@ -136,13 +140,17 @@ func TestSQLiteStateManager_GetActiveWorkflowID_PreservesValidWorkflow(t *testin
 			// Create a workflow with valid status
 			now := time.Now().Truncate(time.Second)
 			state := &core.WorkflowState{
-				Version:      1,
-				WorkflowID:   core.WorkflowID("wf-valid-" + tc.name),
-				Status:       tc.status,
-				CurrentPhase: core.PhaseAnalyze,
-				Prompt:       "test prompt",
-				CreatedAt:    now,
-				UpdatedAt:    now,
+				WorkflowDefinition: core.WorkflowDefinition{
+					Version:    1,
+					WorkflowID: core.WorkflowID("wf-valid-" + tc.name),
+					Prompt:     "test prompt",
+					CreatedAt:  now,
+				},
+				WorkflowRun: core.WorkflowRun{
+					Status:       tc.status,
+					CurrentPhase: core.PhaseAnalyze,
+					UpdatedAt:    now,
+				},
 			}
 			if err := manager.Save(ctx, state); err != nil {
 				t.Fatalf("Save() error = %v", err)
@@ -181,13 +189,17 @@ func TestSQLiteStateManager_GetActiveWorkflowID_DetectsCompletedWorkflow(t *test
 	// Create a completed workflow
 	now := time.Now().Truncate(time.Second)
 	state := &core.WorkflowState{
-		Version:      1,
-		WorkflowID:   "wf-completed-ghost",
-		Status:       core.WorkflowStatusCompleted,
-		CurrentPhase: "", // Empty means fully completed
-		Prompt:       "test prompt that completed",
-		CreatedAt:    now,
-		UpdatedAt:    now,
+		WorkflowDefinition: core.WorkflowDefinition{
+			Version:    1,
+			WorkflowID: "wf-completed-ghost",
+			Prompt:     "test prompt that completed",
+			CreatedAt:  now,
+		},
+		WorkflowRun: core.WorkflowRun{
+			Status:       core.WorkflowStatusCompleted,
+			CurrentPhase: "", // Empty means fully completed
+			UpdatedAt:    now,
+		},
 	}
 	if err := manager.Save(ctx, state); err != nil {
 		t.Fatalf("Save() error = %v", err)
@@ -230,13 +242,17 @@ func TestSQLiteStateManager_DeactivateWorkflow_ClearsActiveWorkflow(t *testing.T
 	// Create and activate a workflow
 	now := time.Now().Truncate(time.Second)
 	state := &core.WorkflowState{
-		Version:      1,
-		WorkflowID:   "wf-deactivate-test",
-		Status:       core.WorkflowStatusRunning,
-		CurrentPhase: core.PhaseAnalyze,
-		Prompt:       "test prompt",
-		CreatedAt:    now,
-		UpdatedAt:    now,
+		WorkflowDefinition: core.WorkflowDefinition{
+			Version:    1,
+			WorkflowID: "wf-deactivate-test",
+			Prompt:     "test prompt",
+			CreatedAt:  now,
+		},
+		WorkflowRun: core.WorkflowRun{
+			Status:       core.WorkflowStatusRunning,
+			CurrentPhase: core.PhaseAnalyze,
+			UpdatedAt:    now,
+		},
 	}
 	if err := manager.Save(ctx, state); err != nil {
 		t.Fatalf("Save() error = %v", err)
@@ -298,13 +314,17 @@ func TestSQLiteStateManager_FindWorkflowsByPrompt_DetectsDuplicates(t *testing.T
 		core.WorkflowStatusRunning,
 	} {
 		state := &core.WorkflowState{
-			Version:      1,
-			WorkflowID:   core.WorkflowID(time.Now().Format("20060102-150405") + string(rune('a'+i))),
-			Status:       status,
-			CurrentPhase: core.PhaseAnalyze,
-			Prompt:       prompt,
-			CreatedAt:    now.Add(time.Duration(i) * time.Hour),
-			UpdatedAt:    now.Add(time.Duration(i) * time.Hour),
+			WorkflowDefinition: core.WorkflowDefinition{
+				Version:    1,
+				WorkflowID: core.WorkflowID(time.Now().Format("20060102-150405") + string(rune('a'+i))),
+				Prompt:     prompt,
+				CreatedAt:  now.Add(time.Duration(i) * time.Hour),
+			},
+			WorkflowRun: core.WorkflowRun{
+				Status:       status,
+				CurrentPhase: core.PhaseAnalyze,
+				UpdatedAt:    now.Add(time.Duration(i) * time.Hour),
+			},
 		}
 		if err := manager.Save(ctx, state); err != nil {
 			t.Fatalf("Save() error = %v", err)
@@ -338,13 +358,17 @@ func TestSQLiteStateManager_FindWorkflowsByPrompt_NoDuplicates(t *testing.T) {
 	// Create a workflow
 	now := time.Now().Truncate(time.Second)
 	state := &core.WorkflowState{
-		Version:      1,
-		WorkflowID:   "wf-unique-prompt",
-		Status:       core.WorkflowStatusCompleted,
-		CurrentPhase: "",
-		Prompt:       "This is a unique prompt",
-		CreatedAt:    now,
-		UpdatedAt:    now,
+		WorkflowDefinition: core.WorkflowDefinition{
+			Version:    1,
+			WorkflowID: "wf-unique-prompt",
+			Prompt:     "This is a unique prompt",
+			CreatedAt:  now,
+		},
+		WorkflowRun: core.WorkflowRun{
+			Status:       core.WorkflowStatusCompleted,
+			CurrentPhase: "",
+			UpdatedAt:    now,
+		},
 	}
 	if err := manager.Save(ctx, state); err != nil {
 		t.Fatalf("Save() error = %v", err)

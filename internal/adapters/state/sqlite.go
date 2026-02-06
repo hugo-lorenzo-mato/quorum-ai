@@ -53,6 +53,9 @@ var migrationV9 string
 //go:embed migrations/010_add_task_description.sql
 var migrationV10 string
 
+//go:embed migrations/011_blueprint.sql
+var migrationV11 string
+
 // SQLiteStateManager implements StateManager with SQLite storage.
 type SQLiteStateManager struct {
 	dbPath     string
@@ -295,6 +298,14 @@ func (m *SQLiteStateManager) migrate() error {
 		}
 	}
 
+	if version < 11 {
+		// Migration V11 renames config column to blueprint
+		_, err := m.db.Exec(migrationV11)
+		if err != nil && !strings.Contains(err.Error(), "already exists") && !strings.Contains(err.Error(), "no such column") {
+			return fmt.Errorf("applying migration v11: %w", err)
+		}
+	}
+
 	return nil
 }
 
@@ -338,11 +349,11 @@ func (m *SQLiteStateManager) Save(ctx context.Context, state *core.WorkflowState
 		return fmt.Errorf("marshaling task order: %w", err)
 	}
 
-	var configJSON, metricsJSON []byte
-	if state.Config != nil {
-		configJSON, err = json.Marshal(state.Config)
+	var blueprintJSON, metricsJSON []byte
+	if state.Blueprint != nil {
+		blueprintJSON, err = json.Marshal(state.Blueprint)
 		if err != nil {
-			return fmt.Errorf("marshaling config: %w", err)
+			return fmt.Errorf("marshaling blueprint: %w", err)
 		}
 	}
 	if state.Metrics != nil {
@@ -372,7 +383,7 @@ func (m *SQLiteStateManager) Save(ctx context.Context, state *core.WorkflowState
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO workflows (
 			id, version, title, status, current_phase, prompt, optimized_prompt,
-			task_order, config, metrics, checksum, created_at, updated_at, report_path,
+			task_order, blueprint, metrics, checksum, created_at, updated_at, report_path,
 			agent_events, workflow_branch,
 			kanban_column, kanban_position, pr_url, pr_number,
 			kanban_started_at, kanban_completed_at, kanban_execution_count, kanban_last_error,
@@ -386,7 +397,7 @@ func (m *SQLiteStateManager) Save(ctx context.Context, state *core.WorkflowState
 			prompt = excluded.prompt,
 			optimized_prompt = excluded.optimized_prompt,
 			task_order = excluded.task_order,
-			config = excluded.config,
+			blueprint = excluded.blueprint,
 			metrics = excluded.metrics,
 			checksum = excluded.checksum,
 			updated_at = excluded.updated_at,
@@ -405,7 +416,7 @@ func (m *SQLiteStateManager) Save(ctx context.Context, state *core.WorkflowState
 	`,
 		state.WorkflowID, state.Version, state.Title, state.Status, state.CurrentPhase,
 		state.Prompt, state.OptimizedPrompt, string(taskOrderJSON),
-		nullableString(configJSON), nullableString(metricsJSON),
+		nullableString(blueprintJSON), nullableString(metricsJSON),
 		checksum, state.CreatedAt, state.UpdatedAt,
 		nullableString([]byte(state.ReportPath)),
 		nullableString(agentEventsJSON),
@@ -563,7 +574,7 @@ func (m *SQLiteStateManager) LoadByID(ctx context.Context, id core.WorkflowID) (
 func (m *SQLiteStateManager) loadWorkflowByID(ctx context.Context, id core.WorkflowID) (*core.WorkflowState, error) {
 	// Load workflow using read connection
 	var state core.WorkflowState
-	var taskOrderJSON, configJSON, metricsJSON sql.NullString
+	var taskOrderJSON, blueprintJSON, metricsJSON sql.NullString
 	var optimizedPrompt sql.NullString
 	var checksum sql.NullString
 	var reportPath sql.NullString
@@ -577,14 +588,14 @@ func (m *SQLiteStateManager) loadWorkflowByID(ctx context.Context, id core.Workf
 
 	err := m.readDB.QueryRowContext(ctx, `
 		SELECT id, version, title, status, current_phase, prompt, optimized_prompt,
-		       task_order, config, metrics, checksum, created_at, updated_at, report_path,
+		       task_order, blueprint, metrics, checksum, created_at, updated_at, report_path,
 		       agent_events, workflow_branch,
 		       kanban_column, kanban_position, pr_url, pr_number,
 		       kanban_started_at, kanban_completed_at, kanban_execution_count, kanban_last_error
 		FROM workflows WHERE id = ?
 	`, id).Scan(
 		&state.WorkflowID, &state.Version, &title, &state.Status, &state.CurrentPhase,
-		&state.Prompt, &optimizedPrompt, &taskOrderJSON, &configJSON, &metricsJSON,
+		&state.Prompt, &optimizedPrompt, &taskOrderJSON, &blueprintJSON, &metricsJSON,
 		&checksum, &state.CreatedAt, &state.UpdatedAt, &reportPath, &agentEventsJSON, &workflowBranch,
 		&kanbanColumn, &kanbanPosition, &prURL, &prNumber,
 		&kanbanStartedAt, &kanbanCompletedAt, &kanbanExecutionCount, &kanbanLastError,
@@ -637,10 +648,10 @@ func (m *SQLiteStateManager) loadWorkflowByID(ctx context.Context, id core.Workf
 			return nil, fmt.Errorf("unmarshaling task order: %w", err)
 		}
 	}
-	if configJSON.Valid && configJSON.String != "" {
-		state.Config = &core.WorkflowConfig{}
-		if err := json.Unmarshal([]byte(configJSON.String), state.Config); err != nil {
-			return nil, fmt.Errorf("unmarshaling config: %w", err)
+	if blueprintJSON.Valid && blueprintJSON.String != "" {
+		state.Blueprint = &core.Blueprint{}
+		if err := json.Unmarshal([]byte(blueprintJSON.String), state.Blueprint); err != nil {
+			return nil, fmt.Errorf("unmarshaling blueprint: %w", err)
 		}
 	}
 	if metricsJSON.Valid && metricsJSON.String != "" {
@@ -2118,7 +2129,7 @@ func (m *SQLiteStateManager) ExecuteAtomically(ctx context.Context, fn func(core
 //nolint:gocyclo // Complex aggregation mirrors database schema.
 func (a *sqliteAtomicContext) LoadByID(id core.WorkflowID) (*core.WorkflowState, error) {
 	var state core.WorkflowState
-	var taskOrderJSON, configJSON, metricsJSON sql.NullString
+	var taskOrderJSON, blueprintJSON, metricsJSON sql.NullString
 	var optimizedPrompt sql.NullString
 	var checksum sql.NullString
 	var reportPath sql.NullString
@@ -2131,14 +2142,14 @@ func (a *sqliteAtomicContext) LoadByID(id core.WorkflowID) (*core.WorkflowState,
 
 	err := a.tx.QueryRowContext(a.ctx, `
 		SELECT id, version, title, status, current_phase, prompt, optimized_prompt,
-		       task_order, config, metrics, checksum, created_at, updated_at, report_path,
+		       task_order, blueprint, metrics, checksum, created_at, updated_at, report_path,
 		       agent_events, workflow_branch,
 		       kanban_column, kanban_position, pr_url, pr_number,
 		       kanban_started_at, kanban_completed_at, kanban_execution_count, kanban_last_error
 		FROM workflows WHERE id = ?
 	`, id).Scan(
 		&state.WorkflowID, &state.Version, &title, &state.Status, &state.CurrentPhase,
-		&state.Prompt, &optimizedPrompt, &taskOrderJSON, &configJSON, &metricsJSON,
+		&state.Prompt, &optimizedPrompt, &taskOrderJSON, &blueprintJSON, &metricsJSON,
 		&checksum, &state.CreatedAt, &state.UpdatedAt, &reportPath, &agentEventsJSON, &workflowBranch,
 		&kanbanColumn, &kanbanPosition, &prURL, &prNumber,
 		&kanbanStartedAt, &kanbanCompletedAt, &kanbanExecutionCount, &kanbanLastError,
@@ -2189,10 +2200,10 @@ func (a *sqliteAtomicContext) LoadByID(id core.WorkflowID) (*core.WorkflowState,
 			return nil, fmt.Errorf("unmarshaling task order: %w", err)
 		}
 	}
-	if configJSON.Valid && configJSON.String != "" {
-		state.Config = &core.WorkflowConfig{}
-		if err := json.Unmarshal([]byte(configJSON.String), state.Config); err != nil {
-			return nil, fmt.Errorf("unmarshaling config: %w", err)
+	if blueprintJSON.Valid && blueprintJSON.String != "" {
+		state.Blueprint = &core.Blueprint{}
+		if err := json.Unmarshal([]byte(blueprintJSON.String), state.Blueprint); err != nil {
+			return nil, fmt.Errorf("unmarshaling blueprint: %w", err)
 		}
 	}
 	if metricsJSON.Valid && metricsJSON.String != "" {
@@ -2276,11 +2287,11 @@ func (a *sqliteAtomicContext) Save(state *core.WorkflowState) error {
 		return fmt.Errorf("marshaling task order: %w", err)
 	}
 
-	var configJSON, metricsJSON []byte
-	if state.Config != nil {
-		configJSON, err = json.Marshal(state.Config)
+	var blueprintJSON, metricsJSON []byte
+	if state.Blueprint != nil {
+		blueprintJSON, err = json.Marshal(state.Blueprint)
 		if err != nil {
-			return fmt.Errorf("marshaling config: %w", err)
+			return fmt.Errorf("marshaling blueprint: %w", err)
 		}
 	}
 	if state.Metrics != nil {
@@ -2301,7 +2312,7 @@ func (a *sqliteAtomicContext) Save(state *core.WorkflowState) error {
 	_, err = a.tx.ExecContext(a.ctx, `
 		INSERT INTO workflows (
 			id, version, title, status, current_phase, prompt, optimized_prompt,
-			task_order, config, metrics, checksum, created_at, updated_at, report_path,
+			task_order, blueprint, metrics, checksum, created_at, updated_at, report_path,
 			agent_events, workflow_branch,
 			kanban_column, kanban_position, pr_url, pr_number,
 			kanban_started_at, kanban_completed_at, kanban_execution_count, kanban_last_error
@@ -2314,7 +2325,7 @@ func (a *sqliteAtomicContext) Save(state *core.WorkflowState) error {
 			prompt = excluded.prompt,
 			optimized_prompt = excluded.optimized_prompt,
 			task_order = excluded.task_order,
-			config = excluded.config,
+			blueprint = excluded.blueprint,
 			metrics = excluded.metrics,
 			checksum = excluded.checksum,
 			updated_at = excluded.updated_at,
@@ -2332,7 +2343,7 @@ func (a *sqliteAtomicContext) Save(state *core.WorkflowState) error {
 	`,
 		state.WorkflowID, state.Version, state.Title, state.Status, state.CurrentPhase,
 		state.Prompt, state.OptimizedPrompt, string(taskOrderJSON),
-		nullableString(configJSON), nullableString(metricsJSON),
+		nullableString(blueprintJSON), nullableString(metricsJSON),
 		checksum, state.CreatedAt, state.UpdatedAt,
 		nullableString([]byte(state.ReportPath)),
 		nullableString(agentEventsJSON),

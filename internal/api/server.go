@@ -174,6 +174,7 @@ func NewServer(stateManager core.StateManager, eventBus *events.EventBus, opts .
 		s.chatStore,
 		webadapters.WithChatStoreResolver(s.getProjectChatStore),
 		webadapters.WithProjectRootResolver(s.getProjectRootPath),
+		webadapters.WithAttachmentStoreResolver(s.getProjectAttachmentStore),
 	)
 
 	s.router = s.setupRouter()

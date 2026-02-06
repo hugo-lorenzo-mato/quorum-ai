@@ -64,7 +64,7 @@ func (f *RunnerFactory) WithHeartbeat(hb *workflow.HeartbeatManager) *RunnerFact
 //   - *workflow.Runner: Fully configured runner
 //   - *webadapters.WebOutputNotifier: The notifier (for lifecycle events)
 //   - error: Any error during setup
-func (f *RunnerFactory) CreateRunner(ctx context.Context, workflowID string, cp *control.ControlPlane, wfConfig *core.WorkflowConfig) (*workflow.Runner, *webadapters.WebOutputNotifier, error) {
+func (f *RunnerFactory) CreateRunner(ctx context.Context, workflowID string, cp *control.ControlPlane, bp *core.Blueprint) (*workflow.Runner, *webadapters.WebOutputNotifier, error) {
 	// Get project-scoped StateManager if available
 	stateManager := GetStateManagerFromContext(ctx, f.stateManager)
 
@@ -109,18 +109,18 @@ func (f *RunnerFactory) CreateRunner(ctx context.Context, workflowID string, cp 
 		WithProjectRoot(projectRoot)
 
 	// Apply workflow-level overrides if provided
-	if wfConfig != nil {
+	if bp != nil {
 		builder.WithWorkflowConfig(&workflow.WorkflowConfigOverride{
-			ExecutionMode:              wfConfig.ExecutionMode,
-			SingleAgentName:            wfConfig.SingleAgentName,
-			SingleAgentModel:           wfConfig.SingleAgentModel,
-			SingleAgentReasoningEffort: wfConfig.SingleAgentReasoningEffort,
-			ConsensusThreshold:         wfConfig.ConsensusThreshold,
-			MaxRetries:                 wfConfig.MaxRetries,
-			Timeout:                    wfConfig.Timeout,
-			DryRun:                     wfConfig.DryRun,
-			Sandbox:                    wfConfig.Sandbox,
-			// Since these come from core.WorkflowConfig which already has resolved values,
+			ExecutionMode:              bp.ExecutionMode,
+			SingleAgentName:            bp.SingleAgent.Agent,
+			SingleAgentModel:           bp.SingleAgent.Model,
+			SingleAgentReasoningEffort: bp.SingleAgent.ReasoningEffort,
+			ConsensusThreshold:         bp.Consensus.Threshold,
+			MaxRetries:                 bp.MaxRetries,
+			Timeout:                    bp.Timeout,
+			DryRun:                     bp.DryRun,
+			Sandbox:                    bp.Sandbox,
+			// Since these come from core.Blueprint which already has resolved values,
 			// we treat them as explicit overrides.
 			HasDryRun:  true,
 			HasSandbox: true,

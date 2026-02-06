@@ -342,8 +342,8 @@ func TestEngine_LoadPersistedState(t *testing.T) {
 
 	// Also add the workflow so recovery doesn't fail
 	stateMgr.AddWorkflow(&core.WorkflowState{
-		WorkflowID: core.WorkflowID(wfID),
-		Status:     core.WorkflowStatusRunning,
+		WorkflowDefinition: core.WorkflowDefinition{WorkflowID: core.WorkflowID(wfID)},
+		WorkflowRun:        core.WorkflowRun{Status: core.WorkflowStatusRunning},
 	})
 
 	engine := NewEngine(EngineConfig{
@@ -379,10 +379,14 @@ func TestEngine_Tick_PicksWorkflow(t *testing.T) {
 
 	// Add workflow to queue
 	wf := &core.WorkflowState{
-		WorkflowID:   "wf-todo-1",
-		Title:        "Test Workflow",
-		Status:       core.WorkflowStatusPending,
-		KanbanColumn: "todo",
+		WorkflowDefinition: core.WorkflowDefinition{
+			WorkflowID: "wf-todo-1",
+			Title:      "Test Workflow",
+		},
+		WorkflowRun: core.WorkflowRun{
+			Status:       core.WorkflowStatusPending,
+			KanbanColumn: "todo",
+		},
 	}
 	stateMgr.AddWorkflow(wf)
 	stateMgr.SetNextWorkflow(wf)
@@ -434,8 +438,8 @@ func TestEngine_Tick_DoesNotPickWhenDisabled(t *testing.T) {
 	stateMgr := newMockKanbanStateManager()
 
 	wf := &core.WorkflowState{
-		WorkflowID:   "wf-should-not-run",
-		KanbanColumn: "todo",
+		WorkflowDefinition: core.WorkflowDefinition{WorkflowID: "wf-should-not-run"},
+		WorkflowRun:        core.WorkflowRun{KanbanColumn: "todo"},
 	}
 	stateMgr.AddWorkflow(wf)
 	stateMgr.SetNextWorkflow(wf)
@@ -472,8 +476,8 @@ func TestEngine_Tick_DoesNotPickWithOpenCircuitBreaker(t *testing.T) {
 	stateMgr := newMockKanbanStateManager()
 
 	wf := &core.WorkflowState{
-		WorkflowID:   "wf-blocked",
-		KanbanColumn: "todo",
+		WorkflowDefinition: core.WorkflowDefinition{WorkflowID: "wf-blocked"},
+		WorkflowRun:        core.WorkflowRun{KanbanColumn: "todo"},
 	}
 	stateMgr.AddWorkflow(wf)
 	stateMgr.SetNextWorkflow(wf)
@@ -514,10 +518,12 @@ func TestEngine_HandleWorkflowCompleted(t *testing.T) {
 	eventBus := events.New(100)
 
 	wf := &core.WorkflowState{
-		WorkflowID:     "wf-complete",
-		Status:         core.WorkflowStatusRunning,
-		KanbanColumn:   "in_progress",
-		WorkflowBranch: "quorum/wf-complete",
+		WorkflowDefinition: core.WorkflowDefinition{WorkflowID: "wf-complete"},
+		WorkflowRun: core.WorkflowRun{
+			Status:         core.WorkflowStatusRunning,
+			KanbanColumn:   "in_progress",
+			WorkflowBranch: "quorum/wf-complete",
+		},
 	}
 	stateMgr.AddWorkflow(wf)
 
@@ -560,9 +566,11 @@ func TestEngine_HandleWorkflowFailed(t *testing.T) {
 	eventBus := events.New(100)
 
 	wf := &core.WorkflowState{
-		WorkflowID:   "wf-fail",
-		Status:       core.WorkflowStatusRunning,
-		KanbanColumn: "in_progress",
+		WorkflowDefinition: core.WorkflowDefinition{WorkflowID: "wf-fail"},
+		WorkflowRun: core.WorkflowRun{
+			Status:       core.WorkflowStatusRunning,
+			KanbanColumn: "in_progress",
+		},
 	}
 	stateMgr.AddWorkflow(wf)
 
@@ -603,9 +611,11 @@ func TestEngine_CircuitBreakerTrips(t *testing.T) {
 	eventBus := events.New(100)
 
 	wf := &core.WorkflowState{
-		WorkflowID:   "wf-trip",
-		Status:       core.WorkflowStatusRunning,
-		KanbanColumn: "in_progress",
+		WorkflowDefinition: core.WorkflowDefinition{WorkflowID: "wf-trip"},
+		WorkflowRun: core.WorkflowRun{
+			Status:       core.WorkflowStatusRunning,
+			KanbanColumn: "in_progress",
+		},
 	}
 	stateMgr.AddWorkflow(wf)
 
@@ -646,9 +656,11 @@ func TestEngine_RecoverInterrupted_Completed(t *testing.T) {
 
 	wfID := "wf-recovered"
 	wf := &core.WorkflowState{
-		WorkflowID:   core.WorkflowID(wfID),
-		Status:       core.WorkflowStatusCompleted,
-		KanbanColumn: "in_progress",
+		WorkflowDefinition: core.WorkflowDefinition{WorkflowID: core.WorkflowID(wfID)},
+		WorkflowRun: core.WorkflowRun{
+			Status:       core.WorkflowStatusCompleted,
+			KanbanColumn: "in_progress",
+		},
 	}
 	stateMgr.AddWorkflow(wf)
 	stateMgr.engineState = &KanbanEngineState{
@@ -687,10 +699,12 @@ func TestEngine_RecoverInterrupted_Failed(t *testing.T) {
 
 	wfID := "wf-failed-recovery"
 	wf := &core.WorkflowState{
-		WorkflowID:   core.WorkflowID(wfID),
-		Status:       core.WorkflowStatusFailed,
-		Error:        "previous error",
-		KanbanColumn: "in_progress",
+		WorkflowDefinition: core.WorkflowDefinition{WorkflowID: core.WorkflowID(wfID)},
+		WorkflowRun: core.WorkflowRun{
+			Status:       core.WorkflowStatusFailed,
+			Error:        "previous error",
+			KanbanColumn: "in_progress",
+		},
 	}
 	stateMgr.AddWorkflow(wf)
 	stateMgr.engineState = &KanbanEngineState{

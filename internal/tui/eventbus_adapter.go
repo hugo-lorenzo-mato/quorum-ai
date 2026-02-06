@@ -110,15 +110,19 @@ func (a *EventBusAdapter) eventToMsg(event events.Event) tea.Msg {
 		// Create a minimal WorkflowState for UI
 		return WorkflowUpdateMsg{
 			State: &core.WorkflowState{
-				CurrentPhase: core.Phase(e.Phase),
-				Status:       core.WorkflowStatusRunning,
+				WorkflowRun: core.WorkflowRun{
+					CurrentPhase: core.Phase(e.Phase),
+					Status:       core.WorkflowStatusRunning,
+				},
 			},
 		}
 
 	case events.WorkflowCompletedEvent:
 		return WorkflowUpdateMsg{
 			State: &core.WorkflowState{
-				Status: core.WorkflowStatusCompleted,
+				WorkflowRun: core.WorkflowRun{
+					Status: core.WorkflowStatusCompleted,
+				},
 			},
 		}
 

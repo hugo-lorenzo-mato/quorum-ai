@@ -126,12 +126,16 @@ func TestRunner_HandleError_DeactivatesWorkflow(t *testing.T) {
 
 	// Create a workflow state
 	state := &core.WorkflowState{
-		WorkflowID:   "wf-test-error-001",
-		Status:       core.WorkflowStatusRunning,
-		CurrentPhase: core.PhaseAnalyze,
-		Prompt:       "test prompt",
-		CreatedAt:    time.Now(),
-		UpdatedAt:    time.Now(),
+		WorkflowDefinition: core.WorkflowDefinition{
+			WorkflowID: "wf-test-error-001",
+			Prompt:     "test prompt",
+			CreatedAt:  time.Now(),
+		},
+		WorkflowRun: core.WorkflowRun{
+			Status:       core.WorkflowStatusRunning,
+			CurrentPhase: core.PhaseAnalyze,
+			UpdatedAt:    time.Now(),
+		},
 	}
 
 	// Call handleError
@@ -182,13 +186,17 @@ func TestRunner_HandleError_WritesErrorFile(t *testing.T) {
 	}
 
 	state := &core.WorkflowState{
-		WorkflowID:   "wf-test-error-file",
-		Status:       core.WorkflowStatusRunning,
-		CurrentPhase: core.PhaseAnalyze,
-		Prompt:       "test prompt for error file",
-		ReportPath:   reportPath,
-		CreatedAt:    time.Now(),
-		UpdatedAt:    time.Now(),
+		WorkflowDefinition: core.WorkflowDefinition{
+			WorkflowID: "wf-test-error-file",
+			Prompt:     "test prompt for error file",
+			CreatedAt:  time.Now(),
+		},
+		WorkflowRun: core.WorkflowRun{
+			Status:       core.WorkflowStatusRunning,
+			CurrentPhase: core.PhaseAnalyze,
+			ReportPath:   reportPath,
+			UpdatedAt:    time.Now(),
+		},
 	}
 
 	// Call handleError
@@ -242,13 +250,17 @@ func TestRunner_CreateContext_InitializesReportDirectory(t *testing.T) {
 
 	// Create a new workflow state (simulating new workflow)
 	state := &core.WorkflowState{
-		WorkflowID:   "wf-test-eager-init",
-		Status:       core.WorkflowStatusRunning,
-		CurrentPhase: core.PhaseRefine,
-		Prompt:       "test prompt",
-		CreatedAt:    time.Now(),
-		UpdatedAt:    time.Now(),
-		// ReportPath is empty - should be set by createContext
+		WorkflowDefinition: core.WorkflowDefinition{
+			WorkflowID: "wf-test-eager-init",
+			Prompt:     "test prompt",
+			CreatedAt:  time.Now(),
+		},
+		WorkflowRun: core.WorkflowRun{
+			Status:       core.WorkflowStatusRunning,
+			CurrentPhase: core.PhaseRefine,
+			UpdatedAt:    time.Now(),
+			// ReportPath is empty - should be set by createContext
+		},
 	}
 
 	// Call createContext
@@ -297,13 +309,17 @@ func TestRunner_CreateContext_ReusesExistingReportPath(t *testing.T) {
 
 	// Create a workflow state with existing ReportPath (resuming scenario)
 	state := &core.WorkflowState{
-		WorkflowID:   "wf-resume-test",
-		Status:       core.WorkflowStatusRunning,
-		CurrentPhase: core.PhaseExecute,
-		Prompt:       "test prompt",
-		ReportPath:   existingPath, // Already set from previous run
-		CreatedAt:    time.Now(),
-		UpdatedAt:    time.Now(),
+		WorkflowDefinition: core.WorkflowDefinition{
+			WorkflowID: "wf-resume-test",
+			Prompt:     "test prompt",
+			CreatedAt:  time.Now(),
+		},
+		WorkflowRun: core.WorkflowRun{
+			Status:       core.WorkflowStatusRunning,
+			CurrentPhase: core.PhaseExecute,
+			ReportPath:   existingPath, // Already set from previous run
+			UpdatedAt:    time.Now(),
+		},
 	}
 
 	// Call createContext
@@ -338,12 +354,16 @@ func TestRunner_RunWithState_ValidationFailure_DeactivatesWorkflow(t *testing.T)
 
 	// Create state with empty prompt (will fail validation)
 	state := &core.WorkflowState{
-		WorkflowID:   "wf-validation-fail",
-		Status:       core.WorkflowStatusPending,
-		CurrentPhase: core.PhaseRefine,
-		Prompt:       "", // Empty - will fail validation
-		CreatedAt:    time.Now(),
-		UpdatedAt:    time.Now(),
+		WorkflowDefinition: core.WorkflowDefinition{
+			WorkflowID: "wf-validation-fail",
+			Prompt:     "", // Empty - will fail validation
+			CreatedAt:  time.Now(),
+		},
+		WorkflowRun: core.WorkflowRun{
+			Status:       core.WorkflowStatusPending,
+			CurrentPhase: core.PhaseRefine,
+			UpdatedAt:    time.Now(),
+		},
 	}
 
 	// Call RunWithState - should fail validation

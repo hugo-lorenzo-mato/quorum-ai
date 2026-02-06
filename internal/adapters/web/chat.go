@@ -87,6 +87,10 @@ type ListSessionsResponse struct {
 // This allows for project-scoped chat storage.
 type ChatStoreResolver func(ctx context.Context) core.ChatStore
 
+// AttachmentStoreResolver is a function that returns the attachment Store for the current request context.
+// This allows for project-scoped attachment storage.
+type AttachmentStoreResolver func(ctx context.Context) *attachments.Store
+
 // ProjectRootResolver is a function that returns the project root directory for the current request context.
 type ProjectRootResolver func(ctx context.Context) string
 
@@ -97,10 +101,11 @@ type ChatHandler struct {
 	eventBus            *events.EventBus
 	sessions            map[string]*chatSessionState
 	loadedProjectRoots  map[string]bool // best-effort cache to avoid reloading persisted sessions repeatedly
-	attachmentStore     *attachments.Store
-	chatStore           core.ChatStore      // Fallback global store
-	chatStoreResolver   ChatStoreResolver   // Per-request store resolver
-	projectRootResolver ProjectRootResolver // Per-request project root resolver
+	attachmentStore         *attachments.Store
+	attachmentStoreResolver AttachmentStoreResolver // Per-request attachment store resolver
+	chatStore               core.ChatStore          // Fallback global store
+	chatStoreResolver       ChatStoreResolver       // Per-request store resolver
+	projectRootResolver     ProjectRootResolver     // Per-request project root resolver
 }
 
 // chatSessionState holds the internal state of a chat session.
@@ -120,6 +125,13 @@ type ChatHandlerOption func(*ChatHandler)
 func WithChatStoreResolver(resolver ChatStoreResolver) ChatHandlerOption {
 	return func(h *ChatHandler) {
 		h.chatStoreResolver = resolver
+	}
+}
+
+// WithAttachmentStoreResolver sets the attachment store resolver for project-scoped attachments.
+func WithAttachmentStoreResolver(resolver AttachmentStoreResolver) ChatHandlerOption {
+	return func(h *ChatHandler) {
+		h.attachmentStoreResolver = resolver
 	}
 }
 
@@ -265,6 +277,18 @@ func (h *ChatHandler) getChatStore(ctx context.Context) core.ChatStore {
 		}
 	}
 	return h.chatStore
+}
+
+// getAttachmentStore returns the attachment Store for the given context.
+// If a resolver is configured and returns a non-nil store, that is used.
+// Otherwise, falls back to the global attachmentStore.
+func (h *ChatHandler) getAttachmentStore(ctx context.Context) *attachments.Store {
+	if h.attachmentStoreResolver != nil {
+		if store := h.attachmentStoreResolver(ctx); store != nil {
+			return store
+		}
+	}
+	return h.attachmentStore
 }
 
 // getProjectRoot returns the project root for the given context.
@@ -641,8 +665,8 @@ func (h *ChatHandler) DeleteSession(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Best-effort cleanup of attachments on disk.
-	if h.attachmentStore != nil {
-		_ = h.attachmentStore.DeleteAll(attachments.OwnerChatSession, sessionID)
+	if store := h.getAttachmentStore(ctx); store != nil {
+		_ = store.DeleteAll(attachments.OwnerChatSession, sessionID)
 	}
 
 	w.WriteHeader(http.StatusNoContent)
@@ -881,8 +905,10 @@ func (h *ChatHandler) executeAgent(ctx context.Context, opts executeAgentOptions
 			// Uploaded attachments (.quorum/attachments/) live under the attachment
 			// store root, which may differ from the project root. Resolve accordingly.
 			resolveRoot := opts.projectRoot
-			if strings.HasPrefix(filePath, ".quorum/") && h.attachmentStore != nil {
-				resolveRoot = h.attachmentStore.Root()
+			if strings.HasPrefix(filePath, ".quorum/") {
+				if store := h.getAttachmentStore(ctx); store != nil {
+					resolveRoot = store.Root()
+				}
 			}
 
 			if isImageFile(filePath) {
@@ -1173,7 +1199,8 @@ func (h *ChatHandler) loadFileContent(filePath, projectRoot string) (string, err
 
 // ListAttachments lists all stored attachments for a chat session.
 func (h *ChatHandler) ListAttachments(w http.ResponseWriter, r *http.Request) {
-	if h.attachmentStore == nil {
+	store := h.getAttachmentStore(r.Context())
+	if store == nil {
 		writeError(w, http.StatusServiceUnavailable, "attachments store not available")
 		return
 	}
@@ -1187,7 +1214,7 @@ func (h *ChatHandler) ListAttachments(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	atts, err := h.attachmentStore.List(attachments.OwnerChatSession, sessionID)
+	atts, err := store.List(attachments.OwnerChatSession, sessionID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list attachments")
 		return
@@ -1198,7 +1225,8 @@ func (h *ChatHandler) ListAttachments(w http.ResponseWriter, r *http.Request) {
 
 // UploadAttachments uploads one or more files as chat session attachments.
 func (h *ChatHandler) UploadAttachments(w http.ResponseWriter, r *http.Request) {
-	if h.attachmentStore == nil {
+	store := h.getAttachmentStore(r.Context())
+	if store == nil {
 		writeError(w, http.StatusServiceUnavailable, "attachments store not available")
 		return
 	}
@@ -1233,7 +1261,7 @@ func (h *ChatHandler) UploadAttachments(w http.ResponseWriter, r *http.Request) 
 			writeError(w, http.StatusBadRequest, "failed to open uploaded file")
 			return
 		}
-		att, err := h.attachmentStore.Save(attachments.OwnerChatSession, sessionID, f, fh.Filename)
+		att, err := store.Save(attachments.OwnerChatSession, sessionID, f, fh.Filename)
 		_ = f.Close()
 		if err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())
@@ -1247,7 +1275,8 @@ func (h *ChatHandler) UploadAttachments(w http.ResponseWriter, r *http.Request) 
 
 // DownloadAttachment downloads a stored chat session attachment.
 func (h *ChatHandler) DownloadAttachment(w http.ResponseWriter, r *http.Request) {
-	if h.attachmentStore == nil {
+	store := h.getAttachmentStore(r.Context())
+	if store == nil {
 		writeError(w, http.StatusServiceUnavailable, "attachments store not available")
 		return
 	}
@@ -1267,7 +1296,7 @@ func (h *ChatHandler) DownloadAttachment(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	meta, absPath, err := h.attachmentStore.Resolve(attachments.OwnerChatSession, sessionID, attachmentID)
+	meta, absPath, err := store.Resolve(attachments.OwnerChatSession, sessionID, attachmentID)
 	if err != nil {
 		if os.IsNotExist(err) {
 			writeError(w, http.StatusNotFound, "attachment not found")
@@ -1284,7 +1313,8 @@ func (h *ChatHandler) DownloadAttachment(w http.ResponseWriter, r *http.Request)
 
 // DeleteAttachment deletes a stored chat session attachment.
 func (h *ChatHandler) DeleteAttachment(w http.ResponseWriter, r *http.Request) {
-	if h.attachmentStore == nil {
+	store := h.getAttachmentStore(r.Context())
+	if store == nil {
 		writeError(w, http.StatusServiceUnavailable, "attachments store not available")
 		return
 	}
@@ -1304,7 +1334,7 @@ func (h *ChatHandler) DeleteAttachment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.attachmentStore.Delete(attachments.OwnerChatSession, sessionID, attachmentID); err != nil {
+	if err := store.Delete(attachments.OwnerChatSession, sessionID, attachmentID); err != nil {
 		if os.IsNotExist(err) {
 			writeError(w, http.StatusNotFound, "attachment not found")
 			return

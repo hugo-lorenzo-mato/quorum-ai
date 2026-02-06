@@ -285,11 +285,13 @@ func TestExecuteCmd_Flags(t *testing.T) {
 
 func TestCountCompletedTasks(t *testing.T) {
 	state := &core.WorkflowState{
-		Tasks: map[core.TaskID]*core.TaskState{
-			"task-1": {ID: "task-1", Status: core.TaskStatusCompleted},
-			"task-2": {ID: "task-2", Status: core.TaskStatusPending},
-			"task-3": {ID: "task-3", Status: core.TaskStatusCompleted},
-			"task-4": {ID: "task-4", Status: core.TaskStatusFailed},
+		WorkflowRun: core.WorkflowRun{
+			Tasks: map[core.TaskID]*core.TaskState{
+				"task-1": {ID: "task-1", Status: core.TaskStatusCompleted},
+				"task-2": {ID: "task-2", Status: core.TaskStatusPending},
+				"task-3": {ID: "task-3", Status: core.TaskStatusCompleted},
+				"task-4": {ID: "task-4", Status: core.TaskStatusFailed},
+			},
 		},
 	}
 
@@ -301,7 +303,9 @@ func TestCountCompletedTasks(t *testing.T) {
 
 func TestCountCompletedTasks_Empty(t *testing.T) {
 	state := &core.WorkflowState{
-		Tasks: map[core.TaskID]*core.TaskState{},
+		WorkflowRun: core.WorkflowRun{
+			Tasks: map[core.TaskID]*core.TaskState{},
+		},
 	}
 
 	count := countCompletedTasks(state)
@@ -312,8 +316,11 @@ func TestCountCompletedTasks_Empty(t *testing.T) {
 
 func TestInitializeWorkflowState(t *testing.T) {
 	prompt := "test prompt"
-	config := &core.WorkflowConfig{ExecutionMode: "single_agent", SingleAgentName: "claude"}
-	state := InitializeWorkflowState(prompt, config)
+	bp := &core.Blueprint{
+		ExecutionMode: "single_agent",
+		SingleAgent:   core.BlueprintSingleAgent{Agent: "claude"},
+	}
+	state := InitializeWorkflowState(prompt, bp)
 
 	if state.Prompt != prompt {
 		t.Errorf("expected prompt '%s', got '%s'", prompt, state.Prompt)
@@ -330,8 +337,8 @@ func TestInitializeWorkflowState(t *testing.T) {
 	if state.Version != core.CurrentStateVersion {
 		t.Errorf("expected version %d, got %d", core.CurrentStateVersion, state.Version)
 	}
-	if state.Config != config {
-		t.Errorf("expected config %v, got %v", config, state.Config)
+	if state.Blueprint != bp {
+		t.Errorf("expected blueprint %v, got %v", bp, state.Blueprint)
 	}
 }
 

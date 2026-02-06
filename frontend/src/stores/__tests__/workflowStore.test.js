@@ -45,12 +45,12 @@ describe('workflowStore', () => {
   });
 
   describe('createWorkflow', () => {
-    it('creates workflow with single-agent config', async () => {
+    it('creates workflow with single-agent blueprint', async () => {
       const mockWorkflow = {
         id: 'wf-123',
         prompt: 'Test prompt',
         title: 'Test',
-        config: {
+        blueprint: {
           execution_mode: 'single_agent',
           single_agent_name: 'claude',
         },
@@ -60,7 +60,7 @@ describe('workflowStore', () => {
 
       const result = await useWorkflowStore.getState().createWorkflow('Test prompt', {
         title: 'Test',
-        config: {
+        blueprint: {
           execution_mode: 'single_agent',
           single_agent_name: 'claude',
         },
@@ -68,7 +68,7 @@ describe('workflowStore', () => {
 
       expect(workflowApi.create).toHaveBeenCalledWith('Test prompt', {
         title: 'Test',
-        config: {
+        blueprint: {
           execution_mode: 'single_agent',
           single_agent_name: 'claude',
         },
@@ -78,12 +78,12 @@ describe('workflowStore', () => {
       const state = useWorkflowStore.getState();
       expect(state.workflows).toHaveLength(1);
       expect(state.workflows[0]).toEqual(mockWorkflow);
-      expect(state.workflows[0].config.execution_mode).toBe('single_agent');
+      expect(state.workflows[0].blueprint.execution_mode).toBe('single_agent');
       expect(state.activeWorkflow).toEqual(mockWorkflow);
       expect(state.loading).toBe(false);
     });
 
-    it('creates workflow with default multi-agent config (no config)', async () => {
+    it('creates workflow with default multi-agent mode (no blueprint)', async () => {
       const mockWorkflow = {
         id: 'wf-456',
         prompt: 'Test prompt',
@@ -97,7 +97,7 @@ describe('workflowStore', () => {
       expect(result).toEqual(mockWorkflow);
     });
 
-    it('creates workflow with title only (no config)', async () => {
+    it('creates workflow with title only (no blueprint)', async () => {
       const mockWorkflow = {
         id: 'wf-789',
         prompt: 'Test prompt',
@@ -120,7 +120,7 @@ describe('workflowStore', () => {
       workflowApi.create.mockRejectedValue(new Error(errorMessage));
 
       const result = await useWorkflowStore.getState().createWorkflow('Test prompt', {
-        config: { execution_mode: 'single_agent' },
+        blueprint: { execution_mode: 'single_agent' },
       });
 
       expect(result).toBeNull();

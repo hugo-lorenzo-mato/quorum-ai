@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/api/middleware"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/attachments"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/config"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/events"
@@ -115,6 +116,19 @@ func (s *Server) getProjectRootPath(ctx context.Context) string {
 		return pc.ProjectRoot()
 	}
 	return ""
+}
+
+// getProjectAttachmentStore extracts the project-scoped attachment Store from request context.
+// If a ProjectContext is available and has an Attachments store, it returns that.
+// Otherwise, it falls back to the server's global attachment store.
+func (s *Server) getProjectAttachmentStore(ctx context.Context) *attachments.Store {
+	pc := middleware.GetProjectContext(ctx)
+	if pc != nil {
+		if projectCtx, ok := pc.(*project.ProjectContext); ok && projectCtx.Attachments != nil {
+			return projectCtx.Attachments
+		}
+	}
+	return s.attachments
 }
 
 // getProjectID extracts the project ID from request context.

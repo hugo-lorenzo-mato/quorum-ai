@@ -119,8 +119,8 @@ func TestMockStateManager_Save_Load(t *testing.T) {
 	sm := testutil.NewMockStateManager()
 
 	state := &core.WorkflowState{
-		WorkflowID: "test-id",
-		Status:     core.WorkflowStatusRunning,
+		WorkflowDefinition: core.WorkflowDefinition{WorkflowID: "test-id"},
+		WorkflowRun:        core.WorkflowRun{Status: core.WorkflowStatusRunning},
 	}
 
 	err := sm.Save(context.Background(), state)

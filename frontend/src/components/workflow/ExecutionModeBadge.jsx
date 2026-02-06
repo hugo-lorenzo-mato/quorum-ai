@@ -3,14 +3,14 @@ import { Users, User, Zap } from 'lucide-react';
 /**
  * Displays the execution mode of a workflow as a badge.
  * @param {Object} props
- * @param {Object} props.config - Workflow configuration
- * @param {string} [props.config.execution_mode] - 'multi_agent' or 'single_agent'
- * @param {string} [props.config.single_agent_name] - Agent name for single-agent mode
+ * @param {Object} props.blueprint - Workflow blueprint
+ * @param {string} [props.blueprint.execution_mode] - 'multi_agent' or 'single_agent'
+ * @param {string} [props.blueprint.single_agent_name] - Agent name for single-agent mode
  * @param {string} [props.variant] - 'badge', 'inline', or 'detailed'
  */
-export function ExecutionModeBadge({ config, variant = 'badge' }) {
-  const isSingleAgent = config?.execution_mode === 'single_agent';
-  const agentName = config?.single_agent_name;
+export function ExecutionModeBadge({ blueprint, variant = 'badge' }) {
+  const isSingleAgent = blueprint?.execution_mode === 'single_agent';
+  const agentName = blueprint?.single_agent_name;
 
   if (variant === 'detailed') {
     return (

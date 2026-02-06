@@ -68,15 +68,19 @@ func TestPlanner_Run_Success(t *testing.T) {
 
 	wctx := &Context{
 		State: &core.WorkflowState{
-			WorkflowID:   "wf-test",
-			CurrentPhase: core.PhaseAnalyze,
-			Prompt:       "test prompt",
-			Tasks:        make(map[core.TaskID]*core.TaskState),
-			TaskOrder:    []core.TaskID{},
-			Checkpoints: []core.Checkpoint{
-				{Type: "consolidated_analysis", Data: analysisJSON},
+			WorkflowDefinition: core.WorkflowDefinition{
+				WorkflowID: "wf-test",
+				Prompt:     "test prompt",
 			},
-			Metrics: &core.StateMetrics{},
+			WorkflowRun: core.WorkflowRun{
+				CurrentPhase: core.PhaseAnalyze,
+				Tasks:        make(map[core.TaskID]*core.TaskState),
+				TaskOrder:    []core.TaskID{},
+				Checkpoints: []core.Checkpoint{
+					{Type: "consolidated_analysis", Data: analysisJSON},
+				},
+				Metrics: &core.StateMetrics{},
+			},
 		},
 		Agents:     registry,
 		Prompts:    &mockPromptRenderer{},
@@ -114,13 +118,17 @@ func TestPlanner_Run_NoAnalysis(t *testing.T) {
 
 	wctx := &Context{
 		State: &core.WorkflowState{
-			WorkflowID:   "wf-test",
-			CurrentPhase: core.PhaseAnalyze,
-			Prompt:       "test prompt",
-			Tasks:        make(map[core.TaskID]*core.TaskState),
-			TaskOrder:    []core.TaskID{},
-			Checkpoints:  []core.Checkpoint{}, // No consolidated analysis
-			Metrics:      &core.StateMetrics{},
+			WorkflowDefinition: core.WorkflowDefinition{
+				WorkflowID: "wf-test",
+				Prompt:     "test prompt",
+			},
+			WorkflowRun: core.WorkflowRun{
+				CurrentPhase: core.PhaseAnalyze,
+				Tasks:        make(map[core.TaskID]*core.TaskState),
+				TaskOrder:    []core.TaskID{},
+				Checkpoints:  []core.Checkpoint{}, // No consolidated analysis
+				Metrics:      &core.StateMetrics{},
+			},
 		},
 		Agents:     registry,
 		Prompts:    &mockPromptRenderer{},
@@ -152,15 +160,19 @@ func TestPlanner_Run_AgentNotFound(t *testing.T) {
 
 	wctx := &Context{
 		State: &core.WorkflowState{
-			WorkflowID:   "wf-test",
-			CurrentPhase: core.PhaseAnalyze,
-			Prompt:       "test prompt",
-			Tasks:        make(map[core.TaskID]*core.TaskState),
-			TaskOrder:    []core.TaskID{},
-			Checkpoints: []core.Checkpoint{
-				{Type: "consolidated_analysis", Data: analysisJSON},
+			WorkflowDefinition: core.WorkflowDefinition{
+				WorkflowID: "wf-test",
+				Prompt:     "test prompt",
 			},
-			Metrics: &core.StateMetrics{},
+			WorkflowRun: core.WorkflowRun{
+				CurrentPhase: core.PhaseAnalyze,
+				Tasks:        make(map[core.TaskID]*core.TaskState),
+				TaskOrder:    []core.TaskID{},
+				Checkpoints: []core.Checkpoint{
+					{Type: "consolidated_analysis", Data: analysisJSON},
+				},
+				Metrics: &core.StateMetrics{},
+			},
 		},
 		Agents:     registry,
 		Prompts:    &mockPromptRenderer{},
@@ -195,15 +207,19 @@ func TestPlanner_Run_RateLimitFails(t *testing.T) {
 
 	wctx := &Context{
 		State: &core.WorkflowState{
-			WorkflowID:   "wf-test",
-			CurrentPhase: core.PhaseAnalyze,
-			Prompt:       "test prompt",
-			Tasks:        make(map[core.TaskID]*core.TaskState),
-			TaskOrder:    []core.TaskID{},
-			Checkpoints: []core.Checkpoint{
-				{Type: "consolidated_analysis", Data: analysisJSON},
+			WorkflowDefinition: core.WorkflowDefinition{
+				WorkflowID: "wf-test",
+				Prompt:     "test prompt",
 			},
-			Metrics: &core.StateMetrics{},
+			WorkflowRun: core.WorkflowRun{
+				CurrentPhase: core.PhaseAnalyze,
+				Tasks:        make(map[core.TaskID]*core.TaskState),
+				TaskOrder:    []core.TaskID{},
+				Checkpoints: []core.Checkpoint{
+					{Type: "consolidated_analysis", Data: analysisJSON},
+				},
+				Metrics: &core.StateMetrics{},
+			},
 		},
 		Agents:     registry,
 		Prompts:    &mockPromptRenderer{},
@@ -240,15 +256,19 @@ func TestPlanner_Run_PromptRenderFails(t *testing.T) {
 
 	wctx := &Context{
 		State: &core.WorkflowState{
-			WorkflowID:   "wf-test",
-			CurrentPhase: core.PhaseAnalyze,
-			Prompt:       "test prompt",
-			Tasks:        make(map[core.TaskID]*core.TaskState),
-			TaskOrder:    []core.TaskID{},
-			Checkpoints: []core.Checkpoint{
-				{Type: "consolidated_analysis", Data: analysisJSON},
+			WorkflowDefinition: core.WorkflowDefinition{
+				WorkflowID: "wf-test",
+				Prompt:     "test prompt",
 			},
-			Metrics: &core.StateMetrics{},
+			WorkflowRun: core.WorkflowRun{
+				CurrentPhase: core.PhaseAnalyze,
+				Tasks:        make(map[core.TaskID]*core.TaskState),
+				TaskOrder:    []core.TaskID{},
+				Checkpoints: []core.Checkpoint{
+					{Type: "consolidated_analysis", Data: analysisJSON},
+				},
+				Metrics: &core.StateMetrics{},
+			},
 		},
 		Agents:     registry,
 		Prompts:    failingPrompts,
@@ -284,15 +304,19 @@ func TestPlanner_Run_AgentExecutionFails(t *testing.T) {
 
 	wctx := &Context{
 		State: &core.WorkflowState{
-			WorkflowID:   "wf-test",
-			CurrentPhase: core.PhaseAnalyze,
-			Prompt:       "test prompt",
-			Tasks:        make(map[core.TaskID]*core.TaskState),
-			TaskOrder:    []core.TaskID{},
-			Checkpoints: []core.Checkpoint{
-				{Type: "consolidated_analysis", Data: analysisJSON},
+			WorkflowDefinition: core.WorkflowDefinition{
+				WorkflowID: "wf-test",
+				Prompt:     "test prompt",
 			},
-			Metrics: &core.StateMetrics{},
+			WorkflowRun: core.WorkflowRun{
+				CurrentPhase: core.PhaseAnalyze,
+				Tasks:        make(map[core.TaskID]*core.TaskState),
+				TaskOrder:    []core.TaskID{},
+				Checkpoints: []core.Checkpoint{
+					{Type: "consolidated_analysis", Data: analysisJSON},
+				},
+				Metrics: &core.StateMetrics{},
+			},
 		},
 		Agents:     registry,
 		Prompts:    &mockPromptRenderer{},
@@ -330,15 +354,19 @@ func TestPlanner_Run_InvalidPlanOutput(t *testing.T) {
 
 	wctx := &Context{
 		State: &core.WorkflowState{
-			WorkflowID:   "wf-test",
-			CurrentPhase: core.PhaseAnalyze,
-			Prompt:       "test prompt",
-			Tasks:        make(map[core.TaskID]*core.TaskState),
-			TaskOrder:    []core.TaskID{},
-			Checkpoints: []core.Checkpoint{
-				{Type: "consolidated_analysis", Data: analysisJSON},
+			WorkflowDefinition: core.WorkflowDefinition{
+				WorkflowID: "wf-test",
+				Prompt:     "test prompt",
 			},
-			Metrics: &core.StateMetrics{},
+			WorkflowRun: core.WorkflowRun{
+				CurrentPhase: core.PhaseAnalyze,
+				Tasks:        make(map[core.TaskID]*core.TaskState),
+				TaskOrder:    []core.TaskID{},
+				Checkpoints: []core.Checkpoint{
+					{Type: "consolidated_analysis", Data: analysisJSON},
+				},
+				Metrics: &core.StateMetrics{},
+			},
 		},
 		Agents:     registry,
 		Prompts:    &mockPromptRenderer{},
@@ -376,15 +404,19 @@ func TestPlanner_Run_DAGBuildFails(t *testing.T) {
 
 	wctx := &Context{
 		State: &core.WorkflowState{
-			WorkflowID:   "wf-test",
-			CurrentPhase: core.PhaseAnalyze,
-			Prompt:       "test prompt",
-			Tasks:        make(map[core.TaskID]*core.TaskState),
-			TaskOrder:    []core.TaskID{},
-			Checkpoints: []core.Checkpoint{
-				{Type: "consolidated_analysis", Data: analysisJSON},
+			WorkflowDefinition: core.WorkflowDefinition{
+				WorkflowID: "wf-test",
+				Prompt:     "test prompt",
 			},
-			Metrics: &core.StateMetrics{},
+			WorkflowRun: core.WorkflowRun{
+				CurrentPhase: core.PhaseAnalyze,
+				Tasks:        make(map[core.TaskID]*core.TaskState),
+				TaskOrder:    []core.TaskID{},
+				Checkpoints: []core.Checkpoint{
+					{Type: "consolidated_analysis", Data: analysisJSON},
+				},
+				Metrics: &core.StateMetrics{},
+			},
 		},
 		Agents:     registry,
 		Prompts:    &mockPromptRenderer{},
@@ -431,15 +463,19 @@ func TestPlanner_Run_WithOutput(t *testing.T) {
 
 	wctx := &Context{
 		State: &core.WorkflowState{
-			WorkflowID:   "wf-test",
-			CurrentPhase: core.PhaseAnalyze,
-			Prompt:       "test prompt",
-			Tasks:        make(map[core.TaskID]*core.TaskState),
-			TaskOrder:    []core.TaskID{},
-			Checkpoints: []core.Checkpoint{
-				{Type: "consolidated_analysis", Data: analysisJSON},
+			WorkflowDefinition: core.WorkflowDefinition{
+				WorkflowID: "wf-test",
+				Prompt:     "test prompt",
 			},
-			Metrics: &core.StateMetrics{},
+			WorkflowRun: core.WorkflowRun{
+				CurrentPhase: core.PhaseAnalyze,
+				Tasks:        make(map[core.TaskID]*core.TaskState),
+				TaskOrder:    []core.TaskID{},
+				Checkpoints: []core.Checkpoint{
+					{Type: "consolidated_analysis", Data: analysisJSON},
+				},
+				Metrics: &core.StateMetrics{},
+			},
 		},
 		Agents:     registry,
 		Prompts:    &mockPromptRenderer{},
@@ -495,15 +531,19 @@ func TestPlanner_Run_WithDependencies(t *testing.T) {
 
 	wctx := &Context{
 		State: &core.WorkflowState{
-			WorkflowID:   "wf-test",
-			CurrentPhase: core.PhaseAnalyze,
-			Prompt:       "test prompt",
-			Tasks:        make(map[core.TaskID]*core.TaskState),
-			TaskOrder:    []core.TaskID{},
-			Checkpoints: []core.Checkpoint{
-				{Type: "consolidated_analysis", Data: analysisJSON},
+			WorkflowDefinition: core.WorkflowDefinition{
+				WorkflowID: "wf-test",
+				Prompt:     "test prompt",
 			},
-			Metrics: &core.StateMetrics{},
+			WorkflowRun: core.WorkflowRun{
+				CurrentPhase: core.PhaseAnalyze,
+				Tasks:        make(map[core.TaskID]*core.TaskState),
+				TaskOrder:    []core.TaskID{},
+				Checkpoints: []core.Checkpoint{
+					{Type: "consolidated_analysis", Data: analysisJSON},
+				},
+				Metrics: &core.StateMetrics{},
+			},
 		},
 		Agents:     registry,
 		Prompts:    &mockPromptRenderer{},
@@ -557,15 +597,19 @@ func TestPlanner_Run_SaveStateFails(t *testing.T) {
 
 	wctx := &Context{
 		State: &core.WorkflowState{
-			WorkflowID:   "wf-test",
-			CurrentPhase: core.PhaseAnalyze,
-			Prompt:       "test prompt",
-			Tasks:        make(map[core.TaskID]*core.TaskState),
-			TaskOrder:    []core.TaskID{},
-			Checkpoints: []core.Checkpoint{
-				{Type: "consolidated_analysis", Data: analysisJSON},
+			WorkflowDefinition: core.WorkflowDefinition{
+				WorkflowID: "wf-test",
+				Prompt:     "test prompt",
 			},
-			Metrics: &core.StateMetrics{},
+			WorkflowRun: core.WorkflowRun{
+				CurrentPhase: core.PhaseAnalyze,
+				Tasks:        make(map[core.TaskID]*core.TaskState),
+				TaskOrder:    []core.TaskID{},
+				Checkpoints: []core.Checkpoint{
+					{Type: "consolidated_analysis", Data: analysisJSON},
+				},
+				Metrics: &core.StateMetrics{},
+			},
 		},
 		Agents:     registry,
 		Prompts:    &mockPromptRenderer{},
@@ -707,10 +751,12 @@ func TestGetConsolidatedAnalysis_MultipleCheckpoints(t *testing.T) {
 	data2, _ := json.Marshal(map[string]interface{}{"content": "Second analysis"})
 
 	state := &core.WorkflowState{
-		Checkpoints: []core.Checkpoint{
-			{Type: "other_type", Data: []byte(`{}`)},
-			{Type: "consolidated_analysis", Data: data1},
-			{Type: "consolidated_analysis", Data: data2}, // Later one should be returned
+		WorkflowRun: core.WorkflowRun{
+			Checkpoints: []core.Checkpoint{
+				{Type: "other_type", Data: []byte(`{}`)},
+				{Type: "consolidated_analysis", Data: data1},
+				{Type: "consolidated_analysis", Data: data2}, // Later one should be returned
+			},
 		},
 	}
 
@@ -722,7 +768,9 @@ func TestGetConsolidatedAnalysis_MultipleCheckpoints(t *testing.T) {
 
 func TestGetConsolidatedAnalysis_NoCheckpoints(t *testing.T) {
 	state := &core.WorkflowState{
-		Checkpoints: []core.Checkpoint{},
+		WorkflowRun: core.WorkflowRun{
+			Checkpoints: []core.Checkpoint{},
+		},
 	}
 
 	result := GetConsolidatedAnalysis(state)
@@ -732,9 +780,7 @@ func TestGetConsolidatedAnalysis_NoCheckpoints(t *testing.T) {
 }
 
 func TestGetConsolidatedAnalysis_NilCheckpoints(t *testing.T) {
-	state := &core.WorkflowState{
-		Checkpoints: nil,
-	}
+	state := &core.WorkflowState{}
 
 	result := GetConsolidatedAnalysis(state)
 	if result != "" {

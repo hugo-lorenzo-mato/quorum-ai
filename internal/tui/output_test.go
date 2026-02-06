@@ -53,10 +53,10 @@ func TestFallbackOutputAdapter_Interface(t *testing.T) {
 	adapter.TaskFailed(task, nil)
 	adapter.TaskSkipped(task, "skipped")
 	adapter.WorkflowStateUpdated(&core.WorkflowState{
-		Tasks: make(map[core.TaskID]*core.TaskState),
+		WorkflowRun: core.WorkflowRun{Tasks: make(map[core.TaskID]*core.TaskState)},
 	})
 	adapter.WorkflowCompleted(&core.WorkflowState{
-		Tasks: make(map[core.TaskID]*core.TaskState),
+		WorkflowRun: core.WorkflowRun{Tasks: make(map[core.TaskID]*core.TaskState)},
 	})
 	adapter.WorkflowFailed(nil)
 	adapter.Log("info", "test message")
@@ -88,10 +88,10 @@ func TestJSONOutputAdapter_Interface(t *testing.T) {
 	adapter.TaskFailed(task, testErr)
 	adapter.TaskSkipped(task, "skipped")
 	adapter.WorkflowStateUpdated(&core.WorkflowState{
-		Tasks: make(map[core.TaskID]*core.TaskState),
+		WorkflowRun: core.WorkflowRun{Tasks: make(map[core.TaskID]*core.TaskState)},
 	})
 	adapter.WorkflowCompleted(&core.WorkflowState{
-		Tasks: make(map[core.TaskID]*core.TaskState),
+		WorkflowRun: core.WorkflowRun{Tasks: make(map[core.TaskID]*core.TaskState)},
 	})
 	adapter.WorkflowFailed(testErr)
 	adapter.Log("info", "test message")
@@ -147,10 +147,10 @@ func TestTUIOutput_Interface(t *testing.T) {
 	tuiOut.TaskFailed(task, nil)
 	tuiOut.TaskSkipped(task, "skipped")
 	tuiOut.WorkflowStateUpdated(&core.WorkflowState{
-		Tasks: make(map[core.TaskID]*core.TaskState),
+		WorkflowRun: core.WorkflowRun{Tasks: make(map[core.TaskID]*core.TaskState)},
 	})
 	tuiOut.WorkflowCompleted(&core.WorkflowState{
-		Tasks: make(map[core.TaskID]*core.TaskState),
+		WorkflowRun: core.WorkflowRun{Tasks: make(map[core.TaskID]*core.TaskState)},
 	})
 	tuiOut.WorkflowFailed(nil)
 	tuiOut.Log("info", "test message")
@@ -171,7 +171,7 @@ func TestTUIOutput_PriorityNeverDrops(t *testing.T) {
 	}
 
 	// Priority events should still work
-	state := &core.WorkflowState{WorkflowID: "test-1"}
+	state := &core.WorkflowState{WorkflowDefinition: core.WorkflowDefinition{WorkflowID: "test-1"}}
 
 	done := make(chan bool, 1)
 	go func() {

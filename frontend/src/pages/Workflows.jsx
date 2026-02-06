@@ -42,6 +42,7 @@ import {
   Sparkles,
   Layers,
   ListTodo,
+  X,
 } from 'lucide-react';
 import { ConfirmDialog } from '../components/config/ConfirmDialog';
 import { ExecutionModeBadge, PhaseStepper, ReplanModal } from '../components/workflow';
@@ -206,7 +207,7 @@ function WorkflowCard({ workflow, onClick, onDelete }) {
           <ListTodo className="w-3.5 h-3.5" />
           <span className="font-medium">Tasks: {workflow.task_count || 0}</span>
         </div>
-        <ExecutionModeBadge config={workflow.config} variant="inline" />
+        <ExecutionModeBadge blueprint={workflow.blueprint} variant="inline" />
       </div>
       
       <ChevronRight className="absolute right-4 bottom-4 w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -856,7 +857,7 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
               </div>
               <div className="flex items-center gap-3 mt-1">
                 <p className="text-sm text-muted-foreground">{workflow.id}</p>
-                <ExecutionModeBadge config={workflow.config} variant="inline" />
+                <ExecutionModeBadge blueprint={workflow.blueprint} variant="inline" />
               </div>
             </div>
           </div>
@@ -1062,7 +1063,7 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
             </p>
             <div className="flex flex-wrap items-center gap-3">
               <StatusBadge status={workflow.status} />
-              <ExecutionModeBadge config={workflow.config} variant="badge" />
+              <ExecutionModeBadge blueprint={workflow.blueprint} variant="badge" />
             </div>
           </div>
           {canEdit && (
@@ -1522,6 +1523,8 @@ function NewWorkflowForm({ onSubmit, onCancel, loading }) {
         }
       : undefined;
 
+    // Clean up blob preview URLs before submitting
+    files.forEach((f) => { if (f._previewUrl) URL.revokeObjectURL(f._previewUrl); });
     onSubmit(prompt, files, title.trim() || undefined, workflowConfig);
   };
 
@@ -1533,7 +1536,31 @@ function NewWorkflowForm({ onSubmit, onCancel, loading }) {
   };
 
   const removeFile = (index) => {
+    const removed = files[index];
+    if (removed && removed._previewUrl) URL.revokeObjectURL(removed._previewUrl);
     setFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handlePaste = (e) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    const imageFiles = [];
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        const file = item.getAsFile();
+        if (file) imageFiles.push(file);
+      }
+    }
+    if (imageFiles.length === 0) return;
+
+    e.preventDefault();
+    // Tag each file with a blob preview URL for display
+    const tagged = imageFiles.map((f) => {
+      f._previewUrl = URL.createObjectURL(f);
+      return f;
+    });
+    setFiles((prev) => [...prev, ...tagged]);
   };
 
   return (
@@ -1568,10 +1595,31 @@ function NewWorkflowForm({ onSubmit, onCancel, loading }) {
             <label className="block text-sm font-medium text-foreground mb-2">
               Prompt
             </label>
+            {/* Image previews from pasted screenshots */}
+            {files.some((f) => f._previewUrl) && (
+              <div className="flex gap-2 mb-2 overflow-x-auto">
+                {files.map((f, idx) => f._previewUrl ? (
+                  <div key={`paste-${idx}`} className="relative group flex-shrink-0 w-16">
+                    <div className="relative overflow-hidden rounded-lg border border-border">
+                      <img src={f._previewUrl} alt={f.name} className="w-16 h-16 object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => removeFile(idx)}
+                        className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                    <p className="text-[9px] text-muted-foreground truncate mt-0.5">{f.name}</p>
+                  </div>
+                ) : null)}
+              </div>
+            )}
             <div className="relative">
               <textarea
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
+                onPaste={handlePaste}
                 placeholder="Describe what you want the AI agents to accomplish..."
                 rows={6}
                 spellCheck={false}

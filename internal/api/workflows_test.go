@@ -54,14 +54,18 @@ func TestHandleRunWorkflow_WorkflowNotFound(t *testing.T) {
 func TestHandleRunWorkflow_AlreadyRunning(t *testing.T) {
 	sm := newMockStateManager()
 	sm.workflows[core.WorkflowID("wf-running")] = &core.WorkflowState{
-		WorkflowID:   "wf-running",
-		Status:       core.WorkflowStatusRunning,
-		CurrentPhase: core.PhaseExecute,
-		Prompt:       "test",
-		Tasks:        make(map[core.TaskID]*core.TaskState),
-		TaskOrder:    []core.TaskID{},
-		CreatedAt:    time.Now(),
-		UpdatedAt:    time.Now(),
+		WorkflowDefinition: core.WorkflowDefinition{
+			WorkflowID: "wf-running",
+			Prompt:     "test",
+			CreatedAt:  time.Now(),
+		},
+		WorkflowRun: core.WorkflowRun{
+			Status:       core.WorkflowStatusRunning,
+			CurrentPhase: core.PhaseExecute,
+			Tasks:        make(map[core.TaskID]*core.TaskState),
+			TaskOrder:    []core.TaskID{},
+			UpdatedAt:    time.Now(),
+		},
 	}
 
 	eb := events.New(100)
@@ -89,14 +93,18 @@ func TestHandleRunWorkflow_AlreadyRunning(t *testing.T) {
 func TestHandleRunWorkflow_AlreadyCompleted(t *testing.T) {
 	sm := newMockStateManager()
 	sm.workflows[core.WorkflowID("wf-completed")] = &core.WorkflowState{
-		WorkflowID:   "wf-completed",
-		Status:       core.WorkflowStatusCompleted,
-		CurrentPhase: core.PhaseExecute,
-		Prompt:       "test",
-		Tasks:        make(map[core.TaskID]*core.TaskState),
-		TaskOrder:    []core.TaskID{},
-		CreatedAt:    time.Now(),
-		UpdatedAt:    time.Now(),
+		WorkflowDefinition: core.WorkflowDefinition{
+			WorkflowID: "wf-completed",
+			Prompt:     "test",
+			CreatedAt:  time.Now(),
+		},
+		WorkflowRun: core.WorkflowRun{
+			Status:       core.WorkflowStatusCompleted,
+			CurrentPhase: core.PhaseExecute,
+			Tasks:        make(map[core.TaskID]*core.TaskState),
+			TaskOrder:    []core.TaskID{},
+			UpdatedAt:    time.Now(),
+		},
 	}
 
 	eb := events.New(100)
@@ -131,14 +139,18 @@ func TestHandleRunWorkflow_MissingStateManager(t *testing.T) {
 func TestHandleRunWorkflow_MissingConfigLoader(t *testing.T) {
 	sm := newMockStateManager()
 	sm.workflows[core.WorkflowID("wf-pending")] = &core.WorkflowState{
-		WorkflowID:   "wf-pending",
-		Status:       core.WorkflowStatusPending,
-		CurrentPhase: core.PhaseAnalyze,
-		Prompt:       "test",
-		Tasks:        make(map[core.TaskID]*core.TaskState),
-		TaskOrder:    []core.TaskID{},
-		CreatedAt:    time.Now(),
-		UpdatedAt:    time.Now(),
+		WorkflowDefinition: core.WorkflowDefinition{
+			WorkflowID: "wf-pending",
+			Prompt:     "test",
+			CreatedAt:  time.Now(),
+		},
+		WorkflowRun: core.WorkflowRun{
+			Status:       core.WorkflowStatusPending,
+			CurrentPhase: core.PhaseAnalyze,
+			Tasks:        make(map[core.TaskID]*core.TaskState),
+			TaskOrder:    []core.TaskID{},
+			UpdatedAt:    time.Now(),
+		},
 	}
 
 	eb := events.New(100)
@@ -186,14 +198,18 @@ func TestHandleRunWorkflow_EmptyWorkflowID(t *testing.T) {
 func TestHandleRunWorkflow_DoubleExecution(t *testing.T) {
 	sm := newMockStateManager()
 	sm.workflows[core.WorkflowID("wf-double")] = &core.WorkflowState{
-		WorkflowID:   "wf-double",
-		Status:       core.WorkflowStatusPending,
-		CurrentPhase: core.PhaseAnalyze,
-		Prompt:       "test",
-		Tasks:        make(map[core.TaskID]*core.TaskState),
-		TaskOrder:    []core.TaskID{},
-		CreatedAt:    time.Now(),
-		UpdatedAt:    time.Now(),
+		WorkflowDefinition: core.WorkflowDefinition{
+			WorkflowID: "wf-double",
+			Prompt:     "test",
+			CreatedAt:  time.Now(),
+		},
+		WorkflowRun: core.WorkflowRun{
+			Status:       core.WorkflowStatusPending,
+			CurrentPhase: core.PhaseAnalyze,
+			Tasks:        make(map[core.TaskID]*core.TaskState),
+			TaskOrder:    []core.TaskID{},
+			UpdatedAt:    time.Now(),
+		},
 	}
 
 	// Set workflow status to running to simulate already running state
@@ -265,14 +281,18 @@ func TestHandleRunWorkflow_StateValidation(t *testing.T) {
 			sm := newMockStateManager()
 			wfID := core.WorkflowID("wf-state-test")
 			sm.workflows[wfID] = &core.WorkflowState{
-				WorkflowID:   wfID,
-				Status:       tt.status,
-				CurrentPhase: core.PhaseAnalyze,
-				Prompt:       "test",
-				Tasks:        make(map[core.TaskID]*core.TaskState),
-				TaskOrder:    []core.TaskID{},
-				CreatedAt:    time.Now(),
-				UpdatedAt:    time.Now(),
+				WorkflowDefinition: core.WorkflowDefinition{
+					WorkflowID: wfID,
+					Prompt:     "test",
+					CreatedAt:  time.Now(),
+				},
+				WorkflowRun: core.WorkflowRun{
+					Status:       tt.status,
+					CurrentPhase: core.PhaseAnalyze,
+					Tasks:        make(map[core.TaskID]*core.TaskState),
+					TaskOrder:    []core.TaskID{},
+					UpdatedAt:    time.Now(),
+				},
 			}
 
 			eb := events.New(100)
@@ -323,16 +343,20 @@ func TestHandleRunWorkflow_LoadError(t *testing.T) {
 func TestHandleGetWorkflow_IncludesReportPathAndOptimizedPrompt(t *testing.T) {
 	sm := newMockStateManager()
 	sm.workflows[core.WorkflowID("wf-artifacts")] = &core.WorkflowState{
-		WorkflowID:      "wf-artifacts",
-		Status:          core.WorkflowStatusCompleted,
-		CurrentPhase:    core.PhaseExecute,
-		Prompt:          "original prompt",
-		OptimizedPrompt: "optimized prompt",
-		ReportPath:      ".quorum/runs/wf-artifacts",
-		Tasks:           make(map[core.TaskID]*core.TaskState),
-		TaskOrder:       []core.TaskID{},
-		CreatedAt:       time.Now(),
-		UpdatedAt:       time.Now(),
+		WorkflowDefinition: core.WorkflowDefinition{
+			WorkflowID:      "wf-artifacts",
+			Prompt:          "original prompt",
+			OptimizedPrompt: "optimized prompt",
+			CreatedAt:       time.Now(),
+		},
+		WorkflowRun: core.WorkflowRun{
+			Status:       core.WorkflowStatusCompleted,
+			CurrentPhase: core.PhaseExecute,
+			ReportPath:   ".quorum/runs/wf-artifacts",
+			Tasks:        make(map[core.TaskID]*core.TaskState),
+			TaskOrder:    []core.TaskID{},
+			UpdatedAt:    time.Now(),
+		},
 	}
 	sm.activeID = core.WorkflowID("wf-artifacts")
 
@@ -362,82 +386,82 @@ func TestHandleGetWorkflow_IncludesReportPathAndOptimizedPrompt(t *testing.T) {
 	}
 }
 
-func TestWorkflowConfig_IsSingleAgentMode(t *testing.T) {
+func TestBlueprintDTO_IsSingleAgentMode(t *testing.T) {
 	tests := []struct {
 		name     string
-		config   *WorkflowConfig
+		bp       *BlueprintDTO
 		expected bool
 	}{
 		{
-			name:     "nil config returns false",
-			config:   nil,
+			name:     "nil blueprint returns false",
+			bp:       nil,
 			expected: false,
 		},
 		{
 			name:     "empty execution_mode returns false",
-			config:   &WorkflowConfig{},
+			bp:       &BlueprintDTO{},
 			expected: false,
 		},
 		{
 			name:     "multi_agent returns false",
-			config:   &WorkflowConfig{ExecutionMode: "multi_agent"},
+			bp:       &BlueprintDTO{ExecutionMode: "multi_agent"},
 			expected: false,
 		},
 		{
 			name:     "single_agent returns true",
-			config:   &WorkflowConfig{ExecutionMode: "single_agent"},
+			bp:       &BlueprintDTO{ExecutionMode: "single_agent"},
 			expected: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.config.IsSingleAgentMode(); got != tt.expected {
+			if got := tt.bp.IsSingleAgentMode(); got != tt.expected {
 				t.Errorf("IsSingleAgentMode() = %v, want %v", got, tt.expected)
 			}
 		})
 	}
 }
 
-func TestWorkflowConfig_GetExecutionMode(t *testing.T) {
+func TestBlueprintDTO_GetExecutionMode(t *testing.T) {
 	tests := []struct {
 		name     string
-		config   *WorkflowConfig
+		bp       *BlueprintDTO
 		expected string
 	}{
 		{
-			name:     "nil config returns multi_agent",
-			config:   nil,
+			name:     "nil blueprint returns multi_agent",
+			bp:       nil,
 			expected: "multi_agent",
 		},
 		{
 			name:     "empty returns multi_agent",
-			config:   &WorkflowConfig{},
+			bp:       &BlueprintDTO{},
 			expected: "multi_agent",
 		},
 		{
 			name:     "single_agent returns single_agent",
-			config:   &WorkflowConfig{ExecutionMode: "single_agent"},
+			bp:       &BlueprintDTO{ExecutionMode: "single_agent"},
 			expected: "single_agent",
 		},
 		{
 			name:     "multi_agent returns multi_agent",
-			config:   &WorkflowConfig{ExecutionMode: "multi_agent"},
+			bp:       &BlueprintDTO{ExecutionMode: "multi_agent"},
 			expected: "multi_agent",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.config.GetExecutionMode(); got != tt.expected {
+			if got := tt.bp.GetExecutionMode(); got != tt.expected {
 				t.Errorf("GetExecutionMode() = %v, want %v", got, tt.expected)
 			}
 		})
 	}
 }
 
-func TestWorkflowConfig_JSON_Roundtrip(t *testing.T) {
-	original := WorkflowConfig{
+func TestBlueprintDTO_JSON_Roundtrip(t *testing.T) {
+	original := BlueprintDTO{
 		ConsensusThreshold:         0.8,
 		DryRun:                     true,
 		ExecutionMode:              "single_agent",
@@ -451,7 +475,7 @@ func TestWorkflowConfig_JSON_Roundtrip(t *testing.T) {
 		t.Fatalf("failed to marshal: %v", err)
 	}
 
-	var decoded WorkflowConfig
+	var decoded BlueprintDTO
 	if err := json.Unmarshal(data, &decoded); err != nil {
 		t.Fatalf("failed to unmarshal: %v", err)
 	}
@@ -476,34 +500,34 @@ func TestWorkflowConfig_JSON_Roundtrip(t *testing.T) {
 	}
 }
 
-func TestWorkflowConfig_Backward_Compatibility(t *testing.T) {
+func TestBlueprintDTO_Backward_Compatibility(t *testing.T) {
 	// JSON without new fields should deserialize correctly
 	oldJSON := `{"consensus_threshold": 0.75, "dry_run": true}`
 
-	var cfg WorkflowConfig
-	if err := json.Unmarshal([]byte(oldJSON), &cfg); err != nil {
+	var bp BlueprintDTO
+	if err := json.Unmarshal([]byte(oldJSON), &bp); err != nil {
 		t.Fatalf("failed to unmarshal: %v", err)
 	}
 
-	if cfg.ConsensusThreshold != 0.75 {
-		t.Errorf("ConsensusThreshold = %v, want %v", cfg.ConsensusThreshold, 0.75)
+	if bp.ConsensusThreshold != 0.75 {
+		t.Errorf("ConsensusThreshold = %v, want %v", bp.ConsensusThreshold, 0.75)
 	}
-	if !cfg.DryRun {
-		t.Errorf("DryRun = %v, want %v", cfg.DryRun, true)
+	if !bp.DryRun {
+		t.Errorf("DryRun = %v, want %v", bp.DryRun, true)
 	}
-	if cfg.ExecutionMode != "" {
-		t.Errorf("ExecutionMode = %q, want empty", cfg.ExecutionMode)
+	if bp.ExecutionMode != "" {
+		t.Errorf("ExecutionMode = %q, want empty", bp.ExecutionMode)
 	}
-	if cfg.SingleAgentName != "" {
-		t.Errorf("SingleAgentName = %q, want empty", cfg.SingleAgentName)
+	if bp.SingleAgentName != "" {
+		t.Errorf("SingleAgentName = %q, want empty", bp.SingleAgentName)
 	}
-	if cfg.SingleAgentModel != "" {
-		t.Errorf("SingleAgentModel = %q, want empty", cfg.SingleAgentModel)
+	if bp.SingleAgentModel != "" {
+		t.Errorf("SingleAgentModel = %q, want empty", bp.SingleAgentModel)
 	}
-	if cfg.SingleAgentReasoningEffort != "" {
-		t.Errorf("SingleAgentReasoningEffort = %q, want empty", cfg.SingleAgentReasoningEffort)
+	if bp.SingleAgentReasoningEffort != "" {
+		t.Errorf("SingleAgentReasoningEffort = %q, want empty", bp.SingleAgentReasoningEffort)
 	}
-	if cfg.IsSingleAgentMode() {
+	if bp.IsSingleAgentMode() {
 		t.Errorf("IsSingleAgentMode() = true, want false")
 	}
 }
@@ -540,7 +564,7 @@ agents:
 	reqBody := CreateWorkflowRequest{
 		Prompt: "Test single agent workflow",
 		Title:  "Single Agent Test",
-		Config: &WorkflowConfig{
+		Blueprint: &BlueprintDTO{
 			ExecutionMode:    "single_agent",
 			SingleAgentName:  "claude",
 			SingleAgentModel: "claude-3-haiku",
@@ -564,27 +588,27 @@ agents:
 		t.Fatalf("failed to decode response: %v", err)
 	}
 
-	if resp.Config == nil {
-		t.Fatal("expected config in response, got nil")
+	if resp.Blueprint == nil {
+		t.Fatal("expected blueprint in response, got nil")
 	}
 
-	if resp.Config.ExecutionMode != "single_agent" {
-		t.Errorf("expected execution_mode 'single_agent', got '%s'", resp.Config.ExecutionMode)
+	if resp.Blueprint.ExecutionMode != "single_agent" {
+		t.Errorf("expected execution_mode 'single_agent', got '%s'", resp.Blueprint.ExecutionMode)
 	}
 
-	if resp.Config.SingleAgentName != "claude" {
-		t.Errorf("expected single_agent_name 'claude', got '%s'", resp.Config.SingleAgentName)
+	if resp.Blueprint.SingleAgentName != "claude" {
+		t.Errorf("expected single_agent_name 'claude', got '%s'", resp.Blueprint.SingleAgentName)
 	}
 
-	if resp.Config.SingleAgentModel != "claude-3-haiku" {
-		t.Errorf("expected single_agent_model 'claude-3-haiku', got '%s'", resp.Config.SingleAgentModel)
+	if resp.Blueprint.SingleAgentModel != "claude-3-haiku" {
+		t.Errorf("expected single_agent_model 'claude-3-haiku', got '%s'", resp.Blueprint.SingleAgentModel)
 	}
 
 	// Verify it was saved in state manager correctly
 	wfID := core.WorkflowID(resp.ID)
 	state, _ := sm.LoadByID(context.Background(), wfID)
-	if state.Config.ExecutionMode != "single_agent" {
-		t.Errorf("expected saved execution_mode 'single_agent', got '%s'", state.Config.ExecutionMode)
+	if state.Blueprint.ExecutionMode != "single_agent" {
+		t.Errorf("expected saved execution_mode 'single_agent', got '%s'", state.Blueprint.ExecutionMode)
 	}
 }
 
@@ -595,15 +619,19 @@ func TestGetWorkflow_IncludesConfig(t *testing.T) {
 
 	wfID := core.WorkflowID("wf-config-test")
 	state := &core.WorkflowState{
-		WorkflowID: wfID,
-		Status:     core.WorkflowStatusPending,
-		Prompt:     "Test prompt",
-		Config: &core.WorkflowConfig{
-			ExecutionMode:   "single_agent",
-			SingleAgentName: "gemini",
+		WorkflowDefinition: core.WorkflowDefinition{
+			WorkflowID: wfID,
+			Prompt:     "Test prompt",
+			Blueprint: &core.Blueprint{
+				ExecutionMode: "single_agent",
+				SingleAgent:   core.BlueprintSingleAgent{Agent: "gemini"},
+			},
+			CreatedAt: time.Now(),
 		},
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		WorkflowRun: core.WorkflowRun{
+			Status:    core.WorkflowStatusPending,
+			UpdatedAt: time.Now(),
+		},
 	}
 	sm.workflows[wfID] = state
 
@@ -621,16 +649,16 @@ func TestGetWorkflow_IncludesConfig(t *testing.T) {
 		t.Fatalf("failed to decode response: %v", err)
 	}
 
-	if resp.Config == nil {
-		t.Fatal("expected config in response, got nil")
+	if resp.Blueprint == nil {
+		t.Fatal("expected blueprint in response, got nil")
 	}
 
-	if resp.Config.ExecutionMode != "single_agent" {
-		t.Errorf("expected execution_mode 'single_agent', got '%s'", resp.Config.ExecutionMode)
+	if resp.Blueprint.ExecutionMode != "single_agent" {
+		t.Errorf("expected execution_mode 'single_agent', got '%s'", resp.Blueprint.ExecutionMode)
 	}
 
-	if resp.Config.SingleAgentName != "gemini" {
-		t.Errorf("expected single_agent_name 'gemini', got '%s'", resp.Config.SingleAgentName)
+	if resp.Blueprint.SingleAgentName != "gemini" {
+		t.Errorf("expected single_agent_name 'gemini', got '%s'", resp.Blueprint.SingleAgentName)
 	}
 }
 
@@ -664,20 +692,24 @@ agents:
 
 	wfID := core.WorkflowID("wf-edit-config")
 	sm.workflows[wfID] = &core.WorkflowState{
-		WorkflowID: wfID,
-		Status:     core.WorkflowStatusPending,
-		Prompt:     "Test prompt",
-		Config: &core.WorkflowConfig{
-			ExecutionMode: "multi_agent",
+		WorkflowDefinition: core.WorkflowDefinition{
+			WorkflowID: wfID,
+			Prompt:     "Test prompt",
+			Blueprint: &core.Blueprint{
+				ExecutionMode: "multi_agent",
+			},
+			CreatedAt: time.Now(),
 		},
-		Tasks:     make(map[core.TaskID]*core.TaskState),
-		TaskOrder: []core.TaskID{},
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		WorkflowRun: core.WorkflowRun{
+			Status:    core.WorkflowStatusPending,
+			Tasks:     make(map[core.TaskID]*core.TaskState),
+			TaskOrder: []core.TaskID{},
+			UpdatedAt: time.Now(),
+		},
 	}
 
 	reqBody := map[string]interface{}{
-		"config": map[string]interface{}{
+		"blueprint": map[string]interface{}{
 			"execution_mode":                "single_agent",
 			"single_agent_name":             "codex",
 			"single_agent_model":            "gpt-5.2-codex",
@@ -700,20 +732,20 @@ agents:
 	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
-	if resp.Config == nil {
-		t.Fatal("expected config in response, got nil")
+	if resp.Blueprint == nil {
+		t.Fatal("expected blueprint in response, got nil")
 	}
-	if resp.Config.ExecutionMode != "single_agent" {
-		t.Errorf("expected execution_mode 'single_agent', got '%s'", resp.Config.ExecutionMode)
+	if resp.Blueprint.ExecutionMode != "single_agent" {
+		t.Errorf("expected execution_mode 'single_agent', got '%s'", resp.Blueprint.ExecutionMode)
 	}
-	if resp.Config.SingleAgentName != "codex" {
-		t.Errorf("expected single_agent_name 'codex', got '%s'", resp.Config.SingleAgentName)
+	if resp.Blueprint.SingleAgentName != "codex" {
+		t.Errorf("expected single_agent_name 'codex', got '%s'", resp.Blueprint.SingleAgentName)
 	}
-	if resp.Config.SingleAgentModel != "gpt-5.2-codex" {
-		t.Errorf("expected single_agent_model 'gpt-5.2-codex', got '%s'", resp.Config.SingleAgentModel)
+	if resp.Blueprint.SingleAgentModel != "gpt-5.2-codex" {
+		t.Errorf("expected single_agent_model 'gpt-5.2-codex', got '%s'", resp.Blueprint.SingleAgentModel)
 	}
-	if resp.Config.SingleAgentReasoningEffort != "high" {
-		t.Errorf("expected single_agent_reasoning_effort 'high', got '%s'", resp.Config.SingleAgentReasoningEffort)
+	if resp.Blueprint.SingleAgentReasoningEffort != "high" {
+		t.Errorf("expected single_agent_reasoning_effort 'high', got '%s'", resp.Blueprint.SingleAgentReasoningEffort)
 	}
 }
 
@@ -724,20 +756,24 @@ func TestUpdateWorkflow_RejectsConfigEditWhenNotPending(t *testing.T) {
 
 	wfID := core.WorkflowID("wf-edit-config-running")
 	sm.workflows[wfID] = &core.WorkflowState{
-		WorkflowID: wfID,
-		Status:     core.WorkflowStatusRunning,
-		Prompt:     "Test prompt",
-		Config: &core.WorkflowConfig{
-			ExecutionMode: "multi_agent",
+		WorkflowDefinition: core.WorkflowDefinition{
+			WorkflowID: wfID,
+			Prompt:     "Test prompt",
+			Blueprint: &core.Blueprint{
+				ExecutionMode: "multi_agent",
+			},
+			CreatedAt: time.Now(),
 		},
-		Tasks:     make(map[core.TaskID]*core.TaskState),
-		TaskOrder: []core.TaskID{},
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		WorkflowRun: core.WorkflowRun{
+			Status:    core.WorkflowStatusRunning,
+			Tasks:     make(map[core.TaskID]*core.TaskState),
+			TaskOrder: []core.TaskID{},
+			UpdatedAt: time.Now(),
+		},
 	}
 
 	reqBody := map[string]interface{}{
-		"config": map[string]interface{}{
+		"blueprint": map[string]interface{}{
 			"execution_mode":    "single_agent",
 			"single_agent_name": "claude",
 		},
@@ -785,20 +821,24 @@ agents:
 
 	wfID := core.WorkflowID("wf-edit-config-invalid")
 	sm.workflows[wfID] = &core.WorkflowState{
-		WorkflowID: wfID,
-		Status:     core.WorkflowStatusPending,
-		Prompt:     "Test prompt",
-		Config: &core.WorkflowConfig{
-			ExecutionMode: "multi_agent",
+		WorkflowDefinition: core.WorkflowDefinition{
+			WorkflowID: wfID,
+			Prompt:     "Test prompt",
+			Blueprint: &core.Blueprint{
+				ExecutionMode: "multi_agent",
+			},
+			CreatedAt: time.Now(),
 		},
-		Tasks:     make(map[core.TaskID]*core.TaskState),
-		TaskOrder: []core.TaskID{},
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		WorkflowRun: core.WorkflowRun{
+			Status:    core.WorkflowStatusPending,
+			Tasks:     make(map[core.TaskID]*core.TaskState),
+			TaskOrder: []core.TaskID{},
+			UpdatedAt: time.Now(),
+		},
 	}
 
 	reqBody := map[string]interface{}{
-		"config": map[string]interface{}{
+		"blueprint": map[string]interface{}{
 			"execution_mode": "single_agent",
 		},
 	}

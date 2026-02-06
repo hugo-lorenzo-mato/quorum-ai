@@ -111,11 +111,11 @@ func runAnalyze(_ *cobra.Command, args []string) error {
 	}
 	defer func() { _ = deps.StateAdapter.ReleaseLock(ctx) }()
 
-	// Build workflow config for state
-	wfConfig := buildCoreWorkflowConfig(deps.RunnerConfig)
+	// Build workflow blueprint for state
+	bp := buildBlueprint(deps.RunnerConfig)
 
 	// Initialize workflow state
-	workflowState := InitializeWorkflowState(prompt, wfConfig)
+	workflowState := InitializeWorkflowState(prompt, bp)
 
 	// Initialize workflow-level git isolation (best-effort; analysis does not require git)
 	if changed, isoErr := EnsureWorkflowGitIsolation(ctx, deps, workflowState); isoErr != nil {

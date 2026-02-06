@@ -5,7 +5,7 @@ describe('ExecutionModeBadge', () => {
   it('renders single-agent badge with agent name', () => {
     render(
       <ExecutionModeBadge
-        config={{
+        blueprint={{
           execution_mode: 'single_agent',
           single_agent_name: 'claude',
         }}
@@ -19,7 +19,7 @@ describe('ExecutionModeBadge', () => {
   it('renders multi-agent badge for multi_agent mode', () => {
     render(
       <ExecutionModeBadge
-        config={{ execution_mode: 'multi_agent' }}
+        blueprint={{ execution_mode: 'multi_agent' }}
       />
     );
 
@@ -27,13 +27,13 @@ describe('ExecutionModeBadge', () => {
   });
 
   it('renders multi-agent badge when config is undefined', () => {
-    render(<ExecutionModeBadge config={undefined} />);
+    render(<ExecutionModeBadge blueprint={undefined} />);
 
     expect(screen.getByText(/Multi-Agent/i)).toBeInTheDocument();
   });
 
   it('renders multi-agent badge when execution_mode is empty', () => {
-    render(<ExecutionModeBadge config={{ execution_mode: '' }} />);
+    render(<ExecutionModeBadge blueprint={{ execution_mode: '' }} />);
 
     expect(screen.getByText(/Multi-Agent/i)).toBeInTheDocument();
   });
@@ -41,7 +41,7 @@ describe('ExecutionModeBadge', () => {
   it('renders single-agent badge without agent name when not provided', () => {
     render(
       <ExecutionModeBadge
-        config={{ execution_mode: 'single_agent' }}
+        blueprint={{ execution_mode: 'single_agent' }}
       />
     );
 
@@ -52,7 +52,7 @@ describe('ExecutionModeBadge', () => {
   it('renders inline variant correctly for single-agent', () => {
     render(
       <ExecutionModeBadge
-        config={{ execution_mode: 'single_agent', single_agent_name: 'gemini' }}
+        blueprint={{ execution_mode: 'single_agent', single_agent_name: 'gemini' }}
         variant="inline"
       />
     );
@@ -64,7 +64,7 @@ describe('ExecutionModeBadge', () => {
   it('renders inline variant correctly for multi-agent', () => {
     render(
       <ExecutionModeBadge
-        config={{ execution_mode: 'multi_agent' }}
+        blueprint={{ execution_mode: 'multi_agent' }}
         variant="inline"
       />
     );
@@ -75,7 +75,7 @@ describe('ExecutionModeBadge', () => {
   it('renders detailed variant correctly for single-agent', () => {
     render(
       <ExecutionModeBadge
-        config={{ execution_mode: 'single_agent', single_agent_name: 'codex' }}
+        blueprint={{ execution_mode: 'single_agent', single_agent_name: 'codex' }}
         variant="detailed"
       />
     );
@@ -87,7 +87,7 @@ describe('ExecutionModeBadge', () => {
   it('renders detailed variant correctly for multi-agent', () => {
     render(
       <ExecutionModeBadge
-        config={{ execution_mode: 'multi_agent' }}
+        blueprint={{ execution_mode: 'multi_agent' }}
         variant="detailed"
       />
     );
@@ -98,7 +98,7 @@ describe('ExecutionModeBadge', () => {
   it('capitalizes agent name correctly', () => {
     render(
       <ExecutionModeBadge
-        config={{ execution_mode: 'single_agent', single_agent_name: 'openai' }}
+        blueprint={{ execution_mode: 'single_agent', single_agent_name: 'openai' }}
       />
     );
 

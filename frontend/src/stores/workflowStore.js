@@ -89,7 +89,7 @@ const useWorkflowStore = create((set, get) => ({
    * @param {Object} options - Additional options
    * @param {string} [options.title] - Optional title
    * @param {string[]} [options.files] - Optional files
-   * @param {Object} [options.config] - Optional config with execution_mode
+   * @param {Object} [options.blueprint] - Optional blueprint with execution_mode
    */
   createWorkflow: async (prompt, options = {}) => {
     set({ loading: true, error: null });

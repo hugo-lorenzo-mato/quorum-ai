@@ -284,30 +284,37 @@ type DuplicateWorkflowInfo struct {
 	Title      string         `json:"title,omitempty"`
 }
 
-// WorkflowState represents the persisted state of a workflow.
-type WorkflowState struct {
-	Version         int                   `json:"version"`
-	WorkflowID      WorkflowID            `json:"workflow_id"`
-	ExecutionID     int                   `json:"execution_id"` // Increments on each Run/Resume to distinguish event sets
-	Title           string                `json:"title,omitempty"`
-	Status          WorkflowStatus        `json:"status"`
-	CurrentPhase    Phase                 `json:"current_phase"`
-	Prompt          string                `json:"prompt"`
-	OptimizedPrompt string                `json:"optimized_prompt,omitempty"`
-	Attachments     []Attachment          `json:"attachments,omitempty"`
-	Error           string                `json:"error,omitempty"` // Error message if workflow failed
-	Tasks           map[TaskID]*TaskState `json:"tasks"`
-	TaskOrder       []TaskID              `json:"task_order"`
-	Config          *WorkflowConfig       `json:"config"`
-	Metrics         *StateMetrics         `json:"metrics"`
-	Checkpoints     []Checkpoint          `json:"checkpoints"`
-	AgentEvents     []AgentEvent          `json:"agent_events,omitempty"` // Persisted agent activity for UI
-	CreatedAt       time.Time             `json:"created_at"`
-	UpdatedAt       time.Time             `json:"updated_at"`
-	Checksum        string                `json:"checksum,omitempty"`
-	ReportPath      string                `json:"report_path,omitempty"` // Persisted report directory for resume
+// WorkflowDefinition holds the immutable definition of a workflow.
+// These fields are set at creation time and do not change during execution
+// (except OptimizedPrompt which is set after the refine phase).
+type WorkflowDefinition struct {
+	Version         int          `json:"version"`
+	WorkflowID      WorkflowID   `json:"workflow_id"`
+	Title           string       `json:"title,omitempty"`
+	Prompt          string       `json:"prompt"`
+	OptimizedPrompt string       `json:"optimized_prompt,omitempty"`
+	Blueprint       *Blueprint   `json:"blueprint"`
+	Attachments     []Attachment `json:"attachments,omitempty"`
+	CreatedAt       time.Time    `json:"created_at"`
+}
 
-	// Heartbeat tracking for zombie detection and auto-resume
+// WorkflowRun holds the mutable execution state of a workflow.
+// These fields change during workflow execution.
+type WorkflowRun struct {
+	ExecutionID  int                   `json:"execution_id"` // Increments on each Run/Resume to distinguish event sets
+	Status       WorkflowStatus        `json:"status"`
+	CurrentPhase Phase                 `json:"current_phase"`
+	Error        string                `json:"error,omitempty"` // Error message if workflow failed
+	Tasks        map[TaskID]*TaskState `json:"tasks"`
+	TaskOrder    []TaskID              `json:"task_order"`
+	AgentEvents  []AgentEvent          `json:"agent_events,omitempty"` // Persisted agent activity for UI
+	Metrics      *StateMetrics         `json:"metrics"`
+	Checkpoints  []Checkpoint          `json:"checkpoints"`
+	UpdatedAt    time.Time             `json:"updated_at"`
+
+	// Infrastructure
+	Checksum   string     `json:"checksum,omitempty"`
+	ReportPath string     `json:"report_path,omitempty"` // Persisted report directory for resume
 	HeartbeatAt *time.Time `json:"heartbeat_at,omitempty"` // Last heartbeat timestamp
 	ResumeCount int        `json:"resume_count,omitempty"` // Number of auto-resumes performed
 	MaxResumes  int        `json:"max_resumes,omitempty"`  // Maximum allowed auto-resumes (default: 3)
@@ -325,6 +332,20 @@ type WorkflowState struct {
 	KanbanExecutionCount int        `json:"kanban_execution_count,omitempty"` // How many times Kanban engine executed this
 	KanbanLastError      string     `json:"kanban_last_error,omitempty"`      // Last error from Kanban execution
 }
+
+// WorkflowState represents the persisted state of a workflow.
+// It composes WorkflowDefinition (immutable) and WorkflowRun (mutable) via embedding.
+// JSON serialization produces a flat object (no nesting) identical to the previous monolithic struct.
+type WorkflowState struct {
+	WorkflowDefinition
+	WorkflowRun
+}
+
+// Definition returns a pointer to the workflow's definition.
+func (ws *WorkflowState) Definition() *WorkflowDefinition { return &ws.WorkflowDefinition }
+
+// Run returns a pointer to the workflow's run state.
+func (ws *WorkflowState) Run() *WorkflowRun { return &ws.WorkflowRun }
 
 // Attachment represents a user-provided file associated with a chat session or workflow.
 // Attachments are stored under .quorum/attachments and are not expected to be part of the git repository.
@@ -403,23 +424,27 @@ const CurrentStateVersion = 1
 // NewWorkflowState creates a new state from a workflow.
 func NewWorkflowState(w *Workflow) *WorkflowState {
 	state := &WorkflowState{
-		Version:      CurrentStateVersion,
-		WorkflowID:   w.ID,
-		Status:       w.Status,
-		CurrentPhase: w.CurrentPhase,
-		Prompt:       w.Prompt,
-		Tasks:        make(map[TaskID]*TaskState),
-		TaskOrder:    w.TaskOrder,
-		Config:       w.Config,
-		Metrics: &StateMetrics{
-			TotalCostUSD:   w.TotalCostUSD,
-			TotalTokensIn:  w.TotalTokensIn,
-			TotalTokensOut: w.TotalTokensOut,
-			ConsensusScore: w.ConsensusScore,
+		WorkflowDefinition: WorkflowDefinition{
+			Version:    CurrentStateVersion,
+			WorkflowID: w.ID,
+			Prompt:     w.Prompt,
+			Blueprint:  w.Blueprint,
+			CreatedAt:  w.CreatedAt,
 		},
-		Checkpoints: make([]Checkpoint, 0),
-		CreatedAt:   w.CreatedAt,
-		UpdatedAt:   time.Now(),
+		WorkflowRun: WorkflowRun{
+			Status:       w.Status,
+			CurrentPhase: w.CurrentPhase,
+			Tasks:        make(map[TaskID]*TaskState),
+			TaskOrder:    w.TaskOrder,
+			Metrics: &StateMetrics{
+				TotalCostUSD:   w.TotalCostUSD,
+				TotalTokensIn:  w.TotalTokensIn,
+				TotalTokensOut: w.TotalTokensOut,
+				ConsensusScore: w.ConsensusScore,
+			},
+			Checkpoints: make([]Checkpoint, 0),
+			UpdatedAt:   time.Now(),
+		},
 	}
 
 	for id, task := range w.Tasks {

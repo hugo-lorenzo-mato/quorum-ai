@@ -42,12 +42,14 @@ func TestTasksPanel_SetState(t *testing.T) {
 	panel := NewTasksPanel()
 
 	state := &core.WorkflowState{
-		Tasks: map[core.TaskID]*core.TaskState{
-			"task-1": {ID: "task-1", Name: "Task One", Status: core.TaskStatusCompleted},
-			"task-2": {ID: "task-2", Name: "Task Two", Status: core.TaskStatusRunning},
-			"task-3": {ID: "task-3", Name: "Task Three", Status: core.TaskStatusPending},
+		WorkflowRun: core.WorkflowRun{
+			Tasks: map[core.TaskID]*core.TaskState{
+				"task-1": {ID: "task-1", Name: "Task One", Status: core.TaskStatusCompleted},
+				"task-2": {ID: "task-2", Name: "Task Two", Status: core.TaskStatusRunning},
+				"task-3": {ID: "task-3", Name: "Task Three", Status: core.TaskStatusPending},
+			},
+			TaskOrder: []core.TaskID{"task-1", "task-2", "task-3"},
 		},
-		TaskOrder: []core.TaskID{"task-1", "task-2", "task-3"},
 	}
 
 	panel.SetState(state)
@@ -99,10 +101,12 @@ func TestTasksPanel_Render(t *testing.T) {
 
 	// With tasks
 	state := &core.WorkflowState{
-		Tasks: map[core.TaskID]*core.TaskState{
-			"task-1": {ID: "task-1", Name: "Test Task", Status: core.TaskStatusCompleted},
+		WorkflowRun: core.WorkflowRun{
+			Tasks: map[core.TaskID]*core.TaskState{
+				"task-1": {ID: "task-1", Name: "Test Task", Status: core.TaskStatusCompleted},
+			},
+			TaskOrder: []core.TaskID{"task-1"},
 		},
-		TaskOrder: []core.TaskID{"task-1"},
 	}
 	panel.SetState(state)
 
@@ -125,11 +129,13 @@ func TestTasksPanel_CompactRender(t *testing.T) {
 
 	// With tasks
 	state := &core.WorkflowState{
-		Tasks: map[core.TaskID]*core.TaskState{
-			"task-1": {ID: "task-1", Name: "Task One", Status: core.TaskStatusCompleted},
-			"task-2": {ID: "task-2", Name: "Task Two", Status: core.TaskStatusPending},
+		WorkflowRun: core.WorkflowRun{
+			Tasks: map[core.TaskID]*core.TaskState{
+				"task-1": {ID: "task-1", Name: "Task One", Status: core.TaskStatusCompleted},
+				"task-2": {ID: "task-2", Name: "Task Two", Status: core.TaskStatusPending},
+			},
+			TaskOrder: []core.TaskID{"task-1", "task-2"},
 		},
-		TaskOrder: []core.TaskID{"task-1", "task-2"},
 	}
 	panel.SetState(state)
 
@@ -149,13 +155,15 @@ func TestTasksPanel_Scroll(t *testing.T) {
 
 	// Create many tasks
 	state := &core.WorkflowState{
-		Tasks: map[core.TaskID]*core.TaskState{
-			"task-1": {ID: "task-1", Name: "Task 1", Status: core.TaskStatusCompleted},
-			"task-2": {ID: "task-2", Name: "Task 2", Status: core.TaskStatusCompleted},
-			"task-3": {ID: "task-3", Name: "Task 3", Status: core.TaskStatusPending},
-			"task-4": {ID: "task-4", Name: "Task 4", Status: core.TaskStatusPending},
+		WorkflowRun: core.WorkflowRun{
+			Tasks: map[core.TaskID]*core.TaskState{
+				"task-1": {ID: "task-1", Name: "Task 1", Status: core.TaskStatusCompleted},
+				"task-2": {ID: "task-2", Name: "Task 2", Status: core.TaskStatusCompleted},
+				"task-3": {ID: "task-3", Name: "Task 3", Status: core.TaskStatusPending},
+				"task-4": {ID: "task-4", Name: "Task 4", Status: core.TaskStatusPending},
+			},
+			TaskOrder: []core.TaskID{"task-1", "task-2", "task-3", "task-4"},
 		},
-		TaskOrder: []core.TaskID{"task-1", "task-2", "task-3", "task-4"},
 	}
 	panel.SetState(state)
 

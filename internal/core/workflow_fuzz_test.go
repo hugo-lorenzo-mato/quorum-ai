@@ -123,7 +123,7 @@ func FuzzWorkflowTaskOperations(f *testing.F) {
 	})
 }
 
-// FuzzWorkflowConfig tests that workflow config values are handled safely.
+// FuzzWorkflowConfig tests that workflow blueprint values are handled safely.
 func FuzzWorkflowConfig(f *testing.F) {
 	f.Add(0.0, 0, int64(0), true, true)
 	f.Add(0.5, 3, int64(3600), false, false)
@@ -138,33 +138,33 @@ func FuzzWorkflowConfig(f *testing.F) {
 			}
 		}()
 
-		config := &WorkflowConfig{
-			ConsensusThreshold: threshold,
-			MaxRetries:         retries,
-			DryRun:             dryRun,
-			Sandbox:            sandbox,
+		bp := &Blueprint{
+			Consensus:  BlueprintConsensus{Threshold: threshold},
+			MaxRetries: retries,
+			DryRun:     dryRun,
+			Sandbox:    sandbox,
 		}
 
-		wf := NewWorkflow("test", "prompt", config)
+		wf := NewWorkflow("test", "prompt", bp)
 
-		// Workflow should be created regardless of config values
+		// Workflow should be created regardless of blueprint values
 		if wf == nil {
 			t.Error("workflow should not be nil")
 			return
 		}
 
-		// Config should be set
-		if wf.Config == nil {
-			t.Error("workflow config should not be nil")
+		// Blueprint should be set
+		if wf.Blueprint == nil {
+			t.Error("workflow blueprint should not be nil")
 			return
 		}
 
 		// Values should be preserved (even if invalid - validation is separate)
-		if wf.Config.ConsensusThreshold != threshold {
-			t.Errorf("threshold not preserved: got %f, want %f", wf.Config.ConsensusThreshold, threshold)
+		if wf.Blueprint.Consensus.Threshold != threshold {
+			t.Errorf("threshold not preserved: got %f, want %f", wf.Blueprint.Consensus.Threshold, threshold)
 		}
-		if wf.Config.MaxRetries != retries {
-			t.Errorf("retries not preserved: got %d, want %d", wf.Config.MaxRetries, retries)
+		if wf.Blueprint.MaxRetries != retries {
+			t.Errorf("retries not preserved: got %d, want %d", wf.Blueprint.MaxRetries, retries)
 		}
 	})
 }
