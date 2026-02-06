@@ -283,7 +283,7 @@ export default function Templates() {
 
               {/* Description */}
               <div className="pl-[34px]">
-                <p className="text-xs text-muted-foreground/80 line-clamp-2 leading-relaxed h-8">
+                <p className="text-xs text-muted-foreground/80 line-clamp-2 leading-relaxed h-10">
                   {template.description}
                 </p>
               </div>
