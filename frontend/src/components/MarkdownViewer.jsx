@@ -78,6 +78,12 @@ export default function MarkdownViewer({ markdown }) {
     return window.matchMedia?.('(prefers-color-scheme: dark)')?.matches ?? false;
   }, [theme]);
 
+  const syntaxTheme = useMemo(() => {
+    if (theme === 'dracula') return dracula;
+    if (theme === 'nord') return nord;
+    return isDark ? oneDark : oneLight;
+  }, [theme, isDark]);
+
   return (
     <div className="space-y-4 relative">
       <button
@@ -184,12 +190,6 @@ export default function MarkdownViewer({ markdown }) {
               const content = String(children || '').replace(/\n$/, '');
               // In react-markdown v9, inline code has no className and no newlines
               const isInline = !className && !content.includes('\n');
-
-              const syntaxTheme = useMemo(() => {
-                if (theme === 'dracula') return dracula;
-                if (theme === 'nord') return nord;
-                return isDark ? oneDark : oneLight;
-              }, [theme, isDark]);
 
               if (match) {
                 // Block code with syntax highlighting
