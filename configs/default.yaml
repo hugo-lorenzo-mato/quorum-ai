@@ -110,7 +110,7 @@ phases:
 #
 # Each agent can have a "phases" map to control participation in workflow phases.
 # This uses an OPT-IN model: only phases set to true are enabled.
-# Omitted phases are disabled. If phases is empty/missing, agent is enabled for all.
+# Omitted phases are disabled. If phases is empty/missing, agent is enabled for NO phases.
 # Available phases: refine, analyze, moderate, synthesize, plan, execute
 #
 # Example - agent only for execution:
@@ -143,7 +143,14 @@ agents:
       refine: max
       analyze: max
       plan: max
-    # No phases specified = enabled for all phases
+    # Strict allowlist: explicitly choose phases for this agent.
+    phases:
+      refine: true
+      analyze: true
+      moderate: true
+      synthesize: true
+      plan: true
+      execute: true
 
   # Gemini CLI configuration
   gemini:
@@ -157,7 +164,13 @@ agents:
       synthesize: gemini-3-pro-preview
       plan: gemini-3-pro-preview
       execute: gemini-3-flash-preview
-    # No phases specified = enabled for all phases
+    phases:
+      refine: true
+      analyze: true
+      moderate: true
+      synthesize: true
+      plan: true
+      execute: true
 
   # OpenAI Codex CLI configuration
   codex:
@@ -178,7 +191,13 @@ agents:
       refine: xhigh
       analyze: xhigh
       plan: xhigh
-    # No phases specified = enabled for all phases
+    phases:
+      refine: true
+      analyze: true
+      moderate: true
+      synthesize: true
+      plan: true
+      execute: true
 
   # GitHub Copilot CLI configuration (optional)
   # Uses the standalone `copilot` CLI (npm install -g @github/copilot)
@@ -195,7 +214,13 @@ agents:
       synthesize: claude-sonnet-4-5
       plan: claude-sonnet-4-5
       execute: claude-sonnet-4-5
-    # No phases specified = enabled for all phases (when enabled: true)
+    phases:
+      refine: true
+      analyze: true
+      moderate: true
+      synthesize: true
+      plan: true
+      execute: true
 
   # OpenCode CLI configuration (optional)
   # Uses the OpenCode CLI (https://opencode.ai/docs/cli/)
@@ -211,7 +236,10 @@ agents:
       synthesize: llama3.1
       plan: llama3.1
       execute: qwen2.5-coder
-    # No phases specified = enabled for all phases (when enabled: true)
+    phases:
+      analyze: true
+      plan: true
+      execute: true
 
 # State persistence configuration
 state:

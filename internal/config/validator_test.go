@@ -32,6 +32,14 @@ func validConfig() *Config {
 				Enabled: true, // Default agent must be enabled for valid config
 				Path:    "claude",
 				Model:   "claude-sonnet-4-20250514",
+				Phases: map[string]bool{
+					"refine":     true,
+					"analyze":    true,
+					"moderate":   true,
+					"synthesize": true,
+					"plan":       true,
+					"execute":    true,
+				},
 			},
 			Gemini: AgentConfig{
 				Enabled: false,

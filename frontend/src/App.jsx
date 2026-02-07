@@ -7,6 +7,7 @@ import Templates from './pages/Templates';
 import IssuesEditor from './pages/IssuesEditor';
 import Chat from './pages/Chat';
 import Settings from './pages/Settings';
+import GlobalSettings from './pages/GlobalSettings';
 import Kanban from './pages/Kanban';
 import Projects from './pages/Projects';
 import useSSE from './hooks/useSSE';
@@ -46,6 +47,7 @@ function AppContent() {
         <Route path="/chat" element={<Chat />} />
         <Route path="/projects" element={<Projects />} />
         <Route path="/settings" element={<Settings />} />
+        <Route path="/settings/global" element={<GlobalSettings />} />
       </Routes>
     </Layout>
   );

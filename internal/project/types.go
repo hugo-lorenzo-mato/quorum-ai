@@ -21,6 +21,12 @@ const (
 	StatusInitializing ProjectStatus = "initializing"
 )
 
+// Config modes for project configuration inheritance.
+const (
+	ConfigModeInheritGlobal = "inherit_global"
+	ConfigModeCustom        = "custom"
+)
+
 // String returns the string representation of the status
 func (s ProjectStatus) String() string {
 	return string(s)
@@ -54,6 +60,15 @@ type Project struct {
 	Color string `yaml:"color,omitempty" json:"color,omitempty"`
 	// CreatedAt is the timestamp when the project was registered
 	CreatedAt time.Time `yaml:"created_at" json:"created_at"`
+	// ConfigMode controls whether this project uses the global config (inherit_global)
+	// or a project-specific config file (custom).
+	//
+	// Values:
+	// - "inherit_global": use global config as the effective config for this project.
+	// - "custom": use <project>/.quorum/config.yaml as the effective config.
+	//
+	// If empty, callers should infer a default (e.g., custom if project config exists).
+	ConfigMode string `yaml:"config_mode,omitempty" json:"config_mode,omitempty"`
 }
 
 // Clone creates a deep copy of the project
@@ -70,6 +85,7 @@ func (p *Project) Clone() *Project {
 		StatusMessage: p.StatusMessage,
 		Color:         p.Color,
 		CreatedAt:     p.CreatedAt,
+		ConfigMode:    p.ConfigMode,
 	}
 }
 

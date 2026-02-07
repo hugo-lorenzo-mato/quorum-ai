@@ -65,8 +65,8 @@ func TestHandleValidateConfig_ValidConfig(t *testing.T) {
 	reqBody := `{
 		"workflow": {"timeout": "2h"},
 		"log": {"level": "debug"},
-		"agents": {"default": "claude", "claude": {"enabled": true}},
-		"phases": {"analyze": {"refiner": {"enabled": false}, "moderator": {"enabled": false}}},
+		"agents": {"default": "claude", "claude": {"enabled": true, "phases": {"plan": true, "execute": true, "synthesize": true}}},
+		"phases": {"analyze": {"refiner": {"enabled": false}, "moderator": {"enabled": false}, "synthesizer": {"agent": "claude"}}},
 		"git": {"worktree": {"dir": ".worktrees"}}
 	}`
 

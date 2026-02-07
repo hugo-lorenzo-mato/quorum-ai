@@ -33,6 +33,7 @@ type ProjectContext struct {
 	ConfigLoader *config.Loader
 	Attachments  *attachments.Store
 	ChatStore    core.ChatStore
+	ConfigMode   string // "inherit_global" | "custom"
 
 	// Metadata
 	CreatedAt    time.Time
@@ -48,6 +49,7 @@ type ProjectContext struct {
 type contextOptions struct {
 	logger          *slog.Logger
 	eventBufferSize int
+	configMode      string
 }
 
 // ContextOption configures a ProjectContext
@@ -69,6 +71,14 @@ func WithEventBufferSize(size int) ContextOption {
 	}
 }
 
+// WithConfigMode sets the configuration mode for this project context.
+// Values: "inherit_global" | "custom". Unknown values fall back to "custom".
+func WithConfigMode(mode string) ContextOption {
+	return func(o *contextOptions) {
+		o.configMode = mode
+	}
+}
+
 // NewProjectContext creates a new context for the given project.
 // The id parameter is the unique project identifier from the registry.
 // The root parameter is the absolute path to the project directory.
@@ -77,6 +87,7 @@ func NewProjectContext(id, root string, opts ...ContextOption) (*ProjectContext,
 	options := &contextOptions{
 		logger:          slog.Default(),
 		eventBufferSize: 100,
+		configMode:      ConfigModeCustom,
 	}
 	for _, opt := range opts {
 		opt(options)
@@ -100,6 +111,7 @@ func NewProjectContext(id, root string, opts ...ContextOption) (*ProjectContext,
 		CreatedAt:    time.Now(),
 		LastAccessed: time.Now(),
 		logger:       options.logger.With("project_id", id, "root", absRoot),
+		ConfigMode:   options.configMode,
 	}
 
 	// Initialize all services in order
@@ -202,8 +214,26 @@ func (pc *ProjectContext) initEventBus(opts *contextOptions) error {
 // initConfigLoader creates the config loader for this project
 func (pc *ProjectContext) initConfigLoader() error {
 	configPath := filepath.Join(pc.Root, ".quorum", "config.yaml")
-	pc.ConfigLoader = config.NewLoader().WithConfigFile(configPath)
-	pc.logger.Debug("config loader initialized", "config_path", configPath)
+
+	mode := pc.ConfigMode
+	if mode != ConfigModeInheritGlobal && mode != ConfigModeCustom {
+		mode = ConfigModeCustom
+	}
+
+	if mode == ConfigModeInheritGlobal {
+		globalPath, err := config.EnsureGlobalConfigFile()
+		if err != nil {
+			return err
+		}
+		configPath = globalPath
+	}
+
+	// IMPORTANT: Resolve relative paths relative to the project root (not the config file location).
+	// This is required for global config inheritance where the config file lives outside the project.
+	pc.ConfigLoader = config.NewLoader().
+		WithConfigFile(configPath).
+		WithProjectDir(pc.Root)
+	pc.logger.Debug("config loader initialized", "config_path", configPath, "config_mode", mode)
 	return nil
 }
 

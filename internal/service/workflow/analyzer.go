@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -565,14 +566,8 @@ func (a *Analyzer) finalizeModeratorAnalysis(ctx context.Context, wctx *Context,
 
 // runVnRefinement runs a V(n) refinement round with all agents.
 func (a *Analyzer) runVnRefinement(ctx context.Context, wctx *Context, round int, previousOutputs []AnalysisOutput, evalResult *ModeratorEvaluationResult, agreements []string) ([]AnalysisOutput, error) {
-	// Use AvailableForPhase to only get agents enabled for analyze phase
-	// If project has specific phase config, use that; otherwise fallback to global config
-	var agentNames []string
-	if len(wctx.Config.ProjectAgentPhases) > 0 {
-		agentNames = wctx.Agents.AvailableForPhaseWithConfig(ctx, "analyze", wctx.Config.ProjectAgentPhases)
-	} else {
-		agentNames = wctx.Agents.AvailableForPhase(ctx, "analyze")
-	}
+	// Strict allowlist: always use the per-project phase configuration to decide participation.
+	agentNames := wctx.Agents.AvailableForPhaseWithConfig(ctx, "analyze", wctx.Config.ProjectAgentPhases)
 	if len(agentNames) == 0 {
 		return nil, core.ErrValidation(core.CodeNoAgents, "no agents available for analyze phase")
 	}
@@ -844,14 +839,8 @@ func (a *Analyzer) runVnRefinementWithAgent(ctx context.Context, wctx *Context, 
 // runV1Analysis runs initial analysis with multiple agents in parallel.
 // It tolerates partial failures - continues as long as at least 2 agents succeed.
 func (a *Analyzer) runV1Analysis(ctx context.Context, wctx *Context) ([]AnalysisOutput, error) {
-	// Use AvailableForPhase to only get agents enabled for analyze phase
-	// If project has specific phase config, use that; otherwise fallback to global config
-	var agentNames []string
-	if len(wctx.Config.ProjectAgentPhases) > 0 {
-		agentNames = wctx.Agents.AvailableForPhaseWithConfig(ctx, "analyze", wctx.Config.ProjectAgentPhases)
-	} else {
-		agentNames = wctx.Agents.AvailableForPhase(ctx, "analyze")
-	}
+	// Strict allowlist: always use the per-project phase configuration to decide participation.
+	agentNames := wctx.Agents.AvailableForPhaseWithConfig(ctx, "analyze", wctx.Config.ProjectAgentPhases)
 	if len(agentNames) == 0 {
 		return nil, core.ErrValidation(core.CodeNoAgents, "no agents available for analyze phase")
 	}
@@ -1758,17 +1747,22 @@ func (a *Analyzer) buildModeratorFallbackChain(wctx *Context) []string {
 	primaryAgent := a.moderator.GetConfig().Agent
 	agents := []string{primaryAgent}
 
-	// Get all available agents that have moderate phase enabled
-	// These can serve as fallbacks if the primary fails
-	// Use ListEnabledForPhase to ensure we only get agents that are explicitly enabled
-	// in the configuration and have the "moderate" phase active.
-	fallbackCandidates := wctx.Agents.ListEnabledForPhase("moderate")
-	for _, agentName := range fallbackCandidates {
+	// Strict allowlist: fallbacks must be explicitly enabled for the "moderate" role
+	// in the per-project phase configuration.
+	fallbackCandidates := make([]string, 0)
+	for agentName, phases := range wctx.Config.ProjectAgentPhases {
 		if agentName == primaryAgent {
-			continue // Skip primary, already first
+			continue
 		}
-		agents = append(agents, agentName)
+		for _, p := range phases {
+			if p == "moderate" {
+				fallbackCandidates = append(fallbackCandidates, agentName)
+				break
+			}
+		}
 	}
+	sort.Strings(fallbackCandidates) // Stable, predictable ordering
+	agents = append(agents, fallbackCandidates...)
 
 	// Limit to max 3 fallback agents to avoid infinite retries
 	if len(agents) > 4 {

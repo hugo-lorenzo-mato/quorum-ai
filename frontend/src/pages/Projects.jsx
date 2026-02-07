@@ -146,7 +146,7 @@ function ProjectCard({
 
   return (
     <div
-      className={`group flex flex-col rounded-xl border transition-all duration-200 overflow-hidden shadow-sm hover:shadow-md ${
+      className={`group flex flex-col rounded-xl border transition-all duration-200 shadow-sm hover:shadow-md ${
         isSelected
           ? 'border-primary/50 bg-primary/5 ring-1 ring-primary/10'
           : 'border-border bg-card hover:border-foreground/20 hover:-translate-y-0.5'
@@ -160,7 +160,6 @@ function ProjectCard({
               <ColorPicker
                 value={project.color || PROJECT_COLORS[0]}
                 onChange={handleColorChange}
-                className="scale-90" 
               />
             </div>
             <div className="group/edit min-w-0 flex-1">
@@ -208,7 +207,7 @@ function ProjectCard({
       </div>
 
       {/* Footer: Compact Actions */}
-      <div className="flex items-center justify-between px-3 py-2 border-t border-border/40 bg-muted/5 mt-auto h-10">
+      <div className="flex items-center justify-between px-3 py-2 border-t border-border/40 bg-muted/5 mt-auto h-10 rounded-b-xl">
         <div className="flex items-center gap-0.5">
           {!isDefault && (
              <button

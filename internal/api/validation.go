@@ -9,6 +9,7 @@ import (
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/config"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/project"
 )
 
 // ValidationErrorResponse represents validation errors for the API.
@@ -124,6 +125,16 @@ func (s *Server) handleValidateConfig(w http.ResponseWriter, r *http.Request) {
 
 	// Load current config as base
 	ctx := r.Context()
+
+	mode, _ := s.getProjectConfigMode(ctx)
+	if mode == project.ConfigModeInheritGlobal {
+		respondJSON(w, http.StatusConflict, map[string]interface{}{
+			"error": "project inherits global configuration; switch to custom config to validate project settings",
+			"code":  "INHERITS_GLOBAL",
+		})
+		return
+	}
+
 	cfg, err := s.loadConfigForContext(ctx)
 	if err != nil {
 		s.logger.Error("failed to load config", "error", err)
@@ -135,6 +146,51 @@ func (s *Server) handleValidateConfig(w http.ResponseWriter, r *http.Request) {
 	applyFullConfigUpdates(cfg, &req)
 
 	// Validate
+	if err := config.ValidateConfig(cfg); err != nil {
+		if validationErrs, ok := err.(config.ValidationErrors); ok {
+			response := convertValidationErrors(validationErrs)
+			respondJSON(w, http.StatusOK, ValidationResult{
+				Valid:  false,
+				Errors: response.Errors,
+			})
+			return
+		}
+		respondError(w, http.StatusInternalServerError, "validation error")
+		return
+	}
+
+	respondJSON(w, http.StatusOK, ValidationResult{
+		Valid:  true,
+		Errors: []ValidationFieldError{},
+	})
+}
+
+// handleValidateGlobalConfig validates the global configuration without saving.
+// POST /api/v1/config/global/validate
+func (s *Server) handleValidateGlobalConfig(w http.ResponseWriter, r *http.Request) {
+	var req FullConfigUpdate
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	globalPath, err := config.EnsureGlobalConfigFile()
+	if err != nil {
+		s.logger.Error("failed to ensure global config", "error", err)
+		respondError(w, http.StatusInternalServerError, "failed to load global configuration")
+		return
+	}
+
+	// Load current global config as base (preserve relative paths for editing).
+	cfg, err := config.NewLoader().WithConfigFile(globalPath).WithResolvePaths(false).Load()
+	if err != nil {
+		s.logger.Error("failed to load global config", "error", err)
+		respondError(w, http.StatusInternalServerError, "failed to load global configuration")
+		return
+	}
+
+	applyFullConfigUpdates(cfg, &req)
+
 	if err := config.ValidateConfig(cfg); err != nil {
 		if validationErrs, ok := err.(config.ValidationErrors); ok {
 			response := convertValidationErrors(validationErrs)

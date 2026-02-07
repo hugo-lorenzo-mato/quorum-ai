@@ -68,7 +68,10 @@ func ResumeWorkflowReportWriter(cfg Config, workflowID, existingReportPath strin
 		executionDir: executionDir,
 		workflowID:   workflowID,
 		startTime:    time.Now(),
-		initialized:  true, // Already initialized since we're resuming
+		// Keep initialization lazy even on resume.
+		// The base execution directory may exist without phase subdirectories (e.g. created by API),
+		// and MkdirAll() in Initialize() is idempotent anyway.
+		initialized: false,
 	}
 }
 

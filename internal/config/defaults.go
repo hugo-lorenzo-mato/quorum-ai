@@ -31,7 +31,7 @@ phases:
 
 # Agent configuration
 # Phases use opt-in model: only phases set to true are enabled.
-# If phases is empty or omitted, agent is enabled for all phases.
+# If phases is empty or omitted, agent is enabled for NO phases (strict allowlist).
 # Available phases: refine, analyze, moderate, synthesize, plan, execute
 agents:
   default: claude

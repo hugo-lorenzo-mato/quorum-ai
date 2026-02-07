@@ -1,5 +1,7 @@
 import { useEffect, useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useConfigStore } from '../stores/configStore';
+import useProjectStore from '../stores/projectStore';
 import { Search, ArrowLeft, ChevronRight, X, Settings as SettingsIcon, GitBranch as GitIcon, Terminal as AdvancedIcon, Workflow as WorkflowIcon, Bot as AgentsIcon, ListOrdered as PhasesIcon, Ticket as IssuesIcon } from 'lucide-react';
 import {
   SettingsToolbar,
@@ -93,7 +95,11 @@ const getTabDirty = (tabId, localChanges) => {
   return dirtyKeys.some(key => relevantKeys.includes(key));
 };
 
-export default function Settings() {
+export default function Settings({
+  title = 'Settings',
+  description = 'Manage configuration for the selected project',
+  showProjectBanner = true,
+}) {
   const [activeTab, setActiveTab] = useState('general');
   const [searchQuery, setSearchQuery] = useState('');
   
@@ -107,12 +113,29 @@ export default function Settings() {
   const error = useConfigStore((state) => state.error);
   const config = useConfigStore((state) => state.config);
   const localChanges = useConfigStore((state) => state.localChanges);
+  const projectConfigMode = useConfigStore((state) => state.projectConfigMode);
+
+  const navigate = useNavigate();
+  const currentProjectId = useProjectStore((state) => state.currentProjectId);
+  const updateProject = useProjectStore((state) => state.updateProject);
+  const [isSwitchingConfig, setIsSwitchingConfig] = useState(false);
 
   // Load config and metadata on mount
   useEffect(() => {
     loadConfig();
     loadMetadata();
   }, [loadConfig, loadMetadata]);
+
+  const handleSwitchToCustomConfig = async () => {
+    if (!currentProjectId) return;
+    setIsSwitchingConfig(true);
+    const updated = await updateProject(currentProjectId, { config_mode: 'custom' });
+    setIsSwitchingConfig(false);
+    if (updated) {
+      await loadConfig();
+      await loadMetadata();
+    }
+  };
 
   // Filter tabs based on search
   const filteredTabs = useMemo(() => {
@@ -162,9 +185,9 @@ export default function Settings() {
       <header className="flex-none px-6 py-4 border-b border-border bg-card/50 backdrop-blur-sm z-10">
         <div className={`flex items-center justify-between gap-4 ${mobileView === 'content' ? 'hidden md:flex' : 'flex'}`}>
           <div className={showMobileSearch ? 'hidden md:block' : 'block'}>
-            <h1 className="text-2xl font-bold text-foreground tracking-tight">Settings</h1>
+            <h1 className="text-2xl font-bold text-foreground tracking-tight">{title}</h1>
             <p className="hidden md:block text-sm text-muted-foreground mt-1">
-              Manage your global configuration and preferences
+              {description}
             </p>
           </div>
           
@@ -225,6 +248,38 @@ export default function Settings() {
           <h2 className="text-lg font-semibold text-foreground">{activeTabLabel}</h2>
         </div>
       </header>
+
+      {showProjectBanner && projectConfigMode === 'inherit_global' && (
+        <div className="flex-none px-6 py-3 border-b border-border bg-muted/10">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-foreground">
+                This project inherits the global configuration.
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Editing is disabled here. Update global defaults, or switch this project to a custom config to override settings.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => navigate('/settings/global')}
+                className="px-3 py-1.5 text-xs font-medium rounded-lg border border-border bg-background hover:bg-accent transition-colors"
+              >
+                Edit Global Defaults
+              </button>
+              <button
+                type="button"
+                onClick={handleSwitchToCustomConfig}
+                disabled={isSwitchingConfig || !currentProjectId}
+                className="px-3 py-1.5 text-xs font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:pointer-events-none"
+              >
+                {isSwitchingConfig ? 'Switching...' : 'Switch To Custom Config'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main Layout */}
       <div className="flex-1 flex overflow-hidden">

@@ -13,6 +13,7 @@ import (
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/api/middleware"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/config"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/project"
 )
 
 // Note: DTO types are defined in config_types.go
@@ -25,7 +26,15 @@ func (s *Server) handleGetConfig(w http.ResponseWriter, r *http.Request) {
 	s.configMu.RLock()
 	defer s.configMu.RUnlock()
 
-	cfg, err := s.loadConfigForContext(ctx)
+	configPath, scope, mode, err := s.effectiveConfigPath(ctx)
+	if err != nil {
+		s.logger.Error("failed to resolve config path", "error", err)
+		respondError(w, http.StatusInternalServerError, "failed to resolve configuration path")
+		return
+	}
+
+	// Preserve relative paths for config editing/viewing in the web UI.
+	cfg, err := config.NewLoader().WithConfigFile(configPath).WithResolvePaths(false).Load()
 	if err != nil {
 		s.logger.Error("failed to load config", "error", err)
 		respondError(w, http.StatusInternalServerError, "failed to load configuration")
@@ -34,7 +43,6 @@ func (s *Server) handleGetConfig(w http.ResponseWriter, r *http.Request) {
 
 	// Get file metadata and ETag from file (not from marshaled config!)
 	// IMPORTANT: ETag must be calculated from file bytes to match PATCH validation
-	configPath := s.getProjectConfigPath(ctx)
 	meta, _ := getConfigFileMeta(configPath)
 
 	// Use file-based ETag for consistency with PATCH validation
@@ -69,9 +77,11 @@ func (s *Server) handleGetConfig(w http.ResponseWriter, r *http.Request) {
 	response := ConfigResponseWithMeta{
 		Config: configToFullResponse(cfg),
 		Meta: ConfigMeta{
-			ETag:         etag,
-			LastModified: lastModified,
-			Source:       s.determineConfigSource(configPath),
+			ETag:              etag,
+			LastModified:      lastModified,
+			Source:            s.determineConfigSource(configPath),
+			Scope:             scope,
+			ProjectConfigMode: mode,
 		},
 	}
 
@@ -86,6 +96,50 @@ func (s *Server) determineConfigSource(configPath string) string {
 	return "file"
 }
 
+func (s *Server) getProjectConfigMode(ctx context.Context) (string, error) {
+	// Legacy mode (no multi-project): treat as custom project config.
+	if s.projectRegistry == nil {
+		return project.ConfigModeCustom, nil
+	}
+
+	projectID := middleware.GetProjectID(ctx)
+	if projectID == "" {
+		// No project context: treat as custom.
+		return project.ConfigModeCustom, nil
+	}
+
+	p, err := s.projectRegistry.GetProject(ctx, projectID)
+	if err != nil || p == nil {
+		// Fail closed to custom (project file) in case of lookup errors.
+		return project.ConfigModeCustom, nil
+	}
+
+	if p.ConfigMode == project.ConfigModeInheritGlobal || p.ConfigMode == project.ConfigModeCustom {
+		return p.ConfigMode, nil
+	}
+
+	// Infer if unset: custom if project config exists, otherwise inherit global.
+	projectConfigPath := filepath.Join(p.Path, ".quorum", "config.yaml")
+	if _, err := os.Stat(projectConfigPath); err == nil {
+		return project.ConfigModeCustom, nil
+	}
+	return project.ConfigModeInheritGlobal, nil
+}
+
+// effectiveConfigPath returns the config file path to use for the current request context,
+// plus scope/mode metadata for the frontend.
+func (s *Server) effectiveConfigPath(ctx context.Context) (path string, scope string, mode string, err error) {
+	mode, _ = s.getProjectConfigMode(ctx)
+	if mode == project.ConfigModeInheritGlobal {
+		globalPath, gpErr := config.EnsureGlobalConfigFile()
+		if gpErr != nil {
+			return "", "", "", gpErr
+		}
+		return globalPath, "global", mode, nil
+	}
+	return s.getProjectConfigPath(ctx), "project", mode, nil
+}
+
 // handleUpdateConfig updates configuration values.
 func (s *Server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -97,6 +151,16 @@ func (s *Server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 	var req FullConfigUpdate
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	mode, _ := s.getProjectConfigMode(ctx)
+	if mode == project.ConfigModeInheritGlobal {
+		// Project inherits global config - require switching to custom to edit.
+		respondJSON(w, http.StatusConflict, map[string]interface{}{
+			"error": "project inherits global configuration; switch to custom config to edit project settings",
+			"code":  "INHERITS_GLOBAL",
+		})
 		return
 	}
 
@@ -171,8 +235,10 @@ func (s *Server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 	response := ConfigResponseWithMeta{
 		Config: configToFullResponse(cfg),
 		Meta: ConfigMeta{
-			ETag:   newETag,
-			Source: "file",
+			ETag:              newETag,
+			Source:            "file",
+			Scope:             "project",
+			ProjectConfigMode: mode,
 		},
 	}
 
@@ -186,6 +252,15 @@ func (s *Server) handleResetConfig(w http.ResponseWriter, r *http.Request) {
 	// Use write lock to prevent concurrent modifications
 	s.configMu.Lock()
 	defer s.configMu.Unlock()
+
+	mode, _ := s.getProjectConfigMode(ctx)
+	if mode == project.ConfigModeInheritGlobal {
+		respondJSON(w, http.StatusConflict, map[string]interface{}{
+			"error": "project inherits global configuration; switch to custom config to reset project settings",
+			"code":  "INHERITS_GLOBAL",
+		})
+		return
+	}
 
 	configPath := s.getProjectConfigPath(ctx)
 
@@ -206,7 +281,7 @@ func (s *Server) handleResetConfig(w http.ResponseWriter, r *http.Request) {
 	s.logger.Info("config reset to defaults", "path", configPath)
 
 	// Load the newly written config
-	cfg, err := config.NewLoader().WithConfigFile(configPath).Load()
+	cfg, err := config.NewLoader().WithConfigFile(configPath).WithResolvePaths(false).Load()
 	if err != nil {
 		s.logger.Error("failed to load default config", "error", err)
 		respondError(w, http.StatusInternalServerError, "failed to load default configuration")
@@ -222,12 +297,207 @@ func (s *Server) handleResetConfig(w http.ResponseWriter, r *http.Request) {
 	response := ConfigResponseWithMeta{
 		Config: configToFullResponse(cfg),
 		Meta: ConfigMeta{
-			ETag:   etag,
-			Source: "file",
+			ETag:              etag,
+			Source:            "file",
+			Scope:             "project",
+			ProjectConfigMode: mode,
 		},
 	}
 
 	respondJSON(w, http.StatusOK, response)
+}
+
+// handleGetGlobalConfig returns the global configuration.
+func (s *Server) handleGetGlobalConfig(w http.ResponseWriter, r *http.Request) {
+	// Use read lock to allow concurrent reads
+	s.configMu.RLock()
+	defer s.configMu.RUnlock()
+
+	globalPath, err := config.EnsureGlobalConfigFile()
+	if err != nil {
+		s.logger.Error("failed to ensure global config", "error", err)
+		respondError(w, http.StatusInternalServerError, "failed to load global configuration")
+		return
+	}
+
+	cfg, err := config.NewLoader().WithConfigFile(globalPath).WithResolvePaths(false).Load()
+	if err != nil {
+		s.logger.Error("failed to load global config", "error", err)
+		respondError(w, http.StatusInternalServerError, "failed to load global configuration")
+		return
+	}
+
+	meta, _ := getConfigFileMeta(globalPath)
+	etag := meta.ETag
+	if etag == "" {
+		etag, _ = calculateETag(cfg)
+	}
+
+	if etag != "" {
+		w.Header().Set("ETag", fmt.Sprintf("%q", etag))
+	}
+
+	// Conditional GET
+	if clientETag := r.Header.Get("If-None-Match"); clientETag != "" {
+		clientETag = strings.Trim(clientETag, `"`)
+		if clientETag == etag {
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+	}
+
+	lastModified := ""
+	if meta.Exists {
+		lastModified = meta.LastModified.Format(time.RFC3339)
+	}
+
+	respondJSON(w, http.StatusOK, ConfigResponseWithMeta{
+		Config: configToFullResponse(cfg),
+		Meta: ConfigMeta{
+			ETag:         etag,
+			LastModified: lastModified,
+			Source:       s.determineConfigSource(globalPath),
+			Scope:        "global",
+		},
+	})
+}
+
+// handleUpdateGlobalConfig updates global configuration values.
+func (s *Server) handleUpdateGlobalConfig(w http.ResponseWriter, r *http.Request) {
+	// Use write lock to prevent concurrent modifications
+	s.configMu.Lock()
+	defer s.configMu.Unlock()
+
+	var req FullConfigUpdate
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	globalPath, err := config.EnsureGlobalConfigFile()
+	if err != nil {
+		s.logger.Error("failed to ensure global config", "error", err)
+		respondError(w, http.StatusInternalServerError, "failed to load global configuration")
+		return
+	}
+
+	// Check for force update flag
+	forceUpdate := r.URL.Query().Get("force") == "true"
+
+	// Check If-Match header for ETag validation (unless forcing)
+	clientETag := r.Header.Get("If-Match")
+	if !forceUpdate && clientETag != "" {
+		clientETag = strings.Trim(clientETag, `"`)
+
+		matches, currentETag, err := ETagMatch(clientETag, globalPath)
+		if err != nil {
+			s.logger.Error("failed to check ETag", "error", err)
+			respondError(w, http.StatusInternalServerError, "failed to check configuration version")
+			return
+		}
+
+		if !matches {
+			// Conflict detected!
+			cfg, loadErr := config.NewLoader().WithConfigFile(globalPath).WithResolvePaths(false).Load()
+			if loadErr != nil {
+				respondError(w, http.StatusInternalServerError, "failed to load current configuration")
+				return
+			}
+
+			w.Header().Set("ETag", fmt.Sprintf("%q", currentETag))
+			respondJSON(w, http.StatusPreconditionFailed, map[string]interface{}{
+				"error":          "Configuration was modified externally",
+				"code":           "CONFLICT",
+				"current_etag":   currentETag,
+				"current_config": configToFullResponse(cfg),
+			})
+			return
+		}
+	}
+
+	// Load current global config
+	cfg, err := config.NewLoader().WithConfigFile(globalPath).WithResolvePaths(false).Load()
+	if err != nil {
+		s.logger.Error("failed to load global config", "error", err)
+		respondError(w, http.StatusInternalServerError, "failed to load global configuration")
+		return
+	}
+
+	// Apply updates
+	applyFullConfigUpdates(cfg, &req)
+
+	// Validate merged config before saving
+	if !validateConfig(w, cfg, s.logger) {
+		return
+	}
+
+	// Save with atomic write
+	if err := atomicWriteConfig(cfg, globalPath); err != nil {
+		s.logger.Error("failed to save global config", "error", err)
+		respondError(w, http.StatusInternalServerError, "failed to save configuration")
+		return
+	}
+
+	// New ETag from file bytes
+	newETag, _ := calculateETagFromFile(globalPath)
+	w.Header().Set("ETag", fmt.Sprintf("%q", newETag))
+
+	respondJSON(w, http.StatusOK, ConfigResponseWithMeta{
+		Config: configToFullResponse(cfg),
+		Meta: ConfigMeta{
+			ETag:   newETag,
+			Source: "file",
+			Scope:  "global",
+		},
+	})
+}
+
+// handleResetGlobalConfig resets the global configuration to defaults.
+func (s *Server) handleResetGlobalConfig(w http.ResponseWriter, r *http.Request) {
+	// Use write lock to prevent concurrent modifications
+	s.configMu.Lock()
+	defer s.configMu.Unlock()
+
+	globalPath, err := config.GlobalConfigPath()
+	if err != nil {
+		s.logger.Error("failed to resolve global config path", "error", err)
+		respondError(w, http.StatusInternalServerError, "failed to resolve global configuration path")
+		return
+	}
+
+	// Ensure directory exists
+	if err := os.MkdirAll(filepath.Dir(globalPath), 0o750); err != nil {
+		s.logger.Error("failed to create global config directory", "error", err)
+		respondError(w, http.StatusInternalServerError, "failed to create configuration directory")
+		return
+	}
+
+	if err := os.WriteFile(globalPath, []byte(config.DefaultConfigYAML), 0o600); err != nil {
+		s.logger.Error("failed to write default global config", "error", err)
+		respondError(w, http.StatusInternalServerError, "failed to write default configuration")
+		return
+	}
+
+	cfg, err := config.NewLoader().WithConfigFile(globalPath).WithResolvePaths(false).Load()
+	if err != nil {
+		s.logger.Error("failed to load default global config", "error", err)
+		respondError(w, http.StatusInternalServerError, "failed to load default configuration")
+		return
+	}
+
+	etag, _ := calculateETagFromFile(globalPath)
+	if etag != "" {
+		w.Header().Set("ETag", fmt.Sprintf("%q", etag))
+	}
+
+	respondJSON(w, http.StatusOK, ConfigResponseWithMeta{
+		Config: configToFullResponse(cfg),
+		Meta: ConfigMeta{
+			ETag:   etag,
+			Source: "file",
+			Scope:  "global",
+		},
+	})
 }
 
 // handleGetAgents returns available agents and their status.
@@ -359,16 +629,12 @@ func (s *Server) handleGetAgents(w http.ResponseWriter, _ *http.Request) {
 
 // loadConfigForContext loads the configuration using the project-scoped config loader.
 func (s *Server) loadConfigForContext(ctx context.Context) (*config.Config, error) {
-	loader := s.getProjectConfigLoader(ctx)
-	if loader != nil {
-		return loader.Load()
+	configPath, _, _, err := s.effectiveConfigPath(ctx)
+	if err != nil {
+		return nil, err
 	}
-	// Fallback: load from default path
-	configPath := s.getProjectConfigPath(ctx)
-	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		return config.NewLoader().Load()
-	}
-	return config.NewLoader().WithConfigFile(configPath).Load()
+	// Preserve relative paths for the web UI, and allow missing project config files.
+	return config.NewLoader().WithConfigFile(configPath).WithResolvePaths(false).Load()
 }
 
 // getProjectConfigPath returns the config file path for the current project context.

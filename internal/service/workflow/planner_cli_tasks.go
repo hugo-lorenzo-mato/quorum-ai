@@ -200,7 +200,7 @@ func (p *Planner) runCLIGeneratedTaskPlanning(ctx context.Context, wctx *Context
 // collectAgentInfo gathers information about available agents for task assignment.
 func (p *Planner) collectAgentInfo(ctx context.Context, wctx *Context) []AgentInfo {
 	// Get agents enabled for execute phase
-	agentNames := wctx.Agents.AvailableForPhase(ctx, "execute")
+	agentNames := wctx.Agents.AvailableForPhaseWithConfig(ctx, "execute", wctx.Config.ProjectAgentPhases)
 	if len(agentNames) == 0 {
 		// Fallback to all available agents
 		agentNames = wctx.Agents.Available(ctx)

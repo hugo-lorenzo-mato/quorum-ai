@@ -474,6 +474,134 @@ func (r *Runner) RunWithState(ctx context.Context, state *core.WorkflowState) er
 	return r.state.Save(ctx, workflowState)
 }
 
+// AnalyzeWithState executes refine (if enabled) and analyze phases using an existing workflow state.
+// This is for API usage where the workflow was created and persisted before phase execution.
+//
+// After completion, Status will be "completed" and CurrentPhase will be "plan" (ready for planning).
+func (r *Runner) AnalyzeWithState(ctx context.Context, state *core.WorkflowState) error {
+	if state == nil {
+		return core.ErrValidation("NIL_STATE", "workflow state cannot be nil")
+	}
+	if state.WorkflowID == "" {
+		return core.ErrValidation("MISSING_WORKFLOW_ID", "workflow state must have a workflow ID")
+	}
+
+	// Helper to mark state as failed before returning validation errors.
+	// This ensures the UI shows the correct status when validation fails early.
+	markFailed := func(err error) error {
+		state.Status = core.WorkflowStatusFailed
+		state.Error = err.Error()
+		state.UpdatedAt = time.Now()
+		if saveErr := r.state.Save(ctx, state); saveErr != nil {
+			r.logger.Warn("failed to save failed state", "error", saveErr)
+		}
+		if r.output != nil {
+			r.output.Log("error", "workflow", fmt.Sprintf("Workflow failed: %s", err.Error()))
+		}
+		// Deactivate workflow when validation fails to prevent ghost workflows.
+		if deactErr := r.state.DeactivateWorkflow(ctx); deactErr != nil {
+			r.logger.Warn("failed to deactivate failed workflow",
+				"workflow_id", state.WorkflowID,
+				"error", deactErr,
+			)
+		}
+		return err
+	}
+
+	if err := r.validateRunInput(state.Prompt); err != nil {
+		return markFailed(err)
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, r.config.Timeout)
+	defer cancel()
+
+	if err := r.ValidateAgentAvailability(ctx); err != nil {
+		return markFailed(err)
+	}
+
+	if err := r.state.AcquireLock(ctx); err != nil {
+		return fmt.Errorf("acquiring lock: %w", err)
+	}
+	defer func() {
+		releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		_ = r.state.ReleaseLock(releaseCtx)
+	}()
+
+	workflowState := state
+	if workflowState.Status != core.WorkflowStatusRunning {
+		workflowState.Status = core.WorkflowStatusRunning
+	}
+	if workflowState.CurrentPhase == "" {
+		workflowState.CurrentPhase = core.PhaseRefine
+	}
+	if workflowState.Tasks == nil {
+		workflowState.Tasks = make(map[core.TaskID]*core.TaskState)
+	}
+	if workflowState.TaskOrder == nil {
+		workflowState.TaskOrder = make([]core.TaskID, 0)
+	}
+	if workflowState.Checkpoints == nil {
+		workflowState.Checkpoints = make([]core.Checkpoint, 0)
+	}
+	if workflowState.Metrics == nil {
+		workflowState.Metrics = &core.StateMetrics{}
+	}
+
+	// New execution: bump execution id and clear any previous agent events.
+	r.prepareExecution(workflowState, false)
+
+	// Ensure workflow-level Git isolation (API-created state may not have it persisted).
+	if _, err := r.ensureWorkflowGitIsolation(ctx, workflowState); err != nil {
+		return r.handleError(ctx, workflowState, err)
+	}
+
+	r.logger.Info("starting analyze phase with existing state",
+		"workflow_id", workflowState.WorkflowID,
+		"prompt_length", len(workflowState.Prompt),
+	)
+	if r.output != nil {
+		r.output.Log("info", "workflow", fmt.Sprintf("Analyze phase started: %s", workflowState.WorkflowID))
+	}
+
+	if err := r.state.Save(ctx, workflowState); err != nil {
+		return fmt.Errorf("saving state: %w", err)
+	}
+
+	wctx := r.createContext(workflowState)
+
+	// Run refine (if enabled) and analyze only.
+	if err := r.refiner.Run(ctx, wctx); err != nil {
+		return r.handleError(ctx, workflowState, err)
+	}
+	if err := r.ValidateModeratorConfig(); err != nil {
+		return r.handleError(ctx, workflowState, err)
+	}
+	if err := r.analyzer.Run(ctx, wctx); err != nil {
+		return r.handleError(ctx, workflowState, err)
+	}
+
+	// Finalize metrics
+	r.finalizeMetrics(workflowState)
+
+	// Mark as completed (analyze phase done, ready for plan)
+	workflowState.Status = core.WorkflowStatusCompleted
+	workflowState.CurrentPhase = core.PhasePlan // Ready for next phase
+	workflowState.UpdatedAt = time.Now()
+
+	r.logger.Info("analyze phase completed",
+		"workflow_id", workflowState.WorkflowID,
+		"duration", workflowState.Metrics.Duration,
+		"consensus_score", workflowState.Metrics.ConsensusScore,
+	)
+	if r.output != nil {
+		r.output.Log("success", "workflow", fmt.Sprintf("Analysis completed: consensus %.1f%%",
+			workflowState.Metrics.ConsensusScore*100))
+	}
+
+	return r.state.Save(ctx, workflowState)
+}
+
 // Resume continues a workflow from the last checkpoint.
 func (r *Runner) Resume(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, r.config.Timeout)
@@ -1037,7 +1165,22 @@ func (r *Runner) writeErrorToReportDir(state *core.WorkflowState, err error) {
 		return
 	}
 
-	errorFile := filepath.Join(state.ReportPath, "error.md")
+	reportDir := state.ReportPath
+	if !filepath.IsAbs(reportDir) && strings.TrimSpace(r.projectRoot) != "" {
+		reportDir = filepath.Join(r.projectRoot, reportDir)
+	}
+	if mkErr := os.MkdirAll(reportDir, 0o750); mkErr != nil {
+		if r.logger != nil {
+			r.logger.Warn("failed to ensure report directory for error file",
+				"workflow_id", state.WorkflowID,
+				"path", reportDir,
+				"error", mkErr,
+			)
+		}
+		return
+	}
+
+	errorFile := filepath.Join(reportDir, "error.md")
 	content := fmt.Sprintf(`# Workflow Error
 
 ## Workflow ID
@@ -1360,6 +1503,97 @@ func (r *Runner) Plan(ctx context.Context) error {
 	return r.state.Save(ctx, workflowState)
 }
 
+// PlanWithState executes only the planning phase using an existing workflow state.
+// This is for API usage where the workflow state was loaded by ID before calling into the runner.
+//
+// After completion, Status will be "completed" and CurrentPhase will be "execute" (ready for execution).
+func (r *Runner) PlanWithState(ctx context.Context, state *core.WorkflowState) error {
+	if state == nil {
+		return core.ErrState("NIL_STATE", "workflow state cannot be nil")
+	}
+
+	// Apply timeout
+	ctx, cancel := context.WithTimeout(ctx, r.config.Timeout)
+	defer cancel()
+
+	// Acquire lock
+	if err := r.state.AcquireLock(ctx); err != nil {
+		return fmt.Errorf("acquiring lock: %w", err)
+	}
+	defer func() {
+		releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		_ = r.state.ReleaseLock(releaseCtx)
+	}()
+
+	workflowState := state
+
+	// Verify analyze phase completed
+	analysis := GetConsolidatedAnalysis(workflowState)
+	if analysis == "" {
+		return core.ErrState("MISSING_ANALYSIS", "no consolidated analysis found; run analyze phase first")
+	}
+
+	// Check if plan phase already completed
+	if isPhaseCompleted(workflowState, core.PhasePlan) {
+		r.logger.Info("plan phase already completed",
+			"workflow_id", workflowState.WorkflowID)
+		if r.output != nil {
+			r.output.Log("info", "workflow", "Plan phase already completed, skipping")
+		}
+		return nil
+	}
+
+	// Ensure state maps exist
+	if workflowState.Tasks == nil {
+		workflowState.Tasks = make(map[core.TaskID]*core.TaskState)
+	}
+	if workflowState.TaskOrder == nil {
+		workflowState.TaskOrder = make([]core.TaskID, 0)
+	}
+	if workflowState.Checkpoints == nil {
+		workflowState.Checkpoints = make([]core.Checkpoint, 0)
+	}
+	if workflowState.Metrics == nil {
+		workflowState.Metrics = &core.StateMetrics{}
+	}
+
+	r.logger.Info("starting plan phase with existing state",
+		"workflow_id", workflowState.WorkflowID,
+	)
+	if r.output != nil {
+		r.output.Log("info", "workflow", fmt.Sprintf("Plan phase started: %s", workflowState.WorkflowID))
+	}
+
+	// Create workflow context for phase runners
+	wctx := r.createContext(workflowState)
+
+	// Run ONLY the planner - no fallthrough to execute
+	if err := r.planner.Run(ctx, wctx); err != nil {
+		return r.handleError(ctx, workflowState, err)
+	}
+
+	// Finalize metrics
+	r.finalizeMetrics(workflowState)
+
+	// Mark as completed (plan phase done, ready for execute)
+	workflowState.Status = core.WorkflowStatusCompleted
+	workflowState.CurrentPhase = core.PhaseExecute // Ready for next phase
+	workflowState.UpdatedAt = time.Now()
+
+	r.logger.Info("plan phase completed",
+		"workflow_id", workflowState.WorkflowID,
+		"task_count", len(workflowState.Tasks),
+		"duration", workflowState.Metrics.Duration,
+	)
+	if r.output != nil {
+		r.output.Log("success", "workflow", fmt.Sprintf("Planning completed: %d tasks created",
+			len(workflowState.Tasks)))
+	}
+
+	return r.state.Save(ctx, workflowState)
+}
+
 // Replan clears existing plan data and re-executes the planning phase.
 // This is useful when you want to regenerate tasks with the same consolidated analysis.
 // Optionally prepends additional context to the consolidated analysis.
@@ -1407,6 +1641,83 @@ func (r *Runner) Replan(ctx context.Context, additionalContext string) error {
 	r.clearPlanPhaseData(workflowState)
 
 	r.logger.Info("starting replan workflow",
+		"workflow_id", workflowState.WorkflowID,
+		"previous_tasks", len(workflowState.Tasks),
+	)
+	if r.output != nil {
+		r.output.Log("info", "workflow", "Replanning: clearing previous plan and regenerating tasks...")
+	}
+
+	// Create workflow context for phase runners
+	wctx := r.createContext(workflowState)
+
+	// Run planner
+	if err := r.planner.Run(ctx, wctx); err != nil {
+		return r.handleError(ctx, workflowState, err)
+	}
+
+	// Finalize metrics
+	r.finalizeMetrics(workflowState)
+
+	// Mark as completed (plan phase done, ready for execute)
+	workflowState.Status = core.WorkflowStatusCompleted
+	workflowState.CurrentPhase = core.PhaseExecute
+	workflowState.UpdatedAt = time.Now()
+
+	r.logger.Info("replan completed",
+		"workflow_id", workflowState.WorkflowID,
+		"task_count", len(workflowState.Tasks),
+	)
+	if r.output != nil {
+		r.output.Log("success", "workflow", fmt.Sprintf("Replanning completed: %d tasks created",
+			len(workflowState.Tasks)))
+	}
+
+	return r.state.Save(ctx, workflowState)
+}
+
+// ReplanWithState clears existing plan data and re-executes the planning phase using an existing workflow state.
+// This is for API usage where the workflow state was loaded by ID before calling into the runner.
+func (r *Runner) ReplanWithState(ctx context.Context, state *core.WorkflowState, additionalContext string) error {
+	if state == nil {
+		return core.ErrState("NIL_STATE", "workflow state cannot be nil")
+	}
+
+	// Apply timeout
+	ctx, cancel := context.WithTimeout(ctx, r.config.Timeout)
+	defer cancel()
+
+	// Acquire lock
+	if err := r.state.AcquireLock(ctx); err != nil {
+		return fmt.Errorf("acquiring lock: %w", err)
+	}
+	defer func() {
+		releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		_ = r.state.ReleaseLock(releaseCtx)
+	}()
+
+	workflowState := state
+
+	// Verify analyze phase completed
+	analysis := GetConsolidatedAnalysis(workflowState)
+	if analysis == "" {
+		return core.ErrState("MISSING_ANALYSIS", "no consolidated analysis found; run analyze phase first")
+	}
+
+	// If additional context provided, prepend it to the analysis
+	if additionalContext != "" {
+		if err := PrependToConsolidatedAnalysis(workflowState, additionalContext); err != nil {
+			return fmt.Errorf("updating analysis context: %w", err)
+		}
+		r.logger.Info("prepended additional context to analysis",
+			"context_length", len(additionalContext))
+	}
+
+	// Clear plan phase data
+	r.clearPlanPhaseData(workflowState)
+
+	r.logger.Info("starting replan phase with existing state",
 		"workflow_id", workflowState.WorkflowID,
 		"previous_tasks", len(workflowState.Tasks),
 	)

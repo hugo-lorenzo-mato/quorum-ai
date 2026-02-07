@@ -5,9 +5,11 @@ const API_BASE = '/api/v1';
 /**
  * Build URL with project query parameter if a project is selected.
  * @param {string} baseUrl - The base URL
+ * @param {boolean} skipProject - If true, do not add project parameter
  * @returns {string} URL with project parameter if applicable
  */
-function buildUrlWithProject(baseUrl) {
+function buildUrlWithProject(baseUrl, skipProject = false) {
+  if (skipProject) return baseUrl;
   const projectId = useProjectStore.getState().currentProjectId;
   if (!projectId) return baseUrl;
 
@@ -16,13 +18,14 @@ function buildUrlWithProject(baseUrl) {
 }
 
 async function request(endpoint, options = {}) {
-  const url = buildUrlWithProject(`${API_BASE}${endpoint}`);
+  const { skipProject, ...restOptions } = options;
+  const url = buildUrlWithProject(`${API_BASE}${endpoint}`, !!skipProject);
   const config = {
     headers: {
       'Content-Type': 'application/json',
-      ...options.headers,
+      ...restOptions.headers,
     },
-    ...options,
+    ...restOptions,
   };
 
   const response = await fetch(url, config);
@@ -53,7 +56,10 @@ async function request(endpoint, options = {}) {
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
-    throw new Error(error.message || error.error || response.statusText);
+    const err = new Error(error.message || error.error || response.statusText);
+    if (error.code) err.code = error.code;
+    if (error.errors) err.errors = error.errors;
+    throw err;
   }
 
   // Extract ETag from headers
@@ -137,4 +143,47 @@ export const configApi = {
   getAgents: async () => {
     return request('/config/agents');
   },
+};
+
+// Global configuration endpoints (no project parameter).
+export const globalConfigApi = {
+  get: async (etag) => {
+    const headers = {};
+    if (etag) {
+      headers['If-None-Match'] = `"${etag}"`;
+    }
+    return request('/config/global', { headers, skipProject: true });
+  },
+
+  update: async (updates, etag, force = false) => {
+    const headers = {};
+    if (etag && !force) {
+      headers['If-Match'] = `"${etag}"`;
+    }
+
+    const url = force ? '/config/global?force=true' : '/config/global';
+
+    return request(url, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify(updates),
+      skipProject: true,
+    });
+  },
+
+  validate: async (updates) => {
+    return request('/config/global/validate', {
+      method: 'POST',
+      body: JSON.stringify(updates),
+      skipProject: true,
+    });
+  },
+
+  reset: async () => {
+    return request('/config/global/reset', { method: 'POST', skipProject: true });
+  },
+
+  getSchema: async () => request('/config/schema', { skipProject: true }),
+  getEnums: async () => request('/config/enums', { skipProject: true }),
+  getAgents: async () => request('/config/agents', { skipProject: true }),
 };

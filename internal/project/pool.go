@@ -218,6 +218,7 @@ func (p *StatePool) GetContext(ctx context.Context, projectID string) (*ProjectC
 	pc, err := NewProjectContext(projectID, project.Path,
 		WithContextLogger(p.logger),
 		WithEventBufferSize(p.opts.eventBufferSize),
+		WithConfigMode(project.ConfigMode),
 	)
 	if err != nil {
 		atomic.AddInt64(&p.errors, 1)

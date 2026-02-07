@@ -26,14 +26,19 @@ Complete reference for all quorum-ai configuration options.
 
 ## Overview
 
-quorum-ai uses a layered configuration system with the following precedence (highest to lowest):
+quorum-ai uses a layered configuration system. The exact sources depend on whether you run the CLI inside a single project, or you run the WebUI server managing multiple projects.
 
-1. **CLI flags** - Command-line arguments
+**CLI config precedence (highest to lowest):**
+1. **CLI flags** - command-line arguments
 2. **Environment variables** - `QUORUM_*` prefix
 3. **Project config** - `.quorum/config.yaml` in project root
-4. **Legacy project config** - `.quorum.yaml` (backward compatibility)
-5. **Global config** - `~/.config/quorum/config.yaml`
-6. **Built-in defaults** - Sensible defaults for all options
+4. **Legacy project config** - `.quorum.yaml` (legacy file name)
+5. **User config** - `~/.config/quorum/config.yaml`
+6. **Built-in defaults**
+
+**WebUI server (multi-project) effective config:**
+1. If a project is in `custom` mode, the effective config is `<project>/.quorum/config.yaml`.
+2. If a project is in `inherit_global` mode, the effective config is the global defaults file: `~/.quorum-registry/global-config.yaml`.
 
 Generate a starter configuration:
 
@@ -50,6 +55,7 @@ quorum init
 | `.quorum/config.yaml` | Project-specific settings (recommended) |
 | `.quorum.yaml` | Legacy project settings |
 | `~/.config/quorum/config.yaml` | User-level defaults |
+| `~/.quorum-registry/global-config.yaml` | WebUI global defaults (applies to projects in `inherit_global` mode) |
 | `configs/default.yaml` | Reference template (do not edit) |
 
 ---
@@ -360,7 +366,9 @@ The `phases` map controls which phases an agent participates in:
 
 - **Only phases set to `true` are enabled**
 - **Omitted phases are disabled**
-- **Empty or missing `phases` = enabled for all** (backward compatible)
+- **Empty or missing `phases` = enabled for NO phases** (strict allowlist)
+
+If an agent is `enabled: true`, it must have at least one phase enabled (otherwise config validation fails).
 
 Available phases: `refine`, `analyze`, `moderate`, `synthesize`, `plan`, `execute`
 

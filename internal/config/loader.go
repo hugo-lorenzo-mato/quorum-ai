@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,18 +14,21 @@ import (
 
 // Loader handles configuration loading from multiple sources.
 type Loader struct {
-	v          *viper.Viper
-	configFile string
-	envPrefix  string
-	projectDir string // Resolved project root directory (set by Load)
-	mu         sync.Mutex // Protects concurrent access to viper operations
+	v              *viper.Viper
+	configFile     string
+	envPrefix      string
+	projectDir     string     // Resolved project root directory (set by Load)
+	projectDirHint string     // Optional: override project root directory for path resolution
+	resolvePaths   bool       // Whether to resolve relative paths to absolute on Load
+	mu             sync.Mutex // Protects concurrent access to viper operations
 }
 
 // NewLoader creates a new configuration loader.
 func NewLoader() *Loader {
 	return &Loader{
-		v:         viper.New(),
-		envPrefix: "QUORUM",
+		v:            viper.New(),
+		envPrefix:    "QUORUM",
+		resolvePaths: true,
 	}
 }
 
@@ -32,14 +36,30 @@ func NewLoader() *Loader {
 // This allows integration with CLI flag bindings.
 func NewLoaderWithViper(v *viper.Viper) *Loader {
 	return &Loader{
-		v:         v,
-		envPrefix: "QUORUM",
+		v:            v,
+		envPrefix:    "QUORUM",
+		resolvePaths: true,
 	}
 }
 
 // WithConfigFile sets an explicit config file path.
 func (l *Loader) WithConfigFile(path string) *Loader {
 	l.configFile = path
+	return l
+}
+
+// WithProjectDir provides a project root directory hint for resolving relative paths.
+// This is required for scenarios where the config file is not located under the project
+// root (e.g. a global config shared by many projects).
+func (l *Loader) WithProjectDir(path string) *Loader {
+	l.projectDirHint = path
+	return l
+}
+
+// WithResolvePaths controls whether relative paths are resolved to absolute paths on Load().
+// For API editing endpoints, you typically want resolvePaths=false to preserve relative values.
+func (l *Loader) WithResolvePaths(resolve bool) *Loader {
+	l.resolvePaths = resolve
 	return l
 }
 
@@ -99,20 +119,28 @@ func (l *Loader) Load() (*Config, error) {
 
 	// Read config file (ignore not found)
 	if err := l.v.ReadInConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
+			// ignore
+		} else if errors.Is(err, os.ErrNotExist) {
+			// Explicit config file path does not exist: treat as "no config file" and fall back to defaults.
+		} else {
 			return nil, fmt.Errorf("reading config: %w", err)
 		}
 	}
 
 	// Normalize legacy keys from config file (e.g., maxretries -> max_retries)
 	if configPath := l.v.ConfigFileUsed(); configPath != "" {
-		normalized, err := loadNormalizedConfigMap(configPath)
-		if err != nil {
-			return nil, fmt.Errorf("normalizing config: %w", err)
-		}
-		if len(normalized) > 0 {
-			if err := l.v.MergeConfigMap(normalized); err != nil {
-				return nil, fmt.Errorf("merging normalized config: %w", err)
+		// If we were given an explicit config file path that doesn't exist, viper may still
+		// report it as "used". Skip normalization in that case.
+		if _, err := os.Stat(configPath); err == nil {
+			normalized, err := loadNormalizedConfigMap(configPath)
+			if err != nil {
+				return nil, fmt.Errorf("normalizing config: %w", err)
+			}
+			if len(normalized) > 0 {
+				if err := l.v.MergeConfigMap(normalized); err != nil {
+					return nil, fmt.Errorf("merging normalized config: %w", err)
+				}
 			}
 		}
 	}
@@ -144,8 +172,14 @@ func (l *Loader) Load() (*Config, error) {
 	if projectDir == "" {
 		projectDir, _ = os.Getwd()
 	}
+	// Override project dir when caller provides a hint (e.g. global config shared by many projects).
+	if strings.TrimSpace(l.projectDirHint) != "" {
+		projectDir = l.projectDirHint
+	}
 	l.projectDir = projectDir
-	l.resolveAbsolutePaths(&cfg, projectDir)
+	if l.resolvePaths {
+		l.resolveAbsolutePaths(&cfg, projectDir)
+	}
 
 	return &cfg, nil
 }

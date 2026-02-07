@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 
+	cli "github.com/hugo-lorenzo-mato/quorum-ai/internal/adapters/cli"
 	webadapters "github.com/hugo-lorenzo-mato/quorum-ai/internal/adapters/web"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/config"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/control"
@@ -72,9 +73,6 @@ func (f *RunnerFactory) CreateRunner(ctx context.Context, workflowID string, cp 
 	if stateManager == nil {
 		return nil, nil, fmt.Errorf("state manager not configured")
 	}
-	if f.agentRegistry == nil {
-		return nil, nil, fmt.Errorf("agent registry not configured")
-	}
 	if f.eventBus == nil {
 		return nil, nil, fmt.Errorf("event bus not configured")
 	}
@@ -86,6 +84,13 @@ func (f *RunnerFactory) CreateRunner(ctx context.Context, workflowID string, cp 
 	cfg, err := f.configLoader.Load()
 	if err != nil {
 		return nil, nil, fmt.Errorf("loading config: %w", err)
+	}
+
+	// Build a fresh agent registry from the (project-scoped) config.
+	// This makes config changes effective immediately without requiring server restart.
+	registry := cli.NewRegistry()
+	if err := cli.ConfigureRegistryFromConfig(registry, cfg); err != nil {
+		return nil, nil, fmt.Errorf("configuring agent registry: %w", err)
 	}
 
 	// Get project-scoped EventBus if available
@@ -101,7 +106,7 @@ func (f *RunnerFactory) CreateRunner(ctx context.Context, workflowID string, cp 
 	builder := workflow.NewRunnerBuilder().
 		WithConfig(cfg).
 		WithStateManager(stateManager).
-		WithAgentRegistry(f.agentRegistry).
+		WithAgentRegistry(registry).
 		WithLogger(f.logger).
 		WithOutputNotifier(outputNotifier).
 		WithControlPlane(cp).
@@ -151,7 +156,7 @@ func (s *Server) RunnerFactoryForContext(ctx context.Context) *RunnerFactory {
 	eventBus := s.getProjectEventBus(ctx)
 	configLoader := s.getProjectConfigLoader(ctx)
 
-	if stateManager == nil || s.agentRegistry == nil || eventBus == nil || configLoader == nil {
+	if stateManager == nil || eventBus == nil || configLoader == nil {
 		return nil
 	}
 

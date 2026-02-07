@@ -56,20 +56,19 @@ export function AgentCard({ agentKey }) {
     [phases.value]
   );
   const cleanPhases = useMemo(() => normalizeBoolMap(rawPhases), [rawPhases]);
-  const isRestricted = Object.keys(rawPhases).length > 0;
   const isEnabled = !!enabled.value;
   const isEditingDisabled = enabled.disabled || !isEnabled;
 
   const isPhaseEnabled = (phase) => {
-    if (!isRestricted) return true; // empty map => enabled for all phases (backward-compatible)
     return cleanPhases[phase] === true;
   };
 
   const enabledPhaseCount = phaseKeys.filter((k) => isPhaseEnabled(k)).length;
+  const allPhasesEnabled = enabledPhaseCount === phaseKeys.length;
 
   const togglePhase = (phase) => {
     if (isEditingDisabled) return;
-    const next = isRestricted ? { ...cleanPhases } : Object.fromEntries(phaseKeys.map((k) => [k, true]));
+    const next = { ...cleanPhases };
 
     if (next[phase]) {
       delete next[phase];
@@ -80,12 +79,6 @@ export function AgentCard({ agentKey }) {
     // Prevent "no enabled phases" (use the agent toggle for that)
     const nextEnabledCount = phaseKeys.filter((k) => next[k] === true).length;
     if (nextEnabledCount === 0) return;
-
-    // If all phases are enabled, store empty map (means "all")
-    if (nextEnabledCount === phaseKeys.length) {
-      phases.onChange({});
-      return;
-    }
 
     phases.onChange(next);
   };
@@ -195,7 +188,13 @@ export function AgentCard({ agentKey }) {
         <ToggleSetting
           label={`Enable ${info.name}`}
           checked={enabled.value}
-          onChange={enabled.onChange}
+          onChange={(nextEnabled) => {
+            enabled.onChange(nextEnabled);
+            // If enabling from a blank phases allowlist, default to "all phases" explicitly.
+            if (nextEnabled && enabledPhaseCount === 0) {
+              phases.onChange(Object.fromEntries(phaseKeys.map((k) => [k, true])));
+            }
+          }}
           error={enabled.error}
           disabled={enabled.disabled}
           compact
@@ -258,15 +257,17 @@ export function AgentCard({ agentKey }) {
             <div className="min-w-0">
               <p className="text-sm font-medium text-foreground">Use in phases</p>
               <p className="text-xs text-muted-foreground mt-1">
-                {isRestricted
-                  ? `${enabledPhaseCount} selected · This list is an allowlist`
-                  : 'Default: enabled for all phases'}
+                {allPhasesEnabled
+                  ? 'All phases enabled · Strict allowlist'
+                  : `${enabledPhaseCount} selected · Strict allowlist`}
               </p>
             </div>
             <button
               type="button"
-              onClick={() => !isEditingDisabled && phases.onChange({})}
-              disabled={phases.disabled || !isRestricted || !isEnabled}
+              onClick={() =>
+                !isEditingDisabled && phases.onChange(Object.fromEntries(phaseKeys.map((k) => [k, true])))
+              }
+              disabled={phases.disabled || allPhasesEnabled || !isEnabled}
               className="text-xs font-medium text-muted-foreground hover:text-foreground disabled:opacity-50 disabled:pointer-events-none"
             >
               Reset to all

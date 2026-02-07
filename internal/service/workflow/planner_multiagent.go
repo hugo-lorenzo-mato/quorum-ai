@@ -138,7 +138,7 @@ func (p *Planner) runMultiAgentPlanning(ctx context.Context, wctx *Context) erro
 // Returns at least 2 successful plan proposals.
 func (p *Planner) runV1Planning(ctx context.Context, wctx *Context) ([]PlanOutput, error) {
 	// Use AvailableForPhase to only get agents enabled for plan phase
-	agentNames := wctx.Agents.AvailableForPhase(ctx, "plan")
+	agentNames := wctx.Agents.AvailableForPhaseWithConfig(ctx, "plan", wctx.Config.ProjectAgentPhases)
 	if len(agentNames) == 0 {
 		return nil, core.ErrValidation(core.CodeNoAgents, "no agents available for plan phase")
 	}

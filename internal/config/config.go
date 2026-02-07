@@ -380,14 +380,11 @@ type AgentConfig struct {
 }
 
 // IsEnabledForPhase returns true if the agent is enabled for the given phase.
-// Uses opt-in model: phases must be explicitly set to true to be enabled.
-// If phases map is empty, agent is enabled for all phases (backward compatible).
+// Uses strict opt-in model: phases must be explicitly set to true to be enabled.
+// If phases map is empty or missing, the agent is enabled for NO phases.
 func (c AgentConfig) IsEnabledForPhase(phase string) bool {
 	if !c.Enabled {
 		return false
-	}
-	if len(c.Phases) == 0 {
-		return true // No phase restrictions = enabled for all
 	}
 	enabled, exists := c.Phases[phase]
 	if !exists {
@@ -663,7 +660,7 @@ type ReportConfig struct {
 
 // ExtractAgentPhases extracts the enabled phases for each agent.
 // Returns a map of agent name -> list of enabled phases.
-// An empty list means all phases are enabled.
+// An empty list means no phases are enabled (strict allowlist).
 func (c *Config) ExtractAgentPhases() map[string][]string {
 	phases := make(map[string][]string)
 	agents := map[string]AgentConfig{
@@ -677,20 +674,14 @@ func (c *Config) ExtractAgentPhases() map[string][]string {
 		if !cfg.Enabled {
 			continue
 		}
-		// Extract enabled phases
-		if len(cfg.Phases) == 0 {
-			// Empty phases = all enabled (represented as empty slice)
-			phases[name] = []string{}
-		} else {
-			// Build list of enabled phases
-			enabledPhases := make([]string, 0)
-			for phase, enabled := range cfg.Phases {
-				if enabled {
-					enabledPhases = append(enabledPhases, phase)
-				}
+		// Build list of enabled phases (strict allowlist).
+		enabledPhases := make([]string, 0)
+		for phase, enabled := range cfg.Phases {
+			if enabled {
+				enabledPhases = append(enabledPhases, phase)
 			}
-			phases[name] = enabledPhases
 		}
+		phases[name] = enabledPhases
 	}
 	return phases
 }

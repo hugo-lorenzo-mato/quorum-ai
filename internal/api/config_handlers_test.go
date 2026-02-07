@@ -175,7 +175,7 @@ func TestHandleValidateConfig(t *testing.T) {
 	}{
 		{
 			name:      "valid config",
-			body:      `{"log": {"level": "info"}, "agents": {"default": "claude", "claude": {"enabled": true}}, "phases": {"analyze": {"refiner": {"enabled": false}, "moderator": {"enabled": false}}}, "git": {"worktree": {"dir": ".worktrees"}}}`,
+			body:      `{"log": {"level": "info"}, "agents": {"default": "claude", "claude": {"enabled": true, "phases": {"plan": true, "execute": true, "synthesize": true}}}, "phases": {"analyze": {"refiner": {"enabled": false}, "moderator": {"enabled": false}, "synthesizer": {"agent": "claude"}}}, "git": {"worktree": {"dir": ".worktrees"}}}`,
 			wantValid: true,
 		},
 	}

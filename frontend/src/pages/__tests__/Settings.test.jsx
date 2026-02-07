@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { MemoryRouter } from 'react-router-dom';
 import Settings from '../Settings';
 import { useConfigStore } from '../../stores/configStore';
 
@@ -27,6 +28,8 @@ const mockConfig = {
 };
 
 describe('Settings', () => {
+  const renderWithRouter = (ui) => render(<MemoryRouter>{ui}</MemoryRouter>);
+
   beforeEach(() => {
     useConfigStore.mockImplementation((selector) => {
       const state = {
@@ -53,14 +56,14 @@ describe('Settings', () => {
   });
 
   it('renders page header', () => {
-    render(<Settings />);
+    renderWithRouter(<Settings />);
 
     expect(screen.getByText('Settings')).toBeInTheDocument();
-    expect(screen.getByText(/Manage your global configuration and preferences/i)).toBeInTheDocument();
+    expect(screen.getByText(/Manage configuration for the selected project/i)).toBeInTheDocument();
   });
 
   it('renders all tabs', () => {
-    render(<Settings />);
+    renderWithRouter(<Settings />);
 
     expect(screen.getAllByText('General').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Workflow Defaults').length).toBeGreaterThan(0);
@@ -90,7 +93,7 @@ describe('Settings', () => {
       return selector ? selector(state) : state;
     });
 
-    render(<Settings />);
+    renderWithRouter(<Settings />);
 
     expect(loadConfig).toHaveBeenCalled();
     expect(loadMetadata).toHaveBeenCalled();
@@ -112,7 +115,7 @@ describe('Settings', () => {
       return selector ? selector(state) : state;
     });
 
-    render(<Settings />);
+    renderWithRouter(<Settings />);
 
     expect(screen.getByRole('status')).toBeInTheDocument();
   });
@@ -135,7 +138,7 @@ describe('Settings', () => {
       return selector ? selector(state) : state;
     });
 
-    render(<Settings />);
+    renderWithRouter(<Settings />);
 
     expect(screen.getByText('Failed to load configuration')).toBeInTheDocument();
     expect(screen.getByText('Retry')).toBeInTheDocument();
@@ -163,7 +166,7 @@ describe('Settings', () => {
       return selector ? selector(state) : state;
     });
 
-    render(<Settings />);
+    renderWithRouter(<Settings />);
 
     expect(screen.getByText('You have unsaved changes')).toBeInTheDocument();
     expect(screen.getByText('Save Changes')).toBeInTheDocument();
@@ -186,7 +189,7 @@ describe('Settings', () => {
       return selector ? selector(state) : state;
     });
 
-    render(<Settings />);
+    renderWithRouter(<Settings />);
 
     expect(screen.queryByText('You have unsaved changes')).not.toBeInTheDocument();
   });
@@ -211,7 +214,7 @@ describe('Settings', () => {
       return selector ? selector(state) : state;
     });
 
-    render(<Settings />);
+    renderWithRouter(<Settings />);
 
     expect(screen.getByText('Configuration Conflict')).toBeInTheDocument();
     expect(screen.getByText('Reload Latest')).toBeInTheDocument();

@@ -107,6 +107,37 @@ func TestWorkflowReportWriter_EnsureTasksDir_Disabled(t *testing.T) {
 	}
 }
 
+func TestWorkflowReportWriter_Resume_CreatesMissingDirsOnFirstWrite(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "quorum-test-resume-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	cfg := Config{
+		BaseDir: tmpDir,
+		Enabled: true,
+	}
+	workflowID := "wf-test-resume-123"
+
+	// Simulate "API created only the execution directory" scenario.
+	executionDir := filepath.Join(tmpDir, workflowID)
+	if err := os.MkdirAll(executionDir, 0o755); err != nil {
+		t.Fatalf("failed to create execution dir: %v", err)
+	}
+
+	writer := ResumeWorkflowReportWriter(cfg, workflowID, executionDir)
+
+	if err := writer.WriteOriginalPrompt("hello"); err != nil {
+		t.Fatalf("WriteOriginalPrompt() error = %v", err)
+	}
+
+	path := filepath.Join(writer.AnalyzePhasePath(), "00-original-prompt.md")
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("expected original prompt report to exist at %s: %v", path, err)
+	}
+}
+
 func TestSanitizeFilename(t *testing.T) {
 	tests := []struct {
 		input string

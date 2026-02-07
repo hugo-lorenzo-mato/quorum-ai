@@ -1358,7 +1358,7 @@ func (s *Server) HandleAnalyzeWorkflow(w http.ResponseWriter, r *http.Request) {
 		handle.ConfirmStarted()
 		notifier.WorkflowStarted(state.Prompt)
 
-		err := runner.Analyze(execCtx, state.Prompt)
+		err := runner.AnalyzeWithState(execCtx, state)
 		if err != nil {
 			s.logger.Error("analyze phase failed", "workflow_id", workflowID, "error", err)
 			notifier.WorkflowFailed(string(core.PhaseAnalyze), err)
@@ -1512,7 +1512,7 @@ func (s *Server) HandlePlanWorkflow(w http.ResponseWriter, r *http.Request) {
 		handle.ConfirmStarted()
 		notifier.PhaseStarted(core.PhasePlan)
 
-		err := runner.Plan(execCtx)
+		err := runner.PlanWithState(execCtx, state)
 		if err != nil {
 			s.logger.Error("plan phase failed", "workflow_id", workflowID, "error", err)
 			notifier.WorkflowFailed(string(core.PhasePlan), err)
@@ -1666,7 +1666,7 @@ func (s *Server) HandleReplanWorkflow(w http.ResponseWriter, r *http.Request) {
 		handle.ConfirmStarted()
 		notifier.PhaseStarted(core.PhasePlan)
 
-		err := runner.Replan(execCtx, additionalContext)
+		err := runner.ReplanWithState(execCtx, state, additionalContext)
 		if err != nil {
 			s.logger.Error("replan failed", "workflow_id", workflowID, "error", err)
 			notifier.WorkflowFailed(string(core.PhasePlan), err)
@@ -1819,7 +1819,7 @@ func (s *Server) HandleExecuteWorkflow(w http.ResponseWriter, r *http.Request) {
 		handle.ConfirmStarted()
 		notifier.PhaseStarted(core.PhaseExecute)
 
-		err := runner.Resume(execCtx)
+		err := runner.ResumeWithState(execCtx, state)
 		if err != nil {
 			s.logger.Error("execute phase failed", "workflow_id", workflowID, "error", err)
 			notifier.WorkflowFailed(string(core.PhaseExecute), err)

@@ -29,26 +29,6 @@ func TestRunnerFactory_CreateRunner_MissingStateManager(t *testing.T) {
 	}
 }
 
-func TestRunnerFactory_CreateRunner_MissingAgentRegistry(t *testing.T) {
-	eventBus := events.New(10)
-	defer eventBus.Close()
-	factory := NewRunnerFactory(
-		newMockStateManager(),
-		nil, // missing registry
-		eventBus,
-		nil,
-		nil,
-	)
-
-	_, _, err := factory.CreateRunner(context.Background(), "wf-test", nil, nil)
-	if err == nil {
-		t.Error("expected error for missing agent registry")
-	}
-	if err.Error() != "agent registry not configured" {
-		t.Errorf("unexpected error: %v", err)
-	}
-}
-
 func TestRunnerFactory_CreateRunner_MissingEventBus(t *testing.T) {
 	factory := NewRunnerFactory(
 		newMockStateManager(),

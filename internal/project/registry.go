@@ -365,15 +365,19 @@ func (r *FileRegistry) AddProject(_ context.Context, path string, opts *AddProje
 		color = generateProjectColor(id)
 	}
 
+	// Determine initial config mode.
+	// If the project already has a config file, default to custom.
+	// Otherwise, default to inheriting the global config.
+	configMode := ConfigModeInheritGlobal
+	configPath := filepath.Join(absPath, ".quorum", "config.yaml")
+	if _, err := os.Stat(configPath); err == nil {
+		configMode = ConfigModeCustom
+	}
+
 	// Determine initial status
+	// Missing project config is not an error when inheriting the global config.
 	status := StatusHealthy
 	statusMsg := ""
-
-	configPath := filepath.Join(absPath, ".quorum", "config.yaml")
-	if _, err := os.Stat(configPath); err != nil {
-		status = StatusDegraded
-		statusMsg = "Configuration file not found"
-	}
 
 	now := time.Now()
 	project := &Project{
@@ -385,6 +389,7 @@ func (r *FileRegistry) AddProject(_ context.Context, path string, opts *AddProje
 		StatusMessage: statusMsg,
 		Color:         color,
 		CreatedAt:     now,
+		ConfigMode:    configMode,
 	}
 
 	r.config.Projects = append(r.config.Projects, project)
@@ -556,8 +561,15 @@ func (r *FileRegistry) ValidateProject(_ context.Context, id string) error {
 	// Check config file
 	configPath := filepath.Join(quorumDir, "config.yaml")
 	if _, err := os.Stat(configPath); err != nil {
-		project.Status = StatusDegraded
-		project.StatusMessage = "Configuration file not found or inaccessible"
+		// Missing project config is only a warning when the project is in custom mode.
+		// In inherit_global mode, the effective config comes from the global config.
+		if project.ConfigMode == ConfigModeCustom {
+			project.Status = StatusDegraded
+			project.StatusMessage = "Project configuration file not found or inaccessible"
+		} else {
+			project.Status = StatusHealthy
+			project.StatusMessage = ""
+		}
 		r.config.Projects[index] = project
 		if r.autoSave {
 			_ = r.save()

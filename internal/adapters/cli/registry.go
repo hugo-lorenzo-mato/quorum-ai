@@ -261,7 +261,7 @@ func (r *Registry) AvailableForPhase(ctx context.Context, phase string) []string
 
 // AvailableForPhaseWithConfig returns agents that pass Ping AND are enabled for the given phase,
 // using project-specific phase configurations. This overrides the global agent configs from the server.
-// projectPhases maps agent name -> list of enabled phases (empty list = all phases enabled).
+// projectPhases maps agent name -> list of enabled phases (empty list = no phases enabled).
 func (r *Registry) AvailableForPhaseWithConfig(ctx context.Context, phase string, projectPhases map[string][]string) []string {
 	results := r.PingAll(ctx)
 	available := make([]string, 0)
@@ -279,26 +279,21 @@ func (r *Registry) AvailableForPhaseWithConfig(ctx context.Context, phase string
 			continue
 		}
 
-		// Use project-specific phases if available
-		if phases, ok := projectPhases[name]; ok {
-			if !isPhaseInList(phases, phase) {
-				slog.Debug("agent not enabled for phase (project config)",
-					slog.String("agent", name),
-					slog.String("phase", phase),
-				)
-				continue
-			}
-		} else {
-			// Fallback to global config
-			if cfg, ok := r.configs[name]; ok {
-				if !cfg.IsEnabledForPhase(phase) {
-					slog.Debug("agent not enabled for phase (global config)",
-						slog.String("agent", name),
-						slog.String("phase", phase),
-					)
-					continue
-				}
-			}
+		// Strict project policy: if the agent isn't present in projectPhases, it's not allowed.
+		phases, ok := projectPhases[name]
+		if !ok {
+			slog.Debug("agent not enabled for phase (project config missing agent)",
+				slog.String("agent", name),
+				slog.String("phase", phase),
+			)
+			continue
+		}
+		if !isPhaseInList(phases, phase) {
+			slog.Debug("agent not enabled for phase (project config)",
+				slog.String("agent", name),
+				slog.String("phase", phase),
+			)
+			continue
 		}
 		available = append(available, name)
 	}
@@ -309,7 +304,7 @@ func (r *Registry) AvailableForPhaseWithConfig(ctx context.Context, phase string
 // isPhaseInList checks if a phase is in the list of enabled phases.
 func isPhaseInList(phases []string, phase string) bool {
 	if len(phases) == 0 {
-		return true // Empty list = all phases enabled
+		return false // Empty list = no phases enabled (strict allowlist)
 	}
 	for _, p := range phases {
 		if p == phase {

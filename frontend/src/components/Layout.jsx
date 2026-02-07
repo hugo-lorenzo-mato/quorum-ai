@@ -194,7 +194,11 @@ export default function Layout({ children }) {
   const iconStrokeWidth = ['dark', 'midnight', 'dracula', 'nord', 'ocean'].includes(theme) ? 1.6 : 2;
 
   // Check if we're on the chat, settings, or kanban page - they need full control of their layout
-  const isFullLayoutPage = location.pathname === '/chat' || location.pathname === '/settings' || location.pathname === '/kanban';
+  const isFullLayoutPage =
+    location.pathname === '/chat' ||
+    location.pathname === '/settings' ||
+    location.pathname === '/settings/global' ||
+    location.pathname === '/kanban';
 
   // Close sidebar when resizing to mobile viewport (only triggers on actual resize)
   useEffect(() => {

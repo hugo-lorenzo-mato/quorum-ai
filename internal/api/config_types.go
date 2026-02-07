@@ -15,6 +15,18 @@ type ConfigMeta struct {
 	ETag         string `json:"etag"`
 	LastModified string `json:"last_modified,omitempty"`
 	Source       string `json:"source"` // "file", "default"
+	// Scope indicates which configuration scope was loaded.
+	// Values: "global" | "project"
+	Scope string `json:"scope,omitempty"`
+	// ProjectConfigMode indicates whether the current project inherits the global config
+	// or uses a project-specific config file.
+	// Values: "inherit_global" | "custom"
+	ProjectConfigMode string `json:"project_config_mode,omitempty"`
+
+	// Runtime apply info (best-effort): whether this config was applied to the server runtime.
+	RuntimeApplyStatus string `json:"runtime_apply_status,omitempty"` // "applied" | "failed"
+	RuntimeAppliedAt   string `json:"runtime_applied_at,omitempty"`   // RFC3339
+	RuntimeApplyError  string `json:"runtime_apply_error,omitempty"`
 }
 
 // FullConfigResponse represents the complete configuration response.

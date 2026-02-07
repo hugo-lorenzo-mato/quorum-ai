@@ -362,8 +362,8 @@ func resolveTaskAgent(ctx context.Context, wctx *Context, candidate string) stri
 	// Use AvailableForPhase to only accept agents that are:
 	// 1. enabled: true in config
 	// 2. Pass Ping (CLI is installed)
-	// 3. Have phases.execute != false (or no phases restriction)
-	availableForExecute := wctx.Agents.AvailableForPhase(ctx, "execute")
+	// 3. Have phases.execute: true in the project allowlist
+	availableForExecute := wctx.Agents.AvailableForPhaseWithConfig(ctx, "execute", wctx.Config.ProjectAgentPhases)
 	for _, name := range availableForExecute {
 		if strings.EqualFold(name, cleaned) {
 			return name

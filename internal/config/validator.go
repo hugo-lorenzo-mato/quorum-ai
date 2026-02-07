@@ -188,6 +188,22 @@ func (v *Validator) validateAgent(prefix string, cfg *AgentConfig) {
 		v.addError(prefix+".path", cfg.Path, "path required when enabled")
 	}
 
+	// Strict phases: at least one phase must be explicitly enabled for any enabled agent.
+	// Missing/empty phases map means "enabled for no phases" and would make the agent unusable.
+	if len(cfg.Phases) == 0 {
+		v.addError(prefix+".phases", cfg.Phases, "at least 1 phase must be set to true (strict allowlist)")
+	} else {
+		enabledCount := 0
+		for _, enabled := range cfg.Phases {
+			if enabled {
+				enabledCount++
+			}
+		}
+		if enabledCount == 0 {
+			v.addError(prefix+".phases", cfg.Phases, "at least 1 phase must be set to true (strict allowlist)")
+		}
+	}
+
 	v.validatePhaseModels(prefix+".phase_models", cfg.PhaseModels)
 	v.validateReasoningEffortDefault(prefix+".reasoning_effort", cfg.ReasoningEffort)
 	v.validateReasoningEffortPhases(prefix+".reasoning_effort_phases", cfg.ReasoningEffortPhases)

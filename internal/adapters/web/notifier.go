@@ -38,6 +38,7 @@ type WebOutputNotifier struct {
 	stateMu     sync.Mutex          // Protects state access
 	lastSave    time.Time           // Last time state was saved
 	pendingSave bool                // Whether there are unsaved changes
+	saveTimer   *time.Timer         // Debounced save for bursty agent events
 }
 
 // NewWebOutputNotifier creates a new web output notifier.
@@ -71,7 +72,23 @@ func (n *WebOutputNotifier) saveStateIfNeeded() {
 		return
 	}
 
-	if time.Since(n.lastSave) < saveThrottleInterval {
+	since := time.Since(n.lastSave)
+	if since < saveThrottleInterval {
+		// If we get a burst of events (multi-agent starts), we may not see another event
+		// for a long time. Schedule a delayed save so reload recovery includes those events.
+		if n.saveTimer != nil {
+			return
+		}
+		delay := saveThrottleInterval - since
+		if delay < 0 {
+			delay = 0
+		}
+		n.saveTimer = time.AfterFunc(delay, func() {
+			n.stateMu.Lock()
+			defer n.stateMu.Unlock()
+			n.saveTimer = nil
+			n.saveStateIfNeeded()
+		})
 		return
 	}
 
@@ -91,6 +108,11 @@ func (n *WebOutputNotifier) saveStateIfNeeded() {
 func (n *WebOutputNotifier) FlushState() {
 	n.stateMu.Lock()
 	defer n.stateMu.Unlock()
+
+	if n.saveTimer != nil {
+		n.saveTimer.Stop()
+		n.saveTimer = nil
+	}
 
 	if n.state == nil || n.stateSaver == nil || !n.pendingSave {
 		return

@@ -12,6 +12,7 @@ export function useConfigField(path) {
   const clearFieldError = useConfigStore((state) => state.clearFieldError);
   const isLoading = useConfigStore((state) => state.isLoading);
   const isSaving = useConfigStore((state) => state.isSaving);
+  const isReadOnly = useConfigStore((state) => state.isReadOnly);
 
   // Get effective value (local change or server value)
   const value = useConfigStore(
@@ -53,9 +54,9 @@ export function useConfigField(path) {
       error,
       isDirty,
       clearError,
-      disabled: isLoading || isSaving,
+      disabled: isLoading || isSaving || isReadOnly,
     }),
-    [value, onChange, error, isDirty, clearError, isLoading, isSaving]
+    [value, onChange, error, isDirty, clearError, isLoading, isSaving, isReadOnly]
   );
 }
 
@@ -116,6 +117,7 @@ export function useConfigSection(basePath) {
   const validationErrors = useConfigStore((state) => state.validationErrors);
   const isLoading = useConfigStore((state) => state.isLoading);
   const isSaving = useConfigStore((state) => state.isSaving);
+  const isReadOnly = useConfigStore((state) => state.isReadOnly);
 
   const getField = useCallback(
     (subPath) => {
@@ -128,10 +130,10 @@ export function useConfigSection(basePath) {
         error: validationErrors[fullPath],
         isDirty: localValue !== undefined,
         onChange: (val) => setField(fullPath, val),
-        disabled: isLoading || isSaving,
+        disabled: isLoading || isSaving || isReadOnly,
       };
     },
-    [basePath, config, localChanges, validationErrors, setField, isLoading, isSaving]
+    [basePath, config, localChanges, validationErrors, setField, isLoading, isSaving, isReadOnly]
   );
 
   return { getField };

@@ -205,9 +205,17 @@ Responsibilities:
 
 1. CLI flags
 2. Environment variables (`QUORUM_*`)
-3. Project config (`.quorum.yaml`)
-4. User config (`~/.config/quorum/config.yaml`)
-5. Built-in defaults
+3. Project config (`.quorum/config.yaml`)
+4. Legacy project config (`.quorum.yaml`)
+5. User config (`~/.config/quorum/config.yaml`)
+6. Built-in defaults
+
+**WebUI global defaults (multi-project):**
+
+When running the WebUI server with multiple projects, each project can either:
+
+- Inherit the global defaults file `~/.quorum-registry/global-config.yaml` (`config_mode: inherit_global`)
+- Use a project-specific config at `<project>/.quorum/config.yaml` (`config_mode: custom`)
 
 ### 5. TUI (`internal/tui/`)
 

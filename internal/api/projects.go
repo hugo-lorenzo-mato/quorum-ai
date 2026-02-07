@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/config"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/project"
 )
 
@@ -24,6 +25,7 @@ type ProjectResponse struct {
 	Color         string    `json:"color,omitempty"`
 	CreatedAt     time.Time `json:"created_at"`
 	IsDefault     bool      `json:"is_default"`
+	ConfigMode    string    `json:"config_mode,omitempty"`
 }
 
 // CreateProjectRequest is the request body for creating a project.
@@ -38,6 +40,9 @@ type UpdateProjectRequest struct {
 	Name  *string `json:"name,omitempty"`
 	Color *string `json:"color,omitempty"`
 	Path  *string `json:"path,omitempty"`
+	// ConfigMode controls whether this project uses the global config (inherit_global)
+	// or a project-specific config file (custom).
+	ConfigMode *string `json:"config_mode,omitempty"`
 }
 
 // SetDefaultProjectRequest is the request body for setting the default project.
@@ -258,6 +263,51 @@ func (h *ProjectsHandler) handleUpdateProject(w http.ResponseWriter, r *http.Req
 		updated = true
 	}
 
+	if req.ConfigMode != nil {
+		mode := *req.ConfigMode
+		if mode != project.ConfigModeInheritGlobal && mode != project.ConfigModeCustom {
+			respondError(w, http.StatusBadRequest, "invalid config_mode (valid: inherit_global, custom)")
+			return
+		}
+
+		p.ConfigMode = mode
+		updated = true
+
+		// If switching to custom, ensure <project>/.quorum/config.yaml exists by copying the global config.
+		if mode == project.ConfigModeCustom {
+			projectConfigPath := filepath.Join(p.Path, ".quorum", "config.yaml")
+			if _, err := os.Stat(projectConfigPath); os.IsNotExist(err) {
+				globalPath, err := config.EnsureGlobalConfigFile()
+				if err != nil {
+					respondError(w, http.StatusInternalServerError, "failed to ensure global configuration file")
+					return
+				}
+
+				// Preserve relative path values when copying the global file into a project config.
+				globalCfg, loadErr := config.NewLoader().WithConfigFile(globalPath).WithResolvePaths(false).Load()
+				if loadErr != nil || globalCfg == nil {
+					respondError(w, http.StatusInternalServerError, "failed to load global configuration")
+					return
+				}
+
+				if err := atomicWriteConfig(globalCfg, projectConfigPath); err != nil {
+					respondError(w, http.StatusInternalServerError, "failed to create project config from global configuration")
+					return
+				}
+			}
+		}
+
+		// If switching back to inherit_global, remove the project config file to avoid drift/confusion.
+		// (Project still remains a valid Quorum project because .quorum/ directory and state remain.)
+		if mode == project.ConfigModeInheritGlobal {
+			projectConfigPath := filepath.Join(p.Path, ".quorum", "config.yaml")
+			if err := os.Remove(projectConfigPath); err != nil && !os.IsNotExist(err) {
+				respondError(w, http.StatusInternalServerError, "failed to remove project config while switching to inherit_global")
+				return
+			}
+		}
+	}
+
 	if !updated {
 		respondError(w, http.StatusBadRequest, "no fields to update")
 		return
@@ -416,5 +466,6 @@ func projectToResponse(p *project.Project, defaultID string) ProjectResponse {
 		Color:         p.Color,
 		CreatedAt:     p.CreatedAt,
 		IsDefault:     p.ID == defaultID,
+		ConfigMode:    p.ConfigMode,
 	}
 }
