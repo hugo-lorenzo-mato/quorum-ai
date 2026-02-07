@@ -71,10 +71,9 @@ func (p *Planner) runCLIGeneratedTaskPlanning(ctx context.Context, wctx *Context
 		}
 	}
 
-	// Make tasks directory absolute
+	// Make tasks directory absolute relative to project root
 	if !filepath.IsAbs(tasksDir) {
-		cwd, _ := os.Getwd()
-		tasksDir = filepath.Join(cwd, tasksDir)
+		tasksDir = filepath.Join(wctx.ProjectRoot, tasksDir)
 	}
 
 	// Collect available agent information

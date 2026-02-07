@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -21,6 +22,7 @@ import (
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/fsutil"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/logging"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service/report"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service/workflow"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/tui"
 )
@@ -136,6 +138,11 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 		return fmt.Errorf("loading config: %w", err)
 	}
 
+	// Get the resolved project root directory for multi-project support.
+	// This ensures agent subprocesses and artifacts use the project directory
+	// even when quorum's CWD differs from the target project.
+	projectRoot := loader.ProjectDir()
+
 	// Validate configuration (catches invalid weights, thresholds, etc.)
 	if err := config.ValidateConfig(cfg); err != nil {
 		return fmt.Errorf("validating config: %w", err)
@@ -171,7 +178,7 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 		var ok bool
 		tuiOutput, ok = output.(*tui.TUIOutput)
 		if ok {
-			baseDir := ".quorum"
+			baseDir := filepath.Join(projectRoot, ".quorum")
 			tuiOutput.SetModel(tui.NewWithStateManager(baseDir))
 
 			// Connect TUILogHandler to TUIOutput so logs are routed directly
@@ -314,6 +321,12 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 			MergeStrategy: cfg.Git.Finalization.MergeStrategy,
 			Remote:        cfg.GitHub.Remote,
 		},
+		Report: report.Config{
+			Enabled:    cfg.Report.Enabled,
+			BaseDir:    cfg.Report.BaseDir,
+			UseUTC:     cfg.Report.UseUTC,
+			IncludeRaw: cfg.Report.IncludeRaw,
+		},
 	}
 
 	// Create trace writer if tracing is enabled
@@ -350,11 +363,7 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 	dagBuilder := service.NewDAGBuilder()
 
 	// Create worktree manager for task isolation
-	cwd, err := os.Getwd()
-	if err != nil {
-		return fmt.Errorf("getting working directory: %w", err)
-	}
-	gitClient, err := git.NewClient(cwd)
+	gitClient, err := git.NewClient(projectRoot)
 	if err != nil {
 		logger.Warn("failed to create git client, worktree isolation disabled", "error", err)
 	}
@@ -439,6 +448,7 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 		Logger:            logger,
 		Output:            outputNotifier,
 		ModeEnforcer:      modeEnforcerAdapter,
+		ProjectRoot:       projectRoot,
 	})
 
 	// Connect agent streaming events to the output notifier for real-time progress

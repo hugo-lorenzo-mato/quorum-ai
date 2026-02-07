@@ -16,6 +16,7 @@ type Loader struct {
 	v          *viper.Viper
 	configFile string
 	envPrefix  string
+	projectDir string // Resolved project root directory (set by Load)
 	mu         sync.Mutex // Protects concurrent access to viper operations
 }
 
@@ -143,9 +144,17 @@ func (l *Loader) Load() (*Config, error) {
 	if projectDir == "" {
 		projectDir, _ = os.Getwd()
 	}
+	l.projectDir = projectDir
 	l.resolveAbsolutePaths(&cfg, projectDir)
 
 	return &cfg, nil
+}
+
+// ProjectDir returns the resolved project root directory.
+// This is the directory containing the .quorum/ config folder (or CWD as fallback).
+// Available after Load() has been called.
+func (l *Loader) ProjectDir() string {
+	return l.projectDir
 }
 
 // resolveAbsolutePaths converts all relative paths in the config to absolute paths.

@@ -304,6 +304,9 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 			displayWorkDir = wd
 		}
 	}
+	// Use the resolved directory as the effective working directory for agent execution.
+	// This ensures agents run in the project root when no worktree is active.
+	workDir = displayWorkDir
 	execContext := wctx.GetContextString()
 	if attCtx := BuildAttachmentsContext(wctx.State, displayWorkDir); attCtx != "" {
 		execContext = execContext + "\n\n" + attCtx
@@ -1251,8 +1254,8 @@ func (e *Executor) saveTaskOutput(wctx *Context, taskID core.TaskID, output stri
 	if wctx != nil && wctx.Report != nil && wctx.Report.IsEnabled() {
 		outputPath = wctx.Report.TaskOutputPath(string(taskID))
 	} else {
-		// Fallback: create outputs directory
-		outputDir := ".quorum/outputs"
+		// Fallback: create outputs directory under project root
+		outputDir := filepath.Join(wctx.ProjectRoot, ".quorum/outputs")
 		if err := os.MkdirAll(outputDir, 0o750); err != nil {
 			return ""
 		}

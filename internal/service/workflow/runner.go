@@ -1506,11 +1506,13 @@ func (r *Runner) UsePlan(ctx context.Context) error {
 // findTasksDirectory searches for the tasks directory for a given workflow.
 // It looks in .quorum/runs/ for directories matching the workflow ID pattern.
 func (r *Runner) findTasksDirectory(workflowID core.WorkflowID) (string, error) {
-	outputDir := ".quorum/runs"
+	// Use project root for resolving relative paths
+	baseDir := r.projectRoot
+	if baseDir == "" {
+		baseDir, _ = os.Getwd()
+	}
 
-	// Make absolute
-	cwd, _ := os.Getwd()
-	outputDir = filepath.Join(cwd, outputDir)
+	outputDir := filepath.Join(baseDir, ".quorum/runs")
 
 	// List directories in output
 	entries, err := os.ReadDir(outputDir)
@@ -1534,7 +1536,7 @@ func (r *Runner) findTasksDirectory(workflowID core.WorkflowID) (string, error) 
 
 	if len(candidates) == 0 {
 		// Try fallback: .quorum/tasks
-		fallback := filepath.Join(cwd, ".quorum", "tasks")
+		fallback := filepath.Join(baseDir, ".quorum", "tasks")
 		if _, err := os.Stat(fallback); err == nil {
 			return fallback, nil
 		}
