@@ -1865,7 +1865,7 @@ function NewWorkflowForm({ onSubmit, onCancel, loading }) {
           <button
             type="submit"
             disabled={loading || !prompt.trim()}
-            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors shadow-sm"
+            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-all shadow-sm"
           >
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
             Start Workflow
@@ -2096,9 +2096,9 @@ export default function Workflows() {
             <WorkflowFilters filter={filter} setFilter={setFilter} />
             <Link
               to="/workflows/new"
-              className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors shadow-sm whitespace-nowrap"
+              className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-all shadow-sm hover:shadow-md whitespace-nowrap"
             >
-              <Plus className="w-4 h-4" />
+              <Zap className="w-4 h-4" />
               New Workflow
             </Link>
           </div>
@@ -2146,17 +2146,17 @@ export default function Workflows() {
           {!filter && (
             <Link
               to="/workflows/new"
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-all shadow-lg shadow-primary/20"
             >
-              <Plus className="w-4 h-4" />
-              Create Workflow
+              <Zap className="w-4 h-4" />
+              Start Workflow
             </Link>
           )}
         </div>
       )}
       
       {/* Mobile FAB */}
-      <FAB onClick={() => navigate('/workflows/new')} icon={Plus} label="New Workflow" />
+      <FAB onClick={() => navigate('/workflows/new')} icon={Zap} label="New Workflow" />
 
       {/* Delete Confirmation Dialog for list view */}
       <ConfirmDialog
