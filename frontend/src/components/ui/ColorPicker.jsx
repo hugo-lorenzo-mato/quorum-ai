@@ -36,9 +36,14 @@ export default function ColorPicker({ value, onChange, className = '' }) {
     }
   }, [showPicker]);
 
-  const handleColorSelect = (color) => {
+  const handlePresetSelect = (color) => {
     onChange(color);
     setShowPicker(false);
+  };
+
+  const handleCustomColorChange = (color) => {
+    onChange(color);
+    // Do NOT close the picker here so the user can see the change and refine it
   };
 
   return (
@@ -46,7 +51,10 @@ export default function ColorPicker({ value, onChange, className = '' }) {
       {/* Color trigger button */}
       <button
         type="button"
-        onClick={() => setShowPicker(!showPicker)}
+        onClick={(e) => {
+          e.preventDefault();
+          setShowPicker(!showPicker);
+        }}
         className="w-7 h-7 rounded-md border-2 border-border hover:border-foreground/50 transition-all shadow-sm hover:scale-105"
         style={{ backgroundColor: value || PROJECT_COLORS[0] }}
         title="Change color"
@@ -54,13 +62,16 @@ export default function ColorPicker({ value, onChange, className = '' }) {
 
       {/* Color picker dropdown */}
       {showPicker && (
-        <div className="absolute top-full left-0 mt-2 p-3 bg-popover border border-border rounded-xl shadow-2xl z-[100] animate-in fade-in zoom-in-95 duration-100 min-w-[180px]">
+        <div 
+          className="absolute top-full left-0 mt-2 p-3 bg-popover border border-border rounded-xl shadow-2xl z-[100] animate-in fade-in zoom-in-95 duration-100 min-w-[180px]"
+          onMouseDown={(e) => e.stopPropagation()}
+        >
           <div className="grid grid-cols-5 gap-2.5 mb-3">
             {PROJECT_COLORS.map((color) => (
               <button
                 key={color}
                 type="button"
-                onClick={() => handleColorSelect(color)}
+                onClick={() => handlePresetSelect(color)}
                 className={`w-8 h-8 rounded-lg border-2 transition-all hover:scale-110 shadow-sm ${
                   value === color
                     ? 'border-foreground ring-2 ring-primary/40 ring-offset-1'
@@ -80,7 +91,7 @@ export default function ColorPicker({ value, onChange, className = '' }) {
                 <input
                   type="color"
                   value={value && value.length === 7 ? value : PROJECT_COLORS[0]}
-                  onChange={(e) => handleColorSelect(e.target.value)}
+                  onChange={(e) => handleCustomColorChange(e.target.value)}
                   className="absolute inset-0 w-[150%] h-[150%] -translate-x-[25%] -translate-y-[25%] cursor-pointer border-none p-0"
                 />
               </div>
@@ -90,7 +101,7 @@ export default function ColorPicker({ value, onChange, className = '' }) {
                 onChange={(e) => {
                   const val = e.target.value;
                   if (/^#[0-9A-Fa-f]{0,6}$/.test(val) || val === '') {
-                    onChange(val);
+                    handleCustomColorChange(val);
                   }
                 }}
                 onKeyDown={(e) => {
