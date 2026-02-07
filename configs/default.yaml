@@ -65,6 +65,9 @@ phases:
   analyze:
     # Maximum duration for analyze phase
     timeout: 2h
+    # Grace period after agent signals logical completion before killing the process.
+    # Prevents losing output when agent CLIs hang after producing results.
+    process_grace_period: "30s"
     # Prompt refiner (optional) - enhances user prompt before analysis
     refiner:
       enabled: true

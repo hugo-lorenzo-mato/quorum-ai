@@ -102,6 +102,11 @@ func (f *RunnerFactory) CreateRunner(ctx context.Context, workflowID string, cp 
 	// Create web output notifier (bridges to EventBus)
 	outputNotifier := webadapters.NewWebOutputNotifier(eventBus, workflowID)
 
+	// Connect agent streaming events to the output notifier for real-time progress
+	registry.SetEventHandler(func(event core.AgentEvent) {
+		outputNotifier.AgentEvent(string(event.Type), event.Agent, event.Message, event.Data)
+	})
+
 	// Build runner using RunnerBuilder (Task-6 unification)
 	builder := workflow.NewRunnerBuilder().
 		WithConfig(cfg).

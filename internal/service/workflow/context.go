@@ -180,9 +180,10 @@ type SingleAgentConfig struct {
 
 // PhaseTimeouts holds timeout durations for each workflow phase.
 type PhaseTimeouts struct {
-	Analyze time.Duration
-	Plan    time.Duration
-	Execute time.Duration
+	Analyze            time.Duration
+	Plan               time.Duration
+	Execute            time.Duration
+	ProcessGracePeriod time.Duration // Time to wait after logical completion before killing (default: 30s)
 }
 
 // FinalizationConfig configures post-task git operations.

@@ -564,6 +564,14 @@ func BuildRunnerConfigFromConfig(cfg *config.Config) *RunnerConfig {
 		}
 	}
 
+	// Parse process grace period (default: 30s)
+	processGracePeriod := 30 * time.Second
+	if cfg.Phases.Analyze.ProcessGracePeriod != "" {
+		if parsed, err := time.ParseDuration(cfg.Phases.Analyze.ProcessGracePeriod); err == nil {
+			processGracePeriod = parsed
+		}
+	}
+
 	return &RunnerConfig{
 		Timeout:           timeout,
 		MaxRetries:        cfg.Workflow.MaxRetries,
@@ -601,9 +609,10 @@ func BuildRunnerConfigFromConfig(cfg *config.Config) *RunnerConfig {
 			Agent:   cfg.Phases.Plan.Synthesizer.Agent,
 		},
 		PhaseTimeouts: PhaseTimeouts{
-			Analyze: analyzeTimeout,
-			Plan:    planTimeout,
-			Execute: executeTimeout,
+			Analyze:            analyzeTimeout,
+			Plan:               planTimeout,
+			Execute:            executeTimeout,
+			ProcessGracePeriod: processGracePeriod,
 		},
 		Finalization: FinalizationConfig{
 			AutoCommit:    cfg.Git.Task.AutoCommit,

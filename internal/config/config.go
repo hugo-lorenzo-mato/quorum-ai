@@ -135,6 +135,9 @@ type PhasesConfig struct {
 type AnalyzePhaseConfig struct {
 	// Timeout for the entire analysis phase (e.g., "2h").
 	Timeout string `mapstructure:"timeout" yaml:"timeout"`
+	// ProcessGracePeriod is how long to wait after an agent signals logical completion
+	// before killing the process (e.g., "30s"). Default: 30s.
+	ProcessGracePeriod string `mapstructure:"process_grace_period" yaml:"process_grace_period"`
 	// Refiner refines and clarifies the prompt before analysis.
 	Refiner RefinerConfig `mapstructure:"refiner" yaml:"refiner"`
 	// Moderator evaluates consensus between agent analyses.

@@ -769,10 +769,31 @@ func (a *Analyzer) runVnRefinementWithAgent(ctx context.Context, wctx *Context, 
 		})
 	}
 
+	// Launch output file watchdog for recovery if agent hangs after writing
+	var watchdog *OutputWatchdog
+	if outputFilePath != "" {
+		watchdog = NewOutputWatchdog(outputFilePath, DefaultWatchdogConfig(), wctx.Logger)
+		watchdog.Start()
+		defer watchdog.Stop()
+	}
+
 	var result *core.ExecuteResult
 	err = wctx.Retry.Execute(func() error {
 		if ctrlErr := wctx.CheckControl(ctx); ctrlErr != nil {
 			return ctrlErr
+		}
+		// Pre-retry: if output file already exists with substantial content, use it.
+		// This recovers from the case where the agent wrote output but cmd.Wait() failed.
+		if outputFilePath != "" {
+			if info, statErr := os.Stat(outputFilePath); statErr == nil && info.Size() > 1024 {
+				content, readErr := os.ReadFile(outputFilePath)
+				if readErr == nil {
+					wctx.Logger.Info("recovered Vn output from file written by previous attempt",
+						"agent", agentName, "round", round, "path", outputFilePath, "size", len(content))
+					result = &core.ExecuteResult{Output: string(content), Model: model}
+					return nil
+				}
+			}
 		}
 		var execErr error
 		result, execErr = agent.Execute(ctx, core.ExecuteOptions{
@@ -784,6 +805,17 @@ func (a *Analyzer) runVnRefinementWithAgent(ctx context.Context, wctx *Context, 
 			Phase:   core.PhaseAnalyze,
 			WorkDir: wctx.ProjectRoot,
 		})
+		// If execution failed but watchdog detected stable output, recover
+		if execErr != nil && watchdog != nil {
+			select {
+			case content := <-watchdog.StableCh():
+				wctx.Logger.Info("watchdog recovery: using stable Vn output file",
+					"agent", agentName, "round", round, "size", len(content))
+				result = &core.ExecuteResult{Output: content, Model: model}
+				return nil
+			default:
+			}
+		}
 		return execErr
 	})
 
@@ -1004,11 +1036,32 @@ func (a *Analyzer) runAnalysisWithAgent(ctx context.Context, wctx *Context, agen
 		})
 	}
 
+	// Launch output file watchdog for recovery if agent hangs after writing
+	var watchdog *OutputWatchdog
+	if outputFilePath != "" {
+		watchdog = NewOutputWatchdog(outputFilePath, DefaultWatchdogConfig(), wctx.Logger)
+		watchdog.Start()
+		defer watchdog.Stop()
+	}
+
 	// Execute with retry
 	var result *core.ExecuteResult
 	err = wctx.Retry.Execute(func() error {
 		if ctrlErr := wctx.CheckControl(ctx); ctrlErr != nil {
 			return ctrlErr
+		}
+		// Pre-retry: if output file already exists with substantial content, use it.
+		// This recovers from the case where the agent wrote output but cmd.Wait() failed.
+		if outputFilePath != "" {
+			if info, statErr := os.Stat(outputFilePath); statErr == nil && info.Size() > 1024 {
+				content, readErr := os.ReadFile(outputFilePath)
+				if readErr == nil {
+					wctx.Logger.Info("recovered output from file written by previous attempt",
+						"agent", agentName, "path", outputFilePath, "size", len(content))
+					result = &core.ExecuteResult{Output: string(content), Model: model}
+					return nil
+				}
+			}
 		}
 		var execErr error
 		result, execErr = agent.Execute(ctx, core.ExecuteOptions{
@@ -1020,6 +1073,17 @@ func (a *Analyzer) runAnalysisWithAgent(ctx context.Context, wctx *Context, agen
 			Phase:   core.PhaseAnalyze,
 			WorkDir: wctx.ProjectRoot,
 		})
+		// If execution failed but watchdog detected stable output, recover
+		if execErr != nil && watchdog != nil {
+			select {
+			case content := <-watchdog.StableCh():
+				wctx.Logger.Info("watchdog recovery: using stable output file",
+					"agent", agentName, "size", len(content))
+				result = &core.ExecuteResult{Output: content, Model: model}
+				return nil
+			default:
+			}
+		}
 		return execErr
 	})
 
