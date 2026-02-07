@@ -265,7 +265,7 @@ function SessionItem({ session, isActive, onClick, onDelete, onRename }) {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3 flex-1 min-w-0">
           <SessionAvatar session={session} />
-          <div className="flex-1 min-w-0">
+          <div className="flex-1 min-w-0 relative z-10">
             {isEditing ? (
               <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
                 <input
@@ -276,7 +276,7 @@ function SessionItem({ session, isActive, onClick, onDelete, onRename }) {
                   onKeyDown={handleKeyDown}
                   onBlur={handleSave}
                   placeholder="Session title"
-                  className="flex-1 min-w-0 text-sm font-medium bg-background border border-input rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-ring"
+                  className="flex-1 min-w-0 text-sm font-medium bg-background border border-primary rounded px-1.5 py-1 -mx-1.5 focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
                 />
                 <button
                   onClick={handleSave}
@@ -539,14 +539,14 @@ export default function Chat() {
           <>
             {/* Header - IDE style with selectors */}
             <div className="h-14 px-3 md:px-4 border-b border-border bg-card flex items-center justify-between gap-2 md:gap-4 shrink-0 z-40">
-              <div className="flex items-center gap-2 md:gap-3 overflow-hidden flex-1">
+              <div className="flex items-center gap-2 md:gap-3 flex-1 min-w-0">
                 <button 
                   onClick={handleBackToList}
                   className="md:hidden p-1.5 -ml-1 rounded-lg hover:bg-accent text-muted-foreground"
                 >
                   <ArrowLeft className="w-4 h-4" />
                 </button>
-                <div className="flex flex-col min-w-0">
+                <div className="flex flex-col min-w-0 relative z-10">
                   {isEditingTitle ? (
                     <input
                       ref={titleInputRef}
@@ -555,7 +555,7 @@ export default function Chat() {
                       onChange={(e) => setEditTitleValue(e.target.value)}
                       onKeyDown={handleTitleKeyDown}
                       onBlur={handleSaveTitleEdit}
-                      className="text-xs font-bold bg-background border border-input rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-ring"
+                      className="text-sm font-bold bg-background border border-primary rounded px-1.5 py-0.5 -mx-1.5 focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
                     />
                   ) : (
                     <h3
@@ -642,7 +642,7 @@ export default function Chat() {
 
             {/* Input - Integrated bar */}
             <div className="shrink-0 border-t border-border bg-card p-3 md:p-4 pb-safe z-50 overflow-visible relative">
-              <div className="w-full mx-auto max-w-6xl overflow-visible relative">
+              <div className="w-full overflow-visible relative">
               {error && (
                 <div className="mb-3 p-2.5 bg-destructive/10 text-destructive text-sm rounded-lg flex items-center justify-between">
                   <span>{error}</span>

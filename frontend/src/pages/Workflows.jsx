@@ -1621,7 +1621,7 @@ function NewWorkflowForm({ onSubmit, onCancel, loading }) {
 
   return (
     <div className="w-full animate-fade-in pb-10">
-      <div className="max-w-2xl mx-auto p-6 rounded-xl border border-border bg-card animate-fade-up">
+      <div className="max-w-4xl mx-auto p-6 rounded-xl border border-border bg-card animate-fade-up">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-xl font-semibold text-foreground">Create New Workflow</h2>
           <Link
@@ -1679,7 +1679,7 @@ function NewWorkflowForm({ onSubmit, onCancel, loading }) {
                 placeholder="Describe what you want the AI agents to accomplish..."
                 rows={6}
                 spellCheck={false}
-                className="w-full px-3 py-2 pr-12 border border-input rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background resize-none font-mono text-sm leading-6"
+                className="w-full px-3 py-2 pr-12 border border-input rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background resize-y min-h-[150px] max-h-[500px] font-mono text-sm leading-6"
               />
               <VoiceInputButton
                 onTranscript={(text) => setPrompt((prev) => (prev ? prev + ' ' + text : text))}

@@ -211,7 +211,7 @@ export default function EditWorkflowModal({ isOpen, onClose, workflow, onSave, c
       />
 
       {/* Modal */}
-      <div className="relative w-full max-w-2xl mx-4 bg-card border border-border rounded-xl shadow-2xl animate-fade-up">
+      <div className="relative w-full max-w-4xl mx-4 bg-card border border-border rounded-xl shadow-2xl animate-fade-up">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-border">
           <div className="flex items-center gap-2">
@@ -227,7 +227,7 @@ export default function EditWorkflowModal({ isOpen, onClose, workflow, onSave, c
         </div>
 
         {/* Body */}
-        <div className="p-4 space-y-4" onKeyDown={handleKeyDown}>
+        <div className="p-4 space-y-4 overflow-y-auto max-h-[calc(100vh-14rem)]" onKeyDown={handleKeyDown}>
           {/* Title field */}
           <div>
             <label htmlFor={titleInputId} className="block text-sm font-medium text-foreground mb-1.5">
@@ -263,7 +263,7 @@ export default function EditWorkflowModal({ isOpen, onClose, workflow, onSave, c
                 rows={8}
                 spellCheck={false}
                 disabled={!canEditPrompt}
-                className={`w-full px-3 py-2 pr-12 rounded-lg border border-input bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background resize-none transition-shadow font-mono text-sm leading-6 ${!canEditPrompt ? 'opacity-60 cursor-not-allowed' : ''}`}
+                className={`w-full px-3 py-2 pr-12 rounded-lg border border-input bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background resize-y min-h-[120px] max-h-[500px] transition-shadow font-mono text-sm leading-6 ${!canEditPrompt ? 'opacity-60 cursor-not-allowed' : ''}`}
               />
               {canEditPrompt && (
                 <VoiceInputButton
