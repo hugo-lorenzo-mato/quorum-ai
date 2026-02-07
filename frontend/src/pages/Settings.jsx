@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useConfigStore } from '../stores/configStore';
 import useProjectStore from '../stores/projectStore';
 import { Search, ArrowLeft, ChevronRight, X, Settings as SettingsIcon, GitBranch as GitIcon, Terminal as AdvancedIcon, Workflow as WorkflowIcon, Bot as AgentsIcon, ListOrdered as PhasesIcon, Ticket as IssuesIcon } from 'lucide-react';
+import { ConfirmDialog } from '../components/config/ConfirmDialog';
 import {
   SettingsToolbar,
   ConflictDialog,
@@ -114,11 +115,14 @@ export default function Settings({
   const config = useConfigStore((state) => state.config);
   const localChanges = useConfigStore((state) => state.localChanges);
   const projectConfigMode = useConfigStore((state) => state.projectConfigMode);
+  const configSource = useConfigStore((state) => state.source);
 
   const navigate = useNavigate();
   const currentProjectId = useProjectStore((state) => state.currentProjectId);
   const updateProject = useProjectStore((state) => state.updateProject);
   const [isSwitchingConfig, setIsSwitchingConfig] = useState(false);
+  const [showSwitchToCustomConfirm, setShowSwitchToCustomConfirm] = useState(false);
+  const [showSwitchToGlobalConfirm, setShowSwitchToGlobalConfirm] = useState(false);
 
   // Load config and metadata on mount
   useEffect(() => {
@@ -130,6 +134,17 @@ export default function Settings({
     if (!currentProjectId) return;
     setIsSwitchingConfig(true);
     const updated = await updateProject(currentProjectId, { config_mode: 'custom' });
+    setIsSwitchingConfig(false);
+    if (updated) {
+      await loadConfig();
+      await loadMetadata();
+    }
+  };
+
+  const handleSwitchToGlobalConfig = async () => {
+    if (!currentProjectId) return;
+    setIsSwitchingConfig(true);
+    const updated = await updateProject(currentProjectId, { config_mode: 'inherit_global' });
     setIsSwitchingConfig(false);
     if (updated) {
       await loadConfig();
@@ -270,11 +285,48 @@ export default function Settings({
               </button>
               <button
                 type="button"
-                onClick={handleSwitchToCustomConfig}
+                onClick={() => setShowSwitchToCustomConfirm(true)}
                 disabled={isSwitchingConfig || !currentProjectId}
                 className="px-3 py-1.5 text-xs font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:pointer-events-none"
               >
                 {isSwitchingConfig ? 'Switching...' : 'Switch To Custom Config'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showProjectBanner && projectConfigMode === 'custom' && (
+        <div className="flex-none px-6 py-3 border-b border-border bg-muted/10">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-foreground">
+                This project uses a custom configuration.
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Changes you make here apply only to this project. You can switch back to global defaults at any time.
+              </p>
+              {configSource === 'default' && (
+                <p className="text-xs text-warning mt-1">
+                  Project config file not found. You are currently seeing defaults. Switching modes can recreate or remove the project config file.
+                </p>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => navigate('/settings/global')}
+                className="px-3 py-1.5 text-xs font-medium rounded-lg border border-border bg-background hover:bg-accent transition-colors"
+              >
+                Edit Global Defaults
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowSwitchToGlobalConfirm(true)}
+                disabled={isSwitchingConfig || !currentProjectId}
+                className="px-3 py-1.5 text-xs font-medium rounded-lg bg-warning text-black hover:bg-warning/90 transition-colors disabled:opacity-50 disabled:pointer-events-none"
+              >
+                {isSwitchingConfig ? 'Switching...' : 'Switch To Global Config'}
               </button>
             </div>
           </div>
@@ -404,6 +456,29 @@ export default function Settings({
           })}
         </div>
       </div>
+
+      {/* Switch mode confirmations */}
+      <ConfirmDialog
+        isOpen={showSwitchToCustomConfirm}
+        onClose={() => setShowSwitchToCustomConfirm(false)}
+        onConfirm={handleSwitchToCustomConfig}
+        title="Switch to custom config?"
+        message="This will create a project config file at .quorum/config.yaml by copying the current global defaults. After switching, edits here apply only to this project and global changes will not automatically apply. You can switch back later, which will delete the project config file."
+        confirmText="Switch to Custom"
+        cancelText="Cancel"
+        variant="warning"
+      />
+
+      <ConfirmDialog
+        isOpen={showSwitchToGlobalConfirm}
+        onClose={() => setShowSwitchToGlobalConfirm(false)}
+        onConfirm={handleSwitchToGlobalConfig}
+        title="Switch back to global defaults?"
+        message="This will delete the project config file at .quorum/config.yaml and the project will inherit the global configuration. Any project-specific settings will be lost."
+        confirmText="Switch to Global"
+        cancelText="Cancel"
+        variant="danger"
+      />
 
       {/* Floating Toolbar */}
       <SettingsToolbar />
