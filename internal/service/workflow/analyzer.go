@@ -659,6 +659,10 @@ func (a *Analyzer) runVnRefinementWithAgent(ctx context.Context, wctx *Context, 
 		outputFilePath = wctx.Report.VnAnalysisPath(agentName, model, round)
 	}
 
+	// Resolve to absolute path for filesystem operations (multi-project safety).
+	// The relative outputFilePath is kept for the prompt (agent runs in ProjectRoot).
+	absOutputPath := wctx.ResolveFilePath(outputFilePath)
+
 	// Compute prompt hash for cache validation
 	promptHash := computePromptHash(wctx.State)
 
@@ -682,12 +686,12 @@ func (a *Analyzer) runVnRefinementWithAgent(ctx context.Context, wctx *Context, 
 	}
 
 	// 2. Backward compatibility: file exists but no checkpoint
-	if outputFilePath != "" {
-		if output, err := loadExistingAnalysis(outputFilePath, agentName, model); err == nil {
+	if absOutputPath != "" {
+		if output, err := loadExistingAnalysis(absOutputPath, agentName, model); err == nil {
 			wctx.Logger.Info("using existing Vn analysis (no checkpoint, metrics unavailable)",
 				"agent", agentName,
 				"round", round,
-				"path", outputFilePath,
+				"path", absOutputPath,
 			)
 			if wctx.Output != nil {
 				wctx.Output.Log("info", "analyzer", fmt.Sprintf("Using existing V%d analysis for %s (legacy cache)", round, agentName))
@@ -704,10 +708,10 @@ func (a *Analyzer) runVnRefinementWithAgent(ctx context.Context, wctx *Context, 
 	}
 
 	// Ensure output directory exists before execution (file enforcement)
-	if outputFilePath != "" {
+	if absOutputPath != "" {
 		enforcement := NewFileEnforcement(wctx.Logger)
-		if err := enforcement.EnsureDirectory(outputFilePath); err != nil {
-			wctx.Logger.Warn("failed to ensure output directory", "path", outputFilePath, "error", err)
+		if err := enforcement.EnsureDirectory(absOutputPath); err != nil {
+			wctx.Logger.Warn("failed to ensure output directory", "path", absOutputPath, "error", err)
 		}
 	}
 
@@ -771,8 +775,8 @@ func (a *Analyzer) runVnRefinementWithAgent(ctx context.Context, wctx *Context, 
 
 	// Launch output file watchdog for recovery if agent hangs after writing
 	var watchdog *OutputWatchdog
-	if outputFilePath != "" {
-		watchdog = NewOutputWatchdog(outputFilePath, DefaultWatchdogConfig(), wctx.Logger)
+	if absOutputPath != "" {
+		watchdog = NewOutputWatchdog(absOutputPath, DefaultWatchdogConfig(), wctx.Logger)
 		watchdog.Start()
 		defer watchdog.Stop()
 	}
@@ -784,12 +788,12 @@ func (a *Analyzer) runVnRefinementWithAgent(ctx context.Context, wctx *Context, 
 		}
 		// Pre-retry: if output file already exists with substantial content, use it.
 		// This recovers from the case where the agent wrote output but cmd.Wait() failed.
-		if outputFilePath != "" {
-			if info, statErr := os.Stat(outputFilePath); statErr == nil && info.Size() > 1024 {
-				content, readErr := os.ReadFile(outputFilePath)
+		if absOutputPath != "" {
+			if info, statErr := os.Stat(absOutputPath); statErr == nil && info.Size() > 1024 {
+				content, readErr := os.ReadFile(absOutputPath)
 				if readErr == nil {
 					wctx.Logger.Info("recovered Vn output from file written by previous attempt",
-						"agent", agentName, "round", round, "path", outputFilePath, "size", len(content))
+						"agent", agentName, "round", round, "path", absOutputPath, "size", len(content))
 					result = &core.ExecuteResult{Output: string(content), Model: model}
 					return nil
 				}
@@ -845,13 +849,13 @@ func (a *Analyzer) runVnRefinementWithAgent(ctx context.Context, wctx *Context, 
 	}
 
 	// Ensure output file exists (file enforcement fallback)
-	if outputFilePath != "" && result != nil && result.Output != "" {
+	if absOutputPath != "" && result != nil && result.Output != "" {
 		enforcement := NewFileEnforcement(wctx.Logger)
-		createdByLLM, verifyErr := enforcement.VerifyOrWriteFallback(outputFilePath, result.Output)
+		createdByLLM, verifyErr := enforcement.VerifyOrWriteFallback(absOutputPath, result.Output)
 		if verifyErr != nil {
-			wctx.Logger.Warn("file enforcement failed", "path", outputFilePath, "error", verifyErr)
+			wctx.Logger.Warn("file enforcement failed", "path", absOutputPath, "error", verifyErr)
 		} else if !createdByLLM {
-			wctx.Logger.Debug("created fallback file from stdout", "path", outputFilePath)
+			wctx.Logger.Debug("created fallback file from stdout", "path", absOutputPath)
 		}
 	}
 
@@ -859,8 +863,8 @@ func (a *Analyzer) runVnRefinementWithAgent(ctx context.Context, wctx *Context, 
 	output := parseAnalysisOutputWithMetrics(outputName, model, result, durationMS)
 
 	// Create checkpoint for future resume with full metrics
-	if outputFilePath != "" {
-		if cpErr := createAnalysisCheckpoint(wctx, agentName, model, round, outputFilePath, output, promptHash); cpErr != nil {
+	if absOutputPath != "" {
+		if cpErr := createAnalysisCheckpoint(wctx, agentName, model, round, absOutputPath, output, promptHash); cpErr != nil {
 			wctx.Logger.Warn("failed to create Vn analysis checkpoint", "agent", agentName, "round", round, "error", cpErr)
 		}
 	}
@@ -964,6 +968,9 @@ func (a *Analyzer) runAnalysisWithAgent(ctx context.Context, wctx *Context, agen
 		outputFilePath = wctx.Report.V1AnalysisPath(agentName, model)
 	}
 
+	// Resolve to absolute path for filesystem operations (multi-project safety).
+	absOutputPath := wctx.ResolveFilePath(outputFilePath)
+
 	// Compute prompt hash for cache validation
 	promptHash := computePromptHash(wctx.State)
 
@@ -986,11 +993,11 @@ func (a *Analyzer) runAnalysisWithAgent(ctx context.Context, wctx *Context, agen
 	}
 
 	// 2. Backward compatibility: file exists but no checkpoint
-	if outputFilePath != "" {
-		if output, err := loadExistingAnalysis(outputFilePath, agentName, model); err == nil {
+	if absOutputPath != "" {
+		if output, err := loadExistingAnalysis(absOutputPath, agentName, model); err == nil {
 			wctx.Logger.Info("using existing V1 analysis (no checkpoint, metrics unavailable)",
 				"agent", agentName,
-				"path", outputFilePath,
+				"path", absOutputPath,
 			)
 			if wctx.Output != nil {
 				wctx.Output.Log("info", "analyzer", fmt.Sprintf("Using existing V1 analysis for %s (legacy cache)", agentName))
@@ -1007,10 +1014,10 @@ func (a *Analyzer) runAnalysisWithAgent(ctx context.Context, wctx *Context, agen
 	}
 
 	// Ensure output directory exists before execution (file enforcement)
-	if outputFilePath != "" {
+	if absOutputPath != "" {
 		enforcement := NewFileEnforcement(wctx.Logger)
-		if err := enforcement.EnsureDirectory(outputFilePath); err != nil {
-			wctx.Logger.Warn("failed to ensure output directory", "path", outputFilePath, "error", err)
+		if err := enforcement.EnsureDirectory(absOutputPath); err != nil {
+			wctx.Logger.Warn("failed to ensure output directory", "path", absOutputPath, "error", err)
 		}
 	}
 
@@ -1038,8 +1045,8 @@ func (a *Analyzer) runAnalysisWithAgent(ctx context.Context, wctx *Context, agen
 
 	// Launch output file watchdog for recovery if agent hangs after writing
 	var watchdog *OutputWatchdog
-	if outputFilePath != "" {
-		watchdog = NewOutputWatchdog(outputFilePath, DefaultWatchdogConfig(), wctx.Logger)
+	if absOutputPath != "" {
+		watchdog = NewOutputWatchdog(absOutputPath, DefaultWatchdogConfig(), wctx.Logger)
 		watchdog.Start()
 		defer watchdog.Stop()
 	}
@@ -1052,12 +1059,12 @@ func (a *Analyzer) runAnalysisWithAgent(ctx context.Context, wctx *Context, agen
 		}
 		// Pre-retry: if output file already exists with substantial content, use it.
 		// This recovers from the case where the agent wrote output but cmd.Wait() failed.
-		if outputFilePath != "" {
-			if info, statErr := os.Stat(outputFilePath); statErr == nil && info.Size() > 1024 {
-				content, readErr := os.ReadFile(outputFilePath)
+		if absOutputPath != "" {
+			if info, statErr := os.Stat(absOutputPath); statErr == nil && info.Size() > 1024 {
+				content, readErr := os.ReadFile(absOutputPath)
 				if readErr == nil {
 					wctx.Logger.Info("recovered output from file written by previous attempt",
-						"agent", agentName, "path", outputFilePath, "size", len(content))
+						"agent", agentName, "path", absOutputPath, "size", len(content))
 					result = &core.ExecuteResult{Output: string(content), Model: model}
 					return nil
 				}
@@ -1115,13 +1122,13 @@ func (a *Analyzer) runAnalysisWithAgent(ctx context.Context, wctx *Context, agen
 
 	// Ensure output file exists (file enforcement fallback)
 	// If LLM didn't write to the file, write stdout as fallback
-	if outputFilePath != "" && result != nil && result.Output != "" {
+	if absOutputPath != "" && result != nil && result.Output != "" {
 		enforcement := NewFileEnforcement(wctx.Logger)
-		createdByLLM, verifyErr := enforcement.VerifyOrWriteFallback(outputFilePath, result.Output)
+		createdByLLM, verifyErr := enforcement.VerifyOrWriteFallback(absOutputPath, result.Output)
 		if verifyErr != nil {
-			wctx.Logger.Warn("file enforcement failed", "path", outputFilePath, "error", verifyErr)
+			wctx.Logger.Warn("file enforcement failed", "path", absOutputPath, "error", verifyErr)
 		} else if !createdByLLM {
-			wctx.Logger.Debug("created fallback file from stdout", "path", outputFilePath)
+			wctx.Logger.Debug("created fallback file from stdout", "path", absOutputPath)
 		}
 	}
 
@@ -1131,8 +1138,8 @@ func (a *Analyzer) runAnalysisWithAgent(ctx context.Context, wctx *Context, agen
 	output := parseAnalysisOutputWithMetrics(outputName, model, result, durationMS)
 
 	// Create checkpoint for future resume with full metrics
-	if outputFilePath != "" {
-		if cpErr := createAnalysisCheckpoint(wctx, agentName, model, 1, outputFilePath, output, promptHash); cpErr != nil {
+	if absOutputPath != "" {
+		if cpErr := createAnalysisCheckpoint(wctx, agentName, model, 1, absOutputPath, output, promptHash); cpErr != nil {
 			wctx.Logger.Warn("failed to create analysis checkpoint", "agent", agentName, "error", cpErr)
 		}
 	}

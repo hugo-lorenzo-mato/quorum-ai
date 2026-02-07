@@ -429,7 +429,7 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 	modeEnforcerAdapter := workflow.NewModeEnforcerAdapter(modeEnforcer)
 
 	// Create workflow runner using modular architecture (ADR-0005)
-	runner := workflow.NewRunner(workflow.RunnerDeps{
+	runner, err := workflow.NewRunner(workflow.RunnerDeps{
 		Config:            runnerConfig,
 		State:             stateAdapter,
 		Agents:            registry,
@@ -450,6 +450,9 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 		ModeEnforcer:      modeEnforcerAdapter,
 		ProjectRoot:       projectRoot,
 	})
+	if err != nil {
+		return err
+	}
 
 	// Connect agent streaming events to the output notifier for real-time progress
 	registry.SetEventHandler(func(event core.AgentEvent) {

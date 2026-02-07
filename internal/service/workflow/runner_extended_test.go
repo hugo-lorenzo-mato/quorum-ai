@@ -18,9 +18,9 @@ func TestNewRunner(t *testing.T) {
 			Agents: &mockAgentRegistry{},
 		}
 
-		runner := NewRunner(deps)
-		if runner == nil {
-			t.Fatal("NewRunner() returned nil")
+		runner, err := NewRunner(deps)
+		if err != nil {
+			t.Fatalf("NewRunner() returned error: %v", err)
 		}
 		if runner.config == nil {
 			t.Error("runner.config should not be nil")
@@ -38,7 +38,10 @@ func TestNewRunner(t *testing.T) {
 			Logger: nil,
 		}
 
-		runner := NewRunner(deps)
+		runner, err := NewRunner(deps)
+		if err != nil {
+			t.Fatalf("NewRunner() returned error: %v", err)
+		}
 		if runner.logger == nil {
 			t.Error("runner.logger should not be nil")
 		}
@@ -52,7 +55,10 @@ func TestNewRunner(t *testing.T) {
 			Output: nil,
 		}
 
-		runner := NewRunner(deps)
+		runner, err := NewRunner(deps)
+		if err != nil {
+			t.Fatalf("NewRunner() returned error: %v", err)
+		}
 		if runner.output == nil {
 			t.Error("runner.output should not be nil")
 		}
@@ -73,7 +79,10 @@ func TestNewRunner(t *testing.T) {
 			Output:     NopOutputNotifier{},
 		}
 
-		runner := NewRunner(deps)
+		runner, err := NewRunner(deps)
+		if err != nil {
+			t.Fatalf("NewRunner() returned error: %v", err)
+		}
 		if runner.state != state {
 			t.Error("state not set correctly")
 		}

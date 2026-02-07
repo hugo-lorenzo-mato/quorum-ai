@@ -151,6 +151,29 @@ function entryFromSSE(eventType, data, executionId) {
   if (eventType === 'workflow_state_updated') return null;
   if (eventType === 'task_progress') return null;
 
+  if (eventType === 'config_loaded') {
+    const scope = safeStr(data?.config_scope) || 'unknown';
+    const mode = safeStr(data?.config_mode) || 'unknown';
+    const path = safeStr(data?.config_path);
+    const snapshot = safeStr(data?.snapshot_path);
+    const usedExecId = data?.execution_id ?? executionId;
+
+    const parts = [];
+    if (path) parts.push(path);
+    if (snapshot) parts.push(`snapshot: ${snapshot}`);
+    if (data?.execution_id != null) parts.push(`exec ${safeStr(data.execution_id)}`);
+
+    return {
+      kind: 'workflow',
+      event: eventType,
+      title: `Config loaded · ${scope}/${mode}`,
+      message: parts.join(' · '),
+      ts,
+      data,
+      executionId: usedExecId,
+    };
+  }
+
   if (eventType === 'agent_event') {
     const eventKind = safeStr(data?.event_kind) || 'progress';
     const agent = safeStr(data?.agent) || 'agent';
@@ -369,4 +392,3 @@ const useExecutionStore = create(
 );
 
 export default useExecutionStore;
-

@@ -463,7 +463,7 @@ func createWorkflowRunner(
 	modeEnforcerAdapter := workflow.NewModeEnforcerAdapter(modeEnforcer)
 
 	// Create workflow runner
-	runner := workflow.NewRunner(workflow.RunnerDeps{
+	runner, err := workflow.NewRunner(workflow.RunnerDeps{
 		Config:           runnerConfig,
 		State:            stateAdapter,
 		Agents:           registry,
@@ -480,6 +480,9 @@ func createWorkflowRunner(
 		ModeEnforcer:     modeEnforcerAdapter,
 		Control:          controlPlane,
 	})
+	if err != nil {
+		return nil, err
+	}
 
 	return runner, nil
 }
@@ -805,7 +808,7 @@ func createWorkflowRunnerWithTrace(
 	modeEnforcerAdapter := workflow.NewModeEnforcerAdapter(modeEnforcer)
 
 	// Create workflow runner
-	runner := workflow.NewRunner(workflow.RunnerDeps{
+	runner, err := workflow.NewRunner(workflow.RunnerDeps{
 		Config:           runnerConfig,
 		State:            stateAdapter,
 		Agents:           registry,
@@ -822,6 +825,9 @@ func createWorkflowRunnerWithTrace(
 		ModeEnforcer:     modeEnforcerAdapter,
 		Control:          controlPlane,
 	})
+	if err != nil {
+		return nil, err
+	}
 
 	return runner, nil
 }

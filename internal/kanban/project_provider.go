@@ -28,6 +28,11 @@ type ProjectStateProvider interface {
 	// GetProjectEventBus returns the EventBus for a specific project (for SSE events).
 	// May return nil if project doesn't have an EventBus.
 	GetProjectEventBus(ctx context.Context, projectID string) EventPublisher
+
+	// GetProjectExecutionContext returns a context decorated with the project's ProjectContext.
+	// This is required for background execution (Kanban) so the executor can resolve
+	// project-scoped resources (StateManager, EventBus, config).
+	GetProjectExecutionContext(ctx context.Context, projectID string) (context.Context, error)
 }
 
 // EventPublisher defines the interface for publishing events.
@@ -69,4 +74,9 @@ func (p *SingleProjectProvider) GetProjectStateManager(_ context.Context, _ stri
 // GetProjectEventBus returns the single EventBus.
 func (p *SingleProjectProvider) GetProjectEventBus(_ context.Context, _ string) EventPublisher {
 	return p.eventBus
+}
+
+// GetProjectExecutionContext returns the provided context unchanged (legacy single-project mode).
+func (p *SingleProjectProvider) GetProjectExecutionContext(ctx context.Context, _ string) (context.Context, error) {
+	return ctx, nil
 }

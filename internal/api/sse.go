@@ -218,6 +218,20 @@ func (s *Server) sendEventToClient(w http.ResponseWriter, flusher http.Flusher, 
 			"timestamp":   e.Timestamp(),
 		}
 
+	case events.ConfigLoadedEvent:
+		payload = map[string]interface{}{
+			"workflow_id":    e.WorkflowID(),
+			"config_path":    e.ConfigPath,
+			"config_scope":   e.ConfigScope,
+			"config_mode":    e.ConfigMode,
+			"file_etag":      e.FileETag,
+			"effective_etag": e.EffectiveETag,
+			"execution_id":   e.ExecutionID,
+			"snapshot_path":  e.SnapshotPath,
+			"warning":        e.Warning,
+			"timestamp":      e.Timestamp(),
+		}
+
 	// Kanban events
 	case events.KanbanWorkflowMovedEvent:
 		payload = map[string]interface{}{

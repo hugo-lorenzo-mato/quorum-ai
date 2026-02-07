@@ -193,8 +193,7 @@ type RunnerDeps struct {
 }
 
 // NewRunner creates a new workflow runner with all dependencies.
-// Returns nil if the moderator cannot be created (invalid config).
-func NewRunner(deps RunnerDeps) *Runner {
+func NewRunner(deps RunnerDeps) (*Runner, error) {
 	if deps.Config == nil {
 		deps.Config = DefaultRunnerConfig()
 	}
@@ -209,7 +208,7 @@ func NewRunner(deps RunnerDeps) *Runner {
 	analyzer, err := NewAnalyzer(deps.Config.Moderator)
 	if err != nil {
 		deps.Logger.Error("failed to create analyzer", "error", err)
-		return nil
+		return nil, fmt.Errorf("creating analyzer: %w", err)
 	}
 
 	return &Runner{
@@ -236,7 +235,7 @@ func NewRunner(deps RunnerDeps) *Runner {
 		control:           deps.Control,
 		heartbeat:         deps.Heartbeat,
 		projectRoot:       deps.ProjectRoot,
-	}
+	}, nil
 }
 
 // Run executes a complete workflow from a user prompt.
@@ -1467,6 +1466,9 @@ func (r *Runner) Plan(ctx context.Context) error {
 		return nil
 	}
 
+	// New phase execution attempt: bump execution id but keep prior events for history.
+	r.prepareExecution(workflowState, true)
+
 	r.logger.Info("starting plan-only workflow",
 		"workflow_id", workflowState.WorkflowID,
 	)
@@ -1558,6 +1560,9 @@ func (r *Runner) PlanWithState(ctx context.Context, state *core.WorkflowState) e
 		workflowState.Metrics = &core.StateMetrics{}
 	}
 
+	// New phase execution attempt: bump execution id but keep prior events for history.
+	r.prepareExecution(workflowState, true)
+
 	r.logger.Info("starting plan phase with existing state",
 		"workflow_id", workflowState.WorkflowID,
 	)
@@ -1640,6 +1645,9 @@ func (r *Runner) Replan(ctx context.Context, additionalContext string) error {
 	// Clear plan phase data
 	r.clearPlanPhaseData(workflowState)
 
+	// New phase execution attempt: bump execution id but keep prior events for history.
+	r.prepareExecution(workflowState, true)
+
 	r.logger.Info("starting replan workflow",
 		"workflow_id", workflowState.WorkflowID,
 		"previous_tasks", len(workflowState.Tasks),
@@ -1716,6 +1724,9 @@ func (r *Runner) ReplanWithState(ctx context.Context, state *core.WorkflowState,
 
 	// Clear plan phase data
 	r.clearPlanPhaseData(workflowState)
+
+	// New phase execution attempt: bump execution id but keep prior events for history.
+	r.prepareExecution(workflowState, true)
 
 	r.logger.Info("starting replan phase with existing state",
 		"workflow_id", workflowState.WorkflowID,

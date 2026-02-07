@@ -441,9 +441,9 @@ func (b *RunnerBuilder) Build(ctx context.Context) (*Runner, error) {
 	}
 
 	// Create the runner
-	runner := NewRunner(deps)
-	if runner == nil {
-		return nil, fmt.Errorf("failed to create runner (check moderator config)")
+	runner, err := NewRunner(deps)
+	if err != nil {
+		return nil, err
 	}
 
 	return runner, nil

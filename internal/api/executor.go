@@ -122,8 +122,18 @@ func (e *WorkflowExecutor) execute(ctx context.Context, workflowID core.Workflow
 	execCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), e.executionTimeout)
 	handle.SetExecCancel(cancel)
 
+	// Reload state (it was updated by StartExecution).
+	state, err = stateManager.LoadByID(ctx, workflowID)
+	if err != nil {
+		cancel()
+		if rollbackErr := e.unifiedTracker.RollbackExecution(ctx, workflowID, err.Error()); rollbackErr != nil && e.logger != nil {
+			e.logger.Error("failed to rollback execution", "workflow_id", workflowID, "error", rollbackErr)
+		}
+		return fmt.Errorf("reloading workflow state: %w", err)
+	}
+
 	// Create runner using the ControlPlane from the handle
-	runner, notifier, err := e.runnerFactory.CreateRunner(execCtx, id, handle.ControlPlane, state.Blueprint)
+	runner, notifier, err := e.runnerFactory.CreateRunner(execCtx, id, handle.ControlPlane, state.Blueprint, state)
 	if err != nil {
 		cancel()
 		if rollbackErr := e.unifiedTracker.RollbackExecution(ctx, workflowID, err.Error()); rollbackErr != nil && e.logger != nil {
@@ -135,16 +145,6 @@ func (e *WorkflowExecutor) execute(ctx context.Context, workflowID core.Workflow
 	// Connect notifier to state for agent event persistence
 	notifier.SetState(state)
 	notifier.SetStateSaver(stateManager)
-
-	// Reload state to get atomic updates from StartExecution
-	state, err = stateManager.LoadByID(ctx, workflowID)
-	if err != nil {
-		cancel()
-		if rollbackErr := e.unifiedTracker.RollbackExecution(ctx, workflowID, err.Error()); rollbackErr != nil && e.logger != nil {
-			e.logger.Error("failed to rollback execution", "workflow_id", workflowID, "error", rollbackErr)
-		}
-		return fmt.Errorf("reloading workflow state: %w", err)
-	}
 
 	// Start execution in background
 	go e.executeAsync(execCtx, cancel, runner, notifier, state, isResume, id, handle)

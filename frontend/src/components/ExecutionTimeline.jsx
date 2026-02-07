@@ -45,6 +45,8 @@ function shouldShowEntry(filterId, entry) {
   if (filterId === 'agents') return entry.kind === 'agent';
   if (filterId === 'workflow') return entry.kind === 'workflow';
   // phases_tasks default
+  // Include config provenance even in the default view (low-noise, high-value).
+  if (entry.event === 'config_loaded') return true;
   return entry.kind === 'phase' || entry.kind === 'task';
 }
 
@@ -168,4 +170,3 @@ export default function ExecutionTimeline({
     </div>
   );
 }
-

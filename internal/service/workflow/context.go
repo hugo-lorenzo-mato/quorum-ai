@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -386,6 +387,21 @@ func (c *Context) GetContextString() string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return BuildContextString(c.State)
+}
+
+// ResolveFilePath returns an absolute path for filesystem operations (os.Stat, os.ReadFile).
+// If the path is already absolute, it's returned as-is.
+// If the path is relative and ProjectRoot is set, it's resolved against ProjectRoot.
+// This ensures file checks work correctly in multi-project mode where the server's
+// CWD may differ from the project root.
+func (c *Context) ResolveFilePath(path string) string {
+	if path == "" || filepath.IsAbs(path) {
+		return path
+	}
+	if c != nil && c.ProjectRoot != "" {
+		return filepath.Join(c.ProjectRoot, path)
+	}
+	return path
 }
 
 // CheckControl applies workflow-level control checks (cancel + pause).

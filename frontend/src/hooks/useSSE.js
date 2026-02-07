@@ -185,6 +185,11 @@ export default function useSSE() {
         handleAgentEvent(data);
         break;
 
+      // Config / provenance events
+      case 'config_loaded':
+        // Persisted by ingestSSEEvent; no store updates required.
+        break;
+
       // Kanban events
       case 'kanban_workflow_moved':
         handleKanbanWorkflowMoved(data);
@@ -318,6 +323,7 @@ export default function useSSE() {
       'task_skipped',
       'task_retry',
       'agent_event',
+      'config_loaded',
       'kanban_workflow_moved',
       'kanban_execution_started',
       'kanban_execution_completed',

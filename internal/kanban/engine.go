@@ -284,7 +284,15 @@ func (e *Engine) startExecutionForProject(ctx context.Context, workflow *core.Wo
 
 	// Start workflow execution in background
 	go func() {
-		execCtx := context.Background() // Independent context for execution
+		baseCtx := context.Background() // Independent context for execution
+		execCtx, ctxErr := e.projectProvider.GetProjectExecutionContext(baseCtx, projectID)
+		if ctxErr != nil {
+			e.logger.Error("failed to create project execution context",
+				"workflow_id", workflowID, "project_id", projectID, "error", ctxErr)
+			e.handleWorkflowFailedForProject(baseCtx, workflowID, projectID, ctxErr.Error())
+			return
+		}
+
 		err := e.executor.Run(execCtx, core.WorkflowID(workflowID))
 		if err != nil {
 			// executor.Run() can fail in two ways:
@@ -300,7 +308,7 @@ func (e *Engine) startExecutionForProject(ctx context.Context, workflow *core.Wo
 			// Handle early failure: update state directly since no event will be published
 			// This covers cases like validation errors, missing config, etc.
 			errMsg := err.Error()
-			e.handleWorkflowFailedForProject(execCtx, workflowID, projectID, errMsg)
+			e.handleWorkflowFailedForProject(baseCtx, workflowID, projectID, errMsg)
 		}
 		// Note: For successful async execution, WorkflowCompletedEvent/WorkflowFailedEvent
 		// will be published by the executor and handled in handleWorkflowEvent()

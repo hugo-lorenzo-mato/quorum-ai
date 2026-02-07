@@ -366,13 +366,14 @@ func (s *Server) handleCreateWorkflow(w http.ResponseWriter, r *http.Request) {
 		// Continue anyway - the directory will be created during execution
 	}
 
-	// Build workflow blueprint
+	// Build workflow blueprint.
+	// Timeout is intentionally 0 (unset) so the config default (typically 12h) is used.
+	// The builder only overrides the config timeout when blueprint.Timeout > 0.
 	blueprint := &core.Blueprint{
 		Consensus: core.BlueprintConsensus{
 			Threshold: 0.75,
 		},
 		MaxRetries: 3,
-		Timeout:    time.Hour,
 	}
 
 	if req.Blueprint != nil {
@@ -852,6 +853,12 @@ func (s *Server) HandleRunWorkflow(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if execErr != nil {
+			// Prefer structured domain errors for correct HTTP status codes.
+			if status, ok := httpStatusForDomainError(execErr); ok {
+				respondError(w, status, execErr.Error())
+				return
+			}
+
 			// Map errors to HTTP status codes
 			errMsg := execErr.Error()
 			switch {
@@ -945,12 +952,18 @@ func (s *Server) HandleRunWorkflow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	runner, notifier, err := factory.CreateRunner(execCtx, workflowID, handle.ControlPlane, state.Blueprint)
+	runner, notifier, err := factory.CreateRunner(execCtx, workflowID, handle.ControlPlane, state.Blueprint, state)
 	if err != nil {
 		cancel()
 		_ = s.unifiedTracker.RollbackExecution(ctx, core.WorkflowID(workflowID), "failed to create runner: "+err.Error())
 		s.logger.Error("failed to create runner", "workflow_id", workflowID, "error", err)
-		respondError(w, http.StatusServiceUnavailable, "workflow execution not available: "+err.Error())
+		status := http.StatusServiceUnavailable
+		msg := "workflow execution not available: " + err.Error()
+		if s, ok := httpStatusForDomainError(err); ok {
+			status = s
+			msg = err.Error()
+		}
+		respondError(w, status, msg)
 		return
 	}
 
@@ -1332,12 +1345,18 @@ func (s *Server) HandleAnalyzeWorkflow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	runner, notifier, err := factory.CreateRunner(execCtx, workflowID, handle.ControlPlane, state.Blueprint)
+	runner, notifier, err := factory.CreateRunner(execCtx, workflowID, handle.ControlPlane, state.Blueprint, state)
 	if err != nil {
 		cancel()
 		_ = s.unifiedTracker.RollbackExecution(ctx, core.WorkflowID(workflowID), "failed to create runner: "+err.Error())
 		s.logger.Error("failed to create runner", "workflow_id", workflowID, "error", err)
-		respondError(w, http.StatusServiceUnavailable, "workflow execution not available: "+err.Error())
+		status := http.StatusServiceUnavailable
+		msg := "workflow execution not available: " + err.Error()
+		if s, ok := httpStatusForDomainError(err); ok {
+			status = s
+			msg = err.Error()
+		}
+		respondError(w, status, msg)
 		return
 	}
 
@@ -1488,11 +1507,17 @@ func (s *Server) HandlePlanWorkflow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	runner, notifier, err := factory.CreateRunner(execCtx, workflowID, handle.ControlPlane, state.Blueprint)
+	runner, notifier, err := factory.CreateRunner(execCtx, workflowID, handle.ControlPlane, state.Blueprint, state)
 	if err != nil {
 		cancel()
 		_ = s.unifiedTracker.RollbackExecution(ctx, core.WorkflowID(workflowID), "failed to create runner: "+err.Error())
-		respondError(w, http.StatusServiceUnavailable, "workflow execution not available: "+err.Error())
+		status := http.StatusServiceUnavailable
+		msg := "workflow execution not available: " + err.Error()
+		if s, ok := httpStatusForDomainError(err); ok {
+			status = s
+			msg = err.Error()
+		}
+		respondError(w, status, msg)
 		return
 	}
 
@@ -1640,11 +1665,17 @@ func (s *Server) HandleReplanWorkflow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	runner, notifier, err := factory.CreateRunner(execCtx, workflowID, handle.ControlPlane, state.Blueprint)
+	runner, notifier, err := factory.CreateRunner(execCtx, workflowID, handle.ControlPlane, state.Blueprint, state)
 	if err != nil {
 		cancel()
 		_ = s.unifiedTracker.RollbackExecution(ctx, core.WorkflowID(workflowID), "failed to create runner: "+err.Error())
-		respondError(w, http.StatusServiceUnavailable, "workflow execution not available: "+err.Error())
+		status := http.StatusServiceUnavailable
+		msg := "workflow execution not available: " + err.Error()
+		if s, ok := httpStatusForDomainError(err); ok {
+			status = s
+			msg = err.Error()
+		}
+		respondError(w, status, msg)
 		return
 	}
 
@@ -1795,11 +1826,17 @@ func (s *Server) HandleExecuteWorkflow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	runner, notifier, err := factory.CreateRunner(execCtx, workflowID, handle.ControlPlane, state.Blueprint)
+	runner, notifier, err := factory.CreateRunner(execCtx, workflowID, handle.ControlPlane, state.Blueprint, state)
 	if err != nil {
 		cancel()
 		_ = s.unifiedTracker.RollbackExecution(ctx, core.WorkflowID(workflowID), "failed to create runner: "+err.Error())
-		respondError(w, http.StatusServiceUnavailable, "workflow execution not available: "+err.Error())
+		status := http.StatusServiceUnavailable
+		msg := "workflow execution not available: " + err.Error()
+		if s, ok := httpStatusForDomainError(err); ok {
+			status = s
+			msg = err.Error()
+		}
+		respondError(w, status, msg)
 		return
 	}
 

@@ -269,6 +269,11 @@ func (b *BaseAdapter) ExecuteCommand(ctx context.Context, args []string, stdin, 
 		if stderrPipe != nil {
 			_ = stderrPipe.Close()
 		}
+		// If the context expired before the process could start, return a retryable
+		// timeout error so the retry policy can attempt recovery (e.g., file-based).
+		if ctx.Err() != nil {
+			return nil, core.ErrTimeout(fmt.Sprintf("starting command: %v (context: %v)", err, ctx.Err()))
+		}
 		return nil, fmt.Errorf("starting command: %w", err)
 	}
 
@@ -580,6 +585,11 @@ func (b *BaseAdapter) executeWithJSONStreaming(
 		// CRITICAL: Close both pipes if Start() fails to prevent FD leak
 		_ = stdoutPipe.Close()
 		_ = stderrPipe.Close()
+		// If the context expired before the process could start, return a retryable
+		// timeout error so the retry policy can attempt recovery (e.g., file-based).
+		if ctx.Err() != nil {
+			return nil, core.ErrTimeout(fmt.Sprintf("starting command: %v (context: %v)", err, ctx.Err()))
+		}
 		return nil, fmt.Errorf("starting command: %w", err)
 	}
 
@@ -639,7 +649,13 @@ func (b *BaseAdapter) executeWithJSONStreaming(
 			waitErr = <-waitDone
 		}
 	case <-ctx.Done():
-		waitErr = ctx.Err()
+		// Context expired — kill the entire process group (not just PID).
+		// exec.CommandContext only kills the PID; child processes in the Setpgid
+		// process group may survive. GracefulKill targets the PGID.
+		b.logger.Warn("context expired, killing process group",
+			"adapter", adapterName, "reason", ctx.Err())
+		_ = b.GracefulKill(5 * time.Second)
+		waitErr = <-waitDone
 	}
 
 	wg.Wait()
@@ -893,6 +909,11 @@ func (b *BaseAdapter) executeWithLogFileStreaming(
 	startTime := time.Now()
 
 	if err := cmd.Start(); err != nil {
+		// If the context expired before the process could start, return a retryable
+		// timeout error so the retry policy can attempt recovery (e.g., file-based).
+		if ctx.Err() != nil {
+			return nil, core.ErrTimeout(fmt.Sprintf("starting command: %v (context: %v)", err, ctx.Err()))
+		}
 		return nil, fmt.Errorf("starting command: %w", err)
 	}
 
