@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate, Link, useSearchParams, useLocation } from 'react-router-dom';
-import { useWorkflowStore, useTaskStore, useUIStore, useAgentStore, useConfigStore } from '../stores';
+import { useWorkflowStore, useTaskStore, useUIStore, useExecutionStore, useProjectStore, useConfigStore } from '../stores';
 import { fileApi, workflowApi } from '../lib/api';
 import { getModelsForAgent, getReasoningLevels, supportsReasoning, useEnums } from '../lib/agents';
 import { getStatusColor } from '../lib/theme';
 import MarkdownViewer from '../components/MarkdownViewer';
 import AgentActivity, { AgentActivityCompact } from '../components/AgentActivity';
+import ExecutionTimeline from '../components/ExecutionTimeline';
 import EditWorkflowModal from '../components/EditWorkflowModal';
 import VoiceInputButton from '../components/VoiceInputButton';
 import FAB from '../components/FAB';
@@ -134,6 +135,7 @@ function StatusBadge({ status }) {
   const iconMap = {
     pending: Clock,
     running: Activity,
+    cancelling: StopCircle,
     completed: CheckCircle2,
     failed: XCircle,
     paused: Pause,
@@ -150,13 +152,13 @@ function StatusBadge({ status }) {
 }
 
 function WorkflowCard({ workflow, onClick, onDelete }) {
-  const canDelete = workflow.status !== 'running';
+  const canDelete = workflow.status !== 'running' && workflow.status !== 'cancelling';
   
   // Determine variant and accent based on status
   let variant = 'default';
   let accentColor = 'primary';
   
-  if (workflow.status === 'running') {
+  if (workflow.status === 'running' || workflow.status === 'cancelling') {
     variant = 'executing';
     accentColor = 'blue';
   } else if (workflow.status === 'completed') {
@@ -286,8 +288,8 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
 
   // Delete confirmation state
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const canDelete = workflow.status !== 'running';
-  const canModifyAttachments = workflow.status !== 'running';
+  const canDelete = workflow.status !== 'running' && workflow.status !== 'cancelling';
+  const canModifyAttachments = workflow.status !== 'running' && workflow.status !== 'cancelling';
   const attachmentInputRef = useRef(null);
   const [attachmentUploading, setAttachmentUploading] = useState(false);
 
@@ -411,7 +413,7 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
   }, [workflow.id, deleteWorkflow, notifyInfo, notifyError, navigate]);
   // Title can be edited anytime except when running
   // Prompt can only be edited when pending
-  const canEdit = workflow.status !== 'running';
+  const canEdit = workflow.status !== 'running' && workflow.status !== 'cancelling';
   const canEditPrompt = workflow.status === 'pending';
   const displayTitle = workflow.title || deriveWorkflowTitle(workflow, tasks);
 
@@ -433,20 +435,54 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
   const [showIssuesModal, setShowIssuesModal] = useState(false);
   const [issuesGenerating, setIssuesGenerating] = useState(false);
 
-  const agentActivityMap = useAgentStore((s) => s.agentActivity);
-  const currentAgentsMap = useAgentStore((s) => s.currentAgents);
+  // Execution timeline + agent status is persisted in the browser so it survives navigation/refresh.
+  const currentProjectId = useProjectStore((s) => s.currentProjectId);
+  const workflowKey = useMemo(
+    () => `${currentProjectId || 'default'}:${workflow?.id || ''}`,
+    [currentProjectId, workflow?.id]
+  );
+  const hydrateFromWorkflowResponse = useExecutionStore((s) => s.hydrateFromWorkflowResponse);
+  const timeline = useExecutionStore((s) => s.timelineByWorkflow[workflowKey] || []);
+  const currentAgents = useExecutionStore((s) => s.currentAgentsByWorkflow[workflowKey] || {});
+  const connectionMode = useUIStore((s) => s.connectionMode);
+
+  useEffect(() => {
+    // Merge persisted backend agent_events (if any) into the local replayable timeline.
+    // Never overwrite local entries; local timeline is the source of continuity across navigation.
+    hydrateFromWorkflowResponse(workflow, currentProjectId);
+  }, [hydrateFromWorkflowResponse, workflow, currentProjectId]);
+
+  // Safety net: while running/cancelling, refresh workflow state periodically so UI
+  // recovers even if an SSE event is dropped (or the client reconnects mid-run).
+  useEffect(() => {
+    if (!workflow?.id) return;
+    if (!['running', 'cancelling'].includes(workflow.status)) return;
+    const interval = setInterval(() => {
+      fetchWorkflow(workflow.id, { silent: true });
+    }, 8000);
+    return () => clearInterval(interval);
+  }, [workflow?.id, workflow?.status, fetchWorkflow]);
 
   const agentActivity = useMemo(
-    () => agentActivityMap[workflow?.id] || [],
-    [agentActivityMap, workflow?.id]
+    () => (timeline || [])
+      .filter((e) => e.kind === 'agent' && e.agent)
+      .map((e) => ({
+        id: e.id,
+        agent: e.agent,
+        eventKind: e.event,
+        message: e.message,
+        data: e.data,
+        timestamp: e.ts,
+      })),
+    [timeline]
   );
 
-  const activeAgents = useMemo(() => {
-    const agents = currentAgentsMap[workflow?.id] || {};
-    return Object.entries(agents)
+  const activeAgents = useMemo(
+    () => Object.entries(currentAgents)
       .filter(([, info]) => ['started', 'thinking', 'tool_use', 'progress'].includes(info.status))
-      .map(([name, info]) => ({ name, ...info }));
-  }, [currentAgentsMap, workflow?.id]);
+      .map(([name, info]) => ({ name, ...info })),
+    [currentAgents]
+  );
 
   const cacheRef = useRef(new Map());
   const [artifactsLoading, setArtifactsLoading] = useState(false);
@@ -872,7 +908,7 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
           </div>
 
           <div className="flex items-center gap-2 flex-wrap md:justify-end w-full md:w-auto">
-            {workflow.status === 'running' && (
+            {['running', 'cancelling'].includes(workflow.status) && (
               <AgentActivityCompact activeAgents={activeAgents} />
             )}
 
@@ -970,11 +1006,18 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
               </button>
             )}
 
-            {/* Running indicator */}
+            {/* Running/Cancelling indicator */}
             {workflow.status === 'running' && (
               <div className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-info/10 text-info text-sm">
                 <Loader2 className="w-4 h-4 animate-spin" />
                 {workflow.current_phase ? `Running ${workflow.current_phase}...` : 'Running...'}
+              </div>
+            )}
+
+            {workflow.status === 'cancelling' && (
+              <div className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-warning/10 text-warning text-sm">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Cancelling...
               </div>
             )}
 
@@ -1147,8 +1190,16 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
         </button>
       </div>
 
-      {/* Agent Activity Panel - Conditionally visible on mobile */}
-      <div className={`${activeMobileTab === 'activity' ? 'block' : 'hidden'} md:block`}>
+      {/* Execution Panels - Conditionally visible on mobile */}
+      <div className={`${activeMobileTab === 'activity' ? 'block' : 'hidden'} md:block space-y-4`}>
+        <ExecutionTimeline
+          entries={timeline}
+          status={workflow.status}
+          defaultFilter="phases_tasks"
+          onRefresh={() => fetchWorkflow(workflow.id, { silent: true })}
+          connectionMode={connectionMode}
+        />
+
         {(agentActivity.length > 0 || activeAgents.length > 0) && (
           <>
             {selectedTaskId && filteredActivity.length !== agentActivity.length && (
@@ -1156,7 +1207,6 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
                 <span className="text-muted-foreground">
                   Showing logs for <span className="font-mono font-medium text-foreground">{selectedTaskId}</span> ({filteredActivity.length}/{agentActivity.length} events)
                 </span>
-                {/* Optional: Add a button to disable filtering while keeping doc selected if desired */}
               </div>
             )}
             <AgentActivity
@@ -1165,7 +1215,7 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
               activeAgents={activeAgents}
               expanded={activityExpanded}
               onToggle={() => setActivityExpanded(!activityExpanded)}
-              workflowStartTime={workflow.status === 'running' ? workflow.updated_at : null}
+              workflowStartTime={['running', 'cancelling'].includes(workflow.status) ? workflow.updated_at : null}
             />
           </>
         )}

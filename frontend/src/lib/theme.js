@@ -41,6 +41,14 @@ export const STATUS_COLORS = {
     dot: 'bg-status-paused',
     tint: 'bg-status-paused-bg/50',
   },
+  cancelling: {
+    text: 'text-status-paused',
+    bg: 'bg-status-paused-bg',
+    border: 'border-status-paused/20',
+    borderStrip: 'border-status-paused',
+    dot: 'bg-status-paused',
+    tint: 'bg-status-paused-bg/50',
+  },
 };
 
 export const KANBAN_COLUMN_COLORS = {

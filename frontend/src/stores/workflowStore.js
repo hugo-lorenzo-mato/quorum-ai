@@ -50,8 +50,13 @@ const useWorkflowStore = create((set, get) => ({
     }
   },
 
-  fetchWorkflow: async (id) => {
-    set({ loading: true, error: null });
+  fetchWorkflow: async (id, options = {}) => {
+    const silent = options?.silent === true;
+    if (!silent) {
+      set({ loading: true, error: null });
+    } else {
+      set({ error: null });
+    }
     try {
       const workflow = await workflowApi.get(id);
       const { workflows } = get();
@@ -59,7 +64,11 @@ const useWorkflowStore = create((set, get) => ({
       if (!workflows.find(w => w.id === id)) {
         updated.push(workflow);
       }
-      set({ workflows: updated, loading: false });
+      if (silent) {
+        set({ workflows: updated });
+      } else {
+        set({ workflows: updated, loading: false });
+      }
 
       // Load persisted agent events for page reload recovery
       // Pass execution_id to filter events from current execution only
@@ -78,7 +87,11 @@ const useWorkflowStore = create((set, get) => ({
 
       return workflow;
     } catch (error) {
-      set({ error: error.message, loading: false });
+      if (silent) {
+        set({ error: error.message });
+      } else {
+        set({ error: error.message, loading: false });
+      }
       return null;
     }
   },
@@ -211,9 +224,19 @@ const useWorkflowStore = create((set, get) => ({
     set({ loading: true, error: null });
     try {
       const result = await workflowApi.cancel(id);
-      // The backend cancels the workflow asynchronously.
-      // Real-time status updates will come via SSE events.
-      set({ loading: false });
+      // The backend cancels asynchronously. Reflect an immediate intermediate state in UI.
+      const { workflows, activeWorkflow } = get();
+      const nowIso = new Date().toISOString();
+      const updated = workflows.map(w =>
+        w.id === id ? { ...w, status: 'cancelling', updated_at: nowIso } : w
+      );
+      set({
+        workflows: updated,
+        activeWorkflow: activeWorkflow?.id === id
+          ? { ...activeWorkflow, status: 'cancelling', updated_at: nowIso }
+          : activeWorkflow,
+        loading: false,
+      });
       return result;
     } catch (error) {
       set({ error: error.message, loading: false });

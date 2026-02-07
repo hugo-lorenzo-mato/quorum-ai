@@ -3,6 +3,7 @@ import useWorkflowStore from '../stores/workflowStore';
 import useTaskStore from '../stores/taskStore';
 import useUIStore from '../stores/uiStore';
 import useAgentStore from '../stores/agentStore';
+import useExecutionStore from '../stores/executionStore';
 import useKanbanStore from '../stores/kanbanStore';
 import useProjectStore from '../stores/projectStore';
 import { workflowApi } from '../lib/api';
@@ -65,6 +66,7 @@ export default function useSSE() {
 
   // Agent event handler
   const handleAgentEvent = useAgentStore(state => state.handleAgentEvent);
+  const ingestSSEEvent = useExecutionStore(state => state.ingestSSEEvent);
 
   // Kanban event handlers
   const handleKanbanWorkflowMoved = useKanbanStore(state => state.handleWorkflowMoved);
@@ -107,6 +109,17 @@ export default function useSSE() {
   }, []);
 
   const handleEvent = useCallback((eventType, data) => {
+    // Persist a replayable execution timeline (per project + workflow) for the workflow detail view.
+    // We intentionally ingest before the switch so we don't miss anything due to handler errors.
+    if (eventType && eventType !== 'connected' && eventType !== 'message') {
+      try {
+        ingestSSEEvent(eventType, data, currentProjectId);
+      } catch (e) {
+        // Never break live updates due to telemetry persistence failures.
+        console.warn('Failed to ingest SSE event into execution store', e);
+      }
+    }
+
     switch (eventType) {
       // Workflow events
       case 'workflow_started':
@@ -217,6 +230,7 @@ export default function useSSE() {
     handleTaskSkipped,
     handleTaskRetry,
     handleAgentEvent,
+    ingestSSEEvent,
     handleKanbanWorkflowMoved,
     handleKanbanExecutionStarted,
     handleKanbanExecutionCompleted,
@@ -228,6 +242,7 @@ export default function useSSE() {
     stopPolling,
     notifyInfo,
     notifyError,
+    currentProjectId,
   ]);
 
   const connect = useCallback(() => {
