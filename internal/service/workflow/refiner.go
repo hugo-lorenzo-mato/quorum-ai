@@ -117,6 +117,9 @@ func (r *Refiner) Run(ctx context.Context, wctx *Context) error {
 	// Execute refinement
 	var result *core.ExecuteResult
 	err = wctx.Retry.Execute(func() error {
+		if ctrlErr := wctx.CheckControl(ctx); ctrlErr != nil {
+			return ctrlErr
+		}
 		var execErr error
 		result, execErr = agent.Execute(ctx, core.ExecuteOptions{
 			Prompt:  prompt,

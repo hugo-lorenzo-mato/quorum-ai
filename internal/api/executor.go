@@ -120,6 +120,7 @@ func (e *WorkflowExecutor) execute(ctx context.Context, workflowID core.Workflow
 	// This ensures the workflow continues running after the HTTP request completes,
 	// while maintaining access to project-scoped resources (StateManager, EventBus, etc.)
 	execCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), e.executionTimeout)
+	handle.SetExecCancel(cancel)
 
 	// Create runner using the ControlPlane from the handle
 	runner, notifier, err := e.runnerFactory.CreateRunner(execCtx, id, handle.ControlPlane, state.Blueprint)

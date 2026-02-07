@@ -2,6 +2,7 @@ package control
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 )
@@ -61,6 +62,38 @@ func TestControlPlane_WaitIfPaused(t *testing.T) {
 		// Expected
 	case <-time.After(100 * time.Millisecond):
 		t.Error("Should have resumed")
+	}
+}
+
+func TestControlPlane_WaitIfPaused_CancelUnblocks(t *testing.T) {
+	cp := New()
+	cp.Pause()
+
+	done := make(chan error, 1)
+	go func() {
+		done <- cp.WaitIfPaused(context.Background())
+	}()
+
+	// Should still be waiting
+	select {
+	case err := <-done:
+		t.Fatalf("expected WaitIfPaused to block, got err=%v", err)
+	case <-time.After(50 * time.Millisecond):
+		// Expected
+	}
+
+	cp.Cancel()
+
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("expected error after cancel, got nil")
+		}
+		if !strings.Contains(err.Error(), "CANCELLED") {
+			t.Fatalf("expected CANCELLED error, got %v", err)
+		}
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("expected WaitIfPaused to unblock after cancel")
 	}
 }
 

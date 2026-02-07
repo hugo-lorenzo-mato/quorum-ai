@@ -934,6 +934,7 @@ func (s *Server) HandleRunWorkflow(w http.ResponseWriter, r *http.Request) {
 	// context.WithoutCancel detaches from HTTP request cancellation while maintaining
 	// access to project-scoped resources (StateManager, EventBus, etc.)
 	execCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 4*time.Hour)
+	handle.SetExecCancel(cancel)
 
 	// Reload state (it was updated by StartExecution)
 	state, err = stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
@@ -1096,7 +1097,7 @@ func (s *Server) handleCancelWorkflow(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusAccepted, WorkflowControlResponse{
 		ID:      workflowID,
 		Status:  "cancelling",
-		Message: "Workflow cancellation requested. The workflow will stop after the current task completes.",
+		Message: "Workflow cancellation requested. In-flight agent processes will be interrupted.",
 	})
 }
 
@@ -1320,6 +1321,7 @@ func (s *Server) HandleAnalyzeWorkflow(w http.ResponseWriter, r *http.Request) {
 	// context.WithoutCancel detaches from HTTP request cancellation while maintaining
 	// access to project-scoped resources (StateManager, EventBus, etc.)
 	execCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 4*time.Hour)
+	handle.SetExecCancel(cancel)
 
 	// Reload state (it was updated by StartExecution)
 	state, err = stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
@@ -1476,6 +1478,7 @@ func (s *Server) HandlePlanWorkflow(w http.ResponseWriter, r *http.Request) {
 
 	// Create execution context that preserves ProjectContext values.
 	execCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Hour)
+	handle.SetExecCancel(cancel)
 
 	state, err = stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
 	if err != nil {
@@ -1627,6 +1630,7 @@ func (s *Server) HandleReplanWorkflow(w http.ResponseWriter, r *http.Request) {
 
 	// Create execution context that preserves ProjectContext values.
 	execCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Hour)
+	handle.SetExecCancel(cancel)
 
 	state, err = stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
 	if err != nil {
@@ -1781,6 +1785,7 @@ func (s *Server) HandleExecuteWorkflow(w http.ResponseWriter, r *http.Request) {
 
 	// Create execution context that preserves ProjectContext values.
 	execCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 8*time.Hour)
+	handle.SetExecCancel(cancel)
 
 	state, err = stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
 	if err != nil {

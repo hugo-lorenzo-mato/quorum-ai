@@ -259,7 +259,11 @@ func (r *Runner) Run(ctx context.Context, prompt string) error {
 	if err := r.state.AcquireLock(ctx); err != nil {
 		return fmt.Errorf("acquiring lock: %w", err)
 	}
-	defer func() { _ = r.state.ReleaseLock(ctx) }()
+	defer func() {
+		releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		_ = r.state.ReleaseLock(releaseCtx)
+	}()
 
 	// Initialize state
 	workflowState := r.initializeState(prompt)
@@ -379,7 +383,11 @@ func (r *Runner) RunWithState(ctx context.Context, state *core.WorkflowState) er
 	if err := r.state.AcquireLock(ctx); err != nil {
 		return fmt.Errorf("acquiring lock: %w", err)
 	}
-	defer func() { _ = r.state.ReleaseLock(ctx) }()
+	defer func() {
+		releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		_ = r.state.ReleaseLock(releaseCtx)
+	}()
 
 	// Use provided state - NO initializeState()
 	workflowState := state
@@ -474,7 +482,11 @@ func (r *Runner) Resume(ctx context.Context) error {
 	if err := r.state.AcquireLock(ctx); err != nil {
 		return fmt.Errorf("acquiring lock: %w", err)
 	}
-	defer func() { _ = r.state.ReleaseLock(ctx) }()
+	defer func() {
+		releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		_ = r.state.ReleaseLock(releaseCtx)
+	}()
 
 	// Load existing state
 	workflowState, err := r.state.Load(ctx)
@@ -586,7 +598,11 @@ func (r *Runner) ResumeWithState(ctx context.Context, state *core.WorkflowState)
 	if err := r.state.AcquireLock(ctx); err != nil {
 		return fmt.Errorf("acquiring lock: %w", err)
 	}
-	defer func() { _ = r.state.ReleaseLock(ctx) }()
+	defer func() {
+		releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		_ = r.state.ReleaseLock(releaseCtx)
+	}()
 
 	// Ensure workflow-level Git isolation branch exists when resuming.
 	if changed, err := r.ensureWorkflowGitIsolation(ctx, state); err != nil {
@@ -901,8 +917,79 @@ func (r *Runner) createContext(state *core.WorkflowState) *Context {
 	}
 }
 
+// handleAbort maps a cancellation to an aborted workflow and persists it using a
+// non-cancelled context. This prevents workflows from getting stuck in "running"
+// if the execution context is cancelled mid-save.
+func (r *Runner) handleAbort(ctx context.Context, state *core.WorkflowState, _ error) error {
+	cancelMsg := "workflow cancelled by user"
+	now := time.Now()
+
+	r.logger.Info("workflow cancelled",
+		"workflow_id", state.WorkflowID,
+		"phase", state.CurrentPhase,
+	)
+	if r.output != nil {
+		r.output.Log("info", "workflow", "Workflow cancelled.")
+	}
+
+	state.Status = core.WorkflowStatusAborted
+	state.Error = cancelMsg
+	state.UpdatedAt = now
+
+	// Ensure tasks aren't left in "running" when the workflow is aborted.
+	for _, ts := range state.Tasks {
+		if ts == nil {
+			continue
+		}
+		if ts.Status == core.TaskStatusRunning {
+			ts.Status = core.TaskStatusFailed
+			ts.Error = cancelMsg
+			if ts.CompletedAt == nil {
+				completedAt := now
+				ts.CompletedAt = &completedAt
+			}
+		}
+	}
+
+	// Add an explicit checkpoint for cancellation (best-effort, persisted via Save below).
+	state.Checkpoints = append(state.Checkpoints, core.Checkpoint{
+		ID:        fmt.Sprintf("cancel-%d", now.UnixNano()),
+		Type:      "cancelled",
+		Phase:     state.CurrentPhase,
+		Timestamp: now,
+		Message:   cancelMsg,
+	})
+
+	// Persist terminal state using a context that ignores execution cancellation.
+	saveCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	if saveErr := r.state.Save(saveCtx, state); saveErr != nil {
+		r.logger.Warn("failed to save aborted workflow state",
+			"workflow_id", state.WorkflowID,
+			"error", saveErr,
+		)
+	}
+
+	deactCtx, deactCancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer deactCancel()
+	if deactErr := r.state.DeactivateWorkflow(deactCtx); deactErr != nil {
+		r.logger.Warn("failed to deactivate aborted workflow",
+			"workflow_id", state.WorkflowID,
+			"error", deactErr,
+		)
+	} else {
+		r.logger.Info("deactivated aborted workflow", "workflow_id", state.WorkflowID)
+	}
+
+	return workflowCancelledError()
+}
+
 // handleError handles workflow errors.
 func (r *Runner) handleError(ctx context.Context, state *core.WorkflowState, err error) error {
+	if isWorkflowCancelled(err) {
+		return r.handleAbort(ctx, state, err)
+	}
+
 	r.logger.Error("workflow error",
 		"workflow_id", state.WorkflowID,
 		"phase", state.CurrentPhase,
@@ -918,14 +1005,20 @@ func (r *Runner) handleError(ctx context.Context, state *core.WorkflowState, err
 	if checkpointErr := r.checkpoint.ErrorCheckpoint(state, err); checkpointErr != nil {
 		r.logger.Warn("failed to create error checkpoint", "checkpoint_error", checkpointErr)
 	}
-	_ = r.state.Save(ctx, state)
+
+	// Persist terminal state using a context that ignores execution cancellation.
+	saveCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	_ = r.state.Save(saveCtx, state)
 
 	// Write error details to the report directory for debugging and traceability.
 	r.writeErrorToReportDir(state, err)
 
 	// Deactivate workflow when it fails to prevent ghost workflows.
 	// A failed workflow should not remain as the active workflow.
-	if deactErr := r.state.DeactivateWorkflow(ctx); deactErr != nil {
+	deactCtx, deactCancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer deactCancel()
+	if deactErr := r.state.DeactivateWorkflow(deactCtx); deactErr != nil {
 		r.logger.Warn("failed to deactivate failed workflow",
 			"workflow_id", state.WorkflowID,
 			"error", deactErr,
@@ -1126,7 +1219,11 @@ func (r *Runner) Analyze(ctx context.Context, prompt string) error {
 	if err := r.state.AcquireLock(ctx); err != nil {
 		return fmt.Errorf("acquiring lock: %w", err)
 	}
-	defer func() { _ = r.state.ReleaseLock(ctx) }()
+	defer func() {
+		releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		_ = r.state.ReleaseLock(releaseCtx)
+	}()
 
 	// Initialize state
 	workflowState := r.initializeState(prompt)
@@ -1195,7 +1292,11 @@ func (r *Runner) Plan(ctx context.Context) error {
 	if err := r.state.AcquireLock(ctx); err != nil {
 		return fmt.Errorf("acquiring lock: %w", err)
 	}
-	defer func() { _ = r.state.ReleaseLock(ctx) }()
+	defer func() {
+		releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		_ = r.state.ReleaseLock(releaseCtx)
+	}()
 
 	// Load existing state
 	workflowState, err := r.state.Load(ctx)
@@ -1271,7 +1372,11 @@ func (r *Runner) Replan(ctx context.Context, additionalContext string) error {
 	if err := r.state.AcquireLock(ctx); err != nil {
 		return fmt.Errorf("acquiring lock: %w", err)
 	}
-	defer func() { _ = r.state.ReleaseLock(ctx) }()
+	defer func() {
+		releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		_ = r.state.ReleaseLock(releaseCtx)
+	}()
 
 	// Load existing state
 	workflowState, err := r.state.Load(ctx)
@@ -1405,7 +1510,11 @@ func (r *Runner) UsePlan(ctx context.Context) error {
 	if err := r.state.AcquireLock(ctx); err != nil {
 		return fmt.Errorf("acquiring lock: %w", err)
 	}
-	defer func() { _ = r.state.ReleaseLock(ctx) }()
+	defer func() {
+		releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		_ = r.state.ReleaseLock(releaseCtx)
+	}()
 
 	// Load existing state
 	workflowState, err := r.state.Load(ctx)

@@ -1,6 +1,11 @@
 package events
 
-import "time"
+import (
+	"errors"
+	"time"
+
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
+)
 
 // Event type constants for workflow events.
 const (
@@ -68,20 +73,31 @@ func NewWorkflowCompletedEvent(workflowID, projectID string, duration time.Durat
 // This is a PRIORITY event - never dropped.
 type WorkflowFailedEvent struct {
 	BaseEvent
-	Phase string `json:"phase"`
-	Error string `json:"error"`
+	Phase         string `json:"phase"`
+	Error         string `json:"error"`
+	ErrorCode     string `json:"error_code,omitempty"`
+	ErrorCategory string `json:"error_category,omitempty"`
 }
 
 // NewWorkflowFailedEvent creates a new workflow failed event.
 func NewWorkflowFailedEvent(workflowID, projectID, phase string, err error) WorkflowFailedEvent {
 	errStr := ""
+	errCode := ""
+	errCategory := ""
 	if err != nil {
 		errStr = err.Error()
+		var domErr *core.DomainError
+		if errors.As(err, &domErr) {
+			errCode = domErr.Code
+			errCategory = string(domErr.Category)
+		}
 	}
 	return WorkflowFailedEvent{
-		BaseEvent: NewBaseEvent(TypeWorkflowFailed, workflowID, projectID),
-		Phase:     phase,
-		Error:     errStr,
+		BaseEvent:     NewBaseEvent(TypeWorkflowFailed, workflowID, projectID),
+		Phase:         phase,
+		Error:         errStr,
+		ErrorCode:     errCode,
+		ErrorCategory: errCategory,
 	}
 }
 

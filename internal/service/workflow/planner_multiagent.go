@@ -260,6 +260,9 @@ func (p *Planner) runPlanningWithAgent(ctx context.Context, wctx *Context, agent
 	// Execute with retry
 	var result *core.ExecuteResult
 	err = wctx.Retry.Execute(func() error {
+		if ctrlErr := wctx.CheckControl(ctx); ctrlErr != nil {
+			return ctrlErr
+		}
 		var execErr error
 		result, execErr = agent.Execute(ctx, core.ExecuteOptions{
 			Prompt:  prompt,
@@ -409,6 +412,9 @@ func (p *Planner) consolidatePlans(ctx context.Context, wctx *Context, plans []P
 	// Execute with retry
 	var result *core.ExecuteResult
 	err = wctx.Retry.Execute(func() error {
+		if ctrlErr := wctx.CheckControl(ctx); ctrlErr != nil {
+			return ctrlErr
+		}
 		var execErr error
 		result, execErr = agent.Execute(ctx, core.ExecuteOptions{
 			Prompt:  prompt,

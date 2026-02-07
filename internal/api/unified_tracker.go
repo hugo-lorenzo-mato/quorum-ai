@@ -19,12 +19,55 @@ type ExecutionHandle struct {
 	ControlPlane *control.ControlPlane
 	StartedAt    time.Time
 
+	// Cancel function for the execution context created by the API layer.
+	// This allows Cancel/ForceStop to interrupt in-flight agent processes (best-effort).
+	execCancelMu sync.Mutex
+	execCancel   context.CancelFunc
+
 	// Confirmation channel - closed when goroutine confirms start
 	confirmCh chan struct{}
 	// Error channel - receives error if start fails
 	errorCh chan error
 	// Done channel - closed when execution completes
 	doneCh chan struct{}
+}
+
+// SetExecCancel sets the execution cancel function.
+// If cancellation has already been requested via the ControlPlane, this will
+// immediately cancel the execution context (best-effort).
+func (h *ExecutionHandle) SetExecCancel(cancel context.CancelFunc) {
+	if h == nil || cancel == nil {
+		return
+	}
+
+	h.execCancelMu.Lock()
+	alreadySet := h.execCancel != nil
+	if !alreadySet {
+		h.execCancel = cancel
+	}
+	shouldCancel := h.ControlPlane != nil && h.ControlPlane.IsCancelled()
+	h.execCancelMu.Unlock()
+
+	if !alreadySet && shouldCancel {
+		h.CancelExec()
+	}
+}
+
+// CancelExec cancels the execution context (best-effort).
+// It is safe to call multiple times.
+func (h *ExecutionHandle) CancelExec() {
+	if h == nil {
+		return
+	}
+	h.execCancelMu.Lock()
+	cancel := h.execCancel
+	// Clear to ensure idempotence and avoid holding references longer than needed.
+	h.execCancel = nil
+	h.execCancelMu.Unlock()
+
+	if cancel != nil {
+		cancel()
+	}
 }
 
 // WaitForConfirmation blocks until the execution goroutine confirms it started.
@@ -316,14 +359,19 @@ func (t *UnifiedTracker) GetControlPlane(workflowID core.WorkflowID) (*control.C
 
 // Cancel cancels a running workflow.
 func (t *UnifiedTracker) Cancel(workflowID core.WorkflowID) error {
-	cp, ok := t.GetControlPlane(workflowID)
-	if !ok {
+	handle, ok := t.GetHandle(workflowID)
+	if !ok || handle == nil || handle.ControlPlane == nil {
 		return fmt.Errorf("workflow is not running")
 	}
+	cp := handle.ControlPlane
 	if cp.IsCancelled() {
+		// Best-effort: ensure the execution context is also cancelled even if
+		// the control plane was already marked cancelled (idempotent).
+		handle.CancelExec()
 		return fmt.Errorf("workflow is already being cancelled")
 	}
 	cp.Cancel()
+	handle.CancelExec()
 	t.logger.Info("workflow cancellation requested", "workflow_id", workflowID)
 	return nil
 }
@@ -370,6 +418,8 @@ func (t *UnifiedTracker) ForceStop(ctx context.Context, workflowID core.Workflow
 			cp.Cancel()
 			t.logger.Info("workflow cancellation requested via force-stop", "workflow_id", workflowID)
 		}
+		// Also cancel the execution context to interrupt in-flight work.
+		handle.CancelExec()
 	}
 
 	// Get state manager from context or use default

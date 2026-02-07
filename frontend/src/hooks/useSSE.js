@@ -134,7 +134,11 @@ export default function useSSE() {
         break;
       case 'workflow_failed':
         handleWorkflowFailed(data);
-        notifyError(`Workflow ${data.workflow_id} failed: ${data.error}`);
+        if (String(data?.error_code || '').toUpperCase() === 'CANCELLED') {
+          notifyInfo(`Workflow ${data.workflow_id} cancelled`);
+        } else {
+          notifyError(`Workflow ${data.workflow_id} failed: ${data.error}`);
+        }
         break;
       case 'workflow_paused':
         handleWorkflowPaused(data);

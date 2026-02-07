@@ -35,6 +35,8 @@ type ControlPlane struct {
 	retryQueue chan core.TaskID
 	pauseCh    chan struct{}
 	resumeCh   chan struct{}
+	cancelOnce sync.Once
+	cancelCh   chan struct{}
 
 	// Human-in-the-loop support
 	inputMu        sync.RWMutex
@@ -48,6 +50,7 @@ func New() *ControlPlane {
 		retryQueue:     make(chan core.TaskID, 100),
 		pauseCh:        make(chan struct{}),
 		resumeCh:       make(chan struct{}),
+		cancelCh:       make(chan struct{}),
 		inputRequestCh: make(chan InputRequest, 10),
 		pendingInputs:  make(map[string]chan InputResponse),
 	}
@@ -81,6 +84,9 @@ func (cp *ControlPlane) Resume() {
 // Cancel cancels the workflow execution.
 func (cp *ControlPlane) Cancel() {
 	cp.cancelled.Store(true)
+	cp.cancelOnce.Do(func() {
+		close(cp.cancelCh)
+	})
 }
 
 // RetryTask queues a task for retry.
@@ -105,6 +111,9 @@ func (cp *ControlPlane) IsCancelled() bool {
 // WaitIfPaused blocks until the workflow is resumed.
 // Returns immediately if not paused or if cancelled.
 func (cp *ControlPlane) WaitIfPaused(ctx context.Context) error {
+	if cp.cancelled.Load() {
+		return core.ErrState("CANCELLED", "workflow cancelled by user")
+	}
 	if !cp.paused.Load() {
 		return nil
 	}
@@ -116,6 +125,8 @@ func (cp *ControlPlane) WaitIfPaused(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
+	case <-cp.cancelCh:
+		return core.ErrState("CANCELLED", "workflow cancelled by user")
 	case <-resumeCh:
 		return nil
 	}

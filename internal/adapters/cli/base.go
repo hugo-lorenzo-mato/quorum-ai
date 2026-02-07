@@ -310,6 +310,14 @@ func (b *BaseAdapter) ExecuteCommand(ctx context.Context, args []string, stdin, 
 		)
 		return result, core.ErrTimeout(fmt.Sprintf("command timed out after %v", timeout))
 	}
+	if ctx.Err() == context.Canceled {
+		b.logger.Info("cli: command cancelled",
+			"adapter", b.config.Name,
+			"path", cmdPath,
+			"duration", duration,
+		)
+		return result, core.ErrState("CANCELLED", "workflow cancelled by user")
+	}
 
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
@@ -598,6 +606,10 @@ func (b *BaseAdapter) executeWithJSONStreaming(
 		b.emitEvent(core.NewAgentEvent(core.AgentEventError, adapterName, "Execution timed out"))
 		return result, core.ErrTimeout(fmt.Sprintf("command timed out after %v", timeout))
 	}
+	if ctx.Err() == context.Canceled {
+		b.emitEvent(core.NewAgentEvent(core.AgentEventError, adapterName, "Execution cancelled"))
+		return result, core.ErrState("CANCELLED", "workflow cancelled by user")
+	}
 
 	if err != nil {
 		b.emitEvent(core.NewAgentEvent(core.AgentEventError, adapterName, "Execution failed"))
@@ -827,6 +839,10 @@ func (b *BaseAdapter) executeWithLogFileStreaming(
 	if ctx.Err() == context.DeadlineExceeded {
 		b.emitEvent(core.NewAgentEvent(core.AgentEventError, adapterName, "Execution timed out"))
 		return result, core.ErrTimeout(fmt.Sprintf("command timed out after %v", timeout))
+	}
+	if ctx.Err() == context.Canceled {
+		b.emitEvent(core.NewAgentEvent(core.AgentEventError, adapterName, "Execution cancelled"))
+		return result, core.ErrState("CANCELLED", "workflow cancelled by user")
 	}
 
 	if err != nil {

@@ -387,6 +387,18 @@ func (c *Context) GetContextString() string {
 	return BuildContextString(c.State)
 }
 
+// CheckControl applies workflow-level control checks (cancel + pause).
+// It returns immediately when no ControlPlane is configured.
+func (c *Context) CheckControl(ctx context.Context) error {
+	if c == nil || c.Control == nil {
+		return nil
+	}
+	if err := c.Control.CheckCancelled(); err != nil {
+		return err
+	}
+	return c.Control.WaitIfPaused(ctx)
+}
+
 // Lock acquires a write lock on the context state.
 func (c *Context) Lock() {
 	c.mu.Lock()

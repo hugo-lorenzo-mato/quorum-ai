@@ -190,6 +190,9 @@ func (a *Analyzer) runSingleAgentAnalysis(ctx context.Context, wctx *Context) er
 	// Execute with retry
 	var result *core.ExecuteResult
 	err = wctx.Retry.Execute(func() error {
+		if ctrlErr := wctx.CheckControl(ctx); ctrlErr != nil {
+			return ctrlErr
+		}
 		var execErr error
 		result, execErr = agent.Execute(ctx, core.ExecuteOptions{
 			Prompt:          prompt,
@@ -773,6 +776,9 @@ func (a *Analyzer) runVnRefinementWithAgent(ctx context.Context, wctx *Context, 
 
 	var result *core.ExecuteResult
 	err = wctx.Retry.Execute(func() error {
+		if ctrlErr := wctx.CheckControl(ctx); ctrlErr != nil {
+			return ctrlErr
+		}
 		var execErr error
 		result, execErr = agent.Execute(ctx, core.ExecuteOptions{
 			Prompt:  prompt,
@@ -1012,6 +1018,9 @@ func (a *Analyzer) runAnalysisWithAgent(ctx context.Context, wctx *Context, agen
 	// Execute with retry
 	var result *core.ExecuteResult
 	err = wctx.Retry.Execute(func() error {
+		if ctrlErr := wctx.CheckControl(ctx); ctrlErr != nil {
+			return ctrlErr
+		}
 		var execErr error
 		result, execErr = agent.Execute(ctx, core.ExecuteOptions{
 			Prompt:  prompt,
@@ -1168,6 +1177,9 @@ func (a *Analyzer) consolidateAnalysis(ctx context.Context, wctx *Context, outpu
 	// Execute with retry
 	var result *core.ExecuteResult
 	err = wctx.Retry.Execute(func() error {
+		if ctrlErr := wctx.CheckControl(ctx); ctrlErr != nil {
+			return ctrlErr
+		}
 		var execErr error
 		result, execErr = agent.Execute(ctx, core.ExecuteOptions{
 			Prompt:  prompt,

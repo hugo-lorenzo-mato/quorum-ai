@@ -136,6 +136,7 @@ function StatusBadge({ status }) {
     pending: Clock,
     running: Activity,
     cancelling: StopCircle,
+    aborted: StopCircle,
     completed: CheckCircle2,
     failed: XCircle,
     paused: Pause,
@@ -1890,6 +1891,7 @@ const STATUS_FILTERS = [
   { value: 'running', label: 'Running', icon: Activity },
   { value: 'completed', label: 'Completed', icon: CheckCircle2 },
   { value: 'failed', label: 'Failed', icon: XCircle },
+  { value: 'aborted', label: 'Aborted', icon: StopCircle },
 ];
 
 function StatusFilterTabs({ status, setStatus }) {

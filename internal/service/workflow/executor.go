@@ -380,6 +380,11 @@ func (e *Executor) executeTask(ctx context.Context, wctx *Context, task *core.Ta
 		wctx.Unlock()
 
 		if execErr != nil {
+			// Cancellation should not trigger retries/fallbacks. Propagate immediately.
+			if isWorkflowCancelled(execErr) {
+				return fail(execErr)
+			}
+
 			lastErr = execErr
 			lastAgentName = agentName
 			lastModel = model
@@ -590,6 +595,9 @@ func (e *Executor) notifyAgentStarted(wctx *Context, agentName string, task *cor
 
 func (e *Executor) executeWithRetry(ctx context.Context, wctx *Context, agent core.Agent, agentName string, task *core.Task, prompt, model, workDir string, execStartTime time.Time) (result *core.ExecuteResult, retryCount int, durationMS int64, err error) {
 	err = wctx.Retry.ExecuteWithNotify(func() error {
+		if ctrlErr := wctx.CheckControl(ctx); ctrlErr != nil {
+			return ctrlErr
+		}
 		var execErr error
 		result, execErr = agent.Execute(ctx, core.ExecuteOptions{
 			Prompt:      prompt,

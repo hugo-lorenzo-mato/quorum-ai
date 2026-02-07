@@ -443,16 +443,18 @@ const useWorkflowStore = create((set, get) => ({
   },
 
   handleWorkflowFailed: (data) => {
+    const isCancelled = String(data?.error_code || '').toUpperCase() === 'CANCELLED';
+    const nextStatus = isCancelled ? 'aborted' : 'failed';
     const { workflows, activeWorkflow } = get();
     const updated = workflows.map(w => {
       if (w.id === data.workflow_id) {
-        return { ...w, status: 'failed', error: data.error, updated_at: data.timestamp };
+        return { ...w, status: nextStatus, error: data.error, updated_at: data.timestamp };
       }
       return w;
     });
     set({ workflows: updated });
     if (activeWorkflow?.id === data.workflow_id) {
-      set({ activeWorkflow: { ...activeWorkflow, status: 'failed', error: data.error } });
+      set({ activeWorkflow: { ...activeWorkflow, status: nextStatus, error: data.error } });
     }
   },
 
