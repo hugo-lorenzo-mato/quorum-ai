@@ -17,6 +17,7 @@ import (
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/adapters/cli"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/adapters/state"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/api"
+	apimiddleware "github.com/hugo-lorenzo-mato/quorum-ai/internal/api/middleware"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/config"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/diagnostics"
@@ -357,13 +358,76 @@ func runServe(_ *cobra.Command, _ []string) error {
 		}
 	}
 
-	// Also clean up any orphaned running_workflows entries (safety net)
+	// Also clean up any orphaned running_workflows entries (safety net).
+	// This is multi-project aware when project registry + state pool are available.
 	if unifiedTracker != nil {
-		if cleaned, err := unifiedTracker.CleanupOrphanedWorkflows(ctx); err != nil {
-			logger.Warn("failed to clean up orphaned workflows", slog.String("error", err.Error()))
-		} else if cleaned > 0 {
-			logger.Info("cleaned up orphaned running_workflows entries", slog.Int("count", cleaned))
+		const reconcilerInterval = 30 * time.Second
+
+		runCleanup := func() {
+			cleanupCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
+			defer cancel()
+
+			totalCleaned := 0
+
+			// Prefer multi-project mode.
+			if projectRegistry != nil && statePool != nil {
+				projects, err := projectRegistry.ListProjects(cleanupCtx)
+				if err != nil {
+					logger.Warn("failed to list projects for orphan cleanup", slog.String("error", err.Error()))
+				} else {
+					for _, p := range projects {
+						if p == nil || !p.IsAccessible() {
+							continue
+						}
+						pc, err := statePool.GetContext(cleanupCtx, p.ID)
+						if err != nil {
+							logger.Warn("failed to get project context for orphan cleanup",
+								slog.String("project_id", p.ID),
+								slog.String("error", err.Error()))
+							continue
+						}
+						projCtx := apimiddleware.WithProjectContext(cleanupCtx, pc)
+						cleaned, err := unifiedTracker.CleanupOrphanedWorkflows(projCtx)
+						if err != nil {
+							logger.Warn("failed to clean orphaned workflows for project",
+								slog.String("project_id", p.ID),
+								slog.String("error", err.Error()))
+							continue
+						}
+						totalCleaned += cleaned
+					}
+				}
+			} else {
+				// Single-project fallback.
+				cleaned, err := unifiedTracker.CleanupOrphanedWorkflows(cleanupCtx)
+				if err != nil {
+					logger.Warn("failed to clean up orphaned workflows", slog.String("error", err.Error()))
+					return
+				}
+				totalCleaned += cleaned
+			}
+
+			if totalCleaned > 0 {
+				logger.Info("cleaned up orphaned running_workflows entries", slog.Int("count", totalCleaned))
+			}
 		}
+
+		// Run once at startup.
+		runCleanup()
+
+		// Then reconcile periodically to avoid stale UI states and unkillable "running" markers.
+		go func() {
+			ticker := time.NewTicker(reconcilerInterval)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+					runCleanup()
+				}
+			}
+		}()
 	}
 
 	// Migrate existing workflows to Kanban board (assign to refinement column if not set)

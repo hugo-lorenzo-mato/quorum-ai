@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -217,6 +218,9 @@ func (t *UnifiedTracker) StartExecution(ctx context.Context, workflowID core.Wor
 
 		// Mark as running in DB
 		if err := atomic.SetWorkflowRunning(workflowID); err != nil {
+			if errors.Is(err, core.ErrState("WORKFLOW_ALREADY_RUNNING", "")) {
+				return fmt.Errorf("workflow is already running (in database)")
+			}
 			return fmt.Errorf("marking workflow as running: %w", err)
 		}
 
@@ -559,37 +563,88 @@ func (t *UnifiedTracker) RollbackExecution(ctx context.Context, workflowID core.
 // CleanupOrphanedWorkflows finds and cleans up workflows that are marked as running
 // in the DB but have no in-memory handle (orphaned due to crash/restart).
 func (t *UnifiedTracker) CleanupOrphanedWorkflows(ctx context.Context) (int, error) {
+	// Get project-scoped StateManager if available.
+	stateManager := GetStateManagerFromContext(ctx, t.stateManager)
+
 	// Get all running workflows from DB
-	runningIDs, err := t.stateManager.ListRunningWorkflows(ctx)
+	runningIDs, err := stateManager.ListRunningWorkflows(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("listing running workflows: %w", err)
 	}
 
 	cleaned := 0
 	for _, id := range runningIDs {
-		// If not in memory, it's orphaned
+		// If tracked in-memory, skip.
 		if t.IsRunningInMemory(id) {
 			continue
 		}
 
-		t.logger.Warn("cleaning up orphaned workflow",
-			"workflow_id", id)
+		// Without lock-holder metadata, we cannot safely distinguish between:
+		// - A workflow orphaned by a crash/restart (safe to recover)
+		// - A workflow running in a different server process (unsafe to touch)
+		provider, ok := stateManager.(interface {
+			GetRunningWorkflowRecord(context.Context, core.WorkflowID) (*core.RunningWorkflowRecord, error)
+		})
+		if !ok {
+			t.logger.Warn("skipping orphan cleanup: state manager does not expose running_workflows metadata",
+				"workflow_id", id)
+			continue
+		}
 
-		// Clear running status
-		if err := t.stateManager.ClearWorkflowRunning(ctx, id); err != nil {
-			t.logger.Error("failed to clear orphaned workflow",
+		rec, err := provider.GetRunningWorkflowRecord(ctx, id)
+		if err != nil {
+			t.logger.Warn("skipping orphan cleanup: failed to read running_workflows record",
 				"workflow_id", id,
 				"error", err)
 			continue
 		}
+		if rec == nil {
+			// Not actually running anymore (or already cleared).
+			continue
+		}
 
-		// Update state to failed
-		state, err := t.stateManager.LoadByID(ctx, id)
-		if err == nil && state != nil {
-			state.Status = core.WorkflowStatusFailed
-			state.Error = "Orphaned workflow (server restarted during execution)"
-			state.UpdatedAt = time.Now()
-			_ = t.stateManager.Save(ctx, state)
+		if !isProvablyOrphan(rec) {
+			t.logger.Info("skipping orphan cleanup: lock holder still alive or remote",
+				"workflow_id", id,
+				"lock_holder_pid", rec.LockHolderPID,
+				"lock_holder_host", rec.LockHolderHost)
+			continue
+		}
+
+		t.logger.Warn("cleaning up orphaned workflow",
+			"workflow_id", id,
+			"lock_holder_pid", rec.LockHolderPID,
+			"lock_holder_host", rec.LockHolderHost)
+
+		// Clear running marker + update workflow state atomically.
+		err = stateManager.ExecuteAtomically(ctx, func(atomic core.AtomicStateContext) error {
+			if err := atomic.ClearWorkflowRunning(id); err != nil {
+				return err
+			}
+
+			state, err := atomic.LoadByID(id)
+			if err != nil || state == nil {
+				return err
+			}
+
+			// Only update if still running.
+			if state.Status == core.WorkflowStatusRunning {
+				state.Status = core.WorkflowStatusFailed
+				if rec.LockHolderPID != nil && rec.LockHolderHost != "" {
+					state.Error = fmt.Sprintf("Orphaned workflow (previous holder pid %d on %s is not alive)", *rec.LockHolderPID, rec.LockHolderHost)
+				} else {
+					state.Error = "Orphaned workflow (previous holder is not alive)"
+				}
+				state.UpdatedAt = time.Now()
+				return atomic.Save(state)
+			}
+			return nil
+		})
+		if err != nil {
+			t.logger.Error("failed to recover orphaned workflow",
+				"workflow_id", id,
+				"error", err)
+			continue
 		}
 
 		cleaned++

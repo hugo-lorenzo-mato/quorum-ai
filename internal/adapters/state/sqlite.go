@@ -1300,12 +1300,17 @@ func (m *SQLiteStateManager) SetWorkflowRunning(ctx context.Context, workflowID 
 
 	return m.retryWrite(ctx, "set_workflow_running", func() error {
 		_, err := m.db.ExecContext(ctx, `
-			INSERT OR REPLACE INTO running_workflows
+			INSERT INTO running_workflows
 			(workflow_id, started_at, lock_holder_pid, lock_holder_host, heartbeat_at)
 			VALUES (?, ?, ?, ?, ?)
 		`, string(workflowID), now, pid, hostname, now)
 
 		if err != nil {
+			if strings.Contains(err.Error(), "UNIQUE constraint failed") ||
+				strings.Contains(err.Error(), "PRIMARY KEY constraint failed") {
+				return core.ErrState("WORKFLOW_ALREADY_RUNNING",
+					fmt.Sprintf("workflow %s is already marked as running", workflowID)).WithCause(err)
+			}
 			return fmt.Errorf("setting workflow running: %w", err)
 		}
 
@@ -1354,6 +1359,55 @@ func (m *SQLiteStateManager) ListRunningWorkflows(ctx context.Context) ([]core.W
 	}
 
 	return ids, rows.Err()
+}
+
+// GetRunningWorkflowRecord returns the running_workflows row for a given workflow ID.
+// Returns (nil, nil) when the workflow is not marked as running.
+func (m *SQLiteStateManager) GetRunningWorkflowRecord(ctx context.Context, workflowID core.WorkflowID) (*core.RunningWorkflowRecord, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	var id string
+	var startedAt sql.NullTime
+	var lockPID sql.NullInt64
+	var lockHost sql.NullString
+	var heartbeatAt sql.NullTime
+
+	err := m.readDB.QueryRowContext(ctx, `
+		SELECT workflow_id, started_at, lock_holder_pid, lock_holder_host, heartbeat_at
+		FROM running_workflows
+		WHERE workflow_id = ?
+	`, string(workflowID)).Scan(&id, &startedAt, &lockPID, &lockHost, &heartbeatAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("querying running_workflows: %w", err)
+	}
+
+	var pidPtr *int
+	if lockPID.Valid {
+		p := int(lockPID.Int64)
+		pidPtr = &p
+	}
+
+	var heartbeatPtr *time.Time
+	if heartbeatAt.Valid {
+		hb := heartbeatAt.Time
+		heartbeatPtr = &hb
+	}
+
+	record := &core.RunningWorkflowRecord{
+		WorkflowID:     core.WorkflowID(id),
+		LockHolderPID:  pidPtr,
+		LockHolderHost: lockHost.String,
+		HeartbeatAt:    heartbeatPtr,
+	}
+	if startedAt.Valid {
+		record.StartedAt = startedAt.Time
+	}
+
+	return record, nil
 }
 
 // IsWorkflowRunning checks if a specific workflow is currently executing.
@@ -2427,12 +2481,17 @@ func (a *sqliteAtomicContext) SetWorkflowRunning(workflowID core.WorkflowID) err
 	now := time.Now().UTC()
 
 	_, err := a.tx.ExecContext(a.ctx, `
-		INSERT OR REPLACE INTO running_workflows
+		INSERT INTO running_workflows
 		(workflow_id, started_at, lock_holder_pid, lock_holder_host, heartbeat_at)
 		VALUES (?, ?, ?, ?, ?)
 	`, string(workflowID), now, pid, hostname, now)
 
 	if err != nil {
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") ||
+			strings.Contains(err.Error(), "PRIMARY KEY constraint failed") {
+			return core.ErrState("WORKFLOW_ALREADY_RUNNING",
+				fmt.Sprintf("workflow %s is already marked as running", workflowID)).WithCause(err)
+		}
 		return fmt.Errorf("setting workflow running: %w", err)
 	}
 

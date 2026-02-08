@@ -23,27 +23,31 @@ import (
 
 // WorkflowResponse is the API response for a workflow.
 type WorkflowResponse struct {
-	ID              string            `json:"id"`
-	ExecutionID     int               `json:"execution_id"`
-	Title           string            `json:"title,omitempty"`
-	Status          string            `json:"status"`
-	CurrentPhase    string            `json:"current_phase"`
-	Prompt          string            `json:"prompt"`
-	OptimizedPrompt string            `json:"optimized_prompt,omitempty"`
-	Attachments     []core.Attachment `json:"attachments,omitempty"`
-	Error           string            `json:"error,omitempty"`
-	Warning         string            `json:"warning,omitempty"` // Warning about potential issues (e.g., duplicates)
-	ReportPath      string            `json:"report_path,omitempty"`
-	CreatedAt       time.Time         `json:"created_at"`
-	UpdatedAt       time.Time         `json:"updated_at"`
-	HeartbeatAt     *time.Time        `json:"heartbeat_at,omitempty"` // Last heartbeat for zombie detection
-	IsActive        bool              `json:"is_active"`
-	ActuallyRunning bool              `json:"actually_running,omitempty"` // True if executing in this process
-	TaskCount       int               `json:"task_count"`
-	Metrics         *Metrics          `json:"metrics,omitempty"`
-	AgentEvents     []core.AgentEvent `json:"agent_events,omitempty"` // Persisted agent activity
-	Tasks           []TaskResponse    `json:"tasks,omitempty"`        // Persisted task state for reload
-	Blueprint       *BlueprintDTO     `json:"blueprint,omitempty"`    // Workflow orchestration blueprint
+	ID               string            `json:"id"`
+	ExecutionID      int               `json:"execution_id"`
+	Title            string            `json:"title,omitempty"`
+	Status           string            `json:"status"`
+	CurrentPhase     string            `json:"current_phase"`
+	Prompt           string            `json:"prompt"`
+	OptimizedPrompt  string            `json:"optimized_prompt,omitempty"`
+	Attachments      []core.Attachment `json:"attachments,omitempty"`
+	Error            string            `json:"error,omitempty"`
+	Warning          string            `json:"warning,omitempty"` // Warning about potential issues (e.g., duplicates)
+	ReportPath       string            `json:"report_path,omitempty"`
+	CreatedAt        time.Time         `json:"created_at"`
+	UpdatedAt        time.Time         `json:"updated_at"`
+	HeartbeatAt      *time.Time        `json:"heartbeat_at,omitempty"` // Last heartbeat (running_workflows.heartbeat_at when available)
+	IsActive         bool              `json:"is_active"`
+	ActuallyRunning  bool              `json:"actually_running"`  // True if executing in this process (in-memory handle exists)
+	RunningInDB      bool              `json:"running_in_db"`     // True if marked running in the DB (running_workflows contains row)
+	ControlAvailable bool              `json:"control_available"` // True if this server has an in-memory control handle (cancel/pause/resume)
+	LockHolderPID    *int              `json:"lock_holder_pid,omitempty"`
+	LockHolderHost   string            `json:"lock_holder_host,omitempty"`
+	TaskCount        int               `json:"task_count"`
+	Metrics          *Metrics          `json:"metrics,omitempty"`
+	AgentEvents      []core.AgentEvent `json:"agent_events,omitempty"` // Persisted agent activity
+	Tasks            []TaskResponse    `json:"tasks,omitempty"`        // Persisted task state for reload
+	Blueprint        *BlueprintDTO     `json:"blueprint,omitempty"`    // Workflow orchestration blueprint
 }
 
 // Metrics represents workflow metrics in API responses.
@@ -124,12 +128,11 @@ type PhaseResponse struct {
 	Message      string `json:"message"`
 }
 
-// isWorkflowRunning checks if a workflow is currently running using the UnifiedTracker.
-// This provides a single source of truth for workflow execution status.
+// isWorkflowRunning checks if a workflow is running in-memory in this server process.
+// This should only reflect local control availability, not persisted DB state.
 func (s *Server) isWorkflowRunning(ctx context.Context, workflowID string) bool {
-	// Use UnifiedTracker as the single source of truth
 	if s.unifiedTracker != nil {
-		return s.unifiedTracker.IsRunning(ctx, core.WorkflowID(workflowID))
+		return s.unifiedTracker.IsRunningInMemory(core.WorkflowID(workflowID))
 	}
 	// Fallback to executor if tracker not available
 	if s.executor != nil {
@@ -167,17 +170,41 @@ func (s *Server) handleListWorkflows(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Best-effort: build a set of running workflow IDs from the DB so we can expose
+	// running_in_db without per-workflow queries.
+	runningSet := make(map[core.WorkflowID]struct{})
+	if runningIDs, err := stateManager.ListRunningWorkflows(ctx); err == nil {
+		for _, id := range runningIDs {
+			runningSet[id] = struct{}{}
+		}
+	} else {
+		s.logger.Warn("failed to list running workflows for running_in_db enrichment", "error", err)
+	}
+
 	response := make([]WorkflowResponse, 0, len(workflows))
 	for _, wf := range workflows {
+		_, runningInDB := runningSet[wf.WorkflowID]
+		controlAvailable := false
+		if s.unifiedTracker != nil {
+			_, ok := s.unifiedTracker.GetControlPlane(wf.WorkflowID)
+			controlAvailable = ok
+		} else if s.executor != nil {
+			// Best-effort fallback: executor running implies local control.
+			controlAvailable = s.executor.IsRunning(string(wf.WorkflowID))
+		}
+
 		response = append(response, WorkflowResponse{
-			ID:           string(wf.WorkflowID),
-			Title:        wf.Title,
-			Status:       string(wf.Status),
-			CurrentPhase: string(wf.CurrentPhase),
-			Prompt:       wf.Prompt,
-			CreatedAt:    wf.CreatedAt,
-			UpdatedAt:    wf.UpdatedAt,
-			IsActive:     wf.IsActive,
+			ID:               string(wf.WorkflowID),
+			Title:            wf.Title,
+			Status:           string(wf.Status),
+			CurrentPhase:     string(wf.CurrentPhase),
+			Prompt:           wf.Prompt,
+			CreatedAt:        wf.CreatedAt,
+			UpdatedAt:        wf.UpdatedAt,
+			IsActive:         wf.IsActive,
+			ActuallyRunning:  s.isWorkflowRunning(ctx, string(wf.WorkflowID)),
+			RunningInDB:      runningInDB,
+			ControlAvailable: controlAvailable,
 		})
 	}
 
@@ -660,24 +687,70 @@ func (s *Server) handleActivateWorkflow(w http.ResponseWriter, r *http.Request) 
 // stateToWorkflowResponse converts a WorkflowState to a WorkflowResponse.
 // This is a Server method to access the unified workflow running check.
 func (s *Server) stateToWorkflowResponse(ctx context.Context, state *core.WorkflowState, activeID core.WorkflowID) WorkflowResponse {
+	stateManager := s.getProjectStateManager(ctx)
+
+	// Persisted state: is it marked running in the DB?
+	runningInDB := false
+	if stateManager != nil {
+		if isRunning, err := stateManager.IsWorkflowRunning(ctx, state.WorkflowID); err == nil {
+			runningInDB = isRunning
+		} else {
+			s.logger.Warn("failed to check running_in_db for workflow response", "workflow_id", state.WorkflowID, "error", err)
+		}
+	}
+
+	// Control state: does this server have a ControlPlane for this workflow?
+	controlAvailable := false
+	if s.unifiedTracker != nil {
+		_, ok := s.unifiedTracker.GetControlPlane(state.WorkflowID)
+		controlAvailable = ok
+	} else if s.executor != nil {
+		controlAvailable = s.executor.IsRunning(string(state.WorkflowID))
+	}
+
+	var runningRec *core.RunningWorkflowRecord
+	if stateManager != nil {
+		if provider, ok := stateManager.(interface {
+			GetRunningWorkflowRecord(context.Context, core.WorkflowID) (*core.RunningWorkflowRecord, error)
+		}); ok {
+			if rec, err := provider.GetRunningWorkflowRecord(ctx, state.WorkflowID); err == nil {
+				runningRec = rec
+			} else {
+				s.logger.Warn("failed to load running_workflows metadata for workflow response", "workflow_id", state.WorkflowID, "error", err)
+			}
+		}
+	}
+
+	heartbeatAt := state.HeartbeatAt
+	if runningRec != nil && runningRec.HeartbeatAt != nil {
+		heartbeatAt = runningRec.HeartbeatAt
+	}
+
 	resp := WorkflowResponse{
-		ID:              string(state.WorkflowID),
-		ExecutionID:     state.ExecutionID,
-		Title:           state.Title,
-		Status:          string(state.Status),
-		CurrentPhase:    string(state.CurrentPhase),
-		Prompt:          state.Prompt,
-		OptimizedPrompt: state.OptimizedPrompt,
-		Attachments:     state.Attachments,
-		Error:           state.Error,
-		ReportPath:      state.ReportPath,
-		CreatedAt:       state.CreatedAt,
-		UpdatedAt:       state.UpdatedAt,
-		HeartbeatAt:     state.HeartbeatAt,
-		IsActive:        state.WorkflowID == activeID,
-		ActuallyRunning: s.isWorkflowRunning(ctx, string(state.WorkflowID)),
-		TaskCount:       len(state.Tasks),
-		AgentEvents:     state.AgentEvents,
+		ID:               string(state.WorkflowID),
+		ExecutionID:      state.ExecutionID,
+		Title:            state.Title,
+		Status:           string(state.Status),
+		CurrentPhase:     string(state.CurrentPhase),
+		Prompt:           state.Prompt,
+		OptimizedPrompt:  state.OptimizedPrompt,
+		Attachments:      state.Attachments,
+		Error:            state.Error,
+		ReportPath:       state.ReportPath,
+		CreatedAt:        state.CreatedAt,
+		UpdatedAt:        state.UpdatedAt,
+		HeartbeatAt:      heartbeatAt,
+		IsActive:         state.WorkflowID == activeID,
+		ActuallyRunning:  s.isWorkflowRunning(ctx, string(state.WorkflowID)),
+		RunningInDB:      runningInDB,
+		ControlAvailable: controlAvailable,
+		TaskCount:        len(state.Tasks),
+		AgentEvents:      state.AgentEvents,
+	}
+
+	if runningRec != nil {
+		resp.LockHolderPID = runningRec.LockHolderPID
+		resp.LockHolderHost = runningRec.LockHolderHost
 	}
 
 	if state.Metrics != nil {
@@ -1088,41 +1161,114 @@ func (s *Server) handleCancelWorkflow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Use UnifiedTracker for cancel operation
+	ctx := r.Context()
+	stateManager := s.getProjectStateManager(ctx)
+
+	// Use UnifiedTracker for cancel operation (preferred: has access to ForceStop recovery).
 	if s.unifiedTracker != nil {
-		if err := s.unifiedTracker.Cancel(core.WorkflowID(workflowID)); err != nil {
-			if strings.Contains(err.Error(), "not running") {
-				respondError(w, http.StatusConflict, "workflow is not running")
-			} else if strings.Contains(err.Error(), "already being cancelled") {
-				respondError(w, http.StatusConflict, "workflow is already being cancelled")
-			} else {
-				respondError(w, http.StatusInternalServerError, err.Error())
-			}
+		err := s.unifiedTracker.Cancel(core.WorkflowID(workflowID))
+		if err == nil {
+			respondJSON(w, http.StatusAccepted, WorkflowControlResponse{
+				ID:      workflowID,
+				Status:  "cancelling",
+				Message: "Workflow cancellation requested. In-flight agent processes will be interrupted.",
+			})
 			return
 		}
-	} else if s.executor != nil {
-		// Fallback to executor if tracker not available
+
+		// Idempotence: treat "already being cancelled" as success.
+		if strings.Contains(err.Error(), "already being cancelled") {
+			respondJSON(w, http.StatusAccepted, WorkflowControlResponse{
+				ID:      workflowID,
+				Status:  "cancelling",
+				Message: "Workflow cancellation already requested.",
+			})
+			return
+		}
+
+		// If not controllable in-memory, we might still have a DB running marker from a previous crash.
+		if strings.Contains(err.Error(), "not running") && stateManager != nil {
+			runningInDB, dbErr := stateManager.IsWorkflowRunning(ctx, core.WorkflowID(workflowID))
+			if dbErr != nil {
+				s.logger.Error("failed to check running status in DB during cancel recovery", "workflow_id", workflowID, "error", dbErr)
+				respondError(w, http.StatusInternalServerError, "failed to check workflow running status")
+				return
+			}
+
+			// Idempotence: if not running in DB either, return OK (no-op).
+			if !runningInDB {
+				respondJSON(w, http.StatusOK, WorkflowControlResponse{
+					ID:      workflowID,
+					Status:  "stopped",
+					Message: "Workflow is not running.",
+				})
+				return
+			}
+
+			// Best-effort: if we can prove the previous lock-holder is dead on this host, auto-recover.
+			var rec *core.RunningWorkflowRecord
+			if provider, ok := stateManager.(interface {
+				GetRunningWorkflowRecord(context.Context, core.WorkflowID) (*core.RunningWorkflowRecord, error)
+			}); ok {
+				rec, _ = provider.GetRunningWorkflowRecord(ctx, core.WorkflowID(workflowID))
+			}
+
+			if isProvablyOrphan(rec) {
+				if forceErr := s.unifiedTracker.ForceStop(ctx, core.WorkflowID(workflowID)); forceErr != nil {
+					s.logger.Error("failed to force-stop orphaned workflow during cancel recovery", "workflow_id", workflowID, "error", forceErr)
+					respondError(w, http.StatusInternalServerError, "failed to recover orphaned workflow")
+					return
+				}
+				respondJSON(w, http.StatusOK, WorkflowControlResponse{
+					ID:      workflowID,
+					Status:  "stopped",
+					Message: "Orphan recovered: workflow was forcibly stopped.",
+				})
+				return
+			}
+
+			msg := "workflow is marked running in the DB but this server has no control handle; use POST /force-stop to recover"
+			if rec != nil && rec.LockHolderHost != "" {
+				if rec.LockHolderPID != nil {
+					msg = fmt.Sprintf("workflow is marked running in DB but not controllable (holder pid %d on %s); use POST /force-stop to recover", *rec.LockHolderPID, rec.LockHolderHost)
+				} else {
+					msg = fmt.Sprintf("workflow is marked running in DB but not controllable (holder on %s); use POST /force-stop to recover", rec.LockHolderHost)
+				}
+			}
+			respondError(w, http.StatusConflict, msg)
+			return
+		}
+
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	// Fallback to executor if tracker not available.
+	if s.executor != nil {
 		if err := s.executor.Cancel(workflowID); err != nil {
 			if strings.Contains(err.Error(), "not running") {
 				respondError(w, http.StatusConflict, "workflow is not running")
 			} else if strings.Contains(err.Error(), "already being cancelled") {
-				respondError(w, http.StatusConflict, "workflow is already being cancelled")
+				respondJSON(w, http.StatusAccepted, WorkflowControlResponse{
+					ID:      workflowID,
+					Status:  "cancelling",
+					Message: "Workflow cancellation already requested.",
+				})
 			} else {
 				respondError(w, http.StatusInternalServerError, err.Error())
 			}
 			return
 		}
-	} else {
-		respondError(w, http.StatusConflict, "workflow is not running")
+
+		respondJSON(w, http.StatusAccepted, WorkflowControlResponse{
+			ID:      workflowID,
+			Status:  "cancelling",
+			Message: "Workflow cancellation requested. In-flight agent processes will be interrupted.",
+		})
 		return
 	}
 
-	// Return success response (actual state change happens asynchronously)
-	respondJSON(w, http.StatusAccepted, WorkflowControlResponse{
-		ID:      workflowID,
-		Status:  "cancelling",
-		Message: "Workflow cancellation requested. In-flight agent processes will be interrupted.",
-	})
+	respondError(w, http.StatusServiceUnavailable, "workflow management not available")
 }
 
 // handleForceStopWorkflow forcibly stops a workflow, even if it doesn't have an active handle.

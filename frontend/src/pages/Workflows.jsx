@@ -267,6 +267,7 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
     pauseWorkflow,
     resumeWorkflow,
     stopWorkflow,
+    forceStopWorkflow,
     deleteWorkflow,
     updateWorkflow,
     fetchWorkflow,
@@ -453,14 +454,45 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
     hydrateFromWorkflowResponse(workflow, currentProjectId);
   }, [hydrateFromWorkflowResponse, workflow, currentProjectId]);
 
+  const controlAvailable = workflow?.control_available === true;
+  const runningInDB = workflow?.running_in_db === true;
+
+  const handlePause = useCallback(async () => {
+    const res = await pauseWorkflow(workflow.id);
+    if (!res) {
+      await fetchWorkflow(workflow.id, { silent: true });
+    }
+  }, [pauseWorkflow, fetchWorkflow, workflow.id]);
+
+  const handleStop = useCallback(async () => {
+    const res = await stopWorkflow(workflow.id);
+    if (!res) {
+      await fetchWorkflow(workflow.id, { silent: true });
+    }
+  }, [stopWorkflow, fetchWorkflow, workflow.id]);
+
+  const handleForceStop = useCallback(async () => {
+    const hostInfo = workflow?.lock_holder_host
+      ? ` (holder: ${workflow.lock_holder_host}${workflow.lock_holder_pid ? `:${workflow.lock_holder_pid}` : ''})`
+      : '';
+    if (!window.confirm(`Force stop this workflow? This will clear the DB running marker and mark the workflow as failed.${hostInfo}`)) {
+      return;
+    }
+    const res = await forceStopWorkflow(workflow.id);
+    if (!res) {
+      await fetchWorkflow(workflow.id, { silent: true });
+    }
+  }, [forceStopWorkflow, fetchWorkflow, workflow.id, workflow?.lock_holder_host, workflow?.lock_holder_pid]);
+
   // Safety net: while running/cancelling, refresh workflow state periodically so UI
   // recovers even if an SSE event is dropped (or the client reconnects mid-run).
   useEffect(() => {
     if (!workflow?.id) return;
-    if (!['running', 'cancelling'].includes(workflow.status)) return;
+    if (!['running', 'cancelling', 'paused'].includes(workflow.status)) return;
+    const intervalMs = workflow.status === 'paused' ? 20000 : 8000;
     const interval = setInterval(() => {
       fetchWorkflow(workflow.id, { silent: true });
-    }, 8000);
+    }, intervalMs);
     return () => clearInterval(interval);
   }, [workflow?.id, workflow?.status, fetchWorkflow]);
 
@@ -1022,35 +1054,75 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
               </div>
             )}
 
+            {/* Orphan indicator: running in DB but not controllable in this server */}
+            {runningInDB && !controlAvailable && (
+              <div
+                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-warning/10 text-warning text-sm"
+                title="The workflow is marked running in the database, but this server has no in-memory control handle."
+              >
+                <Network className="w-4 h-4" />
+                Orphaned (running in DB)
+                {workflow.lock_holder_host && (
+                  <span className="text-[11px] font-mono opacity-80">
+                    {workflow.lock_holder_host}{workflow.lock_holder_pid ? `:${workflow.lock_holder_pid}` : ''}
+                  </span>
+                )}
+              </div>
+            )}
+
             {/* Pause/Stop controls - when running */}
             {workflow.status === 'running' && (
               <>
-                <button
-                  onClick={() => pauseWorkflow(workflow.id)}
-                  className="flex-1 md:flex-none inline-flex justify-center items-center gap-2 px-3 py-2 rounded-lg bg-secondary text-secondary-foreground text-sm font-medium hover:bg-secondary/80 transition-colors"
-                >
-                  <Pause className="w-4 h-4" />
-                  Pause
-                </button>
-                <button
-                  onClick={() => stopWorkflow(workflow.id)}
-                  className="flex-1 md:flex-none inline-flex justify-center items-center gap-2 px-3 py-2 rounded-lg bg-destructive text-destructive-foreground text-sm font-medium hover:bg-destructive/90 transition-colors"
-                >
-                  <StopCircle className="w-4 h-4" />
-                  Stop
-                </button>
+                {controlAvailable ? (
+                  <>
+                    <button
+                      onClick={handlePause}
+                      className="flex-1 md:flex-none inline-flex justify-center items-center gap-2 px-3 py-2 rounded-lg bg-secondary text-secondary-foreground text-sm font-medium hover:bg-secondary/80 transition-colors"
+                    >
+                      <Pause className="w-4 h-4" />
+                      Pause
+                    </button>
+                    <button
+                      onClick={handleStop}
+                      className="flex-1 md:flex-none inline-flex justify-center items-center gap-2 px-3 py-2 rounded-lg bg-destructive text-destructive-foreground text-sm font-medium hover:bg-destructive/90 transition-colors"
+                    >
+                      <StopCircle className="w-4 h-4" />
+                      Stop
+                    </button>
+                  </>
+                ) : runningInDB ? (
+                  <button
+                    onClick={handleForceStop}
+                    className="flex-1 md:flex-none inline-flex justify-center items-center gap-2 px-3 py-2 rounded-lg bg-destructive text-destructive-foreground text-sm font-medium hover:bg-destructive/90 transition-colors"
+                    title="Force stop (orphan recovery)"
+                  >
+                    <StopCircle className="w-4 h-4" />
+                    Force stop
+                  </button>
+                ) : null}
               </>
             )}
 
                       {/* Stop when paused */}
                       {workflow.status === 'paused' && (
-                        <button
-                          onClick={() => stopWorkflow(workflow.id)}
-                          className="flex-1 md:flex-none inline-flex justify-center items-center gap-2 px-3 py-2 rounded-lg bg-destructive text-destructive-foreground text-sm font-medium hover:bg-destructive/90 transition-colors"
-                        >
-                          <StopCircle className="w-4 h-4" />
-                          Stop
-                        </button>
+                        controlAvailable ? (
+                          <button
+                            onClick={handleStop}
+                            className="flex-1 md:flex-none inline-flex justify-center items-center gap-2 px-3 py-2 rounded-lg bg-destructive text-destructive-foreground text-sm font-medium hover:bg-destructive/90 transition-colors"
+                          >
+                            <StopCircle className="w-4 h-4" />
+                            Stop
+                          </button>
+                        ) : runningInDB ? (
+                          <button
+                            onClick={handleForceStop}
+                            className="flex-1 md:flex-none inline-flex justify-center items-center gap-2 px-3 py-2 rounded-lg bg-destructive text-destructive-foreground text-sm font-medium hover:bg-destructive/90 transition-colors"
+                            title="Force stop (orphan recovery)"
+                          >
+                            <StopCircle className="w-4 h-4" />
+                            Force stop
+                          </button>
+                        ) : null
                       )}
             
                       {/* Download Artifacts */}

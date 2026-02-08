@@ -3,6 +3,7 @@ package state
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -1237,6 +1238,85 @@ func TestSQLiteStateManager_RunningWorkflowsTracking(t *testing.T) {
 	}
 	if len(running) != 1 {
 		t.Errorf("Expected 1 running workflow, got %d", len(running))
+	}
+}
+
+func TestSQLiteStateManager_SetWorkflowRunning_DuplicateReturnsDomainError(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	manager, err := NewSQLiteStateManager(dbPath)
+	if err != nil {
+		t.Fatalf("NewSQLiteStateManager() error = %v", err)
+	}
+	defer manager.Close()
+
+	ctx := context.Background()
+
+	state := newTestStateSQLite()
+	state.WorkflowID = core.WorkflowID("wf-run-dupe-001")
+	if err := manager.Save(ctx, state); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	if err := manager.SetWorkflowRunning(ctx, state.WorkflowID); err != nil {
+		t.Fatalf("SetWorkflowRunning() first call error = %v", err)
+	}
+
+	err = manager.SetWorkflowRunning(ctx, state.WorkflowID)
+	if err == nil {
+		t.Fatal("expected SetWorkflowRunning() second call to return error")
+	}
+	if !errors.Is(err, core.ErrState("WORKFLOW_ALREADY_RUNNING", "")) {
+		t.Fatalf("expected WORKFLOW_ALREADY_RUNNING domain error, got %T: %v", err, err)
+	}
+}
+
+func TestSQLiteStateManager_GetRunningWorkflowRecord(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	manager, err := NewSQLiteStateManager(dbPath)
+	if err != nil {
+		t.Fatalf("NewSQLiteStateManager() error = %v", err)
+	}
+	defer manager.Close()
+
+	ctx := context.Background()
+
+	state := newTestStateSQLite()
+	state.WorkflowID = core.WorkflowID("wf-run-meta-001")
+	if err := manager.Save(ctx, state); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	// Not running yet.
+	rec, err := manager.GetRunningWorkflowRecord(ctx, state.WorkflowID)
+	if err != nil {
+		t.Fatalf("GetRunningWorkflowRecord() error = %v", err)
+	}
+	if rec != nil {
+		t.Fatalf("expected nil record for non-running workflow, got %+v", rec)
+	}
+
+	if err := manager.SetWorkflowRunning(ctx, state.WorkflowID); err != nil {
+		t.Fatalf("SetWorkflowRunning() error = %v", err)
+	}
+
+	rec, err = manager.GetRunningWorkflowRecord(ctx, state.WorkflowID)
+	if err != nil {
+		t.Fatalf("GetRunningWorkflowRecord() error = %v", err)
+	}
+	if rec == nil {
+		t.Fatal("expected record, got nil")
+	}
+	if rec.WorkflowID != state.WorkflowID {
+		t.Fatalf("expected workflow_id %s, got %s", state.WorkflowID, rec.WorkflowID)
+	}
+	if rec.LockHolderPID == nil || *rec.LockHolderPID <= 0 {
+		t.Fatalf("expected lock_holder_pid to be set, got %+v", rec.LockHolderPID)
+	}
+	if rec.LockHolderHost == "" {
+		t.Fatal("expected lock_holder_host to be set")
+	}
+	if rec.HeartbeatAt == nil {
+		t.Fatal("expected heartbeat_at to be set")
 	}
 }
 
