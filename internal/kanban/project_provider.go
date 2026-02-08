@@ -21,6 +21,11 @@ type ProjectStateProvider interface {
 	// Returns only healthy/accessible projects.
 	ListActiveProjects(ctx context.Context) ([]ProjectInfo, error)
 
+	// ListLoadedProjects returns only projects whose contexts are already loaded in memory.
+	// Unlike ListActiveProjects, this does NOT initialize new project contexts.
+	// Used by tick() to avoid loading all registered projects on every cycle.
+	ListLoadedProjects(ctx context.Context) ([]ProjectInfo, error)
+
 	// GetProjectStateManager returns the KanbanStateManager for a specific project.
 	// Returns nil if the project doesn't exist or its StateManager doesn't support Kanban.
 	GetProjectStateManager(ctx context.Context, projectID string) (KanbanStateManager, error)
@@ -64,6 +69,11 @@ func (p *SingleProjectProvider) ListActiveProjects(_ context.Context) ([]Project
 		return nil, nil
 	}
 	return []ProjectInfo{{ID: p.projectID, Name: "Default", Path: ""}}, nil
+}
+
+// ListLoadedProjects delegates to ListActiveProjects — the single project is always "loaded".
+func (p *SingleProjectProvider) ListLoadedProjects(ctx context.Context) ([]ProjectInfo, error) {
+	return p.ListActiveProjects(ctx)
 }
 
 // GetProjectStateManager returns the single StateManager.

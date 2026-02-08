@@ -206,10 +206,10 @@ func (e *Engine) tick(ctx context.Context) {
 		return // Already executing a workflow
 	}
 
-	// Get list of active projects
-	projects, err := e.projectProvider.ListActiveProjects(ctx)
+	// Get list of loaded projects (only those already in memory — avoids pool eviction pressure)
+	projects, err := e.projectProvider.ListLoadedProjects(ctx)
 	if err != nil {
-		e.logger.Error("failed to list active projects", "error", err)
+		e.logger.Error("failed to list loaded projects", "error", err)
 		return
 	}
 

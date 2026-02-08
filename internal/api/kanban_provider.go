@@ -52,6 +52,33 @@ func (p *KanbanStatePoolProvider) ListActiveProjects(ctx context.Context) ([]kan
 	return result, nil
 }
 
+// ListLoadedProjects returns only projects whose contexts are already loaded in the pool.
+// This avoids initializing new project contexts, preventing pool eviction pressure.
+func (p *KanbanStatePoolProvider) ListLoadedProjects(ctx context.Context) ([]kanban.ProjectInfo, error) {
+	if p.pool == nil || p.registry == nil {
+		return nil, nil
+	}
+
+	loadedIDs := p.pool.GetActiveProjects()
+	result := make([]kanban.ProjectInfo, 0, len(loadedIDs))
+	for _, id := range loadedIDs {
+		proj, err := p.registry.GetProject(ctx, id)
+		if err != nil || proj == nil {
+			continue
+		}
+		if proj.Status == project.StatusOffline {
+			continue
+		}
+		result = append(result, kanban.ProjectInfo{
+			ID:   proj.ID,
+			Name: proj.Name,
+			Path: proj.Path,
+		})
+	}
+
+	return result, nil
+}
+
 // GetProjectStateManager returns the KanbanStateManager for a specific project.
 func (p *KanbanStatePoolProvider) GetProjectStateManager(ctx context.Context, projectID string) (kanban.KanbanStateManager, error) {
 	if p.pool == nil {
