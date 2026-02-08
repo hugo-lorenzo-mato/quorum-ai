@@ -582,6 +582,163 @@ func TestValidator_SingleAgentDisabledIsValid(t *testing.T) {
 	}
 }
 
+func TestValidator_IssuesInvalidMode(t *testing.T) {
+	cfg := validConfig()
+	cfg.Issues.Enabled = true
+	cfg.Issues.Mode = "batch"
+
+	v := NewValidator()
+	err := v.Validate(cfg)
+	if err == nil {
+		t.Fatal("Validate() error = nil, want error for invalid issues.mode")
+	}
+
+	if !strings.Contains(err.Error(), "issues.mode") {
+		t.Errorf("error = %v, should mention issues.mode", err)
+	}
+}
+
+func TestValidator_IssuesValidModes(t *testing.T) {
+	for _, mode := range []string{"direct", "agent"} {
+		t.Run(mode, func(t *testing.T) {
+			cfg := validConfig()
+			cfg.Issues.Enabled = true
+			cfg.Issues.Mode = mode
+
+			v := NewValidator()
+			err := v.Validate(cfg)
+			if err != nil {
+				t.Errorf("Validate() error = %v, want nil for valid mode %q", err, mode)
+			}
+		})
+	}
+}
+
+func TestValidator_IssuesInvalidRepository(t *testing.T) {
+	tests := []struct {
+		name string
+		repo string
+	}{
+		{"no slash", "myrepo"},
+		{"too many slashes", "owner/repo/extra"},
+		{"empty owner", "/repo"},
+		{"empty repo", "owner/"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := validConfig()
+			cfg.Issues.Enabled = true
+			cfg.Issues.Repository = tt.repo
+
+			v := NewValidator()
+			err := v.Validate(cfg)
+			if err == nil {
+				t.Fatalf("Validate() error = nil, want error for invalid repository %q", tt.repo)
+			}
+
+			if !strings.Contains(err.Error(), "issues.repository") {
+				t.Errorf("error = %v, should mention issues.repository", err)
+			}
+		})
+	}
+}
+
+func TestValidator_IssuesValidRepository(t *testing.T) {
+	cfg := validConfig()
+	cfg.Issues.Enabled = true
+	cfg.Issues.Repository = "owner/repo"
+
+	v := NewValidator()
+	err := v.Validate(cfg)
+	if err != nil {
+		t.Errorf("Validate() error = %v, want nil for valid repository", err)
+	}
+}
+
+func TestValidator_IssuesInvalidTimeout(t *testing.T) {
+	cfg := validConfig()
+	cfg.Issues.Enabled = true
+	cfg.Issues.Timeout = "not-a-duration"
+
+	v := NewValidator()
+	err := v.Validate(cfg)
+	if err == nil {
+		t.Fatal("Validate() error = nil, want error for invalid issues.timeout")
+	}
+
+	if !strings.Contains(err.Error(), "issues.timeout") {
+		t.Errorf("error = %v, should mention issues.timeout", err)
+	}
+}
+
+func TestValidator_IssuesGeneratorInvalidReasoningEffort(t *testing.T) {
+	cfg := validConfig()
+	cfg.Issues.Enabled = true
+	cfg.Issues.Generator.Enabled = true
+	cfg.Issues.Generator.Agent = "claude"
+	cfg.Issues.Generator.ReasoningEffort = "ultra"
+
+	v := NewValidator()
+	err := v.Validate(cfg)
+	if err == nil {
+		t.Fatal("Validate() error = nil, want error for invalid reasoning_effort")
+	}
+
+	if !strings.Contains(err.Error(), "issues.generator.reasoning_effort") {
+		t.Errorf("error = %v, should mention issues.generator.reasoning_effort", err)
+	}
+}
+
+func TestValidator_IssuesGeneratorValidReasoningEffort(t *testing.T) {
+	cfg := validConfig()
+	cfg.Issues.Enabled = true
+	cfg.Issues.Generator.Enabled = true
+	cfg.Issues.Generator.Agent = "claude"
+	cfg.Issues.Generator.ReasoningEffort = "high"
+
+	v := NewValidator()
+	err := v.Validate(cfg)
+	if err != nil {
+		t.Errorf("Validate() error = %v, want nil for valid reasoning_effort", err)
+	}
+}
+
+func TestValidator_IssuesGeneratorInvalidAgent(t *testing.T) {
+	cfg := validConfig()
+	cfg.Issues.Enabled = true
+	cfg.Issues.Generator.Enabled = true
+	cfg.Issues.Generator.Agent = "nonexistent"
+
+	v := NewValidator()
+	err := v.Validate(cfg)
+	if err == nil {
+		t.Fatal("Validate() error = nil, want error for invalid generator agent")
+	}
+
+	if !strings.Contains(err.Error(), "issues.generator.agent") {
+		t.Errorf("error = %v, should mention issues.generator.agent", err)
+	}
+}
+
+func TestValidator_IssuesGeneratorNegativeMaxBodyLength(t *testing.T) {
+	cfg := validConfig()
+	cfg.Issues.Enabled = true
+	cfg.Issues.Generator.Enabled = true
+	cfg.Issues.Generator.Agent = "claude"
+	cfg.Issues.Generator.MaxBodyLength = -1
+
+	v := NewValidator()
+	err := v.Validate(cfg)
+	if err == nil {
+		t.Fatal("Validate() error = nil, want error for negative max_body_length")
+	}
+
+	if !strings.Contains(err.Error(), "issues.generator.max_body_length") {
+		t.Errorf("error = %v, should mention issues.generator.max_body_length", err)
+	}
+}
+
 func TestSingleAgentConfig_IsValid(t *testing.T) {
 	tests := []struct {
 		name   string

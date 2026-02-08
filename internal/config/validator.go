@@ -316,6 +316,31 @@ func (v *Validator) validateIssues(cfg *IssuesConfig) {
 		v.addError("issues.provider", cfg.Provider, "must be one of: github, gitlab")
 	}
 
+	// Validate mode
+	if cfg.Mode != "" {
+		validModes := map[string]bool{
+			core.IssueModeDirect: true, core.IssueModeAgent: true,
+		}
+		if !validModes[cfg.Mode] {
+			v.addError("issues.mode", cfg.Mode, "must be one of: direct, agent")
+		}
+	}
+
+	// Validate repository format (owner/repo)
+	if cfg.Repository != "" {
+		parts := strings.Split(cfg.Repository, "/")
+		if len(parts) != 2 || strings.TrimSpace(parts[0]) == "" || strings.TrimSpace(parts[1]) == "" {
+			v.addError("issues.repository", cfg.Repository, "must be in 'owner/repo' format")
+		}
+	}
+
+	// Validate timeout duration
+	if cfg.Timeout != "" {
+		if _, err := time.ParseDuration(cfg.Timeout); err != nil {
+			v.addError("issues.timeout", cfg.Timeout, "invalid duration format")
+		}
+	}
+
 	validTones := map[string]bool{
 		"professional": true, "casual": true, "technical": true, "concise": true, "": true,
 	}
@@ -336,6 +361,28 @@ func (v *Validator) validateIssues(cfg *IssuesConfig) {
 	if cfg.Provider == "gitlab" && cfg.GitLab.ProjectID == "" {
 		v.addError("issues.gitlab.project_id", cfg.GitLab.ProjectID,
 			"required when provider is 'gitlab'")
+	}
+
+	// Validate generator
+	v.validateIssueGenerator(&cfg.Generator)
+}
+
+func (v *Validator) validateIssueGenerator(cfg *IssueGeneratorConfig) {
+	if !cfg.Enabled {
+		return
+	}
+
+	if cfg.Agent != "" && !core.IsValidAgent(cfg.Agent) {
+		v.addError("issues.generator.agent", cfg.Agent, "unknown agent")
+	}
+
+	if cfg.ReasoningEffort != "" && !core.IsValidReasoningEffort(cfg.ReasoningEffort) {
+		v.addError("issues.generator.reasoning_effort", cfg.ReasoningEffort,
+			"invalid reasoning effort (valid: none, minimal, low, medium, high, xhigh, max)")
+	}
+
+	if cfg.MaxBodyLength < 0 {
+		v.addError("issues.generator.max_body_length", cfg.MaxBodyLength, "must be non-negative")
 	}
 }
 
