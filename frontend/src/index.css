@@ -461,6 +461,15 @@
   animation: dash-flow 1s linear infinite;
 }
 
+/* Pipeline pulse glow for running phase chips */
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 0 0 var(--status-running-bg); }
+  50% { box-shadow: 0 0 8px 2px var(--status-running-bg); }
+}
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
 /* Background patterns */
 .bg-dot-pattern {
   background-image: radial-gradient(circle, var(--border-color) 1px, transparent 1px);

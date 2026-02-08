@@ -112,6 +112,7 @@ type ModeratorConfigResponse struct {
 	Enabled             bool    `json:"enabled"`
 	Agent               string  `json:"agent"`
 	Threshold           float64 `json:"threshold"`
+	MinSuccessfulAgents int     `json:"min_successful_agents"`
 	MinRounds           int     `json:"min_rounds"`
 	MaxRounds           int     `json:"max_rounds"`
 	WarningThreshold    float64 `json:"warning_threshold"`
@@ -383,6 +384,7 @@ type ModeratorConfigUpdate struct {
 	Enabled             *bool    `json:"enabled,omitempty"`
 	Agent               *string  `json:"agent,omitempty"`
 	Threshold           *float64 `json:"threshold,omitempty"`
+	MinSuccessfulAgents *int     `json:"min_successful_agents,omitempty"`
 	MinRounds           *int     `json:"min_rounds,omitempty"`
 	MaxRounds           *int     `json:"max_rounds,omitempty"`
 	WarningThreshold    *float64 `json:"warning_threshold,omitempty"`

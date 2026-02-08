@@ -127,6 +127,7 @@ func DefaultRunnerConfig() *RunnerConfig {
 			Enabled:             false, // Disabled by default - must be explicitly enabled
 			Agent:               "",    // NO default - must be configured
 			Threshold:           0.90,
+			MinSuccessfulAgents: 2,
 			MinRounds:           2,
 			MaxRounds:           5,
 			WarningThreshold:    0.30,
@@ -412,6 +413,9 @@ func (r *Runner) RunWithState(ctx context.Context, state *core.WorkflowState) er
 	// Prepare new execution - increment ExecutionID and clear old events
 	r.prepareExecution(workflowState, false)
 
+	// Sync blueprint with actual runner config (API-created workflows have minimal blueprint)
+	workflowState.Blueprint = r.buildBlueprint()
+
 	// Ensure workflow-level Git isolation (API-created state may not have it persisted).
 	if _, err := r.ensureWorkflowGitIsolation(ctx, workflowState); err != nil {
 		return r.handleError(ctx, workflowState, err)
@@ -549,6 +553,9 @@ func (r *Runner) AnalyzeWithState(ctx context.Context, state *core.WorkflowState
 
 	// New execution: bump execution id and clear any previous agent events.
 	r.prepareExecution(workflowState, false)
+
+	// Sync blueprint with actual runner config (API-created workflows have minimal blueprint)
+	workflowState.Blueprint = r.buildBlueprint()
 
 	// Ensure workflow-level Git isolation (API-created state may not have it persisted).
 	if _, err := r.ensureWorkflowGitIsolation(ctx, workflowState); err != nil {

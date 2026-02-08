@@ -184,6 +184,13 @@ type ModeratorConfig struct {
 	// Keys: "analysis", "design", "bugfix", "refactor". If a task type matches,
 	// its threshold is used instead of the default Threshold.
 	Thresholds map[string]float64 `mapstructure:"thresholds" yaml:"thresholds"`
+	// MinSuccessfulAgents is the minimum number of agents that must succeed in a
+	// given analysis/refinement round before continuing (default: 2).
+	//
+	// This is different from MinRounds/MaxRounds:
+	// - MinSuccessfulAgents: per-round success requirement (availability)
+	// - MinRounds/MaxRounds: number of moderator refinement rounds (quality loop)
+	MinSuccessfulAgents int `mapstructure:"min_successful_agents" yaml:"min_successful_agents"`
 	// MinRounds is the minimum refinement rounds before accepting consensus (default: 2).
 	MinRounds int `mapstructure:"min_rounds" yaml:"min_rounds"`
 	// MaxRounds limits the number of refinement rounds (default: 5).

@@ -17,6 +17,7 @@ import (
 
 	webadapters "github.com/hugo-lorenzo-mato/quorum-ai/internal/adapters/web"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/attachments"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/config"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service/workflow"
 )
@@ -161,6 +162,58 @@ type PhaseResponse struct {
 	Status       string `json:"status"`
 	CurrentPhase string `json:"current_phase"`
 	Message      string `json:"message"`
+}
+
+const (
+	defaultWorkflowExecTimeout = 16 * time.Hour
+	defaultAnalyzeExecTimeout  = 8 * time.Hour
+	defaultPlanExecTimeout     = 1 * time.Hour
+)
+
+func parseDurationOrDefault(raw string, def time.Duration) time.Duration {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return def
+	}
+	d, err := time.ParseDuration(raw)
+	if err != nil || d <= 0 {
+		return def
+	}
+	return d
+}
+
+func effectiveWorkflowTimeout(cfg *config.Config, bp *core.Blueprint) time.Duration {
+	if bp != nil && bp.Timeout > 0 {
+		return bp.Timeout
+	}
+	if cfg != nil {
+		return parseDurationOrDefault(cfg.Workflow.Timeout, defaultWorkflowExecTimeout)
+	}
+	return defaultWorkflowExecTimeout
+}
+
+func execTimeoutForAnalyze(cfg *config.Config, bp *core.Blueprint) time.Duration {
+	wfTimeout := effectiveWorkflowTimeout(cfg, bp)
+	analyzeTimeout := defaultAnalyzeExecTimeout
+	if cfg != nil {
+		analyzeTimeout = parseDurationOrDefault(cfg.Phases.Analyze.Timeout, defaultAnalyzeExecTimeout)
+	}
+	if wfTimeout > 0 && wfTimeout < analyzeTimeout {
+		return wfTimeout
+	}
+	return analyzeTimeout
+}
+
+func execTimeoutForPlan(cfg *config.Config, bp *core.Blueprint) time.Duration {
+	wfTimeout := effectiveWorkflowTimeout(cfg, bp)
+	planTimeout := defaultPlanExecTimeout
+	if cfg != nil {
+		planTimeout = parseDurationOrDefault(cfg.Phases.Plan.Timeout, defaultPlanExecTimeout)
+	}
+	if wfTimeout > 0 && wfTimeout < planTimeout {
+		return wfTimeout
+	}
+	return planTimeout
 }
 
 // isWorkflowRunning checks if a workflow is running in-memory in this server process.
@@ -440,7 +493,7 @@ func (s *Server) handleCreateWorkflow(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Build workflow blueprint.
-	// Timeout is intentionally 0 (unset) so the config default (typically 12h) is used.
+	// Timeout is intentionally 0 (unset) so the config default (typically 16h) is used.
 	// The builder only overrides the config timeout when blueprint.Timeout > 0.
 	blueprint := &core.Blueprint{
 		Consensus: core.BlueprintConsensus{
@@ -481,7 +534,7 @@ func (s *Server) handleCreateWorkflow(w http.ResponseWriter, r *http.Request) {
 		},
 		WorkflowRun: core.WorkflowRun{
 			Status:         core.WorkflowStatusPending,
-			CurrentPhase:   core.PhaseAnalyze,
+			CurrentPhase:   "",
 			Tasks:          make(map[core.TaskID]*core.TaskState),
 			TaskOrder:      make([]core.TaskID, 0),
 			Metrics:        &core.StateMetrics{},
@@ -1077,20 +1130,35 @@ func (s *Server) HandleRunWorkflow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create runner with execution context that preserves ProjectContext values.
-	// context.WithoutCancel detaches from HTTP request cancellation while maintaining
-	// access to project-scoped resources (StateManager, EventBus, etc.)
-	execCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 4*time.Hour)
-	handle.SetExecCancel(cancel)
-
 	// Reload state (it was updated by StartExecution)
 	state, err = stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
 	if err != nil {
-		cancel()
 		_ = s.unifiedTracker.RollbackExecution(ctx, core.WorkflowID(workflowID), "failed to reload state")
 		respondError(w, http.StatusInternalServerError, "failed to reload workflow state")
 		return
 	}
+
+	// Resolve the effective execution config so the execution timeout matches Settings.
+	effCfg, cfgErr := ResolveEffectiveExecutionConfig(ctx)
+	if cfgErr != nil {
+		_ = s.unifiedTracker.RollbackExecution(ctx, core.WorkflowID(workflowID), "failed to resolve effective configuration: "+cfgErr.Error())
+		status := http.StatusServiceUnavailable
+		msg := "workflow execution not available: " + cfgErr.Error()
+		if st, ok := httpStatusForDomainError(cfgErr); ok {
+			status = st
+			msg = cfgErr.Error()
+		}
+		respondError(w, status, msg)
+		return
+	}
+
+	execTimeout := effectiveWorkflowTimeout(effCfg.Config, state.Blueprint)
+
+	// Create runner with execution context that preserves ProjectContext values.
+	// context.WithoutCancel detaches from HTTP request cancellation while maintaining
+	// access to project-scoped resources (StateManager, EventBus, etc.)
+	execCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), execTimeout)
+	handle.SetExecCancel(cancel)
 
 	runner, notifier, err := factory.CreateRunner(execCtx, workflowID, handle.ControlPlane, state.Blueprint, state)
 	if err != nil {
@@ -1550,20 +1618,35 @@ func (s *Server) HandleAnalyzeWorkflow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create execution context that preserves ProjectContext values.
-	// context.WithoutCancel detaches from HTTP request cancellation while maintaining
-	// access to project-scoped resources (StateManager, EventBus, etc.)
-	execCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 4*time.Hour)
-	handle.SetExecCancel(cancel)
-
 	// Reload state (it was updated by StartExecution)
 	state, err = stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
 	if err != nil {
-		cancel()
 		_ = s.unifiedTracker.RollbackExecution(ctx, core.WorkflowID(workflowID), "failed to reload state")
 		respondError(w, http.StatusInternalServerError, "failed to reload workflow state")
 		return
 	}
+
+	// Resolve the effective execution config so the execution timeout matches Settings.
+	effCfg, cfgErr := ResolveEffectiveExecutionConfig(ctx)
+	if cfgErr != nil {
+		_ = s.unifiedTracker.RollbackExecution(ctx, core.WorkflowID(workflowID), "failed to resolve effective configuration: "+cfgErr.Error())
+		status := http.StatusServiceUnavailable
+		msg := "workflow execution not available: " + cfgErr.Error()
+		if st, ok := httpStatusForDomainError(cfgErr); ok {
+			status = st
+			msg = cfgErr.Error()
+		}
+		respondError(w, status, msg)
+		return
+	}
+
+	execTimeout := execTimeoutForAnalyze(effCfg.Config, state.Blueprint)
+
+	// Create execution context that preserves ProjectContext values.
+	// context.WithoutCancel detaches from HTTP request cancellation while maintaining
+	// access to project-scoped resources (StateManager, EventBus, etc.)
+	execCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), execTimeout)
+	handle.SetExecCancel(cancel)
 
 	runner, notifier, err := factory.CreateRunner(execCtx, workflowID, handle.ControlPlane, state.Blueprint, state)
 	if err != nil {
@@ -1715,17 +1798,32 @@ func (s *Server) HandlePlanWorkflow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create execution context that preserves ProjectContext values.
-	execCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Hour)
-	handle.SetExecCancel(cancel)
-
 	state, err = stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
 	if err != nil {
-		cancel()
 		_ = s.unifiedTracker.RollbackExecution(ctx, core.WorkflowID(workflowID), "failed to reload state")
 		respondError(w, http.StatusInternalServerError, "failed to reload workflow state")
 		return
 	}
+
+	// Resolve the effective execution config so the execution timeout matches Settings.
+	effCfg, cfgErr := ResolveEffectiveExecutionConfig(ctx)
+	if cfgErr != nil {
+		_ = s.unifiedTracker.RollbackExecution(ctx, core.WorkflowID(workflowID), "failed to resolve effective configuration: "+cfgErr.Error())
+		status := http.StatusServiceUnavailable
+		msg := "workflow execution not available: " + cfgErr.Error()
+		if st, ok := httpStatusForDomainError(cfgErr); ok {
+			status = st
+			msg = cfgErr.Error()
+		}
+		respondError(w, status, msg)
+		return
+	}
+
+	execTimeout := execTimeoutForPlan(effCfg.Config, state.Blueprint)
+
+	// Create execution context that preserves ProjectContext values.
+	execCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), execTimeout)
+	handle.SetExecCancel(cancel)
 
 	runner, notifier, err := factory.CreateRunner(execCtx, workflowID, handle.ControlPlane, state.Blueprint, state)
 	if err != nil {
@@ -1873,17 +1971,32 @@ func (s *Server) HandleReplanWorkflow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create execution context that preserves ProjectContext values.
-	execCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Hour)
-	handle.SetExecCancel(cancel)
-
 	state, err = stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
 	if err != nil {
-		cancel()
 		_ = s.unifiedTracker.RollbackExecution(ctx, core.WorkflowID(workflowID), "failed to reload state")
 		respondError(w, http.StatusInternalServerError, "failed to reload workflow state")
 		return
 	}
+
+	// Resolve the effective execution config so the execution timeout matches Settings.
+	effCfg, cfgErr := ResolveEffectiveExecutionConfig(ctx)
+	if cfgErr != nil {
+		_ = s.unifiedTracker.RollbackExecution(ctx, core.WorkflowID(workflowID), "failed to resolve effective configuration: "+cfgErr.Error())
+		status := http.StatusServiceUnavailable
+		msg := "workflow execution not available: " + cfgErr.Error()
+		if st, ok := httpStatusForDomainError(cfgErr); ok {
+			status = st
+			msg = cfgErr.Error()
+		}
+		respondError(w, status, msg)
+		return
+	}
+
+	execTimeout := execTimeoutForPlan(effCfg.Config, state.Blueprint)
+
+	// Create execution context that preserves ProjectContext values.
+	execCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), execTimeout)
+	handle.SetExecCancel(cancel)
 
 	runner, notifier, err := factory.CreateRunner(execCtx, workflowID, handle.ControlPlane, state.Blueprint, state)
 	if err != nil {
@@ -2034,17 +2147,32 @@ func (s *Server) HandleExecuteWorkflow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create execution context that preserves ProjectContext values.
-	execCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 8*time.Hour)
-	handle.SetExecCancel(cancel)
-
 	state, err = stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
 	if err != nil {
-		cancel()
 		_ = s.unifiedTracker.RollbackExecution(ctx, core.WorkflowID(workflowID), "failed to reload state")
 		respondError(w, http.StatusInternalServerError, "failed to reload workflow state")
 		return
 	}
+
+	// Resolve the effective execution config so the execution timeout matches Settings.
+	effCfg, cfgErr := ResolveEffectiveExecutionConfig(ctx)
+	if cfgErr != nil {
+		_ = s.unifiedTracker.RollbackExecution(ctx, core.WorkflowID(workflowID), "failed to resolve effective configuration: "+cfgErr.Error())
+		status := http.StatusServiceUnavailable
+		msg := "workflow execution not available: " + cfgErr.Error()
+		if st, ok := httpStatusForDomainError(cfgErr); ok {
+			status = st
+			msg = cfgErr.Error()
+		}
+		respondError(w, status, msg)
+		return
+	}
+
+	execTimeout := effectiveWorkflowTimeout(effCfg.Config, state.Blueprint)
+
+	// Create execution context that preserves ProjectContext values.
+	execCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), execTimeout)
+	handle.SetExecCancel(cancel)
 
 	runner, notifier, err := factory.CreateRunner(execCtx, workflowID, handle.ControlPlane, state.Blueprint, state)
 	if err != nil {

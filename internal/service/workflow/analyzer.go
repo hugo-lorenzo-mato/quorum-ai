@@ -730,8 +730,13 @@ func (a *Analyzer) runVnRefinement(ctx context.Context, wctx *Context, round int
 
 	wg.Wait()
 
-	// Need at least 2 successful outputs
-	const minRequired = 2
+	// Need at least N successful outputs (default: 2).
+	// This is configurable to allow degraded operation when one agent is flaky/timeouts,
+	// but the default remains 2 because single-agent "consensus" has no cross-validation value.
+	minRequired := 2
+	if wctx.Config != nil && wctx.Config.Moderator.MinSuccessfulAgents > 0 {
+		minRequired = wctx.Config.Moderator.MinSuccessfulAgents
+	}
 	if len(outputs) < minRequired {
 		var errMsgs []string
 		for agent, err := range errors {
@@ -1081,9 +1086,11 @@ func (a *Analyzer) runV1Analysis(ctx context.Context, wctx *Context) ([]Analysis
 		"total", len(agentNames),
 	)
 
-	// Need at least 2 successful outputs for meaningful consensus
-	// Without at least 2 agents, there's no cross-validation benefit
-	const minRequired = 2
+	// Need at least N successful outputs (default: 2) for meaningful cross-validation.
+	minRequired := 2
+	if wctx.Config != nil && wctx.Config.Moderator.MinSuccessfulAgents > 0 {
+		minRequired = wctx.Config.Moderator.MinSuccessfulAgents
+	}
 
 	if len(outputs) < minRequired {
 		// Collect error messages

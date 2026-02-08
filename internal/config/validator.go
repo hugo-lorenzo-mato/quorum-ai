@@ -144,7 +144,7 @@ func (v *Validator) validateTrace(cfg *TraceConfig) {
 
 func (v *Validator) validateWorkflow(cfg *WorkflowConfig) {
 	if cfg.Timeout == "" {
-		cfg.Timeout = "12h"
+		cfg.Timeout = "16h"
 	}
 	if _, err := time.ParseDuration(cfg.Timeout); err != nil {
 		v.addError("workflow.timeout", cfg.Timeout, "invalid duration format")
@@ -434,6 +434,14 @@ func (v *Validator) validatePhaseParticipation(cfg *PhasesConfig, agents *Agents
 			"at least 2 agents must have phases.analyze: true for multi-agent consensus (moderator enabled)")
 	}
 
+	// 5b. Validate min_successful_agents does not exceed available analyze agents
+	if cfg.Analyze.Moderator.Enabled && !cfg.Analyze.SingleAgent.Enabled {
+		if cfg.Analyze.Moderator.MinSuccessfulAgents > analyzeCount {
+			v.addError("phases.analyze.moderator.min_successful_agents", cfg.Analyze.Moderator.MinSuccessfulAgents,
+				fmt.Sprintf("must be <= number of agents with phases.analyze: true (%d)", analyzeCount))
+		}
+	}
+
 	// 6. Validate at least 1 agent for plan phase
 	if planCount < 1 {
 		v.addError("agents.*.phases.plan", planAgents,
@@ -509,6 +517,9 @@ func (v *Validator) validateModerator(cfg *ModeratorConfig, agents *AgentsConfig
 	}
 	if cfg.StagnationThreshold < 0 || cfg.StagnationThreshold > 1 {
 		v.addError("phases.analyze.moderator.stagnation_threshold", cfg.StagnationThreshold, "must be between 0 and 1")
+	}
+	if cfg.MinSuccessfulAgents < 1 {
+		v.addError("phases.analyze.moderator.min_successful_agents", cfg.MinSuccessfulAgents, "must be at least 1")
 	}
 	if cfg.MinRounds < 1 {
 		v.addError("phases.analyze.moderator.min_rounds", cfg.MinRounds, "must be at least 1")

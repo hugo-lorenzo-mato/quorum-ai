@@ -713,6 +713,7 @@ func configToFullResponse(cfg *config.Config) FullConfigResponse {
 					Enabled:             cfg.Phases.Analyze.Moderator.Enabled,
 					Agent:               cfg.Phases.Analyze.Moderator.Agent,
 					Threshold:           cfg.Phases.Analyze.Moderator.Threshold,
+					MinSuccessfulAgents: cfg.Phases.Analyze.Moderator.MinSuccessfulAgents,
 					MinRounds:           cfg.Phases.Analyze.Moderator.MinRounds,
 					MaxRounds:           cfg.Phases.Analyze.Moderator.MaxRounds,
 					WarningThreshold:    cfg.Phases.Analyze.Moderator.WarningThreshold,
@@ -1032,6 +1033,9 @@ func applyAnalyzePhaseUpdates(cfg *config.AnalyzePhaseConfig, update *AnalyzePha
 		}
 		if update.Moderator.Threshold != nil {
 			cfg.Moderator.Threshold = *update.Moderator.Threshold
+		}
+		if update.Moderator.MinSuccessfulAgents != nil {
+			cfg.Moderator.MinSuccessfulAgents = *update.Moderator.MinSuccessfulAgents
 		}
 		if update.Moderator.MinRounds != nil {
 			cfg.Moderator.MinRounds = *update.Moderator.MinRounds

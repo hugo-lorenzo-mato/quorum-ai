@@ -22,11 +22,11 @@ func TestLoader_Defaults(t *testing.T) {
 	}
 
 	// Verify workflow defaults
-	if cfg.Workflow.Timeout != "12h" {
-		t.Errorf("Workflow.Timeout = %q, want %q", cfg.Workflow.Timeout, "12h")
+	if cfg.Workflow.Timeout != "16h" {
+		t.Errorf("Workflow.Timeout = %q, want %q", cfg.Workflow.Timeout, "16h")
 	}
-	if cfg.Phases.Analyze.Timeout != "2h" {
-		t.Errorf("Phases.Analyze.Timeout = %q, want %q", cfg.Phases.Analyze.Timeout, "2h")
+	if cfg.Phases.Analyze.Timeout != "8h" {
+		t.Errorf("Phases.Analyze.Timeout = %q, want %q", cfg.Phases.Analyze.Timeout, "8h")
 	}
 	if cfg.Phases.Plan.Timeout != "1h" {
 		t.Errorf("Phases.Plan.Timeout = %q, want %q", cfg.Phases.Plan.Timeout, "1h")
@@ -55,6 +55,9 @@ func TestLoader_Defaults(t *testing.T) {
 	// Verify moderator defaults
 	if cfg.Phases.Analyze.Moderator.Threshold != 0.80 {
 		t.Errorf("Phases.Analyze.Moderator.Threshold = %f, want %f", cfg.Phases.Analyze.Moderator.Threshold, 0.80)
+	}
+	if cfg.Phases.Analyze.Moderator.MinSuccessfulAgents != 2 {
+		t.Errorf("Phases.Analyze.Moderator.MinSuccessfulAgents = %d, want %d", cfg.Phases.Analyze.Moderator.MinSuccessfulAgents, 2)
 	}
 }
 

@@ -276,19 +276,20 @@ func (l *Loader) setDefaults() {
 	l.v.SetDefault("trace.include_phases", []string{"analyze", "plan", "execute"})
 
 	// Workflow defaults
-	l.v.SetDefault("workflow.timeout", "12h")
+	l.v.SetDefault("workflow.timeout", "16h")
 	l.v.SetDefault("workflow.max_retries", 3)
 	l.v.SetDefault("workflow.dry_run", false)
 	l.v.SetDefault("workflow.sandbox", true) // Security: sandbox enabled by default
 
 	// Phase defaults
 	// Analyze phase
-	l.v.SetDefault("phases.analyze.timeout", "2h")
+	l.v.SetDefault("phases.analyze.timeout", "8h")
 	l.v.SetDefault("phases.analyze.refiner.enabled", true)
 	l.v.SetDefault("phases.analyze.refiner.agent", "")
 	l.v.SetDefault("phases.analyze.moderator.enabled", true)
 	l.v.SetDefault("phases.analyze.moderator.agent", "")
 	l.v.SetDefault("phases.analyze.moderator.threshold", 0.80)
+	l.v.SetDefault("phases.analyze.moderator.min_successful_agents", 2)
 	l.v.SetDefault("phases.analyze.moderator.min_rounds", 2)
 	l.v.SetDefault("phases.analyze.moderator.max_rounds", 3)
 	l.v.SetDefault("phases.analyze.moderator.warning_threshold", 0.30)

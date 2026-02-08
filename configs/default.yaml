@@ -34,7 +34,7 @@ trace:
 # Workflow execution settings
 workflow:
   # Maximum workflow execution time
-  timeout: 12h
+  timeout: 16h
   # Maximum retry attempts per task
   max_retries: 3
   # Dry-run mode (simulate without executing)
@@ -64,7 +64,7 @@ phases:
   # Analyze phase settings
   analyze:
     # Maximum duration for analyze phase
-    timeout: 2h
+    timeout: 8h
     # Grace period after agent signals logical completion before killing the process.
     # Prevents losing output when agent CLIs hang after producing results.
     process_grace_period: "30s"
@@ -84,6 +84,8 @@ phases:
       agent: claude
       # Minimum consensus score to accept (0.0-1.0)
       threshold: 0.80
+      # Minimum number of agents that must succeed per analysis/refinement round
+      min_successful_agents: 2
       # Minimum refinement rounds before accepting consensus
       min_rounds: 2
       # Maximum refinement rounds before giving up

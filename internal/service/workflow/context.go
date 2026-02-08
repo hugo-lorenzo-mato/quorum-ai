@@ -154,6 +154,9 @@ type ModeratorConfig struct {
 	// Keys: "analysis", "design", "bugfix", "refactor". If a task type matches,
 	// its threshold is used instead of the default Threshold.
 	Thresholds map[string]float64
+	// MinSuccessfulAgents is the minimum number of agents that must succeed
+	// in a given analysis/refinement round before continuing (default: 2).
+	MinSuccessfulAgents int
 	// MinRounds is the minimum number of rounds before accepting consensus (default: 2).
 	MinRounds int
 	// MaxRounds limits the number of V(n) refinement rounds (default: 5).
