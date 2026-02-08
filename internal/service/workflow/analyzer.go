@@ -492,7 +492,7 @@ func (a *Analyzer) runModeratorRound(ctx context.Context, wctx *Context, round i
 		wctx.Output.Log("info", "analyzer", fmt.Sprintf("Round %d: Running moderator evaluation", round))
 	}
 
-	evalResult, evalErr := a.runModeratorWithFallback(ctx, wctx, round, currentOutputs)
+	evalResult, evalErr := a.runModeratorWithRetry(ctx, wctx, round, currentOutputs)
 	if evalErr != nil {
 		return nil, fmt.Errorf("moderator evaluation round %d: %w", round, evalErr)
 	}
@@ -1868,8 +1868,8 @@ func (a *Analyzer) continueFromCheckpoint(ctx context.Context, wctx *Context, sa
 			wctx.Output.Log("info", "analyzer", fmt.Sprintf("Round %d: Running moderator evaluation (resumed)", round))
 		}
 
-		// Run moderator evaluation with retry and fallback support
-		evalResult, evalErr := a.runModeratorWithFallback(ctx, wctx, round, currentOutputs)
+		// Run moderator evaluation with retry support
+		evalResult, evalErr := a.runModeratorWithRetry(ctx, wctx, round, currentOutputs)
 		if evalErr != nil {
 			return fmt.Errorf("moderator evaluation round %d: %w", round, evalErr)
 		}
@@ -2002,151 +2002,138 @@ func isTransientModeratorError(err error) bool {
 		core.IsRetryable(err)
 }
 
-// runModeratorWithFallback runs the moderator evaluation with retry and fallback support.
-// If the primary moderator agent fails, it tries fallback agents configured with moderate phase.
-func (a *Analyzer) runModeratorWithFallback(ctx context.Context, wctx *Context, round int, outputs []AnalysisOutput) (*ModeratorEvaluationResult, error) {
-	// Build list of fallback agents for moderator role
-	fallbackAgents := a.buildModeratorFallbackChain(wctx)
+// runModeratorWithRetry runs the moderator evaluation with retry support.
+// Tries the configured moderator agent first (up to maxRetries for transient errors).
+// If the primary fails completely, falls back to ONE other agent that has the
+// "moderate" phase enabled in the project config.
+func (a *Analyzer) runModeratorWithRetry(ctx context.Context, wctx *Context, round int, outputs []AnalysisOutput) (*ModeratorEvaluationResult, error) {
+	primaryAgent := a.moderator.GetConfig().Agent
+	const maxRetries = 2
 
-	var lastErr error
-	var triedAgents []string
-	var lastAgent string
-	var lastAttempt int
-	globalAttempt := 0 // Global attempt counter for unique file naming
-
-	for agentIdx, agentName := range fallbackAgents {
-		isPrimary := agentIdx == 0
-		lastAgent = agentName
-
-		// Try up to 2 attempts with each agent
-		for attempt := 1; attempt <= 2; attempt++ {
-			globalAttempt++ // Increment global counter for each attempt
-			lastAttempt = globalAttempt
-
-			if !isPrimary || attempt > 1 {
-				wctx.Logger.Info("trying moderator evaluation",
-					"round", round,
-					"agent", agentName,
-					"is_fallback", !isPrimary,
-					"attempt", attempt,
-					"global_attempt", globalAttempt,
-				)
-				if wctx.Output != nil {
-					if isPrimary {
-						wctx.Output.Log("info", "analyzer",
-							fmt.Sprintf("Round %d: Retrying moderator with %s (attempt %d)", round, agentName, attempt))
-					} else {
-						wctx.Output.Log("info", "analyzer",
-							fmt.Sprintf("Round %d: Trying fallback moderator %s (attempt %d)", round, agentName, globalAttempt))
-					}
-				}
-			}
-
-			// Use EvaluateWithAgent to allow fallback to alternative agents
-			// Pass globalAttempt for unique file naming per attempt
-			evalResult, evalErr := a.moderator.EvaluateWithAgent(ctx, wctx, round, globalAttempt, outputs, agentName)
-			if evalErr == nil {
-				// Success - log if we used a fallback
-				if !isPrimary {
-					wctx.Logger.Info("fallback moderator succeeded",
-						"round", round,
-						"agent", agentName,
-						"previous_failures", triedAgents,
-					)
-					if wctx.Output != nil {
-						wctx.Output.Log("success", "analyzer",
-							fmt.Sprintf("Round %d: Fallback moderator %s succeeded (after trying: %v)", round, agentName, triedAgents))
-					}
-				}
-				return evalResult, nil
-			}
-
-			lastErr = evalErr
-
-			// Log the error with detailed context
-			wctx.Logger.Warn("moderator evaluation failed",
-				"round", round,
-				"agent", agentName,
-				"attempt", attempt,
-				"is_fallback", !isPrimary,
-				"error", evalErr,
-				"is_transient", isTransientModeratorError(evalErr),
-				"is_validation", IsModeratorValidationError(evalErr),
-			)
-
-			// Decide whether to retry same agent or move to fallback
-			if attempt < 2 && isTransientModeratorError(evalErr) {
-				if wctx.Output != nil {
-					wctx.Output.Log("warn", "analyzer",
-						fmt.Sprintf("Round %d: %s failed (%v), retrying in 30s...", round, agentName, evalErr))
-				}
-				time.Sleep(30 * time.Second)
-				continue
-			}
-
-			// If validation error or non-transient, move to next agent
-			break
-		}
-
-		// Track that we tried this agent
-		triedAgents = append(triedAgents, agentName)
+	// Try the configured moderator agent
+	primaryErr := a.tryModeratorAgent(ctx, wctx, round, outputs, primaryAgent, maxRetries, 1)
+	if primaryErr.result != nil {
+		return primaryErr.result, nil
 	}
 
-	// All agents failed - create detailed error checkpoint for debugging
+	// Primary failed — try ONE fallback agent with moderate phase enabled
+	fallbackAgent := a.pickModeratorFallback(wctx, primaryAgent)
+	if fallbackAgent != "" {
+		wctx.Logger.Info("primary moderator failed, trying fallback",
+			"round", round,
+			"primary", primaryAgent,
+			"fallback", fallbackAgent,
+			"primary_error", primaryErr.err,
+		)
+		if wctx.Output != nil {
+			wctx.Output.Log("info", "analyzer",
+				fmt.Sprintf("Round %d: Primary moderator %s failed, trying fallback %s", round, primaryAgent, fallbackAgent))
+		}
+
+		// Offset attempt numbers so file naming stays unique
+		fallbackResult := a.tryModeratorAgent(ctx, wctx, round, outputs, fallbackAgent, maxRetries, maxRetries+1)
+		if fallbackResult.result != nil {
+			if wctx.Output != nil {
+				wctx.Output.Log("success", "analyzer",
+					fmt.Sprintf("Round %d: Fallback moderator %s succeeded", round, fallbackAgent))
+			}
+			return fallbackResult.result, nil
+		}
+	}
+
+	// All attempts exhausted
+	lastErr := primaryErr.err
+	lastAgent := primaryAgent
+	if fallbackAgent != "" {
+		lastAgent = fallbackAgent
+	}
+
 	if wctx.Checkpoint != nil {
+		tried := []string{primaryAgent}
+		if fallbackAgent != "" {
+			tried = append(tried, fallbackAgent)
+		}
 		_ = wctx.Checkpoint.ErrorCheckpointWithContext(wctx.State, lastErr, service.ErrorCheckpointDetails{
 			Agent:             lastAgent,
 			Round:             round,
-			Attempt:           lastAttempt,
 			IsTransient:       isTransientModeratorError(lastErr),
 			IsValidationError: IsModeratorValidationError(lastErr),
-			FallbacksTried:    triedAgents,
-			Extra: map[string]string{
-				"total_agents":  fmt.Sprintf("%d", len(fallbackAgents)),
-				"outputs_count": fmt.Sprintf("%d", len(outputs)),
-			},
+			FallbacksTried:    tried,
 		})
 	}
 
-	// All agents failed
-	return nil, fmt.Errorf("all moderator agents failed (tried %d agents: %v, last error: %w)", len(fallbackAgents), triedAgents, lastErr)
+	if fallbackAgent != "" {
+		return nil, fmt.Errorf("moderator agents failed (primary %s, fallback %s): %w", primaryAgent, fallbackAgent, lastErr)
+	}
+	return nil, fmt.Errorf("moderator agent %s failed after %d attempts: %w", primaryAgent, maxRetries, lastErr)
 }
 
-// buildModeratorFallbackChain builds a list of agents to try for moderator evaluation.
-// Primary is the configured moderator agent, fallbacks are other agents with moderate phase enabled.
-func (a *Analyzer) buildModeratorFallbackChain(wctx *Context) []string {
-	primaryAgent := a.moderator.GetConfig().Agent
-	agents := []string{primaryAgent}
+// moderatorAttemptResult holds the outcome of trying a moderator agent.
+type moderatorAttemptResult struct {
+	result *ModeratorEvaluationResult
+	err    error
+}
 
-	// Strict allowlist: fallbacks must be explicitly enabled for the "moderate" role
-	// in the per-project phase configuration.
-	fallbackCandidates := make([]string, 0)
+// tryModeratorAgent tries a single agent up to maxRetries times, retrying only on transient errors.
+// attemptOffset is added to the attempt number for unique file naming across primary/fallback.
+func (a *Analyzer) tryModeratorAgent(ctx context.Context, wctx *Context, round int, outputs []AnalysisOutput, agentName string, maxRetries int, attemptOffset int) moderatorAttemptResult {
+	var lastErr error
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		if attempt > 1 {
+			wctx.Logger.Info("retrying moderator evaluation",
+				"round", round,
+				"agent", agentName,
+				"attempt", attempt,
+			)
+			if wctx.Output != nil {
+				wctx.Output.Log("info", "analyzer",
+					fmt.Sprintf("Round %d: Retrying moderator %s (attempt %d/%d)", round, agentName, attempt, maxRetries))
+			}
+			time.Sleep(30 * time.Second)
+		}
+
+		globalAttempt := attemptOffset + attempt - 1
+		evalResult, evalErr := a.moderator.EvaluateWithAgent(ctx, wctx, round, globalAttempt, outputs, agentName)
+		if evalErr == nil {
+			return moderatorAttemptResult{result: evalResult}
+		}
+
+		lastErr = evalErr
+		wctx.Logger.Warn("moderator evaluation failed",
+			"round", round,
+			"agent", agentName,
+			"attempt", attempt,
+			"error", evalErr,
+			"is_transient", isTransientModeratorError(evalErr),
+		)
+
+		if !isTransientModeratorError(evalErr) {
+			break
+		}
+	}
+	return moderatorAttemptResult{err: lastErr}
+}
+
+// pickModeratorFallback returns ONE fallback agent that has the "moderate" phase
+// enabled in the project config, excluding the primary. Returns "" if none available.
+func (a *Analyzer) pickModeratorFallback(wctx *Context, primaryAgent string) string {
+	var candidates []string
 	for agentName, phases := range wctx.Config.ProjectAgentPhases {
 		if agentName == primaryAgent {
 			continue
 		}
 		for _, p := range phases {
 			if p == "moderate" {
-				fallbackCandidates = append(fallbackCandidates, agentName)
+				candidates = append(candidates, agentName)
 				break
 			}
 		}
 	}
-	sort.Strings(fallbackCandidates) // Stable, predictable ordering
-	agents = append(agents, fallbackCandidates...)
-
-	// Limit to max 3 fallback agents to avoid infinite retries
-	if len(agents) > 4 {
-		agents = agents[:4]
+	if len(candidates) == 0 {
+		return ""
 	}
-
-	wctx.Logger.Debug("moderator fallback chain built",
-		"primary", primaryAgent,
-		"total_agents", len(agents),
-		"chain", agents,
-	)
-
-	return agents
+	sort.Strings(candidates)
+	return candidates[0]
 }
 
 // compactAnalysisOutput is a compact representation of AnalysisOutput for checkpoint storage.
