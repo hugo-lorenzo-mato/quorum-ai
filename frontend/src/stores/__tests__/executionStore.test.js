@@ -139,6 +139,48 @@ describe('executionStore', () => {
     expect(state.timelineByWorkflow[key][0].id).toMatch(/^syn_/);
   });
 
+  it('ignores chunk events and preserves agent status', () => {
+    const key = 'p1:wf-1';
+
+    // Set agent to 'thinking'
+    useExecutionStore.getState().ingestSSEEvent('agent_event', {
+      workflow_id: 'wf-1', event_kind: 'thinking',
+      agent: 'claude', message: 'Analyzing...', timestamp: '2026-02-07T00:00:00Z',
+    }, 'p1');
+
+    // Send chunk — should be ignored
+    useExecutionStore.getState().ingestSSEEvent('agent_event', {
+      workflow_id: 'wf-1', event_kind: 'chunk',
+      agent: 'claude', message: 'partial', timestamp: '2026-02-07T00:00:01Z',
+    }, 'p1');
+
+    const state = useExecutionStore.getState();
+    expect(state.timelineByWorkflow[key]).toHaveLength(1); // only thinking
+    expect(state.currentAgentsByWorkflow[key].claude.status).toBe('thinking');
+  });
+
+  it('ingests log SSE event correctly', () => {
+    useExecutionStore.getState().ingestSSEEvent('log', {
+      workflow_id: 'wf-1', level: 'error',
+      message: '[executor] merge failed', timestamp: '2026-02-07T00:00:00Z',
+    }, 'p1');
+
+    const tl = useExecutionStore.getState().timelineByWorkflow['p1:wf-1'];
+    expect(tl).toHaveLength(1);
+    expect(tl[0].kind).toBe('log');
+    expect(tl[0].title).toContain('error');
+  });
+
+  it('ignores log event with empty message', () => {
+    useExecutionStore.getState().ingestSSEEvent('log', {
+      workflow_id: 'wf-1', level: 'info',
+      message: '', timestamp: '2026-02-07T00:00:00Z',
+    }, 'p1');
+
+    const tl = useExecutionStore.getState().timelineByWorkflow['p1:wf-1'];
+    expect(tl || []).toHaveLength(0);
+  });
+
   it('dedupes SSE event with identical hydrated event', () => {
     const key = 'proj-1:wf-1';
     const ts = '2026-02-07T00:00:01.000Z';

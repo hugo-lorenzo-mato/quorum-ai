@@ -43,6 +43,7 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 
 	// Subscribe to project-scoped events
 	eventCh := eventBus.Subscribe()
+	defer eventBus.Unsubscribe(eventCh)
 
 	projectID := getProjectID(ctx)
 	s.logger.Info("SSE client connected", "remote_addr", r.RemoteAddr, "project_id", projectID)
@@ -284,6 +285,30 @@ func (s *Server) sendEventToClient(w http.ResponseWriter, flusher http.Flusher, 
 			"timestamp":            e.Timestamp(),
 		}
 
+	case events.PhaseStartedEvent:
+		payload = map[string]interface{}{
+			"workflow_id": e.WorkflowID(),
+			"phase":       e.Phase,
+			"timestamp":   e.Timestamp(),
+		}
+
+	case events.PhaseCompletedEvent:
+		payload = map[string]interface{}{
+			"workflow_id": e.WorkflowID(),
+			"phase":       e.Phase,
+			"duration":    e.Duration.String(),
+			"timestamp":   e.Timestamp(),
+		}
+
+	case events.LogEvent:
+		payload = map[string]interface{}{
+			"workflow_id": e.WorkflowID(),
+			"level":       e.Level,
+			"message":     e.Message,
+			"fields":      e.Fields,
+			"timestamp":   e.Timestamp(),
+		}
+
 	default:
 		// Generic event handling
 		payload = map[string]interface{}{
@@ -314,8 +339,9 @@ func NewSSEClient(eventBus *events.EventBus) *SSEClient {
 	}
 }
 
-// Close closes the SSE client.
+// Close closes the SSE client and unsubscribes from the event bus.
 func (c *SSEClient) Close() {
+	c.eventBus.Unsubscribe(c.eventCh)
 	c.cancel()
 }
 

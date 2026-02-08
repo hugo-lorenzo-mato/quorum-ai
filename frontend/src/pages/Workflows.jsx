@@ -1306,7 +1306,7 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
               activeAgents={activeAgents}
               expanded={activityExpanded}
               onToggle={() => setActivityExpanded(!activityExpanded)}
-              workflowStartTime={['running', 'cancelling'].includes(workflow.status) ? workflow.updated_at : null}
+              workflowStartTime={['running', 'cancelling'].includes(workflow.status) ? workflow.created_at : null}
             />
           </>
         )}

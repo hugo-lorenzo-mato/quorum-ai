@@ -90,6 +90,7 @@ function mergeTimeline(existing, incoming) {
 }
 
 function updateAgentStatusFromEvent(existing, eventKind, payload) {
+  if (eventKind === 'chunk') return existing || {};
   const ts = toIsoTimestamp(payload?.timestamp) || toIsoTimestamp(payload?.ts) || null;
   const data = payload?.data;
 
@@ -176,6 +177,7 @@ function entryFromSSE(eventType, data, executionId) {
 
   if (eventType === 'agent_event') {
     const eventKind = safeStr(data?.event_kind) || 'progress';
+    if (eventKind === 'chunk') return null;
     const agent = safeStr(data?.agent) || 'agent';
     const message = safeStr(data?.message);
     return {
@@ -205,6 +207,21 @@ function entryFromSSE(eventType, data, executionId) {
       event: eventType,
       phase,
       title,
+      message,
+      ts,
+      data,
+      executionId,
+    };
+  }
+
+  if (eventType === 'log') {
+    const level = safeStr(data?.level) || 'info';
+    const message = safeStr(data?.message);
+    if (!message) return null;
+    return {
+      kind: 'log',
+      event: eventType,
+      title: `Log [${level}]`,
       message,
       ts,
       data,

@@ -7,6 +7,7 @@ import {
   Loader2,
   RefreshCw,
   Filter,
+  AlertTriangle,
 } from 'lucide-react';
 
 const FILTERS = [
@@ -24,6 +25,8 @@ function iconForEntry(entry) {
       return GitBranch;
     case 'task':
       return ListChecks;
+    case 'log':
+      return AlertTriangle;
     case 'workflow':
     default:
       return WorkflowIcon;
@@ -54,6 +57,7 @@ function shouldShowEntry(filterId, entry) {
   // phases_tasks default
   // Include config provenance even in the default view (low-noise, high-value).
   if (entry.event === 'config_loaded') return true;
+  if (entry.kind === 'log') return true;
   return entry.kind === 'phase' || entry.kind === 'task';
 }
 

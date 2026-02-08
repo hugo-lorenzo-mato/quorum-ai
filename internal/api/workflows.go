@@ -1708,6 +1708,7 @@ func (s *Server) HandleAnalyzeWorkflow(w http.ResponseWriter, r *http.Request) {
 		handle.ConfirmStarted()
 		notifier.WorkflowStarted(state.Prompt)
 
+		phaseStart := time.Now()
 		err := runner.AnalyzeWithState(execCtx, state)
 		if err != nil {
 			s.logger.Error("analyze phase failed", "workflow_id", workflowID, "error", err)
@@ -1718,7 +1719,7 @@ func (s *Server) HandleAnalyzeWorkflow(w http.ResponseWriter, r *http.Request) {
 		// Load final state and emit completion
 		finalState, _ := stateManager.LoadByID(cleanupCtx, core.WorkflowID(workflowID))
 		if finalState != nil {
-			notifier.PhaseCompleted(string(core.PhaseAnalyze), time.Since(state.UpdatedAt))
+			notifier.PhaseCompleted(string(core.PhaseAnalyze), time.Since(phaseStart))
 		}
 	}()
 
@@ -1881,8 +1882,8 @@ func (s *Server) HandlePlanWorkflow(w http.ResponseWriter, r *http.Request) {
 		}()
 
 		handle.ConfirmStarted()
-		notifier.PhaseStarted(core.PhasePlan)
 
+		phaseStart := time.Now()
 		err := runner.PlanWithState(execCtx, state)
 		if err != nil {
 			s.logger.Error("plan phase failed", "workflow_id", workflowID, "error", err)
@@ -1890,7 +1891,7 @@ func (s *Server) HandlePlanWorkflow(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		notifier.PhaseCompleted(string(core.PhasePlan), time.Since(state.UpdatedAt))
+		notifier.PhaseCompleted(string(core.PhasePlan), time.Since(phaseStart))
 	}()
 
 	if err := handle.WaitForConfirmation(s.unifiedTracker.ConfirmTimeout()); err != nil {
@@ -2056,8 +2057,8 @@ func (s *Server) HandleReplanWorkflow(w http.ResponseWriter, r *http.Request) {
 		}()
 
 		handle.ConfirmStarted()
-		notifier.PhaseStarted(core.PhasePlan)
 
+		phaseStart := time.Now()
 		err := runner.ReplanWithState(execCtx, state, additionalContext)
 		if err != nil {
 			s.logger.Error("replan failed", "workflow_id", workflowID, "error", err)
@@ -2065,7 +2066,7 @@ func (s *Server) HandleReplanWorkflow(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		notifier.PhaseCompleted(string(core.PhasePlan), time.Since(state.UpdatedAt))
+		notifier.PhaseCompleted(string(core.PhasePlan), time.Since(phaseStart))
 	}()
 
 	if err := handle.WaitForConfirmation(s.unifiedTracker.ConfirmTimeout()); err != nil {
@@ -2230,8 +2231,8 @@ func (s *Server) HandleExecuteWorkflow(w http.ResponseWriter, r *http.Request) {
 		}()
 
 		handle.ConfirmStarted()
-		notifier.PhaseStarted(core.PhaseExecute)
 
+		phaseStart := time.Now()
 		err := runner.ResumeWithState(execCtx, state)
 		if err != nil {
 			s.logger.Error("execute phase failed", "workflow_id", workflowID, "error", err)
@@ -2241,7 +2242,7 @@ func (s *Server) HandleExecuteWorkflow(w http.ResponseWriter, r *http.Request) {
 
 		finalState, _ := stateManager.LoadByID(cleanupCtx, core.WorkflowID(workflowID))
 		if finalState != nil && finalState.Status == core.WorkflowStatusCompleted {
-			notifier.WorkflowCompleted(time.Since(state.UpdatedAt))
+			notifier.WorkflowCompleted(time.Since(phaseStart))
 		}
 	}()
 
