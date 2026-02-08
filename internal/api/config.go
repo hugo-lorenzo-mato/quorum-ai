@@ -819,10 +819,14 @@ func issuesToResponse(cfg *config.IssuesConfig) IssuesConfigResponse {
 	}
 
 	return IssuesConfigResponse{
-		Enabled:      cfg.Enabled,
-		Provider:     cfg.Provider,
-		AutoGenerate: cfg.AutoGenerate,
-		Timeout:      cfg.Timeout,
+		Enabled:        cfg.Enabled,
+		Provider:       cfg.Provider,
+		AutoGenerate:   cfg.AutoGenerate,
+		Timeout:        cfg.Timeout,
+		Mode:           cfg.Mode,
+		DraftDirectory: cfg.DraftDirectory,
+		Repository:     cfg.Repository,
+		ParentTemplate: cfg.ParentTemplate,
 		Template: IssueTemplateConfigResponse{
 			Language:           cfg.Template.Language,
 			Tone:               cfg.Template.Tone,
@@ -839,11 +843,14 @@ func issuesToResponse(cfg *config.IssuesConfig) IssuesConfigResponse {
 			ProjectID: cfg.GitLab.ProjectID,
 		},
 		Generator: IssueGeneratorConfigResponse{
-			Enabled:       cfg.Generator.Enabled,
-			Agent:         cfg.Generator.Agent,
-			Model:         cfg.Generator.Model,
-			Summarize:     cfg.Generator.Summarize,
-			MaxBodyLength: cfg.Generator.MaxBodyLength,
+			Enabled:           cfg.Generator.Enabled,
+			Agent:             cfg.Generator.Agent,
+			Model:             cfg.Generator.Model,
+			Summarize:         cfg.Generator.Summarize,
+			MaxBodyLength:     cfg.Generator.MaxBodyLength,
+			ReasoningEffort:   cfg.Generator.ReasoningEffort,
+			Instructions:      cfg.Generator.Instructions,
+			TitleInstructions: cfg.Generator.TitleInstructions,
 		},
 	}
 }
@@ -1289,6 +1296,18 @@ func applyIssuesUpdates(cfg *config.IssuesConfig, update *IssuesConfigUpdate) {
 	if update.Timeout != nil {
 		cfg.Timeout = *update.Timeout
 	}
+	if update.Mode != nil {
+		cfg.Mode = *update.Mode
+	}
+	if update.DraftDirectory != nil {
+		cfg.DraftDirectory = *update.DraftDirectory
+	}
+	if update.Repository != nil {
+		cfg.Repository = *update.Repository
+	}
+	if update.ParentTemplate != nil {
+		cfg.ParentTemplate = *update.ParentTemplate
+	}
 	if update.Labels != nil {
 		cfg.Labels = *update.Labels
 	}
@@ -1354,5 +1373,14 @@ func applyIssueGeneratorUpdates(cfg *config.IssueGeneratorConfig, update *IssueG
 	}
 	if update.MaxBodyLength != nil {
 		cfg.MaxBodyLength = *update.MaxBodyLength
+	}
+	if update.ReasoningEffort != nil {
+		cfg.ReasoningEffort = *update.ReasoningEffort
+	}
+	if update.Instructions != nil {
+		cfg.Instructions = *update.Instructions
+	}
+	if update.TitleInstructions != nil {
+		cfg.TitleInstructions = *update.TitleInstructions
 	}
 }

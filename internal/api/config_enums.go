@@ -27,6 +27,7 @@ type EnumsResponse struct {
 	IssueProviders    []string `json:"issue_providers"`
 	TemplateLanguages []string `json:"template_languages"`
 	TemplateTones     []string `json:"template_tones"`
+	IssueModes        []string `json:"issue_modes"`
 }
 
 // handleGetEnums returns all enum values for UI dropdowns.
@@ -53,6 +54,7 @@ func (s *Server) handleGetEnums(w http.ResponseWriter, _ *http.Request) {
 		IssueProviders:      core.IssueProviders,
 		TemplateLanguages:   core.IssueLanguages,
 		TemplateTones:       core.IssueTones,
+		IssueModes:          core.IssueModes,
 	}
 
 	respondJSON(w, http.StatusOK, enums)

@@ -390,3 +390,12 @@ var IssueTones = []string{
 	IssueToneTechnical,
 	IssueToneConcise,
 }
+
+// Issue creation modes
+const (
+	IssueModeDirect = "direct"
+	IssueModeAgent  = "agent"
+)
+
+// IssueModes defines the valid issue creation modes.
+var IssueModes = []string{IssueModeDirect, IssueModeAgent}
