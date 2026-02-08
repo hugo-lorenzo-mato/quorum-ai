@@ -1,5 +1,5 @@
 import { useConfigField, useConfigSelect } from '../../../hooks/useConfigField';
-import { getModelsForAgent, useEnums } from '../../../lib/agents';
+import { getModelsForAgent, getReasoningLevels, useEnums } from '../../../lib/agents';
 import {
   SettingSection,
   SelectSetting,
@@ -24,8 +24,12 @@ export function IssuesTab() {
 function GeneralIssuesSection() {
   const enabled = useConfigField('issues.enabled');
   const provider = useConfigSelect('issues.provider', 'issue_providers');
+  const mode = useConfigSelect('issues.mode', 'issue_modes');
   const autoGenerate = useConfigField('issues.auto_generate');
   const timeout = useConfigField('issues.timeout');
+  const draftDirectory = useConfigField('issues.draft_directory');
+  const repository = useConfigField('issues.repository');
+  const parentTemplate = useConfigField('issues.parent_template');
 
   return (
     <SettingSection
@@ -56,6 +60,20 @@ function GeneralIssuesSection() {
         disabled={provider.disabled || !enabled.value}
       />
 
+      <SelectSetting
+        label="Generation Mode"
+        description="How issues are generated from workflow artifacts"
+        tooltip="'Direct' copies workflow artifacts as-is (~12ms). 'Agent' uses an LLM to reformat and polish content (~30-50s)."
+        value={mode.value || 'direct'}
+        onChange={mode.onChange}
+        options={mode.options.length > 0 ? mode.options : [
+          { value: 'direct', label: 'Direct' },
+          { value: 'agent', label: 'Agent' },
+        ]}
+        error={mode.error}
+        disabled={mode.disabled || !enabled.value}
+      />
+
       <DurationInputSetting
         label="Timeout"
         tooltip="Maximum time allowed for issue generation. Example: '5m' for 5 minutes. AI-based generation may take longer."
@@ -74,6 +92,39 @@ function GeneralIssuesSection() {
         error={autoGenerate.error}
         disabled={autoGenerate.disabled || !enabled.value}
       />
+
+      <TextInputSetting
+        label="Repository"
+        description="Override the auto-detected repository (owner/repo)"
+        tooltip="Specify a GitHub repository in 'owner/repo' format. Leave empty to auto-detect from git remote."
+        placeholder="(auto-detect from git remote)"
+        value={repository.value || ''}
+        onChange={repository.onChange}
+        error={repository.error}
+        disabled={repository.disabled || !enabled.value}
+      />
+
+      <TextInputSetting
+        label="Draft Directory"
+        description="Directory where draft issue files are saved"
+        tooltip="Relative path from the project root where draft markdown files are stored."
+        placeholder=".quorum/issues"
+        value={draftDirectory.value || ''}
+        onChange={draftDirectory.onChange}
+        error={draftDirectory.error}
+        disabled={draftDirectory.disabled || !enabled.value}
+      />
+
+      <TextInputSetting
+        label="Parent Template"
+        description="Template file for the main/parent issue"
+        tooltip="Path to a custom markdown template for the parent issue. Leave empty to use the built-in template."
+        placeholder="(use default template)"
+        value={parentTemplate.value || ''}
+        onChange={parentTemplate.onChange}
+        error={parentTemplate.error}
+        disabled={parentTemplate.disabled || !enabled.value}
+      />
     </SettingSection>
   );
 }
@@ -88,12 +139,18 @@ function GeneratorSection() {
   const model = useConfigField('issues.generator.model');
   const summarize = useConfigField('issues.generator.summarize');
   const maxBodyLength = useConfigField('issues.generator.max_body_length');
+  const reasoningEffort = useConfigField('issues.generator.reasoning_effort');
+  const instructions = useConfigField('issues.generator.instructions');
+  const titleInstructions = useConfigField('issues.generator.title_instructions');
 
   const isDisabled = !issuesEnabled.value;
 
   // Get model options based on selected agent
   const selectedAgent = agent.value || 'claude';
   const modelOptions = getModelsForAgent(selectedAgent);
+
+  // Get reasoning effort options for selected agent/model
+  const reasoningOptions = getReasoningLevels(selectedAgent, model.value || undefined);
 
   return (
     <SettingSection
@@ -140,6 +197,20 @@ function GeneratorSection() {
         disabled={model.disabled || isDisabled || !enabled.value}
       />
 
+      <SelectSetting
+        label="Reasoning Effort"
+        description="Controls how much reasoning the AI uses during generation"
+        tooltip="Higher reasoning effort produces more thoughtful content but takes longer and costs more."
+        value={reasoningEffort.value || ''}
+        onChange={reasoningEffort.onChange}
+        options={[
+          { value: '', label: 'Default' },
+          ...reasoningOptions,
+        ]}
+        error={reasoningEffort.error}
+        disabled={reasoningEffort.disabled || isDisabled || !enabled.value}
+      />
+
       <ToggleSetting
         label="Summarize Content"
         description="Create concise summaries instead of copying full text"
@@ -161,6 +232,60 @@ function GeneratorSection() {
         disabled={maxBodyLength.disabled || isDisabled || !enabled.value}
         type="number"
       />
+
+      <div className="py-3">
+        <div className="flex items-center gap-2 mb-2">
+          <label className={`text-sm font-medium ${isDisabled || !enabled.value ? 'text-muted-foreground' : 'text-foreground'}`}>
+            Body Instructions
+          </label>
+        </div>
+        <p className="text-xs text-muted-foreground mb-2">
+          Custom instructions for the AI when generating issue body content
+        </p>
+        <textarea
+          value={instructions.value || ''}
+          onChange={(e) => instructions.onChange(e.target.value)}
+          disabled={instructions.disabled || isDisabled || !enabled.value}
+          placeholder="Add specific instructions for how the AI should write issue bodies..."
+          rows={3}
+          className={`
+            w-full px-3 py-2
+            border rounded-lg bg-background text-foreground
+            transition-colors resize-y
+            focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent
+            disabled:opacity-50 disabled:cursor-not-allowed
+            placeholder:text-muted-foreground
+            ${instructions.error ? 'border-error' : 'border-input hover:border-muted-foreground'}
+          `}
+        />
+      </div>
+
+      <div className="py-3">
+        <div className="flex items-center gap-2 mb-2">
+          <label className={`text-sm font-medium ${isDisabled || !enabled.value ? 'text-muted-foreground' : 'text-foreground'}`}>
+            Title Instructions
+          </label>
+        </div>
+        <p className="text-xs text-muted-foreground mb-2">
+          Custom instructions for the AI when generating issue titles
+        </p>
+        <textarea
+          value={titleInstructions.value || ''}
+          onChange={(e) => titleInstructions.onChange(e.target.value)}
+          disabled={titleInstructions.disabled || isDisabled || !enabled.value}
+          placeholder="Add specific instructions for how the AI should write issue titles..."
+          rows={2}
+          className={`
+            w-full px-3 py-2
+            border rounded-lg bg-background text-foreground
+            transition-colors resize-y
+            focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent
+            disabled:opacity-50 disabled:cursor-not-allowed
+            placeholder:text-muted-foreground
+            ${titleInstructions.error ? 'border-error' : 'border-input hover:border-muted-foreground'}
+          `}
+        />
+      </div>
     </SettingSection>
   );
 }

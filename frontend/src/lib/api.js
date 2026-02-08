@@ -229,6 +229,49 @@ export const workflowApi = {
     }),
   }),
 
+  /**
+   * List draft issue files for a workflow.
+   * @param {string} workflowId - Workflow ID
+   * @returns {Promise<{workflow_id: string, drafts: Array}>}
+   */
+  listDrafts: (workflowId) => request(`/workflows/${workflowId}/issues/drafts`),
+
+  /**
+   * Edit a specific draft issue.
+   * @param {string} workflowId - Workflow ID
+   * @param {string} taskId - Task ID identifying the draft
+   * @param {Object} updates - Fields to update (title, body, labels, assignees)
+   */
+  editDraft: (workflowId, taskId, updates) => request(`/workflows/${workflowId}/issues/drafts/${encodeURIComponent(taskId)}`, {
+    method: 'PUT',
+    body: JSON.stringify(updates),
+  }),
+
+  /**
+   * Publish draft issues to GitHub/GitLab.
+   * @param {string} workflowId - Workflow ID
+   * @param {Object} options - Publish options
+   * @param {boolean} [options.dryRun=false] - Preview without publishing
+   * @param {boolean} [options.linkIssues=true] - Link sub-issues to main
+   * @param {string[]} [options.taskIds] - Specific task IDs to publish (empty = all)
+   */
+  publishDrafts: (workflowId, options = {}) => request(`/workflows/${workflowId}/issues/publish`, {
+    method: 'POST',
+    body: JSON.stringify({
+      dry_run: options.dryRun ?? false,
+      link_issues: options.linkIssues ?? true,
+      task_ids: options.taskIds || [],
+    }),
+    timeout: 180000,
+  }),
+
+  /**
+   * Get issues generation/publishing status for a workflow.
+   * @param {string} workflowId - Workflow ID
+   * @returns {Promise<{workflow_id: string, has_drafts: boolean, draft_count: number, has_published: boolean, published_count: number}>}
+   */
+  getIssuesStatus: (workflowId) => request(`/workflows/${workflowId}/issues/status`),
+
   // Workflow attachments
   listAttachments: (id) => request(`/workflows/${id}/attachments`),
 
