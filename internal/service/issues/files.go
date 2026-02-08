@@ -150,7 +150,7 @@ func (g *Generator) CreateIssuesFromFiles(ctx context.Context, workflowID string
 	}
 
 	var mainIssue *core.Issue
-	var mappingEntries []issueMappingEntry
+	var mappingEntries []IssueMappingEntry
 
 	// Create main issue
 	if mainInput != nil {
@@ -192,7 +192,7 @@ func (g *Generator) CreateIssuesFromFiles(ctx context.Context, workflowID string
 			}
 			mainIssue = issue
 			result.IssueSet.MainIssue = mainIssue
-			mappingEntries = append(mappingEntries, issueMappingEntry{
+			mappingEntries = append(mappingEntries, IssueMappingEntry{
 				TaskID:      mainInput.TaskID,
 				FilePath:    filePath,
 				IssueNumber: issue.Number,
@@ -253,7 +253,7 @@ func (g *Generator) CreateIssuesFromFiles(ctx context.Context, workflowID string
 		if parentNum > 0 && issue.ParentIssue == 0 {
 			result.Errors = append(result.Errors, fmt.Errorf("linking sub-issue #%d to parent #%d failed", issue.Number, parentNum))
 		}
-		mappingEntries = append(mappingEntries, issueMappingEntry{
+		mappingEntries = append(mappingEntries, IssueMappingEntry{
 			TaskID:      input.TaskID,
 			FilePath:    filePath,
 			IssueNumber: issue.Number,
@@ -397,13 +397,15 @@ func (g *Generator) readIssueFile(workflowID string, input IssueInput) (title, b
 	return title, body, relPath, nil
 }
 
-type issueMapping struct {
+// IssueMapping holds the mapping between draft files and published issues.
+type IssueMapping struct {
 	WorkflowID  string              `json:"workflow_id"`
 	GeneratedAt time.Time           `json:"generated_at"`
-	Issues      []issueMappingEntry `json:"issues"`
+	Issues      []IssueMappingEntry `json:"issues"`
 }
 
-type issueMappingEntry struct {
+// IssueMappingEntry records a single published issue mapping.
+type IssueMappingEntry struct {
 	TaskID      string `json:"task_id,omitempty"`
 	FilePath    string `json:"file_path"`
 	IssueNumber int    `json:"issue_number"`
@@ -412,8 +414,8 @@ type issueMappingEntry struct {
 	ParentIssue int    `json:"parent_issue,omitempty"`
 }
 
-func (g *Generator) writeIssueMappingFile(workflowID string, entries []issueMappingEntry) error {
-	mapping := issueMapping{
+func (g *Generator) writeIssueMappingFile(workflowID string, entries []IssueMappingEntry) error {
+	mapping := IssueMapping{
 		WorkflowID:  workflowID,
 		GeneratedAt: time.Now(),
 	}

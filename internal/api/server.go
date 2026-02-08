@@ -190,11 +190,10 @@ func (s *Server) Handler() http.Handler {
 func (s *Server) setupRouter() chi.Router {
 	r := chi.NewRouter()
 
-	// Middleware
+	// Middleware (timeout applied per-route-group, not globally, to allow longer timeouts for AI operations)
 	r.Use(chimiddleware.RequestID)
 	r.Use(chimiddleware.RealIP)
 	r.Use(chimiddleware.Recoverer)
-	r.Use(chimiddleware.Timeout(60 * time.Second))
 	r.Use(s.loggingMiddleware)
 
 	// CORS for frontend access
@@ -222,49 +221,58 @@ func (s *Server) setupRouter() chi.Router {
 
 		// Workflow endpoints
 		r.Route("/workflows", func(r chi.Router) {
-			r.Get("/", s.handleListWorkflows)
-			r.Post("/", s.handleCreateWorkflow)
-			r.Get("/active", s.handleGetActiveWorkflow)
+			// List/create/active endpoints with standard timeout
+			r.With(chimiddleware.Timeout(60 * time.Second)).Get("/", s.handleListWorkflows)
+			r.With(chimiddleware.Timeout(60 * time.Second)).Post("/", s.handleCreateWorkflow)
+			r.With(chimiddleware.Timeout(60 * time.Second)).Get("/active", s.handleGetActiveWorkflow)
 
 			r.Route("/{workflowID}", func(r chi.Router) {
-				r.Get("/", s.handleGetWorkflow)
-				r.Put("/", s.handleUpdateWorkflow)
-				r.Patch("/", s.handleUpdateWorkflow)
-				r.Delete("/", s.handleDeleteWorkflow)
-				r.Post("/activate", s.handleActivateWorkflow)
-				r.Post("/run", s.HandleRunWorkflow)
-				r.Post("/cancel", s.handleCancelWorkflow)
-				r.Post("/pause", s.handlePauseWorkflow)
-				r.Post("/resume", s.handleResumeWorkflow)
-				r.Post("/force-stop", s.handleForceStopWorkflow)
-				r.Get("/download", s.handleDownloadWorkflow)
+				// Standard workflow endpoints with default timeout
+				r.With(chimiddleware.Timeout(60*time.Second)).Get("/", s.handleGetWorkflow)
+				r.With(chimiddleware.Timeout(60*time.Second)).Put("/", s.handleUpdateWorkflow)
+				r.With(chimiddleware.Timeout(60*time.Second)).Patch("/", s.handleUpdateWorkflow)
+				r.With(chimiddleware.Timeout(60*time.Second)).Delete("/", s.handleDeleteWorkflow)
+				r.With(chimiddleware.Timeout(60*time.Second)).Post("/activate", s.handleActivateWorkflow)
+				r.With(chimiddleware.Timeout(60*time.Second)).Post("/run", s.HandleRunWorkflow)
+				r.With(chimiddleware.Timeout(60*time.Second)).Post("/cancel", s.handleCancelWorkflow)
+				r.With(chimiddleware.Timeout(60*time.Second)).Post("/pause", s.handlePauseWorkflow)
+				r.With(chimiddleware.Timeout(60*time.Second)).Post("/resume", s.handleResumeWorkflow)
+				r.With(chimiddleware.Timeout(60*time.Second)).Post("/force-stop", s.handleForceStopWorkflow)
+				r.With(chimiddleware.Timeout(60*time.Second)).Get("/download", s.handleDownloadWorkflow)
 
 				// Phase-specific execution endpoints
-				r.Post("/analyze", s.HandleAnalyzeWorkflow)
-				r.Post("/plan", s.HandlePlanWorkflow)
-				r.Post("/replan", s.HandleReplanWorkflow)
-				r.Post("/execute", s.HandleExecuteWorkflow)
+				r.With(chimiddleware.Timeout(60*time.Second)).Post("/analyze", s.HandleAnalyzeWorkflow)
+				r.With(chimiddleware.Timeout(60*time.Second)).Post("/plan", s.HandlePlanWorkflow)
+				r.With(chimiddleware.Timeout(60*time.Second)).Post("/replan", s.HandleReplanWorkflow)
+				r.With(chimiddleware.Timeout(60*time.Second)).Post("/execute", s.HandleExecuteWorkflow)
 
 				// Task endpoints nested under workflow
 				r.Route("/tasks", func(r chi.Router) {
+					r.Use(chimiddleware.Timeout(60 * time.Second))
 					r.Get("/", s.handleListTasks)
 					r.Get("/{taskID}", s.handleGetTask)
 				})
 
 				// Workflow attachments
 				r.Route("/attachments", func(r chi.Router) {
+					r.Use(chimiddleware.Timeout(60 * time.Second))
 					r.Get("/", s.handleListWorkflowAttachments)
 					r.Post("/", s.handleUploadWorkflowAttachments)
 					r.Get("/{attachmentID}/download", s.handleDownloadWorkflowAttachment)
 					r.Delete("/{attachmentID}", s.handleDeleteWorkflowAttachment)
 				})
 
-				// Issue generation endpoints
+				// Issue generation endpoints — longer timeout for AI generation
 				r.Route("/issues", func(r chi.Router) {
+					r.Use(chimiddleware.Timeout(300 * time.Second))
 					r.Post("/", s.handleGenerateIssues)
 					r.Get("/preview", s.handlePreviewIssues)
 					r.Post("/files", s.handleSaveIssuesFiles)
 					r.Post("/single", s.handleCreateSingleIssue)
+					r.Get("/drafts", s.handleListDrafts)
+					r.Put("/drafts/{taskId}", s.handleEditDraft)
+					r.Post("/publish", s.handlePublishDrafts)
+					r.Get("/status", s.handleIssuesStatus)
 				})
 			})
 		})
@@ -278,6 +286,7 @@ func (s *Server) setupRouter() chi.Router {
 
 		// Chat endpoints
 		r.Route("/chat", func(r chi.Router) {
+			r.Use(chimiddleware.Timeout(60 * time.Second))
 			r.Post("/sessions", s.chatHandler.CreateSession)
 			r.Get("/sessions", s.chatHandler.ListSessions)
 			r.Get("/sessions/{sessionID}", s.chatHandler.GetSession)
@@ -295,6 +304,7 @@ func (s *Server) setupRouter() chi.Router {
 
 		// File browser endpoints
 		r.Route("/files", func(r chi.Router) {
+			r.Use(chimiddleware.Timeout(60 * time.Second))
 			r.Get("/", s.handleListFiles)
 			r.Get("/content", s.handleGetFileContent)
 			r.Get("/tree", s.handleGetFileTree)
@@ -302,6 +312,7 @@ func (s *Server) setupRouter() chi.Router {
 
 		// Configuration endpoints
 		r.Route("/config", func(r chi.Router) {
+			r.Use(chimiddleware.Timeout(60 * time.Second))
 			r.Get("/", s.handleGetConfig)
 			r.Patch("/", s.handleUpdateConfig)
 			r.Post("/validate", s.handleValidateConfig)
