@@ -280,6 +280,12 @@ func (l *Loader) setDefaults() {
 	l.v.SetDefault("workflow.max_retries", 3)
 	l.v.SetDefault("workflow.dry_run", false)
 	l.v.SetDefault("workflow.sandbox", true) // Security: sandbox enabled by default
+	l.v.SetDefault("workflow.heartbeat.enabled", true) // Always true; kept for backwards compat
+	l.v.SetDefault("workflow.heartbeat.interval", "30s")
+	l.v.SetDefault("workflow.heartbeat.stale_threshold", "2m")
+	l.v.SetDefault("workflow.heartbeat.check_interval", "60s")
+	l.v.SetDefault("workflow.heartbeat.auto_resume", true)
+	l.v.SetDefault("workflow.heartbeat.max_resumes", 1)
 
 	// Phase defaults
 	// Analyze phase

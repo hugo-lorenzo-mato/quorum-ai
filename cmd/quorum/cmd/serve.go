@@ -225,9 +225,9 @@ func runServe(_ *cobra.Command, _ []string) error {
 		)
 	}
 
-	// Create heartbeat manager for zombie workflow detection (if enabled)
+	// Create heartbeat manager for zombie workflow detection (always active).
 	var heartbeatManager *workflow.HeartbeatManager
-	if quorumCfg != nil && quorumCfg.Workflow.Heartbeat.Enabled && stateManager != nil {
+	if quorumCfg != nil && stateManager != nil {
 		heartbeatCfg := buildHeartbeatConfig(quorumCfg.Workflow.Heartbeat)
 		heartbeatManager = workflow.NewHeartbeatManager(heartbeatCfg, stateManager, logger.Logger)
 		logger.Info("heartbeat manager initialized",

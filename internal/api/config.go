@@ -694,7 +694,7 @@ func configToFullResponse(cfg *config.Config) FullConfigResponse {
 			Sandbox:    cfg.Workflow.Sandbox,
 			DenyTools:  denyTools,
 			Heartbeat: HeartbeatConfigResponse{
-				Enabled:        cfg.Workflow.Heartbeat.Enabled,
+				Enabled:        true, // Heartbeat is always active; field kept for API compat
 				Interval:       cfg.Workflow.Heartbeat.Interval,
 				StaleThreshold: cfg.Workflow.Heartbeat.StaleThreshold,
 				CheckInterval:  cfg.Workflow.Heartbeat.CheckInterval,
@@ -980,9 +980,7 @@ func applyWorkflowUpdates(cfg *config.WorkflowConfig, update *WorkflowConfigUpda
 }
 
 func applyHeartbeatUpdates(cfg *config.HeartbeatConfig, update *HeartbeatConfigUpdate) {
-	if update.Enabled != nil {
-		cfg.Enabled = *update.Enabled
-	}
+	// Enabled is intentionally ignored — heartbeat is always active.
 	if update.Interval != nil {
 		cfg.Interval = *update.Interval
 	}

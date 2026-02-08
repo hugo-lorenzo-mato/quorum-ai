@@ -177,6 +177,14 @@ func (e *WorkflowExecutor) executeAsync(
 	workflowID string,
 	handle *ExecutionHandle,
 ) {
+	defer func() {
+		if r := recover(); r != nil {
+			e.logger.Error("panic in workflow execution",
+				"workflow_id", workflowID,
+				"panic", fmt.Sprintf("%v", r))
+		}
+	}()
+
 	// Capture cleanup context at the start to preserve ProjectContext for FinishExecution.
 	// This ensures cleanup happens in the correct project's DB even if the execution times out.
 	cleanupCtx := context.WithoutCancel(ctx)

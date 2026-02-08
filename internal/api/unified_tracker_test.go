@@ -375,3 +375,41 @@ func TestUnifiedTracker_IsHeartbeatHealthy_NilHeartbeat(t *testing.T) {
 		t.Fatal("expected IsHeartbeatHealthy to return true when heartbeat is nil")
 	}
 }
+
+func TestUnifiedTracker_CleanupOrphanedWorkflows_DetectsFinishedButUncleaned(t *testing.T) {
+	sm := testutil.NewMockStateManager()
+	id := core.WorkflowID("wf-uncleaned")
+	sm.SetState(&core.WorkflowState{
+		WorkflowDefinition: core.WorkflowDefinition{
+			WorkflowID: id,
+		},
+		WorkflowRun: core.WorkflowRun{
+			Status: core.WorkflowStatusRunning,
+		},
+	})
+
+	tracker := NewUnifiedTracker(sm, nil, newTestLogger(), DefaultUnifiedTrackerConfig())
+
+	// Create a handle with a closed Done() channel (simulates goroutine that finished
+	// but FinishExecution was never called, e.g. due to a panic).
+	handle := newTestHandle(id)
+	handle.MarkDone() // Close the done channel
+	tracker.mu.Lock()
+	tracker.handles[id] = handle
+	tracker.mu.Unlock()
+
+	ctx := context.Background()
+	cleaned, err := tracker.CleanupOrphanedWorkflows(ctx)
+	if err != nil {
+		t.Fatalf("CleanupOrphanedWorkflows() error = %v", err)
+	}
+
+	if cleaned != 1 {
+		t.Errorf("CleanupOrphanedWorkflows() cleaned = %d, want 1", cleaned)
+	}
+
+	// Handle should be removed after cleanup
+	if tracker.IsRunningInMemory(id) {
+		t.Fatal("expected handle to be removed after cleanup of finished-but-uncleaned workflow")
+	}
+}

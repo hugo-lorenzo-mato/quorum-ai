@@ -378,6 +378,33 @@ func TestLoader_DefaultConfigFile(t *testing.T) {
 	}
 }
 
+func TestDefaultConfig_HeartbeatEnabled(t *testing.T) {
+	loader := NewLoader()
+	cfg, err := loader.Load()
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+
+	if !cfg.Workflow.Heartbeat.Enabled {
+		t.Error("Expected workflow.heartbeat.enabled to default to true")
+	}
+	if cfg.Workflow.Heartbeat.Interval != "30s" {
+		t.Errorf("Workflow.Heartbeat.Interval = %q, want %q", cfg.Workflow.Heartbeat.Interval, "30s")
+	}
+	if cfg.Workflow.Heartbeat.StaleThreshold != "2m" {
+		t.Errorf("Workflow.Heartbeat.StaleThreshold = %q, want %q", cfg.Workflow.Heartbeat.StaleThreshold, "2m")
+	}
+	if cfg.Workflow.Heartbeat.CheckInterval != "60s" {
+		t.Errorf("Workflow.Heartbeat.CheckInterval = %q, want %q", cfg.Workflow.Heartbeat.CheckInterval, "60s")
+	}
+	if !cfg.Workflow.Heartbeat.AutoResume {
+		t.Error("Expected workflow.heartbeat.auto_resume to default to true")
+	}
+	if cfg.Workflow.Heartbeat.MaxResumes != 1 {
+		t.Errorf("Workflow.Heartbeat.MaxResumes = %d, want %d", cfg.Workflow.Heartbeat.MaxResumes, 1)
+	}
+}
+
 func TestDefaultConfig_SandboxEnabled(t *testing.T) {
 	loader := NewLoader()
 	cfg, err := loader.Load()

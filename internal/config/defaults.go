@@ -124,4 +124,18 @@ git:
     auto_merge: true      # Merge PR automatically (disable for manual review)
     pr_base_branch: ""    # Target branch (empty = repository default)
     merge_strategy: squash  # merge | squash | rebase
+
+# Workflow execution settings
+workflow:
+  timeout: 16h
+  max_retries: 3
+  sandbox: true
+  heartbeat:
+    # Heartbeat monitoring is always active (cannot be disabled).
+    # Intervals can be tuned below.
+    interval: 30s
+    stale_threshold: 2m
+    check_interval: 60s
+    auto_resume: true
+    max_resumes: 1
 `

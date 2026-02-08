@@ -574,8 +574,24 @@ func (t *UnifiedTracker) CleanupOrphanedWorkflows(ctx context.Context) (int, err
 
 	cleaned := 0
 	for _, id := range runningIDs {
-		// If tracked in-memory, skip.
+		// If tracked in-memory, check if the goroutine finished without cleanup.
 		if t.IsRunningInMemory(id) {
+			handle, _ := t.GetHandle(id)
+			if handle != nil {
+				select {
+				case <-handle.Done():
+					// Goroutine finished but FinishExecution never called
+					t.logger.Warn("detected finished-but-uncleaned workflow, forcing cleanup",
+						"workflow_id", id)
+					if err := t.ForceStop(ctx, id); err != nil {
+						t.logger.Error("failed to force-stop uncleaned workflow",
+							"workflow_id", id, "error", err)
+					}
+					cleaned++
+				default:
+					// Goroutine still alive, skip
+				}
+			}
 			continue
 		}
 

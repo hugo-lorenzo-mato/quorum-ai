@@ -44,20 +44,19 @@ workflow:
   sandbox: true
   # Tools to deny during execution
   deny_tools: []
-  # Heartbeat system for zombie workflow detection and recovery
+  # Heartbeat system for zombie workflow detection and recovery.
+  # Heartbeat monitoring is always active and cannot be disabled.
   heartbeat:
-    # Enable heartbeat monitoring
-    enabled: true
     # How often to write heartbeats
     interval: 30s
     # When to consider a workflow zombie (no heartbeat)
     stale_threshold: 2m
     # How often to check for zombie workflows
     check_interval: 60s
-    # Automatically resume zombie workflows
-    auto_resume: false
+    # Automatically resume zombie workflows (at least once before failing)
+    auto_resume: true
     # Maximum auto-resume attempts per workflow
-    max_resumes: 3
+    max_resumes: 1
 
 # Phase configuration
 phases:

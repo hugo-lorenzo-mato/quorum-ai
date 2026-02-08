@@ -701,7 +701,28 @@ func (a *Analyzer) runVnRefinement(ctx context.Context, wctx *Context, round int
 			// Get this agent's previous analysis
 			prevOutput, hasPrevious := previousByAgent[name]
 			if !hasPrevious {
-				// If this agent didn't participate before, treat as new V1
+				// Agent didn't participate in previous round (e.g., timed out and output
+				// wasn't saved in checkpoint). Check if a V(n) output file already exists
+				// on disk from a previous attempt before falling back to V1 analysis.
+				model := ResolvePhaseModel(wctx.Config, name, core.PhaseAnalyze, "")
+				if wctx.Report != nil && wctx.Report.IsEnabled() {
+					vnPath := wctx.Report.VnAnalysisPath(name, model, round)
+					absVnPath := wctx.ResolveFilePath(vnPath)
+					if cached, loadErr := loadExistingAnalysis(absVnPath, name, model); loadErr == nil {
+						wctx.Logger.Info("recovered V(n) analysis from disk (agent missing from checkpoint)",
+							"agent", name, "round", round, "path", absVnPath)
+						if wctx.Output != nil {
+							wctx.Output.Log("info", "analyzer", fmt.Sprintf("Recovered V%d analysis for %s from disk", round, name))
+						}
+						cached.AgentName = fmt.Sprintf("v%d-%s", round, name)
+						mu.Lock()
+						outputs = append(outputs, *cached)
+						mu.Unlock()
+						return
+					}
+				}
+
+				// No V(n) file found — fall back to V1 analysis
 				output, err := a.runAnalysisWithAgent(ctx, wctx, name)
 				if err != nil {
 					mu.Lock()
