@@ -32,6 +32,9 @@ const useIssuesStore = create(
 
       // Submission state
       submitting: false,
+      publishingProgress: 0,
+      publishingTotal: 0,
+      publishingMessage: '',
       error: null,
 
       // AI generation info (for debugging)
@@ -229,14 +232,18 @@ const useIssuesStore = create(
       /**
        * Update generation progress (for streaming UI)
        */
-      updateGenerationProgress: (progress, issue = null) => {
+      updateGenerationProgress: (progress, issue = null, total = null) => {
         const { generatedIssues } = get();
-        set({
+        const next = {
           generationProgress: progress,
           generatedIssues: issue
             ? [...generatedIssues, issue]
             : generatedIssues,
-        });
+        };
+        if (typeof total === 'number' && Number.isFinite(total) && total >= 0) {
+          next.generationTotal = total;
+        }
+        set(next);
       },
 
       /**
@@ -264,7 +271,28 @@ const useIssuesStore = create(
       /**
        * Start submission
        */
-      setSubmitting: (submitting) => set({ submitting }),
+      setSubmitting: (submitting) => set({
+        submitting,
+        publishingProgress: submitting ? 0 : 0,
+        publishingTotal: submitting ? 0 : 0,
+        publishingMessage: submitting ? '' : '',
+      }),
+
+      /**
+       * Update publishing progress (from SSE)
+       */
+      updatePublishingProgress: (progress, total = null, message = null) => {
+        const next = {
+          publishingProgress: Number(progress) || 0,
+        };
+        if (typeof total === 'number' && Number.isFinite(total) && total >= 0) {
+          next.publishingTotal = total;
+        }
+        if (message != null) {
+          next.publishingMessage = String(message || '');
+        }
+        set(next);
+      },
 
       /**
        * Set error
@@ -318,6 +346,9 @@ const useIssuesStore = create(
         generationTotal: 0,
         generatedIssues: [],
         submitting: false,
+        publishingProgress: 0,
+        publishingTotal: 0,
+        publishingMessage: '',
         error: null,
         aiUsed: false,
         aiErrors: [],

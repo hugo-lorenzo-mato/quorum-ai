@@ -39,6 +39,8 @@ type Generator struct {
 
 	// LLM generation cache - prevents regenerating files within same workflow
 	llmGenerationCache map[string][]IssuePreview // workflowID -> generated issues
+
+	progress ProgressReporter // Optional: progress reporting for SSE/UI
 }
 
 // NewGenerator creates a new issue generator.
@@ -53,6 +55,25 @@ func NewGenerator(client core.IssueClient, cfg config.IssuesConfig, projectRoot,
 		agents:             agents,
 		llmGenerationCache: make(map[string][]IssuePreview),
 	}
+}
+
+// SetProgressReporter sets an optional progress reporter for generation/publishing progress.
+func (g *Generator) SetProgressReporter(r ProgressReporter) {
+	g.progress = r
+}
+
+func (g *Generator) emitIssuesGenerationProgress(workflowID, stage string, current, total int, issue *ProgressIssue, message string) {
+	if g.progress == nil {
+		return
+	}
+	g.progress.OnIssuesGenerationProgress(workflowID, stage, current, total, issue, message)
+}
+
+func (g *Generator) emitIssuesPublishingProgress(workflowID, stage string, current, total int, issue *ProgressIssue, issueNumber int, dryRun bool, message string) {
+	if g.progress == nil {
+		return
+	}
+	g.progress.OnIssuesPublishingProgress(workflowID, stage, current, total, issue, issueNumber, dryRun, message)
 }
 
 // getProjectRoot returns the project root, falling back to os.Getwd() if not set.
@@ -315,6 +336,20 @@ func (g *Generator) Generate(ctx context.Context, opts GenerateOptions) (*Genera
 	}
 	mainLabels := ensureEpicLabel(labels)
 
+	createdCount := 0
+	totalToPublish := 0
+
+	// Pre-read task files so we can emit deterministic publishing progress.
+	var tasks []TaskInfo
+	if opts.CreateSubIssues {
+		var err error
+		tasks, err = g.readTaskFiles()
+		if err != nil {
+			result.Errors = append(result.Errors, fmt.Errorf("reading task files: %w", err))
+		}
+		totalToPublish += len(tasks)
+	}
+
 	// Read consolidated analysis for main issue
 	var consolidatedContent string
 	var mainIssue *core.Issue
@@ -324,6 +359,15 @@ func (g *Generator) Generate(ctx context.Context, opts GenerateOptions) (*Genera
 		consolidatedContent, err = g.readConsolidatedAnalysis()
 		if err != nil {
 			result.Errors = append(result.Errors, fmt.Errorf("reading consolidated analysis: %w", err))
+		}
+
+		if consolidatedContent != "" {
+			totalToPublish++
+		}
+
+		// Emit a "started" publishing event once we know the total.
+		if totalToPublish > 0 {
+			g.emitIssuesPublishingProgress(opts.WorkflowID, "started", 0, totalToPublish, nil, 0, opts.DryRun, "issue publishing started")
 		}
 
 		if consolidatedContent != "" {
@@ -362,6 +406,12 @@ func (g *Generator) Generate(ctx context.Context, opts GenerateOptions) (*Genera
 					Assignees:   assignees,
 					IsMainIssue: true,
 				})
+				createdCount++
+				g.emitIssuesPublishingProgress(opts.WorkflowID, "progress", createdCount, totalToPublish, &ProgressIssue{
+					Title:       mainTitle,
+					TaskID:      "main",
+					IsMainIssue: true,
+				}, 0, true, "")
 			} else {
 				mainIssue, err = g.client.CreateIssue(ctx, core.CreateIssueOptions{
 					Title:     mainTitle,
@@ -373,17 +423,21 @@ func (g *Generator) Generate(ctx context.Context, opts GenerateOptions) (*Genera
 					return nil, fmt.Errorf("creating main issue: %w", err)
 				}
 				result.IssueSet.MainIssue = mainIssue
+				createdCount++
+				g.emitIssuesPublishingProgress(opts.WorkflowID, "progress", createdCount, totalToPublish, &ProgressIssue{
+					Title:       mainIssue.Title,
+					TaskID:      "main",
+					IsMainIssue: true,
+				}, mainIssue.Number, false, "")
 			}
 		}
+	} else if totalToPublish > 0 {
+		// No main issue: still emit a started event for sub-issue publishing.
+		g.emitIssuesPublishingProgress(opts.WorkflowID, "started", 0, totalToPublish, nil, 0, opts.DryRun, "issue publishing started")
 	}
 
 	// Read and create sub-issues from task files
 	if opts.CreateSubIssues {
-		tasks, err := g.readTaskFiles()
-		if err != nil {
-			result.Errors = append(result.Errors, fmt.Errorf("reading task files: %w", err))
-		}
-
 		for _, task := range tasks {
 			var taskTitle, taskBody string
 			var taskAISucceeded bool
@@ -419,6 +473,12 @@ func (g *Generator) Generate(ctx context.Context, opts GenerateOptions) (*Genera
 					IsMainIssue: false,
 					TaskID:      task.ID,
 				})
+				createdCount++
+				g.emitIssuesPublishingProgress(opts.WorkflowID, "progress", createdCount, totalToPublish, &ProgressIssue{
+					Title:       taskTitle,
+					TaskID:      task.ID,
+					IsMainIssue: false,
+				}, 0, true, "")
 			} else {
 				parentNum := 0
 				if opts.LinkIssues && mainIssue != nil {
@@ -437,8 +497,20 @@ func (g *Generator) Generate(ctx context.Context, opts GenerateOptions) (*Genera
 					continue
 				}
 				result.IssueSet.SubIssues = append(result.IssueSet.SubIssues, subIssue)
+				createdCount++
+				g.emitIssuesPublishingProgress(opts.WorkflowID, "progress", createdCount, totalToPublish, &ProgressIssue{
+					Title:       subIssue.Title,
+					TaskID:      task.ID,
+					IsMainIssue: false,
+				}, subIssue.Number, false, "")
 			}
 		}
+	}
+
+	// Make sure we always end with a "completed" progress update when we had a defined total.
+	if totalToPublish > 0 {
+		finalCount := createdCount
+		g.emitIssuesPublishingProgress(opts.WorkflowID, "completed", finalCount, totalToPublish, nil, 0, opts.DryRun, "issue publishing completed")
 	}
 
 	return result, nil
@@ -914,6 +986,61 @@ func (g *Generator) GenerateIssueFiles(ctx context.Context, workflowID string) (
 		expectedByName[exp.FileName] = exp
 		tracker.AddExpected(exp.FileName, exp.TaskID)
 	}
+	totalExpected := len(tracker.ExpectedFiles)
+	emitted := make(map[string]bool, totalExpected)
+	estimatedProgress := 0
+
+	parseProgressIssue := func(fileName string) *ProgressIssue {
+		filePath := filepath.Join(issuesDirAbs, fileName)
+		content, err := os.ReadFile(filePath)
+		if err != nil {
+			return &ProgressIssue{Title: fileName, FileName: fileName}
+		}
+
+		if fm, _, fmErr := parseDraftContent(string(content)); fmErr == nil && fm != nil {
+			return &ProgressIssue{
+				Title:       fm.Title,
+				TaskID:      fm.TaskID,
+				FileName:    fileName,
+				IsMainIssue: fm.IsMainIssue,
+			}
+		}
+
+		title, _ := parseIssueMarkdown(string(content))
+		return &ProgressIssue{
+			Title:       title,
+			TaskID:      "",
+			FileName:    fileName,
+			IsMainIssue: strings.Contains(fileName, "consolidated") || strings.HasPrefix(fileName, "00-"),
+		}
+	}
+
+	emitNewFiles := func() {
+		names := make([]string, 0, len(tracker.GeneratedFiles))
+		for name := range tracker.GeneratedFiles {
+			names = append(names, name)
+		}
+		sort.Slice(names, func(i, j int) bool {
+			return extractFileNumber(names[i]) < extractFileNumber(names[j])
+		})
+		for _, name := range names {
+			if emitted[name] {
+				continue
+			}
+			emitted[name] = true
+			cur := len(emitted)
+			if estimatedProgress > cur {
+				cur = estimatedProgress
+			}
+			g.emitIssuesGenerationProgress(workflowID, "file_generated", cur, totalExpected, parseProgressIssue(name), "")
+		}
+		// Always emit an aggregate progress update (helps UIs that don't track per-file events).
+		cur := len(emitted)
+		if estimatedProgress > cur {
+			cur = estimatedProgress
+		}
+		g.emitIssuesGenerationProgress(workflowID, "progress", cur, totalExpected, nil, "")
+	}
 
 	resilienceCfg := g.buildLLMResilienceConfig(g.config.Generator.Resilience, logger)
 	executor := NewResilientLLMExecutor(agent, resilienceCfg)
@@ -928,6 +1055,8 @@ func (g *Generator) GenerateIssueFiles(ctx context.Context, workflowID string) (
 		"output_dir", issuesDirRel,
 		"total_tasks", len(taskFiles),
 		"max_attempts", maxAttempts)
+
+	g.emitIssuesGenerationProgress(workflowID, "started", 0, totalExpected, nil, "issue generation started")
 
 	if logger != nil {
 		deadline, hasDeadline := ctx.Deadline()
@@ -954,6 +1083,15 @@ func (g *Generator) GenerateIssueFiles(ctx context.Context, workflowID string) (
 
 		if len(missing) == 0 {
 			break
+		}
+
+		// Baseline estimate: everything not in "missing" is considered already generated.
+		// This helps keep progress monotonic across retries.
+		if totalExpected > 0 {
+			estimatedProgress = totalExpected - len(missing)
+			if estimatedProgress < 0 {
+				estimatedProgress = 0
+			}
 		}
 
 		var tasksToGenerate []service.IssueTaskFile
@@ -1012,6 +1150,12 @@ func (g *Generator) GenerateIssueFiles(ctx context.Context, workflowID string) (
 				"tasks_in_batch", len(batch),
 				"prompt_size", len(prompt),
 				"includes_consolidated", consolidatedForBatch != "")
+			cur := len(emitted)
+			if estimatedProgress > cur {
+				cur = estimatedProgress
+			}
+			g.emitIssuesGenerationProgress(workflowID, "batch_started", cur, totalExpected, nil,
+				fmt.Sprintf("batch %d/%d (attempt %d)", batchNum+1, totalBatches, attempt))
 
 			if logger != nil {
 				taskIDs := make([]string, 0, len(batch))
@@ -1047,6 +1191,12 @@ func (g *Generator) GenerateIssueFiles(ctx context.Context, workflowID string) (
 						"batch", batchNum+1,
 						"error", err)
 				}
+				cur := len(emitted)
+				if estimatedProgress > cur {
+					cur = estimatedProgress
+				}
+				g.emitIssuesGenerationProgress(workflowID, "batch_failed", cur, totalExpected, nil,
+					fmt.Sprintf("batch %d/%d failed (attempt %d)", batchNum+1, totalBatches, attempt))
 				continue
 			}
 
@@ -1061,11 +1211,22 @@ func (g *Generator) GenerateIssueFiles(ctx context.Context, workflowID string) (
 					"batch", batchNum+1,
 					"output_length", len(result.Output))
 			}
+			// Update an estimated progress count so the UI can show incremental movement even before we scan the filesystem.
+			estimatedProgress += len(batch)
+			if includeMain && batchNum == 0 {
+				estimatedProgress++
+			}
+			if estimatedProgress > totalExpected && totalExpected > 0 {
+				estimatedProgress = totalExpected
+			}
+			g.emitIssuesGenerationProgress(workflowID, "batch_completed", estimatedProgress, totalExpected, nil,
+				fmt.Sprintf("batch %d/%d completed (attempt %d)", batchNum+1, totalBatches, attempt))
 		}
 
 		if _, err := g.scanGeneratedIssueFilesWithTracker(issuesDirAbs, tracker); err != nil {
 			return nil, fmt.Errorf("scanning generated issue files: %w", err)
 		}
+		emitNewFiles()
 
 		missingNames := tracker.GetMissingFiles()
 		sort.Strings(missingNames)
@@ -1095,6 +1256,7 @@ func (g *Generator) GenerateIssueFiles(ctx context.Context, workflowID string) (
 	if err != nil {
 		return nil, fmt.Errorf("scanning generated issue files: %w", err)
 	}
+	emitNewFiles()
 
 	if len(files) == 0 {
 		return nil, fmt.Errorf("AI did not generate any issue files (no files found in %s)", issuesDirAbs)
@@ -1114,6 +1276,7 @@ func (g *Generator) GenerateIssueFiles(ctx context.Context, workflowID string) (
 		logger.Info("issue generation completed", "total_files", len(files))
 	}
 
+	g.emitIssuesGenerationProgress(workflowID, "completed", len(emitted), totalExpected, nil, "issue generation completed")
 	return files, nil
 }
 

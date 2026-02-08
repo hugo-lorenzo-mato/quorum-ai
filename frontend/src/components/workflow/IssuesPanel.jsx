@@ -20,7 +20,6 @@ export default function IssuesPanel({ workflow }) {
     setWorkflow,
     loadIssues,
     startGeneration,
-    updateGenerationProgress,
     cancelGeneration,
   } = useIssuesStore();
 
@@ -81,8 +80,8 @@ export default function IssuesPanel({ workflow }) {
         setPreviewLoading(false);
       }
     } else {
-      // AI mode: show loading, start generation with streaming effect
-      startGeneration('ai', 10); // Estimated 10 issues
+      // AI mode: show loading and rely on SSE progress events
+      startGeneration('ai', 0);
       navigate(`/workflows/${workflow.id}/issues`);
 
       // Generate in background with AI
@@ -95,13 +94,7 @@ export default function IssuesPanel({ workflow }) {
           console.warn('AI generation errors:', response.ai_errors);
         }
 
-        // Simulate streaming by revealing issues progressively
-        for (let i = 0; i < issues.length; i++) {
-          await new Promise(resolve => setTimeout(resolve, 200)); // 200ms delay per issue
-          updateGenerationProgress(i + 1, issues[i]);
-        }
-
-        // Pass AI info to store
+        // Finalize with the full issue set (SSE handles incremental progress).
         useIssuesStore.getState().loadIssues(issues, {
           ai_used: response.ai_used,
           ai_errors: response.ai_errors,
@@ -120,7 +113,6 @@ export default function IssuesPanel({ workflow }) {
     setWorkflow,
     loadIssues,
     startGeneration,
-    updateGenerationProgress,
     cancelGeneration,
     navigate,
     notifyError,

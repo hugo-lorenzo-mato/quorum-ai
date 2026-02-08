@@ -6,6 +6,7 @@ import useAgentStore from '../stores/agentStore';
 import useExecutionStore from '../stores/executionStore';
 import useKanbanStore from '../stores/kanbanStore';
 import useProjectStore from '../stores/projectStore';
+import useIssuesStore from '../stores/issuesStore';
 import { workflowApi } from '../lib/api';
 
 const SSE_BASE_URL = '/api/v1/sse/events';
@@ -67,6 +68,10 @@ export default function useSSE() {
   // Agent event handler
   const handleAgentEvent = useAgentStore(state => state.handleAgentEvent);
   const ingestSSEEvent = useExecutionStore(state => state.ingestSSEEvent);
+
+  // Issues store (for issue generation/publishing progress)
+  const updateGenerationProgress = useIssuesStore(state => state.updateGenerationProgress);
+  const updatePublishingProgress = useIssuesStore(state => state.updatePublishingProgress);
 
   // Kanban event handlers
   const handleKanbanWorkflowMoved = useKanbanStore(state => state.handleWorkflowMoved);
@@ -206,6 +211,41 @@ export default function useSSE() {
         notifyError('Kanban engine circuit breaker opened - too many failures');
         break;
 
+      // Issues progress events
+      case 'issues_generation_progress': {
+        const st = useIssuesStore.getState();
+        if (st.generating && st.workflowId && st.workflowId === data?.workflow_id) {
+          const total = typeof data?.total === 'number' ? data.total : null;
+          const current = typeof data?.current === 'number' ? data.current : st.generationProgress;
+
+          if (data?.stage === 'file_generated') {
+            const issue = {
+              title: data?.title || data?.file_name || 'Generated issue',
+              body: '',
+              labels: [],
+              assignees: [],
+              is_main_issue: !!data?.is_main_issue,
+              task_id: data?.task_id || null,
+              file_path: data?.file_name || null,
+            };
+            updateGenerationProgress(current, issue, total);
+          } else {
+            updateGenerationProgress(current, null, total);
+          }
+        }
+        break;
+      }
+
+      case 'issues_publishing_progress': {
+        const st = useIssuesStore.getState();
+        if (st.submitting && st.workflowId && st.workflowId === data?.workflow_id) {
+          const total = typeof data?.total === 'number' ? data.total : null;
+          const current = typeof data?.current === 'number' ? data.current : 0;
+          updatePublishingProgress(current, total, data?.message || null);
+        }
+        break;
+      }
+
       // Connection events
       case 'connected':
         setSSEConnected(true);
@@ -246,6 +286,8 @@ export default function useSSE() {
     stopPolling,
     notifyInfo,
     notifyError,
+    updateGenerationProgress,
+    updatePublishingProgress,
     currentProjectId,
   ]);
 
@@ -318,6 +360,8 @@ export default function useSSE() {
       'task_skipped',
       'task_retry',
       'agent_event',
+      'issues_generation_progress',
+      'issues_publishing_progress',
       'kanban_workflow_moved',
       'kanban_execution_started',
       'kanban_execution_completed',
