@@ -40,6 +40,13 @@ function timeStr(ts) {
   }
 }
 
+function formatTokens(count) {
+  if (count == null) return '';
+  if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M`;
+  if (count >= 1_000) return `${(count / 1_000).toFixed(1)}K`;
+  return String(count);
+}
+
 function shouldShowEntry(filterId, entry) {
   if (filterId === 'all') return true;
   if (filterId === 'agents') return entry.kind === 'agent';
@@ -155,6 +162,11 @@ export default function ExecutionTimeline({
                     {entry.message ? (
                       <p className="text-xs text-muted-foreground truncate mt-0.5">{entry.message}</p>
                     ) : null}
+                    {entry.kind === 'agent' && entry.event === 'completed' && entry.data?.tokens_in != null && (
+                      <span className="inline-block mt-0.5 font-mono text-[10px] text-muted-foreground bg-muted/50 px-1.5 py-0.5 rounded" data-testid="timeline-tokens">
+                        {formatTokens(entry.data.tokens_in)}in/{formatTokens(entry.data.tokens_out)}out
+                      </span>
+                    )}
                   </div>
                   <span className="text-xs text-muted-foreground whitespace-nowrap">{ts}</span>
                 </div>

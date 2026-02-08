@@ -2,12 +2,50 @@ package cli
 
 import (
 	"encoding/json"
+	"fmt"
 	"regexp"
 	"strings"
 	"time"
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 )
+
+// truncateDataValue truncates a string to maxLen, appending "...[truncated]" if needed.
+func truncateDataValue(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "...[truncated]"
+}
+
+// truncateDataAny handles any-typed values (e.g. content.Input): if small leaves intact,
+// if large serializes to JSON and truncates.
+func truncateDataAny(v any, maxLen int) any {
+	if v == nil {
+		return nil
+	}
+	switch val := v.(type) {
+	case string:
+		return truncateDataValue(val, maxLen)
+	case map[string]any:
+		// Small maps: keep as-is for structured display
+		if len(val) <= 3 {
+			return val
+		}
+		// Larger maps: serialize and truncate
+		b, err := json.Marshal(val)
+		if err != nil {
+			return truncateDataValue(fmt.Sprintf("%v", val), maxLen)
+		}
+		return truncateDataValue(string(b), maxLen)
+	default:
+		b, err := json.Marshal(val)
+		if err != nil {
+			return truncateDataValue(fmt.Sprintf("%v", val), maxLen)
+		}
+		return truncateDataValue(string(b), maxLen)
+	}
+}
 
 // =============================================================================
 // Claude Stream Parser
@@ -74,19 +112,27 @@ func (p *ClaudeStreamParser) ParseLine(line string) []core.AgentEvent {
 			for _, content := range event.Message.Content {
 				switch content.Type {
 				case "tool_use":
+					data := map[string]any{
+						"tool": content.Name,
+					}
+					if content.Input != nil {
+						data["args"] = truncateDataAny(content.Input, 500)
+					}
 					events = append(events, core.NewAgentEvent(
 						core.AgentEventToolUse,
 						"claude",
 						"Using tool: "+content.Name,
-					).WithData(map[string]any{
-						"tool": content.Name,
-					}))
+					).WithData(data))
 				case "thinking":
+					thinkData := map[string]any{}
+					if content.Text != "" {
+						thinkData["thinking_text"] = truncateDataValue(content.Text, 200)
+					}
 					events = append(events, core.NewAgentEvent(
 						core.AgentEventThinking,
 						"claude",
 						"Thinking...",
-					))
+					).WithData(thinkData))
 				case "text":
 					if content.Text != "" {
 						events = append(events, core.NewAgentEvent(
@@ -191,20 +237,28 @@ func (p *GeminiStreamParser) ParseLine(line string) []core.AgentEvent {
 		}))
 
 	case "tool_result":
+		resultData := map[string]any{
+			"tool": event.ToolName,
+		}
+		if event.ToolResult != "" {
+			resultData["result"] = truncateDataValue(event.ToolResult, 500)
+		}
 		events = append(events, core.NewAgentEvent(
 			core.AgentEventProgress,
 			"gemini",
 			"Tool completed: "+event.ToolName,
-		).WithData(map[string]any{
-			"tool": event.ToolName,
-		}))
+		).WithData(resultData))
 
 	case "thinking":
+		gemThinkData := map[string]any{}
+		if event.Text != "" {
+			gemThinkData["thinking_text"] = truncateDataValue(event.Text, 200)
+		}
 		events = append(events, core.NewAgentEvent(
 			core.AgentEventThinking,
 			"gemini",
 			"Thinking...",
-		))
+		).WithData(gemThinkData))
 
 	case "text":
 		if event.Text != "" {
@@ -264,11 +318,12 @@ type codexStreamEvent struct {
 }
 
 type codexItem struct {
-	ID      string `json:"id,omitempty"`
-	Type    string `json:"type"`              // "command_execution", "reasoning", "agent_message", "file_edit"
-	Command string `json:"command,omitempty"` // for command_execution
-	Text    string `json:"text,omitempty"`    // for reasoning, agent_message
-	Status  string `json:"status,omitempty"`  // "in_progress", "completed"
+	ID       string `json:"id,omitempty"`
+	Type     string `json:"type"`              // "command_execution", "reasoning", "agent_message", "file_edit"
+	Command  string `json:"command,omitempty"` // for command_execution
+	Text     string `json:"text,omitempty"`    // for reasoning, agent_message
+	Status   string `json:"status,omitempty"`  // "in_progress", "completed"
+	ExitCode *int   `json:"exit_code,omitempty"`
 }
 
 type codexUsage struct {
@@ -355,23 +410,38 @@ func (p *CodexStreamParser) ParseLine(line string) []core.AgentEvent {
 				if len(text) > 50 {
 					text = text[:50] + "..."
 				}
+				reasonData := map[string]any{}
+				if event.Item.Text != "" {
+					reasonData["reasoning_text"] = truncateDataValue(event.Item.Text, 200)
+				}
 				events = append(events, core.NewAgentEvent(
 					core.AgentEventThinking,
 					"codex",
 					text,
-				))
+				).WithData(reasonData))
 			case "command_execution":
+				cmdData := map[string]any{}
+				if event.Item.Command != "" {
+					cmdData["command"] = event.Item.Command
+				}
+				if event.Item.ExitCode != nil {
+					cmdData["exit_code"] = *event.Item.ExitCode
+				}
 				events = append(events, core.NewAgentEvent(
 					core.AgentEventProgress,
 					"codex",
 					"Command completed",
-				))
+				).WithData(cmdData))
 			case "agent_message":
+				msgData := map[string]any{}
+				if event.Item.Text != "" {
+					msgData["text"] = truncateDataValue(event.Item.Text, 500)
+				}
 				events = append(events, core.NewAgentEvent(
 					core.AgentEventProgress,
 					"codex",
 					"Response complete",
-				))
+				).WithData(msgData))
 			}
 		}
 
