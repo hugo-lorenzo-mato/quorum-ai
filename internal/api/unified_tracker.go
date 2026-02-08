@@ -306,21 +306,27 @@ func (t *UnifiedTracker) FinishExecution(ctx context.Context, workflowID core.Wo
 
 // IsRunning checks if a workflow is currently running.
 // Checks in-memory first (fast path), then DB (authoritative).
+// When a handle exists but the heartbeat is unhealthy, the workflow is considered
+// not running (zombie). When heartbeat is disabled, trusts the handle.
 // The StateManager is obtained from the context if a ProjectContext is available.
 func (t *UnifiedTracker) IsRunning(ctx context.Context, workflowID core.WorkflowID) bool {
-	// Fast path: check in-memory
 	t.mu.RLock()
 	_, exists := t.handles[workflowID]
 	t.mu.RUnlock()
 
 	if exists {
+		// Handle exists, but verify the heartbeat is healthy (when available).
+		// A stale heartbeat means the execution goroutine is hung.
+		// When heartbeat is nil (disabled), this check is skipped and we
+		// trust the handle — zombies must be resolved via manual ForceStop.
+		if t.heartbeat != nil && !t.heartbeat.IsHealthy(workflowID) {
+			return false
+		}
 		return true
 	}
 
-	// Get project-scoped StateManager if available
-	stateManager := GetStateManagerFromContext(ctx, t.stateManager)
-
 	// Slow path: check DB (another process might be running it)
+	stateManager := GetStateManagerFromContext(ctx, t.stateManager)
 	isRunning, err := stateManager.IsWorkflowRunning(ctx, workflowID)
 	if err != nil {
 		t.logger.Warn("failed to check running status in DB",
@@ -338,6 +344,15 @@ func (t *UnifiedTracker) IsRunningInMemory(workflowID core.WorkflowID) bool {
 	defer t.mu.RUnlock()
 	_, exists := t.handles[workflowID]
 	return exists
+}
+
+// IsHeartbeatHealthy checks if a workflow's heartbeat is being written successfully.
+// When heartbeat is disabled (nil), returns true (assume healthy — no data to say otherwise).
+func (t *UnifiedTracker) IsHeartbeatHealthy(workflowID core.WorkflowID) bool {
+	if t.heartbeat == nil {
+		return true // No heartbeat system → assume healthy
+	}
+	return t.heartbeat.IsHealthy(workflowID)
 }
 
 // GetHandle returns the ExecutionHandle for a running workflow.
@@ -404,22 +419,39 @@ func (t *UnifiedTracker) Resume(workflowID core.WorkflowID) error {
 	return nil
 }
 
-// ForceStop forcibly stops a workflow, even if it doesn't have an active handle.
-// This is used for zombie workflows that appear running in the DB but have no in-memory state
-// (e.g., after server restart). Unlike Cancel, ForceStop works without a ControlPlane.
+// ForceStop forcibly stops a workflow, cleaning up both in-memory and DB state.
+// This is the primary recovery mechanism for zombie workflows. Unlike Cancel,
+// ForceStop works without a ControlPlane and removes the in-memory handle to
+// prevent the "already running" error on subsequent /run requests.
 func (t *UnifiedTracker) ForceStop(ctx context.Context, workflowID core.WorkflowID) error {
-	// Try graceful cancel if handle exists
-	t.mu.RLock()
+	// Extract and remove handle from in-memory tracking.
+	t.mu.Lock()
 	handle, exists := t.handles[workflowID]
-	t.mu.RUnlock()
+	if exists {
+		delete(t.handles, workflowID)
+	}
+	t.mu.Unlock()
 
+	// Cancel execution if handle was present.
 	if exists && handle != nil {
 		if cp := handle.ControlPlane; cp != nil && !cp.IsCancelled() {
 			cp.Cancel()
 			t.logger.Info("workflow cancellation requested via force-stop", "workflow_id", workflowID)
 		}
-		// Also cancel the execution context to interrupt in-flight work.
 		handle.CancelExec()
+		handle.MarkDone()
+
+		// Wait briefly for the goroutine to finish its own cleanup (FinishExecution).
+		select {
+		case <-handle.Done():
+		case <-time.After(2 * time.Second):
+			t.logger.Debug("force-stop: goroutine did not finish within grace period", "workflow_id", workflowID)
+		}
+	}
+
+	// Stop heartbeat tracking.
+	if t.heartbeat != nil {
+		t.heartbeat.Stop(workflowID)
 	}
 
 	// Get state manager from context or use default
@@ -444,7 +476,7 @@ func (t *UnifiedTracker) ForceStop(ctx context.Context, workflowID core.Workflow
 		// Only update if still running
 		if state.Status == core.WorkflowStatusRunning {
 			state.Status = core.WorkflowStatusFailed
-			state.Error = "Workflow forcibly stopped (orphaned after server restart)"
+			state.Error = "Workflow forcibly stopped (orphaned or zombie)"
 			state.UpdatedAt = time.Now()
 			state.Checkpoints = append(state.Checkpoints, core.Checkpoint{
 				ID:        fmt.Sprintf("force-stop-%d", time.Now().UnixNano()),

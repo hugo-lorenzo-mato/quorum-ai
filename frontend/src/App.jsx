@@ -1,19 +1,31 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { useEffect } from 'react';
+import { useEffect, lazy, Suspense } from 'react';
 import Layout from './components/Layout';
-import Dashboard from './pages/Dashboard';
-import Workflows from './pages/Workflows';
-import Templates from './pages/Templates';
-import IssuesEditor from './pages/IssuesEditor';
-import Chat from './pages/Chat';
-import Settings from './pages/Settings';
-import GlobalSettings from './pages/GlobalSettings';
-import Kanban from './pages/Kanban';
-import Projects from './pages/Projects';
 import useSSE from './hooks/useSSE';
 import { useUIStore } from './stores';
 import { useConfigStore } from './stores/configStore';
 import { loadEnums } from './lib/agents';
+
+// Lazy load page components
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const Workflows = lazy(() => import('./pages/Workflows'));
+const Templates = lazy(() => import('./pages/Templates'));
+const IssuesEditor = lazy(() => import('./pages/IssuesEditor'));
+const Chat = lazy(() => import('./pages/Chat'));
+const Settings = lazy(() => import('./pages/Settings'));
+const GlobalSettings = lazy(() => import('./pages/GlobalSettings'));
+const Kanban = lazy(() => import('./pages/Kanban'));
+const Projects = lazy(() => import('./pages/Projects'));
+
+// Loading fallback component
+const PageLoader = () => (
+  <div className="flex items-center justify-center h-[calc(100vh-10rem)]">
+    <div className="relative">
+      <div className="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin"></div>
+      <div className="mt-4 text-sm font-medium text-muted-foreground animate-pulse text-center">Loading...</div>
+    </div>
+  </div>
+);
 
 function AppContent() {
   // Initialize SSE connection
@@ -37,18 +49,20 @@ function AppContent() {
 
   return (
     <Layout>
-      <Routes>
-        <Route path="/" element={<Dashboard />} />
-        <Route path="/workflows" element={<Workflows />} />
-        <Route path="/workflows/:id" element={<Workflows />} />
-        <Route path="/workflows/:id/issues" element={<IssuesEditor />} />
-        <Route path="/templates" element={<Templates />} />
-        <Route path="/kanban" element={<Kanban />} />
-        <Route path="/chat" element={<Chat />} />
-        <Route path="/projects" element={<Projects />} />
-        <Route path="/settings" element={<Settings />} />
-        <Route path="/settings/global" element={<GlobalSettings />} />
-      </Routes>
+      <Suspense fallback={<PageLoader />}>
+        <Routes>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/workflows" element={<Workflows />} />
+          <Route path="/workflows/:id" element={<Workflows />} />
+          <Route path="/workflows/:id/issues" element={<IssuesEditor />} />
+          <Route path="/templates" element={<Templates />} />
+          <Route path="/kanban" element={<Kanban />} />
+          <Route path="/chat" element={<Chat />} />
+          <Route path="/projects" element={<Projects />} />
+          <Route path="/settings" element={<Settings />} />
+          <Route path="/settings/global" element={<GlobalSettings />} />
+        </Routes>
+      </Suspense>
     </Layout>
   );
 }

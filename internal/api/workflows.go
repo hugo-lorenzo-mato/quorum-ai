@@ -138,6 +138,17 @@ func (s *Server) isWorkflowRunning(ctx context.Context, workflowID string) bool 
 	return false
 }
 
+// isZombieWorkflow checks if a workflow is tracked but has an unhealthy heartbeat.
+// When heartbeat is disabled, this always returns false — zombie detection relies
+// on heartbeat being enabled, or users must manually ForceStop.
+func (s *Server) isZombieWorkflow(_ context.Context, workflowID string) bool {
+	if s.unifiedTracker == nil {
+		return false
+	}
+	wfID := core.WorkflowID(workflowID)
+	return s.unifiedTracker.IsRunningInMemory(wfID) && !s.unifiedTracker.IsHeartbeatHealthy(wfID)
+}
+
 // handleListWorkflows returns all workflows.
 func (s *Server) handleListWorkflows(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -1213,7 +1224,14 @@ func (s *Server) handleResumeWorkflow(w http.ResponseWriter, r *http.Request) {
 			if strings.Contains(err.Error(), "not running") {
 				respondError(w, http.StatusConflict, "workflow is not running")
 			} else if strings.Contains(err.Error(), "not paused") {
-				respondError(w, http.StatusConflict, "workflow is not paused")
+				ctx := r.Context()
+				if s.isZombieWorkflow(ctx, workflowID) {
+					respondError(w, http.StatusConflict,
+						"workflow appears to be a zombie (stale heartbeat). Use POST /force-stop then re-run")
+				} else {
+					respondError(w, http.StatusConflict,
+						"workflow is not paused. If the workflow appears stuck, use POST /force-stop to recover")
+				}
 			} else {
 				respondError(w, http.StatusInternalServerError, err.Error())
 			}

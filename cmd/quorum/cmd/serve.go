@@ -357,6 +357,15 @@ func runServe(_ *cobra.Command, _ []string) error {
 		}
 	}
 
+	// Also clean up any orphaned running_workflows entries (safety net)
+	if unifiedTracker != nil {
+		if cleaned, err := unifiedTracker.CleanupOrphanedWorkflows(ctx); err != nil {
+			logger.Warn("failed to clean up orphaned workflows", slog.String("error", err.Error()))
+		} else if cleaned > 0 {
+			logger.Info("cleaned up orphaned running_workflows entries", slog.Int("count", cleaned))
+		}
+	}
+
 	// Migrate existing workflows to Kanban board (assign to refinement column if not set)
 	if stateManager != nil {
 		if migrated, err := migrateWorkflowsToKanban(ctx, stateManager, logger.Logger); err != nil {
@@ -393,10 +402,17 @@ func runServe(_ *cobra.Command, _ []string) error {
 			// Use HandleZombie for proper auto-resume support when executor is available
 			if workflowExecutor != nil {
 				heartbeatManager.HandleZombie(state, workflowExecutor)
+			} else if unifiedTracker != nil {
+				// No executor available — use ForceStop for complete cleanup
+				if err := unifiedTracker.ForceStop(ctx, state.WorkflowID); err != nil {
+					logger.Error("failed to force-stop zombie workflow",
+						slog.String("workflow_id", string(state.WorkflowID)),
+						slog.String("error", err.Error()))
+				}
 			} else {
-				// Fallback: mark as failed when executor is not available
+				// Fallback: mark as failed when neither executor nor tracker is available
 				state.Status = core.WorkflowStatusFailed
-				state.Error = "Zombie workflow detected (stale heartbeat, executor unavailable)"
+				state.Error = "Zombie workflow detected (stale heartbeat, no executor/tracker)"
 				state.UpdatedAt = time.Now()
 				if err := stateManager.Save(ctx, state); err != nil {
 					logger.Error("failed to save zombie state", slog.String("error", err.Error()))
