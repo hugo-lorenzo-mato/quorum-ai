@@ -11,12 +11,12 @@ import (
 )
 
 func (g *Generator) openIssuesLogger(workflowID string) (*slog.Logger, func() error, error) {
-	cwd, err := os.Getwd()
+	root, err := g.getProjectRoot()
 	if err != nil {
-		return nil, nil, fmt.Errorf("getting working directory: %w", err)
+		return nil, nil, fmt.Errorf("getting project root: %w", err)
 	}
 
-	logDir := filepath.Join(cwd, ".quorum", "logs")
+	logDir := filepath.Join(root, ".quorum", "logs")
 	if err := os.MkdirAll(logDir, 0o755); err != nil {
 		return nil, nil, fmt.Errorf("creating log directory: %w", err)
 	}

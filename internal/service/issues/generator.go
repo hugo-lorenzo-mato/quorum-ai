@@ -30,26 +30,72 @@ type IssueInput struct {
 
 // Generator creates GitHub/GitLab issues from workflow artifacts.
 type Generator struct {
-	client    core.IssueClient
-	config    config.IssuesConfig
-	reportDir string
-	agents    core.AgentRegistry      // Optional: for LLM-based generation
-	prompts   *service.PromptRenderer // Lazy-initialized prompt renderer
+	client      core.IssueClient
+	config      config.IssuesConfig
+	projectRoot string                  // Project root directory (replaces os.Getwd)
+	reportDir   string
+	agents      core.AgentRegistry      // Optional: for LLM-based generation
+	prompts     *service.PromptRenderer // Lazy-initialized prompt renderer
 
 	// LLM generation cache - prevents regenerating files within same workflow
 	llmGenerationCache map[string][]IssuePreview // workflowID -> generated issues
 }
 
 // NewGenerator creates a new issue generator.
+// projectRoot is the project root directory; if empty, falls back to os.Getwd().
 // agents can be nil if LLM-based generation is not needed.
-func NewGenerator(client core.IssueClient, cfg config.IssuesConfig, reportDir string, agents core.AgentRegistry) *Generator {
+func NewGenerator(client core.IssueClient, cfg config.IssuesConfig, projectRoot, reportDir string, agents core.AgentRegistry) *Generator {
 	return &Generator{
 		client:             client,
 		config:             cfg,
+		projectRoot:        projectRoot,
 		reportDir:          reportDir,
 		agents:             agents,
 		llmGenerationCache: make(map[string][]IssuePreview),
 	}
+}
+
+// getProjectRoot returns the project root, falling back to os.Getwd() if not set.
+func (g *Generator) getProjectRoot() (string, error) {
+	if g.projectRoot != "" {
+		return g.projectRoot, nil
+	}
+	return os.Getwd()
+}
+
+// resolveDraftDir returns the absolute path to the draft directory for a workflow.
+// Uses DraftDirectory from config if set, otherwise defaults to .quorum/issues/.
+func (g *Generator) resolveDraftDir(workflowID string) (string, error) {
+	root, err := g.getProjectRoot()
+	if err != nil {
+		return "", fmt.Errorf("resolving project root: %w", err)
+	}
+	baseDir := ".quorum/issues"
+	if g.config.DraftDirectory != "" {
+		baseDir = g.config.DraftDirectory
+	}
+	return filepath.Join(root, baseDir, workflowID, "draft"), nil
+}
+
+// resolvePublishedDir returns the absolute path to the published directory for a workflow.
+func (g *Generator) resolvePublishedDir(workflowID string) (string, error) {
+	root, err := g.getProjectRoot()
+	if err != nil {
+		return "", fmt.Errorf("resolving project root: %w", err)
+	}
+	baseDir := ".quorum/issues"
+	if g.config.DraftDirectory != "" {
+		baseDir = g.config.DraftDirectory
+	}
+	return filepath.Join(root, baseDir, workflowID, "published"), nil
+}
+
+// resolveIssuesBaseDir returns the relative base directory for issues (without workflow subdirectory).
+func (g *Generator) resolveIssuesBaseDir() string {
+	if g.config.DraftDirectory != "" {
+		return g.config.DraftDirectory
+	}
+	return filepath.Join(".quorum", "issues")
 }
 
 // getPromptRenderer returns the prompt renderer, initializing it lazily if needed.
@@ -759,21 +805,26 @@ func (g *Generator) GetIssueSet(_ context.Context, _ string) (*core.IssueSet, er
 	return nil, nil
 }
 
-// cleanIssuesDirectory removes all existing files in the issues directory
-// to prevent duplicates from accumulating across multiple generations.
-func (g *Generator) cleanIssuesDirectory(issuesDir string) error {
+// cleanIssuesDirectory removes only the draft/ subdirectory to prevent duplicates
+// from accumulating across multiple generations. The published/ directory is preserved.
+func (g *Generator) cleanIssuesDirectory(workflowID string) error {
+	draftDir, err := g.resolveDraftDir(workflowID)
+	if err != nil {
+		return fmt.Errorf("resolving draft directory: %w", err)
+	}
+
 	// Check if directory exists
-	if _, err := os.Stat(issuesDir); os.IsNotExist(err) {
-		slog.Debug("issues directory does not exist, skipping cleanup", "dir", issuesDir)
+	if _, err := os.Stat(draftDir); os.IsNotExist(err) {
+		slog.Debug("draft directory does not exist, skipping cleanup", "dir", draftDir)
 		return nil
 	}
 
-	// Remove the directory and all its contents
-	if err := os.RemoveAll(issuesDir); err != nil {
-		return fmt.Errorf("removing issues directory: %w", err)
+	// Remove only the draft directory, preserving published/
+	if err := os.RemoveAll(draftDir); err != nil {
+		return fmt.Errorf("removing draft directory: %w", err)
 	}
 
-	slog.Info("cleaned issues directory to prevent duplicates", "dir", issuesDir)
+	slog.Info("cleaned draft directory to prevent duplicates", "dir", draftDir)
 	return nil
 }
 
@@ -820,22 +871,29 @@ func (g *Generator) GenerateIssueFiles(ctx context.Context, workflowID string) (
 	}
 
 	// Create output directory
-	cwd, err := os.Getwd()
+	root, err := g.getProjectRoot()
 	if err != nil {
-		return nil, fmt.Errorf("getting working directory: %w", err)
+		return nil, fmt.Errorf("getting project root: %w", err)
 	}
+
+	// Clean the draft directory before generation to avoid duplicates
+	if err := g.cleanIssuesDirectory(workflowID); err != nil {
+		return nil, fmt.Errorf("cleaning draft directory: %w", err)
+	}
+
+	draftDirAbs, err := g.resolveDraftDir(workflowID)
+	if err != nil {
+		return nil, fmt.Errorf("resolving draft directory: %w", err)
+	}
+	if err := os.MkdirAll(draftDirAbs, 0o755); err != nil {
+		return nil, fmt.Errorf("creating draft directory: %w", err)
+	}
+
 	// Use relative path for shorter prompt (Claude will resolve it from cwd)
-	issuesDirRel := filepath.Join(".quorum", "issues", workflowID)
-	issuesDirAbs := filepath.Join(cwd, issuesDirRel)
-
-	// Clean the directory before generation to avoid duplicates
-	if err := g.cleanIssuesDirectory(issuesDirAbs); err != nil {
-		return nil, fmt.Errorf("cleaning issues directory: %w", err)
-	}
-
-	if err := os.MkdirAll(issuesDirAbs, 0o755); err != nil {
-		return nil, fmt.Errorf("creating issues directory: %w", err)
-	}
+	baseDir := g.resolveIssuesBaseDir()
+	issuesDirRel := filepath.Join(baseDir, workflowID, "draft")
+	issuesDirAbs := draftDirAbs
+	cwd := root
 
 	// Get consolidated analysis path (not content)
 	consolidatedPath, err := g.getConsolidatedAnalysisPath()
@@ -1084,29 +1142,29 @@ func (g *Generator) splitIntoBatches(tasks []service.IssueTaskFile, batchSize in
 // getConsolidatedAnalysisPath returns the RELATIVE path to the consolidated analysis file.
 // Using relative paths keeps the prompt shorter and avoids Claude CLI prompt size limits.
 func (g *Generator) getConsolidatedAnalysisPath() (string, error) {
-	cwd, err := os.Getwd()
+	root, err := g.getProjectRoot()
 	if err != nil {
-		return "", fmt.Errorf("getting working directory: %w", err)
+		return "", fmt.Errorf("getting project root: %w", err)
 	}
 
 	// Get relative reportDir (in case it's absolute)
 	reportDirRel := g.reportDir
 	if filepath.IsAbs(g.reportDir) {
-		if rel, err := filepath.Rel(cwd, g.reportDir); err == nil {
+		if rel, err := filepath.Rel(root, g.reportDir); err == nil {
 			reportDirRel = rel
 		}
 	}
 
 	// Try analyze-phase/consolidated.md first
 	relPath := filepath.Join(reportDirRel, "analyze-phase", "consolidated.md")
-	absPath := filepath.Join(cwd, relPath)
+	absPath := filepath.Join(root, relPath)
 	if _, err := os.Stat(absPath); err == nil {
 		return relPath, nil
 	}
 
 	// Fallback to consensus directory
 	consensusRelPath := filepath.Join(reportDirRel, "analyze-phase", "consensus", "consolidated.md")
-	absConsensusPath := filepath.Join(cwd, consensusRelPath)
+	absConsensusPath := filepath.Join(root, consensusRelPath)
 	if _, err := os.Stat(absConsensusPath); err == nil {
 		return consensusRelPath, nil
 	}
@@ -1117,15 +1175,15 @@ func (g *Generator) getConsolidatedAnalysisPath() (string, error) {
 // getTaskFilePaths returns information about task files (RELATIVE paths, not content).
 // Using relative paths keeps the prompt shorter and avoids Claude CLI prompt size limits.
 func (g *Generator) getTaskFilePaths() ([]service.IssueTaskFile, error) {
-	cwd, err := os.Getwd()
+	root, err := g.getProjectRoot()
 	if err != nil {
-		return nil, fmt.Errorf("getting working directory: %w", err)
+		return nil, fmt.Errorf("getting project root: %w", err)
 	}
 
 	// Get relative reportDir (in case it's absolute)
 	reportDirRel := g.reportDir
 	if filepath.IsAbs(g.reportDir) {
-		if rel, err := filepath.Rel(cwd, g.reportDir); err == nil {
+		if rel, err := filepath.Rel(root, g.reportDir); err == nil {
 			reportDirRel = rel
 		}
 	}
@@ -1150,7 +1208,7 @@ func (g *Generator) getTaskFilePaths() ([]service.IssueTaskFile, error) {
 	for _, tasksDir := range tasksDirs {
 		absTasksDir := tasksDir
 		if !filepath.IsAbs(tasksDir) {
-			absTasksDir = filepath.Join(cwd, tasksDir)
+			absTasksDir = filepath.Join(root, tasksDir)
 		}
 
 		entries, err := os.ReadDir(absTasksDir)
@@ -1585,9 +1643,23 @@ func sanitizeFilename(name string) string {
 }
 
 // ReadGeneratedIssues reads the generated issue markdown files and returns IssuePreview objects.
+// It first looks in the draft/ subdirectory; if empty, falls back to the base directory for backward compat.
 // Deduplicates by task ID to prevent duplicate issues.
 func (g *Generator) ReadGeneratedIssues(workflowID string) ([]IssuePreview, error) {
-	issuesDir := filepath.Join(".quorum", "issues", workflowID)
+	// Try reading from draft/ subdirectory first (new layout)
+	previews, err := g.ReadAllDrafts(workflowID)
+	if err != nil {
+		return nil, err
+	}
+	if len(previews) > 0 {
+		slog.Info("read generated issues from draft directory",
+			"unique_issues", len(previews))
+		return previews, nil
+	}
+
+	// Fallback: read from the flat base directory (backward compat with old layout)
+	baseDir := g.resolveIssuesBaseDir()
+	issuesDir := filepath.Join(baseDir, workflowID)
 
 	entries, err := os.ReadDir(issuesDir)
 	if err != nil {
@@ -1597,7 +1669,6 @@ func (g *Generator) ReadGeneratedIssues(workflowID string) ([]IssuePreview, erro
 		return nil, fmt.Errorf("reading issues directory: %w", err)
 	}
 
-	var previews []IssuePreview
 	seen := make(map[string]bool) // Track by taskID to deduplicate
 	taskIndexMap := make(map[int]string)
 	if taskFiles, err := g.getTaskFilePaths(); err == nil {
@@ -1624,6 +1695,28 @@ func (g *Generator) ReadGeneratedIssues(workflowID string) ([]IssuePreview, erro
 			continue
 		}
 
+		// Try parsing frontmatter first
+		fm, fmBody, fmErr := parseDraftContent(string(content))
+		if fmErr == nil && fm != nil {
+			if fm.TaskID != "" && seen[fm.TaskID] {
+				continue
+			}
+			if fm.TaskID != "" {
+				seen[fm.TaskID] = true
+			}
+			previews = append(previews, IssuePreview{
+				Title:       fm.Title,
+				Body:        fmBody,
+				Labels:      fm.Labels,
+				Assignees:   fm.Assignees,
+				IsMainIssue: fm.IsMainIssue,
+				TaskID:      fm.TaskID,
+				FilePath:    filepath.Join(issuesDir, entry.Name()),
+			})
+			continue
+		}
+
+		// Fallback: plain markdown parsing
 		title, body := parseIssueMarkdown(string(content))
 
 		// Determine if it's the consolidated analysis (task_id will be empty)
@@ -1634,7 +1727,6 @@ func (g *Generator) ReadGeneratedIssues(workflowID string) ([]IssuePreview, erro
 			taskID = "main"
 		} else {
 			// Extract task ID from filename pattern: XX-task-name.md or issue-N-task-name.md
-			// Try pattern: NN-something.md
 			re := regexp.MustCompile(`^(\d+)-(.+)\.md$`)
 			if match := re.FindStringSubmatch(entry.Name()); len(match) > 1 {
 				taskNum := match[1]
@@ -1650,7 +1742,6 @@ func (g *Generator) ReadGeneratedIssues(workflowID string) ([]IssuePreview, erro
 					}
 				}
 			} else {
-				// Try pattern: issue-N-something.md or issue-task-N.md
 				re = regexp.MustCompile(`issue-(?:task-)?(\d+)`)
 				if match := re.FindStringSubmatch(entry.Name()); len(match) > 1 {
 					if num, err := strconv.Atoi(match[1]); err == nil {
