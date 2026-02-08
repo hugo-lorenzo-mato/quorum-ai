@@ -84,6 +84,41 @@ type BlueprintDTO struct {
 
 	// SingleAgentReasoningEffort is an optional reasoning effort override for the single agent.
 	SingleAgentReasoningEffort string `json:"single_agent_reasoning_effort,omitempty"`
+
+	// Extended pipeline config (read-only, derived from internal Blueprint).
+	Consensus       *ConsensusDTO       `json:"consensus,omitempty"`
+	Refiner         *RefinerDTO         `json:"refiner,omitempty"`
+	Synthesizer     *SynthesizerDTO     `json:"synthesizer,omitempty"`
+	PlanSynthesizer *PlanSynthesizerDTO `json:"plan_synthesizer,omitempty"`
+}
+
+// ConsensusDTO exposes consensus/moderator configuration.
+type ConsensusDTO struct {
+	Enabled             bool               `json:"enabled,omitempty"`
+	Agent               string             `json:"agent,omitempty"`
+	Threshold           float64            `json:"threshold,omitempty"`
+	Thresholds          map[string]float64 `json:"thresholds,omitempty"`
+	MinRounds           int                `json:"min_rounds,omitempty"`
+	MaxRounds           int                `json:"max_rounds,omitempty"`
+	WarningThreshold    float64            `json:"warning_threshold,omitempty"`
+	StagnationThreshold float64            `json:"stagnation_threshold,omitempty"`
+}
+
+// RefinerDTO exposes prompt refinement configuration.
+type RefinerDTO struct {
+	Enabled bool   `json:"enabled,omitempty"`
+	Agent   string `json:"agent,omitempty"`
+}
+
+// SynthesizerDTO exposes analysis synthesis configuration.
+type SynthesizerDTO struct {
+	Agent string `json:"agent,omitempty"`
+}
+
+// PlanSynthesizerDTO exposes multi-agent plan synthesis configuration.
+type PlanSynthesizerDTO struct {
+	Enabled bool   `json:"enabled,omitempty"`
+	Agent   string `json:"agent,omitempty"`
 }
 
 type blueprintPatch struct {
@@ -782,6 +817,27 @@ func (s *Server) stateToWorkflowResponse(ctx context.Context, state *core.Workfl
 			SingleAgentName:            state.Blueprint.SingleAgent.Agent,
 			SingleAgentModel:           state.Blueprint.SingleAgent.Model,
 			SingleAgentReasoningEffort: state.Blueprint.SingleAgent.ReasoningEffort,
+			Consensus: &ConsensusDTO{
+				Enabled:             state.Blueprint.Consensus.Enabled,
+				Agent:               state.Blueprint.Consensus.Agent,
+				Threshold:           state.Blueprint.Consensus.Threshold,
+				Thresholds:          state.Blueprint.Consensus.Thresholds,
+				MinRounds:           state.Blueprint.Consensus.MinRounds,
+				MaxRounds:           state.Blueprint.Consensus.MaxRounds,
+				WarningThreshold:    state.Blueprint.Consensus.WarningThreshold,
+				StagnationThreshold: state.Blueprint.Consensus.StagnationThreshold,
+			},
+			Refiner: &RefinerDTO{
+				Enabled: state.Blueprint.Refiner.Enabled,
+				Agent:   state.Blueprint.Refiner.Agent,
+			},
+			Synthesizer: &SynthesizerDTO{
+				Agent: state.Blueprint.Synthesizer.Agent,
+			},
+			PlanSynthesizer: &PlanSynthesizerDTO{
+				Enabled: state.Blueprint.PlanSynthesizer.Enabled,
+				Agent:   state.Blueprint.PlanSynthesizer.Agent,
+			},
 		}
 	}
 

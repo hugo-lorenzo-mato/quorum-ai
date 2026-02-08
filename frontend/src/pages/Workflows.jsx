@@ -46,7 +46,9 @@ import {
   X,
 } from 'lucide-react';
 import { ConfirmDialog } from '../components/config/ConfirmDialog';
-import { ExecutionModeBadge, PhaseStepper, ReplanModal } from '../components/workflow';
+import { ExecutionModeBadge, PhaseStepper, ReplanModal, WorkflowPipelineLive } from '../components/workflow';
+import PipelineExpandedPanel from '../components/workflow/pipeline/PipelineExpandedPanel';
+import usePipelineState from '../components/workflow/hooks/usePipelineState';
 import { GenerationOptionsModal } from '../components/issues';
 import useIssuesStore from '../stores/issuesStore';
 import FileTree from '../components/FileTree';
@@ -447,6 +449,10 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
   const timeline = useExecutionStore((s) => s.timelineByWorkflow[workflowKey] || []);
   const currentAgents = useExecutionStore((s) => s.currentAgentsByWorkflow[workflowKey] || {});
   const connectionMode = useUIStore((s) => s.connectionMode);
+
+  // Pipeline live state
+  const [expandedPhase, setExpandedPhase] = useState(null);
+  const pipelineState = usePipelineState(workflow, workflowKey);
 
   useEffect(() => {
     // Merge persisted backend agent_events (if any) into the local replayable timeline.
@@ -937,7 +943,13 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
 
           {/* Phase Progress Stepper - inline */}
           <div className="hidden md:flex flex-1 justify-center">
-            <PhaseStepper workflow={workflow} compact />
+            <WorkflowPipelineLive
+              workflow={workflow}
+              workflowKey={workflowKey}
+              compact
+              expandedPhase={expandedPhase}
+              onPhaseClick={(phase) => setExpandedPhase((prev) => (prev === phase ? null : phase))}
+            />
           </div>
 
           <div className="flex items-center gap-2 flex-wrap md:justify-end w-full md:w-auto">
@@ -1150,6 +1162,12 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
           </div>
         </div>
       </div>
+
+      {/* Pipeline Detail Panel */}
+      <PipelineExpandedPanel
+        expandedPhase={expandedPhase}
+        pipelineState={pipelineState}
+      />
 
       {/* Workflow Error Banner - Shows when workflow failed */}
       {workflow.status === 'failed' && workflow.error && (
