@@ -111,7 +111,7 @@ describe('executionStore', () => {
     expect(state.currentAgentsByWorkflow[key] || {}).toEqual({});
   });
 
-  it('dedupes persisted agent_events by id', () => {
+  it('dedupes persisted agent_events by synthetic id', () => {
     const key = 'proj-1:wf-1';
     const workflow = {
       id: 'wf-1',
@@ -134,6 +134,51 @@ describe('executionStore', () => {
 
     const state = useExecutionStore.getState();
     expect(state.timelineByWorkflow[key]).toHaveLength(1);
-    expect(state.timelineByWorkflow[key][0].id).toBe('evt-1');
+    // ID is now a synthetic hash (not the backend-assigned evt-1) so that
+    // hydrated events merge with identical events that arrived via SSE.
+    expect(state.timelineByWorkflow[key][0].id).toMatch(/^syn_/);
+  });
+
+  it('dedupes SSE event with identical hydrated event', () => {
+    const key = 'proj-1:wf-1';
+    const ts = '2026-02-07T00:00:01.000Z';
+
+    // Simulate SSE event arriving first
+    useExecutionStore.getState().ingestSSEEvent(
+      'agent_event',
+      {
+        workflow_id: 'wf-1',
+        event_kind: 'progress',
+        agent: 'codex',
+        message: 'Command completed',
+        timestamp: ts,
+      },
+      'proj-1'
+    );
+    expect(useExecutionStore.getState().timelineByWorkflow[key]).toHaveLength(1);
+
+    // Hydrate the same event from backend persistence — should merge, not duplicate
+    useExecutionStore.getState().hydrateFromWorkflowResponse(
+      {
+        id: 'wf-1',
+        execution_id: 1,
+        agent_events: [
+          {
+            id: 'backend-id-123',
+            event_kind: 'progress',
+            agent: 'codex',
+            message: 'Command completed',
+            timestamp: ts,
+            data: {},
+            execution_id: 1,
+          },
+        ],
+      },
+      'proj-1'
+    );
+
+    const state = useExecutionStore.getState();
+    // Must still be 1 entry, not 2 (the core deduplication fix)
+    expect(state.timelineByWorkflow[key]).toHaveLength(1);
   });
 });

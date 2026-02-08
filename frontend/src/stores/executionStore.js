@@ -348,8 +348,12 @@ const useExecutionStore = create(
 
         const persisted = Array.isArray(workflow.agent_events) ? workflow.agent_events : [];
         if (persisted.length > 0) {
+          // NOTE: we intentionally omit the backend-assigned `id` so that
+          // normalizeTimelineEntry computes a synthetic ID from the entry
+          // content.  This ensures hydrated events merge correctly with
+          // events that arrived earlier via the real-time SSE path (which
+          // also use synthetic IDs).
           const persistedEntries = persisted.map((e) => ({
-            id: e.id,
             kind: 'agent',
             event: e.event_kind,
             agent: e.agent,

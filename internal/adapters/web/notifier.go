@@ -196,8 +196,14 @@ func (n *WebOutputNotifier) Log(level, source, message string) {
 
 // AgentEvent is called when an agent emits a streaming event.
 func (n *WebOutputNotifier) AgentEvent(kind, agent, message string, data map[string]interface{}) {
+	// Capture a single timestamp so SSE and persisted events are identical —
+	// prevents frontend deduplication mismatches between the real-time SSE path
+	// and the hydration path (which loads persisted agent_events).
+	now := time.Now()
+
 	// Publish to SSE for real-time updates (all events, including chunks)
-	n.eventBus.Publish(events.NewAgentStreamEvent(n.workflowID, "", events.AgentEventType(kind), agent, message).WithData(data))
+	evt := events.NewAgentStreamEventAt(now, n.workflowID, "", events.AgentEventType(kind), agent, message).WithData(data)
+	n.eventBus.Publish(evt)
 
 	// Skip persisting chunk events — they are high-volume transient streaming data
 	// (e.g., every text fragment from Claude) and not useful for reload recovery.
@@ -210,12 +216,12 @@ func (n *WebOutputNotifier) AgentEvent(kind, agent, message string, data map[str
 	defer n.stateMu.Unlock()
 	if n.state != nil {
 		event := core.AgentEvent{
-			ID:          fmt.Sprintf("%d-%s", time.Now().UnixNano(), agent),
+			ID:          fmt.Sprintf("%d-%s", now.UnixNano(), agent),
 			Type:        core.AgentEventType(kind),
 			Agent:       agent,
 			Message:     message,
 			Data:        data,
-			Timestamp:   time.Now(),
+			Timestamp:   now,
 			ExecutionID: n.state.ExecutionID,
 		}
 		n.state.AgentEvents = append(n.state.AgentEvents, event)
