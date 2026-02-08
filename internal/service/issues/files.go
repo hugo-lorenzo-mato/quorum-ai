@@ -15,7 +15,8 @@ import (
 
 const mainIssueFilename = "00-consolidated-analysis.md"
 
-// WriteIssuesToDisk writes issues to markdown files under .quorum/issues/{workflowID}.
+// WriteIssuesToDisk writes issues to markdown files under the draft directory.
+// Files include YAML frontmatter with structured metadata.
 // It returns previews that include the file paths written.
 func (g *Generator) WriteIssuesToDisk(workflowID string, inputs []IssueInput) ([]IssuePreview, error) {
 	if workflowID == "" {
@@ -25,16 +26,16 @@ func (g *Generator) WriteIssuesToDisk(workflowID string, inputs []IssueInput) ([
 		return nil, fmt.Errorf("no issues provided")
 	}
 
-	cwd, err := os.Getwd()
+	draftDirAbs, err := g.resolveDraftDir(workflowID)
 	if err != nil {
-		return nil, fmt.Errorf("getting working directory: %w", err)
+		return nil, fmt.Errorf("resolving draft directory: %w", err)
+	}
+	if err := os.MkdirAll(draftDirAbs, 0o755); err != nil {
+		return nil, fmt.Errorf("creating draft directory: %w", err)
 	}
 
-	issuesDirRel := filepath.Join(".quorum", "issues", workflowID)
-	issuesDirAbs := filepath.Join(cwd, issuesDirRel)
-	if err := os.MkdirAll(issuesDirAbs, 0o755); err != nil {
-		return nil, fmt.Errorf("creating issues directory: %w", err)
-	}
+	baseDir := g.resolveIssuesBaseDir()
+	draftDirRel := filepath.Join(baseDir, workflowID, "draft")
 
 	// Build task index for stable filenames
 	taskFiles, _ := g.getTaskFilePaths()
@@ -65,20 +66,27 @@ func (g *Generator) WriteIssuesToDisk(workflowID string, inputs []IssueInput) ([
 	previews := make([]IssuePreview, 0, len(inputs))
 	for _, input := range inputs {
 		fileName := g.resolveIssueFilename(input, tasksByID, used, &maxIndex)
-		filePath, err := ValidateOutputPath(issuesDirAbs, fileName)
-		if err != nil {
-			return nil, fmt.Errorf("validating issue file path %q: %w", fileName, err)
-		}
-
-		content := buildIssueMarkdown(input.Title, input.Body)
-		if err := os.WriteFile(filePath, []byte(content), 0o600); err != nil {
-			return nil, fmt.Errorf("writing issue file %s: %w", filePath, err)
-		}
 
 		labels := input.Labels
 		if input.IsMainIssue {
 			labels = ensureEpicLabel(labels)
 		}
+
+		fm := DraftFrontmatter{
+			Title:       input.Title,
+			Labels:      labels,
+			Assignees:   input.Assignees,
+			IsMainIssue: input.IsMainIssue,
+			TaskID:      input.TaskID,
+			SourcePath:  input.FilePath,
+			Status:      "draft",
+		}
+
+		absPath, err := g.WriteDraftFile(workflowID, fileName, fm, input.Body)
+		if err != nil {
+			return nil, fmt.Errorf("writing draft file %q: %w", fileName, err)
+		}
+		_ = absPath
 
 		previews = append(previews, IssuePreview{
 			Title:       input.Title,
@@ -87,7 +95,7 @@ func (g *Generator) WriteIssuesToDisk(workflowID string, inputs []IssueInput) ([
 			Assignees:   input.Assignees,
 			IsMainIssue: input.IsMainIssue,
 			TaskID:      input.TaskID,
-			FilePath:    filepath.Join(issuesDirRel, fileName),
+			FilePath:    filepath.Join(draftDirRel, fileName),
 		})
 	}
 
@@ -329,12 +337,14 @@ func buildIssueMarkdown(title, body string) string {
 }
 
 func (g *Generator) readIssueFile(workflowID string, input IssueInput) (title, body, relPath string, err error) {
-	issuesDirRel := filepath.Join(".quorum", "issues", workflowID)
-	issuesDirAbs := issuesDirRel
-	cwd, cwdErr := os.Getwd()
-	if cwdErr == nil {
-		issuesDirAbs = filepath.Join(cwd, issuesDirRel)
+	root, err := g.getProjectRoot()
+	if err != nil {
+		return "", "", "", fmt.Errorf("resolving project root: %w", err)
 	}
+
+	baseDir := g.resolveIssuesBaseDir()
+	issuesDirRel := filepath.Join(baseDir, workflowID)
+	issuesDirAbs := filepath.Join(root, issuesDirRel)
 
 	path := input.FilePath
 	if path == "" {
@@ -344,21 +354,20 @@ func (g *Generator) readIssueFile(workflowID string, input IssueInput) (title, b
 	var absPath string
 	if filepath.IsAbs(path) {
 		absPath = path
-		if cwdErr == nil {
-			relPath, _ = filepath.Rel(cwd, path)
-		} else {
-			relPath = path
-		}
-	} else if strings.ContainsAny(path, "/\\") || strings.HasPrefix(path, ".quorum") {
-		if cwdErr == nil {
-			absPath = filepath.Join(cwd, path)
-		} else {
-			absPath = path
-		}
+		relPath, _ = filepath.Rel(root, path)
+	} else if strings.ContainsAny(path, "/\\") || strings.HasPrefix(path, ".quorum") || strings.HasPrefix(path, baseDir) {
+		absPath = filepath.Join(root, path)
 		relPath = path
 	} else {
-		absPath = filepath.Join(issuesDirAbs, path)
-		relPath = filepath.Join(issuesDirRel, path)
+		// Bare filename: look in draft/ subdirectory first, then fallback to base
+		draftPath := filepath.Join(issuesDirAbs, "draft", path)
+		if _, statErr := os.Stat(draftPath); statErr == nil {
+			absPath = draftPath
+			relPath = filepath.Join(issuesDirRel, "draft", path)
+		} else {
+			absPath = filepath.Join(issuesDirAbs, path)
+			relPath = filepath.Join(issuesDirRel, path)
+		}
 	}
 
 	absIssuesDir, err := filepath.Abs(issuesDirAbs)
@@ -376,6 +385,12 @@ func (g *Generator) readIssueFile(workflowID string, input IssueInput) (title, b
 	content, err := os.ReadFile(absPath)
 	if err != nil {
 		return "", "", "", fmt.Errorf("reading issue file %s: %w", absPath, err)
+	}
+
+	// Try parsing frontmatter first, fallback to plain markdown
+	fm, fmBody, fmErr := parseDraftContent(string(content))
+	if fmErr == nil && fm != nil {
+		return fm.Title, fmBody, relPath, nil
 	}
 
 	title, body = parseIssueMarkdown(string(content))
@@ -404,12 +419,15 @@ func (g *Generator) writeIssueMappingFile(workflowID string, entries []issueMapp
 	}
 	mapping.Issues = entries
 
-	issuesDir := filepath.Join(".quorum", "issues", workflowID)
-	if err := os.MkdirAll(issuesDir, 0o755); err != nil {
-		return fmt.Errorf("creating issues directory: %w", err)
+	publishedDir, err := g.resolvePublishedDir(workflowID)
+	if err != nil {
+		return fmt.Errorf("resolving published directory: %w", err)
+	}
+	if err := os.MkdirAll(publishedDir, 0o755); err != nil {
+		return fmt.Errorf("creating published directory: %w", err)
 	}
 
-	mappingPath := filepath.Join(issuesDir, "mapping.json")
+	mappingPath := filepath.Join(publishedDir, "mapping.json")
 	data, err := json.MarshalIndent(mapping, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshaling mapping: %w", err)

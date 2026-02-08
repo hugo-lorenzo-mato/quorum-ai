@@ -199,7 +199,7 @@ func (s *Server) handleGenerateIssues(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create generator with agent registry for LLM-based generation
-	generator := issues.NewGenerator(issueClient, issuesCfg, reportDir, s.agentRegistry)
+	generator := issues.NewGenerator(issueClient, issuesCfg, "", reportDir, s.agentRegistry)
 
 	// Apply timeout from config
 	genCtx := ctx
@@ -422,7 +422,7 @@ func (s *Server) handleSaveIssuesFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	generator := issues.NewGenerator(nil, issuesCfg, reportDir, s.agentRegistry)
+	generator := issues.NewGenerator(nil, issuesCfg, "", reportDir, s.agentRegistry)
 
 	issueInputs := make([]issues.IssueInput, len(req.Issues))
 	for i, input := range req.Issues {
@@ -515,7 +515,7 @@ func (s *Server) handlePreviewIssues(w http.ResponseWriter, r *http.Request) {
 	if fastMode {
 		// Fast mode: use direct copy without AI
 		issuesCfg.Generator.Enabled = false
-		generator := issues.NewGenerator(nil, issuesCfg, reportDir, nil)
+		generator := issues.NewGenerator(nil, issuesCfg, "", reportDir, nil)
 
 		opts := issues.GenerateOptions{
 			WorkflowID:      workflowID,
@@ -550,7 +550,7 @@ func (s *Server) handlePreviewIssues(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		generator := issues.NewGenerator(nil, issuesCfg, reportDir, s.agentRegistry)
+		generator := issues.NewGenerator(nil, issuesCfg, "", reportDir, s.agentRegistry)
 
 		// Generate the issue files
 		files, err := generator.GenerateIssueFiles(ctx, workflowID)
@@ -708,7 +708,7 @@ func (s *Server) handleCreateSingleIssue(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	generator := issues.NewGenerator(issueClient, issuesCfg, reportDir, s.agentRegistry)
+	generator := issues.NewGenerator(issueClient, issuesCfg, "", reportDir, s.agentRegistry)
 
 	input := issues.IssueInput{
 		Title:       req.Title,
