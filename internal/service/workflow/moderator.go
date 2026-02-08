@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"fmt"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -143,6 +144,15 @@ func (m *SemanticModerator) EvaluateWithAgent(ctx context.Context, wctx *Context
 	if wctx.Report != nil && wctx.Report.IsEnabled() {
 		outputFilePath = wctx.Report.ModeratorAttemptPath(round, attempt, moderatorAgentName)
 	}
+	absOutputPath := wctx.ResolveFilePath(outputFilePath)
+
+	// Ensure output directory exists before execution (file enforcement)
+	if absOutputPath != "" {
+		enforcement := NewFileEnforcement(wctx.Logger)
+		if err := enforcement.EnsureDirectory(absOutputPath); err != nil {
+			wctx.Logger.Warn("failed to ensure moderator output directory", "path", absOutputPath, "error", err)
+		}
+	}
 
 	// Render moderator prompt
 	prompt, err := wctx.Prompts.RenderModeratorEvaluate(ModeratorEvaluateParams{
@@ -173,14 +183,54 @@ func (m *SemanticModerator) EvaluateWithAgent(ctx context.Context, wctx *Context
 		})
 	}
 
+	// Launch output file watchdog for recovery/reaping if agent hangs after writing
+	var watchdog *OutputWatchdog
+	if absOutputPath != "" {
+		watchdog = NewOutputWatchdog(absOutputPath, DefaultWatchdogConfig(), wctx.Logger)
+		watchdog.Start()
+		defer watchdog.Stop()
+	}
+
 	// Execute moderator evaluation
 	var result *core.ExecuteResult
 	err = wctx.Retry.Execute(func() error {
 		if ctrlErr := wctx.CheckControl(ctx); ctrlErr != nil {
 			return ctrlErr
 		}
+		// Pre-retry: if output file already exists with substantial content, use it.
+		// This recovers from the case where the agent wrote output but cmd.Wait() failed.
+		if absOutputPath != "" {
+			if info, statErr := os.Stat(absOutputPath); statErr == nil && info.Size() > 1024 {
+				content, readErr := os.ReadFile(absOutputPath)
+				if readErr == nil {
+					wctx.Logger.Info("recovered moderator output from file written by previous attempt",
+						"agent", moderatorAgentName, "round", round, "path", absOutputPath, "size", len(content))
+					result = &core.ExecuteResult{Output: string(content), Model: model}
+					return nil
+				}
+			}
+		}
+
+		attemptCtx, cancelAttempt := context.WithCancelCause(ctx)
+		defer cancelAttempt(nil)
+
+		stableOutputCh := make(chan string, 1)
+		if watchdog != nil {
+			go func() {
+				select {
+				case content := <-watchdog.StableCh():
+					select {
+					case stableOutputCh <- content:
+					default:
+					}
+					cancelAttempt(core.ErrExecution(watchdogStableOutputCode, "output file stabilized; reaping hung agent process"))
+				case <-attemptCtx.Done():
+				}
+			}()
+		}
+
 		var execErr error
-		result, execErr = agent.Execute(ctx, core.ExecuteOptions{
+		result, execErr = agent.Execute(attemptCtx, core.ExecuteOptions{
 			Prompt:  prompt,
 			Format:  core.OutputFormatText,
 			Model:   model,
@@ -189,6 +239,17 @@ func (m *SemanticModerator) EvaluateWithAgent(ctx context.Context, wctx *Context
 			Phase:   core.PhaseAnalyze,
 			WorkDir: wctx.ProjectRoot,
 		})
+		// If execution was cancelled after the output file stabilized, treat it as success.
+		if execErr != nil {
+			select {
+			case content := <-stableOutputCh:
+				wctx.Logger.Info("watchdog reap: using stable moderator output file",
+					"agent", moderatorAgentName, "round", round, "path", absOutputPath, "size", len(content))
+				result = &core.ExecuteResult{Output: content, Model: model}
+				return nil
+			default:
+			}
+		}
 		return execErr
 	})
 
@@ -206,6 +267,32 @@ func (m *SemanticModerator) EvaluateWithAgent(ctx context.Context, wctx *Context
 	}
 
 	durationMS := time.Since(startTime).Milliseconds()
+
+	// Some CLIs write to file but return empty stdout. Prefer the file content in that case.
+	if absOutputPath != "" && (result == nil || strings.TrimSpace(result.Output) == "") {
+		if content, readErr := os.ReadFile(absOutputPath); readErr == nil && strings.TrimSpace(string(content)) != "" {
+			if result == nil {
+				result = &core.ExecuteResult{}
+			}
+			result.Output = string(content)
+			if result.Model == "" {
+				result.Model = model
+			}
+			wctx.Logger.Info("file enforcement: using moderator output file content (stdout empty)",
+				"agent", moderatorAgentName, "round", round, "path", absOutputPath, "size", len(content))
+		}
+	}
+
+	// Ensure output file exists (file enforcement fallback)
+	if absOutputPath != "" && result != nil && result.Output != "" {
+		enforcement := NewFileEnforcement(wctx.Logger)
+		createdByLLM, verifyErr := enforcement.VerifyOrWriteFallback(absOutputPath, result.Output)
+		if verifyErr != nil {
+			wctx.Logger.Warn("file enforcement failed", "path", absOutputPath, "error", verifyErr)
+		} else if !createdByLLM {
+			wctx.Logger.Debug("created fallback file from stdout", "path", absOutputPath)
+		}
+	}
 
 	// Parse the moderator response
 	evalResult := m.parseModeratorResponse(result.Output)

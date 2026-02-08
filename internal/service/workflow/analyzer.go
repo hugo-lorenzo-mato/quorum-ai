@@ -164,6 +164,15 @@ func (a *Analyzer) runSingleAgentAnalysis(ctx context.Context, wctx *Context) er
 	if wctx.Report != nil && wctx.Report.IsEnabled() {
 		outputFilePath = wctx.Report.SingleAgentAnalysisPath(agentName, model)
 	}
+	absOutputPath := wctx.ResolveFilePath(outputFilePath)
+
+	// Ensure output directory exists before execution (file enforcement)
+	if absOutputPath != "" {
+		enforcement := NewFileEnforcement(wctx.Logger)
+		if err := enforcement.EnsureDirectory(absOutputPath); err != nil {
+			wctx.Logger.Warn("failed to ensure output directory", "path", absOutputPath, "error", err)
+		}
+	}
 
 	// Render analysis prompt
 	prompt, err := wctx.Prompts.RenderAnalyzeV1(AnalyzeV1Params{
@@ -194,8 +203,46 @@ func (a *Analyzer) runSingleAgentAnalysis(ctx context.Context, wctx *Context) er
 		if ctrlErr := wctx.CheckControl(ctx); ctrlErr != nil {
 			return ctrlErr
 		}
+		// Pre-retry: if output file already exists with substantial content, use it.
+		// This recovers from the case where the agent wrote output but cmd.Wait() failed.
+		if absOutputPath != "" {
+			if info, statErr := os.Stat(absOutputPath); statErr == nil && info.Size() > 1024 {
+				content, readErr := os.ReadFile(absOutputPath)
+				if readErr == nil {
+					wctx.Logger.Info("recovered single-agent output from file written by previous attempt",
+						"agent", agentName, "path", absOutputPath, "size", len(content))
+					result = &core.ExecuteResult{Output: string(content), Model: model}
+					return nil
+				}
+			}
+		}
+
+		attemptCtx, cancelAttempt := context.WithCancelCause(ctx)
+		defer cancelAttempt(nil)
+
+		// Launch output file watchdog for recovery/reaping if agent hangs after writing.
+		var watchdog *OutputWatchdog
+		stableOutputCh := make(chan string, 1)
+		if absOutputPath != "" {
+			watchdog = NewOutputWatchdog(absOutputPath, DefaultWatchdogConfig(), wctx.Logger)
+			watchdog.Start()
+			defer watchdog.Stop()
+
+			go func() {
+				select {
+				case content := <-watchdog.StableCh():
+					select {
+					case stableOutputCh <- content:
+					default:
+					}
+					cancelAttempt(core.ErrExecution(watchdogStableOutputCode, "output file stabilized; reaping hung agent process"))
+				case <-attemptCtx.Done():
+				}
+			}()
+		}
+
 		var execErr error
-		result, execErr = agent.Execute(ctx, core.ExecuteOptions{
+		result, execErr = agent.Execute(attemptCtx, core.ExecuteOptions{
 			Prompt:          prompt,
 			Format:          core.OutputFormatText,
 			Model:           model,
@@ -205,6 +252,18 @@ func (a *Analyzer) runSingleAgentAnalysis(ctx context.Context, wctx *Context) er
 			ReasoningEffort: wctx.Config.SingleAgent.ReasoningEffort,
 			WorkDir:         wctx.ProjectRoot,
 		})
+
+		// If execution was cancelled after the output file stabilized, treat it as success.
+		if execErr != nil {
+			select {
+			case content := <-stableOutputCh:
+				wctx.Logger.Info("watchdog reap: using stable single-agent output file",
+					"agent", agentName, "path", absOutputPath, "size", len(content))
+				result = &core.ExecuteResult{Output: content, Model: model}
+				return nil
+			default:
+			}
+		}
 		return execErr
 	})
 
@@ -221,6 +280,32 @@ func (a *Analyzer) runSingleAgentAnalysis(ctx context.Context, wctx *Context) er
 			})
 		}
 		return fmt.Errorf("single-agent analysis failed: %w", err)
+	}
+
+	// Some CLIs write to file but return empty stdout. Prefer the file content in that case.
+	if absOutputPath != "" && (result == nil || strings.TrimSpace(result.Output) == "") {
+		if content, readErr := os.ReadFile(absOutputPath); readErr == nil && strings.TrimSpace(string(content)) != "" {
+			if result == nil {
+				result = &core.ExecuteResult{}
+			}
+			result.Output = string(content)
+			if result.Model == "" {
+				result.Model = model
+			}
+			wctx.Logger.Info("file enforcement: using single-agent output file content (stdout empty)",
+				"agent", agentName, "path", absOutputPath, "size", len(content))
+		}
+	}
+
+	// Ensure output file exists (file enforcement fallback)
+	if absOutputPath != "" && result != nil && result.Output != "" {
+		enforcement := NewFileEnforcement(wctx.Logger)
+		createdByLLM, verifyErr := enforcement.VerifyOrWriteFallback(absOutputPath, result.Output)
+		if verifyErr != nil {
+			wctx.Logger.Warn("file enforcement failed", "path", absOutputPath, "error", verifyErr)
+		} else if !createdByLLM {
+			wctx.Logger.Debug("created fallback file from stdout", "path", absOutputPath)
+		}
 	}
 
 	// Emit completed event
@@ -799,8 +884,26 @@ func (a *Analyzer) runVnRefinementWithAgent(ctx context.Context, wctx *Context, 
 				}
 			}
 		}
+		attemptCtx, cancelAttempt := context.WithCancelCause(ctx)
+		defer cancelAttempt(nil)
+
+		stableOutputCh := make(chan string, 1)
+		if watchdog != nil {
+			go func() {
+				select {
+				case content := <-watchdog.StableCh():
+					select {
+					case stableOutputCh <- content:
+					default:
+					}
+					cancelAttempt(core.ErrExecution(watchdogStableOutputCode, "output file stabilized; reaping hung agent process"))
+				case <-attemptCtx.Done():
+				}
+			}()
+		}
+
 		var execErr error
-		result, execErr = agent.Execute(ctx, core.ExecuteOptions{
+		result, execErr = agent.Execute(attemptCtx, core.ExecuteOptions{
 			Prompt:  prompt,
 			Format:  core.OutputFormatText,
 			Model:   model,
@@ -809,12 +912,12 @@ func (a *Analyzer) runVnRefinementWithAgent(ctx context.Context, wctx *Context, 
 			Phase:   core.PhaseAnalyze,
 			WorkDir: wctx.ProjectRoot,
 		})
-		// If execution failed but watchdog detected stable output, recover
-		if execErr != nil && watchdog != nil {
+		// If execution was cancelled after the output file stabilized, treat it as success.
+		if execErr != nil {
 			select {
-			case content := <-watchdog.StableCh():
-				wctx.Logger.Info("watchdog recovery: using stable Vn output file",
-					"agent", agentName, "round", round, "size", len(content))
+			case content := <-stableOutputCh:
+				wctx.Logger.Info("watchdog reap: using stable Vn output file",
+					"agent", agentName, "round", round, "path", absOutputPath, "size", len(content))
 				result = &core.ExecuteResult{Output: content, Model: model}
 				return nil
 			default:
@@ -833,6 +936,21 @@ func (a *Analyzer) runVnRefinementWithAgent(ctx context.Context, wctx *Context, 
 			})
 		}
 		return AnalysisOutput{}, err
+	}
+
+	// Some CLIs write to file but return empty stdout. Prefer the file content in that case.
+	if absOutputPath != "" && (result == nil || strings.TrimSpace(result.Output) == "") {
+		if content, readErr := os.ReadFile(absOutputPath); readErr == nil && strings.TrimSpace(string(content)) != "" {
+			if result == nil {
+				result = &core.ExecuteResult{}
+			}
+			result.Output = string(content)
+			if result.Model == "" {
+				result.Model = model
+			}
+			wctx.Logger.Info("file enforcement: using Vn output file content (stdout empty)",
+				"agent", agentName, "round", round, "path", absOutputPath, "size", len(content))
+		}
 	}
 
 	durationMS := time.Since(startTime).Milliseconds()
@@ -1070,8 +1188,26 @@ func (a *Analyzer) runAnalysisWithAgent(ctx context.Context, wctx *Context, agen
 				}
 			}
 		}
+		attemptCtx, cancelAttempt := context.WithCancelCause(ctx)
+		defer cancelAttempt(nil)
+
+		stableOutputCh := make(chan string, 1)
+		if watchdog != nil {
+			go func() {
+				select {
+				case content := <-watchdog.StableCh():
+					select {
+					case stableOutputCh <- content:
+					default:
+					}
+					cancelAttempt(core.ErrExecution(watchdogStableOutputCode, "output file stabilized; reaping hung agent process"))
+				case <-attemptCtx.Done():
+				}
+			}()
+		}
+
 		var execErr error
-		result, execErr = agent.Execute(ctx, core.ExecuteOptions{
+		result, execErr = agent.Execute(attemptCtx, core.ExecuteOptions{
 			Prompt:  prompt,
 			Format:  core.OutputFormatText,
 			Model:   model,
@@ -1080,12 +1216,12 @@ func (a *Analyzer) runAnalysisWithAgent(ctx context.Context, wctx *Context, agen
 			Phase:   core.PhaseAnalyze,
 			WorkDir: wctx.ProjectRoot,
 		})
-		// If execution failed but watchdog detected stable output, recover
-		if execErr != nil && watchdog != nil {
+		// If execution was cancelled after the output file stabilized, treat it as success.
+		if execErr != nil {
 			select {
-			case content := <-watchdog.StableCh():
-				wctx.Logger.Info("watchdog recovery: using stable output file",
-					"agent", agentName, "size", len(content))
+			case content := <-stableOutputCh:
+				wctx.Logger.Info("watchdog reap: using stable output file",
+					"agent", agentName, "path", absOutputPath, "size", len(content))
 				result = &core.ExecuteResult{Output: content, Model: model}
 				return nil
 			default:
@@ -1104,6 +1240,21 @@ func (a *Analyzer) runAnalysisWithAgent(ctx context.Context, wctx *Context, agen
 			})
 		}
 		return AnalysisOutput{}, err
+	}
+
+	// Some CLIs write to file but return empty stdout. Prefer the file content in that case.
+	if absOutputPath != "" && (result == nil || strings.TrimSpace(result.Output) == "") {
+		if content, readErr := os.ReadFile(absOutputPath); readErr == nil && strings.TrimSpace(string(content)) != "" {
+			if result == nil {
+				result = &core.ExecuteResult{}
+			}
+			result.Output = string(content)
+			if result.Model == "" {
+				result.Model = model
+			}
+			wctx.Logger.Info("file enforcement: using output file content (stdout empty)",
+				"agent", agentName, "path", absOutputPath, "size", len(content))
+		}
 	}
 
 	// Emit completed event
@@ -1184,6 +1335,15 @@ func (a *Analyzer) consolidateAnalysis(ctx context.Context, wctx *Context, outpu
 	if wctx.Report != nil && wctx.Report.IsEnabled() {
 		outputFilePath = wctx.Report.ConsolidatedAnalysisPath()
 	}
+	absOutputPath := wctx.ResolveFilePath(outputFilePath)
+
+	// Ensure output directory exists before execution (file enforcement)
+	if absOutputPath != "" {
+		enforcement := NewFileEnforcement(wctx.Logger)
+		if err := enforcement.EnsureDirectory(absOutputPath); err != nil {
+			wctx.Logger.Warn("failed to ensure output directory", "path", absOutputPath, "error", err)
+		}
+	}
 
 	// Build summaries of analyses to avoid context overflow in synthesis
 	// With 4 agents, ~80k chars each is generous while leaving room for prompt and output
@@ -1234,14 +1394,54 @@ func (a *Analyzer) consolidateAnalysis(ctx context.Context, wctx *Context, outpu
 		})
 	}
 
+	// Launch output file watchdog for recovery/reaping if agent hangs after writing
+	var watchdog *OutputWatchdog
+	if absOutputPath != "" {
+		watchdog = NewOutputWatchdog(absOutputPath, DefaultWatchdogConfig(), wctx.Logger)
+		watchdog.Start()
+		defer watchdog.Stop()
+	}
+
 	// Execute with retry
 	var result *core.ExecuteResult
 	err = wctx.Retry.Execute(func() error {
 		if ctrlErr := wctx.CheckControl(ctx); ctrlErr != nil {
 			return ctrlErr
 		}
+		// Pre-retry: if output file already exists with substantial content, use it.
+		// This recovers from the case where the agent wrote output but cmd.Wait() failed.
+		if absOutputPath != "" {
+			if info, statErr := os.Stat(absOutputPath); statErr == nil && info.Size() > 1024 {
+				content, readErr := os.ReadFile(absOutputPath)
+				if readErr == nil {
+					wctx.Logger.Info("recovered synthesis output from file written by previous attempt",
+						"agent", synthesizerAgent, "path", absOutputPath, "size", len(content))
+					result = &core.ExecuteResult{Output: string(content), Model: model}
+					return nil
+				}
+			}
+		}
+
+		attemptCtx, cancelAttempt := context.WithCancelCause(ctx)
+		defer cancelAttempt(nil)
+
+		stableOutputCh := make(chan string, 1)
+		if watchdog != nil {
+			go func() {
+				select {
+				case content := <-watchdog.StableCh():
+					select {
+					case stableOutputCh <- content:
+					default:
+					}
+					cancelAttempt(core.ErrExecution(watchdogStableOutputCode, "output file stabilized; reaping hung agent process"))
+				case <-attemptCtx.Done():
+				}
+			}()
+		}
+
 		var execErr error
-		result, execErr = agent.Execute(ctx, core.ExecuteOptions{
+		result, execErr = agent.Execute(attemptCtx, core.ExecuteOptions{
 			Prompt:  prompt,
 			Format:  core.OutputFormatText,
 			Model:   model,
@@ -1250,6 +1450,17 @@ func (a *Analyzer) consolidateAnalysis(ctx context.Context, wctx *Context, outpu
 			Phase:   core.PhaseAnalyze,
 			WorkDir: wctx.ProjectRoot,
 		})
+		// If execution was cancelled after the output file stabilized, treat it as success.
+		if execErr != nil {
+			select {
+			case content := <-stableOutputCh:
+				wctx.Logger.Info("watchdog reap: using stable synthesis output file",
+					"agent", synthesizerAgent, "path", absOutputPath, "size", len(content))
+				result = &core.ExecuteResult{Output: content, Model: model}
+				return nil
+			default:
+			}
+		}
 		return execErr
 	})
 
@@ -1272,6 +1483,32 @@ func (a *Analyzer) consolidateAnalysis(ctx context.Context, wctx *Context, outpu
 
 	durationMS := time.Since(startTime).Milliseconds()
 
+	// Some CLIs write to file but return empty stdout. Prefer the file content in that case.
+	if absOutputPath != "" && (result == nil || strings.TrimSpace(result.Output) == "") {
+		if content, readErr := os.ReadFile(absOutputPath); readErr == nil && strings.TrimSpace(string(content)) != "" {
+			if result == nil {
+				result = &core.ExecuteResult{}
+			}
+			result.Output = string(content)
+			if result.Model == "" {
+				result.Model = model
+			}
+			wctx.Logger.Info("file enforcement: using synthesis output file content (stdout empty)",
+				"agent", synthesizerAgent, "path", absOutputPath, "size", len(content))
+		}
+	}
+
+	// Ensure output file exists (file enforcement fallback)
+	if absOutputPath != "" && result != nil && result.Output != "" {
+		enforcement := NewFileEnforcement(wctx.Logger)
+		createdByLLM, verifyErr := enforcement.VerifyOrWriteFallback(absOutputPath, result.Output)
+		if verifyErr != nil {
+			wctx.Logger.Warn("file enforcement failed", "path", absOutputPath, "error", verifyErr)
+		} else if !createdByLLM {
+			wctx.Logger.Debug("created fallback file from stdout", "path", absOutputPath)
+		}
+	}
+
 	// Emit completed event
 	if wctx.Output != nil {
 		wctx.Output.AgentEvent("completed", synthesizerAgent, "Synthesis completed", map[string]interface{}{
@@ -1290,6 +1527,13 @@ func (a *Analyzer) consolidateAnalysis(ctx context.Context, wctx *Context, outpu
 	)
 
 	// Store the LLM-synthesized analysis as checkpoint
+	if strings.TrimSpace(result.Output) == "" {
+		wctx.Logger.Warn("synthesis returned empty output, using fallback concatenation",
+			"agent", synthesizerAgent,
+			"model", model,
+		)
+		return a.synthesizeAnalysisFallback(wctx, outputs)
+	}
 	return wctx.Checkpoint.CreateCheckpoint(wctx.State, "consolidated_analysis", map[string]interface{}{
 		"content":     result.Output,
 		"agent_count": len(outputs),

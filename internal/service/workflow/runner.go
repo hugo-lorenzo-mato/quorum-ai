@@ -637,6 +637,14 @@ func (r *Runner) Resume(ctx context.Context) error {
 	// Prepare resume execution - increment ExecutionID but keep events for history
 	r.prepareExecution(workflowState, true)
 
+	// Reconcile checkpoints from on-disk artifacts before computing the resume point.
+	// This prevents re-running analysis when the markdown output exists but checkpoints are missing.
+	if recErr := r.reconcileAnalysisArtifacts(ctx, workflowState); recErr != nil {
+		if r.logger != nil {
+			r.logger.Warn("failed to reconcile analysis artifacts", "error", recErr)
+		}
+	}
+
 	// Get resume point
 	resumePoint, err := r.resumeProvider.GetResumePoint(workflowState)
 	if err != nil {
@@ -742,6 +750,13 @@ func (r *Runner) ResumeWithState(ctx context.Context, state *core.WorkflowState)
 
 	// Prepare resume execution - increment ExecutionID but keep events for history
 	r.prepareExecution(state, true)
+
+	// Reconcile checkpoints from on-disk artifacts before computing the resume point.
+	if recErr := r.reconcileAnalysisArtifacts(ctx, state); recErr != nil {
+		if r.logger != nil {
+			r.logger.Warn("failed to reconcile analysis artifacts", "error", recErr)
+		}
+	}
 
 	resumePoint, err := r.resumeProvider.GetResumePoint(state)
 	if err != nil {
@@ -1450,6 +1465,13 @@ func (r *Runner) Plan(ctx context.Context) error {
 		return core.ErrState("NO_STATE", "no workflow state found to plan")
 	}
 
+	// Reconcile analysis artifacts: allow planning from a consolidated.md even if checkpoints are missing.
+	if recErr := r.reconcileAnalysisArtifacts(ctx, workflowState); recErr != nil {
+		if r.logger != nil {
+			r.logger.Warn("failed to reconcile analysis artifacts", "error", recErr)
+		}
+	}
+
 	// Verify analyze phase completed
 	analysis := GetConsolidatedAnalysis(workflowState)
 	if analysis == "" {
@@ -1529,6 +1551,13 @@ func (r *Runner) PlanWithState(ctx context.Context, state *core.WorkflowState) e
 	}()
 
 	workflowState := state
+
+	// Reconcile analysis artifacts: allow planning from a consolidated.md even if checkpoints are missing.
+	if recErr := r.reconcileAnalysisArtifacts(ctx, workflowState); recErr != nil {
+		if r.logger != nil {
+			r.logger.Warn("failed to reconcile analysis artifacts", "error", recErr)
+		}
+	}
 
 	// Verify analyze phase completed
 	analysis := GetConsolidatedAnalysis(workflowState)
@@ -1627,6 +1656,13 @@ func (r *Runner) Replan(ctx context.Context, additionalContext string) error {
 		return core.ErrState("NO_STATE", "no workflow state found to replan")
 	}
 
+	// Reconcile analysis artifacts: allow replan from a consolidated.md even if checkpoints are missing.
+	if recErr := r.reconcileAnalysisArtifacts(ctx, workflowState); recErr != nil {
+		if r.logger != nil {
+			r.logger.Warn("failed to reconcile analysis artifacts", "error", recErr)
+		}
+	}
+
 	// Verify analyze phase completed
 	analysis := GetConsolidatedAnalysis(workflowState)
 	if analysis == "" {
@@ -1706,6 +1742,13 @@ func (r *Runner) ReplanWithState(ctx context.Context, state *core.WorkflowState,
 	}()
 
 	workflowState := state
+
+	// Reconcile analysis artifacts: allow replan from a consolidated.md even if checkpoints are missing.
+	if recErr := r.reconcileAnalysisArtifacts(ctx, workflowState); recErr != nil {
+		if r.logger != nil {
+			r.logger.Warn("failed to reconcile analysis artifacts", "error", recErr)
+		}
+	}
 
 	// Verify analyze phase completed
 	analysis := GetConsolidatedAnalysis(workflowState)

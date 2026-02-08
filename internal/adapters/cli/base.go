@@ -332,6 +332,13 @@ func (b *BaseAdapter) ExecuteCommand(ctx context.Context, args []string, stdin, 
 			"path", cmdPath,
 			"duration", duration,
 		)
+		// Preserve cancellation cause (used for file-based recovery / watchdog reaping).
+		// When a workflow is cancelled by the user, upstream code does NOT cancel this
+		// context with a cause; it returns an explicit CANCELLED error via control-plane checks.
+		// Therefore: context cancellation here is usually timeout/infra or an internal cancel cause.
+		if cause := context.Cause(ctx); cause != nil && cause != context.Canceled {
+			return result, cause
+		}
 		return result, core.ErrState("CANCELLED", "workflow cancelled by user")
 	}
 
@@ -676,6 +683,9 @@ func (b *BaseAdapter) executeWithJSONStreaming(
 	}
 	if ctx.Err() == context.Canceled {
 		b.emitEvent(core.NewAgentEvent(core.AgentEventError, adapterName, "Execution cancelled"))
+		if cause := context.Cause(ctx); cause != nil && cause != context.Canceled {
+			return result, cause
+		}
 		return result, core.ErrState("CANCELLED", "workflow cancelled by user")
 	}
 
@@ -952,6 +962,9 @@ func (b *BaseAdapter) executeWithLogFileStreaming(
 	}
 	if ctx.Err() == context.Canceled {
 		b.emitEvent(core.NewAgentEvent(core.AgentEventError, adapterName, "Execution cancelled"))
+		if cause := context.Cause(ctx); cause != nil && cause != context.Canceled {
+			return result, cause
+		}
 		return result, core.ErrState("CANCELLED", "workflow cancelled by user")
 	}
 

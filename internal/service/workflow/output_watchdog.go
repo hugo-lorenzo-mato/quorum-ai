@@ -13,6 +13,12 @@ type OutputWatchdogConfig struct {
 	MinFileSize     int64         // Minimum file size to consider as valid output (default: 512 bytes)
 }
 
+const (
+	// When the watchdog detects a stable output file, we cancel the agent attempt context
+	// with this explicit cause so adapters can surface it distinctly from user cancellation.
+	watchdogStableOutputCode = "WATCHDOG_STABLE_OUTPUT"
+)
+
 // DefaultWatchdogConfig returns sensible defaults for the output watchdog.
 func DefaultWatchdogConfig() OutputWatchdogConfig {
 	return OutputWatchdogConfig{
