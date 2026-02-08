@@ -257,7 +257,9 @@ export default function useSSE() {
 
   // Keep ref in sync so connect() always calls the latest handleEvent
   // without needing it as a dependency (which would destabilize connect).
-  handleEventRef.current = handleEvent;
+  useEffect(() => {
+    handleEventRef.current = handleEvent;
+  }, [handleEvent]);
 
   const connect = useCallback(() => {
     if (eventSourceRef.current) {
