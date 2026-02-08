@@ -68,7 +68,7 @@ The configuration is complex. A flat list is overwhelming.
 **Proposed Layout:**
 - **Sidebar (Vertical Tabs):**
   1.  **General:** Logging, Report settings, Theme (local).
-  2.  **Workflow:** Global timeouts, Sandbox, Deny Tools.
+  2.  **Workflow:** Global timeouts, Deny Tools.
   3.  **Agents:** A detailed matrix or list view.
   4.  **Phases:** Deep dive into Analyze, Plan, Execute settings.
   5.  **Git & State:** Repo settings, Worktree modes, Persistence backend.

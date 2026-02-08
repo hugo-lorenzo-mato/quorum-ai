@@ -110,9 +110,6 @@ func TestDefaultRunnerConfig_Values(t *testing.T) {
 	if cfg.DryRun != false {
 		t.Error("DryRun should be false by default")
 	}
-	if cfg.Sandbox != true {
-		t.Error("Sandbox should be true by default")
-	}
 	// DefaultAgent has NO default - must be configured in config file
 	if cfg.DefaultAgent != "" {
 		t.Errorf("DefaultAgent = %q, want empty (no default)", cfg.DefaultAgent)
@@ -296,7 +293,6 @@ func TestRunnerConfig_Fields(t *testing.T) {
 		Timeout:           2 * time.Hour,
 		MaxRetries:        5,
 		DryRun:            true,
-		Sandbox:           false,
 		DenyTools:         []string{"rm", "sudo", "mkfs"},
 		DefaultAgent:      "gemini",
 		AgentPhaseModels:  map[string]map[string]string{"claude": {"analyze": "opus"}},
@@ -312,9 +308,6 @@ func TestRunnerConfig_Fields(t *testing.T) {
 	}
 	if !cfg.DryRun {
 		t.Error("DryRun should be true")
-	}
-	if cfg.Sandbox {
-		t.Error("Sandbox should be false")
 	}
 	if len(cfg.DenyTools) != 3 {
 		t.Errorf("len(DenyTools) = %d, want 3", len(cfg.DenyTools))

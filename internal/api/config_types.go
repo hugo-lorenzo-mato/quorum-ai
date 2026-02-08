@@ -70,7 +70,6 @@ type WorkflowConfigResponse struct {
 	Timeout    string                  `json:"timeout"`
 	MaxRetries int                     `json:"max_retries"`
 	DryRun     bool                    `json:"dry_run"`
-	Sandbox    bool                    `json:"sandbox"`
 	DenyTools  []string                `json:"deny_tools"`
 	Heartbeat  HeartbeatConfigResponse `json:"heartbeat"`
 }
@@ -342,7 +341,6 @@ type WorkflowConfigUpdate struct {
 	Timeout    *string                `json:"timeout,omitempty"`
 	MaxRetries *int                   `json:"max_retries,omitempty"`
 	DryRun     *bool                  `json:"dry_run,omitempty"`
-	Sandbox    *bool                  `json:"sandbox,omitempty"`
 	DenyTools  *[]string              `json:"deny_tools,omitempty"`
 	Heartbeat  *HeartbeatConfigUpdate `json:"heartbeat,omitempty"`
 }

@@ -81,15 +81,11 @@ func containsSubstring(s, substr string) bool {
 func TestConfig_Defaults(t *testing.T) {
 	cfg := &Config{
 		DryRun:       false,
-		Sandbox:      true,
 		DefaultAgent: "claude",
 	}
 
 	if cfg.DryRun {
 		t.Error("DryRun should be false by default")
-	}
-	if !cfg.Sandbox {
-		t.Error("Sandbox should be true by default")
 	}
 	if cfg.DefaultAgent != "claude" {
 		t.Errorf("DefaultAgent = %q, want %q", cfg.DefaultAgent, "claude")

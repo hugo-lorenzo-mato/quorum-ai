@@ -71,7 +71,6 @@ type BlueprintDTO struct {
 	MaxRetries         int     `json:"max_retries,omitempty"`
 	TimeoutSeconds     int     `json:"timeout_seconds,omitempty"`
 	DryRun             bool    `json:"dry_run,omitempty"`
-	Sandbox            bool    `json:"sandbox,omitempty"`
 
 	// ExecutionMode determines whether to use multi-agent consensus or single-agent mode.
 	// Valid values: "multi_agent" (default), "single_agent"
@@ -511,7 +510,6 @@ func (s *Server) handleCreateWorkflow(w http.ResponseWriter, r *http.Request) {
 			blueprint.Timeout = time.Duration(req.Blueprint.TimeoutSeconds) * time.Second
 		}
 		blueprint.DryRun = req.Blueprint.DryRun
-		blueprint.Sandbox = req.Blueprint.Sandbox
 		blueprint.ExecutionMode = req.Blueprint.ExecutionMode
 		blueprint.SingleAgent = core.BlueprintSingleAgent{
 			Agent:           req.Blueprint.SingleAgentName,
@@ -645,7 +643,6 @@ func (s *Server) handleUpdateWorkflow(w http.ResponseWriter, r *http.Request) {
 			MaxRetries:                 state.Blueprint.MaxRetries,
 			TimeoutSeconds:             int(state.Blueprint.Timeout.Seconds()),
 			DryRun:                     state.Blueprint.DryRun,
-			Sandbox:                    state.Blueprint.Sandbox,
 			ExecutionMode:              state.Blueprint.ExecutionMode,
 			SingleAgentName:            state.Blueprint.SingleAgent.Agent,
 			SingleAgentModel:           state.Blueprint.SingleAgent.Model,
@@ -893,7 +890,6 @@ func (s *Server) stateToWorkflowResponse(ctx context.Context, state *core.Workfl
 			MaxRetries:                 state.Blueprint.MaxRetries,
 			TimeoutSeconds:             int(state.Blueprint.Timeout.Seconds()),
 			DryRun:                     state.Blueprint.DryRun,
-			Sandbox:                    state.Blueprint.Sandbox,
 			ExecutionMode:              state.Blueprint.ExecutionMode,
 			SingleAgentName:            state.Blueprint.SingleAgent.Agent,
 			SingleAgentModel:           state.Blueprint.SingleAgent.Model,

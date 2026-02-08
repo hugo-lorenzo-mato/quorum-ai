@@ -129,7 +129,6 @@ func TestExecutor_Run_AllTasksCompleted(t *testing.T) {
 		Output:     output,
 		Config: &Config{
 			DryRun:       false,
-			Sandbox:      true,
 			DefaultAgent: "claude",
 			WorktreeMode: "disabled",
 		},

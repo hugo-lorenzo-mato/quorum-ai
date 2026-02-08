@@ -32,7 +32,6 @@ export const defaultConfig = {
     timeout: '30m',
     max_retries: 2,
     dry_run: false,
-    sandbox: true,
     deny_tools: [],
   },
   state: {

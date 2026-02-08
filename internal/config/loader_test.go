@@ -405,18 +405,6 @@ func TestDefaultConfig_HeartbeatEnabled(t *testing.T) {
 	}
 }
 
-func TestDefaultConfig_SandboxEnabled(t *testing.T) {
-	loader := NewLoader()
-	cfg, err := loader.Load()
-	if err != nil {
-		t.Fatalf("Failed to load config: %v", err)
-	}
-
-	if !cfg.Workflow.Sandbox {
-		t.Error("Expected workflow.sandbox to default to true")
-	}
-}
-
 func TestLoader_ModeratorDefaults(t *testing.T) {
 	loader := NewLoader()
 	cfg, err := loader.Load()

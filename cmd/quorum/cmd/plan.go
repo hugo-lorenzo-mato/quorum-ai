@@ -86,7 +86,7 @@ func runPlan(_ *cobra.Command, _ []string) error {
 	defer func() { _ = output.Close() }()
 
 	// Initialize phase runner dependencies
-	deps, err := InitPhaseRunner(ctx, core.PhasePlan, planMaxRetries, planDryRun, false)
+	deps, err := InitPhaseRunner(ctx, core.PhasePlan, planMaxRetries, planDryRun)
 	if err != nil {
 		return err
 	}

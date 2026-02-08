@@ -180,7 +180,6 @@ func (p *Planner) runSingleAgentPlanning(ctx context.Context, wctx *Context) err
 			Format:  core.OutputFormatText,
 			Model:   model,
 			Timeout: wctx.Config.PhaseTimeouts.Plan,
-			Sandbox: wctx.Config.Sandbox,
 			Phase:   core.PhasePlan,
 			WorkDir: wctx.ProjectRoot,
 		})

@@ -247,7 +247,6 @@ func (a *Analyzer) runSingleAgentAnalysis(ctx context.Context, wctx *Context) er
 			Format:          core.OutputFormatText,
 			Model:           model,
 			Timeout:         wctx.Config.PhaseTimeouts.Analyze,
-			Sandbox:         wctx.Config.Sandbox,
 			Phase:           core.PhaseAnalyze,
 			ReasoningEffort: wctx.Config.SingleAgent.ReasoningEffort,
 			WorkDir:         wctx.ProjectRoot,
@@ -950,7 +949,6 @@ func (a *Analyzer) runVnRefinementWithAgent(ctx context.Context, wctx *Context, 
 			Format:  core.OutputFormatText,
 			Model:   model,
 			Timeout: wctx.Config.PhaseTimeouts.Analyze,
-			Sandbox: wctx.Config.Sandbox,
 			Phase:   core.PhaseAnalyze,
 			WorkDir: wctx.ProjectRoot,
 		})
@@ -1280,7 +1278,6 @@ func (a *Analyzer) runAnalysisWithAgent(ctx context.Context, wctx *Context, agen
 			Format:  core.OutputFormatText,
 			Model:   model,
 			Timeout: wctx.Config.PhaseTimeouts.Analyze,
-			Sandbox: wctx.Config.Sandbox,
 			Phase:   core.PhaseAnalyze,
 			WorkDir: wctx.ProjectRoot,
 		})
@@ -1530,7 +1527,6 @@ func (a *Analyzer) consolidateAnalysis(ctx context.Context, wctx *Context, outpu
 			Format:  core.OutputFormatText,
 			Model:   model,
 			Timeout: wctx.Config.PhaseTimeouts.Analyze,
-			Sandbox: wctx.Config.Sandbox,
 			Phase:   core.PhaseAnalyze,
 			WorkDir: wctx.ProjectRoot,
 		})

@@ -90,8 +90,6 @@ type Context struct {
 type ModeEnforcerInterface interface {
 	// CanExecute checks if an operation can be executed.
 	CanExecute(ctx context.Context, op ModeOperation) error
-	// IsSandboxed returns whether sandbox mode is enabled.
-	IsSandboxed() bool
 	// IsDryRun returns whether dry-run mode is enabled.
 	IsDryRun() bool
 }
@@ -104,14 +102,12 @@ type ModeOperation struct {
 	HasSideEffects       bool
 	RequiresConfirmation bool
 	InWorkspace          bool
-	AllowedInSandbox     bool
 	IsDestructive        bool
 }
 
 // Config holds workflow configuration.
 type Config struct {
 	DryRun       bool
-	Sandbox      bool
 	DenyTools    []string
 	DefaultAgent string
 	// AgentPhaseModels allows per-agent, per-phase model overrides.
@@ -281,7 +277,7 @@ type TaskExecuteParams struct {
 	Task    *core.Task
 	Context string
 	WorkDir string
-	// Constraints are optional additional rules for the agent (e.g., policy, sandbox limits).
+	// Constraints are optional additional rules for the agent (e.g., policy limits).
 	Constraints []string
 }
 

@@ -611,7 +611,7 @@ The codebase exhibits significant divergence in how different interfaces constru
 **CLI Path** (`cmd/quorum/cmd/common.go:54-293`):
 
 ```go
-func InitPhaseRunner(ctx context.Context, phase core.Phase, maxRetries int, dryRun, sandbox bool) (*PhaseRunnerDeps, error) {
+func InitPhaseRunner(ctx context.Context, phase core.Phase, maxRetries int, dryRun bool) (*PhaseRunnerDeps, error) {
     // 1. Load configuration via viper
     loader := config.NewLoaderWithViper(viper.GetViper())
     cfg, err := loader.Load()

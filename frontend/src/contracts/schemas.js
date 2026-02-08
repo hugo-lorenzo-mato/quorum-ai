@@ -65,12 +65,11 @@ export const heartbeatConfigSchema = {
 // Workflow configuration
 export const workflowConfigSchema = {
   type: 'object',
-  required: ['timeout', 'max_retries', 'dry_run', 'sandbox', 'heartbeat'],
+  required: ['timeout', 'max_retries', 'dry_run', 'heartbeat'],
   properties: {
     timeout: { type: 'string' },
     max_retries: { type: 'integer' },
     dry_run: { type: 'boolean' },
-    sandbox: { type: 'boolean' },
     deny_tools: { type: 'array', items: { type: 'string' } },
     heartbeat: heartbeatConfigSchema,
   },

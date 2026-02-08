@@ -50,7 +50,6 @@ type RunnerConfig struct {
 	Timeout      time.Duration
 	MaxRetries   int
 	DryRun       bool
-	Sandbox      bool
 	DenyTools    []string
 	DefaultAgent string
 	// AgentPhaseModels allows per-agent, per-phase model overrides.
@@ -106,7 +105,6 @@ func DefaultRunnerConfig() *RunnerConfig {
 		Timeout:          time.Hour,
 		MaxRetries:       3,
 		DryRun:           false,
-		Sandbox:          true,
 		DefaultAgent:     "", // NO default - must be configured
 		AgentPhaseModels: map[string]map[string]string{},
 		WorktreeMode:     "always",
@@ -905,7 +903,6 @@ func (r *Runner) buildBlueprint() *core.Blueprint {
 		MaxRetries: r.config.MaxRetries,
 		Timeout:    r.config.Timeout,
 		DryRun:     r.config.DryRun,
-		Sandbox:    r.config.Sandbox,
 	}
 }
 
@@ -1047,7 +1044,6 @@ func (r *Runner) createContext(state *core.WorkflowState) *Context {
 		Report:            reportWriter,
 		Config: &Config{
 			DryRun:                 r.config.DryRun,
-			Sandbox:                r.config.Sandbox,
 			DenyTools:              r.config.DenyTools,
 			DefaultAgent:           r.config.DefaultAgent,
 			AgentPhaseModels:       r.config.AgentPhaseModels,

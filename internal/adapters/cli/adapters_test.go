@@ -354,9 +354,6 @@ func TestCodexAdapter_BuildArgs(t *testing.T) {
 	if !containsString(args, `approval_policy="never"`) {
 		t.Error("should include approval_policy override")
 	}
-	if !containsString(args, `sandbox_mode="workspace-write"`) {
-		t.Error("should include sandbox_mode override")
-	}
 	if !containsString(args, `model_reasoning_effort="high"`) {
 		t.Error("should include model_reasoning_effort override")
 	}

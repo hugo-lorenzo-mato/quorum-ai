@@ -691,7 +691,6 @@ func configToFullResponse(cfg *config.Config) FullConfigResponse {
 			Timeout:    cfg.Workflow.Timeout,
 			MaxRetries: cfg.Workflow.MaxRetries,
 			DryRun:     cfg.Workflow.DryRun,
-			Sandbox:    cfg.Workflow.Sandbox,
 			DenyTools:  denyTools,
 			Heartbeat: HeartbeatConfigResponse{
 				Enabled:        true, // Heartbeat is always active; field kept for API compat
@@ -967,9 +966,6 @@ func applyWorkflowUpdates(cfg *config.WorkflowConfig, update *WorkflowConfigUpda
 	}
 	if update.DryRun != nil {
 		cfg.DryRun = *update.DryRun
-	}
-	if update.Sandbox != nil {
-		cfg.Sandbox = *update.Sandbox
 	}
 	if update.DenyTools != nil {
 		cfg.DenyTools = *update.DenyTools

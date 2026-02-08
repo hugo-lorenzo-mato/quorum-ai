@@ -28,13 +28,6 @@ func TestDefaultRunnerConfig(t *testing.T) {
 	}
 }
 
-func TestDefaultRunnerConfig_SandboxEnabled(t *testing.T) {
-	config := DefaultRunnerConfig()
-	if !config.Sandbox {
-		t.Error("Expected DefaultRunnerConfig().Sandbox to be true")
-	}
-}
-
 // testRunnerConfig returns a config suitable for testing with required fields set.
 func testRunnerConfig() *RunnerConfig {
 	cfg := DefaultRunnerConfig()
@@ -180,7 +173,6 @@ func TestRunner_initializeState(t *testing.T) {
 func TestRunner_createContext(t *testing.T) {
 	config := &RunnerConfig{
 		DryRun:       true,
-		Sandbox:      false,
 		DenyTools:    []string{"rm", "sudo"},
 		DefaultAgent: "gemini",
 	}
@@ -208,9 +200,6 @@ func TestRunner_createContext(t *testing.T) {
 	}
 	if ctx.Config.DryRun != config.DryRun {
 		t.Errorf("DryRun = %v, want %v", ctx.Config.DryRun, config.DryRun)
-	}
-	if ctx.Config.Sandbox != config.Sandbox {
-		t.Errorf("Sandbox = %v, want %v", ctx.Config.Sandbox, config.Sandbox)
 	}
 	if ctx.Config.DefaultAgent != config.DefaultAgent {
 		t.Errorf("DefaultAgent = %q, want %q", ctx.Config.DefaultAgent, config.DefaultAgent)

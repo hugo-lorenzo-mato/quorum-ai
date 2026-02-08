@@ -977,7 +977,6 @@ func (g *Generator) GenerateIssueFiles(ctx context.Context, workflowID string) (
 				Model:   g.config.Generator.Model,
 				Format:  core.OutputFormatText,
 				Timeout: timeout,
-				Sandbox: false,
 				WorkDir: cwd,
 			})
 			if err != nil {

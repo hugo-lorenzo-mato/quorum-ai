@@ -365,7 +365,6 @@ func createWorkflowRunner(
 		Timeout:      timeout,
 		MaxRetries:   3,
 		DryRun:       false,
-		Sandbox:      cfg.Workflow.Sandbox,
 		DenyTools:    cfg.Workflow.DenyTools,
 		DefaultAgent: defaultAgent,
 		AgentPhaseModels: map[string]map[string]string{
@@ -457,7 +456,6 @@ func createWorkflowRunner(
 	// Create mode enforcer
 	modeEnforcer := service.NewModeEnforcer(service.ExecutionMode{
 		DryRun:      runnerConfig.DryRun,
-		Sandbox:     runnerConfig.Sandbox,
 		DeniedTools: runnerConfig.DenyTools,
 	})
 	modeEnforcerAdapter := workflow.NewModeEnforcerAdapter(modeEnforcer)
@@ -707,7 +705,6 @@ func createWorkflowRunnerWithTrace(
 		Timeout:      timeout,
 		MaxRetries:   3,
 		DryRun:       false,
-		Sandbox:      cfg.Workflow.Sandbox,
 		DenyTools:    cfg.Workflow.DenyTools,
 		DefaultAgent: defaultAgent,
 		AgentPhaseModels: map[string]map[string]string{
@@ -802,7 +799,6 @@ func createWorkflowRunnerWithTrace(
 	// Create mode enforcer
 	modeEnforcer := service.NewModeEnforcer(service.ExecutionMode{
 		DryRun:      runnerConfig.DryRun,
-		Sandbox:     runnerConfig.Sandbox,
 		DeniedTools: runnerConfig.DenyTools,
 	})
 	modeEnforcerAdapter := workflow.NewModeEnforcerAdapter(modeEnforcer)

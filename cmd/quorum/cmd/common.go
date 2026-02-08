@@ -63,7 +63,7 @@ type PhaseRunnerDeps struct {
 // InitPhaseRunner initializes all dependencies needed for running individual phases.
 // This extracts the common initialization logic from run.go to be reused by
 // analyze, plan, and execute commands.
-func InitPhaseRunner(ctx context.Context, phase core.Phase, maxRetries int, dryRun, sandbox bool) (*PhaseRunnerDeps, error) {
+func InitPhaseRunner(ctx context.Context, phase core.Phase, maxRetries int, dryRun bool) (*PhaseRunnerDeps, error) {
 	// Load unified configuration using global viper (includes flag bindings)
 	loader := config.NewLoaderWithViper(viper.GetViper())
 	if cfgFile != "" {
@@ -173,7 +173,6 @@ func InitPhaseRunner(ctx context.Context, phase core.Phase, maxRetries int, dryR
 		Timeout:      timeout,
 		MaxRetries:   maxRetries,
 		DryRun:       dryRun,
-		Sandbox:      sandbox || cfg.Workflow.Sandbox,
 		DenyTools:    cfg.Workflow.DenyTools,
 		DefaultAgent: defaultAgent,
 		AgentPhaseModels: map[string]map[string]string{
@@ -329,7 +328,6 @@ func CreateWorkflowContext(deps *PhaseRunnerDeps, state *core.WorkflowState) *wo
 		Logger:            deps.Logger,
 		Config: &workflow.Config{
 			DryRun:            deps.RunnerConfig.DryRun,
-			Sandbox:           deps.RunnerConfig.Sandbox,
 			DenyTools:         deps.RunnerConfig.DenyTools,
 			DefaultAgent:      deps.RunnerConfig.DefaultAgent,
 			AgentPhaseModels:  deps.RunnerConfig.AgentPhaseModels,
@@ -453,7 +451,6 @@ func buildBlueprint(runnerCfg *workflow.RunnerConfig) *core.Blueprint {
 		MaxRetries: runnerCfg.MaxRetries,
 		Timeout:    runnerCfg.Timeout,
 		DryRun:     runnerCfg.DryRun,
-		Sandbox:    runnerCfg.Sandbox,
 	}
 }
 

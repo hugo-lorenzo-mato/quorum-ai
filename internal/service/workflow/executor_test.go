@@ -14,7 +14,6 @@ import (
 
 // mockModeEnforcer implements ModeEnforcerInterface for testing.
 type mockModeEnforcer struct {
-	sandboxed bool
 	dryRun    bool
 	blocked   bool
 }
@@ -28,7 +27,6 @@ func (m *mockModeEnforcer) CanExecute(_ context.Context, _ ModeOperation) error 
 
 func (m *mockModeEnforcer) RecordCost(_ float64) {}
 
-func (m *mockModeEnforcer) IsSandboxed() bool { return m.sandboxed }
 func (m *mockModeEnforcer) IsDryRun() bool    { return m.dryRun }
 
 func TestExecutor_ModeEnforcerBlocks(t *testing.T) {

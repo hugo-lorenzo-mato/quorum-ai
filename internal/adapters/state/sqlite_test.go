@@ -703,7 +703,6 @@ func TestSQLiteStateManager_ConfigAndMetrics(t *testing.T) {
 		MaxRetries: 5,
 		Timeout:    2 * time.Hour,
 		DryRun:     true,
-		Sandbox:    true,
 	}
 	state.Metrics = &core.StateMetrics{
 		TotalTokensIn:  10000,

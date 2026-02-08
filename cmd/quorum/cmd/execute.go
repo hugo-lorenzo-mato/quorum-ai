@@ -35,7 +35,6 @@ var (
 	executeDryRun     bool
 	executeMaxRetries int
 	executeOutput     string
-	executeSandbox    bool
 	executeWorkflowID string
 )
 
@@ -45,7 +44,6 @@ func init() {
 	executeCmd.Flags().BoolVar(&executeDryRun, "dry-run", false, "Simulate without executing")
 	executeCmd.Flags().IntVar(&executeMaxRetries, "max-retries", 3, "Maximum retry attempts")
 	executeCmd.Flags().StringVarP(&executeOutput, "output", "o", "", "Output mode (tui, plain, json, quiet)")
-	executeCmd.Flags().BoolVar(&executeSandbox, "sandbox", false, "Run in sandboxed mode")
 	executeCmd.Flags().StringVarP(&executeWorkflowID, "workflow", "w", "", "Resume specific workflow by ID")
 
 	// Single-agent mode flags
@@ -89,7 +87,7 @@ func runExecute(_ *cobra.Command, _ []string) error {
 	defer func() { _ = output.Close() }()
 
 	// Initialize phase runner dependencies
-	deps, err := InitPhaseRunner(ctx, core.PhaseExecute, executeMaxRetries, executeDryRun, executeSandbox)
+	deps, err := InitPhaseRunner(ctx, core.PhaseExecute, executeMaxRetries, executeDryRun)
 	if err != nil {
 		return err
 	}

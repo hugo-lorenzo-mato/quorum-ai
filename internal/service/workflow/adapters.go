@@ -363,19 +363,10 @@ func (a *ModeEnforcerAdapter) CanExecute(ctx context.Context, op ModeOperation) 
 		HasSideEffects:       op.HasSideEffects,
 		RequiresConfirmation: op.RequiresConfirmation,
 		InWorkspace:          op.InWorkspace,
-		AllowedInSandbox:     op.AllowedInSandbox,
 		IsDestructive:        op.IsDestructive,
 	}
 
 	return a.enforcer.CanExecute(ctx, serviceOp)
-}
-
-// IsSandboxed implements ModeEnforcerInterface.
-func (a *ModeEnforcerAdapter) IsSandboxed() bool {
-	if a.enforcer == nil {
-		return false
-	}
-	return a.enforcer.Mode().Sandbox
 }
 
 // IsDryRun implements ModeEnforcerInterface.

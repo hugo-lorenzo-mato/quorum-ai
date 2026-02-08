@@ -218,16 +218,6 @@ func buildWorkflowSection() SchemaSection {
 				Category:    "basic",
 			},
 			{
-				Path:        "workflow.sandbox",
-				Type:        "bool",
-				Title:       "Sandbox Mode",
-				Description: "Restrict dangerous operations",
-				Tooltip:     "When enabled, restricts operations that could modify the system outside the project directory. Recommended for safety.",
-				Default:     true,
-				DangerLevel: "danger",
-				Category:    "basic",
-			},
-			{
 				Path:        "workflow.dry_run",
 				Type:        "bool",
 				Title:       "Dry Run",

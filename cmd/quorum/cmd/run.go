@@ -274,7 +274,6 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 		Timeout:      timeout,
 		MaxRetries:   runMaxRetries,
 		DryRun:       runDryRun,
-		Sandbox:      cfg.Workflow.Sandbox,
 		DenyTools:    cfg.Workflow.DenyTools,
 		DefaultAgent: defaultAgent,
 		AgentPhaseModels: map[string]map[string]string{
@@ -423,7 +422,6 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 	// Create mode enforcer from config
 	modeEnforcer := service.NewModeEnforcer(service.ExecutionMode{
 		DryRun:      runnerConfig.DryRun,
-		Sandbox:     runnerConfig.Sandbox,
 		DeniedTools: runnerConfig.DenyTools,
 	})
 	modeEnforcerAdapter := workflow.NewModeEnforcerAdapter(modeEnforcer)

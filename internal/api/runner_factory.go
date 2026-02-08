@@ -220,10 +220,10 @@ func (f *RunnerFactory) CreateRunner(ctx context.Context, workflowID string, cp 
 			ConsensusThreshold:         bp.Consensus.Threshold,
 			MaxRetries:                 bp.MaxRetries,
 			Timeout:                    bp.Timeout,
-			// NOTE: We intentionally do NOT treat dry-run/sandbox as blueprint-level overrides.
-			// Those are controlled globally via settings (workflow.dry_run/workflow.sandbox).
-			// Blueprint doesn't carry explicit "has_*" flags for booleans, so treating them
-			// as overrides would make zero-values accidentally disable sandbox by default.
+			// NOTE: We intentionally do NOT treat dry-run as a blueprint-level override.
+			// It is controlled globally via settings (workflow.dry_run).
+			// Blueprint doesn't carry explicit "has_*" flags for booleans, so treating it
+			// as an override could make omitted fields accidentally flip behavior.
 		})
 	}
 

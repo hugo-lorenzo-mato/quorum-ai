@@ -10,7 +10,6 @@ func TestFullConfigResponse_Marshaling(t *testing.T) {
 		Workflow: WorkflowConfigResponse{
 			Timeout:    "1h",
 			MaxRetries: 3,
-			Sandbox:    false,
 			DenyTools:  []string{},
 		},
 		Agents: AgentsConfigResponse{

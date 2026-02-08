@@ -22,7 +22,6 @@ function WorkflowSection() {
   const timeout = useConfigField('workflow.timeout');
   const maxRetries = useConfigField('workflow.max_retries');
   const dryRun = useConfigField('workflow.dry_run');
-  const sandbox = useConfigField('workflow.sandbox');
   const denyTools = useConfigField('workflow.deny_tools');
 
   return (
@@ -58,16 +57,6 @@ function WorkflowSection() {
         onChange={dryRun.onChange}
         error={dryRun.error}
         disabled={dryRun.disabled}
-      />
-
-      <ToggleSetting
-        label="Sandbox Mode"
-        description="Run commands in sandboxed environment"
-        tooltip="Provides an additional layer of security by isolating agent command execution."
-        checked={sandbox.value}
-        onChange={sandbox.onChange}
-        error={sandbox.error}
-        disabled={sandbox.disabled}
       />
 
       <ArrayInputSetting

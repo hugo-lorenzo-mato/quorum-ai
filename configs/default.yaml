@@ -39,9 +39,6 @@ workflow:
   max_retries: 3
   # Dry-run mode (simulate without executing)
   dry_run: false
-  # Sandbox mode restricts operations that could modify the system.
-  # Set to false only when you trust the workflow to make changes.
-  sandbox: true
   # Tools to deny during execution
   deny_tools: []
   # Heartbeat system for zombie workflow detection and recovery.

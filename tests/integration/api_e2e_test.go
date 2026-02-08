@@ -228,7 +228,6 @@ func TestE2E_ConfigSections(t *testing.T) {
 		updateReq := api.FullConfigUpdate{
 			Workflow: &api.WorkflowConfigUpdate{
 				Timeout: strPtr("2h"),
-				Sandbox: boolPtr(true),
 			},
 		}
 		status, _, body := request(t, ts, "PATCH", "/api/v1/config", updateReq)
@@ -238,7 +237,6 @@ func TestE2E_ConfigSections(t *testing.T) {
 		err := json.Unmarshal(body, &cfg)
 		testutil.AssertNoError(t, err)
 		testutil.AssertEqual(t, cfg.Config.Workflow.Timeout, "2h")
-		testutil.AssertEqual(t, cfg.Config.Workflow.Sandbox, true)
 	})
 
 	t.Run("Agents Config", func(t *testing.T) {

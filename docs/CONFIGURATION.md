@@ -129,7 +129,6 @@ workflow:
   timeout: 12h
   max_retries: 3
   dry_run: false
-  sandbox: true
   deny_tools: []
 ```
 
@@ -138,7 +137,6 @@ workflow:
 | `timeout` | duration | `12h` | Maximum workflow execution time |
 | `max_retries` | int | `3` | Retry attempts per failed task (0-10) |
 | `dry_run` | bool | `false` | Simulate without running agents |
-| `sandbox` | bool | `true` | Restrict dangerous operations |
 | `deny_tools` | []string | `[]` | Tool names to block during execution |
 
 ---

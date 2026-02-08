@@ -101,7 +101,6 @@ type WorkflowConfig struct {
 	Timeout    string          `mapstructure:"timeout" yaml:"timeout"`
 	MaxRetries int             `mapstructure:"max_retries" yaml:"max_retries"`
 	DryRun     bool            `mapstructure:"dry_run" yaml:"dry_run"`
-	Sandbox    bool            `mapstructure:"sandbox" yaml:"sandbox"`
 	DenyTools  []string        `mapstructure:"deny_tools" yaml:"deny_tools"`
 	Heartbeat  HeartbeatConfig `mapstructure:"heartbeat" yaml:"heartbeat"`
 }

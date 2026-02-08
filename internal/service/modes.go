@@ -12,7 +12,6 @@ import (
 type ExecutionMode struct {
 	DryRun      bool
 	Yolo        bool
-	Sandbox     bool
 	DeniedTools []string
 	Interactive bool
 }
@@ -22,7 +21,6 @@ func DefaultMode() ExecutionMode {
 	return ExecutionMode{
 		DryRun:      false,
 		Yolo:        false,
-		Sandbox:     true, // Security: sandbox enabled by default
 		DeniedTools: nil,
 		Interactive: true,
 	}
@@ -30,10 +28,6 @@ func DefaultMode() ExecutionMode {
 
 // Validate validates the mode configuration.
 func (m ExecutionMode) Validate() error {
-	if m.Sandbox && m.Yolo {
-		return fmt.Errorf("cannot use yolo mode in sandbox")
-	}
-
 	return nil
 }
 
@@ -64,14 +58,6 @@ func (e *ModeEnforcer) CanExecute(_ context.Context, op Operation) error {
 		e.logOperation("BLOCKED (denied)", op)
 		return core.ErrValidation("TOOL_DENIED",
 			fmt.Sprintf("tool %s is denied", op.Tool))
-	}
-
-	// Check sandbox restrictions
-	if e.mode.Sandbox {
-		if err := e.checkSandboxRestrictions(op); err != nil {
-			e.logOperation("BLOCKED (sandbox)", op)
-			return err
-		}
 	}
 
 	e.logOperation("ALLOWED", op)
@@ -106,32 +92,6 @@ func (e *ModeEnforcer) isToolDenied(tool string) bool {
 	return false
 }
 
-// checkSandboxRestrictions applies sandbox mode restrictions.
-func (e *ModeEnforcer) checkSandboxRestrictions(op Operation) error {
-	// In sandbox mode, restrict:
-	// - File system writes outside workspace
-	// - Network operations
-	// - Git push operations
-	// - Destructive operations
-
-	if op.Type == OpTypeFileWrite && !op.InWorkspace {
-		return core.ErrValidation("SANDBOX_VIOLATION",
-			"file writes outside workspace not allowed in sandbox")
-	}
-
-	if op.Type == OpTypeNetwork && !op.AllowedInSandbox {
-		return core.ErrValidation("SANDBOX_VIOLATION",
-			"network operation not allowed in sandbox")
-	}
-
-	if op.Type == OpTypeGit && op.IsDestructive {
-		return core.ErrValidation("SANDBOX_VIOLATION",
-			"destructive git operation not allowed in sandbox")
-	}
-
-	return nil
-}
-
 // logOperation logs an operation check.
 func (e *ModeEnforcer) logOperation(status string, op Operation) {
 	e.operationLog = append(e.operationLog,
@@ -151,7 +111,6 @@ type Operation struct {
 	HasSideEffects       bool
 	RequiresConfirmation bool
 	InWorkspace          bool
-	AllowedInSandbox     bool
 	IsDestructive        bool
 }
 

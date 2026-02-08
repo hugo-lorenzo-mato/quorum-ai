@@ -269,7 +269,6 @@ func (p *Planner) runPlanningWithAgent(ctx context.Context, wctx *Context, agent
 			Format:  core.OutputFormatText,
 			Model:   model,
 			Timeout: wctx.Config.PhaseTimeouts.Plan,
-			Sandbox: wctx.Config.Sandbox,
 			Phase:   core.PhasePlan,
 			WorkDir: wctx.ProjectRoot,
 		})
@@ -421,7 +420,6 @@ func (p *Planner) consolidatePlans(ctx context.Context, wctx *Context, plans []P
 			Format:  core.OutputFormatText,
 			Model:   model,
 			Timeout: wctx.Config.PhaseTimeouts.Plan,
-			Sandbox: wctx.Config.Sandbox,
 			Phase:   core.PhasePlan,
 			WorkDir: wctx.ProjectRoot,
 		})

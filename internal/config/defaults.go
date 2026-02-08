@@ -129,7 +129,6 @@ git:
 workflow:
   timeout: 16h
   max_retries: 3
-  sandbox: true
   heartbeat:
     # Heartbeat monitoring is always active (cannot be disabled).
     # Intervals can be tuned below.

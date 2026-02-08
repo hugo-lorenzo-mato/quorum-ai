@@ -235,7 +235,6 @@ func (m *SemanticModerator) EvaluateWithAgent(ctx context.Context, wctx *Context
 			Format:  core.OutputFormatText,
 			Model:   model,
 			Timeout: wctx.Config.PhaseTimeouts.Analyze,
-			Sandbox: wctx.Config.Sandbox,
 			Phase:   core.PhaseAnalyze,
 			WorkDir: wctx.ProjectRoot,
 		})

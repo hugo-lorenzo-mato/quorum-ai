@@ -125,13 +125,13 @@ func FuzzWorkflowTaskOperations(f *testing.F) {
 
 // FuzzWorkflowConfig tests that workflow blueprint values are handled safely.
 func FuzzWorkflowConfig(f *testing.F) {
-	f.Add(0.0, 0, int64(0), true, true)
-	f.Add(0.5, 3, int64(3600), false, false)
-	f.Add(1.0, 10, int64(7200), true, false)
-	f.Add(-0.5, -1, int64(-1000), false, true)
-	f.Add(2.0, 100, int64(86400), true, true)
+	f.Add(0.0, 0, int64(0), true)
+	f.Add(0.5, 3, int64(3600), false)
+	f.Add(1.0, 10, int64(7200), true)
+	f.Add(-0.5, -1, int64(-1000), false)
+	f.Add(2.0, 100, int64(86400), true)
 
-	f.Fuzz(func(t *testing.T, threshold float64, retries int, timeoutSec int64, dryRun bool, sandbox bool) {
+	f.Fuzz(func(t *testing.T, threshold float64, retries int, timeoutSec int64, dryRun bool) {
 		defer func() {
 			if r := recover(); r != nil {
 				t.Errorf("panic creating workflow with config: %v", r)
@@ -142,7 +142,6 @@ func FuzzWorkflowConfig(f *testing.F) {
 			Consensus:  BlueprintConsensus{Threshold: threshold},
 			MaxRetries: retries,
 			DryRun:     dryRun,
-			Sandbox:    sandbox,
 		}
 
 		wf := NewWorkflow("test", "prompt", bp)

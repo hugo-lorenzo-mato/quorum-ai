@@ -46,14 +46,8 @@ type WorkflowConfigOverride struct {
 	// DryRun enables simulation mode without making external changes.
 	DryRun bool
 
-	// Sandbox enables isolated execution environment.
-	Sandbox bool
-
 	// HasDryRun indicates if DryRun was explicitly set.
 	HasDryRun bool
-
-	// HasSandbox indicates if Sandbox was explicitly set.
-	HasSandbox bool
 }
 
 // IsSingleAgentMode returns true if the override specifies single-agent execution.
@@ -97,7 +91,6 @@ type RunnerBuilder struct {
 	phase      *core.Phase
 	maxRetries *int
 	dryRun     *bool
-	sandbox    *bool
 
 	// Disable auto-creation of git components
 	skipGitAutoCreate bool
@@ -232,19 +225,13 @@ func (b *RunnerBuilder) WithDryRun(dryRun bool) *RunnerBuilder {
 	return b
 }
 
-// WithSandbox enables or disables sandbox mode.
-func (b *RunnerBuilder) WithSandbox(sandbox bool) *RunnerBuilder {
-	b.sandbox = &sandbox
-	return b
-}
-
 // WithMaxRetries sets the maximum number of retries.
 func (b *RunnerBuilder) WithMaxRetries(retries int) *RunnerBuilder {
 	b.maxRetries = &retries
 	return b
 }
 
-// WithModeEnforcer sets the mode enforcer for dry-run/sandbox enforcement.
+// WithModeEnforcer sets the mode enforcer for execution-mode enforcement.
 func (b *RunnerBuilder) WithModeEnforcer(me ModeEnforcerInterface) *RunnerBuilder {
 	b.modeEnforcer = me
 	return b
@@ -337,9 +324,6 @@ func (b *RunnerBuilder) Build(ctx context.Context) (*Runner, error) {
 	if b.dryRun != nil {
 		runnerConfig.DryRun = *b.dryRun
 	}
-	if b.sandbox != nil {
-		runnerConfig.Sandbox = *b.sandbox
-	}
 	if b.maxRetries != nil {
 		runnerConfig.MaxRetries = *b.maxRetries
 	}
@@ -370,7 +354,6 @@ func (b *RunnerBuilder) Build(ctx context.Context) (*Runner, error) {
 	} else {
 		modeEnforcer := service.NewModeEnforcer(service.ExecutionMode{
 			DryRun:      runnerConfig.DryRun,
-			Sandbox:     runnerConfig.Sandbox,
 			DeniedTools: runnerConfig.DenyTools,
 		})
 		modeEnforcerAdapter = NewModeEnforcerAdapter(modeEnforcer)
@@ -475,9 +458,6 @@ func (b *RunnerBuilder) buildRunnerConfig() *RunnerConfig {
 		if b.workflowConfig.HasDryRun {
 			runnerCfg.DryRun = b.workflowConfig.DryRun
 		}
-		if b.workflowConfig.HasSandbox {
-			runnerCfg.Sandbox = b.workflowConfig.Sandbox
-		}
 	}
 
 	runnerCfg.SingleAgent = b.buildSingleAgentConfig(cfg)
@@ -576,7 +556,6 @@ func BuildRunnerConfigFromConfig(cfg *config.Config) *RunnerConfig {
 		Timeout:           timeout,
 		MaxRetries:        cfg.Workflow.MaxRetries,
 		DryRun:            cfg.Workflow.DryRun,
-		Sandbox:           cfg.Workflow.Sandbox,
 		DenyTools:         cfg.Workflow.DenyTools,
 		DefaultAgent:      cfg.Agents.Default,
 		AgentPhaseModels:  buildAgentPhaseModels(cfg.Agents),
