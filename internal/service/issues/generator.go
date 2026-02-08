@@ -1031,12 +1031,13 @@ func (g *Generator) GenerateIssueFiles(ctx context.Context, workflowID string) (
 			timeout := resolveExecuteTimeout(deadline, hasDeadline, 10*time.Minute)
 
 			result, err := executor.Execute(ctx, core.ExecuteOptions{
-				Prompt:  prompt,
-				Model:   g.config.Generator.Model,
-				Format:  core.OutputFormatText,
-				Timeout: timeout,
-				Sandbox: false,
-				WorkDir: cwd,
+				Prompt:          prompt,
+				Model:           g.config.Generator.Model,
+				Format:          core.OutputFormatText,
+				Timeout:         timeout,
+				Sandbox:         false,
+				WorkDir:         cwd,
+				ReasoningEffort: g.config.Generator.ReasoningEffort,
 			})
 			if err != nil {
 				batchErrors = append(batchErrors, fmt.Errorf("batch %d/%d attempt %d: %w", batchNum+1, totalBatches, attempt, err))
