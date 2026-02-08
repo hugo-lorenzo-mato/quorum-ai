@@ -149,6 +149,15 @@ func (g *Generator) CreateIssuesFromFiles(ctx context.Context, workflowID string
 		}
 	}
 
+	totalToPublish := len(subInputs)
+	if mainInput != nil {
+		totalToPublish++
+	}
+	createdCount := 0
+	if totalToPublish > 0 {
+		g.emitIssuesPublishingProgress(workflowID, "started", 0, totalToPublish, nil, 0, dryRun, "issue publishing started")
+	}
+
 	var mainIssue *core.Issue
 	var mappingEntries []IssueMappingEntry
 
@@ -180,6 +189,13 @@ func (g *Generator) CreateIssuesFromFiles(ctx context.Context, workflowID string
 				TaskID:      mainInput.TaskID,
 				FilePath:    filePath,
 			})
+			createdCount++
+			g.emitIssuesPublishingProgress(workflowID, "progress", createdCount, totalToPublish, &ProgressIssue{
+				Title:       title,
+				TaskID:      mainInput.TaskID,
+				IsMainIssue: true,
+				FileName:    filepath.Base(filePath),
+			}, 0, true, "")
 		} else {
 			issue, err := g.client.CreateIssue(ctx, core.CreateIssueOptions{
 				Title:     title,
@@ -192,6 +208,13 @@ func (g *Generator) CreateIssuesFromFiles(ctx context.Context, workflowID string
 			}
 			mainIssue = issue
 			result.IssueSet.MainIssue = mainIssue
+			createdCount++
+			g.emitIssuesPublishingProgress(workflowID, "progress", createdCount, totalToPublish, &ProgressIssue{
+				Title:       issue.Title,
+				TaskID:      mainInput.TaskID,
+				IsMainIssue: true,
+				FileName:    filepath.Base(filePath),
+			}, issue.Number, false, "")
 			mappingEntries = append(mappingEntries, IssueMappingEntry{
 				TaskID:      mainInput.TaskID,
 				FilePath:    filePath,
@@ -230,6 +253,13 @@ func (g *Generator) CreateIssuesFromFiles(ctx context.Context, workflowID string
 				TaskID:      input.TaskID,
 				FilePath:    filePath,
 			})
+			createdCount++
+			g.emitIssuesPublishingProgress(workflowID, "progress", createdCount, totalToPublish, &ProgressIssue{
+				Title:       title,
+				TaskID:      input.TaskID,
+				IsMainIssue: false,
+				FileName:    filepath.Base(filePath),
+			}, 0, true, "")
 			continue
 		}
 
@@ -250,6 +280,13 @@ func (g *Generator) CreateIssuesFromFiles(ctx context.Context, workflowID string
 			continue
 		}
 		result.IssueSet.SubIssues = append(result.IssueSet.SubIssues, issue)
+		createdCount++
+		g.emitIssuesPublishingProgress(workflowID, "progress", createdCount, totalToPublish, &ProgressIssue{
+			Title:       issue.Title,
+			TaskID:      input.TaskID,
+			IsMainIssue: false,
+			FileName:    filepath.Base(filePath),
+		}, issue.Number, false, "")
 		if parentNum > 0 && issue.ParentIssue == 0 {
 			result.Errors = append(result.Errors, fmt.Errorf("linking sub-issue #%d to parent #%d failed", issue.Number, parentNum))
 		}
@@ -267,6 +304,10 @@ func (g *Generator) CreateIssuesFromFiles(ctx context.Context, workflowID string
 		if err := g.writeIssueMappingFile(workflowID, mappingEntries); err != nil {
 			result.Errors = append(result.Errors, fmt.Errorf("writing issue mapping: %w", err))
 		}
+	}
+
+	if totalToPublish > 0 {
+		g.emitIssuesPublishingProgress(workflowID, "completed", createdCount, totalToPublish, nil, 0, dryRun, "issue publishing completed")
 	}
 
 	return result, nil

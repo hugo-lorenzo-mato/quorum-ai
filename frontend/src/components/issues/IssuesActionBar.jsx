@@ -25,6 +25,8 @@ export default function IssuesActionBar({
     setError,
     clearError,
     reset,
+    publishingProgress,
+    publishingTotal,
   } = useIssuesStore();
 
   const [exporting, setExporting] = useState(false);
@@ -202,7 +204,7 @@ export default function IssuesActionBar({
           {submitting ? (
             <>
               <Loader2 className="w-4 h-4 animate-spin" />
-              Creating...
+              Creating{publishingTotal > 0 ? ` (${publishingProgress}/${publishingTotal})` : '...'}
             </>
           ) : (
             <>

@@ -195,6 +195,7 @@ func (s *Server) handleGenerateIssues(w http.ResponseWriter, r *http.Request) {
 
 	// Create generator with agent registry for LLM-based generation
 	generator := issues.NewGenerator(issueClient, issuesCfg, "", reportDir, s.agentRegistry)
+	generator.SetProgressReporter(newIssuesSSEProgressReporter(s.getProjectEventBus(ctx), getProjectID(ctx)))
 
 	// Apply timeout from config
 	genCtx := ctx
@@ -569,6 +570,7 @@ func (s *Server) handlePreviewIssues(w http.ResponseWriter, r *http.Request) {
 		}
 
 		generator := issues.NewGenerator(nil, issuesCfg, "", reportDir, s.agentRegistry)
+		generator.SetProgressReporter(newIssuesSSEProgressReporter(s.getProjectEventBus(ctx), getProjectID(ctx)))
 
 		// Generate the issue files
 		files, err := generator.GenerateIssueFiles(ctx, workflowID)
@@ -717,6 +719,7 @@ func (s *Server) handleCreateSingleIssue(w http.ResponseWriter, r *http.Request)
 	}
 
 	generator := issues.NewGenerator(issueClient, issuesCfg, "", reportDir, s.agentRegistry)
+	generator.SetProgressReporter(newIssuesSSEProgressReporter(s.getProjectEventBus(ctx), getProjectID(ctx)))
 
 	input := issues.IssueInput{
 		Title:       req.Title,
@@ -1045,6 +1048,7 @@ func (s *Server) handlePublishDrafts(w http.ResponseWriter, r *http.Request) {
 
 	projectRoot := s.getProjectRootPath(ctx)
 	generator := issues.NewGenerator(issueClient, issuesCfg, projectRoot, "", s.agentRegistry)
+	generator.SetProgressReporter(newIssuesSSEProgressReporter(s.getProjectEventBus(ctx), getProjectID(ctx)))
 
 	// Read all drafts
 	drafts, err := generator.ReadAllDrafts(workflowID)

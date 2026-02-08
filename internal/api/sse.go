@@ -218,6 +218,36 @@ func (s *Server) sendEventToClient(w http.ResponseWriter, flusher http.Flusher, 
 			"timestamp":   e.Timestamp(),
 		}
 
+	// Issues events
+	case events.IssuesGenerationProgressEvent:
+		payload = map[string]interface{}{
+			"workflow_id":    e.WorkflowID(),
+			"stage":          e.Stage,
+			"current":        e.Current,
+			"total":          e.Total,
+			"message":        e.Message,
+			"file_name":      e.FileName,
+			"title":          e.Title,
+			"task_id":        e.TaskID,
+			"is_main_issue":  e.IsMainIssue,
+			"timestamp":      e.Timestamp(),
+		}
+
+	case events.IssuesPublishingProgressEvent:
+		payload = map[string]interface{}{
+			"workflow_id":    e.WorkflowID(),
+			"stage":          e.Stage,
+			"current":        e.Current,
+			"total":          e.Total,
+			"message":        e.Message,
+			"title":          e.Title,
+			"task_id":        e.TaskID,
+			"is_main_issue":  e.IsMainIssue,
+			"issue_number":   e.IssueNumber,
+			"dry_run":        e.DryRun,
+			"timestamp":      e.Timestamp(),
+		}
+
 	// Kanban events
 	case events.KanbanWorkflowMovedEvent:
 		payload = map[string]interface{}{
