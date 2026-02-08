@@ -337,6 +337,12 @@ func (p *CodexStreamParser) ParseLine(line string) []core.AgentEvent {
 					"codex",
 					"Editing file",
 				))
+			case "agent_message":
+				events = append(events, core.NewAgentEvent(
+					core.AgentEventProgress,
+					"codex",
+					"Generating response...",
+				))
 			}
 		}
 
@@ -359,6 +365,12 @@ func (p *CodexStreamParser) ParseLine(line string) []core.AgentEvent {
 					core.AgentEventProgress,
 					"codex",
 					"Command completed",
+				))
+			case "agent_message":
+				events = append(events, core.NewAgentEvent(
+					core.AgentEventProgress,
+					"codex",
+					"Response complete",
 				))
 			}
 		}

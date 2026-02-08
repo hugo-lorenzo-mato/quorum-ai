@@ -214,6 +214,12 @@ func TestCodexStreamParser_ParseLine(t *testing.T) {
 			wantAgent: "codex",
 		},
 		{
+			name:      "item.started agent_message",
+			line:      `{"type":"item.started","item":{"id":"item_3","type":"agent_message"}}`,
+			wantType:  core.AgentEventProgress,
+			wantAgent: "codex",
+		},
+		{
 			name:      "item.completed reasoning",
 			line:      `{"type":"item.completed","item":{"id":"item_0","type":"reasoning","text":"**Listing files in the directory**"}}`,
 			wantType:  core.AgentEventThinking,
@@ -222,6 +228,12 @@ func TestCodexStreamParser_ParseLine(t *testing.T) {
 		{
 			name:      "item.completed command_execution",
 			line:      `{"type":"item.completed","item":{"id":"item_1","type":"command_execution","command":"ls","exit_code":0,"status":"completed"}}`,
+			wantType:  core.AgentEventProgress,
+			wantAgent: "codex",
+		},
+		{
+			name:      "item.completed agent_message",
+			line:      `{"type":"item.completed","item":{"id":"item_3","type":"agent_message","text":"Here is my analysis..."}}`,
 			wantType:  core.AgentEventProgress,
 			wantAgent: "codex",
 		},
