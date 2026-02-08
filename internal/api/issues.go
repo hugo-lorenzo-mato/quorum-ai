@@ -3,9 +3,12 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -147,8 +150,12 @@ func (s *Server) handleGenerateIssues(w http.ResponseWriter, r *http.Request) {
 
 	// Parse request body
 	var req GenerateIssuesRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		// Use defaults if no body provided
+	if r.Body != nil && r.ContentLength > 0 {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			respondError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err.Error()))
+			return
+		}
+	} else {
 		req = GenerateIssuesRequest{
 			CreateMainIssue: true,
 			CreateSubIssues: true,
@@ -173,21 +180,9 @@ func (s *Server) handleGenerateIssues(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create issue client based on provider
-	var issueClient core.IssueClient
-	switch issuesCfg.Provider {
-	case "github", "":
-		client, err := github.NewIssueClientFromRepo()
-		if err != nil {
-			respondError(w, http.StatusInternalServerError, fmt.Sprintf("failed to create GitHub client: %v", err))
-			return
-		}
-		issueClient = client
-	case "gitlab":
-		// TODO: Implement GitLab client
-		respondError(w, http.StatusNotImplemented, "GitLab issue generation not yet implemented")
-		return
-	default:
-		respondError(w, http.StatusBadRequest, fmt.Sprintf("unknown provider: %s", issuesCfg.Provider))
+	issueClient, clientErr := createIssueClient(issuesCfg)
+	if clientErr != nil {
+		writeIssueClientError(w, clientErr)
 		return
 	}
 
@@ -605,8 +600,9 @@ func (s *Server) handlePreviewIssues(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Log generated files
+		slog.Debug("generated issue files", "count", len(files))
 		for _, f := range files {
-			fmt.Printf("Generated: %s\n", f)
+			slog.Debug("generated issue file", "path", f)
 		}
 	}
 
@@ -695,20 +691,9 @@ func (s *Server) handleCreateSingleIssue(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Create issue client based on provider
-	var issueClient core.IssueClient
-	switch issuesCfg.Provider {
-	case "github", "":
-		client, err := github.NewIssueClientFromRepo()
-		if err != nil {
-			respondError(w, http.StatusInternalServerError, fmt.Sprintf("failed to create GitHub client: %v", err))
-			return
-		}
-		issueClient = client
-	case "gitlab":
-		respondError(w, http.StatusNotImplemented, "GitLab not yet implemented")
-		return
-	default:
-		respondError(w, http.StatusBadRequest, fmt.Sprintf("unknown provider: %s", issuesCfg.Provider))
+	issueClient, clientErr := createIssueClient(issuesCfg)
+	if clientErr != nil {
+		writeIssueClientError(w, clientErr)
 		return
 	}
 
@@ -754,7 +739,21 @@ func (s *Server) handleCreateSingleIssue(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
-	result, err := generator.CreateIssuesFromFiles(ctx, workflowID, []issues.IssueInput{input}, false, false, labels, assignees)
+	// Check for existing parent issue to enable sub-issue linking
+	linkIssues := false
+	if !input.IsMainIssue {
+		mapping, _ := generator.ReadIssueMapping(workflowID)
+		if mapping != nil {
+			for _, entry := range mapping.Issues {
+				if entry.IsMain && entry.IssueNumber > 0 {
+					linkIssues = true
+					break
+				}
+			}
+		}
+	}
+
+	result, err := generator.CreateIssuesFromFiles(ctx, workflowID, []issues.IssueInput{input}, false, linkIssues, labels, assignees)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, fmt.Sprintf("failed to create issue: %v", err))
 		return
@@ -780,5 +779,382 @@ func (s *Server) handleCreateSingleIssue(w http.ResponseWriter, r *http.Request)
 			State:  created.State,
 			Labels: created.Labels,
 		},
+	})
+}
+
+// DraftResponse represents a single draft issue in API responses.
+type DraftResponse struct {
+	Title       string   `json:"title"`
+	Body        string   `json:"body"`
+	Labels      []string `json:"labels"`
+	Assignees   []string `json:"assignees"`
+	IsMainIssue bool     `json:"is_main_issue"`
+	TaskID      string   `json:"task_id,omitempty"`
+	FilePath    string   `json:"file_path,omitempty"`
+}
+
+// DraftsListResponse is the response for listing draft files.
+type DraftsListResponse struct {
+	WorkflowID string          `json:"workflow_id"`
+	Drafts     []DraftResponse `json:"drafts"`
+}
+
+// DraftUpdateRequest is the request body for editing a draft.
+type DraftUpdateRequest struct {
+	Title     *string   `json:"title"`
+	Body      *string   `json:"body"`
+	Labels    *[]string `json:"labels"`
+	Assignees *[]string `json:"assignees"`
+}
+
+// PublishRequest is the request body for publishing drafts.
+type PublishRequest struct {
+	DryRun     bool     `json:"dry_run"`
+	LinkIssues bool     `json:"link_issues"`
+	TaskIDs    []string `json:"task_ids"`
+}
+
+// PublishResponse is the response for publishing drafts.
+type PublishResponse struct {
+	WorkflowID string            `json:"workflow_id"`
+	Published  []PublishedRecord `json:"published"`
+}
+
+// PublishedRecord represents a published issue.
+type PublishedRecord struct {
+	TaskID      string `json:"task_id,omitempty"`
+	FilePath    string `json:"file_path"`
+	IssueNumber int    `json:"issue_number,omitempty"`
+	IssueURL    string `json:"issue_url,omitempty"`
+	IsMain      bool   `json:"is_main_issue"`
+	Error       string `json:"error,omitempty"`
+}
+
+// IssuesStatusResponse is the response for issue generation status.
+type IssuesStatusResponse struct {
+	WorkflowID    string `json:"workflow_id"`
+	HasDrafts     bool   `json:"has_drafts"`
+	DraftCount    int    `json:"draft_count"`
+	HasPublished  bool   `json:"has_published"`
+	PublishedCount int   `json:"published_count"`
+}
+
+// createIssueClient creates an IssueClient based on provider config, using
+// configurable Repository when set (overrides auto-detection).
+func createIssueClient(cfg config.IssuesConfig) (core.IssueClient, error) {
+	switch cfg.Provider {
+	case "github", "":
+		if cfg.Repository != "" {
+			parts := strings.SplitN(cfg.Repository, "/", 2)
+			if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+				return nil, fmt.Errorf("invalid repository format %q, expected owner/repo", cfg.Repository)
+			}
+			return github.NewIssueClient(parts[0], parts[1])
+		}
+		return github.NewIssueClientFromRepo()
+	case "gitlab":
+		return nil, fmt.Errorf("GitLab issue generation not yet implemented")
+	default:
+		return nil, fmt.Errorf("unknown provider: %s", cfg.Provider)
+	}
+}
+
+// writeIssueClientError writes the appropriate HTTP error for issue client creation failures.
+func writeIssueClientError(w http.ResponseWriter, err error) {
+	var domainErr *core.DomainError
+	if errors.As(err, &domainErr) && domainErr.Code == "GH_NOT_AUTHENTICATED" {
+		respondError(w, http.StatusUnauthorized, `GitHub CLI is not authenticated. Run "gh auth login" to authenticate.`)
+		return
+	}
+	if strings.Contains(err.Error(), "gh auth login") || strings.Contains(err.Error(), "not authenticated") {
+		respondError(w, http.StatusUnauthorized, `GitHub CLI is not authenticated. Run "gh auth login" to authenticate.`)
+		return
+	}
+	if strings.Contains(err.Error(), "not yet implemented") {
+		respondError(w, http.StatusNotImplemented, err.Error())
+		return
+	}
+	if strings.Contains(err.Error(), "unknown provider") || strings.Contains(err.Error(), "invalid repository format") {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	respondError(w, http.StatusInternalServerError, fmt.Sprintf("failed to create issue client: %v", err))
+}
+
+// handleListDrafts lists current draft files for a workflow.
+// GET /api/v1/workflows/{workflowID}/issues/drafts
+func (s *Server) handleListDrafts(w http.ResponseWriter, r *http.Request) {
+	workflowID := chi.URLParam(r, "workflowID")
+	ctx := r.Context()
+
+	var issuesCfg config.IssuesConfig
+	configLoader := s.getProjectConfigLoader(ctx)
+	if configLoader != nil {
+		cfg, err := configLoader.Load()
+		if err == nil {
+			issuesCfg = cfg.Issues
+		}
+	}
+
+	projectRoot := s.getProjectRootPath(ctx)
+	generator := issues.NewGenerator(nil, issuesCfg, projectRoot, "", s.agentRegistry)
+
+	drafts, err := generator.ReadAllDrafts(workflowID)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, fmt.Sprintf("failed to read drafts: %v", err))
+		return
+	}
+
+	response := DraftsListResponse{
+		WorkflowID: workflowID,
+		Drafts:     make([]DraftResponse, 0, len(drafts)),
+	}
+	for _, d := range drafts {
+		response.Drafts = append(response.Drafts, DraftResponse{
+			Title:       d.Title,
+			Body:        d.Body,
+			Labels:      d.Labels,
+			Assignees:   d.Assignees,
+			IsMainIssue: d.IsMainIssue,
+			TaskID:      d.TaskID,
+			FilePath:    d.FilePath,
+		})
+	}
+
+	respondJSON(w, http.StatusOK, response)
+}
+
+// handleEditDraft edits a specific draft file.
+// PUT /api/v1/workflows/{workflowID}/issues/drafts/{taskId}
+func (s *Server) handleEditDraft(w http.ResponseWriter, r *http.Request) {
+	workflowID := chi.URLParam(r, "workflowID")
+	taskID := chi.URLParam(r, "taskId")
+	ctx := r.Context()
+
+	var req DraftUpdateRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err.Error()))
+		return
+	}
+
+	var issuesCfg config.IssuesConfig
+	configLoader := s.getProjectConfigLoader(ctx)
+	if configLoader != nil {
+		cfg, err := configLoader.Load()
+		if err == nil {
+			issuesCfg = cfg.Issues
+		}
+	}
+
+	projectRoot := s.getProjectRootPath(ctx)
+	generator := issues.NewGenerator(nil, issuesCfg, projectRoot, "", s.agentRegistry)
+
+	drafts, err := generator.ReadAllDrafts(workflowID)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, fmt.Sprintf("failed to read drafts: %v", err))
+		return
+	}
+
+	var target *issues.IssuePreview
+	for i := range drafts {
+		if drafts[i].TaskID == taskID || (taskID == "main" && drafts[i].IsMainIssue) {
+			target = &drafts[i]
+			break
+		}
+	}
+
+	if target == nil {
+		respondError(w, http.StatusNotFound, fmt.Sprintf("draft not found for task: %s", taskID))
+		return
+	}
+
+	// Apply updates
+	if req.Title != nil {
+		target.Title = *req.Title
+	}
+	if req.Body != nil {
+		target.Body = *req.Body
+	}
+	if req.Labels != nil {
+		target.Labels = *req.Labels
+	}
+	if req.Assignees != nil {
+		target.Assignees = *req.Assignees
+	}
+
+	// Write back using draft file APIs
+	fileName := filepath.Base(target.FilePath)
+	fm := issues.DraftFrontmatter{
+		Title:       target.Title,
+		Labels:      target.Labels,
+		Assignees:   target.Assignees,
+		IsMainIssue: target.IsMainIssue,
+		TaskID:      target.TaskID,
+		Status:      "draft",
+	}
+	if _, err := generator.WriteDraftFile(workflowID, fileName, fm, target.Body); err != nil {
+		respondError(w, http.StatusInternalServerError, fmt.Sprintf("failed to save draft: %v", err))
+		return
+	}
+
+	respondJSON(w, http.StatusOK, DraftResponse{
+		Title:       target.Title,
+		Body:        target.Body,
+		Labels:      target.Labels,
+		Assignees:   target.Assignees,
+		IsMainIssue: target.IsMainIssue,
+		TaskID:      target.TaskID,
+		FilePath:    target.FilePath,
+	})
+}
+
+// handlePublishDrafts publishes draft issues to GitHub.
+// POST /api/v1/workflows/{workflowID}/issues/publish
+func (s *Server) handlePublishDrafts(w http.ResponseWriter, r *http.Request) {
+	workflowID := chi.URLParam(r, "workflowID")
+	ctx := r.Context()
+
+	var req PublishRequest
+	if r.Body != nil && r.ContentLength > 0 {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			respondError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err.Error()))
+			return
+		}
+	}
+
+	var issuesCfg config.IssuesConfig
+	configLoader := s.getProjectConfigLoader(ctx)
+	if configLoader != nil {
+		cfg, err := configLoader.Load()
+		if err == nil {
+			issuesCfg = cfg.Issues
+		}
+	}
+
+	if !issuesCfg.Enabled {
+		respondError(w, http.StatusBadRequest, "issue generation is disabled in configuration")
+		return
+	}
+
+	// Create issue client
+	issueClient, clientErr := createIssueClient(issuesCfg)
+	if clientErr != nil {
+		writeIssueClientError(w, clientErr)
+		return
+	}
+
+	projectRoot := s.getProjectRootPath(ctx)
+	generator := issues.NewGenerator(issueClient, issuesCfg, projectRoot, "", s.agentRegistry)
+
+	// Read all drafts
+	drafts, err := generator.ReadAllDrafts(workflowID)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, fmt.Sprintf("failed to read drafts: %v", err))
+		return
+	}
+	if len(drafts) == 0 {
+		respondError(w, http.StatusBadRequest, "no drafts to publish")
+		return
+	}
+
+	// Filter by task IDs if specified
+	if len(req.TaskIDs) > 0 {
+		taskIDSet := make(map[string]bool, len(req.TaskIDs))
+		for _, id := range req.TaskIDs {
+			taskIDSet[id] = true
+		}
+		filtered := make([]issues.IssuePreview, 0)
+		for _, d := range drafts {
+			if taskIDSet[d.TaskID] || (d.IsMainIssue && taskIDSet["main"]) {
+				filtered = append(filtered, d)
+			}
+		}
+		drafts = filtered
+	}
+
+	// Convert to IssueInputs for CreateIssuesFromFiles
+	inputs := make([]issues.IssueInput, 0, len(drafts))
+	for _, d := range drafts {
+		inputs = append(inputs, issues.IssueInput{
+			Title:       d.Title,
+			Body:        d.Body,
+			Labels:      d.Labels,
+			Assignees:   d.Assignees,
+			IsMainIssue: d.IsMainIssue,
+			TaskID:      d.TaskID,
+			FilePath:    d.FilePath,
+		})
+	}
+
+	labels := issuesCfg.Labels
+	assignees := issuesCfg.Assignees
+
+	result, err := generator.CreateIssuesFromFiles(ctx, workflowID, inputs, req.DryRun, req.LinkIssues, labels, assignees)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, fmt.Sprintf("publish failed: %v", err))
+		return
+	}
+
+	var records []PublishedRecord
+	if result.IssueSet.MainIssue != nil {
+		records = append(records, PublishedRecord{
+			IssueNumber: result.IssueSet.MainIssue.Number,
+			IssueURL:    result.IssueSet.MainIssue.URL,
+			IsMain:      true,
+		})
+	}
+	for _, sub := range result.IssueSet.SubIssues {
+		records = append(records, PublishedRecord{
+			IssueNumber: sub.Number,
+			IssueURL:    sub.URL,
+			IsMain:      false,
+		})
+	}
+	for _, preview := range result.PreviewIssues {
+		records = append(records, PublishedRecord{
+			TaskID:   preview.TaskID,
+			FilePath: preview.FilePath,
+			IsMain:   preview.IsMainIssue,
+		})
+	}
+
+	respondJSON(w, http.StatusOK, PublishResponse{
+		WorkflowID: workflowID,
+		Published:  records,
+	})
+}
+
+// handleIssuesStatus returns the current status of issue drafts and published issues.
+// GET /api/v1/workflows/{workflowID}/issues/status
+func (s *Server) handleIssuesStatus(w http.ResponseWriter, r *http.Request) {
+	workflowID := chi.URLParam(r, "workflowID")
+	ctx := r.Context()
+
+	var issuesCfg config.IssuesConfig
+	configLoader := s.getProjectConfigLoader(ctx)
+	if configLoader != nil {
+		cfg, err := configLoader.Load()
+		if err == nil {
+			issuesCfg = cfg.Issues
+		}
+	}
+
+	projectRoot := s.getProjectRootPath(ctx)
+	generator := issues.NewGenerator(nil, issuesCfg, projectRoot, "", s.agentRegistry)
+
+	drafts, _ := generator.ReadAllDrafts(workflowID)
+	mapping, _ := generator.ReadIssueMapping(workflowID)
+
+	publishedCount := 0
+	if mapping != nil {
+		publishedCount = len(mapping.Issues)
+	}
+
+	respondJSON(w, http.StatusOK, IssuesStatusResponse{
+		WorkflowID:     workflowID,
+		HasDrafts:      len(drafts) > 0,
+		DraftCount:     len(drafts),
+		HasPublished:   publishedCount > 0,
+		PublishedCount: publishedCount,
 	})
 }

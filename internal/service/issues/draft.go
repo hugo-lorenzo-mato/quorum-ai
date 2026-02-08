@@ -146,7 +146,7 @@ func (g *Generator) ReadAllDrafts(workflowID string) ([]IssuePreview, error) {
 }
 
 // ReadIssueMapping reads the mapping.json file from the published directory.
-func (g *Generator) ReadIssueMapping(workflowID string) (*issueMapping, error) {
+func (g *Generator) ReadIssueMapping(workflowID string) (*IssueMapping, error) {
 	publishedDir, err := g.resolvePublishedDir(workflowID)
 	if err != nil {
 		return nil, fmt.Errorf("resolving published directory: %w", err)
@@ -161,7 +161,7 @@ func (g *Generator) ReadIssueMapping(workflowID string) (*issueMapping, error) {
 		return nil, fmt.Errorf("reading mapping file: %w", err)
 	}
 
-	var mapping issueMapping
+	var mapping IssueMapping
 	if err := json.Unmarshal(data, &mapping); err != nil {
 		return nil, fmt.Errorf("parsing mapping file: %w", err)
 	}
