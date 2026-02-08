@@ -486,9 +486,9 @@ func TestExtractTextFromJSONLine(t *testing.T) {
 			want: "Final gemini response",
 		},
 		{
-			name: "codex agent_message",
+			name: "codex agent_message (with trailing newline)",
 			line: `{"type":"item.completed","item":{"type":"agent_message","text":"Codex says hello"}}`,
-			want: "Codex says hello",
+			want: "Codex says hello\n",
 		},
 		{
 			name: "codex reasoning (no text extracted)",

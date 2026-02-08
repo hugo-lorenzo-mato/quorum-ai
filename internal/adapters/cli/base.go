@@ -818,10 +818,12 @@ func extractTextFromJSONLine(line string) string {
 		return event.Text
 	}
 
-	// Handle Codex agent_message
+	// Handle Codex agent_message (complete message, not a streaming chunk).
+	// Append \n so consecutive messages are separated in the stdout buffer
+	// instead of forming a single unreadable line.
 	if event.Type == "item.completed" && event.Item != nil {
 		if event.Item.Type == "agent_message" && event.Item.Text != "" {
-			return event.Item.Text
+			return event.Item.Text + "\n"
 		}
 	}
 

@@ -208,7 +208,7 @@ func (a *Analyzer) runSingleAgentAnalysis(ctx context.Context, wctx *Context) er
 		if absOutputPath != "" {
 			if info, statErr := os.Stat(absOutputPath); statErr == nil && info.Size() > 1024 {
 				content, readErr := os.ReadFile(absOutputPath)
-				if readErr == nil {
+				if readErr == nil && isValidAnalysisOutput(string(content)) {
 					wctx.Logger.Info("recovered single-agent output from file written by previous attempt",
 						"agent", agentName, "path", absOutputPath, "size", len(content))
 					result = &core.ExecuteResult{Output: string(content), Model: model}
@@ -257,6 +257,11 @@ func (a *Analyzer) runSingleAgentAnalysis(ctx context.Context, wctx *Context) er
 		if execErr != nil {
 			select {
 			case content := <-stableOutputCh:
+				if !isValidAnalysisOutput(content) {
+					wctx.Logger.Warn("watchdog reap: stable file rejected (unstructured content)",
+						"agent", agentName, "path", absOutputPath, "size", len(content))
+					return execErr
+				}
 				wctx.Logger.Info("watchdog reap: using stable single-agent output file",
 					"agent", agentName, "path", absOutputPath, "size", len(content))
 				result = &core.ExecuteResult{Output: content, Model: model}
@@ -295,6 +300,17 @@ func (a *Analyzer) runSingleAgentAnalysis(ctx context.Context, wctx *Context) er
 			wctx.Logger.Info("file enforcement: using single-agent output file content (stdout empty)",
 				"agent", agentName, "path", absOutputPath, "size", len(content))
 		}
+	}
+
+	// Quality gate: reject outputs that look like intermediate agent narration
+	// rather than a real analysis.
+	if result != nil && result.Output != "" && !isValidAnalysisOutput(result.Output) {
+		wctx.Logger.Warn("single-agent output rejected: does not look like structured analysis",
+			"agent", agentName,
+			"size", len(result.Output),
+			"newlines", strings.Count(result.Output, "\n"),
+		)
+		return fmt.Errorf("agent %s produced unstructured output (%d bytes, no markdown headers)", agentName, len(result.Output))
 	}
 
 	// Ensure output file exists (file enforcement fallback)
@@ -876,7 +892,7 @@ func (a *Analyzer) runVnRefinementWithAgent(ctx context.Context, wctx *Context, 
 		if absOutputPath != "" {
 			if info, statErr := os.Stat(absOutputPath); statErr == nil && info.Size() > 1024 {
 				content, readErr := os.ReadFile(absOutputPath)
-				if readErr == nil {
+				if readErr == nil && isValidAnalysisOutput(string(content)) {
 					wctx.Logger.Info("recovered Vn output from file written by previous attempt",
 						"agent", agentName, "round", round, "path", absOutputPath, "size", len(content))
 					result = &core.ExecuteResult{Output: string(content), Model: model}
@@ -916,6 +932,11 @@ func (a *Analyzer) runVnRefinementWithAgent(ctx context.Context, wctx *Context, 
 		if execErr != nil {
 			select {
 			case content := <-stableOutputCh:
+				if !isValidAnalysisOutput(content) {
+					wctx.Logger.Warn("watchdog reap: stable Vn file rejected (unstructured content)",
+						"agent", agentName, "round", round, "path", absOutputPath, "size", len(content))
+					return execErr
+				}
 				wctx.Logger.Info("watchdog reap: using stable Vn output file",
 					"agent", agentName, "round", round, "path", absOutputPath, "size", len(content))
 				result = &core.ExecuteResult{Output: content, Model: model}
@@ -951,6 +972,25 @@ func (a *Analyzer) runVnRefinementWithAgent(ctx context.Context, wctx *Context, 
 			wctx.Logger.Info("file enforcement: using Vn output file content (stdout empty)",
 				"agent", agentName, "round", round, "path", absOutputPath, "size", len(content))
 		}
+	}
+
+	// Quality gate: reject outputs that look like intermediate agent narration
+	// (e.g., concatenated Codex agent_message planning text) rather than a real analysis.
+	if result != nil && result.Output != "" && !isValidAnalysisOutput(result.Output) {
+		wctx.Logger.Warn("Vn output rejected: does not look like structured analysis",
+			"agent", agentName, "round", round,
+			"size", len(result.Output),
+			"newlines", strings.Count(result.Output, "\n"),
+		)
+		if wctx.Output != nil {
+			wctx.Output.AgentEvent("error", agentName,
+				fmt.Sprintf("V%d output rejected (unstructured content, %d bytes)", round, len(result.Output)),
+				map[string]interface{}{
+					"phase": fmt.Sprintf("analyze_v%d", round),
+					"round": round,
+				})
+		}
+		return AnalysisOutput{}, fmt.Errorf("agent %s produced unstructured output (%d bytes, no markdown headers)", agentName, len(result.Output))
 	}
 
 	durationMS := time.Since(startTime).Milliseconds()
@@ -1180,7 +1220,7 @@ func (a *Analyzer) runAnalysisWithAgent(ctx context.Context, wctx *Context, agen
 		if absOutputPath != "" {
 			if info, statErr := os.Stat(absOutputPath); statErr == nil && info.Size() > 1024 {
 				content, readErr := os.ReadFile(absOutputPath)
-				if readErr == nil {
+				if readErr == nil && isValidAnalysisOutput(string(content)) {
 					wctx.Logger.Info("recovered output from file written by previous attempt",
 						"agent", agentName, "path", absOutputPath, "size", len(content))
 					result = &core.ExecuteResult{Output: string(content), Model: model}
@@ -1220,6 +1260,11 @@ func (a *Analyzer) runAnalysisWithAgent(ctx context.Context, wctx *Context, agen
 		if execErr != nil {
 			select {
 			case content := <-stableOutputCh:
+				if !isValidAnalysisOutput(content) {
+					wctx.Logger.Warn("watchdog reap: stable file rejected (unstructured content)",
+						"agent", agentName, "path", absOutputPath, "size", len(content))
+					return execErr
+				}
 				wctx.Logger.Info("watchdog reap: using stable output file",
 					"agent", agentName, "path", absOutputPath, "size", len(content))
 				result = &core.ExecuteResult{Output: content, Model: model}
@@ -1255,6 +1300,17 @@ func (a *Analyzer) runAnalysisWithAgent(ctx context.Context, wctx *Context, agen
 			wctx.Logger.Info("file enforcement: using output file content (stdout empty)",
 				"agent", agentName, "path", absOutputPath, "size", len(content))
 		}
+	}
+
+	// Quality gate: reject outputs that look like intermediate agent narration
+	// rather than a real analysis.
+	if result != nil && result.Output != "" && !isValidAnalysisOutput(result.Output) {
+		wctx.Logger.Warn("V1 output rejected: does not look like structured analysis",
+			"agent", agentName,
+			"size", len(result.Output),
+			"newlines", strings.Count(result.Output, "\n"),
+		)
+		return AnalysisOutput{}, fmt.Errorf("agent %s produced unstructured output (%d bytes, no markdown headers)", agentName, len(result.Output))
 	}
 
 	// Emit completed event
