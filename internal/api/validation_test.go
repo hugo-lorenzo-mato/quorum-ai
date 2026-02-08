@@ -297,6 +297,56 @@ func TestValidateBlueprint(t *testing.T) {
 			expectError: false,
 		},
 		{
+			name: "consensus_threshold below 0 is invalid",
+			bp: &BlueprintDTO{
+				ConsensusThreshold: -0.1,
+			},
+			expectError:   true,
+			errorField:    "consensus_threshold",
+			errorCode:     ErrCodeInvalidRange,
+			errorContains: "between 0 and 1",
+		},
+		{
+			name: "consensus_threshold above 1 is invalid",
+			bp: &BlueprintDTO{
+				ConsensusThreshold: 1.1,
+			},
+			expectError:   true,
+			errorField:    "consensus_threshold",
+			errorCode:     ErrCodeInvalidRange,
+			errorContains: "between 0 and 1",
+		},
+		{
+			name: "max_retries below 0 is invalid",
+			bp: &BlueprintDTO{
+				MaxRetries: -1,
+			},
+			expectError:   true,
+			errorField:    "max_retries",
+			errorCode:     ErrCodeInvalidRange,
+			errorContains: "between 0 and 10",
+		},
+		{
+			name: "max_retries above 10 is invalid",
+			bp: &BlueprintDTO{
+				MaxRetries: 11,
+			},
+			expectError:   true,
+			errorField:    "max_retries",
+			errorCode:     ErrCodeInvalidRange,
+			errorContains: "between 0 and 10",
+		},
+		{
+			name: "timeout_seconds below 0 is invalid",
+			bp: &BlueprintDTO{
+				TimeoutSeconds: -1,
+			},
+			expectError:   true,
+			errorField:    "timeout_seconds",
+			errorCode:     ErrCodeInvalidRange,
+			errorContains: "must be >=",
+		},
+		{
 			name: "invalid execution_mode value",
 			bp: &BlueprintDTO{
 				ExecutionMode: "invalid_mode",

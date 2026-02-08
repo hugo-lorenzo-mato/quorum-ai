@@ -123,10 +123,13 @@ type PlanSynthesizerDTO struct {
 }
 
 type blueprintPatch struct {
-	ExecutionMode              *string `json:"execution_mode,omitempty"`
-	SingleAgentName            *string `json:"single_agent_name,omitempty"`
-	SingleAgentModel           *string `json:"single_agent_model,omitempty"`
-	SingleAgentReasoningEffort *string `json:"single_agent_reasoning_effort,omitempty"`
+	ConsensusThreshold         *float64 `json:"consensus_threshold,omitempty"`
+	MaxRetries                 *int     `json:"max_retries,omitempty"`
+	TimeoutSeconds             *int     `json:"timeout_seconds,omitempty"`
+	ExecutionMode              *string  `json:"execution_mode,omitempty"`
+	SingleAgentName            *string  `json:"single_agent_name,omitempty"`
+	SingleAgentModel           *string  `json:"single_agent_model,omitempty"`
+	SingleAgentReasoningEffort *string  `json:"single_agent_reasoning_effort,omitempty"`
 }
 
 // IsSingleAgentMode returns true if the blueprint specifies single-agent execution.
@@ -493,23 +496,18 @@ func (s *Server) handleCreateWorkflow(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Build workflow blueprint.
-	// Timeout is intentionally 0 (unset) so the config default (typically 16h) is used.
-	// The builder only overrides the config timeout when blueprint.Timeout > 0.
-	blueprint := &core.Blueprint{
-		Consensus: core.BlueprintConsensus{
-			Threshold: 0.75,
-		},
-		MaxRetries: 3,
-	}
+	// All override fields are intentionally 0-values here so the effective config is used at run time.
+	// The runner syncs a fully-resolved blueprint at execution start (see Runner.RunWithState/AnalyzeWithState).
+	blueprint := &core.Blueprint{}
 
 	if req.Blueprint != nil {
-		if req.Blueprint.ConsensusThreshold > 0 {
+		if req.Blueprint.ConsensusThreshold != 0 {
 			blueprint.Consensus.Threshold = req.Blueprint.ConsensusThreshold
 		}
-		if req.Blueprint.MaxRetries > 0 {
+		if req.Blueprint.MaxRetries != 0 {
 			blueprint.MaxRetries = req.Blueprint.MaxRetries
 		}
-		if req.Blueprint.TimeoutSeconds > 0 {
+		if req.Blueprint.TimeoutSeconds != 0 {
 			blueprint.Timeout = time.Duration(req.Blueprint.TimeoutSeconds) * time.Second
 		}
 		blueprint.DryRun = req.Blueprint.DryRun
@@ -612,9 +610,21 @@ func (s *Server) handleUpdateWorkflow(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusConflict, "cannot edit title while workflow is running")
 		return
 	}
-	if req.Blueprint != nil && state.Status != core.WorkflowStatusPending {
-		respondError(w, http.StatusConflict, "cannot edit workflow blueprint after workflow has started")
-		return
+	if req.Blueprint != nil {
+		// Allow blueprint edits as long as the workflow is not currently executing.
+		// This enables fixing per-workflow overrides (e.g., a too-short timeout) after failures.
+		if state.Status == core.WorkflowStatusRunning {
+			respondError(w, http.StatusConflict, "cannot edit workflow blueprint while workflow is running")
+			return
+		}
+		if runningInDB, err := stateManager.IsWorkflowRunning(ctx, state.WorkflowID); err != nil {
+			s.logger.Error("failed to check if workflow is running in DB", "workflow_id", workflowID, "error", err)
+			respondError(w, http.StatusInternalServerError, "failed to check workflow running state")
+			return
+		} else if runningInDB || s.isWorkflowRunning(ctx, workflowID) {
+			respondError(w, http.StatusConflict, "cannot edit workflow blueprint while workflow is running")
+			return
+		}
 	}
 
 	if req.Title != "" {
@@ -626,19 +636,29 @@ func (s *Server) handleUpdateWorkflow(w http.ResponseWriter, r *http.Request) {
 	if req.Blueprint != nil {
 		if state.Blueprint == nil {
 			state.Blueprint = &core.Blueprint{
-				Consensus: core.BlueprintConsensus{
-					Threshold: 0.75,
-				},
-				MaxRetries: 3,
-				Timeout:    time.Hour,
+				// Keep defaults "unset" so global config can apply unless explicitly overridden.
 			}
 		}
 
 		merged := &BlueprintDTO{
+			ConsensusThreshold:         state.Blueprint.Consensus.Threshold,
+			MaxRetries:                 state.Blueprint.MaxRetries,
+			TimeoutSeconds:             int(state.Blueprint.Timeout.Seconds()),
+			DryRun:                     state.Blueprint.DryRun,
+			Sandbox:                    state.Blueprint.Sandbox,
 			ExecutionMode:              state.Blueprint.ExecutionMode,
 			SingleAgentName:            state.Blueprint.SingleAgent.Agent,
 			SingleAgentModel:           state.Blueprint.SingleAgent.Model,
 			SingleAgentReasoningEffort: state.Blueprint.SingleAgent.ReasoningEffort,
+		}
+		if req.Blueprint.ConsensusThreshold != nil {
+			merged.ConsensusThreshold = *req.Blueprint.ConsensusThreshold
+		}
+		if req.Blueprint.MaxRetries != nil {
+			merged.MaxRetries = *req.Blueprint.MaxRetries
+		}
+		if req.Blueprint.TimeoutSeconds != nil {
+			merged.TimeoutSeconds = *req.Blueprint.TimeoutSeconds
 		}
 		if req.Blueprint.ExecutionMode != nil {
 			merged.ExecutionMode = *req.Blueprint.ExecutionMode
@@ -671,6 +691,14 @@ func (s *Server) handleUpdateWorkflow(w http.ResponseWriter, r *http.Request) {
 		state.Blueprint.SingleAgent.Agent = merged.SingleAgentName
 		state.Blueprint.SingleAgent.Model = merged.SingleAgentModel
 		state.Blueprint.SingleAgent.ReasoningEffort = merged.SingleAgentReasoningEffort
+		state.Blueprint.Consensus.Threshold = merged.ConsensusThreshold
+		state.Blueprint.MaxRetries = merged.MaxRetries
+		if merged.TimeoutSeconds > 0 {
+			state.Blueprint.Timeout = time.Duration(merged.TimeoutSeconds) * time.Second
+		} else {
+			// 0 clears any workflow-level timeout override so global config can apply.
+			state.Blueprint.Timeout = 0
+		}
 	}
 	if req.Status != "" {
 		state.Status = core.WorkflowStatus(req.Status)
