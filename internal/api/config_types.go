@@ -258,15 +258,19 @@ type PreflightConfigResponse struct {
 
 // IssuesConfigResponse represents issues configuration.
 type IssuesConfigResponse struct {
-	Enabled      bool                         `json:"enabled"`
-	Provider     string                       `json:"provider"`
-	AutoGenerate bool                         `json:"auto_generate"`
-	Timeout      string                       `json:"timeout"`
-	Template     IssueTemplateConfigResponse  `json:"template"`
-	Labels       []string                     `json:"default_labels"`
-	Assignees    []string                     `json:"default_assignees"`
-	GitLab       GitLabIssueConfigResponse    `json:"gitlab"`
-	Generator    IssueGeneratorConfigResponse `json:"generator"`
+	Enabled        bool                         `json:"enabled"`
+	Provider       string                       `json:"provider"`
+	AutoGenerate   bool                         `json:"auto_generate"`
+	Timeout        string                       `json:"timeout"`
+	Mode           string                       `json:"mode"`
+	DraftDirectory string                       `json:"draft_directory"`
+	Repository     string                       `json:"repository"`
+	ParentTemplate string                       `json:"parent_template"`
+	Template       IssueTemplateConfigResponse  `json:"template"`
+	Labels         []string                     `json:"default_labels"`
+	Assignees      []string                     `json:"default_assignees"`
+	GitLab         GitLabIssueConfigResponse    `json:"gitlab"`
+	Generator      IssueGeneratorConfigResponse `json:"generator"`
 }
 
 // IssueTemplateConfigResponse represents issue template configuration.
@@ -288,11 +292,14 @@ type GitLabIssueConfigResponse struct {
 
 // IssueGeneratorConfigResponse represents LLM-based issue generation configuration.
 type IssueGeneratorConfigResponse struct {
-	Enabled       bool   `json:"enabled"`
-	Agent         string `json:"agent"`
-	Model         string `json:"model"`
-	Summarize     bool   `json:"summarize"`
-	MaxBodyLength int    `json:"max_body_length"`
+	Enabled           bool   `json:"enabled"`
+	Agent             string `json:"agent"`
+	Model             string `json:"model"`
+	Summarize         bool   `json:"summarize"`
+	MaxBodyLength     int    `json:"max_body_length"`
+	ReasoningEffort   string `json:"reasoning_effort"`
+	Instructions      string `json:"instructions"`
+	TitleInstructions string `json:"title_instructions"`
 }
 
 // ============================================================================
@@ -529,15 +536,19 @@ type PreflightConfigUpdate struct {
 
 // IssuesConfigUpdate represents issues configuration update.
 type IssuesConfigUpdate struct {
-	Enabled      *bool                       `json:"enabled,omitempty"`
-	Provider     *string                     `json:"provider,omitempty"`
-	AutoGenerate *bool                       `json:"auto_generate,omitempty"`
-	Timeout      *string                     `json:"timeout,omitempty"`
-	Template     *IssueTemplateConfigUpdate  `json:"template,omitempty"`
-	Labels       *[]string                   `json:"default_labels,omitempty"`
-	Assignees    *[]string                   `json:"default_assignees,omitempty"`
-	GitLab       *GitLabIssueConfigUpdate    `json:"gitlab,omitempty"`
-	Generator    *IssueGeneratorConfigUpdate `json:"generator,omitempty"`
+	Enabled        *bool                       `json:"enabled,omitempty"`
+	Provider       *string                     `json:"provider,omitempty"`
+	AutoGenerate   *bool                       `json:"auto_generate,omitempty"`
+	Timeout        *string                     `json:"timeout,omitempty"`
+	Mode           *string                     `json:"mode,omitempty"`
+	DraftDirectory *string                     `json:"draft_directory,omitempty"`
+	Repository     *string                     `json:"repository,omitempty"`
+	ParentTemplate *string                     `json:"parent_template,omitempty"`
+	Template       *IssueTemplateConfigUpdate  `json:"template,omitempty"`
+	Labels         *[]string                   `json:"default_labels,omitempty"`
+	Assignees      *[]string                   `json:"default_assignees,omitempty"`
+	GitLab         *GitLabIssueConfigUpdate    `json:"gitlab,omitempty"`
+	Generator      *IssueGeneratorConfigUpdate `json:"generator,omitempty"`
 }
 
 // IssueTemplateConfigUpdate represents issue template update.
@@ -559,11 +570,14 @@ type GitLabIssueConfigUpdate struct {
 
 // IssueGeneratorConfigUpdate represents issue generator update.
 type IssueGeneratorConfigUpdate struct {
-	Enabled       *bool   `json:"enabled,omitempty"`
-	Agent         *string `json:"agent,omitempty"`
-	Model         *string `json:"model,omitempty"`
-	Summarize     *bool   `json:"summarize,omitempty"`
-	MaxBodyLength *int    `json:"max_body_length,omitempty"`
+	Enabled           *bool   `json:"enabled,omitempty"`
+	Agent             *string `json:"agent,omitempty"`
+	Model             *string `json:"model,omitempty"`
+	Summarize         *bool   `json:"summarize,omitempty"`
+	MaxBodyLength     *int    `json:"max_body_length,omitempty"`
+	ReasoningEffort   *string `json:"reasoning_effort,omitempty"`
+	Instructions      *string `json:"instructions,omitempty"`
+	TitleInstructions *string `json:"title_instructions,omitempty"`
 }
 
 // ============================================================================
