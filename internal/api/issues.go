@@ -226,6 +226,16 @@ func (s *Server) handleGenerateIssues(w http.ResponseWriter, r *http.Request) {
 		assignees = issuesCfg.Assignees
 	}
 
+	// Resolve effective mode: use config Mode, falling back to Generator.Enabled for backward compat.
+	effectiveMode := issuesCfg.Mode
+	if effectiveMode == "" {
+		if issuesCfg.Generator.Enabled {
+			effectiveMode = core.IssueModeAgent
+		} else {
+			effectiveMode = core.IssueModeDirect
+		}
+	}
+
 	// If issues are provided in the request, write to disk then create from files
 	if len(req.Issues) > 0 {
 		slog.Info("creating issues from frontend input", "count", len(req.Issues))
@@ -259,8 +269,8 @@ func (s *Server) handleGenerateIssues(w http.ResponseWriter, r *http.Request) {
 			respondError(w, http.StatusInternalServerError, fmt.Sprintf("issue creation failed: %v", err))
 			return
 		}
-	} else if issuesCfg.Generator.Enabled {
-		slog.Info("generating issues from filesystem artifacts using LLM")
+	} else if effectiveMode == core.IssueModeAgent {
+		slog.Info("generating issues from filesystem artifacts using LLM", "mode", effectiveMode)
 		if _, err := generator.GenerateIssueFiles(genCtx, workflowID); err != nil {
 			respondError(w, http.StatusInternalServerError, fmt.Sprintf("issue generation failed: %v", err))
 			return
@@ -297,8 +307,8 @@ func (s *Server) handleGenerateIssues(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else {
-		// Otherwise, use traditional flow (read from filesystem)
-		slog.Info("generating issues from filesystem artifacts (direct copy)")
+		// Direct mode: read from filesystem (direct copy)
+		slog.Info("generating issues from filesystem artifacts (direct copy)", "mode", effectiveMode)
 		opts := issues.GenerateOptions{
 			WorkflowID:      workflowID,
 			DryRun:          req.DryRun,
@@ -512,8 +522,21 @@ func (s *Server) handlePreviewIssues(w http.ResponseWriter, r *http.Request) {
 		Success: true,
 	}
 
+	// Resolve effective mode for preview: fast mode forces direct, otherwise use config.
+	effectiveMode := issuesCfg.Mode
+	if effectiveMode == "" {
+		if issuesCfg.Generator.Enabled {
+			effectiveMode = core.IssueModeAgent
+		} else {
+			effectiveMode = core.IssueModeDirect
+		}
+	}
 	if fastMode {
-		// Fast mode: use direct copy without AI
+		effectiveMode = core.IssueModeDirect
+	}
+
+	if effectiveMode == core.IssueModeDirect {
+		// Direct mode: use direct copy without AI
 		issuesCfg.Generator.Enabled = false
 		generator := issues.NewGenerator(nil, issuesCfg, "", reportDir, nil)
 
@@ -530,7 +553,7 @@ func (s *Server) handlePreviewIssues(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		response.Message = fmt.Sprintf("Preview: %d issues (fast mode)", len(result.PreviewIssues))
+		response.Message = fmt.Sprintf("Preview: %d issues (direct mode)", len(result.PreviewIssues))
 		for _, preview := range result.PreviewIssues {
 			response.PreviewIssues = append(response.PreviewIssues, IssuePreviewResponse{
 				Title:       preview.Title,
@@ -544,7 +567,7 @@ func (s *Server) handlePreviewIssues(w http.ResponseWriter, r *http.Request) {
 		}
 		response.AIUsed = false
 	} else {
-		// AI mode: generate markdown files using LLM
+		// Agent mode: generate markdown files using LLM
 		if s.agentRegistry == nil {
 			respondError(w, http.StatusInternalServerError, "agent registry not available")
 			return
