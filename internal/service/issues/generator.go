@@ -1824,6 +1824,10 @@ func sanitizeFilename(name string) string {
 // It first looks in the draft/ subdirectory; if empty, falls back to the base directory for backward compat.
 // Deduplicates by task ID to prevent duplicate issues.
 func (g *Generator) ReadGeneratedIssues(workflowID string) ([]IssuePreview, error) {
+	if err := ValidateWorkflowID(workflowID); err != nil {
+		return nil, err
+	}
+
 	// Try reading from draft/ subdirectory first (new layout)
 	previews, err := g.ReadAllDrafts(workflowID)
 	if err != nil {
@@ -1836,8 +1840,15 @@ func (g *Generator) ReadGeneratedIssues(workflowID string) ([]IssuePreview, erro
 	}
 
 	// Fallback: read from the flat base directory (backward compat with old layout)
+	root, err := g.getProjectRoot()
+	if err != nil {
+		return nil, fmt.Errorf("resolving project root: %w", err)
+	}
 	baseDir := g.resolveIssuesBaseDir()
-	issuesDir := filepath.Join(baseDir, workflowID)
+	issuesDir := filepath.Join(root, baseDir, workflowID)
+	if err := validatePathUnderRoot(issuesDir, root); err != nil {
+		return nil, err
+	}
 
 	entries, err := os.ReadDir(issuesDir)
 	if err != nil {

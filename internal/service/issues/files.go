@@ -378,6 +378,10 @@ func buildIssueMarkdown(title, body string) string {
 }
 
 func (g *Generator) readIssueFile(workflowID string, input IssueInput) (title, body, relPath string, err error) {
+	if err := ValidateWorkflowID(workflowID); err != nil {
+		return "", "", "", err
+	}
+
 	root, err := g.getProjectRoot()
 	if err != nil {
 		return "", "", "", fmt.Errorf("resolving project root: %w", err)
