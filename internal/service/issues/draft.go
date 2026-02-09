@@ -55,7 +55,10 @@ func (g *Generator) ReadDraftFile(workflowID, fileName string) (*DraftFrontmatte
 		return nil, "", fmt.Errorf("resolving draft directory: %w", err)
 	}
 
-	filePath := filepath.Join(draftDir, fileName)
+	filePath, err := ValidateOutputPath(draftDir, fileName)
+	if err != nil {
+		return nil, "", fmt.Errorf("validating draft file path %q: %w", fileName, err)
+	}
 	content, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, "", fmt.Errorf("reading draft file %s: %w", filePath, err)

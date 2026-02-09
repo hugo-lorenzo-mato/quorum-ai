@@ -274,7 +274,8 @@ func (s *Server) handleGenerateIssues(w http.ResponseWriter, r *http.Request) {
 
 		previews, err := generator.ReadGeneratedIssues(workflowID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, fmt.Sprintf("reading generated issues: %v", err))
+			slog.Error("reading generated issues failed", "error", err, "workflow_id", workflowID)
+			respondError(w, http.StatusInternalServerError, "reading generated issues failed")
 			return
 		}
 
@@ -582,7 +583,8 @@ func (s *Server) handlePreviewIssues(w http.ResponseWriter, r *http.Request) {
 		// Read the generated files
 		previews, err := generator.ReadGeneratedIssues(workflowID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, fmt.Sprintf("reading generated issues: %v", err))
+			slog.Error("reading generated issues failed", "error", err, "workflow_id", workflowID)
+			respondError(w, http.StatusInternalServerError, "reading generated issues failed")
 			return
 		}
 

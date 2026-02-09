@@ -11,6 +11,9 @@ import (
 )
 
 func (g *Generator) openIssuesLogger(workflowID string) (*slog.Logger, func() error, error) {
+	if err := ValidateWorkflowID(workflowID); err != nil {
+		return nil, nil, err
+	}
 	root, err := g.getProjectRoot()
 	if err != nil {
 		return nil, nil, fmt.Errorf("getting project root: %w", err)

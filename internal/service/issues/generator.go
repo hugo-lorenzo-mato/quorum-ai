@@ -87,28 +87,42 @@ func (g *Generator) getProjectRoot() (string, error) {
 // resolveDraftDir returns the absolute path to the draft directory for a workflow.
 // Uses DraftDirectory from config if set, otherwise defaults to .quorum/issues/.
 func (g *Generator) resolveDraftDir(workflowID string) (string, error) {
+	if err := ValidateWorkflowID(workflowID); err != nil {
+		return "", err
+	}
 	root, err := g.getProjectRoot()
 	if err != nil {
 		return "", fmt.Errorf("resolving project root: %w", err)
 	}
 	baseDir := ".quorum/issues"
 	if g.config.DraftDirectory != "" {
-		baseDir = g.config.DraftDirectory
+		baseDir = filepath.Clean(g.config.DraftDirectory)
 	}
-	return filepath.Join(root, baseDir, workflowID, "draft"), nil
+	result := filepath.Join(root, baseDir, workflowID, "draft")
+	if err := validatePathUnderRoot(result, root); err != nil {
+		return "", err
+	}
+	return result, nil
 }
 
 // resolvePublishedDir returns the absolute path to the published directory for a workflow.
 func (g *Generator) resolvePublishedDir(workflowID string) (string, error) {
+	if err := ValidateWorkflowID(workflowID); err != nil {
+		return "", err
+	}
 	root, err := g.getProjectRoot()
 	if err != nil {
 		return "", fmt.Errorf("resolving project root: %w", err)
 	}
 	baseDir := ".quorum/issues"
 	if g.config.DraftDirectory != "" {
-		baseDir = g.config.DraftDirectory
+		baseDir = filepath.Clean(g.config.DraftDirectory)
 	}
-	return filepath.Join(root, baseDir, workflowID, "published"), nil
+	result := filepath.Join(root, baseDir, workflowID, "published")
+	if err := validatePathUnderRoot(result, root); err != nil {
+		return "", err
+	}
+	return result, nil
 }
 
 // resolveIssuesBaseDir returns the relative base directory for issues (without workflow subdirectory).

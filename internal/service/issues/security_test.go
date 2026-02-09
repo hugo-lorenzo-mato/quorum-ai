@@ -3,12 +3,13 @@ package issues
 import (
 	"errors"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
 
 func TestValidateOutputPath_ValidFilenames(t *testing.T) {
-	baseDir := "/base/issues"
+	baseDir := t.TempDir()
 
 	tests := []struct {
 		filename string
@@ -35,7 +36,7 @@ func TestValidateOutputPath_ValidFilenames(t *testing.T) {
 }
 
 func TestValidateOutputPath_PathTraversal(t *testing.T) {
-	baseDir := "/base/issues"
+	baseDir := t.TempDir()
 
 	tests := []struct {
 		filename string
@@ -63,12 +64,22 @@ func TestValidateOutputPath_PathTraversal(t *testing.T) {
 }
 
 func TestValidateOutputPath_AbsolutePath(t *testing.T) {
-	baseDir := "/base/issues"
+	baseDir := t.TempDir()
 
-	tests := []string{
-		"/etc/passwd",
-		"/var/log/test.md",
-		"/absolute/path.md",
+	// Use OS-appropriate absolute paths
+	var tests []string
+	if runtime.GOOS == "windows" {
+		tests = []string{
+			`C:\Windows\System32`,
+			`D:\var\log\test.md`,
+			`C:\absolute\path.md`,
+		}
+	} else {
+		tests = []string{
+			"/etc/passwd",
+			"/var/log/test.md",
+			"/absolute/path.md",
+		}
 	}
 
 	for _, filename := range tests {
@@ -85,7 +96,7 @@ func TestValidateOutputPath_AbsolutePath(t *testing.T) {
 }
 
 func TestValidateOutputPath_EmptyFilename(t *testing.T) {
-	baseDir := "/base/issues"
+	baseDir := t.TempDir()
 
 	_, err := ValidateOutputPath(baseDir, "")
 	if err == nil {
@@ -100,39 +111,45 @@ func TestSanitizeFilename_DangerousCharacters(t *testing.T) {
 	tests := []struct {
 		input    string
 		expected string
+		winExpected string // different expected value on Windows, empty means same
 	}{
 		// Path traversal - filepath.Base extracts just the basename
-		{"../etc/passwd", "passwd"},
-		// On Linux, backslash is not a path separator so it gets replaced with underscore
-		{"..\\windows\\system32", "windows_system32"},
+		{"../etc/passwd", "passwd", ""},
+		// On Linux, backslash is not a path separator so filepath.Base keeps the full string
+		// On Windows, filepath.Base("..\\windows\\system32") returns "system32"
+		{"..\\windows\\system32", "windows_system32", "system32"},
 
 		// Special characters
-		{"file:stream", "file_stream"},
-		{"file*.md", "file_.md"},
-		{"file?.md", "file_.md"},
-		{"file<>|.md", "file_.md"},
-		{"file\"name\".md", "file_name_.md"},
+		{"file:stream", "file_stream", ""},
+		{"file*.md", "file_.md", ""},
+		{"file?.md", "file_.md", ""},
+		{"file<>|.md", "file_.md", ""},
+		{"file\"name\".md", "file_name_.md", ""},
 
 		// Null byte
-		{"file\x00name.md", "file_name.md"},
+		{"file\x00name.md", "file_name.md", ""},
 
 		// Multiple underscores collapse
-		{"file___name.md", "file_name.md"},
+		{"file___name.md", "file_name.md", ""},
 
 		// Leading/trailing underscores trimmed
-		{"__file__", "file"},
+		{"__file__", "file", ""},
 
 		// Empty after sanitization
-		{"../", "unnamed"},
-		{"..", "unnamed"},
+		{"../", "unnamed", ""},
+		{"..", "unnamed", ""},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.input, func(t *testing.T) {
 			result := SanitizeFilename(tc.input)
-			if result != tc.expected {
+			expected := tc.expected
+			if runtime.GOOS == "windows" && tc.winExpected != "" {
+				expected = tc.winExpected
+			}
+			if result != expected {
 				t.Errorf("SanitizeFilename(%q) = %q, want %q",
-					tc.input, result, tc.expected)
+					tc.input, result, expected)
 			}
 		})
 	}
@@ -339,7 +356,17 @@ func TestValidateOutputPath_RealDirectory(t *testing.T) {
 		{"valid.md", false},
 		{"subdir/file.md", false},
 		{"../escape.md", true},
-		{"/absolute/path.md", true},
+	}
+	if runtime.GOOS == "windows" {
+		tests = append(tests, struct {
+			filename    string
+			shouldError bool
+		}{`C:\absolute\path.md`, true})
+	} else {
+		tests = append(tests, struct {
+			filename    string
+			shouldError bool
+		}{"/absolute/path.md", true})
 	}
 
 	for _, tc := range tests {
@@ -356,23 +383,25 @@ func TestValidateOutputPath_RealDirectory(t *testing.T) {
 }
 
 func TestValidateOutputPath_WindowsPaths(t *testing.T) {
-	baseDir := "/base/issues"
+	baseDir := t.TempDir()
 
 	// These should be caught regardless of OS
 	tests := []string{
 		"..\\windows\\system32",
-		"C:\\Windows\\System32",
 		"file:stream",
+	}
+	if runtime.GOOS == "windows" {
+		tests = append(tests, `C:\Windows\System32`)
 	}
 
 	for _, filename := range tests {
 		t.Run(filename, func(t *testing.T) {
-			_, err := ValidateOutputPath(baseDir, filename)
-			// Should either error or be sanitized to safe path
-			// The important thing is it doesn't escape baseDir
+			result, err := ValidateOutputPath(baseDir, filename)
+			// Should either error or produce a path inside baseDir
 			if err == nil {
-				result, _ := ValidateOutputPath(baseDir, filename)
-				if !strings.HasPrefix(result, baseDir) {
+				absBase, _ := filepath.Abs(baseDir)
+				absResult, _ := filepath.Abs(result)
+				if !strings.HasPrefix(absResult, absBase) {
 					t.Errorf("result %q escapes baseDir %q", result, baseDir)
 				}
 			}
@@ -410,7 +439,7 @@ func TestSanitizeFilename_WhitespaceOnly(t *testing.T) {
 
 // TestPathTraversalVectors tests various known path traversal attack vectors
 func TestPathTraversalVectors(t *testing.T) {
-	baseDir := "/base/issues"
+	baseDir := t.TempDir()
 
 	// Common path traversal attack vectors
 	vectors := []string{
