@@ -633,7 +633,16 @@ func (s *Server) loadConfigForContext(ctx context.Context) (*config.Config, erro
 	if err != nil {
 		return nil, err
 	}
-	// Preserve relative paths for the web UI, and allow missing project config files.
+	// If the config file exists on disk, load it directly (project-scoped config).
+	if _, statErr := os.Stat(configPath); statErr == nil {
+		return config.NewLoader().WithConfigFile(configPath).WithResolvePaths(false).Load()
+	}
+	// File doesn't exist on disk — fall back to the server/project config loader
+	// which may have programmatic defaults or Viper overrides (e.g. test setups).
+	if loader := s.getProjectConfigLoader(ctx); loader != nil {
+		return loader.Load()
+	}
+	// Last resort: new loader with the (missing) path, returns built-in defaults.
 	return config.NewLoader().WithConfigFile(configPath).WithResolvePaths(false).Load()
 }
 

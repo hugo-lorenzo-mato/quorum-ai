@@ -16,6 +16,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	webadapters "github.com/hugo-lorenzo-mato/quorum-ai/internal/adapters/web"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/api/middleware"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/attachments"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/config"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
@@ -1166,6 +1167,19 @@ func (s *Server) HandleRunWorkflow(w http.ResponseWriter, r *http.Request) {
 
 	// Resolve the effective execution config so the execution timeout matches Settings.
 	effCfg, cfgErr := ResolveEffectiveExecutionConfig(ctx)
+	if cfgErr != nil && middleware.GetProjectContext(ctx) == nil {
+		// Legacy mode fallback: no project context configured.
+		// Build EffectiveExecutionConfig from the server's config loader.
+		if fallbackCfg, loadErr := s.loadConfigForContext(ctx); loadErr == nil {
+			effCfg = &EffectiveExecutionConfig{
+				Config:      fallbackCfg,
+				ConfigScope: "global",
+				ConfigMode:  "custom",
+				ProjectRoot: s.root,
+			}
+			cfgErr = nil
+		}
+	}
 	if cfgErr != nil {
 		_ = s.unifiedTracker.RollbackExecution(ctx, core.WorkflowID(workflowID), "failed to resolve effective configuration: "+cfgErr.Error())
 		status := http.StatusServiceUnavailable

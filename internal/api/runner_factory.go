@@ -89,6 +89,17 @@ func (f *RunnerFactory) CreateRunner(ctx context.Context, workflowID string, cp 
 
 	// Resolve the effective config deterministically from ProjectContext.
 	effCfg, err := ResolveEffectiveExecutionConfig(ctx)
+	if err != nil && f.configLoader != nil {
+		// Legacy mode fallback: no project context, use the factory's config loader.
+		if cfg, loadErr := f.configLoader.Load(); loadErr == nil {
+			effCfg = &EffectiveExecutionConfig{
+				Config:      cfg,
+				ConfigScope: "global",
+				ConfigMode:  "custom",
+			}
+			err = nil
+		}
+	}
 	if err != nil {
 		return nil, nil, fmt.Errorf("resolving effective execution config: %w", err)
 	}
