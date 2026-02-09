@@ -846,7 +846,10 @@ type IssuesStatusResponse struct {
 
 // createIssueClient creates an IssueClient based on provider config, using
 // configurable Repository when set (overrides auto-detection).
-func createIssueClient(cfg config.IssuesConfig) (core.IssueClient, error) {
+// It is a package-level variable so tests can swap it with a mock.
+var createIssueClient = newIssueClient
+
+func newIssueClient(cfg config.IssuesConfig) (core.IssueClient, error) {
 	switch cfg.Provider {
 	case "github", "":
 		if cfg.Repository != "" {

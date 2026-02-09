@@ -219,3 +219,161 @@ func TestValidationErrorResponse_Format(t *testing.T) {
 		t.Errorf("expected code to be INVALID")
 	}
 }
+
+func TestIssuesConfigResponse_Marshaling(t *testing.T) {
+	response := IssuesConfigResponse{
+		Enabled:        true,
+		Provider:       "github",
+		AutoGenerate:   true,
+		Timeout:        "5m",
+		Mode:           "agent",
+		DraftDirectory: "custom/issues",
+		Repository:     "owner/repo",
+		ParentTemplate: "epic",
+		Template: IssueTemplateConfigResponse{
+			Language:           "english",
+			Tone:               "technical",
+			IncludeDiagrams:    true,
+			TitleFormat:        "[quorum] {task_name}",
+			BodyTemplateFile:   "template.md",
+			Convention:         "conventional",
+			CustomInstructions: "Be concise",
+		},
+		Labels:    []string{"quorum", "automated"},
+		Assignees: []string{"dev1"},
+		GitLab: GitLabIssueConfigResponse{
+			UseEpics:  true,
+			ProjectID: "12345",
+		},
+		Generator: IssueGeneratorConfigResponse{
+			Enabled:           true,
+			Agent:             "claude",
+			Model:             "opus",
+			Summarize:         true,
+			MaxBodyLength:     50000,
+			ReasoningEffort:   "high",
+			Instructions:      "Generate detailed issues",
+			TitleInstructions: "Use conventional format",
+		},
+	}
+
+	data, err := json.Marshal(response)
+	if err != nil {
+		t.Fatalf("marshal issues response: %v", err)
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(data, &result); err != nil {
+		t.Fatalf("unmarshal issues response: %v", err)
+	}
+
+	// Verify key JSON field names
+	for _, key := range []string{
+		"enabled", "provider", "auto_generate", "timeout",
+		"mode", "draft_directory", "repository", "parent_template",
+		"template", "default_labels", "default_assignees",
+		"gitlab", "generator",
+	} {
+		if _, ok := result[key]; !ok {
+			t.Errorf("expected key %q in issues response", key)
+		}
+	}
+
+	// Verify nested template fields
+	tmpl, ok := result["template"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected template to be an object")
+	}
+	for _, key := range []string{"language", "tone", "include_diagrams", "title_format", "convention", "custom_instructions"} {
+		if _, ok := tmpl[key]; !ok {
+			t.Errorf("expected key %q in template", key)
+		}
+	}
+
+	// Verify generator fields
+	gen, ok := result["generator"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected generator to be an object")
+	}
+	for _, key := range []string{"enabled", "agent", "model", "summarize", "max_body_length", "reasoning_effort", "instructions", "title_instructions"} {
+		if _, ok := gen[key]; !ok {
+			t.Errorf("expected key %q in generator", key)
+		}
+	}
+}
+
+func TestIssuesConfigUpdate_PointerFields(t *testing.T) {
+	tests := []struct {
+		name       string
+		jsonBody   string
+		wantIssues bool
+	}{
+		{
+			name:       "issues enabled",
+			jsonBody:   `{"issues": {"enabled": true}}`,
+			wantIssues: true,
+		},
+		{
+			name:       "issues not set",
+			jsonBody:   `{"log": {"level": "debug"}}`,
+			wantIssues: false,
+		},
+		{
+			name:       "issues with template",
+			jsonBody:   `{"issues": {"template": {"language": "spanish"}}}`,
+			wantIssues: true,
+		},
+		{
+			name:       "issues with generator",
+			jsonBody:   `{"issues": {"generator": {"enabled": true, "agent": "claude"}}}`,
+			wantIssues: true,
+		},
+		{
+			name:       "issues with gitlab",
+			jsonBody:   `{"issues": {"gitlab": {"use_epics": true}}}`,
+			wantIssues: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var req FullConfigUpdate
+			if err := json.Unmarshal([]byte(tt.jsonBody), &req); err != nil {
+				t.Fatalf("unmarshal request: %v", err)
+			}
+
+			if tt.wantIssues {
+				if req.Issues == nil {
+					t.Fatal("expected Issues to be set")
+				}
+			} else if req.Issues != nil {
+				t.Error("expected Issues to be nil")
+			}
+		})
+	}
+}
+
+func TestFullConfigResponse_IssuesSection(t *testing.T) {
+	response := FullConfigResponse{
+		Issues: IssuesConfigResponse{
+			Enabled:  true,
+			Provider: "github",
+			Labels:   []string{"quorum"},
+			Assignees: []string{},
+		},
+	}
+
+	data, err := json.Marshal(response)
+	if err != nil {
+		t.Fatalf("marshal response: %v", err)
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(data, &result); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+
+	if _, ok := result["issues"]; !ok {
+		t.Error("expected 'issues' key in full config response")
+	}
+}
