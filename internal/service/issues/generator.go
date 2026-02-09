@@ -684,7 +684,8 @@ func (g *Generator) readTaskFiles() ([]TaskInfo, error) {
 
 	// Also check global .quorum/tasks directory (derive from reportDir)
 	// reportDir is typically .quorum/runs/{workflowID}, so .quorum/tasks is ../../../.quorum/tasks
-	if strings.Contains(g.reportDir, ".quorum/runs/") {
+	quorumRunsSegment := ".quorum" + string(filepath.Separator) + "runs" + string(filepath.Separator)
+	if strings.Contains(g.reportDir, quorumRunsSegment) {
 		quorumRoot := filepath.Dir(filepath.Dir(g.reportDir)) // Go up to .quorum
 		globalTasksDir := filepath.Join(quorumRoot, "tasks")
 		tasksDirs = append(tasksDirs, globalTasksDir)
