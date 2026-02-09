@@ -169,10 +169,11 @@ func (h *HeartbeatManager) heartbeatLoop(ctx context.Context, workflowID core.Wo
 // getWorkflowSM returns the StateManager for a specific workflow.
 // If a per-workflow SM was registered via Start(), it is returned;
 // otherwise the global (server-level) StateManager is used.
-// Caller must hold h.mu or accept a racy read (safe for heartbeat writes
-// because the map entry is set before the heartbeat loop starts).
 func (h *HeartbeatManager) getWorkflowSM(workflowID core.WorkflowID) core.StateManager {
-	if sm, ok := h.workflowSMs[workflowID]; ok {
+	h.mu.Lock()
+	sm, ok := h.workflowSMs[workflowID]
+	h.mu.Unlock()
+	if ok {
 		return sm
 	}
 	return h.stateManager
