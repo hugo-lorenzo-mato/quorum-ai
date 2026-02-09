@@ -55,6 +55,12 @@ type HeartbeatManager struct {
 	// Track last successful heartbeat write per workflow (in-memory, cheap to check)
 	lastWriteSuccess map[core.WorkflowID]time.Time
 
+	// Per-workflow StateManagers for multi-project support.
+	// When a workflow belongs to a project with its own DB, the project-scoped
+	// StateManager is stored here so heartbeats and zombie detection target the
+	// correct database.
+	workflowSMs map[core.WorkflowID]core.StateManager
+
 	// Zombie detector
 	detectorCancel context.CancelFunc
 	zombieHandler  ZombieHandler
@@ -72,6 +78,7 @@ func NewHeartbeatManager(
 		logger:           logger,
 		active:           make(map[core.WorkflowID]context.CancelFunc),
 		lastWriteSuccess: make(map[core.WorkflowID]time.Time),
+		workflowSMs:      make(map[core.WorkflowID]core.StateManager),
 	}
 }
 
@@ -81,7 +88,10 @@ func (h *HeartbeatManager) Config() HeartbeatConfig {
 }
 
 // Start begins heartbeat tracking for a workflow.
-func (h *HeartbeatManager) Start(workflowID core.WorkflowID) {
+// If sm is non-nil, heartbeats for this workflow will be written to sm instead
+// of the global StateManager. This supports multi-project setups where each
+// project has its own database.
+func (h *HeartbeatManager) Start(workflowID core.WorkflowID, sm core.StateManager) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -93,6 +103,10 @@ func (h *HeartbeatManager) Start(workflowID core.WorkflowID) {
 	ctx, cancel := context.WithCancel(context.Background())
 	h.active[workflowID] = cancel
 	h.lastWriteSuccess[workflowID] = time.Now()
+
+	if sm != nil {
+		h.workflowSMs[workflowID] = sm
+	}
 
 	go h.heartbeatLoop(ctx, workflowID)
 
@@ -108,6 +122,7 @@ func (h *HeartbeatManager) Stop(workflowID core.WorkflowID) {
 		cancel()
 		delete(h.active, workflowID)
 		delete(h.lastWriteSuccess, workflowID)
+		delete(h.workflowSMs, workflowID)
 		h.logger.Debug("stopped heartbeat tracking", "workflow_id", workflowID)
 	}
 }
@@ -151,12 +166,25 @@ func (h *HeartbeatManager) heartbeatLoop(ctx context.Context, workflowID core.Wo
 	}
 }
 
+// getWorkflowSM returns the StateManager for a specific workflow.
+// If a per-workflow SM was registered via Start(), it is returned;
+// otherwise the global (server-level) StateManager is used.
+// Caller must hold h.mu or accept a racy read (safe for heartbeat writes
+// because the map entry is set before the heartbeat loop starts).
+func (h *HeartbeatManager) getWorkflowSM(workflowID core.WorkflowID) core.StateManager {
+	if sm, ok := h.workflowSMs[workflowID]; ok {
+		return sm
+	}
+	return h.stateManager
+}
+
 // writeHeartbeat updates the heartbeat timestamp in the database.
 func (h *HeartbeatManager) writeHeartbeat(workflowID core.WorkflowID) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	if err := h.stateManager.UpdateHeartbeat(ctx, workflowID); err != nil {
+	sm := h.getWorkflowSM(workflowID)
+	if err := sm.UpdateHeartbeat(ctx, workflowID); err != nil {
 		h.logger.Warn("failed to write heartbeat",
 			"workflow_id", workflowID,
 			"error", err)
@@ -214,14 +242,36 @@ func (h *HeartbeatManager) zombieDetectorLoop(ctx context.Context) {
 }
 
 // detectZombies finds and handles zombie workflows.
+// It queries all unique StateManagers (global + per-workflow) so that zombies
+// in project-scoped databases are also detected.
 func (h *HeartbeatManager) detectZombies() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	zombies, err := h.stateManager.FindZombieWorkflows(ctx, h.config.StaleThreshold)
-	if err != nil {
-		h.logger.Error("failed to find zombie workflows", "error", err)
-		return
+	// Collect unique StateManagers to query.
+	h.mu.Lock()
+	uniqueSMs := make(map[core.StateManager]struct{})
+	uniqueSMs[h.stateManager] = struct{}{}
+	for _, sm := range h.workflowSMs {
+		uniqueSMs[sm] = struct{}{}
+	}
+	h.mu.Unlock()
+
+	// Query each SM and deduplicate results by WorkflowID.
+	seen := make(map[core.WorkflowID]struct{})
+	var zombies []*core.WorkflowState
+	for sm := range uniqueSMs {
+		found, err := sm.FindZombieWorkflows(ctx, h.config.StaleThreshold)
+		if err != nil {
+			h.logger.Error("failed to find zombie workflows", "error", err)
+			continue
+		}
+		for _, z := range found {
+			if _, dup := seen[z.WorkflowID]; !dup {
+				seen[z.WorkflowID] = struct{}{}
+				zombies = append(zombies, z)
+			}
+		}
 	}
 
 	for _, zombie := range zombies {
@@ -286,8 +336,9 @@ func (h *HeartbeatManager) HandleZombie(state *core.WorkflowState, executor inte
 				state.ResumeCount, state.MaxResumes),
 		})
 
-		// Save updated state
-		if err := h.stateManager.Save(ctx, state); err != nil {
+		// Save updated state (use per-workflow SM if available)
+		sm := h.getWorkflowSM(state.WorkflowID)
+		if err := sm.Save(ctx, state); err != nil {
 			h.logger.Error("failed to save state before auto-resume",
 				"workflow_id", state.WorkflowID,
 				"error", err)
@@ -328,14 +379,15 @@ func (h *HeartbeatManager) HandleZombie(state *core.WorkflowState, executor inte
 			Message:   reason,
 		})
 
-		if err := h.stateManager.Save(ctx, state); err != nil {
+		sm := h.getWorkflowSM(state.WorkflowID)
+		if err := sm.Save(ctx, state); err != nil {
 			h.logger.Error("failed to save zombie state",
 				"workflow_id", state.WorkflowID,
 				"error", err)
 		}
 
 		// Clear running_workflows entry to prevent zombie re-detection
-		if clearer, ok := h.stateManager.(interface {
+		if clearer, ok := sm.(interface {
 			ClearWorkflowRunning(context.Context, core.WorkflowID) error
 		}); ok {
 			_ = clearer.ClearWorkflowRunning(ctx, state.WorkflowID)
@@ -357,6 +409,7 @@ func (h *HeartbeatManager) Shutdown() {
 		delete(h.active, workflowID)
 	}
 	h.lastWriteSuccess = make(map[core.WorkflowID]time.Time)
+	h.workflowSMs = make(map[core.WorkflowID]core.StateManager)
 
 	h.logger.Info("heartbeat manager shutdown complete")
 }

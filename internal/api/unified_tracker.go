@@ -256,7 +256,7 @@ func (t *UnifiedTracker) StartExecution(ctx context.Context, workflowID core.Wor
 
 	// Start heartbeat tracking
 	if t.heartbeat != nil {
-		t.heartbeat.Start(workflowID)
+		t.heartbeat.Start(workflowID, stateManager)
 	}
 
 	t.logger.Debug("started execution tracking",
@@ -619,7 +619,7 @@ func (t *UnifiedTracker) CleanupOrphanedWorkflows(ctx context.Context) (int, err
 			continue
 		}
 
-		if !isProvablyOrphan(rec) {
+		if !isProvablyOrphan(rec) && !isOrphanInThisProcess(rec) {
 			t.logger.Info("skipping orphan cleanup: lock holder still alive or remote",
 				"workflow_id", id,
 				"lock_holder_pid", rec.LockHolderPID,

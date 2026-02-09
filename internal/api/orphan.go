@@ -50,3 +50,19 @@ func isProvablyOrphan(rec *core.RunningWorkflowRecord) bool {
 	}
 	return !processExists(*rec.LockHolderPID)
 }
+
+// isOrphanInThisProcess returns true when the lock-holder is this very process
+// but no in-memory handle exists for the workflow. This covers the case where
+// the execution goroutine ended (panic, timeout, etc.) without cleaning up the
+// running_workflows DB entry — the process is still alive so isProvablyOrphan
+// returns false, yet we know the workflow cannot be running because we checked
+// the in-memory tracker and found no handle.
+func isOrphanInThisProcess(rec *core.RunningWorkflowRecord) bool {
+	if rec == nil || rec.LockHolderPID == nil {
+		return false
+	}
+	if !isLocalHost(rec.LockHolderHost) {
+		return false
+	}
+	return *rec.LockHolderPID == os.Getpid()
+}

@@ -37,6 +37,7 @@ type WorkflowResponse struct {
 	ReportPath       string            `json:"report_path,omitempty"`
 	CreatedAt        time.Time         `json:"created_at"`
 	UpdatedAt        time.Time         `json:"updated_at"`
+	ExecutionStartedAt *time.Time      `json:"execution_started_at,omitempty"` // When execution actually began (running_workflows.started_at)
 	HeartbeatAt      *time.Time        `json:"heartbeat_at,omitempty"` // Last heartbeat (running_workflows.heartbeat_at when available)
 	IsActive         bool              `json:"is_active"`
 	ActuallyRunning  bool              `json:"actually_running"`  // True if executing in this process (in-memory handle exists)
@@ -864,6 +865,7 @@ func (s *Server) stateToWorkflowResponse(ctx context.Context, state *core.Workfl
 	if runningRec != nil {
 		resp.LockHolderPID = runningRec.LockHolderPID
 		resp.LockHolderHost = runningRec.LockHolderHost
+		resp.ExecutionStartedAt = &runningRec.StartedAt
 	}
 
 	if state.Metrics != nil {
@@ -1369,7 +1371,7 @@ func (s *Server) handleCancelWorkflow(w http.ResponseWriter, r *http.Request) {
 				rec, _ = provider.GetRunningWorkflowRecord(ctx, core.WorkflowID(workflowID))
 			}
 
-			if isProvablyOrphan(rec) {
+			if isProvablyOrphan(rec) || isOrphanInThisProcess(rec) {
 				if forceErr := s.unifiedTracker.ForceStop(ctx, core.WorkflowID(workflowID)); forceErr != nil {
 					s.logger.Error("failed to force-stop orphaned workflow during cancel recovery", "workflow_id", workflowID, "error", forceErr)
 					respondError(w, http.StatusInternalServerError, "failed to recover orphaned workflow")
@@ -1520,13 +1522,13 @@ func (s *Server) handleResumeWorkflow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	ctx := r.Context()
+	stateManager := s.getProjectStateManager(ctx)
+
 	// Use UnifiedTracker for resume operation
 	if s.unifiedTracker != nil {
 		if err := s.unifiedTracker.Resume(core.WorkflowID(workflowID)); err != nil {
-			if strings.Contains(err.Error(), "not running") {
-				respondError(w, http.StatusConflict, "workflow is not running")
-			} else if strings.Contains(err.Error(), "not paused") {
-				ctx := r.Context()
+			if strings.Contains(err.Error(), "not paused") {
 				if s.isZombieWorkflow(ctx, workflowID) {
 					respondError(w, http.StatusConflict,
 						"workflow appears to be a zombie (stale heartbeat). Use POST /force-stop then re-run")
@@ -1534,9 +1536,68 @@ func (s *Server) handleResumeWorkflow(w http.ResponseWriter, r *http.Request) {
 					respondError(w, http.StatusConflict,
 						"workflow is not paused. If the workflow appears stuck, use POST /force-stop to recover")
 				}
-			} else {
-				respondError(w, http.StatusInternalServerError, err.Error())
+				return
 			}
+
+			if !strings.Contains(err.Error(), "not running") {
+				respondError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+
+			// No in-memory handle — check if the workflow is paused/running in DB (orphan).
+			// If provably orphaned, auto-recover: force-stop, then re-execute.
+			if stateManager == nil {
+				respondError(w, http.StatusConflict, "workflow is not running")
+				return
+			}
+
+			state, loadErr := stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
+			if loadErr != nil || state == nil {
+				respondError(w, http.StatusConflict, "workflow is not running")
+				return
+			}
+
+			if state.Status != core.WorkflowStatusPaused && state.Status != core.WorkflowStatusRunning {
+				respondError(w, http.StatusConflict, "workflow is not running")
+				return
+			}
+
+			// We know for certain this is an orphan: the in-memory tracker has no
+			// handle (Resume() returned "not running"), yet the DB says paused/running.
+			// No PID check needed — if a handle existed, Resume() would have succeeded.
+			// Auto-recover: force-stop then re-execute.
+			s.logger.Info("auto-recovering orphaned workflow on resume",
+				"workflow_id", workflowID,
+				"previous_status", state.Status)
+
+			if forceErr := s.unifiedTracker.ForceStop(ctx, core.WorkflowID(workflowID)); forceErr != nil {
+				s.logger.Error("failed to force-stop orphaned workflow during resume recovery",
+					"workflow_id", workflowID, "error", forceErr)
+				respondError(w, http.StatusInternalServerError, "failed to recover orphaned workflow")
+				return
+			}
+
+			// Re-execute via the executor (which handles failed→running transitions)
+			if s.executor != nil {
+				if execErr := s.executor.Resume(ctx, core.WorkflowID(workflowID)); execErr != nil {
+					respondError(w, http.StatusInternalServerError,
+						fmt.Sprintf("orphan recovered but re-execution failed: %s", execErr.Error()))
+					return
+				}
+			} else {
+				respondJSON(w, http.StatusOK, WorkflowControlResponse{
+					ID:      workflowID,
+					Status:  "failed",
+					Message: "Orphan recovered: workflow was forcibly stopped. Use POST /run to re-execute.",
+				})
+				return
+			}
+
+			respondJSON(w, http.StatusOK, WorkflowControlResponse{
+				ID:      workflowID,
+				Status:  "running",
+				Message: "Orphan recovered: workflow force-stopped and re-started.",
+			})
 			return
 		}
 	} else {
@@ -1545,9 +1606,7 @@ func (s *Server) handleResumeWorkflow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Update persisted state
-	ctx := r.Context()
-	stateManager := s.getProjectStateManager(ctx)
+	// Update persisted state (normal unpause path)
 	state, err := stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
 	if err == nil && state != nil {
 		state.Status = core.WorkflowStatusRunning

@@ -100,7 +100,7 @@ func TestHeartbeatManager_IsHealthy_TrackedAndRecent(t *testing.T) {
 	defer hm.Shutdown()
 
 	wfID := core.WorkflowID("wf-test-1")
-	hm.Start(wfID)
+	hm.Start(wfID, nil)
 
 	if !hm.IsHealthy(wfID) {
 		t.Fatal("expected IsHealthy to return true immediately after Start")
@@ -141,7 +141,7 @@ func TestHeartbeatManager_IsHealthy_AfterStop(t *testing.T) {
 	defer hm.Shutdown()
 
 	wfID := core.WorkflowID("wf-test-3")
-	hm.Start(wfID)
+	hm.Start(wfID, nil)
 
 	if !hm.IsHealthy(wfID) {
 		t.Fatal("expected IsHealthy to be true after Start")
@@ -220,7 +220,7 @@ func TestHeartbeatManager_DetectZombies_SkipsRecentTracked(t *testing.T) {
 	defer hm.Shutdown()
 
 	// Mark as tracked
-	hm.Start(zombieState.WorkflowID)
+	hm.Start(zombieState.WorkflowID, nil)
 
 	var handlerCalled bool
 	hm.zombieHandler = func(state *core.WorkflowState) {
@@ -299,5 +299,106 @@ func TestHeartbeatManager_DetectZombies_CatchesUntrackedZombie(t *testing.T) {
 
 	if !handlerCalled {
 		t.Fatal("expected zombie handler to be called for untracked zombie workflow")
+	}
+}
+
+func TestHeartbeatManager_PerWorkflowSM(t *testing.T) {
+	globalSM := &heartbeatMockStateManager{}
+	projectSM := &heartbeatMockStateManager{}
+	hm := newTestHeartbeatManager(globalSM)
+	defer hm.Shutdown()
+
+	wfID := core.WorkflowID("wf-project-1")
+	hm.Start(wfID, projectSM)
+
+	// Wait for at least one heartbeat tick
+	time.Sleep(150 * time.Millisecond)
+	hm.Stop(wfID)
+
+	// projectSM should have received heartbeat calls, not globalSM
+	projectSM.mu.Lock()
+	projectCalls := projectSM.updateCallCount
+	projectSM.mu.Unlock()
+
+	globalSM.mu.Lock()
+	globalCalls := globalSM.updateCallCount
+	globalSM.mu.Unlock()
+
+	if projectCalls == 0 {
+		t.Fatal("expected heartbeat writes to go to project SM")
+	}
+	if globalCalls != 0 {
+		t.Fatalf("expected no heartbeat writes to global SM, got %d", globalCalls)
+	}
+}
+
+func TestHeartbeatManager_DetectZombies_MultiSM(t *testing.T) {
+	staleHeartbeat := time.Now().Add(-time.Hour)
+
+	globalZombie := &core.WorkflowState{
+		WorkflowDefinition: core.WorkflowDefinition{WorkflowID: "wf-global-zombie"},
+		WorkflowRun: core.WorkflowRun{
+			Status:      core.WorkflowStatusRunning,
+			HeartbeatAt: &staleHeartbeat,
+		},
+	}
+	projectZombie := &core.WorkflowState{
+		WorkflowDefinition: core.WorkflowDefinition{WorkflowID: "wf-project-zombie"},
+		WorkflowRun: core.WorkflowRun{
+			Status:      core.WorkflowStatusRunning,
+			HeartbeatAt: &staleHeartbeat,
+		},
+	}
+
+	globalSM := &heartbeatMockStateManager{zombies: []*core.WorkflowState{globalZombie}}
+	projectSM := &heartbeatMockStateManager{zombies: []*core.WorkflowState{projectZombie}}
+	hm := newTestHeartbeatManager(globalSM)
+	defer hm.Shutdown()
+
+	// Register a workflow with the project SM so it gets queried
+	hm.mu.Lock()
+	hm.workflowSMs[core.WorkflowID("wf-project-zombie")] = projectSM
+	hm.mu.Unlock()
+
+	detectedIDs := make(map[core.WorkflowID]bool)
+	hm.zombieHandler = func(state *core.WorkflowState) {
+		detectedIDs[state.WorkflowID] = true
+	}
+
+	hm.detectZombies()
+
+	if !detectedIDs["wf-global-zombie"] {
+		t.Fatal("expected zombie from global SM to be detected")
+	}
+	if !detectedIDs["wf-project-zombie"] {
+		t.Fatal("expected zombie from project SM to be detected")
+	}
+}
+
+func TestHeartbeatManager_Stop_CleansUpSM(t *testing.T) {
+	globalSM := &heartbeatMockStateManager{}
+	projectSM := &heartbeatMockStateManager{}
+	hm := newTestHeartbeatManager(globalSM)
+	defer hm.Shutdown()
+
+	wfID := core.WorkflowID("wf-cleanup-test")
+	hm.Start(wfID, projectSM)
+
+	// Verify SM is registered
+	hm.mu.Lock()
+	_, hasSM := hm.workflowSMs[wfID]
+	hm.mu.Unlock()
+	if !hasSM {
+		t.Fatal("expected per-workflow SM to be registered after Start")
+	}
+
+	hm.Stop(wfID)
+
+	// Verify SM is cleaned up
+	hm.mu.Lock()
+	_, hasSM = hm.workflowSMs[wfID]
+	hm.mu.Unlock()
+	if hasSM {
+		t.Fatal("expected per-workflow SM to be cleaned up after Stop")
 	}
 }

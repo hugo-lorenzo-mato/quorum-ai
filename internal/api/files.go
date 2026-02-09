@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"os"
@@ -36,8 +37,8 @@ func (s *Server) handleListFiles(w http.ResponseWriter, r *http.Request) {
 		requestedPath = "."
 	}
 
-	// Resolve and validate path
-	absPath, err := s.resolvePath(requestedPath)
+	// Resolve and validate path (project-aware)
+	absPath, err := s.resolvePathCtx(r.Context(), requestedPath)
 	if err != nil {
 		respondError(w, http.StatusBadRequest, "invalid path")
 		return
@@ -122,8 +123,8 @@ func (s *Server) handleGetFileContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Resolve and validate path
-	absPath, err := s.resolvePath(requestedPath)
+	// Resolve and validate path (project-aware)
+	absPath, err := s.resolvePathCtx(r.Context(), requestedPath)
 	if err != nil {
 		respondError(w, http.StatusBadRequest, "invalid path")
 		return
@@ -188,7 +189,7 @@ func (s *Server) handleGetFileTree(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	tree, err := s.buildFileTree(".", "", 0, maxDepth)
+	tree, err := s.buildFileTree(r.Context(), ".", "", 0, maxDepth)
 	if err != nil {
 		s.logger.Error("failed to build file tree", "error", err)
 		respondError(w, http.StatusInternalServerError, "failed to build file tree")
@@ -207,12 +208,12 @@ type FileTreeNode struct {
 }
 
 // buildFileTree recursively builds a file tree.
-func (s *Server) buildFileTree(dir, relPath string, depth, maxDepth int) ([]FileTreeNode, error) {
+func (s *Server) buildFileTree(ctx context.Context, dir, relPath string, depth, maxDepth int) ([]FileTreeNode, error) {
 	if depth >= maxDepth {
 		return nil, nil
 	}
 
-	absPath, err := s.resolvePath(dir)
+	absPath, err := s.resolvePathCtx(ctx, dir)
 	if err != nil {
 		return nil, err
 	}
@@ -242,7 +243,7 @@ func (s *Server) buildFileTree(dir, relPath string, depth, maxDepth int) ([]File
 		}
 
 		if entry.IsDir() && depth < maxDepth-1 {
-			children, err := s.buildFileTree(filepath.Join(dir, name), nodePath, depth+1, maxDepth)
+			children, err := s.buildFileTree(ctx, filepath.Join(dir, name), nodePath, depth+1, maxDepth)
 			if err == nil {
 				node.Children = children
 			}
@@ -262,10 +263,15 @@ func (s *Server) buildFileTree(dir, relPath string, depth, maxDepth int) ([]File
 	return nodes, nil
 }
 
-// resolvePath resolves a relative path and validates it's within the project.
-func (s *Server) resolvePath(requestedPath string) (string, error) {
-	// Get working directory
-	wd := s.root
+// resolvePathCtx resolves a relative path and validates it's within the project.
+// It uses the project root from the request context when available (multi-project),
+// falling back to s.root (server root) or the process working directory.
+func (s *Server) resolvePathCtx(ctx context.Context, requestedPath string) (string, error) {
+	// Prefer project root from context (multi-project support)
+	wd := s.getProjectRootPath(ctx)
+	if wd == "" {
+		wd = s.root
+	}
 	if wd == "" {
 		var err error
 		wd, err = os.Getwd()
@@ -288,6 +294,12 @@ func (s *Server) resolvePath(requestedPath string) (string, error) {
 	}
 
 	return absPath, nil
+}
+
+// resolvePath resolves a relative path using the server root (no request context).
+// Prefer resolvePathCtx when a request context is available.
+func (s *Server) resolvePath(requestedPath string) (string, error) {
+	return s.resolvePathCtx(context.Background(), requestedPath)
 }
 
 // isBinaryContent checks if content appears to be binary.

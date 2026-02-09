@@ -146,7 +146,7 @@ func TestUnifiedTracker_IsRunning_ReturnsTrueWhenHeartbeatHealthy(t *testing.T) 
 	tracker.mu.Unlock()
 
 	// Start heartbeat → IsHealthy returns true
-	hb.Start(id)
+	hb.Start(id, nil)
 	defer hb.Stop(id)
 
 	ctx := context.Background()
@@ -245,7 +245,7 @@ func TestUnifiedTracker_ForceStop_StopsHeartbeat(t *testing.T) {
 	tracker.handles[id] = handle
 	tracker.mu.Unlock()
 
-	hb.Start(id)
+	hb.Start(id, nil)
 
 	if !hb.IsTracking(id) {
 		t.Fatal("expected heartbeat to be tracking before ForceStop")

@@ -177,17 +177,15 @@ func (e *WorkflowExecutor) executeAsync(
 	workflowID string,
 	handle *ExecutionHandle,
 ) {
-	defer func() {
-		if r := recover(); r != nil {
-			e.logger.Error("panic in workflow execution",
-				"workflow_id", workflowID,
-				"panic", fmt.Sprintf("%v", r))
-		}
-	}()
-
 	// Capture cleanup context at the start to preserve ProjectContext for FinishExecution.
 	// This ensures cleanup happens in the correct project's DB even if the execution times out.
 	cleanupCtx := context.WithoutCancel(ctx)
+
+	// Defers execute in LIFO order. We declare them so that:
+	//   1. Panic recovery runs FIRST (declared last) — catches panics from any defer or the body.
+	//   2. FlushState runs second — persists final state.
+	//   3. FinishExecution runs third — clears running markers in DB and in-memory tracker.
+	//   4. cancel() runs last — releases the execution context.
 
 	defer cancel()
 	defer func() {
@@ -199,6 +197,48 @@ func (e *WorkflowExecutor) executeAsync(
 		}
 	}()
 	defer notifier.FlushState()
+
+	// Panic recovery — declared last so it runs first (LIFO).
+	// Catches panics from the body AND from the other defers above.
+	defer func() {
+		if r := recover(); r != nil {
+			// Log the panic
+			e.logger.Error("panic in workflow execution",
+				"workflow_id", workflowID,
+				"panic", fmt.Sprintf("%v", r))
+
+			// Emit workflow failed event (sub-recover to avoid double-panic)
+			func() {
+				defer func() { recover() }()
+				notifier.WorkflowFailed(string(state.CurrentPhase),
+					fmt.Errorf("panic: %v", r))
+			}()
+
+			// Safety-net: ensure FinishExecution runs even if the defer above panicked
+			func() {
+				defer func() { recover() }()
+				if e.unifiedTracker != nil {
+					_ = e.unifiedTracker.FinishExecution(cleanupCtx, core.WorkflowID(workflowID))
+				}
+			}()
+
+			// Publish SSE failure event
+			func() {
+				defer func() { recover() }()
+				if e.eventBus != nil {
+					e.eventBus.Publish(events.NewWorkflowFailedEvent(
+						workflowID, "", string(state.CurrentPhase),
+						fmt.Errorf("panic: %v", r)))
+				}
+			}()
+
+			// Cancel the execution context
+			func() {
+				defer func() { recover() }()
+				cancel()
+			}()
+		}
+	}()
 
 	// Confirm that we've started (unblocks the caller waiting on handle.WaitForConfirmation)
 	handle.ConfirmStarted()
