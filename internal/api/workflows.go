@@ -1684,7 +1684,7 @@ func (s *Server) HandleAnalyzeWorkflow(w http.ResponseWriter, r *http.Request) {
 		return
 	case core.WorkflowStatusCompleted:
 		// Check if analyze already done
-		if state.CurrentPhase != core.PhaseRefine && state.CurrentPhase != core.PhaseAnalyze && state.CurrentPhase != "" {
+		if state.CurrentPhase != core.PhaseRefine && state.CurrentPhase != core.PhaseAnalyze && state.CurrentPhase != core.PhaseDone {
 			respondError(w, http.StatusConflict, "analyze phase already completed; use /plan to continue")
 			return
 		}
@@ -2039,14 +2039,14 @@ func (s *Server) HandleReplanWorkflow(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusConflict, "workflow is already running")
 		return
 	case core.WorkflowStatusCompleted:
-		// Valid if analyze was done (CurrentPhase is plan or execute)
-		if state.CurrentPhase != core.PhasePlan && state.CurrentPhase != core.PhaseExecute {
+		// Valid if analyze was done (CurrentPhase is plan, execute, or done)
+		if state.CurrentPhase != core.PhasePlan && state.CurrentPhase != core.PhaseExecute && state.CurrentPhase != core.PhaseDone {
 			respondError(w, http.StatusConflict, "analyze phase must be completed first")
 			return
 		}
 	case core.WorkflowStatusFailed:
 		// Allow replan if analyze was completed
-		if state.CurrentPhase != core.PhasePlan && state.CurrentPhase != core.PhaseExecute {
+		if state.CurrentPhase != core.PhasePlan && state.CurrentPhase != core.PhaseExecute && state.CurrentPhase != core.PhaseDone {
 			respondError(w, http.StatusConflict, "analyze phase must be completed first")
 			return
 		}
@@ -2207,7 +2207,7 @@ func (s *Server) HandleExecuteWorkflow(w http.ResponseWriter, r *http.Request) {
 	case core.WorkflowStatusCompleted:
 		// Check if there are tasks to execute
 		if state.CurrentPhase != core.PhaseExecute {
-			if state.CurrentPhase == "" {
+			if state.CurrentPhase == core.PhaseDone {
 				respondError(w, http.StatusConflict, "workflow already fully completed")
 				return
 			}

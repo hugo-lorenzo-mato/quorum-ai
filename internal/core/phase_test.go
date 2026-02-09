@@ -15,6 +15,9 @@ func TestPhase_Order(t *testing.T) {
 	if PhaseOrder(PhaseExecute) != 3 {
 		t.Fatalf("expected execute order 3")
 	}
+	if PhaseOrder(PhaseDone) != 4 {
+		t.Fatalf("expected done order 4")
+	}
 	if PhaseOrder("invalid") != -1 {
 		t.Fatalf("expected invalid phase order -1")
 	}
@@ -43,6 +46,9 @@ func TestPhase_Navigation(t *testing.T) {
 	if PrevPhase(PhaseExecute) != PhasePlan {
 		t.Fatalf("expected prev execute to be plan")
 	}
+	if PrevPhase(PhaseDone) != PhaseExecute {
+		t.Fatalf("expected prev done to be execute")
+	}
 	if PrevPhase(PhaseRefine) != "" {
 		t.Fatalf("expected no prev phase before refine")
 	}
@@ -53,6 +59,10 @@ func TestPhase_Validation(t *testing.T) {
 		if !ValidPhase(phase) {
 			t.Fatalf("expected phase %s to be valid", phase)
 		}
+	}
+	// PhaseDone is valid but not in AllPhases (not an executable phase)
+	if !ValidPhase(PhaseDone) {
+		t.Fatalf("expected done phase to be valid")
 	}
 	if ValidPhase("invalid") {
 		t.Fatalf("expected invalid phase to be rejected")
@@ -82,6 +92,7 @@ func TestPhase_Description(t *testing.T) {
 		{PhaseAnalyze, "Analyze the problem with multiple agents"},
 		{PhasePlan, "Generate and consolidate execution plans"},
 		{PhaseExecute, "Execute tasks in isolated environments"},
+		{PhaseDone, "All phases completed"},
 	}
 
 	for _, tt := range tests {

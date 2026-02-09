@@ -315,9 +315,9 @@ func (r *Runner) Run(ctx context.Context, prompt string) error {
 	// Finalize metrics
 	r.finalizeMetrics(workflowState)
 
-	// Mark completed - clear CurrentPhase to indicate all phases done
+	// Mark completed with PhaseDone terminal state
 	workflowState.Status = core.WorkflowStatusCompleted
-	workflowState.CurrentPhase = "" // Empty means fully completed
+	workflowState.CurrentPhase = core.PhaseDone
 	workflowState.UpdatedAt = time.Now()
 
 	r.logger.Info("workflow completed",
@@ -458,7 +458,7 @@ func (r *Runner) RunWithState(ctx context.Context, state *core.WorkflowState) er
 
 	r.finalizeMetrics(workflowState)
 	workflowState.Status = core.WorkflowStatusCompleted
-	workflowState.CurrentPhase = "" // Empty means fully completed
+	workflowState.CurrentPhase = core.PhaseDone
 	workflowState.UpdatedAt = time.Now()
 
 	r.logger.Info("workflow completed",
@@ -709,7 +709,7 @@ func (r *Runner) Resume(ctx context.Context) error {
 	r.finalizeMetrics(workflowState)
 
 	workflowState.Status = core.WorkflowStatusCompleted
-	workflowState.CurrentPhase = "" // Empty means fully completed
+	workflowState.CurrentPhase = core.PhaseDone
 	workflowState.UpdatedAt = time.Now()
 
 	r.logger.Info("workflow resumed and completed",
@@ -821,7 +821,7 @@ func (r *Runner) ResumeWithState(ctx context.Context, state *core.WorkflowState)
 
 	r.finalizeMetrics(state)
 	state.Status = core.WorkflowStatusCompleted
-	state.CurrentPhase = "" // Empty means fully completed
+	state.CurrentPhase = core.PhaseDone
 	state.UpdatedAt = time.Now()
 
 	r.logger.Info("workflow resumed and completed",

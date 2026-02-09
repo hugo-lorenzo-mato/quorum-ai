@@ -12,7 +12,7 @@ function derivePhaseStatus(phaseId, currentPhase, workflowStatus, enabled) {
   if (workflowStatus === 'failed' && currentPhase === phaseId) return 'failed';
   if (workflowStatus === 'running' && currentPhase === phaseId) return 'running';
   if (currentOrder > thisOrder) return 'completed';
-  if (workflowStatus === 'completed' && (!currentPhase || currentPhase === '')) return 'completed';
+  if (workflowStatus === 'completed' && (!currentPhase || currentPhase === '' || currentPhase === 'done')) return 'completed';
   if (workflowStatus === 'completed' && currentPhase === phaseId) return 'completed';
   return 'pending';
 }

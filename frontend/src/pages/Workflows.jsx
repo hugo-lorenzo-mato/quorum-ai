@@ -992,7 +992,7 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
             )}
 
             {/* Replan button - when plan or execute phase completed */}
-            {workflow.status === 'completed' && (workflow.current_phase === 'plan' || workflow.current_phase === 'execute') && (
+            {workflow.status === 'completed' && ['plan', 'execute', 'done'].includes(workflow.current_phase) && (
               <button
                 onClick={() => setReplanModalOpen(true)}
                 disabled={loading}
@@ -1016,7 +1016,7 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
             )}
 
             {/* Create Issues button - when execution is done or partly done */}
-            {['execute', 'done'].includes(workflow.current_phase) && (
+            {(workflow.status === 'completed' || ['execute', 'done'].includes(workflow.current_phase)) && (
               <button
                 onClick={() => setShowIssuesModal(true)}
                 disabled={issuesGenerating}

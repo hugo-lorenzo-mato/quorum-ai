@@ -21,6 +21,10 @@ const (
 	// PhaseExecute is the final phase where tasks are executed.
 	// Each task runs in isolated git worktrees.
 	PhaseExecute Phase = "execute"
+
+	// PhaseDone is the terminal state after all phases complete.
+	// It is NOT an executable phase — it signals "workflow fully done".
+	PhaseDone Phase = "done"
 )
 
 // AllPhases returns all phases in execution order.
@@ -39,6 +43,8 @@ func PhaseOrder(p Phase) int {
 		return 2
 	case PhaseExecute:
 		return 3
+	case PhaseDone:
+		return 4
 	default:
 		return -1
 	}
@@ -69,6 +75,8 @@ func PrevPhase(p Phase) Phase {
 		return PhaseAnalyze
 	case PhaseExecute:
 		return PhasePlan
+	case PhaseDone:
+		return PhaseExecute
 	default:
 		return ""
 	}
@@ -77,7 +85,7 @@ func PrevPhase(p Phase) Phase {
 // ValidPhase checks if a phase string is valid.
 func ValidPhase(p Phase) bool {
 	switch p {
-	case PhaseRefine, PhaseAnalyze, PhasePlan, PhaseExecute:
+	case PhaseRefine, PhaseAnalyze, PhasePlan, PhaseExecute, PhaseDone:
 		return true
 	default:
 		return false
@@ -109,6 +117,8 @@ func (p Phase) Description() string {
 		return "Generate and consolidate execution plans"
 	case PhaseExecute:
 		return "Execute tasks in isolated environments"
+	case PhaseDone:
+		return "All phases completed"
 	default:
 		return "Unknown phase"
 	}

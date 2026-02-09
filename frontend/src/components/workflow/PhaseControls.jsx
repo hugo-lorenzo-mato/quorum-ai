@@ -25,13 +25,13 @@ export default function PhaseControls({ workflow }) {
   const isPaused = status === 'paused';
   const isFailed = status === 'failed';
   const isCompleted = status === 'completed';
-  const isFullyCompleted = isCompleted && !current_phase;
+  const isFullyCompleted = isCompleted && (!current_phase || current_phase === 'done');
 
   // Phase-specific conditions
   const canRunAll = isPending;
   const canAnalyze = isPending;
   const canPlan = isCompleted && current_phase === 'plan';
-  const canReplan = isCompleted && (current_phase === 'plan' || current_phase === 'execute');
+  const canReplan = isCompleted && ['plan', 'execute', 'done'].includes(current_phase);
   const canExecute = isCompleted && current_phase === 'execute';
 
   // Resume/Retry conditions

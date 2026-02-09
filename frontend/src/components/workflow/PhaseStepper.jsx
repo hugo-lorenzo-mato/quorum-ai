@@ -21,8 +21,8 @@ function getPhaseStatus(phaseId, currentPhase, workflowStatus) {
     return 'completed';
   }
 
-  // If workflow completed and current_phase is empty (all done)
-  if (workflowStatus === 'completed' && currentPhase === '') {
+  // If workflow completed and current_phase is empty or 'done' (all done)
+  if (workflowStatus === 'completed' && (currentPhase === '' || currentPhase === 'done')) {
     return 'completed';
   }
 

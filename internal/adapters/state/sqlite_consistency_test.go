@@ -197,7 +197,7 @@ func TestSQLiteStateManager_GetActiveWorkflowID_DetectsCompletedWorkflow(t *test
 		},
 		WorkflowRun: core.WorkflowRun{
 			Status:       core.WorkflowStatusCompleted,
-			CurrentPhase: "", // Empty means fully completed
+			CurrentPhase: core.PhaseDone,
 			UpdatedAt:    now,
 		},
 	}
@@ -366,7 +366,7 @@ func TestSQLiteStateManager_FindWorkflowsByPrompt_NoDuplicates(t *testing.T) {
 		},
 		WorkflowRun: core.WorkflowRun{
 			Status:       core.WorkflowStatusCompleted,
-			CurrentPhase: "",
+			CurrentPhase: core.PhaseDone,
 			UpdatedAt:    now,
 		},
 	}

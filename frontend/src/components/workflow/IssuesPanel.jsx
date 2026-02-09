@@ -119,7 +119,7 @@ export default function IssuesPanel({ workflow }) {
   ]);
 
   // Check if workflow can generate issues (has artifacts)
-  const hasAnalysis = workflow.current_phase && ['plan', 'execute', 'done'].includes(workflow.current_phase);
+  const hasAnalysis = workflow.status === 'completed' || (workflow.current_phase && ['plan', 'execute', 'done'].includes(workflow.current_phase));
 
   if (!hasAnalysis) {
     return (
