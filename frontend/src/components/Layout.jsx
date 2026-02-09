@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useLayoutEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useUIStore } from '../stores';
 import MobileBottomNav from './MobileBottomNav';
@@ -214,8 +214,9 @@ export default function Layout({ children }) {
     };
   }, [setSidebarOpen]);
 
-  // Close sidebar on route change on mobile
-  useEffect(() => {
+  // Close sidebar on route change on mobile.
+  // useLayoutEffect avoids a 1-frame flash where the new page renders under the sidebar.
+  useLayoutEffect(() => {
     if (window.innerWidth < 768) {
       setSidebarOpen(false);
     }

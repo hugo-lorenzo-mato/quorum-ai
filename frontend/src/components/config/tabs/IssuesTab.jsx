@@ -183,7 +183,7 @@ function GeneratorSection() {
           { value: 'codex', label: 'Codex' },
         ]}
         error={agent.error}
-        disabled={agent.disabled || isDisabled || !enabled.value}
+        disabled={agent.disabled || isDisabled}
       />
 
       <SelectSetting
@@ -194,7 +194,7 @@ function GeneratorSection() {
         onChange={model.onChange}
         options={modelOptions}
         error={model.error}
-        disabled={model.disabled || isDisabled || !enabled.value}
+        disabled={model.disabled || isDisabled}
       />
 
       <SelectSetting
@@ -208,7 +208,7 @@ function GeneratorSection() {
           ...reasoningOptions,
         ]}
         error={reasoningEffort.error}
-        disabled={reasoningEffort.disabled || isDisabled || !enabled.value}
+        disabled={reasoningEffort.disabled || isDisabled}
       />
 
       <ToggleSetting
@@ -218,7 +218,7 @@ function GeneratorSection() {
         checked={summarize.value}
         onChange={summarize.onChange}
         error={summarize.error}
-        disabled={summarize.disabled || isDisabled || !enabled.value}
+        disabled={summarize.disabled || isDisabled}
       />
 
       <TextInputSetting
@@ -229,7 +229,7 @@ function GeneratorSection() {
         value={maxBodyLength.value?.toString() || ''}
         onChange={(val) => maxBodyLength.onChange(val ? parseInt(val, 10) : null)}
         error={maxBodyLength.error}
-        disabled={maxBodyLength.disabled || isDisabled || !enabled.value}
+        disabled={maxBodyLength.disabled || isDisabled}
         type="number"
       />
 
@@ -246,7 +246,7 @@ function GeneratorSection() {
           <textarea
             value={instructions.value || ''}
             onChange={(e) => instructions.onChange(e.target.value)}
-            disabled={instructions.disabled || isDisabled || !enabled.value}
+            disabled={instructions.disabled || isDisabled}
             placeholder="Add specific instructions for how the AI should write issue bodies..."
             rows={3}
             className={`
@@ -275,7 +275,7 @@ function GeneratorSection() {
           <textarea
             value={titleInstructions.value || ''}
             onChange={(e) => titleInstructions.onChange(e.target.value)}
-            disabled={titleInstructions.disabled || isDisabled || !enabled.value}
+            disabled={titleInstructions.disabled || isDisabled}
             placeholder="Add specific instructions for how the AI should write issue titles..."
             rows={2}
             className={`

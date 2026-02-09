@@ -63,7 +63,6 @@ func TestLoader_Defaults(t *testing.T) {
 }
 
 func TestLoader_EnvOverride(t *testing.T) {
-	t.Parallel()
 	// Set environment variables
 	os.Setenv("QUORUM_LOG_LEVEL", "debug")
 	os.Setenv("QUORUM_WORKFLOW_MAX_RETRIES", "5")
@@ -163,7 +162,6 @@ phases:
 }
 
 func TestLoader_Precedence(t *testing.T) {
-	t.Parallel()
 	// Create a temporary config file
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "test-config.yaml")
@@ -347,7 +345,6 @@ func TestNewLoader(t *testing.T) {
 }
 
 func TestLoader_WithEnvPrefix(t *testing.T) {
-	t.Parallel()
 	// Set environment variable with custom prefix
 	os.Setenv("CUSTOM_LOG_LEVEL", "error")
 	defer os.Unsetenv("CUSTOM_LOG_LEVEL")

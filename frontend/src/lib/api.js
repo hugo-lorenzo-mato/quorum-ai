@@ -210,7 +210,9 @@ export const workflowApi = {
   previewIssues: (id, fast = true, options = {}) => {
     // AI mode can take 60-120 seconds, so use 3 minute timeout
     const timeout = options.timeout ?? (fast ? 30000 : 180000);
-    return request(`/workflows/${id}/issues/preview${fast ? '?fast=true' : ''}`, { timeout });
+    // Always pass fast=true/false explicitly so the backend can force the mode.
+    // This aligns with docs/ISSUES_WORKFLOW.md and prevents "AI mode" silently falling back to direct mode.
+    return request(`/workflows/${id}/issues/preview?fast=${fast ? 'true' : 'false'}`, { timeout });
   },
 
   /**

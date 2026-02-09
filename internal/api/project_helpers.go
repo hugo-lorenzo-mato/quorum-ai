@@ -109,11 +109,14 @@ func (s *Server) getProjectChatStore(ctx context.Context) core.ChatStore {
 
 // getProjectRootPath extracts the project root directory path from request context.
 // If a ProjectContext is available, returns its root path.
-// Otherwise, returns empty string (caller should use fallback).
+// Otherwise, falls back to the server root (legacy mode) when set.
 func (s *Server) getProjectRootPath(ctx context.Context) string {
 	pc := middleware.GetProjectContext(ctx)
 	if pc != nil {
 		return pc.ProjectRoot()
+	}
+	if s.root != "" {
+		return s.root
 	}
 	return ""
 }

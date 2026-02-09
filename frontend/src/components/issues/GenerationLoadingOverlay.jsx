@@ -148,7 +148,7 @@ export default function GenerationLoadingOverlay({
     : null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm animate-fade-in">
+    <div className="fixed inset-0 z-[120] bg-background/95 backdrop-blur-sm animate-fade-in">
       {/* Layout mimics editor */}
       <div className="flex flex-col h-full">
         {/* Header */}
