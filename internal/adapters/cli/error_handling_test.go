@@ -46,7 +46,6 @@ func TestErrorHandling_NetworkFailures(t *testing.T) {
 	for _, tc := range testCases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
 
 			shouldRetry := isRetriableNetworkError(tc.error)
 			if shouldRetry != tc.expectRetry {
@@ -104,7 +103,6 @@ func TestErrorHandling_RateLimitResponses(t *testing.T) {
 	for _, tc := range testCases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
 
 			shouldRetry := isRetriableHTTPStatus(tc.statusCode)
 			if shouldRetry != tc.expectRetry {
@@ -165,7 +163,6 @@ func TestErrorHandling_ExponentialBackoff(t *testing.T) {
 	for _, tc := range testCases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
 
 			delay := calculateExponentialBackoff(tc.baseDelay, tc.attempt)
 
@@ -227,7 +224,6 @@ func TestErrorHandling_CommandExecutionFailures(t *testing.T) {
 	for _, tc := range testCases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
 
 			shouldRetry := isTemporaryExitCode(tc.exitCode)
 			if shouldRetry != tc.expectRetry {

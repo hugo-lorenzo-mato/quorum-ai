@@ -62,7 +62,6 @@ func TestTokenCounting_Accuracy(t *testing.T) {
 	for _, tc := range testCases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
 
 			estimate := base.TokenEstimate(tc.content)
 
@@ -121,7 +120,6 @@ func TestTokenCounting_EdgeCases(t *testing.T) {
 	for _, tc := range testCases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
 
 			estimate := base.TokenEstimate(tc.content)
 
@@ -151,7 +149,6 @@ func TestTokenCounting_PerformanceWithLargeContent(t *testing.T) {
 	for _, size := range sizes {
 		size := size
 		t.Run(fmt.Sprintf("size_%d", size), func(t *testing.T) {
-			t.Parallel()
 
 			content := strings.Repeat("This is test content for performance testing. ", size/45)
 			if len(content) < size {

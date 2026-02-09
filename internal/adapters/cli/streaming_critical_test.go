@@ -59,7 +59,6 @@ func TestStreamingResponseParsing_FragmentedChunks(t *testing.T) {
 	for _, tc := range testCases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
 
 			var events []core.AgentEvent
 			handler := testEventHandlerFunc(&events)
@@ -162,7 +161,6 @@ func TestStreamingResponseParsing_PartialToolCalls(t *testing.T) {
 	for _, tc := range testCases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
 
 			parser := &MockStreamParser{}
 
@@ -236,7 +234,6 @@ func TestStreamingResponseParsing_TimeoutHandling(t *testing.T) {
 	for _, tc := range testCases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
 
 			ctx, cancel := context.WithTimeout(context.Background(), tc.timeout)
 			defer cancel()
@@ -288,7 +285,6 @@ func TestStreamingResponseParsing_BufferOverflow(t *testing.T) {
 	for _, size := range sizes {
 		size := size
 		t.Run(fmt.Sprintf("size_%d", size), func(t *testing.T) {
-			t.Parallel()
 
 			// Generate large streaming response
 			var buffer strings.Builder

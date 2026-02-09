@@ -63,7 +63,6 @@ func TestSemanticModerator_ConsensusEdgeCases(t *testing.T) {
 	for _, tc := range testCases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
 
 			config := ModeratorConfig{
 				Enabled:   true,
@@ -141,7 +140,6 @@ func TestSemanticModerator_StagnationDetection(t *testing.T) {
 	for _, tc := range testCases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
 
 			if len(tc.scores) < 2 {
 				t.Fatal("Need at least 2 scores for stagnation test")
@@ -311,7 +309,6 @@ func TestSemanticModerator_RoundLimits(t *testing.T) {
 	for _, tc := range testCases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
 
 			// Simulate decision logic
 			reachedMinRounds := tc.round >= moderator.MinRounds()
@@ -384,7 +381,6 @@ func TestSemanticModerator_ConfigValidation(t *testing.T) {
 	for _, tc := range testCases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
 
 			moderator, err := NewSemanticModerator(tc.config)
 			
