@@ -214,7 +214,25 @@ Generate your V{{.Round}} analysis in markdown format with these characteristics
 3. **Specific evidence** - Cite files and lines of code
 4. **Visual diagrams** - Include ASCII diagrams for architecture, flows, and relationships
 5. **Autonomous** - Any reader must understand the analysis without seeing V{{.PreviousRound}} or ANY other document
-6. **Exhaustive** - Do not omit details; a longer, complete document is better than a concise one that loses information
+6. **Token-budgeted completeness** - Be complete on *load-bearing* details, but do NOT exceed model output limits. Prefer density over length: fewer words, more evidence and decisions.
+
+### OUTPUT SIZE CONSTRAINT (MANDATORY)
+
+Your entire output (including any tool call inputs) MUST fit within the model's output token limit.
+
+- Aim for a maximum of ~8k-12k words.
+- Avoid long code blocks; cite `file:line` instead.
+- Avoid repeating the same context in multiple sections; reference earlier sections within this same document.
+- If you cannot fit everything, prioritize: current-state facts + exploit paths + concrete mitigations + rollout + test matrix.
+
+### INCREMENTAL WRITING (MANDATORY)
+
+To avoid output token limits, write the output file in **multiple tool calls**:
+
+1. First tool call: create the file with a short skeleton (headings only).
+2. Then write **one top-level section per tool call** (keep each section concise and evidence-dense).
+3. After each tool call finishes, continue with the next section in a new tool call.
+4. Do NOT try to write the entire document in a single tool call.
 {{if .OutputFilePath}}
 
 Write your complete V{{.Round}} analysis to the following file:

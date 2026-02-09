@@ -147,6 +147,12 @@ func TestBaseAdapter_ClassifyError(t *testing.T) {
 		errContains string
 	}{
 		{
+			name:        "output token maximum (should not be auth)",
+			stderr:      "API Error: Claude's response exceeded the 32000 output token maximum.",
+			exitCode:    1,
+			errContains: "OUTPUT_TOO_LONG",
+		},
+		{
 			name:        "rate limit",
 			stderr:      "Error: rate limit exceeded",
 			exitCode:    1,
