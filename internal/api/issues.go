@@ -179,17 +179,17 @@ func (s *Server) handleGenerateIssues(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Determine report directory (cheap check before expensive client creation)
+	reportDir := state.ReportPath
+	if reportDir == "" {
+		respondError(w, http.StatusBadRequest, "workflow has no report directory")
+		return
+	}
+
 	// Create issue client based on provider
 	issueClient, clientErr := createIssueClient(issuesCfg)
 	if clientErr != nil {
 		writeIssueClientError(w, clientErr)
-		return
-	}
-
-	// Determine report directory
-	reportDir := state.ReportPath
-	if reportDir == "" {
-		respondError(w, http.StatusBadRequest, "workflow has no report directory")
 		return
 	}
 
@@ -694,6 +694,13 @@ func (s *Server) handleCreateSingleIssue(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	// Determine report directory (cheap check before expensive client creation)
+	reportDir := state.ReportPath
+	if reportDir == "" {
+		respondError(w, http.StatusBadRequest, "workflow has no report directory")
+		return
+	}
+
 	// Create issue client based on provider
 	issueClient, clientErr := createIssueClient(issuesCfg)
 	if clientErr != nil {
@@ -711,13 +718,6 @@ func (s *Server) handleCreateSingleIssue(w http.ResponseWriter, r *http.Request)
 	assignees := req.Assignees
 	if len(assignees) == 0 {
 		assignees = issuesCfg.Assignees
-	}
-
-	// Create the issue
-	reportDir := state.ReportPath
-	if reportDir == "" {
-		respondError(w, http.StatusBadRequest, "workflow has no report directory")
-		return
 	}
 
 	generator := issues.NewGenerator(issueClient, issuesCfg, "", reportDir, s.agentRegistry)
