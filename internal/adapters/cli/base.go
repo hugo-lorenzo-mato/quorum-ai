@@ -1213,13 +1213,32 @@ func (b *BaseAdapter) classifyError(result *CommandResult) error {
 
 	errorMsgLower := strings.ToLower(errorMsg)
 
+	// Model output/context limit errors.
+	// These are not authentication failures, even though they contain the word "token".
+	// Retrying with the same prompt typically re-fails; treat as non-retryable validation.
+	if containsAny(errorMsgLower, []string{
+		"output token maximum",
+		"output tokens",
+		"max output",
+		"maximum output",
+		"response exceeded",
+		"context length exceeded",
+		"maximum context",
+		"too many tokens",
+		"max_tokens",
+	}) {
+		return core.ErrValidation("OUTPUT_TOO_LONG",
+			"model output/context limit exceeded; reduce required output size or split work into smaller steps: "+errorMsg)
+	}
+
 	// Rate limit detection
 	if containsAny(errorMsgLower, []string{"rate limit", "too many requests", "429", "quota"}) {
 		return core.ErrRateLimit(errorMsg)
 	}
 
 	// Authentication errors
-	if containsAny(errorMsgLower, []string{"unauthorized", "authentication", "api key", "token"}) {
+	// NOTE: do NOT match plain "token"; many non-auth errors mention tokens (e.g., output token limits).
+	if containsAny(errorMsgLower, []string{"unauthorized", "authentication", "authorization", "forbidden", "api key", "invalid api key", "invalid token", "oauth"}) {
 		return core.ErrAuth(errorMsg)
 	}
 

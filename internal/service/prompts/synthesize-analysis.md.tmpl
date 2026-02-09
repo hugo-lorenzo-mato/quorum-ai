@@ -18,8 +18,23 @@ Your goal is to create the **DEFINITIVE CONSOLIDATED ANALYSIS** - an **ULTRA-EXH
 - **DO NOT SUMMARIZE** losing information - expand and complete
 - If an agent mentioned a specific file:line, **INCLUDE IT**
 - If an agent identified an edge case, **DOCUMENT IT**
-- A longer, complete document is preferable to a short one that omits details
+- A longer, complete document is preferable to a short one that omits *critical* details
 - **ZERO INFORMATION LOSS**: Every useful data point from the original analyses must appear in your consolidation
+
+### OUTPUT SIZE CONSTRAINT (MANDATORY)
+Your entire output (including any tool call inputs) MUST fit within the model's output token limit.
+
+- Prefer density over length (bullet lists, tables).
+- Avoid long code blocks; cite `file:line`.
+- If you cannot fit everything, prioritize: architecture, highest-risk findings, and concrete evidence.
+
+### INCREMENTAL WRITING (MANDATORY)
+To avoid output token limits, write the output file in **multiple tool calls**:
+
+1. First tool call: create the file with a short skeleton (headings only).
+2. Then write **one top-level section per tool call** (keep each section concise and evidence-dense).
+3. After each tool call finishes, continue with the next section in a new tool call.
+4. Do NOT try to write the entire document in a single tool call.
 
 ### 3. PURE ANALYSIS - NEVER PLAN OR EXECUTE
 - Your role is to **ANALYZE**, not to plan or execute
