@@ -65,6 +65,7 @@ export default function ColorPicker({ value, onChange, className = '' }) {
         <div 
           className="absolute top-full left-0 mt-2 p-3 bg-popover border border-border rounded-xl shadow-2xl z-[100] animate-in fade-in zoom-in-95 duration-100 min-w-[180px]"
           onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
         >
           <div className="grid grid-cols-5 gap-2.5 mb-3">
             {PROJECT_COLORS.map((color) => (

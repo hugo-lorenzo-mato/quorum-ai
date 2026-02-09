@@ -51,7 +51,10 @@ export default function AgentSelector({ value, onChange, disabled, direction = '
       </button>
 
       {isOpen && (
-        <div className={`absolute left-0 z-50 min-w-[180px] rounded-lg border border-border bg-popover shadow-lg animate-fade-in ${dropdownClasses}`}>
+        <div 
+          className={`absolute left-0 z-50 min-w-[180px] rounded-lg border border-border bg-popover shadow-lg animate-fade-in ${dropdownClasses}`}
+          onClick={(e) => e.stopPropagation()}
+        >
           <div className="p-1">
             {agents.map((agent) => (
               <button

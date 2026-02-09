@@ -48,7 +48,7 @@ export function CardBase({
   };
 
   const hoverStyles = hoverable 
-    ? 'hover:shadow-premium hover:-translate-y-0.5 active:scale-[0.99] transition-all duration-300' 
+    ? 'hover:shadow-premium active:scale-[0.99] transition-all duration-300' 
     : '';
 
   return (

@@ -252,7 +252,7 @@ export default function Templates() {
           <div
             key={template.id}
             onClick={() => setPreviewTemplate(template)}
-            className="group flex flex-col rounded-xl border border-border bg-card transition-all duration-200 overflow-hidden shadow-sm hover:shadow-md hover:border-foreground/20 hover:-translate-y-0.5 cursor-pointer"
+            className="group flex flex-col rounded-xl border border-border bg-card transition-all duration-200 overflow-hidden shadow-sm hover:shadow-md hover:border-foreground/30 cursor-pointer"
           >
             <div className="flex-1 p-4">
               {/* Header: Icon, Name, Tags */}

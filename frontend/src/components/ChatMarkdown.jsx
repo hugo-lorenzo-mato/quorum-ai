@@ -5,6 +5,7 @@ import { oneDark, oneLight, dracula, nord } from 'react-syntax-highlighter/dist/
 import { useUIStore } from '../stores';
 import { useState, useMemo } from 'react';
 import { Copy, CheckCircle2 } from 'lucide-react';
+import { cn } from '../lib/utils';
 
 function CodeCopyButton({ text }) {
   const [copied, setCopied] = useState(false);
@@ -64,7 +65,10 @@ export default function ChatMarkdown({ content, isUser }) {
             href={href}
             target="_blank"
             rel="noreferrer"
-            className="text-primary underline underline-offset-4 hover:opacity-80"
+            className={cn(
+              "underline underline-offset-4 hover:opacity-80 transition-opacity font-medium",
+              isUser ? "text-primary-foreground" : "text-primary"
+            )}
           >
             {children}
           </a>

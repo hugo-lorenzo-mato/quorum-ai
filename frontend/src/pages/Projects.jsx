@@ -149,7 +149,7 @@ function ProjectCard({
       className={`group flex flex-col rounded-xl border transition-all duration-200 shadow-sm hover:shadow-md ${
         isSelected
           ? 'border-primary/50 bg-primary/5 ring-1 ring-primary/10'
-          : 'border-border bg-card hover:border-foreground/20 hover:-translate-y-0.5'
+          : 'border-border bg-card hover:border-foreground/30'
       }`}
     >
       <div className="flex-1 p-4">
