@@ -194,6 +194,12 @@ func (s *Server) handleGenerateIssues(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	projectRoot := s.getProjectRootPath(ctx)
+	fullReportDir := reportDir
+	if projectRoot != "" && !filepath.IsAbs(reportDir) {
+		fullReportDir = filepath.Join(projectRoot, reportDir)
+	}
+
 	// Create issue client based on provider
 	issueClient, clientErr := createIssueClient(issuesCfg)
 	if clientErr != nil {
@@ -202,7 +208,7 @@ func (s *Server) handleGenerateIssues(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create generator with agent registry for LLM-based generation
-	generator := issues.NewGenerator(issueClient, issuesCfg, "", reportDir, s.agentRegistry)
+	generator := issues.NewGenerator(issueClient, issuesCfg, projectRoot, fullReportDir, s.agentRegistry)
 	generator.SetProgressReporter(newIssuesSSEProgressReporter(s.getProjectEventBus(ctx), getProjectID(ctx)))
 
 	// Apply timeout from config
@@ -437,7 +443,12 @@ func (s *Server) handleSaveIssuesFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	generator := issues.NewGenerator(nil, issuesCfg, "", reportDir, s.agentRegistry)
+	projectRoot := s.getProjectRootPath(ctx)
+	fullReportDir := reportDir
+	if projectRoot != "" && !filepath.IsAbs(reportDir) {
+		fullReportDir = filepath.Join(projectRoot, reportDir)
+	}
+	generator := issues.NewGenerator(nil, issuesCfg, projectRoot, fullReportDir, s.agentRegistry)
 
 	issueInputs := make([]issues.IssueInput, len(req.Issues))
 	for i, input := range req.Issues {
@@ -486,8 +497,12 @@ func (s *Server) handlePreviewIssues(w http.ResponseWriter, r *http.Request) {
 	workflowID := chi.URLParam(r, "workflowID")
 	ctx := r.Context()
 
-	// Check for fast mode (skip LLM generation)
-	fastMode := r.URL.Query().Get("fast") == "true"
+	// Preview mode override via query param.
+	// Docs: fast=true => direct mode; fast=false => AI/agent mode.
+	// If omitted, fall back to config-driven behavior.
+	fastParam := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("fast")))
+	forceDirect := fastParam == "true"
+	forceAgent := fastParam == "false"
 
 	// Get workflow state
 	stateManager := s.getProjectStateManager(ctx)
@@ -503,11 +518,13 @@ func (s *Server) handlePreviewIssues(w http.ResponseWriter, r *http.Request) {
 
 	// Get issues config
 	var issuesCfg config.IssuesConfig
+	defaultAgent := ""
 	configLoader := s.getProjectConfigLoader(ctx)
 	if configLoader != nil {
 		cfg, err := configLoader.Load()
 		if err == nil {
 			issuesCfg = cfg.Issues
+			defaultAgent = cfg.Agents.Default
 		}
 	}
 
@@ -523,6 +540,12 @@ func (s *Server) handlePreviewIssues(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	projectRoot := s.getProjectRootPath(ctx)
+	fullReportDir := reportDir
+	if projectRoot != "" && !filepath.IsAbs(reportDir) {
+		fullReportDir = filepath.Join(projectRoot, reportDir)
+	}
+
 	response := GenerateIssuesResponse{
 		Success: true,
 	}
@@ -536,14 +559,17 @@ func (s *Server) handlePreviewIssues(w http.ResponseWriter, r *http.Request) {
 			effectiveMode = core.IssueModeDirect
 		}
 	}
-	if fastMode {
+	// Explicit override from query param wins over config.
+	if forceDirect {
 		effectiveMode = core.IssueModeDirect
+	} else if forceAgent {
+		effectiveMode = core.IssueModeAgent
 	}
 
 	if effectiveMode == core.IssueModeDirect {
 		// Direct mode: use direct copy without AI
 		issuesCfg.Generator.Enabled = false
-		generator := issues.NewGenerator(nil, issuesCfg, "", reportDir, nil)
+		generator := issues.NewGenerator(nil, issuesCfg, projectRoot, fullReportDir, nil)
 
 		opts := issues.GenerateOptions{
 			WorkflowID:      workflowID,
@@ -578,8 +604,25 @@ func (s *Server) handlePreviewIssues(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		generator := issues.NewGenerator(nil, issuesCfg, "", reportDir, s.agentRegistry)
-		generator.SetProgressReporter(newIssuesSSEProgressReporter(s.getProjectEventBus(ctx), getProjectID(ctx)))
+		// If no explicit generator agent is configured, fall back to the project's default agent.
+		// This avoids surprising failures when users request AI preview without configuring issues.generator.agent.
+		if strings.TrimSpace(issuesCfg.Generator.Agent) == "" {
+			if strings.TrimSpace(defaultAgent) != "" {
+				issuesCfg.Generator.Agent = defaultAgent
+			} else {
+				enabled := s.agentRegistry.ListEnabled()
+				if len(enabled) > 0 {
+					issuesCfg.Generator.Agent = enabled[0]
+				}
+			}
+			}
+			if strings.TrimSpace(issuesCfg.Generator.Agent) == "" {
+				respondError(w, http.StatusBadRequest, "issues.generator.agent is required for AI generation")
+				return
+			}
+
+			generator := issues.NewGenerator(nil, issuesCfg, projectRoot, fullReportDir, s.agentRegistry)
+			generator.SetProgressReporter(newIssuesSSEProgressReporter(s.getProjectEventBus(ctx), getProjectID(ctx)))
 
 		// Generate the issue files
 		files, err := generator.GenerateIssueFiles(ctx, workflowID)
@@ -709,6 +752,12 @@ func (s *Server) handleCreateSingleIssue(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	projectRoot := s.getProjectRootPath(ctx)
+	fullReportDir := reportDir
+	if projectRoot != "" && !filepath.IsAbs(reportDir) {
+		fullReportDir = filepath.Join(projectRoot, reportDir)
+	}
+
 	// Create issue client based on provider
 	issueClient, clientErr := createIssueClient(issuesCfg)
 	if clientErr != nil {
@@ -728,7 +777,7 @@ func (s *Server) handleCreateSingleIssue(w http.ResponseWriter, r *http.Request)
 		assignees = issuesCfg.Assignees
 	}
 
-	generator := issues.NewGenerator(issueClient, issuesCfg, "", reportDir, s.agentRegistry)
+	generator := issues.NewGenerator(issueClient, issuesCfg, projectRoot, fullReportDir, s.agentRegistry)
 	generator.SetProgressReporter(newIssuesSSEProgressReporter(s.getProjectEventBus(ctx), getProjectID(ctx)))
 
 	input := issues.IssueInput{

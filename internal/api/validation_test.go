@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"path/filepath"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -171,20 +172,14 @@ func TestHandleUpdateConfig_ValidationErrors(t *testing.T) {
 
 func TestHandleUpdateConfig_ValidUpdate(t *testing.T) {
 	t.Parallel()
-	// Create temp directory and change to it for test isolation
 	tmpDir := t.TempDir()
-	origDir, err := os.Getwd()
-	require.NoError(t, err)
-	require.NoError(t, os.Chdir(tmpDir))
-	t.Cleanup(func() { _ = os.Chdir(origDir) })
-
-	// Create .quorum directory and default config
-	require.NoError(t, os.MkdirAll(".quorum", 0o750))
-	require.NoError(t, os.WriteFile(".quorum/config.yaml", []byte(config.DefaultConfigYAML), 0o600))
+	// Avoid os.Chdir in parallel tests. Use server root and absolute paths for isolation.
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, ".quorum"), 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, ".quorum", "config.yaml"), []byte(config.DefaultConfigYAML), 0o600))
 
 	stateManager := newMockStateManager()
 	eventBus := events.New(100)
-	server := NewServer(stateManager, eventBus)
+	server := NewServer(stateManager, eventBus, WithRoot(tmpDir))
 
 	// Valid update - includes required agents.default
 	reqBody := `{

@@ -656,13 +656,6 @@ agents:
 		t.Fatalf("failed to write config file: %v", err)
 	}
 
-	// Change to temp directory for test
-	originalDir, _ := os.Getwd()
-	if err := os.Chdir(tmpDir); err != nil {
-		t.Fatalf("failed to change to temp dir: %v", err)
-	}
-	t.Cleanup(func() { os.Chdir(originalDir) })
-
 	sm := newMockStateManager()
 	eb := events.New(100)
 	srv := NewServer(sm, eb)
@@ -681,6 +674,7 @@ agents:
 	// Use chi router to handle the request properly
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/workflows/", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
+	req = withProjectRoot(req, tmpDir)
 	w := httptest.NewRecorder()
 
 	srv.Handler().ServeHTTP(w, req)
@@ -788,15 +782,9 @@ agents:
 		t.Fatalf("failed to write config file: %v", err)
 	}
 
-	originalDir, _ := os.Getwd()
-	if err := os.Chdir(tmpDir); err != nil {
-		t.Fatalf("failed to change to temp dir: %v", err)
-	}
-	t.Cleanup(func() { os.Chdir(originalDir) })
-
 	sm := newMockStateManager()
 	eb := events.New(100)
-	srv := NewServer(sm, eb)
+	srv := NewServer(sm, eb, WithRoot(tmpDir))
 
 	wfID := core.WorkflowID("wf-edit-config")
 	sm.workflows[wfID] = &core.WorkflowState{
@@ -919,15 +907,9 @@ agents:
 		t.Fatalf("failed to write config file: %v", err)
 	}
 
-	originalDir, _ := os.Getwd()
-	if err := os.Chdir(tmpDir); err != nil {
-		t.Fatalf("failed to change to temp dir: %v", err)
-	}
-	t.Cleanup(func() { os.Chdir(originalDir) })
-
 	sm := newMockStateManager()
 	eb := events.New(100)
-	srv := NewServer(sm, eb)
+	srv := NewServer(sm, eb, WithRoot(tmpDir))
 
 	wfID := core.WorkflowID("wf-edit-config-invalid")
 	sm.workflows[wfID] = &core.WorkflowState{

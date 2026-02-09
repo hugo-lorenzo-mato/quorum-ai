@@ -43,7 +43,10 @@ func newIssueTestServer(t *testing.T, opts ...ServerOption) *issueTestServer {
 	eb := events.New(100)
 	t.Cleanup(func() { eb.Close() })
 
-	defaults := []ServerOption{WithLogger(slog.Default())}
+	// Always isolate filesystem side effects under a temp root.
+	// Many issue handlers read/write under project root (drafts/mappings), and tests
+	// should never touch the repo working directory.
+	defaults := []ServerOption{WithLogger(slog.Default()), WithRoot(t.TempDir())}
 	defaults = append(defaults, opts...)
 
 	srv := NewServer(sm, eb, defaults...)
@@ -124,7 +127,6 @@ func decodeErrorResponse(t *testing.T, body *bytes.Buffer) string {
 // ---------------------------------------------------------------------------
 
 func TestHandleGenerateIssues_WorkflowNotFound(t *testing.T) {
-	t.Parallel()
 	ts := newIssueTestServer(t)
 	// No workflow added -- should get 404.
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/workflows/nonexistent/issues/", nil)
@@ -143,7 +145,6 @@ func TestHandleGenerateIssues_WorkflowNotFound(t *testing.T) {
 }
 
 func TestHandleGenerateIssues_WorkflowLoadError(t *testing.T) {
-	t.Parallel()
 	ts := newIssueTestServer(t)
 	ts.sm.loadErr = fmt.Errorf("database unavailable")
 
@@ -163,7 +164,6 @@ func TestHandleGenerateIssues_WorkflowLoadError(t *testing.T) {
 }
 
 func TestHandleGenerateIssues_InvalidRequestBody(t *testing.T) {
-	t.Parallel()
 	ts := newIssueTestServer(t)
 	ts.addWorkflow("wf-1", "/some/report")
 
@@ -185,7 +185,6 @@ func TestHandleGenerateIssues_InvalidRequestBody(t *testing.T) {
 }
 
 func TestHandleGenerateIssues_IssuesDisabled(t *testing.T) {
-	t.Parallel()
 	loader := configLoaderWithIssues(t, config.IssuesConfig{Enabled: false})
 	ts := newIssueTestServer(t, WithConfigLoader(loader))
 	ts.addWorkflow("wf-1", "/some/report")
@@ -206,7 +205,6 @@ func TestHandleGenerateIssues_IssuesDisabled(t *testing.T) {
 }
 
 func TestHandleGenerateIssues_NoConfigLoader_IssuesDisabled(t *testing.T) {
-	t.Parallel()
 	// When no config loader is set the zero-value IssuesConfig has Enabled=false.
 	ts := newIssueTestServer(t)
 	ts.addWorkflow("wf-1", "/some/report")
@@ -227,7 +225,6 @@ func TestHandleGenerateIssues_NoConfigLoader_IssuesDisabled(t *testing.T) {
 }
 
 func TestHandleGenerateIssues_EmptyReportPath(t *testing.T) {
-	t.Parallel()
 	loader := configLoaderWithIssues(t, config.IssuesConfig{Enabled: true, Provider: "github", Repository: "owner/repo"})
 	ts := newIssueTestServer(t, WithConfigLoader(loader))
 	// Workflow with empty report path
@@ -251,7 +248,6 @@ func TestHandleGenerateIssues_EmptyReportPath(t *testing.T) {
 }
 
 func TestHandleGenerateIssues_GitLabNotImplemented(t *testing.T) {
-	t.Parallel()
 	loader := configLoaderWithIssues(t, config.IssuesConfig{Enabled: true, Provider: "gitlab"})
 	ts := newIssueTestServer(t, WithConfigLoader(loader))
 	ts.addWorkflow("wf-1", "/some/report")
@@ -268,7 +264,6 @@ func TestHandleGenerateIssues_GitLabNotImplemented(t *testing.T) {
 }
 
 func TestHandleGenerateIssues_UnknownProvider(t *testing.T) {
-	t.Parallel()
 	loader := configLoaderWithIssues(t, config.IssuesConfig{Enabled: true, Provider: "jira"})
 	ts := newIssueTestServer(t, WithConfigLoader(loader))
 	ts.addWorkflow("wf-1", "/some/report")
@@ -289,7 +284,6 @@ func TestHandleGenerateIssues_UnknownProvider(t *testing.T) {
 }
 
 func TestHandleGenerateIssues_InvalidRepositoryFormat(t *testing.T) {
-	t.Parallel()
 	loader := configLoaderWithIssues(t, config.IssuesConfig{Enabled: true, Provider: "github", Repository: "invalid-no-slash"})
 	ts := newIssueTestServer(t, WithConfigLoader(loader))
 	ts.addWorkflow("wf-1", "/some/report")
@@ -314,7 +308,6 @@ func TestHandleGenerateIssues_InvalidRepositoryFormat(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestHandleSaveIssuesFiles_WorkflowNotFound(t *testing.T) {
-	t.Parallel()
 	ts := newIssueTestServer(t)
 
 	body, _ := json.Marshal(SaveIssuesFilesRequest{
@@ -333,7 +326,6 @@ func TestHandleSaveIssuesFiles_WorkflowNotFound(t *testing.T) {
 }
 
 func TestHandleSaveIssuesFiles_WorkflowLoadError(t *testing.T) {
-	t.Parallel()
 	ts := newIssueTestServer(t)
 	ts.sm.loadErr = fmt.Errorf("storage error")
 
@@ -357,7 +349,6 @@ func TestHandleSaveIssuesFiles_WorkflowLoadError(t *testing.T) {
 }
 
 func TestHandleSaveIssuesFiles_InvalidRequestBody(t *testing.T) {
-	t.Parallel()
 	ts := newIssueTestServer(t)
 	ts.addWorkflow("wf-1", "/some/report")
 
@@ -379,7 +370,6 @@ func TestHandleSaveIssuesFiles_InvalidRequestBody(t *testing.T) {
 }
 
 func TestHandleSaveIssuesFiles_EmptyIssues(t *testing.T) {
-	t.Parallel()
 	ts := newIssueTestServer(t)
 	ts.addWorkflow("wf-1", "/some/report")
 
@@ -401,7 +391,6 @@ func TestHandleSaveIssuesFiles_EmptyIssues(t *testing.T) {
 }
 
 func TestHandleSaveIssuesFiles_IssuesDisabled(t *testing.T) {
-	t.Parallel()
 	loader := configLoaderWithIssues(t, config.IssuesConfig{Enabled: false})
 	ts := newIssueTestServer(t, WithConfigLoader(loader))
 	ts.addWorkflow("wf-1", "/some/report")
@@ -426,7 +415,6 @@ func TestHandleSaveIssuesFiles_IssuesDisabled(t *testing.T) {
 }
 
 func TestHandleSaveIssuesFiles_EmptyReportPath(t *testing.T) {
-	t.Parallel()
 	loader := configLoaderWithIssues(t, config.IssuesConfig{Enabled: true, Provider: "github", Repository: "owner/repo"})
 	ts := newIssueTestServer(t, WithConfigLoader(loader))
 	ts.addWorkflow("wf-1", "") // empty report path
@@ -451,7 +439,6 @@ func TestHandleSaveIssuesFiles_EmptyReportPath(t *testing.T) {
 }
 
 func TestHandleSaveIssuesFiles_SuccessWritesToDisk(t *testing.T) {
-	t.Parallel()
 	tmpDir := t.TempDir()
 	reportDir := filepath.Join(tmpDir, ".quorum", "runs", "wf-save")
 	if err := os.MkdirAll(reportDir, 0o755); err != nil {
@@ -498,7 +485,6 @@ func TestHandleSaveIssuesFiles_SuccessWritesToDisk(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestHandlePreviewIssues_WorkflowNotFound(t *testing.T) {
-	t.Parallel()
 	ts := newIssueTestServer(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/workflows/nonexistent/issues/preview", nil)
@@ -513,7 +499,6 @@ func TestHandlePreviewIssues_WorkflowNotFound(t *testing.T) {
 }
 
 func TestHandlePreviewIssues_WorkflowLoadError(t *testing.T) {
-	t.Parallel()
 	ts := newIssueTestServer(t)
 	ts.sm.loadErr = fmt.Errorf("io error")
 
@@ -529,7 +514,6 @@ func TestHandlePreviewIssues_WorkflowLoadError(t *testing.T) {
 }
 
 func TestHandlePreviewIssues_IssuesDisabled(t *testing.T) {
-	t.Parallel()
 	loader := configLoaderWithIssues(t, config.IssuesConfig{Enabled: false})
 	ts := newIssueTestServer(t, WithConfigLoader(loader))
 	ts.addWorkflow("wf-1", "/some/report")
@@ -550,7 +534,6 @@ func TestHandlePreviewIssues_IssuesDisabled(t *testing.T) {
 }
 
 func TestHandlePreviewIssues_EmptyReportPath(t *testing.T) {
-	t.Parallel()
 	loader := configLoaderWithIssues(t, config.IssuesConfig{Enabled: true, Provider: "github", Repository: "owner/repo"})
 	ts := newIssueTestServer(t, WithConfigLoader(loader))
 	ts.addWorkflow("wf-1", "")
@@ -571,7 +554,6 @@ func TestHandlePreviewIssues_EmptyReportPath(t *testing.T) {
 }
 
 func TestHandlePreviewIssues_AgentModeNoRegistry(t *testing.T) {
-	t.Parallel()
 	// Issues enabled with mode=agent but no agentRegistry on server
 	loader := configLoaderWithIssues(t, config.IssuesConfig{Enabled: true, Provider: "github", Repository: "owner/repo"})
 	ts := newIssueTestServer(t, WithConfigLoader(loader))
@@ -613,7 +595,6 @@ issues:
 }
 
 func TestHandlePreviewIssues_FastModeForcesDirect(t *testing.T) {
-	t.Parallel()
 	// When fast=true, the handler should use direct mode (not agent mode).
 	// We set mode=agent in config but pass ?fast=true.
 	tmpDir := t.TempDir()
@@ -657,12 +638,52 @@ issues:
 	}
 }
 
+func TestHandlePreviewIssues_FastFalseForcesAgent(t *testing.T) {
+	// When fast=false, the handler should use agent mode even if the config mode is direct.
+	// The test server has no agent registry, so we expect the agent-mode error.
+	tmpDir := t.TempDir()
+	reportDir := filepath.Join(tmpDir, ".quorum", "runs", "wf-ai")
+	if err := os.MkdirAll(reportDir, 0o755); err != nil {
+		t.Fatalf("mkdir report: %v", err)
+	}
+
+	cfgDir := filepath.Join(tmpDir, ".quorum")
+	cfgFile := filepath.Join(cfgDir, "config.yaml")
+	yamlContent := `
+issues:
+  enabled: true
+  provider: github
+  repository: "owner/repo"
+  mode: direct
+`
+	if err := os.WriteFile(cfgFile, []byte(yamlContent), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	loader := config.NewLoader().WithConfigFile(cfgFile)
+
+	ts := newIssueTestServer(t, WithConfigLoader(loader))
+	ts.addWorkflow("wf-ai", reportDir)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/workflows/wf-ai/issues/preview?fast=false", nil)
+	req = addChiURLParams(req, map[string]string{"workflowID": "wf-ai"})
+	w := httptest.NewRecorder()
+
+	ts.srv.handlePreviewIssues(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("expected %d, got %d: %s", http.StatusInternalServerError, w.Code, w.Body.String())
+	}
+	errMsg := decodeErrorResponse(t, w.Body)
+	if !strings.Contains(errMsg, "agent registry not available") {
+		t.Errorf("expected agent-mode error, got: %s", errMsg)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // handleGetIssuesConfig tests
 // ---------------------------------------------------------------------------
 
 func TestHandleGetIssuesConfig_NoLoader(t *testing.T) {
-	t.Parallel()
 	ts := newIssueTestServer(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/config/issues", nil)
@@ -684,7 +705,6 @@ func TestHandleGetIssuesConfig_NoLoader(t *testing.T) {
 }
 
 func TestHandleGetIssuesConfig_WithLoader(t *testing.T) {
-	t.Parallel()
 	loader := configLoaderWithIssues(t, config.IssuesConfig{Enabled: true, Provider: "github", Repository: "owner/repo"})
 	ts := newIssueTestServer(t, WithConfigLoader(loader))
 
@@ -711,7 +731,6 @@ func TestHandleGetIssuesConfig_WithLoader(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestHandleCreateSingleIssue_WorkflowNotFound(t *testing.T) {
-	t.Parallel()
 	ts := newIssueTestServer(t)
 
 	body, _ := json.Marshal(CreateSingleIssueRequest{Title: "Bug", Body: "description"})
@@ -728,7 +747,6 @@ func TestHandleCreateSingleIssue_WorkflowNotFound(t *testing.T) {
 }
 
 func TestHandleCreateSingleIssue_InvalidBody(t *testing.T) {
-	t.Parallel()
 	ts := newIssueTestServer(t)
 	ts.addWorkflow("wf-1", "/some/report")
 
@@ -746,7 +764,6 @@ func TestHandleCreateSingleIssue_InvalidBody(t *testing.T) {
 }
 
 func TestHandleCreateSingleIssue_MissingTitle(t *testing.T) {
-	t.Parallel()
 	ts := newIssueTestServer(t)
 	ts.addWorkflow("wf-1", "/some/report")
 
@@ -768,7 +785,6 @@ func TestHandleCreateSingleIssue_MissingTitle(t *testing.T) {
 }
 
 func TestHandleCreateSingleIssue_IssuesDisabled(t *testing.T) {
-	t.Parallel()
 	loader := configLoaderWithIssues(t, config.IssuesConfig{Enabled: false})
 	ts := newIssueTestServer(t, WithConfigLoader(loader))
 	ts.addWorkflow("wf-1", "/some/report")
@@ -791,7 +807,6 @@ func TestHandleCreateSingleIssue_IssuesDisabled(t *testing.T) {
 }
 
 func TestHandleCreateSingleIssue_EmptyReportPath(t *testing.T) {
-	t.Parallel()
 	loader := configLoaderWithIssues(t, config.IssuesConfig{Enabled: true, Provider: "github", Repository: "owner/repo"})
 	ts := newIssueTestServer(t, WithConfigLoader(loader))
 	ts.addWorkflow("wf-1", "")
@@ -814,7 +829,6 @@ func TestHandleCreateSingleIssue_EmptyReportPath(t *testing.T) {
 }
 
 func TestHandleCreateSingleIssue_GitLabNotImplemented(t *testing.T) {
-	t.Parallel()
 	loader := configLoaderWithIssues(t, config.IssuesConfig{Enabled: true, Provider: "gitlab"})
 	ts := newIssueTestServer(t, WithConfigLoader(loader))
 	ts.addWorkflow("wf-1", "/some/report")
@@ -837,7 +851,6 @@ func TestHandleCreateSingleIssue_GitLabNotImplemented(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestHandleListDrafts_EmptyDrafts(t *testing.T) {
-	t.Parallel()
 	tmpDir := t.TempDir()
 
 	// Use a minimal loader
@@ -871,7 +884,6 @@ func TestHandleListDrafts_EmptyDrafts(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestHandleEditDraft_InvalidBody(t *testing.T) {
-	t.Parallel()
 	ts := newIssueTestServer(t)
 
 	body := bytes.NewBufferString(`{bad json`)
@@ -892,7 +904,6 @@ func TestHandleEditDraft_InvalidBody(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestHandlePublishDrafts_InvalidBody(t *testing.T) {
-	t.Parallel()
 	ts := newIssueTestServer(t)
 
 	body := bytes.NewBufferString(`{bad json`)
@@ -911,7 +922,6 @@ func TestHandlePublishDrafts_InvalidBody(t *testing.T) {
 }
 
 func TestHandlePublishDrafts_IssuesDisabled(t *testing.T) {
-	t.Parallel()
 	loader := configLoaderWithIssues(t, config.IssuesConfig{Enabled: false})
 	ts := newIssueTestServer(t, WithConfigLoader(loader))
 
@@ -931,7 +941,6 @@ func TestHandlePublishDrafts_IssuesDisabled(t *testing.T) {
 }
 
 func TestHandlePublishDrafts_GitLabNotImplemented(t *testing.T) {
-	t.Parallel()
 	loader := configLoaderWithIssues(t, config.IssuesConfig{Enabled: true, Provider: "gitlab"})
 	ts := newIssueTestServer(t, WithConfigLoader(loader))
 
@@ -951,7 +960,6 @@ func TestHandlePublishDrafts_GitLabNotImplemented(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestHandleIssuesStatus_ReturnsDefaults(t *testing.T) {
-	t.Parallel()
 	tmpDir := t.TempDir()
 	ts := newIssueTestServer(t, WithRoot(tmpDir))
 
@@ -991,7 +999,6 @@ func TestHandleIssuesStatus_ReturnsDefaults(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestCreateIssueClient_GitLabNotImplemented(t *testing.T) {
-	t.Parallel()
 	_, err := createIssueClient(config.IssuesConfig{Provider: "gitlab"})
 	if err == nil {
 		t.Fatal("expected error for gitlab provider")
@@ -1002,7 +1009,6 @@ func TestCreateIssueClient_GitLabNotImplemented(t *testing.T) {
 }
 
 func TestCreateIssueClient_UnknownProvider(t *testing.T) {
-	t.Parallel()
 	_, err := createIssueClient(config.IssuesConfig{Provider: "jira"})
 	if err == nil {
 		t.Fatal("expected error for unknown provider")
@@ -1013,7 +1019,6 @@ func TestCreateIssueClient_UnknownProvider(t *testing.T) {
 }
 
 func TestCreateIssueClient_InvalidRepositoryFormat(t *testing.T) {
-	t.Parallel()
 	_, err := createIssueClient(config.IssuesConfig{Provider: "github", Repository: "no-slash"})
 	if err == nil {
 		t.Fatal("expected error for invalid repository format")
@@ -1024,7 +1029,6 @@ func TestCreateIssueClient_InvalidRepositoryFormat(t *testing.T) {
 }
 
 func TestCreateIssueClient_EmptyOwnerInRepository(t *testing.T) {
-	t.Parallel()
 	_, err := createIssueClient(config.IssuesConfig{Provider: "github", Repository: "/repo"})
 	if err == nil {
 		t.Fatal("expected error for empty owner")
@@ -1035,7 +1039,6 @@ func TestCreateIssueClient_EmptyOwnerInRepository(t *testing.T) {
 }
 
 func TestCreateIssueClient_EmptyRepoInRepository(t *testing.T) {
-	t.Parallel()
 	_, err := createIssueClient(config.IssuesConfig{Provider: "github", Repository: "owner/"})
 	if err == nil {
 		t.Fatal("expected error for empty repo")
@@ -1046,7 +1049,6 @@ func TestCreateIssueClient_EmptyRepoInRepository(t *testing.T) {
 }
 
 func TestWriteIssueClientError_GitLabNotImplemented(t *testing.T) {
-	t.Parallel()
 	w := httptest.NewRecorder()
 	writeIssueClientError(w, fmt.Errorf("GitLab issue generation not yet implemented"))
 
@@ -1056,7 +1058,6 @@ func TestWriteIssueClientError_GitLabNotImplemented(t *testing.T) {
 }
 
 func TestWriteIssueClientError_UnknownProvider(t *testing.T) {
-	t.Parallel()
 	w := httptest.NewRecorder()
 	writeIssueClientError(w, fmt.Errorf("unknown provider: jira"))
 
@@ -1066,7 +1067,6 @@ func TestWriteIssueClientError_UnknownProvider(t *testing.T) {
 }
 
 func TestWriteIssueClientError_InvalidRepositoryFormat(t *testing.T) {
-	t.Parallel()
 	w := httptest.NewRecorder()
 	writeIssueClientError(w, fmt.Errorf("invalid repository format \"bad\", expected owner/repo"))
 
@@ -1076,7 +1076,6 @@ func TestWriteIssueClientError_InvalidRepositoryFormat(t *testing.T) {
 }
 
 func TestWriteIssueClientError_AuthError_GHNotAuthenticated(t *testing.T) {
-	t.Parallel()
 	w := httptest.NewRecorder()
 	writeIssueClientError(w, &core.DomainError{
 		Code:    "GH_NOT_AUTHENTICATED",
@@ -1089,7 +1088,6 @@ func TestWriteIssueClientError_AuthError_GHNotAuthenticated(t *testing.T) {
 }
 
 func TestWriteIssueClientError_AuthError_StringMatch(t *testing.T) {
-	t.Parallel()
 	w := httptest.NewRecorder()
 	writeIssueClientError(w, fmt.Errorf("gh auth login required"))
 
@@ -1099,7 +1097,6 @@ func TestWriteIssueClientError_AuthError_StringMatch(t *testing.T) {
 }
 
 func TestWriteIssueClientError_AuthError_NotAuthenticated(t *testing.T) {
-	t.Parallel()
 	w := httptest.NewRecorder()
 	writeIssueClientError(w, fmt.Errorf("GitHub CLI not authenticated"))
 
@@ -1109,7 +1106,6 @@ func TestWriteIssueClientError_AuthError_NotAuthenticated(t *testing.T) {
 }
 
 func TestWriteIssueClientError_GenericError(t *testing.T) {
-	t.Parallel()
 	w := httptest.NewRecorder()
 	writeIssueClientError(w, fmt.Errorf("some random error"))
 
@@ -1123,7 +1119,6 @@ func TestWriteIssueClientError_GenericError(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestHandleGenerateIssues_ViaRouter_WorkflowNotFound(t *testing.T) {
-	t.Parallel()
 	ts := newIssueTestServer(t)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/workflows/nonexistent/issues/", nil)
@@ -1137,7 +1132,6 @@ func TestHandleGenerateIssues_ViaRouter_WorkflowNotFound(t *testing.T) {
 }
 
 func TestHandleSaveIssuesFiles_ViaRouter_WorkflowNotFound(t *testing.T) {
-	t.Parallel()
 	ts := newIssueTestServer(t)
 
 	body, _ := json.Marshal(SaveIssuesFilesRequest{
@@ -1155,7 +1149,6 @@ func TestHandleSaveIssuesFiles_ViaRouter_WorkflowNotFound(t *testing.T) {
 }
 
 func TestHandlePreviewIssues_ViaRouter_WorkflowNotFound(t *testing.T) {
-	t.Parallel()
 	ts := newIssueTestServer(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/workflows/nonexistent/issues/preview", nil)
@@ -1173,7 +1166,6 @@ func TestHandlePreviewIssues_ViaRouter_WorkflowNotFound(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestHandleGenerateIssues_EmptyBodyDefaultsApplied(t *testing.T) {
-	t.Parallel()
 	// When r.Body is nil and ContentLength is 0, the handler uses defaults:
 	// CreateMainIssue=true, CreateSubIssues=true, LinkIssues=true.
 	// We verify this doesn't panic and gets past body parsing to the
@@ -1203,7 +1195,6 @@ func TestHandleGenerateIssues_EmptyBodyDefaultsApplied(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestIssueHandlers_UseServerFallbackStateManager(t *testing.T) {
-	t.Parallel()
 	// When there is no project context in the request, the handler should use
 	// the server's state manager.  We add a workflow to the server's mock SM
 	// and verify it is found.
@@ -1229,7 +1220,6 @@ func TestIssueHandlers_UseServerFallbackStateManager(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestHandleGenerateIssues_CancelledContext(t *testing.T) {
-	t.Parallel()
 	ts := newIssueTestServer(t)
 	ts.addWorkflow("wf-cancel", "/report")
 
@@ -1437,7 +1427,6 @@ status: %q
 // ===========================================================================
 
 func TestHandleListDrafts_WithDrafts(t *testing.T) {
-	t.Parallel()
 	projectRoot := t.TempDir()
 
 	// Create draft files
@@ -1505,7 +1494,6 @@ func TestHandleListDrafts_WithDrafts(t *testing.T) {
 }
 
 func TestHandleEditDraft_Success(t *testing.T) {
-	t.Parallel()
 	projectRoot := t.TempDir()
 
 	writeDraftFile(t, projectRoot, "wf-edit", "01-task.md", issues.DraftFrontmatter{
@@ -1561,7 +1549,6 @@ func TestHandleEditDraft_Success(t *testing.T) {
 }
 
 func TestHandleEditDraft_NotFound(t *testing.T) {
-	t.Parallel()
 	projectRoot := t.TempDir()
 
 	// Create a draft with task-1, but try to edit task-99
@@ -1595,7 +1582,6 @@ func TestHandleEditDraft_NotFound(t *testing.T) {
 }
 
 func TestHandleEditDraft_PartialUpdate(t *testing.T) {
-	t.Parallel()
 	projectRoot := t.TempDir()
 
 	writeDraftFile(t, projectRoot, "wf-partial", "01-task.md", issues.DraftFrontmatter{
@@ -1645,7 +1631,6 @@ func TestHandleEditDraft_PartialUpdate(t *testing.T) {
 }
 
 func TestHandleEditDraft_MainIssueByTaskIdMain(t *testing.T) {
-	t.Parallel()
 	projectRoot := t.TempDir()
 
 	// Create a main issue draft
@@ -1693,7 +1678,6 @@ func TestHandleEditDraft_MainIssueByTaskIdMain(t *testing.T) {
 // ===========================================================================
 
 func TestHandleGenerateIssues_DirectModeDryRun(t *testing.T) {
-	t.Parallel()
 	// Set up a report directory with task files for direct mode
 	tmpDir := t.TempDir()
 	reportDir := filepath.Join(tmpDir, ".quorum", "runs", "wf-direct")
@@ -1765,7 +1749,7 @@ Implement OAuth2 authentication flow.
 		t.Error("expected success=true")
 	}
 	if len(resp.PreviewIssues) == 0 {
-		t.Error("expected at least one preview issue")
+		t.Fatalf("expected at least one preview issue, got none: message=%q errors=%v", resp.Message, resp.Errors)
 	}
 	if !strings.Contains(resp.Message, "Preview:") {
 		t.Errorf("expected preview message, got: %s", resp.Message)
@@ -1773,7 +1757,6 @@ Implement OAuth2 authentication flow.
 }
 
 func TestHandleGenerateIssues_FrontendIssuesInput(t *testing.T) {
-	t.Parallel()
 	tmpDir := t.TempDir()
 	// Use tmpDir as project root so WriteIssuesToDisk can write draft files
 	reportDir := filepath.Join(tmpDir, ".quorum", "runs", "wf-frontend")
@@ -1829,7 +1812,6 @@ func TestHandleGenerateIssues_FrontendIssuesInput(t *testing.T) {
 }
 
 func TestHandleGenerateIssues_LabelAssigneeDefaults(t *testing.T) {
-	t.Parallel()
 	tmpDir := t.TempDir()
 	reportDir := filepath.Join(tmpDir, ".quorum", "runs", "wf-defaults")
 	tasksDir := filepath.Join(reportDir, "plan-phase", "tasks")
@@ -1896,7 +1878,6 @@ func TestHandleGenerateIssues_LabelAssigneeDefaults(t *testing.T) {
 }
 
 func TestHandleGenerateIssues_NonDryRunCreatesIssues(t *testing.T) {
-	t.Parallel()
 	tmpDir := t.TempDir()
 	reportDir := filepath.Join(tmpDir, ".quorum", "runs", "wf-create")
 	tasksDir := filepath.Join(reportDir, "plan-phase", "tasks")
@@ -1958,10 +1939,10 @@ func TestHandleGenerateIssues_NonDryRunCreatesIssues(t *testing.T) {
 	}
 	// We should have a main issue and at least one sub-issue
 	if resp.MainIssue == nil {
-		t.Error("expected main_issue in response")
+		t.Fatalf("expected main_issue in response: message=%q errors=%v", resp.Message, resp.Errors)
 	}
 	if len(resp.SubIssues) == 0 {
-		t.Error("expected at least one sub-issue")
+		t.Fatalf("expected at least one sub-issue: message=%q errors=%v", resp.Message, resp.Errors)
 	}
 }
 
@@ -1970,7 +1951,6 @@ func TestHandleGenerateIssues_NonDryRunCreatesIssues(t *testing.T) {
 // ===========================================================================
 
 func TestHandlePreviewIssues_DirectModeSuccess(t *testing.T) {
-	t.Parallel()
 	tmpDir := t.TempDir()
 	reportDir := filepath.Join(tmpDir, ".quorum", "runs", "wf-preview")
 	tasksDir := filepath.Join(reportDir, "plan-phase", "tasks")
@@ -2012,7 +1992,7 @@ func TestHandlePreviewIssues_DirectModeSuccess(t *testing.T) {
 		t.Error("expected ai_used=false in direct mode")
 	}
 	if len(resp.PreviewIssues) == 0 {
-		t.Error("expected at least one preview issue")
+		t.Fatalf("expected at least one preview issue, got none: message=%q errors=%v", resp.Message, resp.Errors)
 	}
 	if !strings.Contains(resp.Message, "direct mode") {
 		t.Errorf("expected 'direct mode' in message, got: %s", resp.Message)
@@ -2024,7 +2004,6 @@ func TestHandlePreviewIssues_DirectModeSuccess(t *testing.T) {
 // ===========================================================================
 
 func TestHandleCreateSingleIssue_Success(t *testing.T) {
-	t.Parallel()
 	tmpDir := t.TempDir()
 	reportDir := filepath.Join(tmpDir, ".quorum", "runs", "wf-single")
 	if err := os.MkdirAll(reportDir, 0o755); err != nil {
@@ -2086,7 +2065,6 @@ func TestHandleCreateSingleIssue_Success(t *testing.T) {
 }
 
 func TestHandleCreateSingleIssue_DefaultLabelsAssignees(t *testing.T) {
-	t.Parallel()
 	tmpDir := t.TempDir()
 	reportDir := filepath.Join(tmpDir, ".quorum", "runs", "wf-single-def")
 	if err := os.MkdirAll(reportDir, 0o755); err != nil {
@@ -2153,7 +2131,6 @@ func TestHandleCreateSingleIssue_DefaultLabelsAssignees(t *testing.T) {
 // ===========================================================================
 
 func TestHandlePublishDrafts_Success(t *testing.T) {
-	t.Parallel()
 	projectRoot := t.TempDir()
 
 	// Create draft files
@@ -2234,7 +2211,6 @@ func TestHandlePublishDrafts_Success(t *testing.T) {
 }
 
 func TestHandlePublishDrafts_FilterByTaskIDs(t *testing.T) {
-	t.Parallel()
 	projectRoot := t.TempDir()
 
 	// Create 3 draft files
@@ -2297,7 +2273,6 @@ func TestHandlePublishDrafts_FilterByTaskIDs(t *testing.T) {
 }
 
 func TestHandlePublishDrafts_NoDrafts(t *testing.T) {
-	t.Parallel()
 	projectRoot := t.TempDir()
 	// No draft files created
 
@@ -2329,7 +2304,6 @@ func TestHandlePublishDrafts_NoDrafts(t *testing.T) {
 }
 
 func TestHandlePublishDrafts_DryRunMode(t *testing.T) {
-	t.Parallel()
 	projectRoot := t.TempDir()
 
 	writeDraftFile(t, projectRoot, "wf-dry-pub", "01-task.md", issues.DraftFrontmatter{
@@ -2385,7 +2359,6 @@ func TestHandlePublishDrafts_DryRunMode(t *testing.T) {
 // ===========================================================================
 
 func TestHandleIssuesStatus_WithDrafts(t *testing.T) {
-	t.Parallel()
 	projectRoot := t.TempDir()
 
 	// Create some draft files
@@ -2430,7 +2403,6 @@ func TestHandleIssuesStatus_WithDrafts(t *testing.T) {
 // ===========================================================================
 
 func TestHandleGenerateIssues_TimeoutFromConfig(t *testing.T) {
-	t.Parallel()
 	tmpDir := t.TempDir()
 	reportDir := filepath.Join(tmpDir, ".quorum", "runs", "wf-timeout")
 	tasksDir := filepath.Join(reportDir, "plan-phase", "tasks")
@@ -2478,7 +2450,6 @@ func TestHandleGenerateIssues_TimeoutFromConfig(t *testing.T) {
 // ===========================================================================
 
 func TestHandleCreateSingleIssue_MainIssue(t *testing.T) {
-	t.Parallel()
 	tmpDir := t.TempDir()
 	reportDir := filepath.Join(tmpDir, ".quorum", "runs", "wf-main-single")
 	if err := os.MkdirAll(reportDir, 0o755); err != nil {

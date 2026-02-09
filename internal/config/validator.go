@@ -375,10 +375,6 @@ func (v *Validator) validateIssueTemplate(tmpl *IssueTemplateConfig) {
 }
 
 func (v *Validator) validateIssueGenerator(cfg *IssueGeneratorConfig) {
-	if !cfg.Enabled {
-		return
-	}
-
 	if cfg.Agent != "" && !core.IsValidAgent(cfg.Agent) {
 		v.addError("issues.generator.agent", cfg.Agent, "unknown agent")
 	}
@@ -390,6 +386,11 @@ func (v *Validator) validateIssueGenerator(cfg *IssueGeneratorConfig) {
 
 	if cfg.MaxBodyLength < 0 {
 		v.addError("issues.generator.max_body_length", cfg.MaxBodyLength, "must be non-negative")
+	}
+
+	// The remaining validations are only relevant when the generator is enabled.
+	if !cfg.Enabled {
+		return
 	}
 }
 

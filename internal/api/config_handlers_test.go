@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/events"
@@ -18,19 +17,7 @@ type configTestServer struct {
 func setupConfigTestServer(t *testing.T) *configTestServer {
 	t.Helper()
 
-	cwd, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("get cwd: %v", err)
-	}
-
 	tmpDir := t.TempDir()
-	if err := os.Chdir(tmpDir); err != nil {
-		t.Fatalf("chdir: %v", err)
-	}
-	// Restore working dir for other tests
-	t.Cleanup(func() {
-		_ = os.Chdir(cwd)
-	})
 
 	sm := newMockStateManager()
 	eb := events.New(100)
@@ -38,7 +25,8 @@ func setupConfigTestServer(t *testing.T) *configTestServer {
 		eb.Close()
 	})
 
-	srv := NewServer(sm, eb)
+	// Avoid os.Chdir in parallel tests. Use server root to keep config IO isolated per test.
+	srv := NewServer(sm, eb, WithRoot(tmpDir))
 	return &configTestServer{
 		router: srv.Handler(),
 	}
