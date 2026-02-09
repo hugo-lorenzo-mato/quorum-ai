@@ -630,7 +630,7 @@ func TestGenerator_SetProgressReporter(t *testing.T) {
 	}
 	gen.SetProgressReporter(nil)
 	gen.emitIssuesGenerationProgress("wf", "stage", 0, 0, nil, "msg")
-	gen.emitIssuesPublishingProgress("wf", "stage", 0, 0, nil, 0, false, "msg")
+	gen.emitIssuesPublishingProgress(PublishingProgressParams{WorkflowID: "wf", Stage: "stage", Message: "msg"})
 }
 
 func TestGenerator_GetIssueSet(t *testing.T) {

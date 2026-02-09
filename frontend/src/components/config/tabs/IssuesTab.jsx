@@ -234,57 +234,61 @@ function GeneratorSection() {
       />
 
       <div className="py-3">
-        <div className="flex items-center gap-2 mb-2">
-          <label className={`text-sm font-medium ${isDisabled || !enabled.value ? 'text-muted-foreground' : 'text-foreground'}`}>
-            Body Instructions
-          </label>
-        </div>
-        <p className="text-xs text-muted-foreground mb-2">
-          Custom instructions for the AI when generating issue body content
-        </p>
-        <textarea
-          value={instructions.value || ''}
-          onChange={(e) => instructions.onChange(e.target.value)}
-          disabled={instructions.disabled || isDisabled || !enabled.value}
-          placeholder="Add specific instructions for how the AI should write issue bodies..."
-          rows={3}
-          className={`
-            w-full px-3 py-2
-            border rounded-lg bg-background text-foreground
-            transition-colors resize-y
-            focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent
-            disabled:opacity-50 disabled:cursor-not-allowed
-            placeholder:text-muted-foreground
-            ${instructions.error ? 'border-error' : 'border-input hover:border-muted-foreground'}
-          `}
-        />
+        <label>
+          <div className="flex items-center gap-2 mb-2">
+            <span className={`text-sm font-medium ${isDisabled || !enabled.value ? 'text-muted-foreground' : 'text-foreground'}`}>
+              Body Instructions
+            </span>
+          </div>
+          <p className="text-xs text-muted-foreground mb-2">
+            Custom instructions for the AI when generating issue body content
+          </p>
+          <textarea
+            value={instructions.value || ''}
+            onChange={(e) => instructions.onChange(e.target.value)}
+            disabled={instructions.disabled || isDisabled || !enabled.value}
+            placeholder="Add specific instructions for how the AI should write issue bodies..."
+            rows={3}
+            className={`
+              w-full px-3 py-2
+              border rounded-lg bg-background text-foreground
+              transition-colors resize-y
+              focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent
+              disabled:opacity-50 disabled:cursor-not-allowed
+              placeholder:text-muted-foreground
+              ${instructions.error ? 'border-error' : 'border-input hover:border-muted-foreground'}
+            `}
+          />
+        </label>
       </div>
 
       <div className="py-3">
-        <div className="flex items-center gap-2 mb-2">
-          <label className={`text-sm font-medium ${isDisabled || !enabled.value ? 'text-muted-foreground' : 'text-foreground'}`}>
-            Title Instructions
-          </label>
-        </div>
-        <p className="text-xs text-muted-foreground mb-2">
-          Custom instructions for the AI when generating issue titles
-        </p>
-        <textarea
-          value={titleInstructions.value || ''}
-          onChange={(e) => titleInstructions.onChange(e.target.value)}
-          disabled={titleInstructions.disabled || isDisabled || !enabled.value}
-          placeholder="Add specific instructions for how the AI should write issue titles..."
-          rows={2}
-          className={`
-            w-full px-3 py-2
-            border rounded-lg bg-background text-foreground
-            transition-colors resize-y
-            focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent
-            disabled:opacity-50 disabled:cursor-not-allowed
-            placeholder:text-muted-foreground
-            ${titleInstructions.error ? 'border-error' : 'border-input hover:border-muted-foreground'}
-          `}
-        />
+        <label>
+          <div className="flex items-center gap-2 mb-2">
+            <span className={`text-sm font-medium ${isDisabled || !enabled.value ? 'text-muted-foreground' : 'text-foreground'}`}>
+              Title Instructions
+            </span>
+          </div>
+          <p className="text-xs text-muted-foreground mb-2">
+            Custom instructions for the AI when generating issue titles
+          </p>
+          <textarea
+            value={titleInstructions.value || ''}
+            onChange={(e) => titleInstructions.onChange(e.target.value)}
+            disabled={titleInstructions.disabled || isDisabled || !enabled.value}
+            placeholder="Add specific instructions for how the AI should write issue titles..."
+            rows={2}
+            className={`
+              w-full px-3 py-2
+              border rounded-lg bg-background text-foreground
+              transition-colors resize-y
+              focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent
+              disabled:opacity-50 disabled:cursor-not-allowed
+              placeholder:text-muted-foreground
+              ${titleInstructions.error ? 'border-error' : 'border-input hover:border-muted-foreground'}
+            `}
+          />
+        </label>
       </div>
     </SettingSection>
   );

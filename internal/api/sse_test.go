@@ -150,10 +150,18 @@ func TestSendEventToClient_IssuesGenerationProgress(t *testing.T) {
 	s := newTestServer(bus)
 
 	rec := httptest.NewRecorder()
-	event := events.NewIssuesGenerationProgressEvent(
-		"wf-gen-1", "proj-1", "generating", 3, 10,
-		"Generating issue 3 of 10", "003-fix-auth.md", "Fix auth flow", "task-42", true,
-	)
+	event := events.NewIssuesGenerationProgressEvent(events.IssuesGenerationProgressParams{
+		WorkflowID:  "wf-gen-1",
+		ProjectID:   "proj-1",
+		Stage:       "generating",
+		Current:     3,
+		Total:       10,
+		Message:     "Generating issue 3 of 10",
+		FileName:    "003-fix-auth.md",
+		Title:       "Fix auth flow",
+		TaskID:      "task-42",
+		IsMainIssue: true,
+	})
 
 	s.sendEventToClient(rec, mockFlusher{}, event)
 
@@ -199,10 +207,19 @@ func TestSendEventToClient_IssuesPublishingProgress(t *testing.T) {
 	s := newTestServer(bus)
 
 	rec := httptest.NewRecorder()
-	event := events.NewIssuesPublishingProgressEvent(
-		"wf-pub-1", "proj-2", "publishing", 2, 5,
-		"Publishing issue 2 of 5", "Add CI pipeline", "task-99", false, 42, true,
-	)
+	event := events.NewIssuesPublishingProgressEvent(events.IssuesPublishingProgressParams{
+		WorkflowID:  "wf-pub-1",
+		ProjectID:   "proj-2",
+		Stage:       "publishing",
+		Current:     2,
+		Total:       5,
+		Message:     "Publishing issue 2 of 5",
+		Title:       "Add CI pipeline",
+		TaskID:      "task-99",
+		IsMainIssue: false,
+		IssueNumber: 42,
+		DryRun:      true,
+	})
 
 	s.sendEventToClient(rec, mockFlusher{}, event)
 

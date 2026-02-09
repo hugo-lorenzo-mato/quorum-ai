@@ -15,6 +15,9 @@ import (
 
 const mainIssueFilename = "00-consolidated-analysis.md"
 
+// Error format strings for duplicated messages (S1192).
+const errIssueFileOutsideDir = "issue file is outside issues dir: %s"
+
 // WriteIssuesToDisk writes issues to markdown files under the draft directory.
 // Files include YAML frontmatter with structured metadata.
 // It returns previews that include the file paths written.
@@ -28,7 +31,7 @@ func (g *Generator) WriteIssuesToDisk(workflowID string, inputs []IssueInput) ([
 
 	draftDirAbs, err := g.resolveDraftDir(workflowID)
 	if err != nil {
-		return nil, fmt.Errorf("resolving draft directory: %w", err)
+		return nil, fmt.Errorf(errResolvingDraftDir, err)
 	}
 	if err := os.MkdirAll(draftDirAbs, 0o755); err != nil {
 		return nil, fmt.Errorf("creating draft directory: %w", err)
@@ -155,7 +158,7 @@ func (g *Generator) CreateIssuesFromFiles(ctx context.Context, workflowID string
 	}
 	createdCount := 0
 	if totalToPublish > 0 {
-		g.emitIssuesPublishingProgress(workflowID, "started", 0, totalToPublish, nil, 0, dryRun, "issue publishing started")
+		g.emitIssuesPublishingProgress(PublishingProgressParams{WorkflowID: workflowID, Stage: "started", Current: 0, Total: totalToPublish, DryRun: dryRun, Message: "issue publishing started"})
 	}
 
 	var mainIssue *core.Issue
@@ -190,12 +193,12 @@ func (g *Generator) CreateIssuesFromFiles(ctx context.Context, workflowID string
 				FilePath:    filePath,
 			})
 			createdCount++
-			g.emitIssuesPublishingProgress(workflowID, "progress", createdCount, totalToPublish, &ProgressIssue{
+			g.emitIssuesPublishingProgress(PublishingProgressParams{WorkflowID: workflowID, Stage: "progress", Current: createdCount, Total: totalToPublish, Issue: &ProgressIssue{
 				Title:       title,
 				TaskID:      mainInput.TaskID,
 				IsMainIssue: true,
 				FileName:    filepath.Base(filePath),
-			}, 0, true, "")
+			}, DryRun: true})
 		} else {
 			issue, err := g.client.CreateIssue(ctx, core.CreateIssueOptions{
 				Title:     title,
@@ -209,12 +212,12 @@ func (g *Generator) CreateIssuesFromFiles(ctx context.Context, workflowID string
 			mainIssue = issue
 			result.IssueSet.MainIssue = mainIssue
 			createdCount++
-			g.emitIssuesPublishingProgress(workflowID, "progress", createdCount, totalToPublish, &ProgressIssue{
+			g.emitIssuesPublishingProgress(PublishingProgressParams{WorkflowID: workflowID, Stage: "progress", Current: createdCount, Total: totalToPublish, Issue: &ProgressIssue{
 				Title:       issue.Title,
 				TaskID:      mainInput.TaskID,
 				IsMainIssue: true,
 				FileName:    filepath.Base(filePath),
-			}, issue.Number, false, "")
+			}, IssueNumber: issue.Number})
 			mappingEntries = append(mappingEntries, IssueMappingEntry{
 				TaskID:      mainInput.TaskID,
 				FilePath:    filePath,
@@ -254,12 +257,12 @@ func (g *Generator) CreateIssuesFromFiles(ctx context.Context, workflowID string
 				FilePath:    filePath,
 			})
 			createdCount++
-			g.emitIssuesPublishingProgress(workflowID, "progress", createdCount, totalToPublish, &ProgressIssue{
+			g.emitIssuesPublishingProgress(PublishingProgressParams{WorkflowID: workflowID, Stage: "progress", Current: createdCount, Total: totalToPublish, Issue: &ProgressIssue{
 				Title:       title,
 				TaskID:      input.TaskID,
 				IsMainIssue: false,
 				FileName:    filepath.Base(filePath),
-			}, 0, true, "")
+			}, DryRun: true})
 			continue
 		}
 
@@ -281,12 +284,12 @@ func (g *Generator) CreateIssuesFromFiles(ctx context.Context, workflowID string
 		}
 		result.IssueSet.SubIssues = append(result.IssueSet.SubIssues, issue)
 		createdCount++
-		g.emitIssuesPublishingProgress(workflowID, "progress", createdCount, totalToPublish, &ProgressIssue{
+		g.emitIssuesPublishingProgress(PublishingProgressParams{WorkflowID: workflowID, Stage: "progress", Current: createdCount, Total: totalToPublish, Issue: &ProgressIssue{
 			Title:       issue.Title,
 			TaskID:      input.TaskID,
 			IsMainIssue: false,
 			FileName:    filepath.Base(filePath),
-		}, issue.Number, false, "")
+		}, IssueNumber: issue.Number})
 		if parentNum > 0 && issue.ParentIssue == 0 {
 			result.Errors = append(result.Errors, fmt.Errorf("linking sub-issue #%d to parent #%d failed", issue.Number, parentNum))
 		}
@@ -307,7 +310,7 @@ func (g *Generator) CreateIssuesFromFiles(ctx context.Context, workflowID string
 	}
 
 	if totalToPublish > 0 {
-		g.emitIssuesPublishingProgress(workflowID, "completed", createdCount, totalToPublish, nil, 0, dryRun, "issue publishing completed")
+		g.emitIssuesPublishingProgress(PublishingProgressParams{WorkflowID: workflowID, Stage: "completed", Current: createdCount, Total: totalToPublish, DryRun: dryRun, Message: "issue publishing completed"})
 	}
 
 	return result, nil
@@ -384,7 +387,7 @@ func (g *Generator) readIssueFile(workflowID string, input IssueInput) (title, b
 
 	root, err := g.getProjectRoot()
 	if err != nil {
-		return "", "", "", fmt.Errorf("resolving project root: %w", err)
+		return "", "", "", fmt.Errorf(errResolvingProjectRoot, err)
 	}
 
 	baseDir := g.resolveIssuesBaseDir()
@@ -413,7 +416,7 @@ func (g *Generator) readIssueFile(workflowID string, input IssueInput) (title, b
 		draftPath := filepath.Clean(filepath.Join(issuesDirAbs, "draft", path))
 		rel, relErr := filepath.Rel(absIssuesDir, draftPath)
 		if relErr != nil || strings.HasPrefix(rel, "..") {
-			return "", "", "", fmt.Errorf("issue file is outside issues dir: %s", draftPath)
+			return "", "", "", fmt.Errorf(errIssueFileOutsideDir, draftPath)
 		}
 		if _, statErr := os.Stat(draftPath); statErr == nil {
 			absPath = draftPath
@@ -422,7 +425,7 @@ func (g *Generator) readIssueFile(workflowID string, input IssueInput) (title, b
 			basePath := filepath.Clean(filepath.Join(issuesDirAbs, path))
 			rel, relErr := filepath.Rel(absIssuesDir, basePath)
 			if relErr != nil || strings.HasPrefix(rel, "..") {
-				return "", "", "", fmt.Errorf("issue file is outside issues dir: %s", basePath)
+				return "", "", "", fmt.Errorf(errIssueFileOutsideDir, basePath)
 			}
 			absPath = basePath
 			relPath = filepath.Join(issuesDirRel, path)
@@ -435,7 +438,7 @@ func (g *Generator) readIssueFile(workflowID string, input IssueInput) (title, b
 	}
 	rel, relErr := filepath.Rel(absIssuesDir, absResolved)
 	if relErr != nil || strings.HasPrefix(rel, "..") {
-		return "", "", "", fmt.Errorf("issue file is outside issues dir: %s", absResolved)
+		return "", "", "", fmt.Errorf(errIssueFileOutsideDir, absResolved)
 	}
 
 	content, err := os.ReadFile(absResolved)

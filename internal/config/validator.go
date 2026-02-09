@@ -37,6 +37,9 @@ func (e ValidationErrors) HasErrors() bool {
 	return len(e) > 0
 }
 
+// Validation message constants for duplicated strings (S1192).
+const msgInvalidReasoningEffort = "invalid reasoning effort (valid: none, minimal, low, medium, high, xhigh, max)"
+
 // Validator validates configuration.
 type Validator struct {
 	errors ValidationErrors
@@ -231,7 +234,7 @@ func (v *Validator) validateReasoningEffortDefault(prefix, effort string) {
 	}
 
 	if !core.IsValidReasoningEffort(effort) {
-		v.addError(prefix, effort, "invalid reasoning effort (valid: none, minimal, low, medium, high, xhigh, max)")
+		v.addError(prefix, effort, msgInvalidReasoningEffort)
 	}
 }
 
@@ -246,7 +249,7 @@ func (v *Validator) validateReasoningEffortPhases(prefix string, phases map[stri
 			continue
 		}
 		if !core.IsValidReasoningEffort(effort) {
-			v.addError(prefix+"."+key, effort, "invalid reasoning effort (valid: none, minimal, low, medium, high, xhigh, max)")
+			v.addError(prefix+"."+key, effort, msgInvalidReasoningEffort)
 		}
 	}
 }
@@ -341,22 +344,7 @@ func (v *Validator) validateIssues(cfg *IssuesConfig) {
 		}
 	}
 
-	validTones := map[string]bool{
-		"professional": true, "casual": true, "technical": true, "concise": true, "": true,
-	}
-	if !validTones[cfg.Template.Tone] {
-		v.addError("issues.template.tone", cfg.Template.Tone, "must be one of: professional, casual, technical, concise")
-	}
-
-	validLanguages := map[string]bool{
-		"english": true, "spanish": true, "french": true, "german": true,
-		"portuguese": true, "chinese": true, "japanese": true, "": true,
-	}
-	language := normalizeIssueLanguage(cfg.Template.Language)
-	if !validLanguages[language] {
-		v.addError("issues.template.language", cfg.Template.Language,
-			"must be one of: english, spanish, french, german, portuguese, chinese, japanese")
-	}
+	v.validateIssueTemplate(&cfg.Template)
 
 	if cfg.Provider == "gitlab" && cfg.GitLab.ProjectID == "" {
 		v.addError("issues.gitlab.project_id", cfg.GitLab.ProjectID,
@@ -365,6 +353,25 @@ func (v *Validator) validateIssues(cfg *IssuesConfig) {
 
 	// Validate generator
 	v.validateIssueGenerator(&cfg.Generator)
+}
+
+func (v *Validator) validateIssueTemplate(tmpl *IssueTemplateConfig) {
+	validTones := map[string]bool{
+		"professional": true, "casual": true, "technical": true, "concise": true, "": true,
+	}
+	if !validTones[tmpl.Tone] {
+		v.addError("issues.template.tone", tmpl.Tone, "must be one of: professional, casual, technical, concise")
+	}
+
+	validLanguages := map[string]bool{
+		"english": true, "spanish": true, "french": true, "german": true,
+		"portuguese": true, "chinese": true, "japanese": true, "": true,
+	}
+	language := normalizeIssueLanguage(tmpl.Language)
+	if !validLanguages[language] {
+		v.addError("issues.template.language", tmpl.Language,
+			"must be one of: english, spanish, french, german, portuguese, chinese, japanese")
+	}
 }
 
 func (v *Validator) validateIssueGenerator(cfg *IssueGeneratorConfig) {
@@ -378,7 +385,7 @@ func (v *Validator) validateIssueGenerator(cfg *IssueGeneratorConfig) {
 
 	if cfg.ReasoningEffort != "" && !core.IsValidReasoningEffort(cfg.ReasoningEffort) {
 		v.addError("issues.generator.reasoning_effort", cfg.ReasoningEffort,
-			"invalid reasoning effort (valid: none, minimal, low, medium, high, xhigh, max)")
+			msgInvalidReasoningEffort)
 	}
 
 	if cfg.MaxBodyLength < 0 {

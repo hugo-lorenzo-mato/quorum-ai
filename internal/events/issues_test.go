@@ -7,10 +7,18 @@ import (
 
 func TestNewIssuesGenerationProgressEvent(t *testing.T) {
 	before := time.Now()
-	event := NewIssuesGenerationProgressEvent(
-		"wf-gen-1", "proj-1", "generating", 3, 10,
-		"Generating issue 3 of 10", "003-fix-auth.md", "Fix auth flow", "task-42", true,
-	)
+	event := NewIssuesGenerationProgressEvent(IssuesGenerationProgressParams{
+		WorkflowID:  "wf-gen-1",
+		ProjectID:   "proj-1",
+		Stage:       "generating",
+		Current:     3,
+		Total:       10,
+		Message:     "Generating issue 3 of 10",
+		FileName:    "003-fix-auth.md",
+		Title:       "Fix auth flow",
+		TaskID:      "task-42",
+		IsMainIssue: true,
+	})
 	after := time.Now()
 
 	if event.EventType() != TypeIssuesGenerationProgress {
@@ -53,10 +61,19 @@ func TestNewIssuesGenerationProgressEvent(t *testing.T) {
 
 func TestNewIssuesPublishingProgressEvent(t *testing.T) {
 	before := time.Now()
-	event := NewIssuesPublishingProgressEvent(
-		"wf-pub-1", "proj-2", "publishing", 2, 5,
-		"Publishing issue 2 of 5", "Add CI pipeline", "task-99", false, 42, true,
-	)
+	event := NewIssuesPublishingProgressEvent(IssuesPublishingProgressParams{
+		WorkflowID:  "wf-pub-1",
+		ProjectID:   "proj-2",
+		Stage:       "publishing",
+		Current:     2,
+		Total:       5,
+		Message:     "Publishing issue 2 of 5",
+		Title:       "Add CI pipeline",
+		TaskID:      "task-99",
+		IsMainIssue: false,
+		IssueNumber: 42,
+		DryRun:      true,
+	})
 	after := time.Now()
 
 	if event.EventType() != TypeIssuesPublishingProgress {
@@ -110,11 +127,11 @@ func TestIssuesEventTypeConstants(t *testing.T) {
 }
 
 func TestIssuesGenerationProgressEvent_ImplementsEventInterface(t *testing.T) {
-	event := NewIssuesGenerationProgressEvent("wf-1", "proj-1", "start", 0, 0, "", "", "", "", false)
+	event := NewIssuesGenerationProgressEvent(IssuesGenerationProgressParams{WorkflowID: "wf-1", ProjectID: "proj-1", Stage: "start"})
 	var _ Event = event // Compile-time check
 }
 
 func TestIssuesPublishingProgressEvent_ImplementsEventInterface(t *testing.T) {
-	event := NewIssuesPublishingProgressEvent("wf-1", "proj-1", "start", 0, 0, "", "", "", false, 0, false)
+	event := NewIssuesPublishingProgressEvent(IssuesPublishingProgressParams{WorkflowID: "wf-1", ProjectID: "proj-1", Stage: "start"})
 	var _ Event = event // Compile-time check
 }

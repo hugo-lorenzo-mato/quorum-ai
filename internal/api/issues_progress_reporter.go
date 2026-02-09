@@ -30,18 +30,18 @@ func (r *issuesSSEProgressReporter) OnIssuesGenerationProgress(workflowID, stage
 		taskID = issue.TaskID
 		isMain = issue.IsMainIssue
 	}
-	r.bus.Publish(events.NewIssuesGenerationProgressEvent(
-		workflowID,
-		r.projectID,
-		stage,
-		current,
-		total,
-		message,
-		fileName,
-		title,
-		taskID,
-		isMain,
-	))
+	r.bus.Publish(events.NewIssuesGenerationProgressEvent(events.IssuesGenerationProgressParams{
+		WorkflowID:  workflowID,
+		ProjectID:   r.projectID,
+		Stage:       stage,
+		Current:     current,
+		Total:       total,
+		Message:     message,
+		FileName:    fileName,
+		Title:       title,
+		TaskID:      taskID,
+		IsMainIssue: isMain,
+	}))
 }
 
 func (r *issuesSSEProgressReporter) OnIssuesPublishingProgress(workflowID, stage string, current, total int, issue *issues.ProgressIssue, issueNumber int, dryRun bool, message string) {
@@ -55,18 +55,17 @@ func (r *issuesSSEProgressReporter) OnIssuesPublishingProgress(workflowID, stage
 		taskID = issue.TaskID
 		isMain = issue.IsMainIssue
 	}
-	r.bus.Publish(events.NewIssuesPublishingProgressEvent(
-		workflowID,
-		r.projectID,
-		stage,
-		current,
-		total,
-		message,
-		title,
-		taskID,
-		isMain,
-		issueNumber,
-		dryRun,
-	))
+	r.bus.Publish(events.NewIssuesPublishingProgressEvent(events.IssuesPublishingProgressParams{
+		WorkflowID:  workflowID,
+		ProjectID:   r.projectID,
+		Stage:       stage,
+		Current:     current,
+		Total:       total,
+		Message:     message,
+		Title:       title,
+		TaskID:      taskID,
+		IsMainIssue: isMain,
+		IssueNumber: issueNumber,
+		DryRun:      dryRun,
+	}))
 }
-

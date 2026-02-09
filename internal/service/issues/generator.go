@@ -17,6 +17,13 @@ import (
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service"
 )
 
+// Error format strings for duplicated messages (S1192).
+const (
+	errResolvingProjectRoot = "resolving project root: %w"
+	errGettingProjectRoot   = "getting project root: %w"
+	errResolvingDraftDir    = "resolving draft directory: %w"
+)
+
 // IssueInput represents a single issue to be created (from frontend edits).
 type IssueInput struct {
 	Title       string
@@ -69,11 +76,23 @@ func (g *Generator) emitIssuesGenerationProgress(workflowID, stage string, curre
 	g.progress.OnIssuesGenerationProgress(workflowID, stage, current, total, issue, message)
 }
 
-func (g *Generator) emitIssuesPublishingProgress(workflowID, stage string, current, total int, issue *ProgressIssue, issueNumber int, dryRun bool, message string) {
+// PublishingProgressParams holds parameters for emitting a publishing progress event.
+type PublishingProgressParams struct {
+	WorkflowID  string
+	Stage       string
+	Current     int
+	Total       int
+	Issue       *ProgressIssue
+	IssueNumber int
+	DryRun      bool
+	Message     string
+}
+
+func (g *Generator) emitIssuesPublishingProgress(p PublishingProgressParams) {
 	if g.progress == nil {
 		return
 	}
-	g.progress.OnIssuesPublishingProgress(workflowID, stage, current, total, issue, issueNumber, dryRun, message)
+	g.progress.OnIssuesPublishingProgress(p.WorkflowID, p.Stage, p.Current, p.Total, p.Issue, p.IssueNumber, p.DryRun, p.Message)
 }
 
 // getProjectRoot returns the project root, falling back to os.Getwd() if not set.
@@ -92,7 +111,7 @@ func (g *Generator) resolveDraftDir(workflowID string) (string, error) {
 	}
 	root, err := g.getProjectRoot()
 	if err != nil {
-		return "", fmt.Errorf("resolving project root: %w", err)
+		return "", fmt.Errorf(errResolvingProjectRoot, err)
 	}
 	baseDir := ".quorum/issues"
 	if g.config.DraftDirectory != "" {
@@ -112,7 +131,7 @@ func (g *Generator) resolvePublishedDir(workflowID string) (string, error) {
 	}
 	root, err := g.getProjectRoot()
 	if err != nil {
-		return "", fmt.Errorf("resolving project root: %w", err)
+		return "", fmt.Errorf(errResolvingProjectRoot, err)
 	}
 	baseDir := ".quorum/issues"
 	if g.config.DraftDirectory != "" {
@@ -381,7 +400,10 @@ func (g *Generator) Generate(ctx context.Context, opts GenerateOptions) (*Genera
 
 		// Emit a "started" publishing event once we know the total.
 		if totalToPublish > 0 {
-			g.emitIssuesPublishingProgress(opts.WorkflowID, "started", 0, totalToPublish, nil, 0, opts.DryRun, "issue publishing started")
+			g.emitIssuesPublishingProgress(PublishingProgressParams{
+				WorkflowID: opts.WorkflowID, Stage: "started", Total: totalToPublish,
+				DryRun: opts.DryRun, Message: "issue publishing started",
+			})
 		}
 
 		if consolidatedContent != "" {
@@ -421,11 +443,10 @@ func (g *Generator) Generate(ctx context.Context, opts GenerateOptions) (*Genera
 					IsMainIssue: true,
 				})
 				createdCount++
-				g.emitIssuesPublishingProgress(opts.WorkflowID, "progress", createdCount, totalToPublish, &ProgressIssue{
-					Title:       mainTitle,
-					TaskID:      "main",
-					IsMainIssue: true,
-				}, 0, true, "")
+				g.emitIssuesPublishingProgress(PublishingProgressParams{
+					WorkflowID: opts.WorkflowID, Stage: "progress", Current: createdCount, Total: totalToPublish,
+					Issue: &ProgressIssue{Title: mainTitle, TaskID: "main", IsMainIssue: true}, DryRun: true,
+				})
 			} else {
 				mainIssue, err = g.client.CreateIssue(ctx, core.CreateIssueOptions{
 					Title:     mainTitle,
@@ -438,16 +459,18 @@ func (g *Generator) Generate(ctx context.Context, opts GenerateOptions) (*Genera
 				}
 				result.IssueSet.MainIssue = mainIssue
 				createdCount++
-				g.emitIssuesPublishingProgress(opts.WorkflowID, "progress", createdCount, totalToPublish, &ProgressIssue{
-					Title:       mainIssue.Title,
-					TaskID:      "main",
-					IsMainIssue: true,
-				}, mainIssue.Number, false, "")
+				g.emitIssuesPublishingProgress(PublishingProgressParams{
+					WorkflowID: opts.WorkflowID, Stage: "progress", Current: createdCount, Total: totalToPublish,
+					Issue: &ProgressIssue{Title: mainIssue.Title, TaskID: "main", IsMainIssue: true}, IssueNumber: mainIssue.Number,
+				})
 			}
 		}
 	} else if totalToPublish > 0 {
 		// No main issue: still emit a started event for sub-issue publishing.
-		g.emitIssuesPublishingProgress(opts.WorkflowID, "started", 0, totalToPublish, nil, 0, opts.DryRun, "issue publishing started")
+		g.emitIssuesPublishingProgress(PublishingProgressParams{
+			WorkflowID: opts.WorkflowID, Stage: "started", Total: totalToPublish,
+			DryRun: opts.DryRun, Message: "issue publishing started",
+		})
 	}
 
 	// Read and create sub-issues from task files
@@ -489,11 +512,10 @@ func (g *Generator) Generate(ctx context.Context, opts GenerateOptions) (*Genera
 					TaskID:      task.ID,
 				})
 				createdCount++
-				g.emitIssuesPublishingProgress(opts.WorkflowID, "progress", createdCount, totalToPublish, &ProgressIssue{
-					Title:       taskTitle,
-					TaskID:      task.ID,
-					IsMainIssue: false,
-				}, 0, true, "")
+				g.emitIssuesPublishingProgress(PublishingProgressParams{
+					WorkflowID: opts.WorkflowID, Stage: "progress", Current: createdCount, Total: totalToPublish,
+					Issue: &ProgressIssue{Title: taskTitle, TaskID: task.ID}, DryRun: true,
+				})
 			} else {
 				parentNum := 0
 				if opts.LinkIssues && mainIssue != nil {
@@ -513,19 +535,20 @@ func (g *Generator) Generate(ctx context.Context, opts GenerateOptions) (*Genera
 				}
 				result.IssueSet.SubIssues = append(result.IssueSet.SubIssues, subIssue)
 				createdCount++
-				g.emitIssuesPublishingProgress(opts.WorkflowID, "progress", createdCount, totalToPublish, &ProgressIssue{
-					Title:       subIssue.Title,
-					TaskID:      task.ID,
-					IsMainIssue: false,
-				}, subIssue.Number, false, "")
+				g.emitIssuesPublishingProgress(PublishingProgressParams{
+					WorkflowID: opts.WorkflowID, Stage: "progress", Current: createdCount, Total: totalToPublish,
+					Issue: &ProgressIssue{Title: subIssue.Title, TaskID: task.ID}, IssueNumber: subIssue.Number,
+				})
 			}
 		}
 	}
 
 	// Make sure we always end with a "completed" progress update when we had a defined total.
 	if totalToPublish > 0 {
-		finalCount := createdCount
-		g.emitIssuesPublishingProgress(opts.WorkflowID, "completed", finalCount, totalToPublish, nil, 0, opts.DryRun, "issue publishing completed")
+		g.emitIssuesPublishingProgress(PublishingProgressParams{
+			WorkflowID: opts.WorkflowID, Stage: "completed", Current: createdCount, Total: totalToPublish,
+			DryRun: opts.DryRun, Message: "issue publishing completed",
+		})
 	}
 
 	return result, nil
@@ -898,7 +921,7 @@ func (g *Generator) GetIssueSet(_ context.Context, _ string) (*core.IssueSet, er
 func (g *Generator) cleanIssuesDirectory(workflowID string) error {
 	draftDir, err := g.resolveDraftDir(workflowID)
 	if err != nil {
-		return fmt.Errorf("resolving draft directory: %w", err)
+		return fmt.Errorf(errResolvingDraftDir, err)
 	}
 
 	// Check if directory exists
@@ -961,7 +984,7 @@ func (g *Generator) GenerateIssueFiles(ctx context.Context, workflowID string) (
 	// Create output directory
 	root, err := g.getProjectRoot()
 	if err != nil {
-		return nil, fmt.Errorf("getting project root: %w", err)
+		return nil, fmt.Errorf(errGettingProjectRoot, err)
 	}
 
 	// Clean the draft directory before generation to avoid duplicates
@@ -971,7 +994,7 @@ func (g *Generator) GenerateIssueFiles(ctx context.Context, workflowID string) (
 
 	draftDirAbs, err := g.resolveDraftDir(workflowID)
 	if err != nil {
-		return nil, fmt.Errorf("resolving draft directory: %w", err)
+		return nil, fmt.Errorf(errResolvingDraftDir, err)
 	}
 	if err := os.MkdirAll(draftDirAbs, 0o755); err != nil {
 		return nil, fmt.Errorf("creating draft directory: %w", err)
@@ -1323,7 +1346,7 @@ func (g *Generator) splitIntoBatches(tasks []service.IssueTaskFile, batchSize in
 func (g *Generator) getConsolidatedAnalysisPath() (string, error) {
 	root, err := g.getProjectRoot()
 	if err != nil {
-		return "", fmt.Errorf("getting project root: %w", err)
+		return "", fmt.Errorf(errGettingProjectRoot, err)
 	}
 
 	// Get relative reportDir (in case it's absolute)
@@ -1356,7 +1379,7 @@ func (g *Generator) getConsolidatedAnalysisPath() (string, error) {
 func (g *Generator) getTaskFilePaths() ([]service.IssueTaskFile, error) {
 	root, err := g.getProjectRoot()
 	if err != nil {
-		return nil, fmt.Errorf("getting project root: %w", err)
+		return nil, fmt.Errorf(errGettingProjectRoot, err)
 	}
 
 	// Get relative reportDir (in case it's absolute)
@@ -1843,7 +1866,7 @@ func (g *Generator) ReadGeneratedIssues(workflowID string) ([]IssuePreview, erro
 	// Fallback: read from the flat base directory (backward compat with old layout)
 	root, err := g.getProjectRoot()
 	if err != nil {
-		return nil, fmt.Errorf("resolving project root: %w", err)
+		return nil, fmt.Errorf(errResolvingProjectRoot, err)
 	}
 	baseDir := g.resolveIssuesBaseDir()
 	issuesDir := filepath.Join(root, baseDir, workflowID)

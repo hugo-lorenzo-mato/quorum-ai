@@ -19,6 +19,14 @@ import (
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service/issues"
 )
 
+// Error/message constants for duplicated strings (S1192).
+const (
+	errInvalidRequestBody = "invalid request body: %s"
+	errReadDraftsFailed   = "failed to read drafts: %v"
+	msgIssuesDisabled     = "issue generation is disabled in configuration"
+	msgReadIssuesFailed   = "reading generated issues failed"
+)
+
 // IssueInput represents a single issue to be created (from frontend edits).
 type IssueInput struct {
 	// Title is the issue title.
@@ -152,7 +160,7 @@ func (s *Server) handleGenerateIssues(w http.ResponseWriter, r *http.Request) {
 	var req GenerateIssuesRequest
 	if r.Body != nil && r.ContentLength > 0 {
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			respondError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err.Error()))
+			respondError(w, http.StatusBadRequest, fmt.Sprintf(errInvalidRequestBody, err.Error()))
 			return
 		}
 	} else {
@@ -175,7 +183,7 @@ func (s *Server) handleGenerateIssues(w http.ResponseWriter, r *http.Request) {
 
 	// Check if issues are enabled
 	if !issuesCfg.Enabled {
-		respondError(w, http.StatusBadRequest, "issue generation is disabled in configuration")
+		respondError(w, http.StatusBadRequest, msgIssuesDisabled)
 		return
 	}
 
@@ -274,8 +282,8 @@ func (s *Server) handleGenerateIssues(w http.ResponseWriter, r *http.Request) {
 
 		previews, err := generator.ReadGeneratedIssues(workflowID)
 		if err != nil {
-			slog.Error("reading generated issues failed", "error", err, "workflow_id", workflowID)
-			respondError(w, http.StatusInternalServerError, "reading generated issues failed")
+			slog.Error(msgReadIssuesFailed, "error", err, "workflow_id", workflowID)
+			respondError(w, http.StatusInternalServerError, msgReadIssuesFailed)
 			return
 		}
 
@@ -419,7 +427,7 @@ func (s *Server) handleSaveIssuesFiles(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !issuesCfg.Enabled {
-		respondError(w, http.StatusBadRequest, "issue generation is disabled in configuration")
+		respondError(w, http.StatusBadRequest, msgIssuesDisabled)
 		return
 	}
 
@@ -583,8 +591,8 @@ func (s *Server) handlePreviewIssues(w http.ResponseWriter, r *http.Request) {
 		// Read the generated files
 		previews, err := generator.ReadGeneratedIssues(workflowID)
 		if err != nil {
-			slog.Error("reading generated issues failed", "error", err, "workflow_id", workflowID)
-			respondError(w, http.StatusInternalServerError, "reading generated issues failed")
+			slog.Error(msgReadIssuesFailed, "error", err, "workflow_id", workflowID)
+			respondError(w, http.StatusInternalServerError, msgReadIssuesFailed)
 			return
 		}
 
@@ -909,7 +917,7 @@ func (s *Server) handleListDrafts(w http.ResponseWriter, r *http.Request) {
 
 	drafts, err := generator.ReadAllDrafts(workflowID)
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, fmt.Sprintf("failed to read drafts: %v", err))
+		respondError(w, http.StatusInternalServerError, fmt.Sprintf(errReadDraftsFailed, err))
 		return
 	}
 
@@ -941,7 +949,7 @@ func (s *Server) handleEditDraft(w http.ResponseWriter, r *http.Request) {
 
 	var req DraftUpdateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err.Error()))
+		respondError(w, http.StatusBadRequest, fmt.Sprintf(errInvalidRequestBody, err.Error()))
 		return
 	}
 
@@ -959,7 +967,7 @@ func (s *Server) handleEditDraft(w http.ResponseWriter, r *http.Request) {
 
 	drafts, err := generator.ReadAllDrafts(workflowID)
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, fmt.Sprintf("failed to read drafts: %v", err))
+		respondError(w, http.StatusInternalServerError, fmt.Sprintf(errReadDraftsFailed, err))
 		return
 	}
 
@@ -977,18 +985,7 @@ func (s *Server) handleEditDraft(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Apply updates
-	if req.Title != nil {
-		target.Title = *req.Title
-	}
-	if req.Body != nil {
-		target.Body = *req.Body
-	}
-	if req.Labels != nil {
-		target.Labels = *req.Labels
-	}
-	if req.Assignees != nil {
-		target.Assignees = *req.Assignees
-	}
+	applyDraftUpdates(target, req)
 
 	// Write back using draft file APIs
 	fileName := filepath.Base(target.FilePath)
@@ -1016,6 +1013,22 @@ func (s *Server) handleEditDraft(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// applyDraftUpdates applies non-nil fields from the update request to the target draft.
+func applyDraftUpdates(target *issues.IssuePreview, req DraftUpdateRequest) {
+	if req.Title != nil {
+		target.Title = *req.Title
+	}
+	if req.Body != nil {
+		target.Body = *req.Body
+	}
+	if req.Labels != nil {
+		target.Labels = *req.Labels
+	}
+	if req.Assignees != nil {
+		target.Assignees = *req.Assignees
+	}
+}
+
 // handlePublishDrafts publishes draft issues to GitHub.
 // POST /api/v1/workflows/{workflowID}/issues/publish
 func (s *Server) handlePublishDrafts(w http.ResponseWriter, r *http.Request) {
@@ -1025,7 +1038,7 @@ func (s *Server) handlePublishDrafts(w http.ResponseWriter, r *http.Request) {
 	var req PublishRequest
 	if r.Body != nil && r.ContentLength > 0 {
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			respondError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err.Error()))
+			respondError(w, http.StatusBadRequest, fmt.Sprintf(errInvalidRequestBody, err.Error()))
 			return
 		}
 	}
@@ -1040,7 +1053,7 @@ func (s *Server) handlePublishDrafts(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !issuesCfg.Enabled {
-		respondError(w, http.StatusBadRequest, "issue generation is disabled in configuration")
+		respondError(w, http.StatusBadRequest, msgIssuesDisabled)
 		return
 	}
 
@@ -1058,7 +1071,7 @@ func (s *Server) handlePublishDrafts(w http.ResponseWriter, r *http.Request) {
 	// Read all drafts
 	drafts, err := generator.ReadAllDrafts(workflowID)
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, fmt.Sprintf("failed to read drafts: %v", err))
+		respondError(w, http.StatusInternalServerError, fmt.Sprintf(errReadDraftsFailed, err))
 		return
 	}
 	if len(drafts) == 0 {
@@ -1067,21 +1080,44 @@ func (s *Server) handlePublishDrafts(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Filter by task IDs if specified
-	if len(req.TaskIDs) > 0 {
-		taskIDSet := make(map[string]bool, len(req.TaskIDs))
-		for _, id := range req.TaskIDs {
-			taskIDSet[id] = true
-		}
-		filtered := make([]issues.IssuePreview, 0)
-		for _, d := range drafts {
-			if taskIDSet[d.TaskID] || (d.IsMainIssue && taskIDSet["main"]) {
-				filtered = append(filtered, d)
-			}
-		}
-		drafts = filtered
-	}
+	drafts = filterDraftsByTaskIDs(drafts, req.TaskIDs)
 
 	// Convert to IssueInputs for CreateIssuesFromFiles
+	inputs := draftsToInputs(drafts)
+
+	labels := issuesCfg.Labels
+	assignees := issuesCfg.Assignees
+
+	result, err := generator.CreateIssuesFromFiles(ctx, workflowID, inputs, req.DryRun, req.LinkIssues, labels, assignees)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, fmt.Sprintf("publish failed: %v", err))
+		return
+	}
+
+	respondJSON(w, http.StatusOK, buildPublishResponse(workflowID, result))
+}
+
+// filterDraftsByTaskIDs filters drafts to only include those matching the given task IDs.
+// If taskIDs is empty, all drafts are returned unchanged.
+func filterDraftsByTaskIDs(drafts []issues.IssuePreview, taskIDs []string) []issues.IssuePreview {
+	if len(taskIDs) == 0 {
+		return drafts
+	}
+	taskIDSet := make(map[string]bool, len(taskIDs))
+	for _, id := range taskIDs {
+		taskIDSet[id] = true
+	}
+	filtered := make([]issues.IssuePreview, 0, len(drafts))
+	for _, d := range drafts {
+		if taskIDSet[d.TaskID] || (d.IsMainIssue && taskIDSet["main"]) {
+			filtered = append(filtered, d)
+		}
+	}
+	return filtered
+}
+
+// draftsToInputs converts issue previews to issue inputs for CreateIssuesFromFiles.
+func draftsToInputs(drafts []issues.IssuePreview) []issues.IssueInput {
 	inputs := make([]issues.IssueInput, 0, len(drafts))
 	for _, d := range drafts {
 		inputs = append(inputs, issues.IssueInput{
@@ -1094,16 +1130,11 @@ func (s *Server) handlePublishDrafts(w http.ResponseWriter, r *http.Request) {
 			FilePath:    d.FilePath,
 		})
 	}
+	return inputs
+}
 
-	labels := issuesCfg.Labels
-	assignees := issuesCfg.Assignees
-
-	result, err := generator.CreateIssuesFromFiles(ctx, workflowID, inputs, req.DryRun, req.LinkIssues, labels, assignees)
-	if err != nil {
-		respondError(w, http.StatusInternalServerError, fmt.Sprintf("publish failed: %v", err))
-		return
-	}
-
+// buildPublishResponse converts a GenerateResult into a PublishResponse.
+func buildPublishResponse(workflowID string, result *issues.GenerateResult) PublishResponse {
 	var records []PublishedRecord
 	if result.IssueSet.MainIssue != nil {
 		records = append(records, PublishedRecord{
@@ -1126,11 +1157,10 @@ func (s *Server) handlePublishDrafts(w http.ResponseWriter, r *http.Request) {
 			IsMain:   preview.IsMainIssue,
 		})
 	}
-
-	respondJSON(w, http.StatusOK, PublishResponse{
+	return PublishResponse{
 		WorkflowID: workflowID,
 		Published:  records,
-	})
+	}
 }
 
 // handleIssuesStatus returns the current status of issue drafts and published issues.

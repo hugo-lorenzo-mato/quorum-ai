@@ -16,7 +16,7 @@ func (g *Generator) openIssuesLogger(workflowID string) (*slog.Logger, func() er
 	}
 	root, err := g.getProjectRoot()
 	if err != nil {
-		return nil, nil, fmt.Errorf("getting project root: %w", err)
+		return nil, nil, fmt.Errorf(errGettingProjectRoot, err)
 	}
 
 	logDir := filepath.Join(root, ".quorum", "logs")

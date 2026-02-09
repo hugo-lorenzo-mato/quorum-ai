@@ -114,165 +114,106 @@ export default function useSSE() {
     }
   }, []);
 
-  const handleEvent = useCallback((eventType, data) => {
-    // Persist a replayable execution timeline (per project + workflow) for the workflow detail view.
-    // We intentionally ingest before the switch so we don't miss anything due to handler errors.
-    if (eventType && eventType !== 'connected' && eventType !== 'message') {
-      try {
-        ingestSSEEvent(eventType, data, currentProjectId);
-      } catch (e) {
-        // Never break live updates due to telemetry persistence failures.
-        console.warn('Failed to ingest SSE event into execution store', e);
-      }
+  // --- Issue-specific SSE handlers (extracted to reduce cognitive complexity) ---
+
+  const handleIssuesGenerationProgress = useCallback((data) => {
+    const st = useIssuesStore.getState();
+    if (!st.generating || !st.workflowId || st.workflowId !== data?.workflow_id) return;
+
+    const total = typeof data?.total === 'number' ? data.total : null;
+    const current = typeof data?.current === 'number' ? data.current : st.generationProgress;
+
+    if (data?.stage === 'file_generated') {
+      const issue = {
+        title: data?.title || data?.file_name || 'Generated issue',
+        body: '',
+        labels: [],
+        assignees: [],
+        is_main_issue: !!data?.is_main_issue,
+        task_id: data?.task_id || null,
+        file_path: data?.file_name || null,
+      };
+      updateGenerationProgress(current, issue, total);
+    } else {
+      updateGenerationProgress(current, null, total);
     }
+  }, [updateGenerationProgress]);
 
-    switch (eventType) {
-      // Workflow events
-      case 'workflow_started':
-        handleWorkflowStarted(data);
-        break;
-      case 'workflow_state_updated':
-        handleWorkflowStateUpdated(data);
-        break;
-      case 'workflow_completed':
-        handleWorkflowCompleted(data);
-        notifyInfo(`Workflow ${data.workflow_id} completed`);
-        break;
-      case 'workflow_failed':
-        handleWorkflowFailed(data);
-        if (String(data?.error_code || '').toUpperCase() === 'CANCELLED') {
-          notifyInfo(`Workflow ${data.workflow_id} cancelled`);
-        } else {
-          notifyError(`Workflow ${data.workflow_id} failed: ${data.error}`);
-        }
-        break;
-      case 'workflow_paused':
-        handleWorkflowPaused(data);
-        notifyInfo(`Workflow ${data.workflow_id} paused`);
-        break;
-      case 'workflow_resumed':
-        handleWorkflowResumed(data);
-        notifyInfo(`Workflow ${data.workflow_id} resumed`);
-        break;
+  const handleIssuesPublishingProgress = useCallback((data) => {
+    const st = useIssuesStore.getState();
+    if (!st.submitting || !st.workflowId || st.workflowId !== data?.workflow_id) return;
 
-      // Phase events
-      case 'phase_started':
-        handlePhaseStarted(data);
-        break;
-      case 'phase_completed':
-        handlePhaseCompleted(data);
-        break;
+    const total = typeof data?.total === 'number' ? data.total : null;
+    const current = typeof data?.current === 'number' ? data.current : 0;
+    updatePublishingProgress(current, total, data?.message || null);
+  }, [updatePublishingProgress]);
 
-      // Task events
-      case 'task_created':
-        handleTaskCreated(data);
-        break;
-      case 'task_started':
-        handleTaskStarted(data);
-        break;
-      case 'task_progress':
-        handleTaskProgress(data);
-        break;
-      case 'task_completed':
-        handleTaskCompleted(data);
-        break;
-      case 'task_failed':
-        handleTaskFailed(data);
-        break;
-      case 'task_skipped':
-        handleTaskSkipped(data);
-        break;
-      case 'task_retry':
-        handleTaskRetry(data);
-        break;
-
-      // Agent events
-      case 'agent_event':
-        handleAgentEvent(data);
-        break;
-
-      // Config / provenance events
-      case 'config_loaded':
-        // Persisted by ingestSSEEvent; no store updates required.
-        break;
-
-      // Log events
-      case 'log':
-        // Persisted by ingestSSEEvent; no further store updates needed.
-        break;
-
-      // Kanban events
-      case 'kanban_workflow_moved':
-        handleKanbanWorkflowMoved(data);
-        break;
-      case 'kanban_execution_started':
-        handleKanbanExecutionStarted(data);
-        break;
-      case 'kanban_execution_completed':
-        handleKanbanExecutionCompleted(data);
-        break;
-      case 'kanban_execution_failed':
-        handleKanbanExecutionFailed(data);
-        break;
-      case 'kanban_engine_state_changed':
-        handleKanbanEngineStateChanged(data);
-        break;
-      case 'kanban_circuit_breaker_opened':
-        handleKanbanCircuitBreakerOpened(data);
-        notifyError('Kanban engine circuit breaker opened - too many failures');
-        break;
-
-      // Issues progress events
-      case 'issues_generation_progress': {
-        const st = useIssuesStore.getState();
-        if (st.generating && st.workflowId && st.workflowId === data?.workflow_id) {
-          const total = typeof data?.total === 'number' ? data.total : null;
-          const current = typeof data?.current === 'number' ? data.current : st.generationProgress;
-
-          if (data?.stage === 'file_generated') {
-            const issue = {
-              title: data?.title || data?.file_name || 'Generated issue',
-              body: '',
-              labels: [],
-              assignees: [],
-              is_main_issue: !!data?.is_main_issue,
-              task_id: data?.task_id || null,
-              file_path: data?.file_name || null,
-            };
-            updateGenerationProgress(current, issue, total);
-          } else {
-            updateGenerationProgress(current, null, total);
-          }
-        }
-        break;
-      }
-
-      case 'issues_publishing_progress': {
-        const st = useIssuesStore.getState();
-        if (st.submitting && st.workflowId && st.workflowId === data?.workflow_id) {
-          const total = typeof data?.total === 'number' ? data.total : null;
-          const current = typeof data?.current === 'number' ? data.current : 0;
-          updatePublishingProgress(current, total, data?.message || null);
-        }
-        break;
-      }
-
-      // Connection events
-      case 'connected':
-        setSSEConnected(true);
-        setConnectionMode(CONNECTION_MODE.SSE);
-        reconnectAttemptRef.current = 0;
-        stopPolling(); // Stop polling when SSE reconnects
-        break;
-
-      default:
-        console.log('Unhandled SSE event:', eventType, data);
+  const handleWorkflowFailedEvent = useCallback((data) => {
+    handleWorkflowFailed(data);
+    if (String(data?.error_code || '').toUpperCase() === 'CANCELLED') {
+      notifyInfo(`Workflow ${data.workflow_id} cancelled`);
+    } else {
+      notifyError(`Workflow ${data.workflow_id} failed: ${data.error}`);
     }
-  }, [
+  }, [handleWorkflowFailed, notifyInfo, notifyError]);
+
+  const handleConnectedEvent = useCallback(() => {
+    setSSEConnected(true);
+    setConnectionMode(CONNECTION_MODE.SSE);
+    reconnectAttemptRef.current = 0;
+    stopPolling();
+  }, [setSSEConnected, setConnectionMode, stopPolling]);
+
+  // --- Event dispatch map ---
+
+  const eventHandlers = useCallback(() => ({
+    // Workflow events
+    workflow_started:       (data) => handleWorkflowStarted(data),
+    workflow_state_updated: (data) => handleWorkflowStateUpdated(data),
+    workflow_completed:     (data) => { handleWorkflowCompleted(data); notifyInfo(`Workflow ${data.workflow_id} completed`); },
+    workflow_failed:        (data) => handleWorkflowFailedEvent(data),
+    workflow_paused:        (data) => { handleWorkflowPaused(data); notifyInfo(`Workflow ${data.workflow_id} paused`); },
+    workflow_resumed:       (data) => { handleWorkflowResumed(data); notifyInfo(`Workflow ${data.workflow_id} resumed`); },
+
+    // Phase events
+    phase_started:   (data) => handlePhaseStarted(data),
+    phase_completed: (data) => handlePhaseCompleted(data),
+
+    // Task events
+    task_created:   (data) => handleTaskCreated(data),
+    task_started:   (data) => handleTaskStarted(data),
+    task_progress:  (data) => handleTaskProgress(data),
+    task_completed: (data) => handleTaskCompleted(data),
+    task_failed:    (data) => handleTaskFailed(data),
+    task_skipped:   (data) => handleTaskSkipped(data),
+    task_retry:     (data) => handleTaskRetry(data),
+
+    // Agent events
+    agent_event: (data) => handleAgentEvent(data),
+
+    // Config / provenance & log events (persisted by ingestSSEEvent; no store updates)
+    config_loaded: () => {},
+    log:           () => {},
+
+    // Kanban events
+    kanban_workflow_moved:       (data) => handleKanbanWorkflowMoved(data),
+    kanban_execution_started:    (data) => handleKanbanExecutionStarted(data),
+    kanban_execution_completed:  (data) => handleKanbanExecutionCompleted(data),
+    kanban_execution_failed:     (data) => handleKanbanExecutionFailed(data),
+    kanban_engine_state_changed: (data) => handleKanbanEngineStateChanged(data),
+    kanban_circuit_breaker_opened: (data) => { handleKanbanCircuitBreakerOpened(data); notifyError('Kanban engine circuit breaker opened - too many failures'); },
+
+    // Issues progress events
+    issues_generation_progress:  (data) => handleIssuesGenerationProgress(data),
+    issues_publishing_progress:  (data) => handleIssuesPublishingProgress(data),
+
+    // Connection events
+    connected: () => handleConnectedEvent(),
+  }), [
     handleWorkflowStarted,
     handleWorkflowStateUpdated,
     handleWorkflowCompleted,
-    handleWorkflowFailed,
+    handleWorkflowFailedEvent,
     handleWorkflowPaused,
     handleWorkflowResumed,
     handlePhaseStarted,
@@ -285,22 +226,39 @@ export default function useSSE() {
     handleTaskSkipped,
     handleTaskRetry,
     handleAgentEvent,
-    ingestSSEEvent,
     handleKanbanWorkflowMoved,
     handleKanbanExecutionStarted,
     handleKanbanExecutionCompleted,
     handleKanbanExecutionFailed,
     handleKanbanEngineStateChanged,
     handleKanbanCircuitBreakerOpened,
-    setSSEConnected,
-    setConnectionMode,
-    stopPolling,
+    handleIssuesGenerationProgress,
+    handleIssuesPublishingProgress,
+    handleConnectedEvent,
     notifyInfo,
     notifyError,
-    updateGenerationProgress,
-    updatePublishingProgress,
-    currentProjectId,
   ]);
+
+  const handleEvent = useCallback((eventType, data) => {
+    // Persist a replayable execution timeline (per project + workflow) for the workflow detail view.
+    // We intentionally ingest before dispatch so we don't miss anything due to handler errors.
+    if (eventType && eventType !== 'connected' && eventType !== 'message') {
+      try {
+        ingestSSEEvent(eventType, data, currentProjectId);
+      } catch (e) {
+        // Never break live updates due to telemetry persistence failures.
+        console.warn('Failed to ingest SSE event into execution store', e);
+      }
+    }
+
+    const handlers = eventHandlers();
+    const handler = handlers[eventType];
+    if (handler) {
+      handler(data);
+    } else {
+      console.log('Unhandled SSE event:', eventType, data);
+    }
+  }, [ingestSSEEvent, currentProjectId, eventHandlers]);
 
   // Keep ref in sync so connect() always calls the latest handleEvent
   // without needing it as a dependency (which would destabilize connect).

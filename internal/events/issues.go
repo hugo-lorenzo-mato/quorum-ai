@@ -6,6 +6,20 @@ const (
 	TypeIssuesPublishingProgress = "issues_publishing_progress"
 )
 
+// IssuesGenerationProgressParams holds parameters for creating an IssuesGenerationProgressEvent.
+type IssuesGenerationProgressParams struct {
+	WorkflowID  string
+	ProjectID   string
+	Stage       string
+	Current     int
+	Total       int
+	Message     string
+	FileName    string
+	Title       string
+	TaskID      string
+	IsMainIssue bool
+}
+
 // IssuesGenerationProgressEvent reports progress while generating issue draft files.
 // It is emitted during AI generation (GenerateIssueFiles) and can be used by the UI
 // to render incremental progress.
@@ -22,18 +36,34 @@ type IssuesGenerationProgressEvent struct {
 	IsMainIssue bool   `json:"is_main_issue"`
 }
 
-func NewIssuesGenerationProgressEvent(workflowID, projectID, stage string, current, total int, message, fileName, title, taskID string, isMainIssue bool) IssuesGenerationProgressEvent {
+// NewIssuesGenerationProgressEvent creates an IssuesGenerationProgressEvent from params.
+func NewIssuesGenerationProgressEvent(p IssuesGenerationProgressParams) IssuesGenerationProgressEvent {
 	return IssuesGenerationProgressEvent{
-		BaseEvent:    NewBaseEvent(TypeIssuesGenerationProgress, workflowID, projectID),
-		Stage:       stage,
-		Current:     current,
-		Total:       total,
-		Message:     message,
-		FileName:    fileName,
-		Title:       title,
-		TaskID:      taskID,
-		IsMainIssue: isMainIssue,
+		BaseEvent:   NewBaseEvent(TypeIssuesGenerationProgress, p.WorkflowID, p.ProjectID),
+		Stage:       p.Stage,
+		Current:     p.Current,
+		Total:       p.Total,
+		Message:     p.Message,
+		FileName:    p.FileName,
+		Title:       p.Title,
+		TaskID:      p.TaskID,
+		IsMainIssue: p.IsMainIssue,
 	}
+}
+
+// IssuesPublishingProgressParams holds parameters for creating an IssuesPublishingProgressEvent.
+type IssuesPublishingProgressParams struct {
+	WorkflowID  string
+	ProjectID   string
+	Stage       string
+	Current     int
+	Total       int
+	Message     string
+	Title       string
+	TaskID      string
+	IsMainIssue bool
+	IssueNumber int
+	DryRun      bool
 }
 
 // IssuesPublishingProgressEvent reports progress while creating/publishing issues to the provider.
@@ -51,18 +81,19 @@ type IssuesPublishingProgressEvent struct {
 	DryRun      bool   `json:"dry_run"`
 }
 
-func NewIssuesPublishingProgressEvent(workflowID, projectID, stage string, current, total int, message, title, taskID string, isMainIssue bool, issueNumber int, dryRun bool) IssuesPublishingProgressEvent {
+// NewIssuesPublishingProgressEvent creates an IssuesPublishingProgressEvent from params.
+func NewIssuesPublishingProgressEvent(p IssuesPublishingProgressParams) IssuesPublishingProgressEvent {
 	return IssuesPublishingProgressEvent{
-		BaseEvent:    NewBaseEvent(TypeIssuesPublishingProgress, workflowID, projectID),
-		Stage:       stage,
-		Current:     current,
-		Total:       total,
-		Message:     message,
-		Title:       title,
-		TaskID:      taskID,
-		IsMainIssue: isMainIssue,
-		IssueNumber: issueNumber,
-		DryRun:      dryRun,
+		BaseEvent:   NewBaseEvent(TypeIssuesPublishingProgress, p.WorkflowID, p.ProjectID),
+		Stage:       p.Stage,
+		Current:     p.Current,
+		Total:       p.Total,
+		Message:     p.Message,
+		Title:       p.Title,
+		TaskID:      p.TaskID,
+		IsMainIssue: p.IsMainIssue,
+		IssueNumber: p.IssueNumber,
+		DryRun:      p.DryRun,
 	}
 }
 

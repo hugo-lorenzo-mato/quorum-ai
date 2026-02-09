@@ -28,7 +28,7 @@ type DraftFrontmatter struct {
 func (g *Generator) WriteDraftFile(workflowID, fileName string, fm DraftFrontmatter, body string) (string, error) {
 	draftDir, err := g.resolveDraftDir(workflowID)
 	if err != nil {
-		return "", fmt.Errorf("resolving draft directory: %w", err)
+		return "", fmt.Errorf(errResolvingDraftDir, err)
 	}
 
 	if err := os.MkdirAll(draftDir, 0o755); err != nil {
@@ -52,7 +52,7 @@ func (g *Generator) WriteDraftFile(workflowID, fileName string, fm DraftFrontmat
 func (g *Generator) ReadDraftFile(workflowID, fileName string) (*DraftFrontmatter, string, error) {
 	draftDir, err := g.resolveDraftDir(workflowID)
 	if err != nil {
-		return nil, "", fmt.Errorf("resolving draft directory: %w", err)
+		return nil, "", fmt.Errorf(errResolvingDraftDir, err)
 	}
 
 	filePath, err := ValidateOutputPath(draftDir, fileName)
@@ -76,7 +76,7 @@ func (g *Generator) ReadDraftFile(workflowID, fileName string) (*DraftFrontmatte
 func (g *Generator) ReadAllDrafts(workflowID string) ([]IssuePreview, error) {
 	draftDir, err := g.resolveDraftDir(workflowID)
 	if err != nil {
-		return nil, fmt.Errorf("resolving draft directory: %w", err)
+		return nil, fmt.Errorf(errResolvingDraftDir, err)
 	}
 
 	entries, err := os.ReadDir(draftDir)
@@ -105,47 +105,56 @@ func (g *Generator) ReadAllDrafts(workflowID string) ([]IssuePreview, error) {
 	seen := make(map[string]bool)
 
 	for _, entry := range files {
-		filePath := filepath.Join(draftDir, entry.Name())
-		content, err := os.ReadFile(filePath)
-		if err != nil {
+		preview, skip := g.parseDraftEntry(draftDir, draftRelDir, entry, seen)
+		if skip {
 			continue
 		}
-
-		fm, body, err := parseDraftContent(string(content))
-		if err != nil {
-			// Fallback: try parsing as plain markdown (backward compat)
-			title, bodyPlain := parseIssueMarkdown(string(content))
-			previews = append(previews, IssuePreview{
-				Title:       title,
-				Body:        bodyPlain,
-				Labels:      g.config.Labels,
-				Assignees:   g.config.Assignees,
-				IsMainIssue: strings.Contains(entry.Name(), "consolidated") || strings.HasPrefix(entry.Name(), "00-"),
-				FilePath:    filepath.Join(draftRelDir, entry.Name()),
-			})
-			continue
-		}
-
-		// Deduplicate by task ID
-		if fm.TaskID != "" && seen[fm.TaskID] {
-			continue
-		}
-		if fm.TaskID != "" {
-			seen[fm.TaskID] = true
-		}
-
-		previews = append(previews, IssuePreview{
-			Title:       fm.Title,
-			Body:        body,
-			Labels:      fm.Labels,
-			Assignees:   fm.Assignees,
-			IsMainIssue: fm.IsMainIssue,
-			TaskID:      fm.TaskID,
-			FilePath:    filepath.Join(draftRelDir, entry.Name()),
-		})
+		previews = append(previews, preview)
 	}
 
 	return previews, nil
+}
+
+// parseDraftEntry parses a single draft file entry and returns the preview.
+// It returns skip=true if the file should be skipped (read error or duplicate task ID).
+func (g *Generator) parseDraftEntry(draftDir, draftRelDir string, entry os.DirEntry, seen map[string]bool) (IssuePreview, bool) {
+	filePath := filepath.Join(draftDir, entry.Name())
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		return IssuePreview{}, true
+	}
+
+	fm, body, err := parseDraftContent(string(content))
+	if err != nil {
+		// Fallback: try parsing as plain markdown (backward compat)
+		title, bodyPlain := parseIssueMarkdown(string(content))
+		return IssuePreview{
+			Title:       title,
+			Body:        bodyPlain,
+			Labels:      g.config.Labels,
+			Assignees:   g.config.Assignees,
+			IsMainIssue: strings.Contains(entry.Name(), "consolidated") || strings.HasPrefix(entry.Name(), "00-"),
+			FilePath:    filepath.Join(draftRelDir, entry.Name()),
+		}, false
+	}
+
+	// Deduplicate by task ID
+	if fm.TaskID != "" && seen[fm.TaskID] {
+		return IssuePreview{}, true
+	}
+	if fm.TaskID != "" {
+		seen[fm.TaskID] = true
+	}
+
+	return IssuePreview{
+		Title:       fm.Title,
+		Body:        body,
+		Labels:      fm.Labels,
+		Assignees:   fm.Assignees,
+		IsMainIssue: fm.IsMainIssue,
+		TaskID:      fm.TaskID,
+		FilePath:    filepath.Join(draftRelDir, entry.Name()),
+	}, false
 }
 
 // ReadIssueMapping reads the mapping.json file from the published directory.
