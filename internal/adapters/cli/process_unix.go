@@ -31,6 +31,10 @@ func (b *BaseAdapter) clearActiveProcess() {
 
 // GracefulKill sends SIGTERM to the process group, waits for gracePeriod,
 // then sends SIGKILL if the process hasn't exited.
+//
+// This function does NOT call cmd.Wait(). The caller is expected to call
+// cmd.Wait() separately (typically via a waitDone channel). Calling cmd.Wait()
+// here would race with the caller's Wait and block forever on Go 1.20+.
 func (b *BaseAdapter) GracefulKill(gracePeriod time.Duration) error {
 	b.mu.Lock()
 	cmd := b.activeCmd
@@ -56,19 +60,23 @@ func (b *BaseAdapter) GracefulKill(gracePeriod time.Duration) error {
 		return fmt.Errorf("sigterm pgid %d: %w", pgid, err)
 	}
 
-	// Wait for process to exit within grace period
-	done := make(chan struct{})
-	go func() {
-		_ = cmd.Wait()
-		close(done)
-	}()
-
-	select {
-	case <-done:
-		return nil
-	case <-time.After(gracePeriod):
-		// Process didn't exit, escalate to SIGKILL
-		_ = syscall.Kill(-pgid, syscall.SIGKILL)
-		return nil
+	// Poll for process exit within grace period. We avoid cmd.Wait() here
+	// because it races with the caller's cmd.Wait() goroutine — on Go 1.20+
+	// only one Wait can succeed, the other blocks forever on Process.Wait.
+	deadline := time.After(gracePeriod)
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-deadline:
+			// Process didn't exit, escalate to SIGKILL
+			_ = syscall.Kill(-pgid, syscall.SIGKILL)
+			return nil
+		case <-ticker.C:
+			// Signal 0 checks if the process (group leader) is still alive
+			if err := syscall.Kill(pid, 0); err != nil {
+				return nil // Process exited
+			}
+		}
 	}
 }

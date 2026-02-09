@@ -386,6 +386,9 @@ type AgentConfig struct {
 	// If reported tokens differ from estimated by more than this factor, use estimated.
 	// Default: 5 (reported must be within 1/5 to 5x of estimated). Set to 0 to disable.
 	TokenDiscrepancyThreshold float64 `mapstructure:"token_discrepancy_threshold" yaml:"token_discrepancy_threshold"`
+	// IdleTimeout is the max duration without stdout activity before killing the process.
+	// Examples: "5m", "10m", "0" (disabled). Default: 5m.
+	IdleTimeout string `mapstructure:"idle_timeout" yaml:"idle_timeout"`
 }
 
 // IsEnabledForPhase returns true if the agent is enabled for the given phase.

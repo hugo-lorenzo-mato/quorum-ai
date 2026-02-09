@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"testing"
 	"time"
 )
@@ -348,4 +349,49 @@ func TestContainsAny(t *testing.T) {
 			t.Errorf("containsAny(%q, %v) = %v, want %v", tt.s, tt.substrings, result, tt.want)
 		}
 	}
+}
+
+func TestIdleTimeoutKillsHungProcess(t *testing.T) {
+	// This test verifies that the idle timer kills a process that writes
+	// one JSON line and then hangs (no more stdout output).
+	adapter := NewBaseAdapter(AgentConfig{
+		Name:        "test-idle",
+		Path:        "bash",
+		IdleTimeout: 500 * time.Millisecond,
+		GracePeriod: 200 * time.Millisecond,
+	}, nil)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	start := time.Now()
+
+	// bash -c: print one JSON line, then sleep indefinitely (simulating a hang).
+	// The idle timer should fire after 500ms and kill the process.
+	result, err := adapter.executeWithJSONStreaming(
+		ctx,
+		"test-idle",
+		[]string{"-c", `echo '{"type":"message","text":"hello"}'; sleep 3600`},
+		"",  // stdin
+		"",  // workDir
+		0,   // optTimeout (use default)
+		StreamConfig{}, // no streaming flags needed for bash
+		nil,            // no parser
+	)
+
+	elapsed := time.Since(start)
+
+	// Should complete in ~500ms (idle timeout), not 3600s.
+	if elapsed > 5*time.Second {
+		t.Fatalf("took %v, expected ~500ms — idle timeout did not fire", elapsed)
+	}
+
+	// The result should contain the first line's text (extracted or raw).
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+
+	// err may or may not be nil depending on how the kill is classified.
+	// The key assertion is that we returned quickly.
+	t.Logf("completed in %v, err=%v, stdout=%q", elapsed, err, result.Stdout)
 }
