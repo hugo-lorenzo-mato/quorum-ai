@@ -5,7 +5,9 @@
 [![Security](https://github.com/hugo-lorenzo-mato/quorum-ai/actions/workflows/security.yml/badge.svg)](https://github.com/hugo-lorenzo-mato/quorum-ai/actions/workflows/security.yml)
 [![Build](https://github.com/hugo-lorenzo-mato/quorum-ai/actions/workflows/build.yml/badge.svg)](https://github.com/hugo-lorenzo-mato/quorum-ai/actions/workflows/build.yml)
 [![Coverage](https://codecov.io/gh/hugo-lorenzo-mato/quorum-ai/branch/main/graph/badge.svg)](https://codecov.io/gh/hugo-lorenzo-mato/quorum-ai)
-[![Go Version](https://img.shields.io/badge/Go-1.23+-00ADD8?style=flat&logo=go)](https://go.dev/)
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=hugo-lorenzo-mato_quorum-ai&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=hugo-lorenzo-mato_quorum-ai)
+[![Maintainability Rating](https://sonarcloud.io/api/project_badges/measure?project=hugo-lorenzo-mato_quorum-ai&metric=sqale_rating)](https://sonarcloud.io/summary/new_code?id=hugo-lorenzo-mato_quorum-ai)
+[![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?style=flat&logo=go)](https://go.dev/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 **Multi-agent LLM orchestrator with consensus-based validation for reliable software engineering workflows.**
