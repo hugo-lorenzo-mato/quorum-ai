@@ -372,91 +372,83 @@ func (o *MockOrchestrator) ExecuteWorkflow(ctx context.Context, tasks []TaskDefi
 	
 	// Track running tasks to avoid duplicates
 	running := make(map[core.TaskID]bool)
-	var runMutex sync.Mutex
+	var runMutex sync.RWMutex
 
-	var scheduleTask func(taskID core.TaskID)
-	scheduleTask = func(taskID core.TaskID) {
-		task := taskMap[taskID]
+	// Execute a single task
+	executeTask := func(taskDef *TaskDefinition) {
+		defer wg.Done()
 		
-		runMutex.Lock()
-		if running[taskID] || completed[taskID] || failed[taskID] {
-			runMutex.Unlock()
-			return
-		}
-		
-		// Check if all dependencies are satisfied
-		for _, dep := range task.Dependencies {
-			if !completed[dep] {
-				runMutex.Unlock()
+		// Acquire agent resource if limited
+		if sem, exists := agentSems[taskDef.Agent]; exists {
+			select {
+			case sem <- struct{}{}:
+				defer func() { <-sem }()
+			case <-ctx.Done():
+				resultChan <- &TaskResult{
+					TaskID: taskDef.ID,
+					Status: core.TaskStatusFailed,
+					Error:  "context cancelled",
+				}
 				return
 			}
 		}
-		
-		running[taskID] = true
-		runMutex.Unlock()
 
-		wg.Add(1)
-		go func(t *TaskDefinition) {
-			defer wg.Done()
-			
-			// Acquire agent resource if limited
-			if sem, exists := agentSems[t.Agent]; exists {
-				select {
-				case sem <- struct{}{}:
-					defer func() { <-sem }()
-				case <-ctx.Done():
-					resultChan <- &TaskResult{
-						TaskID: t.ID,
-						Status: core.TaskStatusFailed,
-						Error:  "context cancelled",
-					}
-					return
-				}
-			}
+		result := &TaskResult{
+			TaskID:    taskDef.ID,
+			StartTime: time.Now(),
+			AgentUsed: taskDef.Agent,
+		}
 
-			result := &TaskResult{
-				TaskID:    t.ID,
-				StartTime: time.Now(),
-				AgentUsed: t.Agent,
-			}
-
-			// Simulate task execution
-			if t.Agent == "failing-agent" {
+		// Simulate task execution
+		if taskDef.Agent == "failing-agent" {
+			result.Status = core.TaskStatusFailed
+			result.Error = "simulated agent failure"
+		} else {
+			// Simulate work duration
+			select {
+			case <-time.After(taskDef.EstimatedDuration):
+				result.Status = core.TaskStatusCompleted
+			case <-ctx.Done():
 				result.Status = core.TaskStatusFailed
-				result.Error = "simulated agent failure"
-			} else {
-				// Simulate work duration
-				select {
-				case <-time.After(t.EstimatedDuration):
-					result.Status = core.TaskStatusCompleted
-				case <-ctx.Done():
-					result.Status = core.TaskStatusFailed
-					result.Error = "context cancelled"
-				}
+				result.Error = "context cancelled"
 			}
+		}
 
-			result.EndTime = time.Now()
-			resultChan <- result
-		}(task)
+		result.EndTime = time.Now()
+		resultChan <- result
 	}
 
-	// Start scheduling loop
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-				// Try to schedule any ready tasks
-				for taskID := range taskMap {
-					scheduleTask(taskID)
+	// Schedule tasks based on dependency resolution
+	scheduleReady := func() {
+		runMutex.Lock()
+		defer runMutex.Unlock()
+		
+		for taskID, taskDef := range taskMap {
+			if running[taskID] || completed[taskID] || failed[taskID] {
+				continue
+			}
+			
+			// Check if all dependencies are satisfied
+			allDepsComplete := true
+			for _, dep := range taskDef.Dependencies {
+				if !completed[dep] {
+					allDepsComplete = false
+					break
 				}
-				time.Sleep(10 * time.Millisecond) // Small delay to avoid busy waiting
+			}
+			
+			if allDepsComplete {
+				running[taskID] = true
+				wg.Add(1)
+				go executeTask(taskDef)
 			}
 		}
-	}()
+	}
 
-	// Collect results
+	// Initial scheduling
+	scheduleReady()
+
+	// Collect results and continue scheduling
 	var resultErr error
 	for len(results) < len(tasks) {
 		select {
@@ -471,16 +463,47 @@ func (o *MockOrchestrator) ExecuteWorkflow(ctx context.Context, tasks []TaskDefi
 				if resultErr == nil {
 					resultErr = fmt.Errorf("task %s failed: %s", result.TaskID, result.Error)
 				}
+				
+				// Mark dependent tasks as failed too (cascading failure)
+				var markDependentsFailed func(core.TaskID)
+				markDependentsFailed = func(failedTaskID core.TaskID) {
+					for taskID, taskDef := range taskMap {
+						if completed[taskID] || failed[taskID] || running[taskID] {
+							continue
+						}
+						
+						// Check if this task depends on the failed task
+						for _, dep := range taskDef.Dependencies {
+							if dep == failedTaskID {
+								failed[taskID] = true
+								results = append(results, &TaskResult{
+									TaskID: taskID,
+									Status: core.TaskStatusFailed,
+									Error:  fmt.Sprintf("dependency %s failed", failedTaskID),
+									AgentUsed: taskDef.Agent,
+									StartTime: time.Now(),
+									EndTime:   time.Now(),
+								})
+								markDependentsFailed(taskID) // Recursive cascading
+								break
+							}
+						}
+					}
+				}
+				markDependentsFailed(result.TaskID)
 			}
 			running[result.TaskID] = false
 			runMutex.Unlock()
+			
+			// Schedule any newly ready tasks
+			scheduleReady()
 			
 		case <-ctx.Done():
 			resultErr = fmt.Errorf("workflow execution timed out")
 			break
 		}
 	}
-
+	
 	wg.Wait()
 	close(resultChan)
 

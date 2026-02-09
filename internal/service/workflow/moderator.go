@@ -81,21 +81,15 @@ func (m *SemanticModerator) Evaluate(ctx context.Context, wctx *Context, round i
 // EvaluateWithAgent runs semantic consensus evaluation using a specific agent.
 // This allows fallback to alternative agents if the primary moderator fails.
 // The attempt parameter tracks which attempt this is (1-based) for file naming and traceability.
+// EvaluateWithAgent performs semantic moderation evaluation using specified agent.
 func (m *SemanticModerator) EvaluateWithAgent(ctx context.Context, wctx *Context, round, attempt int, outputs []AnalysisOutput, agentName string) (*ModeratorEvaluationResult, error) {
-	if !m.config.Enabled {
-		return nil, fmt.Errorf("semantic moderator is not enabled. "+
-			"Set 'phases.analyze.moderator.enabled: true' in your config. See: %s#phases-settings", DocsConfigURL)
+	if err := m.validateModeratorEnabled(); err != nil {
+		return nil, err
 	}
 
-	// Use specified agent (allows fallback to alternatives)
-	moderatorAgentName := agentName
-	if moderatorAgentName == "" {
-		moderatorAgentName = m.config.Agent
-	}
-	agent, err := wctx.Agents.Get(moderatorAgentName)
+	agent, moderatorAgentName, err := m.setupModeratorAgent(wctx, agentName)
 	if err != nil {
-		return nil, fmt.Errorf("moderator agent '%s' not available: %w. "+
-			"Ensure this agent is configured and responding (run 'quorum doctor' to verify). See: %s#agents", moderatorAgentName, err, DocsConfigURL)
+		return nil, err
 	}
 
 	// Acquire rate limit
@@ -104,8 +98,66 @@ func (m *SemanticModerator) EvaluateWithAgent(ctx context.Context, wctx *Context
 		return nil, fmt.Errorf("rate limit for moderator: %w", err)
 	}
 
-	// Build analysis file paths for the moderator to read
-	// The moderator will use its file reading tools to access the full analysis content
+	analyses := m.buildAnalysisSummaries(wctx, outputs, round)
+	outputFilePath, absOutputPath := m.prepareOutputPaths(wctx, round, attempt, moderatorAgentName)
+
+	prompt, err := m.renderModeratorPrompt(wctx, round, analyses, outputFilePath)
+	if err != nil {
+		return nil, err
+	}
+
+	model := ResolvePhaseModel(wctx.Config, moderatorAgentName, core.PhaseAnalyze, "")
+	startTime := time.Now()
+
+	m.emitStartedEvent(wctx, moderatorAgentName, round, model, outputs)
+
+	result, err := m.executeModerator(ctx, wctx, agent, prompt, model, absOutputPath, moderatorAgentName, round, attempt)
+	if err != nil {
+		m.emitErrorEvent(wctx, moderatorAgentName, round, model, startTime, err)
+		return nil, err
+	}
+
+	durationMS := time.Since(startTime).Milliseconds()
+	result = m.handleFileEnforcement(wctx, result, absOutputPath, moderatorAgentName, round, model)
+
+	evalResult, err := m.processModeratorResponse(wctx, result, moderatorAgentName, round, model, durationMS)
+	if err != nil {
+		return nil, err
+	}
+
+	m.emitCompletedEvent(wctx, moderatorAgentName, round, result, evalResult, durationMS)
+	m.finalizeModeratorResult(wctx, round, attempt, moderatorAgentName, model, evalResult, result, durationMS)
+
+	return evalResult, nil
+}
+
+// validateModeratorEnabled checks if semantic moderator is enabled.
+func (m *SemanticModerator) validateModeratorEnabled() error {
+	if !m.config.Enabled {
+		return fmt.Errorf("semantic moderator is not enabled. "+
+			"Set 'phases.analyze.moderator.enabled: true' in your config. See: %s#phases-settings", DocsConfigURL)
+	}
+	return nil
+}
+
+// setupModeratorAgent resolves and validates the moderator agent.
+func (m *SemanticModerator) setupModeratorAgent(wctx *Context, agentName string) (core.Agent, string, error) {
+	moderatorAgentName := agentName
+	if moderatorAgentName == "" {
+		moderatorAgentName = m.config.Agent
+	}
+	
+	agent, err := wctx.Agents.Get(moderatorAgentName)
+	if err != nil {
+		return nil, "", fmt.Errorf("moderator agent '%s' not available: %w. "+
+			"Ensure this agent is configured and responding (run 'quorum doctor' to verify). See: %s#agents", moderatorAgentName, err, DocsConfigURL)
+	}
+	
+	return agent, moderatorAgentName, nil
+}
+
+// buildAnalysisSummaries creates moderator analysis summaries from outputs.
+func (m *SemanticModerator) buildAnalysisSummaries(wctx *Context, outputs []AnalysisOutput, round int) []ModeratorAnalysisSummary {
 	analyses := make([]ModeratorAnalysisSummary, len(outputs))
 	for i, out := range outputs {
 		// Extract the base agent name (remove vN- prefix if present)
@@ -137,9 +189,11 @@ func (m *SemanticModerator) EvaluateWithAgent(ctx context.Context, wctx *Context
 			"file_path", filePath,
 		)
 	}
+	return analyses
+}
 
-	// Get output file path for LLM to write directly
-	// Each attempt writes to its own file for traceability
+// prepareOutputPaths sets up output file paths for moderator execution.
+func (m *SemanticModerator) prepareOutputPaths(wctx *Context, round, attempt int, moderatorAgentName string) (string, string) {
 	var outputFilePath string
 	if wctx.Report != nil && wctx.Report.IsEnabled() {
 		outputFilePath = wctx.Report.ModeratorAttemptPath(round, attempt, moderatorAgentName)
@@ -154,8 +208,12 @@ func (m *SemanticModerator) EvaluateWithAgent(ctx context.Context, wctx *Context
 		}
 	}
 
-	// Render moderator prompt
-	prompt, err := wctx.Prompts.RenderModeratorEvaluate(ModeratorEvaluateParams{
+	return outputFilePath, absOutputPath
+}
+
+// renderModeratorPrompt creates the moderator evaluation prompt.
+func (m *SemanticModerator) renderModeratorPrompt(wctx *Context, round int, analyses []ModeratorAnalysisSummary, outputFilePath string) (string, error) {
+	return wctx.Prompts.RenderModeratorEvaluate(ModeratorEvaluateParams{
 		Prompt:         GetEffectivePrompt(wctx.State),
 		Round:          round,
 		NextRound:      round + 1,
@@ -163,16 +221,10 @@ func (m *SemanticModerator) EvaluateWithAgent(ctx context.Context, wctx *Context
 		BelowThreshold: true, // Always request recommendations
 		OutputFilePath: outputFilePath,
 	})
-	if err != nil {
-		return nil, fmt.Errorf("rendering moderator prompt: %w", err)
-	}
+}
 
-	// Resolve model from agent's phase_models.analyze or default model
-	model := ResolvePhaseModel(wctx.Config, moderatorAgentName, core.PhaseAnalyze, "")
-
-	startTime := time.Now()
-
-	// Emit started event
+// emitStartedEvent emits agent started event.
+func (m *SemanticModerator) emitStartedEvent(wctx *Context, moderatorAgentName string, round int, model string, outputs []AnalysisOutput) {
 	if wctx.Output != nil {
 		wctx.Output.AgentEvent("started", moderatorAgentName, fmt.Sprintf("Running semantic moderator evaluation (round %d)", round), map[string]interface{}{
 			"phase":           "moderator",
@@ -182,7 +234,10 @@ func (m *SemanticModerator) EvaluateWithAgent(ctx context.Context, wctx *Context
 			"timeout_seconds": int(wctx.Config.PhaseTimeouts.Analyze.Seconds()),
 		})
 	}
+}
 
+// executeModerator executes the moderator evaluation with retry logic and watchdog.
+func (m *SemanticModerator) executeModerator(ctx context.Context, wctx *Context, agent core.Agent, prompt, model, absOutputPath, moderatorAgentName string, round, attempt int) (*core.ExecuteResult, error) {
 	// Launch output file watchdog for recovery/reaping if agent hangs after writing
 	var watchdog *OutputWatchdog
 	if absOutputPath != "" {
@@ -193,7 +248,7 @@ func (m *SemanticModerator) EvaluateWithAgent(ctx context.Context, wctx *Context
 
 	// Execute moderator evaluation
 	var result *core.ExecuteResult
-	err = wctx.Retry.Execute(func() error {
+	err := wctx.Retry.Execute(func() error {
 		if ctrlErr := wctx.CheckControl(ctx); ctrlErr != nil {
 			return ctrlErr
 		}
@@ -252,21 +307,24 @@ func (m *SemanticModerator) EvaluateWithAgent(ctx context.Context, wctx *Context
 		return execErr
 	})
 
-	if err != nil {
-		if wctx.Output != nil {
-			wctx.Output.AgentEvent("error", moderatorAgentName, err.Error(), map[string]interface{}{
-				"phase":       "moderator",
-				"round":       round,
-				"model":       model,
-				"duration_ms": time.Since(startTime).Milliseconds(),
-				"error_type":  fmt.Sprintf("%T", err),
-			})
-		}
-		return nil, err
+	return result, err
+}
+
+// emitErrorEvent emits agent error event.
+func (m *SemanticModerator) emitErrorEvent(wctx *Context, moderatorAgentName string, round int, model string, startTime time.Time, err error) {
+	if wctx.Output != nil {
+		wctx.Output.AgentEvent("error", moderatorAgentName, err.Error(), map[string]interface{}{
+			"phase":       "moderator",
+			"round":       round,
+			"model":       model,
+			"duration_ms": time.Since(startTime).Milliseconds(),
+			"error_type":  fmt.Sprintf("%T", err),
+		})
 	}
+}
 
-	durationMS := time.Since(startTime).Milliseconds()
-
+// handleFileEnforcement handles file content enforcement for moderator output.
+func (m *SemanticModerator) handleFileEnforcement(wctx *Context, result *core.ExecuteResult, absOutputPath, moderatorAgentName string, round int, model string) *core.ExecuteResult {
 	// Some CLIs write to file but return empty stdout. Prefer the file content in that case.
 	if absOutputPath != "" && (result == nil || strings.TrimSpace(result.Output) == "") {
 		if content, readErr := os.ReadFile(absOutputPath); readErr == nil && strings.TrimSpace(string(content)) != "" {
@@ -293,6 +351,11 @@ func (m *SemanticModerator) EvaluateWithAgent(ctx context.Context, wctx *Context
 		}
 	}
 
+	return result
+}
+
+// processModeratorResponse processes and validates the moderator response.
+func (m *SemanticModerator) processModeratorResponse(wctx *Context, result *core.ExecuteResult, moderatorAgentName string, round int, model string, durationMS int64) (*ModeratorEvaluationResult, error) {
 	// Parse the moderator response
 	evalResult := m.parseModeratorResponse(result.Output)
 	evalResult.TokensIn = result.TokensIn
@@ -331,7 +394,11 @@ func (m *SemanticModerator) EvaluateWithAgent(ctx context.Context, wctx *Context
 		return nil, fmt.Errorf("moderator output validation: %w", validationErr)
 	}
 
-	// Emit completed event
+	return evalResult, nil
+}
+
+// emitCompletedEvent emits agent completed event.
+func (m *SemanticModerator) emitCompletedEvent(wctx *Context, moderatorAgentName string, round int, result *core.ExecuteResult, evalResult *ModeratorEvaluationResult, durationMS int64) {
 	if wctx.Output != nil {
 		wctx.Output.AgentEvent("completed", moderatorAgentName, fmt.Sprintf("Moderator evaluation completed: %.0f%% consensus", evalResult.Score*100), map[string]interface{}{
 			"phase":           "moderator",
@@ -343,7 +410,10 @@ func (m *SemanticModerator) EvaluateWithAgent(ctx context.Context, wctx *Context
 			"duration_ms":     durationMS,
 		})
 	}
+}
 
+// finalizeModeratorResult handles post-processing tasks like file promotion and reporting.
+func (m *SemanticModerator) finalizeModeratorResult(wctx *Context, round, attempt int, moderatorAgentName, model string, evalResult *ModeratorEvaluationResult, result *core.ExecuteResult, durationMS int64) {
 	// Promote successful attempt to official location
 	// This ensures round-X.md only exists when validation passes
 	if wctx.Report != nil && wctx.Report.IsEnabled() {
@@ -374,8 +444,6 @@ func (m *SemanticModerator) EvaluateWithAgent(ctx context.Context, wctx *Context
 			wctx.Logger.Warn("failed to write moderator report", "round", round, "error", reportErr)
 		}
 	}
-
-	return evalResult, nil
 }
 
 // moderatorFrontmatter represents the YAML frontmatter structure for moderator output.

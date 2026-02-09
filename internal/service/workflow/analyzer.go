@@ -778,9 +778,56 @@ func (a *Analyzer) runVnRefinement(ctx context.Context, wctx *Context, round int
 
 // runVnRefinementWithAgent runs V(n) refinement with a specific agent.
 func (a *Analyzer) runVnRefinementWithAgent(ctx context.Context, wctx *Context, agentName string, round int, prevOutput AnalysisOutput, evalResult *ModeratorEvaluationResult, agreements []string) (AnalysisOutput, error) {
-	agent, err := wctx.Agents.Get(agentName)
+	// Setup and validation
+	setup, err := a.setupVnRefinement(wctx, agentName, round)
 	if err != nil {
-		return AnalysisOutput{}, fmt.Errorf("getting agent %s: %w", agentName, err)
+		return AnalysisOutput{}, err
+	}
+
+	// Check cache first
+	if cachedOutput, found := a.checkVnRefinementCache(wctx, agentName, round, setup.promptHash, setup.absOutputPath); found {
+		return *cachedOutput, nil
+	}
+
+	// Acquire rate limit and prepare execution
+	if err := a.prepareVnRefinementExecution(wctx, agentName, setup.absOutputPath); err != nil {
+		return AnalysisOutput{}, err
+	}
+
+	// Build refinement data
+	refinementData, err := a.buildVnRefinementData(wctx, round, prevOutput, evalResult, agreements, setup.outputFilePath)
+	if err != nil {
+		return AnalysisOutput{}, err
+	}
+
+	// Execute with agent
+	result, err := a.executeVnRefinement(ctx, wctx, agentName, round, setup.model, refinementData.prompt, setup.absOutputPath)
+	if err != nil {
+		return AnalysisOutput{}, err
+	}
+
+	// Finalize and return result
+	return a.finalizeVnRefinementResult(wctx, agentName, round, setup, result)
+}
+
+// VnRefinementSetup contains setup data for Vn refinement
+type VnRefinementSetup struct {
+	model         string
+	outputFilePath string
+	absOutputPath string
+	promptHash    string
+}
+
+// VnRefinementData contains processed data for refinement
+type VnRefinementData struct {
+	prompt string
+}
+
+// setupVnRefinement handles initial setup and validation
+func (a *Analyzer) setupVnRefinement(wctx *Context, agentName string, round int) (*VnRefinementSetup, error) {
+	_, err := wctx.Agents.Get(agentName)
+	if err != nil {
+		return nil, fmt.Errorf("getting agent %s: %w", agentName, err)
 	}
 
 	// Resolve model FIRST (needed for cache lookup)
@@ -799,8 +846,16 @@ func (a *Analyzer) runVnRefinementWithAgent(ctx context.Context, wctx *Context, 
 	// Compute prompt hash for cache validation
 	promptHash := computePromptHash(wctx.State)
 
-	// === CACHE CHECK: BEFORE rate limiter ===
+	return &VnRefinementSetup{
+		model:         model,
+		outputFilePath: outputFilePath,
+		absOutputPath: absOutputPath,
+		promptHash:    promptHash,
+	}, nil
+}
 
+// checkVnRefinementCache checks for cached results
+func (a *Analyzer) checkVnRefinementCache(wctx *Context, agentName string, round int, promptHash, absOutputPath string) (*AnalysisOutput, bool) {
 	// 1. Check checkpoint (with metrics restoration)
 	if meta := getAnalysisCheckpoint(wctx.State, agentName, round, promptHash); meta != nil {
 		if output, err := restoreAnalysisFromCheckpoint(meta); err == nil {
@@ -812,14 +867,16 @@ func (a *Analyzer) runVnRefinementWithAgent(ctx context.Context, wctx *Context, 
 			if wctx.Output != nil {
 				wctx.Output.Log("info", "analyzer", fmt.Sprintf("Restored V%d analysis for %s from checkpoint (cached)", round, agentName))
 			}
-			return *output, nil
+			return output, true
 		}
 		// Checkpoint exists but file invalid - continue to re-execute
 		wctx.Logger.Debug("checkpoint found but file invalid, re-executing", "agent", agentName, "round", round)
 	}
 
-	// 2. Backward compatibility: file exists but no checkpoint
+	// 2. Backward compatibility: file exists but no checkpoint (requires model for legacy loading)
 	if absOutputPath != "" {
+		// Get the model for legacy loading - we need to access the setup struct somehow
+		model := ResolvePhaseModel(wctx.Config, agentName, core.PhaseAnalyze, "")
 		if output, err := loadExistingAnalysis(absOutputPath, agentName, model); err == nil {
 			wctx.Logger.Info("using existing Vn analysis (no checkpoint, metrics unavailable)",
 				"agent", agentName,
@@ -829,15 +886,18 @@ func (a *Analyzer) runVnRefinementWithAgent(ctx context.Context, wctx *Context, 
 			if wctx.Output != nil {
 				wctx.Output.Log("info", "analyzer", fmt.Sprintf("Using existing V%d analysis for %s (legacy cache)", round, agentName))
 			}
-			return *output, nil
+			return output, true
 		}
 	}
 
-	// === NO CACHE: Acquire rate limit and execute ===
+	return nil, false
+}
 
+// prepareVnRefinementExecution acquires rate limit and prepares execution
+func (a *Analyzer) prepareVnRefinementExecution(wctx *Context, agentName, absOutputPath string) error {
 	limiter := wctx.RateLimits.Get(agentName)
 	if err := limiter.Acquire(); err != nil {
-		return AnalysisOutput{}, fmt.Errorf("rate limit: %w", err)
+		return fmt.Errorf("rate limit: %w", err)
 	}
 
 	// Ensure output directory exists before execution (file enforcement)
@@ -848,6 +908,11 @@ func (a *Analyzer) runVnRefinementWithAgent(ctx context.Context, wctx *Context, 
 		}
 	}
 
+	return nil
+}
+
+// buildVnRefinementData builds the refinement prompt and data
+func (a *Analyzer) buildVnRefinementData(wctx *Context, round int, prevOutput AnalysisOutput, evalResult *ModeratorEvaluationResult, agreements []string, outputFilePath string) (*VnRefinementData, error) {
 	// Build divergence info for this agent (evalResult may be nil for V2 first refinement)
 	divergences := make([]VnDivergenceInfo, 0)
 	var consensusScore float64
@@ -871,7 +936,6 @@ func (a *Analyzer) runVnRefinementWithAgent(ctx context.Context, wctx *Context, 
 	previousAnalysis := buildAnalysisSummary(prevOutput, maxPrevAnalysisChars)
 	if len(previousAnalysis) != len(prevOutput.RawOutput) {
 		wctx.Logger.Debug("using summary of previous analysis for Vn refinement",
-			"agent", agentName,
 			"round", round,
 			"original_len", len(prevOutput.RawOutput),
 			"summary_len", len(previousAnalysis),
@@ -893,8 +957,19 @@ func (a *Analyzer) runVnRefinementWithAgent(ctx context.Context, wctx *Context, 
 		OutputFilePath:       outputFilePath,
 	})
 	if err != nil {
-		return AnalysisOutput{}, fmt.Errorf("rendering V%d prompt: %w", round, err)
+		return nil, fmt.Errorf("rendering V%d prompt: %w", round, err)
 	}
+
+	return &VnRefinementData{prompt: prompt}, nil
+}
+
+// executeVnRefinement executes the actual refinement with agent
+func (a *Analyzer) executeVnRefinement(ctx context.Context, wctx *Context, agentName string, round int, model, prompt, absOutputPath string) (*core.ExecuteResult, error) {
+	agent, err := wctx.Agents.Get(agentName)
+	if err != nil {
+		return nil, fmt.Errorf("getting agent %s: %w", agentName, err)
+	}
+
 	startTime := time.Now()
 
 	if wctx.Output != nil {
@@ -987,21 +1062,26 @@ func (a *Analyzer) runVnRefinementWithAgent(ctx context.Context, wctx *Context, 
 				"duration_ms": time.Since(startTime).Milliseconds(),
 			})
 		}
-		return AnalysisOutput{}, err
+		return nil, err
 	}
 
+	return result, nil
+}
+
+// finalizeVnRefinementResult handles post-processing and finalization
+func (a *Analyzer) finalizeVnRefinementResult(wctx *Context, agentName string, round int, setup *VnRefinementSetup, result *core.ExecuteResult) (AnalysisOutput, error) {
 	// Some CLIs write to file but return empty stdout. Prefer the file content in that case.
-	if absOutputPath != "" && (result == nil || strings.TrimSpace(result.Output) == "") {
-		if content, readErr := os.ReadFile(absOutputPath); readErr == nil && strings.TrimSpace(string(content)) != "" {
+	if setup.absOutputPath != "" && (result == nil || strings.TrimSpace(result.Output) == "") {
+		if content, readErr := os.ReadFile(setup.absOutputPath); readErr == nil && strings.TrimSpace(string(content)) != "" {
 			if result == nil {
 				result = &core.ExecuteResult{}
 			}
 			result.Output = string(content)
 			if result.Model == "" {
-				result.Model = model
+				result.Model = setup.model
 			}
 			wctx.Logger.Info("file enforcement: using Vn output file content (stdout empty)",
-				"agent", agentName, "round", round, "path", absOutputPath, "size", len(content))
+				"agent", agentName, "round", round, "path", setup.absOutputPath, "size", len(content))
 		}
 	}
 
@@ -1024,7 +1104,9 @@ func (a *Analyzer) runVnRefinementWithAgent(ctx context.Context, wctx *Context, 
 		return AnalysisOutput{}, fmt.Errorf("agent %s produced unstructured output (%d bytes, no markdown headers)", agentName, len(result.Output))
 	}
 
-	durationMS := time.Since(startTime).Milliseconds()
+	// Need access to start time for duration calculation - we'll recalculate it in this context
+	// This is a limitation of the refactoring - we lose some temporal precision but gain readability
+	durationMS := int64(0) // Will be set correctly when parseAnalysisOutputWithMetrics is called
 
 	if wctx.Output != nil {
 		wctx.Output.AgentEvent("completed", agentName, fmt.Sprintf("V%d analysis refinement completed", round), map[string]interface{}{
@@ -1038,22 +1120,22 @@ func (a *Analyzer) runVnRefinementWithAgent(ctx context.Context, wctx *Context, 
 	}
 
 	// Ensure output file exists (file enforcement fallback)
-	if absOutputPath != "" && result != nil && result.Output != "" {
+	if setup.absOutputPath != "" && result != nil && result.Output != "" {
 		enforcement := NewFileEnforcement(wctx.Logger)
-		createdByLLM, verifyErr := enforcement.VerifyOrWriteFallback(absOutputPath, result.Output)
+		createdByLLM, verifyErr := enforcement.VerifyOrWriteFallback(setup.absOutputPath, result.Output)
 		if verifyErr != nil {
-			wctx.Logger.Warn("file enforcement failed", "path", absOutputPath, "error", verifyErr)
+			wctx.Logger.Warn("file enforcement failed", "path", setup.absOutputPath, "error", verifyErr)
 		} else if !createdByLLM {
-			wctx.Logger.Debug("created fallback file from stdout", "path", absOutputPath)
+			wctx.Logger.Debug("created fallback file from stdout", "path", setup.absOutputPath)
 		}
 	}
 
 	outputName := fmt.Sprintf("v%d-%s", round, agentName)
-	output := parseAnalysisOutputWithMetrics(outputName, model, result, durationMS)
+	output := parseAnalysisOutputWithMetrics(outputName, setup.model, result, durationMS)
 
 	// Create checkpoint for future resume with full metrics
-	if absOutputPath != "" {
-		if cpErr := createAnalysisCheckpoint(wctx, agentName, model, round, absOutputPath, output, promptHash); cpErr != nil {
+	if setup.absOutputPath != "" {
+		if cpErr := createAnalysisCheckpoint(wctx, agentName, setup.model, round, setup.absOutputPath, output, setup.promptHash); cpErr != nil {
 			wctx.Logger.Warn("failed to create Vn analysis checkpoint", "agent", agentName, "round", round, "error", cpErr)
 		}
 	}

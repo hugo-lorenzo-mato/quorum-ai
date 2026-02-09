@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -439,6 +440,7 @@ func TestAPI_ConcurrentRequests(t *testing.T) {
 // Mock API implementation
 
 type MockAPIHandler struct {
+	mu          sync.RWMutex // Protege acceso concurrente
 	workflows   map[string]*WorkflowInfo
 	authEnabled bool
 	rateLimit   *RateLimiter
@@ -453,10 +455,11 @@ type WorkflowInfo struct {
 }
 
 type RateLimiter struct {
-	enabled    bool
-	limit      int
-	window     time.Duration
-	requests   map[string][]time.Time
+	mu       sync.RWMutex // Protege acceso concurrente
+	enabled  bool
+	limit    int
+	window   time.Duration
+	requests map[string][]time.Time
 }
 
 type WorkflowCreateRequest struct {
@@ -497,6 +500,8 @@ func (h *MockAPIHandler) EnableAuth(enabled bool) {
 }
 
 func (h *MockAPIHandler) EnableRateLimit(enabled bool, limit int, window time.Duration) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	h.rateLimit = &RateLimiter{
 		enabled:  enabled,
 		limit:    limit,
@@ -513,7 +518,11 @@ func (h *MockAPIHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Rate limiting check
-	if h.rateLimit != nil && h.rateLimit.enabled && !h.checkRateLimit(w, r) {
+	h.mu.RLock()
+	rateLimitEnabled := h.rateLimit != nil && h.rateLimit.enabled
+	h.mu.RUnlock()
+	
+	if rateLimitEnabled && !h.checkRateLimit(w, r) {
 		return
 	}
 
@@ -540,22 +549,38 @@ func (h *MockAPIHandler) isAuthenticated(r *http.Request) bool {
 }
 
 func (h *MockAPIHandler) checkRateLimit(w http.ResponseWriter, r *http.Request) bool {
+	if !h.rateLimit.enabled {
+		return true
+	}
+	
+	// Extract just the IP part, ignoring port
 	clientIP := r.RemoteAddr
+	if idx := strings.LastIndex(clientIP, ":"); idx != -1 {
+		clientIP = clientIP[:idx]
+	}
+	
 	now := time.Now()
 	
-	// Clean old requests
-	if requests, exists := h.rateLimit.requests[clientIP]; exists {
-		var validRequests []time.Time
-		for _, reqTime := range requests {
-			if now.Sub(reqTime) < h.rateLimit.window {
-				validRequests = append(validRequests, reqTime)
-			}
-		}
-		h.rateLimit.requests[clientIP] = validRequests
+	h.rateLimit.mu.Lock()
+	defer h.rateLimit.mu.Unlock()
+	
+	// Initialize if not exists
+	if _, exists := h.rateLimit.requests[clientIP]; !exists {
+		h.rateLimit.requests[clientIP] = make([]time.Time, 0)
 	}
+	
+	// Clean old requests
+	var validRequests []time.Time
+	for _, reqTime := range h.rateLimit.requests[clientIP] {
+		if now.Sub(reqTime) < h.rateLimit.window {
+			validRequests = append(validRequests, reqTime)
+		}
+	}
+	h.rateLimit.requests[clientIP] = validRequests
 	
 	// Check limit
 	currentRequests := len(h.rateLimit.requests[clientIP])
+	
 	if currentRequests >= h.rateLimit.limit {
 		w.Header().Set("X-RateLimit-Limit", fmt.Sprintf("%d", h.rateLimit.limit))
 		w.Header().Set("X-RateLimit-Remaining", "0")
@@ -598,17 +623,21 @@ func (h *MockAPIHandler) createWorkflow(w http.ResponseWriter, r *http.Request) 
 		Updated: time.Now(),
 	}
 
+	h.mu.Lock()
 	h.workflows[workflowID] = workflow
+	h.mu.Unlock()
 
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(WorkflowCreateResponse{WorkflowID: workflowID})
 }
 
 func (h *MockAPIHandler) listWorkflows(w http.ResponseWriter, r *http.Request) {
+	h.mu.RLock()
 	workflows := make([]WorkflowInfo, 0, len(h.workflows))
 	for _, workflow := range h.workflows {
 		workflows = append(workflows, *workflow)
 	}
+	h.mu.RUnlock()
 
 	json.NewEncoder(w).Encode(WorkflowListResponse{Workflows: workflows})
 }
@@ -616,7 +645,10 @@ func (h *MockAPIHandler) listWorkflows(w http.ResponseWriter, r *http.Request) {
 func (h *MockAPIHandler) getWorkflow(w http.ResponseWriter, r *http.Request) {
 	workflowID := strings.TrimPrefix(r.URL.Path, "/api/v1/workflows/")
 	
+	h.mu.RLock()
 	workflow, exists := h.workflows[workflowID]
+	h.mu.RUnlock()
+	
 	if !exists {
 		h.writeError(w, http.StatusNotFound, "workflow not found")
 		return
@@ -636,14 +668,17 @@ func (h *MockAPIHandler) getWorkflow(w http.ResponseWriter, r *http.Request) {
 func (h *MockAPIHandler) cancelWorkflow(w http.ResponseWriter, r *http.Request) {
 	workflowID := strings.TrimPrefix(r.URL.Path, "/api/v1/workflows/")
 	
+	h.mu.Lock()
 	workflow, exists := h.workflows[workflowID]
 	if !exists {
+		h.mu.Unlock()
 		h.writeError(w, http.StatusNotFound, "workflow not found")
 		return
 	}
 
 	workflow.Status = "cancelled"
 	workflow.Updated = time.Now()
+	h.mu.Unlock()
 
 	json.NewEncoder(w).Encode(map[string]string{"message": "workflow cancelled"})
 }
