@@ -396,6 +396,11 @@ func (g *Generator) readIssueFile(workflowID string, input IssueInput) (title, b
 		return "", "", "", fmt.Errorf("issue file path is required")
 	}
 
+	absIssuesDir, err := filepath.Abs(issuesDirAbs)
+	if err != nil {
+		return "", "", "", fmt.Errorf("resolving issues directory: %w", err)
+	}
+
 	var absPath string
 	if filepath.IsAbs(path) {
 		absPath = path
@@ -405,29 +410,35 @@ func (g *Generator) readIssueFile(workflowID string, input IssueInput) (title, b
 		relPath = path
 	} else {
 		// Bare filename: look in draft/ subdirectory first, then fallback to base
-		draftPath := filepath.Join(issuesDirAbs, "draft", path)
+		draftPath := filepath.Clean(filepath.Join(issuesDirAbs, "draft", path))
+		rel, relErr := filepath.Rel(absIssuesDir, draftPath)
+		if relErr != nil || strings.HasPrefix(rel, "..") {
+			return "", "", "", fmt.Errorf("issue file is outside issues dir: %s", draftPath)
+		}
 		if _, statErr := os.Stat(draftPath); statErr == nil {
 			absPath = draftPath
 			relPath = filepath.Join(issuesDirRel, "draft", path)
 		} else {
-			absPath = filepath.Join(issuesDirAbs, path)
+			basePath := filepath.Clean(filepath.Join(issuesDirAbs, path))
+			rel, relErr := filepath.Rel(absIssuesDir, basePath)
+			if relErr != nil || strings.HasPrefix(rel, "..") {
+				return "", "", "", fmt.Errorf("issue file is outside issues dir: %s", basePath)
+			}
+			absPath = basePath
 			relPath = filepath.Join(issuesDirRel, path)
 		}
 	}
 
-	absIssuesDir, err := filepath.Abs(issuesDirAbs)
-	if err != nil {
-		return "", "", "", fmt.Errorf("resolving issues directory: %w", err)
-	}
 	absResolved, err := filepath.Abs(absPath)
 	if err != nil {
 		return "", "", "", fmt.Errorf("resolving issue file path: %w", err)
 	}
-	if !strings.HasPrefix(absResolved, absIssuesDir+string(filepath.Separator)) && absResolved != absIssuesDir {
+	rel, relErr := filepath.Rel(absIssuesDir, absResolved)
+	if relErr != nil || strings.HasPrefix(rel, "..") {
 		return "", "", "", fmt.Errorf("issue file is outside issues dir: %s", absResolved)
 	}
 
-	content, err := os.ReadFile(absPath)
+	content, err := os.ReadFile(absResolved)
 	if err != nil {
 		return "", "", "", fmt.Errorf("reading issue file %s: %w", absPath, err)
 	}
