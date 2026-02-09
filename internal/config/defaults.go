@@ -137,4 +137,35 @@ workflow:
     check_interval: 60s
     auto_resume: true
     max_resumes: 1
+
+# Issue generation
+issues:
+  enabled: true
+  provider: github
+  auto_generate: false
+  timeout: 5m
+  mode: direct
+  draft_directory: ""
+  repository: ""
+  parent_template: ""
+  template:
+    language: english
+    tone: professional
+    include_diagrams: true
+    title_format: "[quorum] {task_name}"
+    body_template_file: ""
+    convention: ""
+    custom_instructions: ""
+  labels:
+    - quorum-generated
+  assignees: []
+  generator:
+    enabled: false
+    agent: claude
+    model: haiku
+    summarize: true
+    max_body_length: 8000
+    reasoning_effort: ""
+    instructions: ""
+    title_instructions: ""
 `

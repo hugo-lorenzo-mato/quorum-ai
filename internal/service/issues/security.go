@@ -19,6 +19,18 @@ var (
 	ErrAbsolutePath = errors.New("absolute path not allowed")
 )
 
+// ValidateWorkflowID ensures a workflow ID is safe for use in filesystem paths.
+// It rejects empty IDs, path traversal attempts, and absolute paths.
+func ValidateWorkflowID(id string) error {
+	if id == "" {
+		return fmt.Errorf("%w: workflow ID is empty", ErrInvalidFilename)
+	}
+	if strings.Contains(id, "..") || strings.ContainsAny(id, "/\\:") || filepath.IsAbs(id) {
+		return fmt.Errorf("%w: unsafe workflow ID: %s", ErrPathTraversal, id)
+	}
+	return nil
+}
+
 // ValidateOutputPath validates that a filename is safe to write within the given directory.
 // It prevents path traversal attacks by ensuring the resulting path is within the allowed directory.
 //
@@ -72,6 +84,22 @@ func ValidateOutputPath(baseDir, filename string) (string, error) {
 	}
 
 	return fullPath, nil
+}
+
+// validatePathUnderRoot ensures a resolved path stays within the project root.
+func validatePathUnderRoot(resolvedPath, root string) error {
+	absResult, err := filepath.Abs(resolvedPath)
+	if err != nil {
+		return fmt.Errorf("resolving path: %w", err)
+	}
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		return fmt.Errorf("resolving root: %w", err)
+	}
+	if !strings.HasPrefix(absResult+string(filepath.Separator), absRoot+string(filepath.Separator)) {
+		return fmt.Errorf("%w: path escapes project root", ErrPathTraversal)
+	}
+	return nil
 }
 
 // SanitizeFilename removes or replaces potentially dangerous characters from a filename.

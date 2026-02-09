@@ -353,6 +353,14 @@ issues:
   auto_generate: false
   # Timeout for issue generation operations (e.g., "3m" for 3 minutes)
   timeout: 5m
+  # Issue creation mode: "direct" (gh CLI) or "agent" (LLM-based)
+  mode: direct
+  # Directory for draft issue files (empty = default .quorum/issues/)
+  draft_directory: ""
+  # Repository override (empty = auto-detect from CWD, format: "owner/repo")
+  repository: ""
+  # Template for parent issues (empty = default template)
+  parent_template: ""
   # Template settings for issue content
   template:
     # Language for issue content: english, spanish, french, german, portuguese, chinese, japanese
@@ -392,3 +400,9 @@ issues:
     summarize: true
     # Maximum body length in characters
     max_body_length: 8000
+    # Reasoning effort for the generator agent (empty = agent default)
+    reasoning_effort: ""
+    # Custom instructions for issue body generation (optional)
+    instructions: ""
+    # Custom instructions for issue title generation (optional)
+    title_instructions: ""

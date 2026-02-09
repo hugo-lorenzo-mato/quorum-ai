@@ -183,8 +183,10 @@ func (p *StatePool) GetContext(ctx context.Context, projectID string) (*ProjectC
 
 	// Double-check after acquiring write lock
 	if entry, ok := p.contexts[projectID]; ok {
+		entry.mu.Lock()
 		entry.lastAccessed = time.Now()
 		entry.accessCount++
+		entry.mu.Unlock()
 		atomic.AddInt64(&p.hits, 1)
 		entry.context.Touch()
 		return entry.context, nil

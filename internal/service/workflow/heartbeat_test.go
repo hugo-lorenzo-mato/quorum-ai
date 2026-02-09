@@ -163,6 +163,7 @@ func TestHeartbeatManager_WriteHeartbeat_UpdatesLastSuccess(t *testing.T) {
 
 	// Initialize tracking so lastWriteSuccess exists
 	hm.mu.Lock()
+	hm.active[wfID] = func() {} // mark as active
 	hm.lastWriteSuccess[wfID] = time.Now().Add(-time.Minute) // start old
 	hm.mu.Unlock()
 
@@ -187,6 +188,7 @@ func TestHeartbeatManager_WriteHeartbeat_FailureDoesNotUpdateLastSuccess(t *test
 
 	oldTime := time.Now().Add(-time.Minute)
 	hm.mu.Lock()
+	hm.active[wfID] = func() {} // mark as active
 	hm.lastWriteSuccess[wfID] = oldTime
 	hm.mu.Unlock()
 

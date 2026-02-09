@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 )
@@ -185,6 +186,10 @@ func TestProjectContextValidateAfterClose(t *testing.T) {
 }
 
 func TestProjectContextValidateDeletedDirectory(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on Windows: open SQLite handle prevents RemoveAll")
+	}
+
 	projectDir, cleanup := setupTestProjectDir(t)
 	defer cleanup()
 

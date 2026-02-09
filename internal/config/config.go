@@ -498,6 +498,18 @@ type IssuesConfig struct {
 	// Timeout for issue generation operations (e.g., "3m", "5m").
 	Timeout string `mapstructure:"timeout" yaml:"timeout" json:"timeout"`
 
+	// Mode specifies issue creation mode: "direct" (gh CLI) or "agent" (LLM-based).
+	Mode string `mapstructure:"mode" yaml:"mode" json:"mode"`
+
+	// DraftDirectory is the directory for draft issue files (empty = default .quorum/issues/).
+	DraftDirectory string `mapstructure:"draft_directory" yaml:"draft_directory" json:"draft_directory"`
+
+	// Repository overrides auto-detected repository (format: "owner/repo").
+	Repository string `mapstructure:"repository" yaml:"repository" json:"repository"`
+
+	// ParentTemplate is the template for parent issues (empty = default template).
+	ParentTemplate string `mapstructure:"parent_template" yaml:"parent_template" json:"parent_template"`
+
 	// Template configures issue content generation.
 	Template IssueTemplateConfig `mapstructure:"template" yaml:"template" json:"template"`
 
@@ -567,6 +579,15 @@ type IssueGeneratorConfig struct {
 
 	// MaxBodyLength limits the generated body length in characters.
 	MaxBodyLength int `mapstructure:"max_body_length" yaml:"max_body_length" json:"max_body_length"`
+
+	// ReasoningEffort controls the reasoning effort level for the generator agent.
+	ReasoningEffort string `mapstructure:"reasoning_effort" yaml:"reasoning_effort" json:"reasoning_effort"`
+
+	// Instructions are custom instructions for the generator agent when generating issue body.
+	Instructions string `mapstructure:"instructions" yaml:"instructions" json:"instructions"`
+
+	// TitleInstructions are custom instructions for the generator agent when generating issue title.
+	TitleInstructions string `mapstructure:"title_instructions" yaml:"title_instructions" json:"title_instructions"`
 
 	// Resilience configures retry and circuit breaker behavior for LLM calls.
 	Resilience LLMResilienceConfig `mapstructure:"resilience" yaml:"resilience" json:"resilience"`

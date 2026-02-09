@@ -162,7 +162,9 @@ func (h *HeartbeatManager) writeHeartbeat(workflowID core.WorkflowID) {
 			"error", err)
 	} else {
 		h.mu.Lock()
-		h.lastWriteSuccess[workflowID] = time.Now()
+		if _, active := h.active[workflowID]; active {
+			h.lastWriteSuccess[workflowID] = time.Now()
+		}
 		h.mu.Unlock()
 	}
 }

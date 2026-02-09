@@ -25,6 +25,9 @@ export default function IssuesActionBar({
     setError,
     clearError,
     reset,
+    publishingProgress,
+    publishingTotal,
+    publishingMessage,
   } = useIssuesStore();
 
   const [exporting, setExporting] = useState(false);
@@ -148,69 +151,91 @@ export default function IssuesActionBar({
   };
 
   return (
-    <footer className="flex items-center justify-between px-4 py-3 border-t border-border bg-card shrink-0">
-      {/* Left side - status */}
-      <div className="flex items-center gap-3">
-        {error ? (
-          <span className="flex items-center gap-1.5 text-sm text-destructive">
-            <AlertCircle className="w-4 h-4" />
-            {error}
-          </span>
-        ) : (
-          <span className="text-sm text-muted-foreground">
-            {issueCount} issue{issueCount !== 1 ? 's' : ''} ready
-            {hasUnsavedChanges && ' (modified)'}
-          </span>
-        )}
-      </div>
+    <footer className="border-t border-border bg-card shrink-0">
+      {/* Publishing progress bar */}
+      {submitting && publishingTotal > 0 && (
+        <div className="px-4 pt-3">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-xs text-muted-foreground">
+              {publishingMessage || `Publishing issue ${publishingProgress} of ${publishingTotal}...`}
+            </span>
+            <span className="text-xs text-muted-foreground">
+              {Math.round((publishingProgress / publishingTotal) * 100)}%
+            </span>
+          </div>
+          <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+            <div
+              className="h-full bg-primary rounded-full transition-all duration-500 ease-out"
+              style={{ width: `${(publishingProgress / publishingTotal) * 100}%` }}
+            />
+          </div>
+        </div>
+      )}
 
-      {/* Right side - actions */}
-      <div className="flex items-center gap-2">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={handleExport}
-          disabled={exporting || submitting || issueCount === 0}
-          className="gap-2"
-        >
-          {exporting ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
+      <div className="flex items-center justify-between px-4 py-3">
+        {/* Left side - status */}
+        <div className="flex items-center gap-3">
+          {error ? (
+            <span className="flex items-center gap-1.5 text-sm text-destructive">
+              <AlertCircle className="w-4 h-4" />
+              {error}
+            </span>
           ) : (
-            <Download className="w-4 h-4" />
+            <span className="text-sm text-muted-foreground">
+              {issueCount} issue{issueCount !== 1 ? 's' : ''} ready
+              {hasUnsavedChanges && ' (modified)'}
+            </span>
           )}
-          Export
-        </Button>
+        </div>
 
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={handleSaveDraft}
-          disabled={submitting || !hasUnsavedChanges}
-          className="gap-2"
-        >
-          <Save className="w-4 h-4" />
-          Save Draft
-        </Button>
-
-        <Button
-          variant="default"
-          size="sm"
-          onClick={handleCreateIssues}
-          disabled={submitting || issueCount === 0}
-          className="gap-2"
-        >
-          {submitting ? (
-            <>
+        {/* Right side - actions */}
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleExport}
+            disabled={exporting || submitting || issueCount === 0}
+            className="gap-2"
+          >
+            {exporting ? (
               <Loader2 className="w-4 h-4 animate-spin" />
-              Creating...
-            </>
-          ) : (
-            <>
-              <Send className="w-4 h-4" />
-              Create Issues
-            </>
-          )}
-        </Button>
+            ) : (
+              <Download className="w-4 h-4" />
+            )}
+            Export
+          </Button>
+
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={handleSaveDraft}
+            disabled={submitting || !hasUnsavedChanges}
+            className="gap-2"
+          >
+            <Save className="w-4 h-4" />
+            Save Draft
+          </Button>
+
+          <Button
+            variant="default"
+            size="sm"
+            onClick={handleCreateIssues}
+            disabled={submitting || issueCount === 0}
+            className="gap-2"
+          >
+            {submitting ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Creating{publishingTotal > 0 ? ` (${publishingProgress}/${publishingTotal})` : '...'}
+              </>
+            ) : (
+              <>
+                <Send className="w-4 h-4" />
+                Create Issues
+              </>
+            )}
+          </Button>
+        </div>
       </div>
     </footer>
   );

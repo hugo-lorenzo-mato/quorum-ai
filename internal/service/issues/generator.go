@@ -17,6 +17,13 @@ import (
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service"
 )
 
+// Error format strings for duplicated messages (S1192).
+const (
+	errResolvingProjectRoot = "resolving project root: %w"
+	errGettingProjectRoot   = "getting project root: %w"
+	errResolvingDraftDir    = "resolving draft directory: %w"
+)
+
 // IssueInput represents a single issue to be created (from frontend edits).
 type IssueInput struct {
 	Title       string
@@ -30,26 +37,119 @@ type IssueInput struct {
 
 // Generator creates GitHub/GitLab issues from workflow artifacts.
 type Generator struct {
-	client    core.IssueClient
-	config    config.IssuesConfig
-	reportDir string
-	agents    core.AgentRegistry      // Optional: for LLM-based generation
-	prompts   *service.PromptRenderer // Lazy-initialized prompt renderer
+	client      core.IssueClient
+	config      config.IssuesConfig
+	projectRoot string                  // Project root directory (replaces os.Getwd)
+	reportDir   string
+	agents      core.AgentRegistry      // Optional: for LLM-based generation
+	prompts     *service.PromptRenderer // Lazy-initialized prompt renderer
 
 	// LLM generation cache - prevents regenerating files within same workflow
 	llmGenerationCache map[string][]IssuePreview // workflowID -> generated issues
+
+	progress ProgressReporter // Optional: progress reporting for SSE/UI
 }
 
 // NewGenerator creates a new issue generator.
+// projectRoot is the project root directory; if empty, falls back to os.Getwd().
 // agents can be nil if LLM-based generation is not needed.
-func NewGenerator(client core.IssueClient, cfg config.IssuesConfig, reportDir string, agents core.AgentRegistry) *Generator {
+func NewGenerator(client core.IssueClient, cfg config.IssuesConfig, projectRoot, reportDir string, agents core.AgentRegistry) *Generator {
 	return &Generator{
 		client:             client,
 		config:             cfg,
+		projectRoot:        projectRoot,
 		reportDir:          reportDir,
 		agents:             agents,
 		llmGenerationCache: make(map[string][]IssuePreview),
 	}
+}
+
+// SetProgressReporter sets an optional progress reporter for generation/publishing progress.
+func (g *Generator) SetProgressReporter(r ProgressReporter) {
+	g.progress = r
+}
+
+func (g *Generator) emitIssuesGenerationProgress(workflowID, stage string, current, total int, issue *ProgressIssue, message string) {
+	if g.progress == nil {
+		return
+	}
+	g.progress.OnIssuesGenerationProgress(workflowID, stage, current, total, issue, message)
+}
+
+// PublishingProgressParams holds parameters for emitting a publishing progress event.
+type PublishingProgressParams struct {
+	WorkflowID  string
+	Stage       string
+	Current     int
+	Total       int
+	Issue       *ProgressIssue
+	IssueNumber int
+	DryRun      bool
+	Message     string
+}
+
+func (g *Generator) emitIssuesPublishingProgress(p PublishingProgressParams) {
+	if g.progress == nil {
+		return
+	}
+	g.progress.OnIssuesPublishingProgress(p)
+}
+
+// getProjectRoot returns the project root, falling back to os.Getwd() if not set.
+func (g *Generator) getProjectRoot() (string, error) {
+	if g.projectRoot != "" {
+		return g.projectRoot, nil
+	}
+	return os.Getwd()
+}
+
+// resolveDraftDir returns the absolute path to the draft directory for a workflow.
+// Uses DraftDirectory from config if set, otherwise defaults to .quorum/issues/.
+func (g *Generator) resolveDraftDir(workflowID string) (string, error) {
+	if err := ValidateWorkflowID(workflowID); err != nil {
+		return "", err
+	}
+	root, err := g.getProjectRoot()
+	if err != nil {
+		return "", fmt.Errorf(errResolvingProjectRoot, err)
+	}
+	baseDir := ".quorum/issues"
+	if g.config.DraftDirectory != "" {
+		baseDir = filepath.Clean(g.config.DraftDirectory)
+	}
+	result := filepath.Join(root, baseDir, workflowID, "draft")
+	if err := validatePathUnderRoot(result, root); err != nil {
+		return "", err
+	}
+	return result, nil
+}
+
+// resolvePublishedDir returns the absolute path to the published directory for a workflow.
+func (g *Generator) resolvePublishedDir(workflowID string) (string, error) {
+	if err := ValidateWorkflowID(workflowID); err != nil {
+		return "", err
+	}
+	root, err := g.getProjectRoot()
+	if err != nil {
+		return "", fmt.Errorf(errResolvingProjectRoot, err)
+	}
+	baseDir := ".quorum/issues"
+	if g.config.DraftDirectory != "" {
+		baseDir = filepath.Clean(g.config.DraftDirectory)
+	}
+	result := filepath.Join(root, baseDir, workflowID, "published")
+	if err := validatePathUnderRoot(result, root); err != nil {
+		return "", err
+	}
+	return result, nil
+}
+
+// resolveIssuesBaseDir returns the relative base directory for issues (without workflow subdirectory).
+func (g *Generator) resolveIssuesBaseDir() string {
+	if g.config.DraftDirectory != "" {
+		return g.config.DraftDirectory
+	}
+	return filepath.Join(".quorum", "issues")
 }
 
 // getPromptRenderer returns the prompt renderer, initializing it lazily if needed.
@@ -269,6 +369,20 @@ func (g *Generator) Generate(ctx context.Context, opts GenerateOptions) (*Genera
 	}
 	mainLabels := ensureEpicLabel(labels)
 
+	createdCount := 0
+	totalToPublish := 0
+
+	// Pre-read task files so we can emit deterministic publishing progress.
+	var tasks []TaskInfo
+	if opts.CreateSubIssues {
+		var err error
+		tasks, err = g.readTaskFiles()
+		if err != nil {
+			result.Errors = append(result.Errors, fmt.Errorf("reading task files: %w", err))
+		}
+		totalToPublish += len(tasks)
+	}
+
 	// Read consolidated analysis for main issue
 	var consolidatedContent string
 	var mainIssue *core.Issue
@@ -278,6 +392,18 @@ func (g *Generator) Generate(ctx context.Context, opts GenerateOptions) (*Genera
 		consolidatedContent, err = g.readConsolidatedAnalysis()
 		if err != nil {
 			result.Errors = append(result.Errors, fmt.Errorf("reading consolidated analysis: %w", err))
+		}
+
+		if consolidatedContent != "" {
+			totalToPublish++
+		}
+
+		// Emit a "started" publishing event once we know the total.
+		if totalToPublish > 0 {
+			g.emitIssuesPublishingProgress(PublishingProgressParams{
+				WorkflowID: opts.WorkflowID, Stage: "started", Total: totalToPublish,
+				DryRun: opts.DryRun, Message: "issue publishing started",
+			})
 		}
 
 		if consolidatedContent != "" {
@@ -316,6 +442,11 @@ func (g *Generator) Generate(ctx context.Context, opts GenerateOptions) (*Genera
 					Assignees:   assignees,
 					IsMainIssue: true,
 				})
+				createdCount++
+				g.emitIssuesPublishingProgress(PublishingProgressParams{
+					WorkflowID: opts.WorkflowID, Stage: "progress", Current: createdCount, Total: totalToPublish,
+					Issue: &ProgressIssue{Title: mainTitle, TaskID: "main", IsMainIssue: true}, DryRun: true,
+				})
 			} else {
 				mainIssue, err = g.client.CreateIssue(ctx, core.CreateIssueOptions{
 					Title:     mainTitle,
@@ -327,20 +458,27 @@ func (g *Generator) Generate(ctx context.Context, opts GenerateOptions) (*Genera
 					return nil, fmt.Errorf("creating main issue: %w", err)
 				}
 				result.IssueSet.MainIssue = mainIssue
+				createdCount++
+				g.emitIssuesPublishingProgress(PublishingProgressParams{
+					WorkflowID: opts.WorkflowID, Stage: "progress", Current: createdCount, Total: totalToPublish,
+					Issue: &ProgressIssue{Title: mainIssue.Title, TaskID: "main", IsMainIssue: true}, IssueNumber: mainIssue.Number,
+				})
 			}
 		}
+	} else if totalToPublish > 0 {
+		// No main issue: still emit a started event for sub-issue publishing.
+		g.emitIssuesPublishingProgress(PublishingProgressParams{
+			WorkflowID: opts.WorkflowID, Stage: "started", Total: totalToPublish,
+			DryRun: opts.DryRun, Message: "issue publishing started",
+		})
 	}
 
 	// Read and create sub-issues from task files
 	if opts.CreateSubIssues {
-		tasks, err := g.readTaskFiles()
-		if err != nil {
-			result.Errors = append(result.Errors, fmt.Errorf("reading task files: %w", err))
-		}
-
 		for _, task := range tasks {
 			var taskTitle, taskBody string
 			var taskAISucceeded bool
+			var err error
 
 			// Try LLM-based generation if enabled
 			if g.config.Generator.Enabled {
@@ -373,6 +511,11 @@ func (g *Generator) Generate(ctx context.Context, opts GenerateOptions) (*Genera
 					IsMainIssue: false,
 					TaskID:      task.ID,
 				})
+				createdCount++
+				g.emitIssuesPublishingProgress(PublishingProgressParams{
+					WorkflowID: opts.WorkflowID, Stage: "progress", Current: createdCount, Total: totalToPublish,
+					Issue: &ProgressIssue{Title: taskTitle, TaskID: task.ID}, DryRun: true,
+				})
 			} else {
 				parentNum := 0
 				if opts.LinkIssues && mainIssue != nil {
@@ -391,8 +534,21 @@ func (g *Generator) Generate(ctx context.Context, opts GenerateOptions) (*Genera
 					continue
 				}
 				result.IssueSet.SubIssues = append(result.IssueSet.SubIssues, subIssue)
+				createdCount++
+				g.emitIssuesPublishingProgress(PublishingProgressParams{
+					WorkflowID: opts.WorkflowID, Stage: "progress", Current: createdCount, Total: totalToPublish,
+					Issue: &ProgressIssue{Title: subIssue.Title, TaskID: task.ID}, IssueNumber: subIssue.Number,
+				})
 			}
 		}
+	}
+
+	// Make sure we always end with a "completed" progress update when we had a defined total.
+	if totalToPublish > 0 {
+		g.emitIssuesPublishingProgress(PublishingProgressParams{
+			WorkflowID: opts.WorkflowID, Stage: "completed", Current: createdCount, Total: totalToPublish,
+			DryRun: opts.DryRun, Message: "issue publishing completed",
+		})
 	}
 
 	return result, nil
@@ -551,7 +707,8 @@ func (g *Generator) readTaskFiles() ([]TaskInfo, error) {
 
 	// Also check global .quorum/tasks directory (derive from reportDir)
 	// reportDir is typically .quorum/runs/{workflowID}, so .quorum/tasks is ../../../.quorum/tasks
-	if strings.Contains(g.reportDir, ".quorum/runs/") {
+	quorumRunsSegment := ".quorum" + string(filepath.Separator) + "runs" + string(filepath.Separator)
+	if strings.Contains(g.reportDir, quorumRunsSegment) {
 		quorumRoot := filepath.Dir(filepath.Dir(g.reportDir)) // Go up to .quorum
 		globalTasksDir := filepath.Join(quorumRoot, "tasks")
 		tasksDirs = append(tasksDirs, globalTasksDir)
@@ -759,21 +916,26 @@ func (g *Generator) GetIssueSet(_ context.Context, _ string) (*core.IssueSet, er
 	return nil, nil
 }
 
-// cleanIssuesDirectory removes all existing files in the issues directory
-// to prevent duplicates from accumulating across multiple generations.
-func (g *Generator) cleanIssuesDirectory(issuesDir string) error {
+// cleanIssuesDirectory removes only the draft/ subdirectory to prevent duplicates
+// from accumulating across multiple generations. The published/ directory is preserved.
+func (g *Generator) cleanIssuesDirectory(workflowID string) error {
+	draftDir, err := g.resolveDraftDir(workflowID)
+	if err != nil {
+		return fmt.Errorf(errResolvingDraftDir, err)
+	}
+
 	// Check if directory exists
-	if _, err := os.Stat(issuesDir); os.IsNotExist(err) {
-		slog.Debug("issues directory does not exist, skipping cleanup", "dir", issuesDir)
+	if _, err := os.Stat(draftDir); os.IsNotExist(err) {
+		slog.Debug("draft directory does not exist, skipping cleanup", "dir", draftDir)
 		return nil
 	}
 
-	// Remove the directory and all its contents
-	if err := os.RemoveAll(issuesDir); err != nil {
-		return fmt.Errorf("removing issues directory: %w", err)
+	// Remove only the draft directory, preserving published/
+	if err := os.RemoveAll(draftDir); err != nil {
+		return fmt.Errorf("removing draft directory: %w", err)
 	}
 
-	slog.Info("cleaned issues directory to prevent duplicates", "dir", issuesDir)
+	slog.Info("cleaned draft directory to prevent duplicates", "dir", draftDir)
 	return nil
 }
 
@@ -820,22 +982,29 @@ func (g *Generator) GenerateIssueFiles(ctx context.Context, workflowID string) (
 	}
 
 	// Create output directory
-	cwd, err := os.Getwd()
+	root, err := g.getProjectRoot()
 	if err != nil {
-		return nil, fmt.Errorf("getting working directory: %w", err)
+		return nil, fmt.Errorf(errGettingProjectRoot, err)
 	}
+
+	// Clean the draft directory before generation to avoid duplicates
+	if err := g.cleanIssuesDirectory(workflowID); err != nil {
+		return nil, fmt.Errorf("cleaning draft directory: %w", err)
+	}
+
+	draftDirAbs, err := g.resolveDraftDir(workflowID)
+	if err != nil {
+		return nil, fmt.Errorf(errResolvingDraftDir, err)
+	}
+	if err := os.MkdirAll(draftDirAbs, 0o755); err != nil {
+		return nil, fmt.Errorf("creating draft directory: %w", err)
+	}
+
 	// Use relative path for shorter prompt (Claude will resolve it from cwd)
-	issuesDirRel := filepath.Join(".quorum", "issues", workflowID)
-	issuesDirAbs := filepath.Join(cwd, issuesDirRel)
-
-	// Clean the directory before generation to avoid duplicates
-	if err := g.cleanIssuesDirectory(issuesDirAbs); err != nil {
-		return nil, fmt.Errorf("cleaning issues directory: %w", err)
-	}
-
-	if err := os.MkdirAll(issuesDirAbs, 0o755); err != nil {
-		return nil, fmt.Errorf("creating issues directory: %w", err)
-	}
+	baseDir := g.resolveIssuesBaseDir()
+	issuesDirRel := filepath.Join(baseDir, workflowID, "draft")
+	issuesDirAbs := draftDirAbs
+	cwd := root
 
 	// Get consolidated analysis path (not content)
 	consolidatedPath, err := g.getConsolidatedAnalysisPath()
@@ -856,6 +1025,61 @@ func (g *Generator) GenerateIssueFiles(ctx context.Context, workflowID string) (
 		expectedByName[exp.FileName] = exp
 		tracker.AddExpected(exp.FileName, exp.TaskID)
 	}
+	totalExpected := len(tracker.ExpectedFiles)
+	emitted := make(map[string]bool, totalExpected)
+	estimatedProgress := 0
+
+	parseProgressIssue := func(fileName string) *ProgressIssue {
+		filePath := filepath.Join(issuesDirAbs, fileName)
+		content, err := os.ReadFile(filePath)
+		if err != nil {
+			return &ProgressIssue{Title: fileName, FileName: fileName}
+		}
+
+		if fm, _, fmErr := parseDraftContent(string(content)); fmErr == nil && fm != nil {
+			return &ProgressIssue{
+				Title:       fm.Title,
+				TaskID:      fm.TaskID,
+				FileName:    fileName,
+				IsMainIssue: fm.IsMainIssue,
+			}
+		}
+
+		title, _ := parseIssueMarkdown(string(content))
+		return &ProgressIssue{
+			Title:       title,
+			TaskID:      "",
+			FileName:    fileName,
+			IsMainIssue: strings.Contains(fileName, "consolidated") || strings.HasPrefix(fileName, "00-"),
+		}
+	}
+
+	emitNewFiles := func() {
+		names := make([]string, 0, len(tracker.GeneratedFiles))
+		for name := range tracker.GeneratedFiles {
+			names = append(names, name)
+		}
+		sort.Slice(names, func(i, j int) bool {
+			return extractFileNumber(names[i]) < extractFileNumber(names[j])
+		})
+		for _, name := range names {
+			if emitted[name] {
+				continue
+			}
+			emitted[name] = true
+			cur := len(emitted)
+			if estimatedProgress > cur {
+				cur = estimatedProgress
+			}
+			g.emitIssuesGenerationProgress(workflowID, "file_generated", cur, totalExpected, parseProgressIssue(name), "")
+		}
+		// Always emit an aggregate progress update (helps UIs that don't track per-file events).
+		cur := len(emitted)
+		if estimatedProgress > cur {
+			cur = estimatedProgress
+		}
+		g.emitIssuesGenerationProgress(workflowID, "progress", cur, totalExpected, nil, "")
+	}
 
 	resilienceCfg := g.buildLLMResilienceConfig(g.config.Generator.Resilience, logger)
 	executor := NewResilientLLMExecutor(agent, resilienceCfg)
@@ -870,6 +1094,8 @@ func (g *Generator) GenerateIssueFiles(ctx context.Context, workflowID string) (
 		"output_dir", issuesDirRel,
 		"total_tasks", len(taskFiles),
 		"max_attempts", maxAttempts)
+
+	g.emitIssuesGenerationProgress(workflowID, "started", 0, totalExpected, nil, "issue generation started")
 
 	if logger != nil {
 		deadline, hasDeadline := ctx.Deadline()
@@ -896,6 +1122,15 @@ func (g *Generator) GenerateIssueFiles(ctx context.Context, workflowID string) (
 
 		if len(missing) == 0 {
 			break
+		}
+
+		// Baseline estimate: everything not in "missing" is considered already generated.
+		// This helps keep progress monotonic across retries.
+		if totalExpected > 0 {
+			estimatedProgress = totalExpected - len(missing)
+			if estimatedProgress < 0 {
+				estimatedProgress = 0
+			}
 		}
 
 		var tasksToGenerate []service.IssueTaskFile
@@ -954,6 +1189,12 @@ func (g *Generator) GenerateIssueFiles(ctx context.Context, workflowID string) (
 				"tasks_in_batch", len(batch),
 				"prompt_size", len(prompt),
 				"includes_consolidated", consolidatedForBatch != "")
+			cur := len(emitted)
+			if estimatedProgress > cur {
+				cur = estimatedProgress
+			}
+			g.emitIssuesGenerationProgress(workflowID, "batch_started", cur, totalExpected, nil,
+				fmt.Sprintf("batch %d/%d (attempt %d)", batchNum+1, totalBatches, attempt))
 
 			if logger != nil {
 				taskIDs := make([]string, 0, len(batch))
@@ -973,11 +1214,12 @@ func (g *Generator) GenerateIssueFiles(ctx context.Context, workflowID string) (
 			timeout := resolveExecuteTimeout(deadline, hasDeadline, 10*time.Minute)
 
 			result, err := executor.Execute(ctx, core.ExecuteOptions{
-				Prompt:  prompt,
-				Model:   g.config.Generator.Model,
-				Format:  core.OutputFormatText,
-				Timeout: timeout,
-				WorkDir: cwd,
+				Prompt:          prompt,
+				Model:           g.config.Generator.Model,
+				Format:          core.OutputFormatText,
+				Timeout:         timeout,
+				WorkDir:         cwd,
+				ReasoningEffort: g.config.Generator.ReasoningEffort,
 			})
 			if err != nil {
 				batchErrors = append(batchErrors, fmt.Errorf("batch %d/%d attempt %d: %w", batchNum+1, totalBatches, attempt, err))
@@ -987,6 +1229,12 @@ func (g *Generator) GenerateIssueFiles(ctx context.Context, workflowID string) (
 						"batch", batchNum+1,
 						"error", err)
 				}
+				cur := len(emitted)
+				if estimatedProgress > cur {
+					cur = estimatedProgress
+				}
+				g.emitIssuesGenerationProgress(workflowID, "batch_failed", cur, totalExpected, nil,
+					fmt.Sprintf("batch %d/%d failed (attempt %d)", batchNum+1, totalBatches, attempt))
 				continue
 			}
 
@@ -1001,11 +1249,22 @@ func (g *Generator) GenerateIssueFiles(ctx context.Context, workflowID string) (
 					"batch", batchNum+1,
 					"output_length", len(result.Output))
 			}
+			// Update an estimated progress count so the UI can show incremental movement even before we scan the filesystem.
+			estimatedProgress += len(batch)
+			if includeMain && batchNum == 0 {
+				estimatedProgress++
+			}
+			if estimatedProgress > totalExpected && totalExpected > 0 {
+				estimatedProgress = totalExpected
+			}
+			g.emitIssuesGenerationProgress(workflowID, "batch_completed", estimatedProgress, totalExpected, nil,
+				fmt.Sprintf("batch %d/%d completed (attempt %d)", batchNum+1, totalBatches, attempt))
 		}
 
 		if _, err := g.scanGeneratedIssueFilesWithTracker(issuesDirAbs, tracker); err != nil {
 			return nil, fmt.Errorf("scanning generated issue files: %w", err)
 		}
+		emitNewFiles()
 
 		missingNames := tracker.GetMissingFiles()
 		sort.Strings(missingNames)
@@ -1035,6 +1294,7 @@ func (g *Generator) GenerateIssueFiles(ctx context.Context, workflowID string) (
 	if err != nil {
 		return nil, fmt.Errorf("scanning generated issue files: %w", err)
 	}
+	emitNewFiles()
 
 	if len(files) == 0 {
 		return nil, fmt.Errorf("AI did not generate any issue files (no files found in %s)", issuesDirAbs)
@@ -1054,6 +1314,7 @@ func (g *Generator) GenerateIssueFiles(ctx context.Context, workflowID string) (
 		logger.Info("issue generation completed", "total_files", len(files))
 	}
 
+	g.emitIssuesGenerationProgress(workflowID, "completed", len(emitted), totalExpected, nil, "issue generation completed")
 	return files, nil
 }
 
@@ -1083,29 +1344,29 @@ func (g *Generator) splitIntoBatches(tasks []service.IssueTaskFile, batchSize in
 // getConsolidatedAnalysisPath returns the RELATIVE path to the consolidated analysis file.
 // Using relative paths keeps the prompt shorter and avoids Claude CLI prompt size limits.
 func (g *Generator) getConsolidatedAnalysisPath() (string, error) {
-	cwd, err := os.Getwd()
+	root, err := g.getProjectRoot()
 	if err != nil {
-		return "", fmt.Errorf("getting working directory: %w", err)
+		return "", fmt.Errorf(errGettingProjectRoot, err)
 	}
 
 	// Get relative reportDir (in case it's absolute)
 	reportDirRel := g.reportDir
 	if filepath.IsAbs(g.reportDir) {
-		if rel, err := filepath.Rel(cwd, g.reportDir); err == nil {
+		if rel, err := filepath.Rel(root, g.reportDir); err == nil {
 			reportDirRel = rel
 		}
 	}
 
 	// Try analyze-phase/consolidated.md first
 	relPath := filepath.Join(reportDirRel, "analyze-phase", "consolidated.md")
-	absPath := filepath.Join(cwd, relPath)
+	absPath := filepath.Join(root, relPath)
 	if _, err := os.Stat(absPath); err == nil {
 		return relPath, nil
 	}
 
 	// Fallback to consensus directory
 	consensusRelPath := filepath.Join(reportDirRel, "analyze-phase", "consensus", "consolidated.md")
-	absConsensusPath := filepath.Join(cwd, consensusRelPath)
+	absConsensusPath := filepath.Join(root, consensusRelPath)
 	if _, err := os.Stat(absConsensusPath); err == nil {
 		return consensusRelPath, nil
 	}
@@ -1116,15 +1377,15 @@ func (g *Generator) getConsolidatedAnalysisPath() (string, error) {
 // getTaskFilePaths returns information about task files (RELATIVE paths, not content).
 // Using relative paths keeps the prompt shorter and avoids Claude CLI prompt size limits.
 func (g *Generator) getTaskFilePaths() ([]service.IssueTaskFile, error) {
-	cwd, err := os.Getwd()
+	root, err := g.getProjectRoot()
 	if err != nil {
-		return nil, fmt.Errorf("getting working directory: %w", err)
+		return nil, fmt.Errorf(errGettingProjectRoot, err)
 	}
 
 	// Get relative reportDir (in case it's absolute)
 	reportDirRel := g.reportDir
 	if filepath.IsAbs(g.reportDir) {
-		if rel, err := filepath.Rel(cwd, g.reportDir); err == nil {
+		if rel, err := filepath.Rel(root, g.reportDir); err == nil {
 			reportDirRel = rel
 		}
 	}
@@ -1149,7 +1410,7 @@ func (g *Generator) getTaskFilePaths() ([]service.IssueTaskFile, error) {
 	for _, tasksDir := range tasksDirs {
 		absTasksDir := tasksDir
 		if !filepath.IsAbs(tasksDir) {
-			absTasksDir = filepath.Join(cwd, tasksDir)
+			absTasksDir = filepath.Join(root, tasksDir)
 		}
 
 		entries, err := os.ReadDir(absTasksDir)
@@ -1584,9 +1845,34 @@ func sanitizeFilename(name string) string {
 }
 
 // ReadGeneratedIssues reads the generated issue markdown files and returns IssuePreview objects.
+// It first looks in the draft/ subdirectory; if empty, falls back to the base directory for backward compat.
 // Deduplicates by task ID to prevent duplicate issues.
 func (g *Generator) ReadGeneratedIssues(workflowID string) ([]IssuePreview, error) {
-	issuesDir := filepath.Join(".quorum", "issues", workflowID)
+	if err := ValidateWorkflowID(workflowID); err != nil {
+		return nil, err
+	}
+
+	// Try reading from draft/ subdirectory first (new layout)
+	previews, err := g.ReadAllDrafts(workflowID)
+	if err != nil {
+		return nil, err
+	}
+	if len(previews) > 0 {
+		slog.Info("read generated issues from draft directory",
+			"unique_issues", len(previews))
+		return previews, nil
+	}
+
+	// Fallback: read from the flat base directory (backward compat with old layout)
+	root, err := g.getProjectRoot()
+	if err != nil {
+		return nil, fmt.Errorf(errResolvingProjectRoot, err)
+	}
+	baseDir := g.resolveIssuesBaseDir()
+	issuesDir := filepath.Join(root, baseDir, workflowID)
+	if err := validatePathUnderRoot(issuesDir, root); err != nil {
+		return nil, err
+	}
 
 	entries, err := os.ReadDir(issuesDir)
 	if err != nil {
@@ -1596,7 +1882,6 @@ func (g *Generator) ReadGeneratedIssues(workflowID string) ([]IssuePreview, erro
 		return nil, fmt.Errorf("reading issues directory: %w", err)
 	}
 
-	var previews []IssuePreview
 	seen := make(map[string]bool) // Track by taskID to deduplicate
 	taskIndexMap := make(map[int]string)
 	if taskFiles, err := g.getTaskFilePaths(); err == nil {
@@ -1623,6 +1908,28 @@ func (g *Generator) ReadGeneratedIssues(workflowID string) ([]IssuePreview, erro
 			continue
 		}
 
+		// Try parsing frontmatter first
+		fm, fmBody, fmErr := parseDraftContent(string(content))
+		if fmErr == nil && fm != nil {
+			if fm.TaskID != "" && seen[fm.TaskID] {
+				continue
+			}
+			if fm.TaskID != "" {
+				seen[fm.TaskID] = true
+			}
+			previews = append(previews, IssuePreview{
+				Title:       fm.Title,
+				Body:        fmBody,
+				Labels:      fm.Labels,
+				Assignees:   fm.Assignees,
+				IsMainIssue: fm.IsMainIssue,
+				TaskID:      fm.TaskID,
+				FilePath:    filepath.Join(issuesDir, entry.Name()),
+			})
+			continue
+		}
+
+		// Fallback: plain markdown parsing
 		title, body := parseIssueMarkdown(string(content))
 
 		// Determine if it's the consolidated analysis (task_id will be empty)
@@ -1633,7 +1940,6 @@ func (g *Generator) ReadGeneratedIssues(workflowID string) ([]IssuePreview, erro
 			taskID = "main"
 		} else {
 			// Extract task ID from filename pattern: XX-task-name.md or issue-N-task-name.md
-			// Try pattern: NN-something.md
 			re := regexp.MustCompile(`^(\d+)-(.+)\.md$`)
 			if match := re.FindStringSubmatch(entry.Name()); len(match) > 1 {
 				taskNum := match[1]
@@ -1649,7 +1955,6 @@ func (g *Generator) ReadGeneratedIssues(workflowID string) ([]IssuePreview, erro
 					}
 				}
 			} else {
-				// Try pattern: issue-N-something.md or issue-task-N.md
 				re = regexp.MustCompile(`issue-(?:task-)?(\d+)`)
 				if match := re.FindStringSubmatch(entry.Name()); len(match) > 1 {
 					if num, err := strconv.Atoi(match[1]); err == nil {
