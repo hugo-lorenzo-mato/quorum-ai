@@ -57,6 +57,49 @@ func TestIsValidAnalysisOutput(t *testing.T) {
 			want:    false,
 		},
 
+		// --- Skeleton cases ---
+		{
+			name: "skeleton with headings only",
+			content: "# Analysis\n## Overview\n## Architecture\n## Findings\n" +
+				"## Risks\n## Recommendations\n## Security\n## Performance\n" +
+				"## Testing\n## Conclusion\n",
+			want: false,
+		},
+		{
+			name: "skeleton with HTML comment placeholders",
+			content: "# Analysis\n## Overview\n<!-- TODO -->\n## Architecture\n" +
+				"<!-- TODO -->\n## Findings\n<!-- to be written -->\n## Risks\n",
+			want: false,
+		},
+		{
+			name: "skeleton with 2 substantive lines",
+			content: "# Analysis\n## Overview\nBrief intro.\n## Architecture\n" +
+				"Some notes here.\n## Findings\n## Risks\n## Recommendations\n",
+			want: false,
+		},
+		{
+			name: "short analysis with few headers",
+			content: "# Analysis\n\nThis is a complete analysis of the system.\n\n" +
+				"## Findings\n\nThe code has several important patterns.\n" +
+				"First, the architecture uses a layered approach.\n" +
+				"Second, the error handling is consistent.\n" +
+				"Third, the test coverage is adequate.\n",
+			want: true,
+		},
+		{
+			name: "headers with substantial content",
+			content: "# Analysis\n\nDetailed intro paragraph with real info.\n\n" +
+				"## Architecture\n\nThe system uses microservices pattern.\n" +
+				"Each service communicates via gRPC calls.\n\n" +
+				"## Findings\n\nThe main entry point is at cmd/main.go:42.\n" +
+				"The config is loaded from internal/config/loader.go:15.\n\n" +
+				"## Risks\n\nConcurrency issues in the event bus.\n" +
+				"Race condition at internal/events/bus.go:89.\n\n" +
+				"## Recommendations\n\nAdd mutex to protect shared state.\n" +
+				"Increase test coverage for edge cases.\n",
+			want: true,
+		},
+
 		// --- Valid cases ---
 		{
 			name:    "short plain text under 1KB threshold",

@@ -235,7 +235,7 @@ func (a *Analyzer) runSingleAgentAnalysis(ctx context.Context, wctx *Context) er
 					case stableOutputCh <- content:
 					default:
 					}
-					cancelAttempt(core.ErrExecution(watchdogStableOutputCode, "output file stabilized; reaping hung agent process"))
+
 				case <-attemptCtx.Done():
 				}
 			}()
@@ -288,7 +288,7 @@ func (a *Analyzer) runSingleAgentAnalysis(ctx context.Context, wctx *Context) er
 
 	// Some CLIs write to file but return empty stdout. Prefer the file content in that case.
 	if absOutputPath != "" && (result == nil || strings.TrimSpace(result.Output) == "") {
-		if content, readErr := os.ReadFile(absOutputPath); readErr == nil && strings.TrimSpace(string(content)) != "" {
+		if content, readErr := os.ReadFile(absOutputPath); readErr == nil && strings.TrimSpace(string(content)) != "" && isValidAnalysisOutput(string(content)) {
 			if result == nil {
 				result = &core.ExecuteResult{}
 			}
@@ -1019,7 +1019,7 @@ func (a *Analyzer) executeVnRefinement(ctx context.Context, wctx *Context, agent
 					case stableOutputCh <- content:
 					default:
 					}
-					cancelAttempt(core.ErrExecution(watchdogStableOutputCode, "output file stabilized; reaping hung agent process"))
+
 				case <-attemptCtx.Done():
 				}
 			}()
@@ -1072,7 +1072,7 @@ func (a *Analyzer) executeVnRefinement(ctx context.Context, wctx *Context, agent
 func (a *Analyzer) finalizeVnRefinementResult(wctx *Context, agentName string, round int, setup *VnRefinementSetup, result *core.ExecuteResult) (AnalysisOutput, error) {
 	// Some CLIs write to file but return empty stdout. Prefer the file content in that case.
 	if setup.absOutputPath != "" && (result == nil || strings.TrimSpace(result.Output) == "") {
-		if content, readErr := os.ReadFile(setup.absOutputPath); readErr == nil && strings.TrimSpace(string(content)) != "" {
+		if content, readErr := os.ReadFile(setup.absOutputPath); readErr == nil && strings.TrimSpace(string(content)) != "" && isValidAnalysisOutput(string(content)) {
 			if result == nil {
 				result = &core.ExecuteResult{}
 			}
@@ -1355,7 +1355,7 @@ func (a *Analyzer) runAnalysisWithAgent(ctx context.Context, wctx *Context, agen
 					case stableOutputCh <- content:
 					default:
 					}
-					cancelAttempt(core.ErrExecution(watchdogStableOutputCode, "output file stabilized; reaping hung agent process"))
+
 				case <-attemptCtx.Done():
 				}
 			}()
@@ -1403,7 +1403,7 @@ func (a *Analyzer) runAnalysisWithAgent(ctx context.Context, wctx *Context, agen
 
 	// Some CLIs write to file but return empty stdout. Prefer the file content in that case.
 	if absOutputPath != "" && (result == nil || strings.TrimSpace(result.Output) == "") {
-		if content, readErr := os.ReadFile(absOutputPath); readErr == nil && strings.TrimSpace(string(content)) != "" {
+		if content, readErr := os.ReadFile(absOutputPath); readErr == nil && strings.TrimSpace(string(content)) != "" && isValidAnalysisOutput(string(content)) {
 			if result == nil {
 				result = &core.ExecuteResult{}
 			}
@@ -1583,7 +1583,7 @@ func (a *Analyzer) consolidateAnalysis(ctx context.Context, wctx *Context, outpu
 		if absOutputPath != "" {
 			if info, statErr := os.Stat(absOutputPath); statErr == nil && info.Size() > 1024 {
 				content, readErr := os.ReadFile(absOutputPath)
-				if readErr == nil {
+				if readErr == nil && isValidAnalysisOutput(string(content)) {
 					wctx.Logger.Info("recovered synthesis output from file written by previous attempt",
 						"agent", synthesizerAgent, "path", absOutputPath, "size", len(content))
 					result = &core.ExecuteResult{Output: string(content), Model: model}
@@ -1604,7 +1604,7 @@ func (a *Analyzer) consolidateAnalysis(ctx context.Context, wctx *Context, outpu
 					case stableOutputCh <- content:
 					default:
 					}
-					cancelAttempt(core.ErrExecution(watchdogStableOutputCode, "output file stabilized; reaping hung agent process"))
+
 				case <-attemptCtx.Done():
 				}
 			}()
@@ -1623,6 +1623,11 @@ func (a *Analyzer) consolidateAnalysis(ctx context.Context, wctx *Context, outpu
 		if execErr != nil {
 			select {
 			case content := <-stableOutputCh:
+				if !isValidAnalysisOutput(content) {
+					wctx.Logger.Warn("watchdog reap: stable synthesis file rejected (unstructured content)",
+						"agent", synthesizerAgent, "path", absOutputPath, "size", len(content))
+					return execErr
+				}
 				wctx.Logger.Info("watchdog reap: using stable synthesis output file",
 					"agent", synthesizerAgent, "path", absOutputPath, "size", len(content))
 				result = &core.ExecuteResult{Output: content, Model: model}
@@ -1654,7 +1659,7 @@ func (a *Analyzer) consolidateAnalysis(ctx context.Context, wctx *Context, outpu
 
 	// Some CLIs write to file but return empty stdout. Prefer the file content in that case.
 	if absOutputPath != "" && (result == nil || strings.TrimSpace(result.Output) == "") {
-		if content, readErr := os.ReadFile(absOutputPath); readErr == nil && strings.TrimSpace(string(content)) != "" {
+		if content, readErr := os.ReadFile(absOutputPath); readErr == nil && strings.TrimSpace(string(content)) != "" && isValidAnalysisOutput(string(content)) {
 			if result == nil {
 				result = &core.ExecuteResult{}
 			}
@@ -2345,6 +2350,10 @@ func loadExistingAnalysis(path, agentName, model string) (*AnalysisOutput, error
 		return nil, fmt.Errorf("read file: %w", err)
 	}
 
+	if !isValidAnalysisOutput(string(content)) {
+		return nil, fmt.Errorf("file content is not a valid analysis (likely skeleton or corrupt)")
+	}
+
 	// Construct result wrapper to reuse parsing logic
 	result := &core.ExecuteResult{
 		Output: string(content),
@@ -2424,6 +2433,10 @@ func restoreAnalysisFromCheckpoint(meta *AnalysisCheckpointMetadata) (*AnalysisO
 	// Validate content integrity
 	if computeContentHash(string(content)) != meta.ContentHash {
 		return nil, fmt.Errorf("content hash mismatch - file was modified")
+	}
+
+	if !isValidAnalysisOutput(string(content)) {
+		return nil, fmt.Errorf("cached content is not a valid analysis")
 	}
 
 	// Construct result wrapper with restored metrics

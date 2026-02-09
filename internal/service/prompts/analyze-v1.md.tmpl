@@ -44,13 +44,15 @@ Analyze the codebase **exhaustively and in depth**. Your analysis must:
 
 **Do not omit any relevant aspect.** Provide a complete and detailed analysis with specific code evidence. Generate your analysis in markdown format, structuring it with the sections you consider most appropriate to communicate your findings clearly and effectively.
 
-## OUTPUT SIZE CONSTRAINT (MANDATORY)
+## OUTPUT GUIDELINES
 
-Your entire output (including any tool call inputs) MUST fit within the model's output token limit.
-
-- Prefer density over length (tables, bullet lists).
-- Avoid long code blocks; cite `file:line` instead.
-- If you cannot fit everything, prioritize: current-state facts + exploit paths + concrete mitigations + rollout + test matrix.
+- Be exhaustive in coverage — do not skip relevant aspects, edge cases, or risks.
+  But be dense in expression: fewer words per finding, more findings.
+- Prefer density over length: tables, bullet lists, `file:line` citations.
+- Every sentence must carry information. Eliminate filler and verbose preambles.
+- You may use multiple tool calls to write the file if needed, but every write
+  must contain substantive analysis. Do NOT create placeholder content
+  (headings-only outlines, "TODO", "to be written" markers).
 
 ## CRITICAL: SELF-CONTAINED DOCUMENT REQUIREMENTS
 
@@ -65,13 +67,13 @@ Your analysis must be a **COMPLETE, SELF-CONTAINED DOCUMENT** that can be read a
 ### 2. Comprehensive Content for Future Phases
 Your analysis will be used by **planning** and **execution** phases. Include:
 - **Architecture Overview**: Complete understanding of the system structure
-- **Component Relationships**: How parts interact (include ASCII diagrams)
+- **Component Relationships**: How parts interact (include ASCII diagrams when they help clarify a flow)
 - **Data Flows**: How information moves through the system
 - **Extension Points**: Where and how the system can be extended
 - **Constraints and Limitations**: Technical boundaries that must be respected
 
-### 3. Visual Aids (ASCII Diagrams)
-Include ASCII diagrams to illustrate:
+### 3. Visual Aids (ASCII Diagrams — When They Add Value)
+Include ASCII diagrams when they help understand a flow or relationship:
 - System architecture and component relationships
 - Data flow between modules
 - Decision trees for complex logic
@@ -124,15 +126,6 @@ Write your complete analysis to the following file:
 ```
 {{.OutputFilePath}}
 ```
-
-## INCREMENTAL WRITING (MANDATORY)
-
-To avoid output token limits, write the file in **multiple tool calls**:
-
-1. First tool call: create the file with a short skeleton (headings only).
-2. Then write **one top-level section per tool call** (keep each section concise and evidence-dense).
-3. After each tool call finishes, continue with the next section in a new tool call.
-4. Do NOT try to write the entire document in a single tool call.
 
 **IMPORTANT - File format:**
 - Write ONLY the analysis content in markdown

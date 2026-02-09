@@ -13,28 +13,22 @@ Your goal is to create the **DEFINITIVE CONSOLIDATED ANALYSIS** - an **ULTRA-EXH
 - Your consolidation must be readable as if it were the **ONLY DOCUMENT** that exists
 - Each statement must include **ALL** its context - don't omit details "because they already appear before"
 
-### 2. ULTRA-EXHAUSTIVE - ZERO INFORMATION LOSS
+### 2. COMPREHENSIVE - PRIORITIZE LOAD-BEARING DETAILS
 - **INCLUDE EVERY** relevant technical detail found in any analysis
-- **DO NOT SUMMARIZE** losing information - expand and complete
+- **DO NOT SUMMARIZE** at the cost of losing critical information - expand key findings
 - If an agent mentioned a specific file:line, **INCLUDE IT**
 - If an agent identified an edge case, **DOCUMENT IT**
-- A longer, complete document is preferable to a short one that omits *critical* details
-- **ZERO INFORMATION LOSS**: Every useful data point from the original analyses must appear in your consolidation
+- A dense, evidence-rich document is preferable to a verbose one that dilutes critical details
+- Prioritize: architecture, highest-risk findings, concrete evidence, and actionable insights
 
-### OUTPUT SIZE CONSTRAINT (MANDATORY)
-Your entire output (including any tool call inputs) MUST fit within the model's output token limit.
-
-- Prefer density over length (bullet lists, tables).
-- Avoid long code blocks; cite `file:line`.
-- If you cannot fit everything, prioritize: architecture, highest-risk findings, and concrete evidence.
-
-### INCREMENTAL WRITING (MANDATORY)
-To avoid output token limits, write the output file in **multiple tool calls**:
-
-1. First tool call: create the file with a short skeleton (headings only).
-2. Then write **one top-level section per tool call** (keep each section concise and evidence-dense).
-3. After each tool call finishes, continue with the next section in a new tool call.
-4. Do NOT try to write the entire document in a single tool call.
+### OUTPUT GUIDELINES
+- Be exhaustive in coverage — do not skip relevant aspects, edge cases, or risks.
+  But be dense in expression: fewer words per finding, more findings.
+- Prefer density over length: tables, bullet lists, `file:line` citations.
+- Every sentence must carry information. Eliminate filler and verbose preambles.
+- You may use multiple tool calls to write the file if needed, but every write
+  must contain substantive analysis. Do NOT create placeholder content
+  (headings-only outlines, "TODO", "to be written" markers).
 
 ### 3. PURE ANALYSIS - NEVER PLAN OR EXECUTE
 - Your role is to **ANALYZE**, not to plan or execute
@@ -95,12 +89,12 @@ Your consolidation must:
 4. **Be exhaustive** - better to err on the side of complete than concise
 5. **Be autonomous** - anyone should understand everything without reading anything else
 
-## MANDATORY: VISUAL AIDS (ASCII DIAGRAMS)
+## VISUAL AIDS (ASCII DIAGRAMS — WHEN THEY ADD VALUE)
 
-Your consolidated analysis **MUST** include ASCII diagrams to facilitate understanding:
+Include ASCII diagrams when they help understand a flow or relationship:
 
 ### Required Diagrams
-Include diagrams that illustrate:
+Consider diagrams for:
 - **System Architecture**: Overall structure with components and their relationships
 - **Data Flow**: How information moves through the system
 - **Component Interactions**: Detailed view of how modules communicate
@@ -146,7 +140,7 @@ Before finishing, verify:
 - [ ] Have I avoided phrases like "the analyses indicate" or "according to the agents"?
 - [ ] Have I provided EVERYTHING necessary for someone to plan/execute?
 - [ ] Have I NOT included implementation steps, code, or tasks?
-- [ ] Have I included ASCII diagrams for architecture, data flow, and key relationships?
+- [ ] Have I included ASCII diagrams where they help clarify flows or relationships?
 - [ ] Have I provided step-by-step explanations for complex findings?
 - [ ] Is each section **complete and self-contained**?
 - [ ] Would a reader unfamiliar with the project understand the full context?

@@ -104,8 +104,9 @@ Generate V{{.Round}} as the **BEST POSSIBLE ANALYSIS** - complete, definitive, a
 2. **PRESERVE agreements** - Include consensus points as your own statements (without mentioning they are consensus)
 3. **RESOLVE divergences** - Investigate the code and take a grounded position
 4. **FILL gaps** - Add missing perspectives, investigating the code
-5. **ELIMINATE errors** - Don't include anything you can't verify with evidence
-6. **NO REFERENCES** - NEVER mention previous versions, arbiters, or other agents
+5. **VALIDATE new hypotheses** - Cross-agent feedback will spark considerations you didn't have before. Go back to the codebase and verify them with `file:line` evidence before including them — do not reason about them in the abstract
+6. **ELIMINATE errors** - Don't include anything you can't verify with evidence
+7. **NO REFERENCES** - NEVER mention previous versions, arbiters, or other agents
 
 **REMEMBER**: The reader of your V{{.Round}} doesn't know that previous versions existed. Write as if this were your only and definitive analysis.
 {{else}}
@@ -157,14 +158,14 @@ Your V{{.Round}} must be a **COMPLETE, SELF-CONTAINED DOCUMENT** that serves as 
 ### 2. Comprehensive Content for Future Phases
 Your analysis will be used directly by **planning** and **execution** phases. Include:
 - **Architecture Overview**: Complete understanding of the system structure
-- **Component Relationships**: How parts interact (with ASCII diagrams)
+- **Component Relationships**: How parts interact (with ASCII diagrams when they help clarify a flow)
 - **Data Flows**: How information moves through the system
 - **Extension Points**: Where and how the system can be extended
 - **Constraints and Limitations**: Technical boundaries that must be respected
 - **Risks and Mitigations**: Identified issues with proposed solutions
 
-### 3. Visual Aids (ASCII Diagrams) - MANDATORY
-Include ASCII diagrams to illustrate:
+### 3. Visual Aids (ASCII Diagrams — When They Add Value)
+Include ASCII diagrams when they help understand a flow or relationship:
 - System architecture and component relationships
 - Data flow between modules
 - Proposed solutions or changes
@@ -212,27 +213,19 @@ Generate your V{{.Round}} analysis in markdown format with these characteristics
 1. **Complete document** - Must contain the entire analysis, no references to previous versions
 2. **Clear structure** - Use sections that best communicate the findings
 3. **Specific evidence** - Cite files and lines of code
-4. **Visual diagrams** - Include ASCII diagrams for architecture, flows, and relationships
+4. **Visual diagrams** - Include ASCII diagrams when they help clarify architecture, flows, or relationships
 5. **Autonomous** - Any reader must understand the analysis without seeing V{{.PreviousRound}} or ANY other document
 6. **Token-budgeted completeness** - Be complete on *load-bearing* details, but do NOT exceed model output limits. Prefer density over length: fewer words, more evidence and decisions.
 
-### OUTPUT SIZE CONSTRAINT (MANDATORY)
+### OUTPUT GUIDELINES
 
-Your entire output (including any tool call inputs) MUST fit within the model's output token limit.
-
-- Aim for a maximum of ~8k-12k words.
-- Avoid long code blocks; cite `file:line` instead.
-- Avoid repeating the same context in multiple sections; reference earlier sections within this same document.
-- If you cannot fit everything, prioritize: current-state facts + exploit paths + concrete mitigations + rollout + test matrix.
-
-### INCREMENTAL WRITING (MANDATORY)
-
-To avoid output token limits, write the output file in **multiple tool calls**:
-
-1. First tool call: create the file with a short skeleton (headings only).
-2. Then write **one top-level section per tool call** (keep each section concise and evidence-dense).
-3. After each tool call finishes, continue with the next section in a new tool call.
-4. Do NOT try to write the entire document in a single tool call.
+- Be exhaustive in coverage — do not skip relevant aspects, edge cases, or risks.
+  But be dense in expression: fewer words per finding, more findings.
+- Prefer density over length: tables, bullet lists, `file:line` citations.
+- Every sentence must carry information. Eliminate filler and verbose preambles.
+- You may use multiple tool calls to write the file if needed, but every write
+  must contain substantive analysis. Do NOT create placeholder content
+  (headings-only outlines, "TODO", "to be written" markers).
 {{if .OutputFilePath}}
 
 Write your complete V{{.Round}} analysis to the following file:

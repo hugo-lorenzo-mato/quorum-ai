@@ -68,6 +68,14 @@ func (r *Runner) reconcileAnalysisArtifacts(ctx context.Context, state *core.Wor
 		return nil
 	}
 
+	if !isValidAnalysisOutput(content) {
+		if r.logger != nil {
+			r.logger.Warn("artifact reconcile: consolidated file is not valid analysis (skeleton?)",
+				"path", absConsolidatedPath, "size", len(content))
+		}
+		return nil
+	}
+
 	// 1) Ensure consolidated_analysis checkpoint exists (or is non-empty).
 	// Planner/Executor only need the "content" field.
 	if strings.TrimSpace(GetConsolidatedAnalysis(state)) == "" {

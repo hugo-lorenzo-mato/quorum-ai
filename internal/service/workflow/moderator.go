@@ -257,7 +257,7 @@ func (m *SemanticModerator) executeModerator(ctx context.Context, wctx *Context,
 		if absOutputPath != "" {
 			if info, statErr := os.Stat(absOutputPath); statErr == nil && info.Size() > 1024 {
 				content, readErr := os.ReadFile(absOutputPath)
-				if readErr == nil {
+				if readErr == nil && len(strings.TrimSpace(string(content))) > 100 {
 					wctx.Logger.Info("recovered moderator output from file written by previous attempt",
 						"agent", moderatorAgentName, "round", round, "path", absOutputPath, "size", len(content))
 					result = &core.ExecuteResult{Output: string(content), Model: model}
@@ -278,7 +278,7 @@ func (m *SemanticModerator) executeModerator(ctx context.Context, wctx *Context,
 					case stableOutputCh <- content:
 					default:
 					}
-					cancelAttempt(core.ErrExecution(watchdogStableOutputCode, "output file stabilized; reaping hung agent process"))
+
 				case <-attemptCtx.Done():
 				}
 			}()
