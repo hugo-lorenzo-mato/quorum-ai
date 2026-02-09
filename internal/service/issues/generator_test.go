@@ -757,16 +757,16 @@ func (m *mockProgressReporter) OnIssuesGenerationProgress(workflowID, stage stri
 	})
 }
 
-func (m *mockProgressReporter) OnIssuesPublishingProgress(workflowID, stage string, current, total int, issue *ProgressIssue, issueNumber int, dryRun bool, message string) {
+func (m *mockProgressReporter) OnIssuesPublishingProgress(p PublishingProgressParams) {
 	m.publishingEvents = append(m.publishingEvents, progressEvent{
-		workflowID:  workflowID,
-		stage:       stage,
-		current:     current,
-		total:       total,
-		issue:       issue,
-		message:     message,
-		issueNumber: issueNumber,
-		dryRun:      dryRun,
+		workflowID:  p.WorkflowID,
+		stage:       p.Stage,
+		current:     p.Current,
+		total:       p.Total,
+		issue:       p.Issue,
+		message:     p.Message,
+		issueNumber: p.IssueNumber,
+		dryRun:      p.DryRun,
 	})
 }
 

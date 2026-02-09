@@ -12,6 +12,6 @@ type ProgressIssue struct {
 // Implementations are expected to be cheap and non-blocking.
 type ProgressReporter interface {
 	OnIssuesGenerationProgress(workflowID, stage string, current, total int, issue *ProgressIssue, message string)
-	OnIssuesPublishingProgress(workflowID, stage string, current, total int, issue *ProgressIssue, issueNumber int, dryRun bool, message string)
+	OnIssuesPublishingProgress(p PublishingProgressParams)
 }
 

@@ -82,7 +82,16 @@ func TestIssuesSSEProgressReporter_Publishing(t *testing.T) {
 		IsMainIssue: false,
 	}
 
-	reporter.OnIssuesPublishingProgress("wf-pub-1", "publishing", 2, 5, issue, 42, true, "Publishing issue 2 of 5")
+	reporter.OnIssuesPublishingProgress(issues.PublishingProgressParams{
+		WorkflowID:  "wf-pub-1",
+		Stage:       "publishing",
+		Current:     2,
+		Total:       5,
+		Issue:       issue,
+		IssueNumber: 42,
+		DryRun:      true,
+		Message:     "Publishing issue 2 of 5",
+	})
 
 	select {
 	case evt := <-ch:
@@ -136,12 +145,12 @@ func TestIssuesSSEProgressReporter_NilSafe(t *testing.T) {
 	// nil reporter should not panic
 	var nilReporter *issuesSSEProgressReporter
 	nilReporter.OnIssuesGenerationProgress("wf-1", "start", 0, 0, nil, "msg")
-	nilReporter.OnIssuesPublishingProgress("wf-1", "start", 0, 0, nil, 0, false, "msg")
+	nilReporter.OnIssuesPublishingProgress(issues.PublishingProgressParams{WorkflowID: "wf-1", Stage: "start", Message: "msg"})
 
 	// reporter with nil bus should not panic
 	reporterNilBus := &issuesSSEProgressReporter{bus: nil, projectID: "proj-1"}
 	reporterNilBus.OnIssuesGenerationProgress("wf-1", "start", 0, 0, nil, "msg")
-	reporterNilBus.OnIssuesPublishingProgress("wf-1", "start", 0, 0, nil, 0, false, "msg")
+	reporterNilBus.OnIssuesPublishingProgress(issues.PublishingProgressParams{WorkflowID: "wf-1", Stage: "start", Message: "msg"})
 }
 
 func TestIssuesSSEProgressReporter_WithNilIssue(t *testing.T) {
@@ -177,7 +186,7 @@ func TestIssuesSSEProgressReporter_WithNilIssue(t *testing.T) {
 	}
 
 	// Also test nil issue for publishing
-	reporter.OnIssuesPublishingProgress("wf-2", "start", 0, 3, nil, 0, false, "Starting publishing")
+	reporter.OnIssuesPublishingProgress(issues.PublishingProgressParams{WorkflowID: "wf-2", Stage: "start", Total: 3, Message: "Starting publishing"})
 
 	select {
 	case evt := <-ch:

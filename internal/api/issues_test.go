@@ -51,7 +51,7 @@ func newIssueTestServer(t *testing.T, opts ...ServerOption) *issueTestServer {
 }
 
 // addWorkflow inserts a workflow into the mock state manager.
-func (its *issueTestServer) addWorkflow(id string, reportPath string) {
+func (its *issueTestServer) addWorkflow(id, reportPath string) {
 	wfID := core.WorkflowID(id)
 	its.sm.workflows[wfID] = &core.WorkflowState{
 		WorkflowDefinition: core.WorkflowDefinition{

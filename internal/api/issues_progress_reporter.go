@@ -44,28 +44,28 @@ func (r *issuesSSEProgressReporter) OnIssuesGenerationProgress(workflowID, stage
 	}))
 }
 
-func (r *issuesSSEProgressReporter) OnIssuesPublishingProgress(workflowID, stage string, current, total int, issue *issues.ProgressIssue, issueNumber int, dryRun bool, message string) {
+func (r *issuesSSEProgressReporter) OnIssuesPublishingProgress(p issues.PublishingProgressParams) {
 	if r == nil || r.bus == nil {
 		return
 	}
 	var title, taskID string
 	var isMain bool
-	if issue != nil {
-		title = issue.Title
-		taskID = issue.TaskID
-		isMain = issue.IsMainIssue
+	if p.Issue != nil {
+		title = p.Issue.Title
+		taskID = p.Issue.TaskID
+		isMain = p.Issue.IsMainIssue
 	}
 	r.bus.Publish(events.NewIssuesPublishingProgressEvent(events.IssuesPublishingProgressParams{
-		WorkflowID:  workflowID,
+		WorkflowID:  p.WorkflowID,
 		ProjectID:   r.projectID,
-		Stage:       stage,
-		Current:     current,
-		Total:       total,
-		Message:     message,
+		Stage:       p.Stage,
+		Current:     p.Current,
+		Total:       p.Total,
+		Message:     p.Message,
 		Title:       title,
 		TaskID:      taskID,
 		IsMainIssue: isMain,
-		IssueNumber: issueNumber,
-		DryRun:      dryRun,
+		IssueNumber: p.IssueNumber,
+		DryRun:      p.DryRun,
 	}))
 }

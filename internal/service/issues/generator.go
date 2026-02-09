@@ -92,7 +92,7 @@ func (g *Generator) emitIssuesPublishingProgress(p PublishingProgressParams) {
 	if g.progress == nil {
 		return
 	}
-	g.progress.OnIssuesPublishingProgress(p.WorkflowID, p.Stage, p.Current, p.Total, p.Issue, p.IssueNumber, p.DryRun, p.Message)
+	g.progress.OnIssuesPublishingProgress(p)
 }
 
 // getProjectRoot returns the project root, falling back to os.Getwd() if not set.
