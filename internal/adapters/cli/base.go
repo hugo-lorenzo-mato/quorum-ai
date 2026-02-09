@@ -348,6 +348,7 @@ func (b *BaseAdapter) ExecuteCommand(ctx context.Context, args []string, stdin, 
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			result.ExitCode = exitErr.ExitCode()
+			classifiedErr := b.classifyError(result)
 			b.logger.Error("cli: command failed",
 				"adapter", b.config.Name,
 				"path", cmdPath,
@@ -358,7 +359,7 @@ func (b *BaseAdapter) ExecuteCommand(ctx context.Context, args []string, stdin, 
 				"stderr", truncateForLog(result.Stderr, 2000),
 				"stdout_preview", truncateForLog(result.Stdout, 500),
 			)
-			return result, b.classifyError(result)
+			return result, classifiedErr
 		}
 		b.logger.Error("cli: command execution error",
 			"adapter", b.config.Name,
@@ -725,11 +726,20 @@ func (b *BaseAdapter) executeWithJSONStreaming(
 	}
 
 	if err != nil {
-		b.emitEvent(core.NewAgentEvent(core.AgentEventError, adapterName, "Execution failed"))
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			result.ExitCode = exitErr.ExitCode()
-			return result, b.classifyError(result)
+			classifiedErr := b.classifyError(result)
+			b.emitEvent(core.NewAgentEvent(core.AgentEventError, adapterName,
+				fmt.Sprintf("Execution failed (exit %d): %s", result.ExitCode, classifiedErr),
+			).WithData(map[string]any{
+				"exit_code": result.ExitCode,
+				"stderr":    truncateForDebug(result.Stderr, 2000),
+			}))
+			return result, classifiedErr
 		}
+		b.emitEvent(core.NewAgentEvent(core.AgentEventError, adapterName,
+			fmt.Sprintf("Execution failed: %s", err),
+		))
 		return result, fmt.Errorf("executing command: %w", err)
 	}
 
@@ -1015,11 +1025,20 @@ func (b *BaseAdapter) executeWithLogFileStreaming(
 	}
 
 	if err != nil {
-		b.emitEvent(core.NewAgentEvent(core.AgentEventError, adapterName, "Execution failed"))
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			result.ExitCode = exitErr.ExitCode()
-			return result, b.classifyError(result)
+			classifiedErr := b.classifyError(result)
+			b.emitEvent(core.NewAgentEvent(core.AgentEventError, adapterName,
+				fmt.Sprintf("Execution failed (exit %d): %s", result.ExitCode, classifiedErr),
+			).WithData(map[string]any{
+				"exit_code": result.ExitCode,
+				"stderr":    truncateForDebug(result.Stderr, 2000),
+			}))
+			return result, classifiedErr
 		}
+		b.emitEvent(core.NewAgentEvent(core.AgentEventError, adapterName,
+			fmt.Sprintf("Execution failed: %s", err),
+		))
 		return result, fmt.Errorf("executing command: %w", err)
 	}
 
