@@ -34,37 +34,36 @@ trace:
 # Workflow execution settings
 workflow:
   # Maximum workflow execution time
-  timeout: 12h
+  timeout: 16h
   # Maximum retry attempts per task
   max_retries: 3
   # Dry-run mode (simulate without executing)
   dry_run: false
-  # Sandbox mode restricts operations that could modify the system.
-  # Set to false only when you trust the workflow to make changes.
-  sandbox: true
   # Tools to deny during execution
   deny_tools: []
-  # Heartbeat system for zombie workflow detection and recovery
+  # Heartbeat system for zombie workflow detection and recovery.
+  # Heartbeat monitoring is always active and cannot be disabled.
   heartbeat:
-    # Enable heartbeat monitoring
-    enabled: true
     # How often to write heartbeats
     interval: 30s
     # When to consider a workflow zombie (no heartbeat)
     stale_threshold: 2m
     # How often to check for zombie workflows
     check_interval: 60s
-    # Automatically resume zombie workflows
-    auto_resume: false
+    # Automatically resume zombie workflows (at least once before failing)
+    auto_resume: true
     # Maximum auto-resume attempts per workflow
-    max_resumes: 3
+    max_resumes: 1
 
 # Phase configuration
 phases:
   # Analyze phase settings
   analyze:
     # Maximum duration for analyze phase
-    timeout: 2h
+    timeout: 8h
+    # Grace period after agent signals logical completion before killing the process.
+    # Prevents losing output when agent CLIs hang after producing results.
+    process_grace_period: "30s"
     # Prompt refiner (optional) - enhances user prompt before analysis
     refiner:
       enabled: true
@@ -81,6 +80,8 @@ phases:
       agent: claude
       # Minimum consensus score to accept (0.0-1.0)
       threshold: 0.80
+      # Minimum number of agents that must succeed per analysis/refinement round
+      min_successful_agents: 2
       # Minimum refinement rounds before accepting consensus
       min_rounds: 2
       # Maximum refinement rounds before giving up

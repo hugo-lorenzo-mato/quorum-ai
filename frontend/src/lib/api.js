@@ -117,6 +117,8 @@ export const workflowApi = {
 
   cancel: (id) => request(`/workflows/${id}/cancel`, { method: 'POST' }),
 
+  forceStop: (id) => request(`/workflows/${id}/force-stop`, { method: 'POST' }),
+
   pause: (id) => request(`/workflows/${id}/pause`, { method: 'POST' }),
 
   resume: (id) => request(`/workflows/${id}/resume`, { method: 'POST' }),

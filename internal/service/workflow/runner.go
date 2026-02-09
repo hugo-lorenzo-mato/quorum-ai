@@ -50,7 +50,6 @@ type RunnerConfig struct {
 	Timeout      time.Duration
 	MaxRetries   int
 	DryRun       bool
-	Sandbox      bool
 	DenyTools    []string
 	DefaultAgent string
 	// AgentPhaseModels allows per-agent, per-phase model overrides.
@@ -106,7 +105,6 @@ func DefaultRunnerConfig() *RunnerConfig {
 		Timeout:          time.Hour,
 		MaxRetries:       3,
 		DryRun:           false,
-		Sandbox:          true,
 		DefaultAgent:     "", // NO default - must be configured
 		AgentPhaseModels: map[string]map[string]string{},
 		WorktreeMode:     "always",
@@ -127,6 +125,7 @@ func DefaultRunnerConfig() *RunnerConfig {
 			Enabled:             false, // Disabled by default - must be explicitly enabled
 			Agent:               "",    // NO default - must be configured
 			Threshold:           0.90,
+			MinSuccessfulAgents: 2,
 			MinRounds:           2,
 			MaxRounds:           5,
 			WarningThreshold:    0.30,
@@ -193,8 +192,7 @@ type RunnerDeps struct {
 }
 
 // NewRunner creates a new workflow runner with all dependencies.
-// Returns nil if the moderator cannot be created (invalid config).
-func NewRunner(deps RunnerDeps) *Runner {
+func NewRunner(deps RunnerDeps) (*Runner, error) {
 	if deps.Config == nil {
 		deps.Config = DefaultRunnerConfig()
 	}
@@ -209,7 +207,7 @@ func NewRunner(deps RunnerDeps) *Runner {
 	analyzer, err := NewAnalyzer(deps.Config.Moderator)
 	if err != nil {
 		deps.Logger.Error("failed to create analyzer", "error", err)
-		return nil
+		return nil, fmt.Errorf("creating analyzer: %w", err)
 	}
 
 	return &Runner{
@@ -236,7 +234,7 @@ func NewRunner(deps RunnerDeps) *Runner {
 		control:           deps.Control,
 		heartbeat:         deps.Heartbeat,
 		projectRoot:       deps.ProjectRoot,
-	}
+	}, nil
 }
 
 // Run executes a complete workflow from a user prompt.
@@ -413,6 +411,9 @@ func (r *Runner) RunWithState(ctx context.Context, state *core.WorkflowState) er
 	// Prepare new execution - increment ExecutionID and clear old events
 	r.prepareExecution(workflowState, false)
 
+	// Sync blueprint with actual runner config (API-created workflows have minimal blueprint)
+	workflowState.Blueprint = r.buildBlueprint()
+
 	// Ensure workflow-level Git isolation (API-created state may not have it persisted).
 	if _, err := r.ensureWorkflowGitIsolation(ctx, workflowState); err != nil {
 		return r.handleError(ctx, workflowState, err)
@@ -551,6 +552,9 @@ func (r *Runner) AnalyzeWithState(ctx context.Context, state *core.WorkflowState
 	// New execution: bump execution id and clear any previous agent events.
 	r.prepareExecution(workflowState, false)
 
+	// Sync blueprint with actual runner config (API-created workflows have minimal blueprint)
+	workflowState.Blueprint = r.buildBlueprint()
+
 	// Ensure workflow-level Git isolation (API-created state may not have it persisted).
 	if _, err := r.ensureWorkflowGitIsolation(ctx, workflowState); err != nil {
 		return r.handleError(ctx, workflowState, err)
@@ -637,6 +641,14 @@ func (r *Runner) Resume(ctx context.Context) error {
 
 	// Prepare resume execution - increment ExecutionID but keep events for history
 	r.prepareExecution(workflowState, true)
+
+	// Reconcile checkpoints from on-disk artifacts before computing the resume point.
+	// This prevents re-running analysis when the markdown output exists but checkpoints are missing.
+	if recErr := r.reconcileAnalysisArtifacts(ctx, workflowState); recErr != nil {
+		if r.logger != nil {
+			r.logger.Warn("failed to reconcile analysis artifacts", "error", recErr)
+		}
+	}
 
 	// Get resume point
 	resumePoint, err := r.resumeProvider.GetResumePoint(workflowState)
@@ -743,6 +755,13 @@ func (r *Runner) ResumeWithState(ctx context.Context, state *core.WorkflowState)
 
 	// Prepare resume execution - increment ExecutionID but keep events for history
 	r.prepareExecution(state, true)
+
+	// Reconcile checkpoints from on-disk artifacts before computing the resume point.
+	if recErr := r.reconcileAnalysisArtifacts(ctx, state); recErr != nil {
+		if r.logger != nil {
+			r.logger.Warn("failed to reconcile analysis artifacts", "error", recErr)
+		}
+	}
 
 	resumePoint, err := r.resumeProvider.GetResumePoint(state)
 	if err != nil {
@@ -884,7 +903,6 @@ func (r *Runner) buildBlueprint() *core.Blueprint {
 		MaxRetries: r.config.MaxRetries,
 		Timeout:    r.config.Timeout,
 		DryRun:     r.config.DryRun,
-		Sandbox:    r.config.Sandbox,
 	}
 }
 
@@ -1026,7 +1044,6 @@ func (r *Runner) createContext(state *core.WorkflowState) *Context {
 		Report:            reportWriter,
 		Config: &Config{
 			DryRun:                 r.config.DryRun,
-			Sandbox:                r.config.Sandbox,
 			DenyTools:              r.config.DenyTools,
 			DefaultAgent:           r.config.DefaultAgent,
 			AgentPhaseModels:       r.config.AgentPhaseModels,
@@ -1451,6 +1468,13 @@ func (r *Runner) Plan(ctx context.Context) error {
 		return core.ErrState("NO_STATE", "no workflow state found to plan")
 	}
 
+	// Reconcile analysis artifacts: allow planning from a consolidated.md even if checkpoints are missing.
+	if recErr := r.reconcileAnalysisArtifacts(ctx, workflowState); recErr != nil {
+		if r.logger != nil {
+			r.logger.Warn("failed to reconcile analysis artifacts", "error", recErr)
+		}
+	}
+
 	// Verify analyze phase completed
 	analysis := GetConsolidatedAnalysis(workflowState)
 	if analysis == "" {
@@ -1466,6 +1490,9 @@ func (r *Runner) Plan(ctx context.Context) error {
 		}
 		return nil
 	}
+
+	// New phase execution attempt: bump execution id but keep prior events for history.
+	r.prepareExecution(workflowState, true)
 
 	r.logger.Info("starting plan-only workflow",
 		"workflow_id", workflowState.WorkflowID,
@@ -1528,6 +1555,13 @@ func (r *Runner) PlanWithState(ctx context.Context, state *core.WorkflowState) e
 
 	workflowState := state
 
+	// Reconcile analysis artifacts: allow planning from a consolidated.md even if checkpoints are missing.
+	if recErr := r.reconcileAnalysisArtifacts(ctx, workflowState); recErr != nil {
+		if r.logger != nil {
+			r.logger.Warn("failed to reconcile analysis artifacts", "error", recErr)
+		}
+	}
+
 	// Verify analyze phase completed
 	analysis := GetConsolidatedAnalysis(workflowState)
 	if analysis == "" {
@@ -1557,6 +1591,9 @@ func (r *Runner) PlanWithState(ctx context.Context, state *core.WorkflowState) e
 	if workflowState.Metrics == nil {
 		workflowState.Metrics = &core.StateMetrics{}
 	}
+
+	// New phase execution attempt: bump execution id but keep prior events for history.
+	r.prepareExecution(workflowState, true)
 
 	r.logger.Info("starting plan phase with existing state",
 		"workflow_id", workflowState.WorkflowID,
@@ -1622,6 +1659,13 @@ func (r *Runner) Replan(ctx context.Context, additionalContext string) error {
 		return core.ErrState("NO_STATE", "no workflow state found to replan")
 	}
 
+	// Reconcile analysis artifacts: allow replan from a consolidated.md even if checkpoints are missing.
+	if recErr := r.reconcileAnalysisArtifacts(ctx, workflowState); recErr != nil {
+		if r.logger != nil {
+			r.logger.Warn("failed to reconcile analysis artifacts", "error", recErr)
+		}
+	}
+
 	// Verify analyze phase completed
 	analysis := GetConsolidatedAnalysis(workflowState)
 	if analysis == "" {
@@ -1639,6 +1683,9 @@ func (r *Runner) Replan(ctx context.Context, additionalContext string) error {
 
 	// Clear plan phase data
 	r.clearPlanPhaseData(workflowState)
+
+	// New phase execution attempt: bump execution id but keep prior events for history.
+	r.prepareExecution(workflowState, true)
 
 	r.logger.Info("starting replan workflow",
 		"workflow_id", workflowState.WorkflowID,
@@ -1699,6 +1746,13 @@ func (r *Runner) ReplanWithState(ctx context.Context, state *core.WorkflowState,
 
 	workflowState := state
 
+	// Reconcile analysis artifacts: allow replan from a consolidated.md even if checkpoints are missing.
+	if recErr := r.reconcileAnalysisArtifacts(ctx, workflowState); recErr != nil {
+		if r.logger != nil {
+			r.logger.Warn("failed to reconcile analysis artifacts", "error", recErr)
+		}
+	}
+
 	// Verify analyze phase completed
 	analysis := GetConsolidatedAnalysis(workflowState)
 	if analysis == "" {
@@ -1716,6 +1770,9 @@ func (r *Runner) ReplanWithState(ctx context.Context, state *core.WorkflowState,
 
 	// Clear plan phase data
 	r.clearPlanPhaseData(workflowState)
+
+	// New phase execution attempt: bump execution id but keep prior events for history.
+	r.prepareExecution(workflowState, true)
 
 	r.logger.Info("starting replan phase with existing state",
 		"workflow_id", workflowState.WorkflowID,

@@ -51,7 +51,6 @@ type Blueprint struct {
 	MaxRetries      int                      `json:"max_retries"`
 	Timeout         time.Duration            `json:"timeout"`
 	DryRun          bool                     `json:"dry_run"`
-	Sandbox         bool                     `json:"sandbox"`
 }
 
 // BlueprintSingleAgent configures single-agent execution mode.

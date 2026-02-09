@@ -81,9 +81,37 @@ func (m *CheckpointManager) PhaseCheckpoint(ctx context.Context, state *core.Wor
 		cpType = CheckpointPhaseComplete
 	}
 
-	return m.CreateCheckpoint(ctx, state, cpType, map[string]interface{}{
+	checkpoint := core.Checkpoint{
+		ID:        generateCheckpointID(),
+		Type:      string(cpType),
+		Phase:     phase, // Use explicit phase parameter (state.CurrentPhase may already have advanced).
+		Timestamp: time.Now(),
+	}
+
+	data, err := json.Marshal(map[string]interface{}{
 		"phase": string(phase),
 	})
+	if err != nil {
+		return fmt.Errorf("marshaling checkpoint metadata: %w", err)
+	}
+	checkpoint.Data = data
+
+	// Append checkpoint to state
+	state.Checkpoints = append(state.Checkpoints, checkpoint)
+	state.UpdatedAt = time.Now()
+
+	// Save state
+	if err := m.state.Save(ctx, state); err != nil {
+		return fmt.Errorf("saving checkpoint: %w", err)
+	}
+
+	m.logger.Info("checkpoint created",
+		"checkpoint_id", checkpoint.ID,
+		"type", cpType,
+		"phase", phase,
+	)
+
+	return nil
 }
 
 // TaskCheckpoint creates a checkpoint for task transitions.

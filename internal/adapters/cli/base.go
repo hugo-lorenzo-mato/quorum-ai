@@ -54,6 +54,9 @@ type AgentConfig struct {
 	// Default: 5 (meaning reported must be within 1/5 to 5x of estimated).
 	// Set to 0 to disable discrepancy detection.
 	TokenDiscrepancyThreshold float64
+	// GracePeriod is the time to wait after logical completion (result:success) before
+	// killing a hung process. Default: 30s.
+	GracePeriod time.Duration
 }
 
 // DefaultTokenDiscrepancyThreshold is the default ratio for token discrepancy detection.
@@ -98,6 +101,10 @@ type BaseAdapter struct {
 	// Diagnostics integration for resource monitoring and crash recovery
 	safeExec   *diagnostics.SafeExecutor
 	dumpWriter *diagnostics.CrashDumpWriter
+
+	// Process tracking for graceful termination
+	mu        sync.Mutex
+	activeCmd *exec.Cmd
 }
 
 // SetLogCallback sets a callback that receives stderr lines in real-time.
@@ -236,6 +243,9 @@ func (b *BaseAdapter) ExecuteCommand(ctx context.Context, args []string, stdin, 
 		cmd.Env = append(cmd.Env, k+"="+v)
 	}
 
+	// Enable process group isolation for graceful termination
+	configureProcAttr(cmd)
+
 	// Log command execution start with truncated stdin for debugging
 	stdinPreview := stdin
 	if len(stdinPreview) > 500 {
@@ -259,8 +269,16 @@ func (b *BaseAdapter) ExecuteCommand(ctx context.Context, args []string, stdin, 
 		if stderrPipe != nil {
 			_ = stderrPipe.Close()
 		}
+		// If the context expired before the process could start, return a retryable
+		// timeout error so the retry policy can attempt recovery (e.g., file-based).
+		if ctx.Err() != nil {
+			return nil, core.ErrTimeout(fmt.Sprintf("starting command: %v (context: %v)", err, ctx.Err()))
+		}
 		return nil, fmt.Errorf("starting command: %w", err)
 	}
+
+	b.setActiveProcess(cmd)
+	defer b.clearActiveProcess()
 
 	b.logger.Info("cli: process started", "adapter", b.config.Name, "pid", cmd.Process.Pid)
 
@@ -314,6 +332,13 @@ func (b *BaseAdapter) ExecuteCommand(ctx context.Context, args []string, stdin, 
 			"path", cmdPath,
 			"duration", duration,
 		)
+		// Preserve cancellation cause (used for file-based recovery / watchdog reaping).
+		// When a workflow is cancelled by the user, upstream code does NOT cancel this
+		// context with a cause; it returns an explicit CANCELLED error via control-plane checks.
+		// Therefore: context cancellation here is usually timeout/infra or an internal cancel cause.
+		if cause := context.Cause(ctx); cause != nil && cause != context.Canceled {
+			return result, cause
+		}
 		return result, core.ErrState("CANCELLED", "workflow cancelled by user")
 	}
 
@@ -532,6 +557,9 @@ func (b *BaseAdapter) executeWithJSONStreaming(
 		cmd.Stdin = strings.NewReader(stdin)
 	}
 
+	// Enable process group isolation for graceful termination
+	configureProcAttr(cmd)
+
 	// Set up pipes for both stdout and stderr
 	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {
@@ -564,8 +592,16 @@ func (b *BaseAdapter) executeWithJSONStreaming(
 		// CRITICAL: Close both pipes if Start() fails to prevent FD leak
 		_ = stdoutPipe.Close()
 		_ = stderrPipe.Close()
+		// If the context expired before the process could start, return a retryable
+		// timeout error so the retry policy can attempt recovery (e.g., file-based).
+		if ctx.Err() != nil {
+			return nil, core.ErrTimeout(fmt.Sprintf("starting command: %v (context: %v)", err, ctx.Err()))
+		}
 		return nil, fmt.Errorf("starting command: %w", err)
 	}
+
+	b.setActiveProcess(cmd)
+	defer b.clearActiveProcess()
 
 	b.logger.Info("cli: streaming process started", "adapter", adapterName, "pid", cmd.Process.Pid)
 
@@ -573,11 +609,15 @@ func (b *BaseAdapter) executeWithJSONStreaming(
 	var stdout, stderr bytes.Buffer
 	var wg sync.WaitGroup
 
-	// Stream stdout (JSON events)
+	// logicalDone is signaled when the JSON parser detects result:success
+	logicalDone := make(chan struct{}, 1)
+	waitDone := make(chan error, 1)
+
+	// Stream stdout (JSON events) with logical completion detection
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		b.streamJSONOutput(stdoutPipe, &stdout, adapterName, parser)
+		b.streamJSONOutputWithSignal(stdoutPipe, &stdout, adapterName, parser, logicalDone)
 	}()
 
 	// Stream stderr (progress messages)
@@ -587,9 +627,46 @@ func (b *BaseAdapter) executeWithJSONStreaming(
 		b.streamStderr(stderrPipe, &stderr, adapterName)
 	}()
 
-	// Wait for command
-	err = cmd.Wait()
+	// Wait for command in background
+	go func() {
+		waitDone <- cmd.Wait()
+	}()
+
+	var waitErr error
+	gracePeriod := b.config.GracePeriod
+	if gracePeriod == 0 {
+		gracePeriod = 30 * time.Second
+	}
+
+	select {
+	case waitErr = <-waitDone:
+		// Process terminated normally
+	case <-logicalDone:
+		// result:success detected — allow grace period for clean exit
+		b.logger.Info("logical completion detected, starting grace period",
+			"adapter", adapterName, "grace_period", gracePeriod)
+		select {
+		case waitErr = <-waitDone:
+			// Exited within grace period
+		case <-time.After(gracePeriod):
+			// Hung after producing output — kill
+			b.logger.Warn("process hung after logical completion, killing",
+				"adapter", adapterName)
+			_ = b.GracefulKill(5 * time.Second)
+			waitErr = <-waitDone
+		}
+	case <-ctx.Done():
+		// Context expired — kill the entire process group (not just PID).
+		// exec.CommandContext only kills the PID; child processes in the Setpgid
+		// process group may survive. GracefulKill targets the PGID.
+		b.logger.Warn("context expired, killing process group",
+			"adapter", adapterName, "reason", ctx.Err())
+		_ = b.GracefulKill(5 * time.Second)
+		waitErr = <-waitDone
+	}
+
 	wg.Wait()
+	err = waitErr
 
 	duration := time.Since(startTime)
 
@@ -606,6 +683,9 @@ func (b *BaseAdapter) executeWithJSONStreaming(
 	}
 	if ctx.Err() == context.Canceled {
 		b.emitEvent(core.NewAgentEvent(core.AgentEventError, adapterName, "Execution cancelled"))
+		if cause := context.Cause(ctx); cause != nil && cause != context.Canceled {
+			return result, cause
+		}
 		return result, core.ErrState("CANCELLED", "workflow cancelled by user")
 	}
 
@@ -647,6 +727,37 @@ func (b *BaseAdapter) streamJSONOutput(pipe io.ReadCloser, buf *bytes.Buffer, _ 
 			events := parser.ParseLine(line)
 			for _, event := range events {
 				b.emitEvent(event)
+			}
+		}
+	}
+}
+
+// streamJSONOutputWithSignal is like streamJSONOutput but signals logicalDone
+// when the parser emits an AgentEventCompleted event (result:success).
+func (b *BaseAdapter) streamJSONOutputWithSignal(pipe io.ReadCloser, buf *bytes.Buffer, _ string, parser StreamParser, logicalDone chan<- struct{}) {
+	scanner := bufio.NewScanner(pipe)
+	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
+
+	signaled := false
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		text := extractTextFromJSONLine(line)
+		if text != "" {
+			buf.WriteString(text)
+		}
+
+		if parser != nil {
+			events := parser.ParseLine(line)
+			for _, event := range events {
+				b.emitEvent(event)
+				if !signaled && event.Type == core.AgentEventCompleted {
+					signaled = true
+					select {
+					case logicalDone <- struct{}{}:
+					default:
+					}
+				}
 			}
 		}
 	}
@@ -707,10 +818,12 @@ func extractTextFromJSONLine(line string) string {
 		return event.Text
 	}
 
-	// Handle Codex agent_message
+	// Handle Codex agent_message (complete message, not a streaming chunk).
+	// Append \n so consecutive messages are separated in the stdout buffer
+	// instead of forming a single unreadable line.
 	if event.Type == "item.completed" && event.Item != nil {
 		if event.Item.Type == "agent_message" && event.Item.Text != "" {
-			return event.Item.Text
+			return event.Item.Text + "\n"
 		}
 	}
 
@@ -796,6 +909,9 @@ func (b *BaseAdapter) executeWithLogFileStreaming(
 	cmd.Env = os.Environ()
 	cmd.Env = append(cmd.Env, "QUORUM_MANAGED=true", fmt.Sprintf("QUORUM_AGENT=%s", adapterName))
 
+	// Enable process group isolation for graceful termination
+	configureProcAttr(cmd)
+
 	b.logger.Debug("executing command with log file streaming",
 		"path", cmdPath,
 		"args", logArgs,
@@ -805,8 +921,16 @@ func (b *BaseAdapter) executeWithLogFileStreaming(
 	startTime := time.Now()
 
 	if err := cmd.Start(); err != nil {
+		// If the context expired before the process could start, return a retryable
+		// timeout error so the retry policy can attempt recovery (e.g., file-based).
+		if ctx.Err() != nil {
+			return nil, core.ErrTimeout(fmt.Sprintf("starting command: %v (context: %v)", err, ctx.Err()))
+		}
 		return nil, fmt.Errorf("starting command: %w", err)
 	}
+
+	b.setActiveProcess(cmd)
+	defer b.clearActiveProcess()
 
 	b.logger.Info("cli: log-streaming process started", "adapter", adapterName, "pid", cmd.Process.Pid)
 
@@ -840,6 +964,9 @@ func (b *BaseAdapter) executeWithLogFileStreaming(
 	}
 	if ctx.Err() == context.Canceled {
 		b.emitEvent(core.NewAgentEvent(core.AgentEventError, adapterName, "Execution cancelled"))
+		if cause := context.Cause(ctx); cause != nil && cause != context.Canceled {
+			return result, cause
+		}
 		return result, core.ErrState("CANCELLED", "workflow cancelled by user")
 	}
 

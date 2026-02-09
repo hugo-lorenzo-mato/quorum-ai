@@ -127,7 +127,6 @@ func TestResolvePhaseModel_WhitespacePhaseModel(t *testing.T) {
 func TestConfig_AllFields(t *testing.T) {
 	cfg := &Config{
 		DryRun:       true,
-		Sandbox:      false,
 		DenyTools:    []string{"rm", "sudo"},
 		DefaultAgent: "gemini",
 		AgentPhaseModels: map[string]map[string]string{
@@ -147,9 +146,6 @@ func TestConfig_AllFields(t *testing.T) {
 
 	if !cfg.DryRun {
 		t.Error("DryRun should be true")
-	}
-	if cfg.Sandbox {
-		t.Error("Sandbox should be false")
 	}
 	if len(cfg.DenyTools) != 2 {
 		t.Errorf("len(DenyTools) = %d, want 2", len(cfg.DenyTools))

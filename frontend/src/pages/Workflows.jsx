@@ -46,7 +46,9 @@ import {
   X,
 } from 'lucide-react';
 import { ConfirmDialog } from '../components/config/ConfirmDialog';
-import { ExecutionModeBadge, PhaseStepper, ReplanModal } from '../components/workflow';
+import { ExecutionModeBadge, PhaseStepper, ReplanModal, WorkflowPipelineLive } from '../components/workflow';
+import PipelineExpandedPanel from '../components/workflow/pipeline/PipelineExpandedPanel';
+import usePipelineState from '../components/workflow/hooks/usePipelineState';
 import { GenerationOptionsModal } from '../components/issues';
 import useIssuesStore from '../stores/issuesStore';
 import FileTree from '../components/FileTree';
@@ -267,6 +269,7 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
     pauseWorkflow,
     resumeWorkflow,
     stopWorkflow,
+    forceStopWorkflow,
     deleteWorkflow,
     updateWorkflow,
     fetchWorkflow,
@@ -447,20 +450,55 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
   const currentAgents = useExecutionStore((s) => s.currentAgentsByWorkflow[workflowKey] || {});
   const connectionMode = useUIStore((s) => s.connectionMode);
 
+  // Pipeline live state
+  const [expandedPhase, setExpandedPhase] = useState(null);
+  const pipelineState = usePipelineState(workflow, workflowKey);
+
   useEffect(() => {
     // Merge persisted backend agent_events (if any) into the local replayable timeline.
     // Never overwrite local entries; local timeline is the source of continuity across navigation.
     hydrateFromWorkflowResponse(workflow, currentProjectId);
   }, [hydrateFromWorkflowResponse, workflow, currentProjectId]);
 
+  const controlAvailable = workflow?.control_available === true;
+  const runningInDB = workflow?.running_in_db === true;
+
+  const handlePause = useCallback(async () => {
+    const res = await pauseWorkflow(workflow.id);
+    if (!res) {
+      await fetchWorkflow(workflow.id, { silent: true });
+    }
+  }, [pauseWorkflow, fetchWorkflow, workflow.id]);
+
+  const handleStop = useCallback(async () => {
+    const res = await stopWorkflow(workflow.id);
+    if (!res) {
+      await fetchWorkflow(workflow.id, { silent: true });
+    }
+  }, [stopWorkflow, fetchWorkflow, workflow.id]);
+
+  const handleForceStop = useCallback(async () => {
+    const hostInfo = workflow?.lock_holder_host
+      ? ` (holder: ${workflow.lock_holder_host}${workflow.lock_holder_pid ? `:${workflow.lock_holder_pid}` : ''})`
+      : '';
+    if (!window.confirm(`Force stop this workflow? This will clear the DB running marker and mark the workflow as failed.${hostInfo}`)) {
+      return;
+    }
+    const res = await forceStopWorkflow(workflow.id);
+    if (!res) {
+      await fetchWorkflow(workflow.id, { silent: true });
+    }
+  }, [forceStopWorkflow, fetchWorkflow, workflow.id, workflow?.lock_holder_host, workflow?.lock_holder_pid]);
+
   // Safety net: while running/cancelling, refresh workflow state periodically so UI
   // recovers even if an SSE event is dropped (or the client reconnects mid-run).
   useEffect(() => {
     if (!workflow?.id) return;
-    if (!['running', 'cancelling'].includes(workflow.status)) return;
+    if (!['running', 'cancelling', 'paused'].includes(workflow.status)) return;
+    const intervalMs = workflow.status === 'paused' ? 20000 : 8000;
     const interval = setInterval(() => {
       fetchWorkflow(workflow.id, { silent: true });
-    }, 8000);
+    }, intervalMs);
     return () => clearInterval(interval);
   }, [workflow?.id, workflow?.status, fetchWorkflow]);
 
@@ -905,7 +943,13 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
 
           {/* Phase Progress Stepper - inline */}
           <div className="hidden md:flex flex-1 justify-center">
-            <PhaseStepper workflow={workflow} compact />
+            <WorkflowPipelineLive
+              workflow={workflow}
+              workflowKey={workflowKey}
+              compact
+              expandedPhase={expandedPhase}
+              onPhaseClick={(phase) => setExpandedPhase((prev) => (prev === phase ? null : phase))}
+            />
           </div>
 
           <div className="flex items-center gap-2 flex-wrap md:justify-end w-full md:w-auto">
@@ -1022,35 +1066,75 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
               </div>
             )}
 
+            {/* Orphan indicator: running in DB but not controllable in this server */}
+            {runningInDB && !controlAvailable && (
+              <div
+                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-warning/10 text-warning text-sm"
+                title="The workflow is marked running in the database, but this server has no in-memory control handle."
+              >
+                <Network className="w-4 h-4" />
+                Orphaned (running in DB)
+                {workflow.lock_holder_host && (
+                  <span className="text-[11px] font-mono opacity-80">
+                    {workflow.lock_holder_host}{workflow.lock_holder_pid ? `:${workflow.lock_holder_pid}` : ''}
+                  </span>
+                )}
+              </div>
+            )}
+
             {/* Pause/Stop controls - when running */}
             {workflow.status === 'running' && (
               <>
-                <button
-                  onClick={() => pauseWorkflow(workflow.id)}
-                  className="flex-1 md:flex-none inline-flex justify-center items-center gap-2 px-3 py-2 rounded-lg bg-secondary text-secondary-foreground text-sm font-medium hover:bg-secondary/80 transition-colors"
-                >
-                  <Pause className="w-4 h-4" />
-                  Pause
-                </button>
-                <button
-                  onClick={() => stopWorkflow(workflow.id)}
-                  className="flex-1 md:flex-none inline-flex justify-center items-center gap-2 px-3 py-2 rounded-lg bg-destructive text-destructive-foreground text-sm font-medium hover:bg-destructive/90 transition-colors"
-                >
-                  <StopCircle className="w-4 h-4" />
-                  Stop
-                </button>
+                {controlAvailable ? (
+                  <>
+                    <button
+                      onClick={handlePause}
+                      className="flex-1 md:flex-none inline-flex justify-center items-center gap-2 px-3 py-2 rounded-lg bg-secondary text-secondary-foreground text-sm font-medium hover:bg-secondary/80 transition-colors"
+                    >
+                      <Pause className="w-4 h-4" />
+                      Pause
+                    </button>
+                    <button
+                      onClick={handleStop}
+                      className="flex-1 md:flex-none inline-flex justify-center items-center gap-2 px-3 py-2 rounded-lg bg-destructive text-destructive-foreground text-sm font-medium hover:bg-destructive/90 transition-colors"
+                    >
+                      <StopCircle className="w-4 h-4" />
+                      Stop
+                    </button>
+                  </>
+                ) : runningInDB ? (
+                  <button
+                    onClick={handleForceStop}
+                    className="flex-1 md:flex-none inline-flex justify-center items-center gap-2 px-3 py-2 rounded-lg bg-destructive text-destructive-foreground text-sm font-medium hover:bg-destructive/90 transition-colors"
+                    title="Force stop (orphan recovery)"
+                  >
+                    <StopCircle className="w-4 h-4" />
+                    Force stop
+                  </button>
+                ) : null}
               </>
             )}
 
                       {/* Stop when paused */}
                       {workflow.status === 'paused' && (
-                        <button
-                          onClick={() => stopWorkflow(workflow.id)}
-                          className="flex-1 md:flex-none inline-flex justify-center items-center gap-2 px-3 py-2 rounded-lg bg-destructive text-destructive-foreground text-sm font-medium hover:bg-destructive/90 transition-colors"
-                        >
-                          <StopCircle className="w-4 h-4" />
-                          Stop
-                        </button>
+                        controlAvailable ? (
+                          <button
+                            onClick={handleStop}
+                            className="flex-1 md:flex-none inline-flex justify-center items-center gap-2 px-3 py-2 rounded-lg bg-destructive text-destructive-foreground text-sm font-medium hover:bg-destructive/90 transition-colors"
+                          >
+                            <StopCircle className="w-4 h-4" />
+                            Stop
+                          </button>
+                        ) : runningInDB ? (
+                          <button
+                            onClick={handleForceStop}
+                            className="flex-1 md:flex-none inline-flex justify-center items-center gap-2 px-3 py-2 rounded-lg bg-destructive text-destructive-foreground text-sm font-medium hover:bg-destructive/90 transition-colors"
+                            title="Force stop (orphan recovery)"
+                          >
+                            <StopCircle className="w-4 h-4" />
+                            Force stop
+                          </button>
+                        ) : null
                       )}
             
                       {/* Download Artifacts */}
@@ -1078,6 +1162,12 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
           </div>
         </div>
       </div>
+
+      {/* Pipeline Detail Panel */}
+      <PipelineExpandedPanel
+        expandedPhase={expandedPhase}
+        pipelineState={pipelineState}
+      />
 
       {/* Workflow Error Banner - Shows when workflow failed */}
       {workflow.status === 'failed' && workflow.error && (
@@ -1216,7 +1306,7 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
               activeAgents={activeAgents}
               expanded={activityExpanded}
               onToggle={() => setActivityExpanded(!activityExpanded)}
-              workflowStartTime={['running', 'cancelling'].includes(workflow.status) ? workflow.updated_at : null}
+              workflowStartTime={['running', 'cancelling'].includes(workflow.status) ? workflow.created_at : null}
             />
           </>
         )}

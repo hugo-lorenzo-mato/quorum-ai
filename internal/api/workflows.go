@@ -17,33 +17,38 @@ import (
 
 	webadapters "github.com/hugo-lorenzo-mato/quorum-ai/internal/adapters/web"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/attachments"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/config"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service/workflow"
 )
 
 // WorkflowResponse is the API response for a workflow.
 type WorkflowResponse struct {
-	ID              string            `json:"id"`
-	ExecutionID     int               `json:"execution_id"`
-	Title           string            `json:"title,omitempty"`
-	Status          string            `json:"status"`
-	CurrentPhase    string            `json:"current_phase"`
-	Prompt          string            `json:"prompt"`
-	OptimizedPrompt string            `json:"optimized_prompt,omitempty"`
-	Attachments     []core.Attachment `json:"attachments,omitempty"`
-	Error           string            `json:"error,omitempty"`
-	Warning         string            `json:"warning,omitempty"` // Warning about potential issues (e.g., duplicates)
-	ReportPath      string            `json:"report_path,omitempty"`
-	CreatedAt       time.Time         `json:"created_at"`
-	UpdatedAt       time.Time         `json:"updated_at"`
-	HeartbeatAt     *time.Time        `json:"heartbeat_at,omitempty"` // Last heartbeat for zombie detection
-	IsActive        bool              `json:"is_active"`
-	ActuallyRunning bool              `json:"actually_running,omitempty"` // True if executing in this process
-	TaskCount       int               `json:"task_count"`
-	Metrics         *Metrics          `json:"metrics,omitempty"`
-	AgentEvents     []core.AgentEvent `json:"agent_events,omitempty"` // Persisted agent activity
-	Tasks           []TaskResponse    `json:"tasks,omitempty"`        // Persisted task state for reload
-	Blueprint       *BlueprintDTO     `json:"blueprint,omitempty"`    // Workflow orchestration blueprint
+	ID               string            `json:"id"`
+	ExecutionID      int               `json:"execution_id"`
+	Title            string            `json:"title,omitempty"`
+	Status           string            `json:"status"`
+	CurrentPhase     string            `json:"current_phase"`
+	Prompt           string            `json:"prompt"`
+	OptimizedPrompt  string            `json:"optimized_prompt,omitempty"`
+	Attachments      []core.Attachment `json:"attachments,omitempty"`
+	Error            string            `json:"error,omitempty"`
+	Warning          string            `json:"warning,omitempty"` // Warning about potential issues (e.g., duplicates)
+	ReportPath       string            `json:"report_path,omitempty"`
+	CreatedAt        time.Time         `json:"created_at"`
+	UpdatedAt        time.Time         `json:"updated_at"`
+	HeartbeatAt      *time.Time        `json:"heartbeat_at,omitempty"` // Last heartbeat (running_workflows.heartbeat_at when available)
+	IsActive         bool              `json:"is_active"`
+	ActuallyRunning  bool              `json:"actually_running"`  // True if executing in this process (in-memory handle exists)
+	RunningInDB      bool              `json:"running_in_db"`     // True if marked running in the DB (running_workflows contains row)
+	ControlAvailable bool              `json:"control_available"` // True if this server has an in-memory control handle (cancel/pause/resume)
+	LockHolderPID    *int              `json:"lock_holder_pid,omitempty"`
+	LockHolderHost   string            `json:"lock_holder_host,omitempty"`
+	TaskCount        int               `json:"task_count"`
+	Metrics          *Metrics          `json:"metrics,omitempty"`
+	AgentEvents      []core.AgentEvent `json:"agent_events,omitempty"` // Persisted agent activity
+	Tasks            []TaskResponse    `json:"tasks,omitempty"`        // Persisted task state for reload
+	Blueprint        *BlueprintDTO     `json:"blueprint,omitempty"`    // Workflow orchestration blueprint
 }
 
 // Metrics represents workflow metrics in API responses.
@@ -66,7 +71,6 @@ type BlueprintDTO struct {
 	MaxRetries         int     `json:"max_retries,omitempty"`
 	TimeoutSeconds     int     `json:"timeout_seconds,omitempty"`
 	DryRun             bool    `json:"dry_run,omitempty"`
-	Sandbox            bool    `json:"sandbox,omitempty"`
 
 	// ExecutionMode determines whether to use multi-agent consensus or single-agent mode.
 	// Valid values: "multi_agent" (default), "single_agent"
@@ -80,13 +84,51 @@ type BlueprintDTO struct {
 
 	// SingleAgentReasoningEffort is an optional reasoning effort override for the single agent.
 	SingleAgentReasoningEffort string `json:"single_agent_reasoning_effort,omitempty"`
+
+	// Extended pipeline config (read-only, derived from internal Blueprint).
+	Consensus       *ConsensusDTO       `json:"consensus,omitempty"`
+	Refiner         *RefinerDTO         `json:"refiner,omitempty"`
+	Synthesizer     *SynthesizerDTO     `json:"synthesizer,omitempty"`
+	PlanSynthesizer *PlanSynthesizerDTO `json:"plan_synthesizer,omitempty"`
+}
+
+// ConsensusDTO exposes consensus/moderator configuration.
+type ConsensusDTO struct {
+	Enabled             bool               `json:"enabled,omitempty"`
+	Agent               string             `json:"agent,omitempty"`
+	Threshold           float64            `json:"threshold,omitempty"`
+	Thresholds          map[string]float64 `json:"thresholds,omitempty"`
+	MinRounds           int                `json:"min_rounds,omitempty"`
+	MaxRounds           int                `json:"max_rounds,omitempty"`
+	WarningThreshold    float64            `json:"warning_threshold,omitempty"`
+	StagnationThreshold float64            `json:"stagnation_threshold,omitempty"`
+}
+
+// RefinerDTO exposes prompt refinement configuration.
+type RefinerDTO struct {
+	Enabled bool   `json:"enabled,omitempty"`
+	Agent   string `json:"agent,omitempty"`
+}
+
+// SynthesizerDTO exposes analysis synthesis configuration.
+type SynthesizerDTO struct {
+	Agent string `json:"agent,omitempty"`
+}
+
+// PlanSynthesizerDTO exposes multi-agent plan synthesis configuration.
+type PlanSynthesizerDTO struct {
+	Enabled bool   `json:"enabled,omitempty"`
+	Agent   string `json:"agent,omitempty"`
 }
 
 type blueprintPatch struct {
-	ExecutionMode              *string `json:"execution_mode,omitempty"`
-	SingleAgentName            *string `json:"single_agent_name,omitempty"`
-	SingleAgentModel           *string `json:"single_agent_model,omitempty"`
-	SingleAgentReasoningEffort *string `json:"single_agent_reasoning_effort,omitempty"`
+	ConsensusThreshold         *float64 `json:"consensus_threshold,omitempty"`
+	MaxRetries                 *int     `json:"max_retries,omitempty"`
+	TimeoutSeconds             *int     `json:"timeout_seconds,omitempty"`
+	ExecutionMode              *string  `json:"execution_mode,omitempty"`
+	SingleAgentName            *string  `json:"single_agent_name,omitempty"`
+	SingleAgentModel           *string  `json:"single_agent_model,omitempty"`
+	SingleAgentReasoningEffort *string  `json:"single_agent_reasoning_effort,omitempty"`
 }
 
 // IsSingleAgentMode returns true if the blueprint specifies single-agent execution.
@@ -124,18 +166,80 @@ type PhaseResponse struct {
 	Message      string `json:"message"`
 }
 
-// isWorkflowRunning checks if a workflow is currently running using the UnifiedTracker.
-// This provides a single source of truth for workflow execution status.
+const (
+	defaultWorkflowExecTimeout = 16 * time.Hour
+	defaultAnalyzeExecTimeout  = 8 * time.Hour
+	defaultPlanExecTimeout     = 1 * time.Hour
+)
+
+func parseDurationOrDefault(raw string, def time.Duration) time.Duration {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return def
+	}
+	d, err := time.ParseDuration(raw)
+	if err != nil || d <= 0 {
+		return def
+	}
+	return d
+}
+
+func effectiveWorkflowTimeout(cfg *config.Config, bp *core.Blueprint) time.Duration {
+	if bp != nil && bp.Timeout > 0 {
+		return bp.Timeout
+	}
+	if cfg != nil {
+		return parseDurationOrDefault(cfg.Workflow.Timeout, defaultWorkflowExecTimeout)
+	}
+	return defaultWorkflowExecTimeout
+}
+
+func execTimeoutForAnalyze(cfg *config.Config, bp *core.Blueprint) time.Duration {
+	wfTimeout := effectiveWorkflowTimeout(cfg, bp)
+	analyzeTimeout := defaultAnalyzeExecTimeout
+	if cfg != nil {
+		analyzeTimeout = parseDurationOrDefault(cfg.Phases.Analyze.Timeout, defaultAnalyzeExecTimeout)
+	}
+	if wfTimeout > 0 && wfTimeout < analyzeTimeout {
+		return wfTimeout
+	}
+	return analyzeTimeout
+}
+
+func execTimeoutForPlan(cfg *config.Config, bp *core.Blueprint) time.Duration {
+	wfTimeout := effectiveWorkflowTimeout(cfg, bp)
+	planTimeout := defaultPlanExecTimeout
+	if cfg != nil {
+		planTimeout = parseDurationOrDefault(cfg.Phases.Plan.Timeout, defaultPlanExecTimeout)
+	}
+	if wfTimeout > 0 && wfTimeout < planTimeout {
+		return wfTimeout
+	}
+	return planTimeout
+}
+
+// isWorkflowRunning checks if a workflow is running in-memory in this server process.
+// This should only reflect local control availability, not persisted DB state.
 func (s *Server) isWorkflowRunning(ctx context.Context, workflowID string) bool {
-	// Use UnifiedTracker as the single source of truth
 	if s.unifiedTracker != nil {
-		return s.unifiedTracker.IsRunning(ctx, core.WorkflowID(workflowID))
+		return s.unifiedTracker.IsRunningInMemory(core.WorkflowID(workflowID))
 	}
 	// Fallback to executor if tracker not available
 	if s.executor != nil {
 		return s.executor.IsRunning(workflowID)
 	}
 	return false
+}
+
+// isZombieWorkflow checks if a workflow is tracked but has an unhealthy heartbeat.
+// When heartbeat is disabled, this always returns false — zombie detection relies
+// on heartbeat being enabled, or users must manually ForceStop.
+func (s *Server) isZombieWorkflow(_ context.Context, workflowID string) bool {
+	if s.unifiedTracker == nil {
+		return false
+	}
+	wfID := core.WorkflowID(workflowID)
+	return s.unifiedTracker.IsRunningInMemory(wfID) && !s.unifiedTracker.IsHeartbeatHealthy(wfID)
 }
 
 // handleListWorkflows returns all workflows.
@@ -156,17 +260,41 @@ func (s *Server) handleListWorkflows(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Best-effort: build a set of running workflow IDs from the DB so we can expose
+	// running_in_db without per-workflow queries.
+	runningSet := make(map[core.WorkflowID]struct{})
+	if runningIDs, err := stateManager.ListRunningWorkflows(ctx); err == nil {
+		for _, id := range runningIDs {
+			runningSet[id] = struct{}{}
+		}
+	} else {
+		s.logger.Warn("failed to list running workflows for running_in_db enrichment", "error", err)
+	}
+
 	response := make([]WorkflowResponse, 0, len(workflows))
 	for _, wf := range workflows {
+		_, runningInDB := runningSet[wf.WorkflowID]
+		controlAvailable := false
+		if s.unifiedTracker != nil {
+			_, ok := s.unifiedTracker.GetControlPlane(wf.WorkflowID)
+			controlAvailable = ok
+		} else if s.executor != nil {
+			// Best-effort fallback: executor running implies local control.
+			controlAvailable = s.executor.IsRunning(string(wf.WorkflowID))
+		}
+
 		response = append(response, WorkflowResponse{
-			ID:           string(wf.WorkflowID),
-			Title:        wf.Title,
-			Status:       string(wf.Status),
-			CurrentPhase: string(wf.CurrentPhase),
-			Prompt:       wf.Prompt,
-			CreatedAt:    wf.CreatedAt,
-			UpdatedAt:    wf.UpdatedAt,
-			IsActive:     wf.IsActive,
+			ID:               string(wf.WorkflowID),
+			Title:            wf.Title,
+			Status:           string(wf.Status),
+			CurrentPhase:     string(wf.CurrentPhase),
+			Prompt:           wf.Prompt,
+			CreatedAt:        wf.CreatedAt,
+			UpdatedAt:        wf.UpdatedAt,
+			IsActive:         wf.IsActive,
+			ActuallyRunning:  s.isWorkflowRunning(ctx, string(wf.WorkflowID)),
+			RunningInDB:      runningInDB,
+			ControlAvailable: controlAvailable,
 		})
 	}
 
@@ -366,27 +494,22 @@ func (s *Server) handleCreateWorkflow(w http.ResponseWriter, r *http.Request) {
 		// Continue anyway - the directory will be created during execution
 	}
 
-	// Build workflow blueprint
-	blueprint := &core.Blueprint{
-		Consensus: core.BlueprintConsensus{
-			Threshold: 0.75,
-		},
-		MaxRetries: 3,
-		Timeout:    time.Hour,
-	}
+	// Build workflow blueprint.
+	// All override fields are intentionally 0-values here so the effective config is used at run time.
+	// The runner syncs a fully-resolved blueprint at execution start (see Runner.RunWithState/AnalyzeWithState).
+	blueprint := &core.Blueprint{}
 
 	if req.Blueprint != nil {
-		if req.Blueprint.ConsensusThreshold > 0 {
+		if req.Blueprint.ConsensusThreshold != 0 {
 			blueprint.Consensus.Threshold = req.Blueprint.ConsensusThreshold
 		}
-		if req.Blueprint.MaxRetries > 0 {
+		if req.Blueprint.MaxRetries != 0 {
 			blueprint.MaxRetries = req.Blueprint.MaxRetries
 		}
-		if req.Blueprint.TimeoutSeconds > 0 {
+		if req.Blueprint.TimeoutSeconds != 0 {
 			blueprint.Timeout = time.Duration(req.Blueprint.TimeoutSeconds) * time.Second
 		}
 		blueprint.DryRun = req.Blueprint.DryRun
-		blueprint.Sandbox = req.Blueprint.Sandbox
 		blueprint.ExecutionMode = req.Blueprint.ExecutionMode
 		blueprint.SingleAgent = core.BlueprintSingleAgent{
 			Agent:           req.Blueprint.SingleAgentName,
@@ -407,7 +530,7 @@ func (s *Server) handleCreateWorkflow(w http.ResponseWriter, r *http.Request) {
 		},
 		WorkflowRun: core.WorkflowRun{
 			Status:         core.WorkflowStatusPending,
-			CurrentPhase:   core.PhaseAnalyze,
+			CurrentPhase:   "",
 			Tasks:          make(map[core.TaskID]*core.TaskState),
 			TaskOrder:      make([]core.TaskID, 0),
 			Metrics:        &core.StateMetrics{},
@@ -485,9 +608,21 @@ func (s *Server) handleUpdateWorkflow(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusConflict, "cannot edit title while workflow is running")
 		return
 	}
-	if req.Blueprint != nil && state.Status != core.WorkflowStatusPending {
-		respondError(w, http.StatusConflict, "cannot edit workflow blueprint after workflow has started")
-		return
+	if req.Blueprint != nil {
+		// Allow blueprint edits as long as the workflow is not currently executing.
+		// This enables fixing per-workflow overrides (e.g., a too-short timeout) after failures.
+		if state.Status == core.WorkflowStatusRunning {
+			respondError(w, http.StatusConflict, "cannot edit workflow blueprint while workflow is running")
+			return
+		}
+		if runningInDB, err := stateManager.IsWorkflowRunning(ctx, state.WorkflowID); err != nil {
+			s.logger.Error("failed to check if workflow is running in DB", "workflow_id", workflowID, "error", err)
+			respondError(w, http.StatusInternalServerError, "failed to check workflow running state")
+			return
+		} else if runningInDB || s.isWorkflowRunning(ctx, workflowID) {
+			respondError(w, http.StatusConflict, "cannot edit workflow blueprint while workflow is running")
+			return
+		}
 	}
 
 	if req.Title != "" {
@@ -499,19 +634,28 @@ func (s *Server) handleUpdateWorkflow(w http.ResponseWriter, r *http.Request) {
 	if req.Blueprint != nil {
 		if state.Blueprint == nil {
 			state.Blueprint = &core.Blueprint{
-				Consensus: core.BlueprintConsensus{
-					Threshold: 0.75,
-				},
-				MaxRetries: 3,
-				Timeout:    time.Hour,
+				// Keep defaults "unset" so global config can apply unless explicitly overridden.
 			}
 		}
 
 		merged := &BlueprintDTO{
+			ConsensusThreshold:         state.Blueprint.Consensus.Threshold,
+			MaxRetries:                 state.Blueprint.MaxRetries,
+			TimeoutSeconds:             int(state.Blueprint.Timeout.Seconds()),
+			DryRun:                     state.Blueprint.DryRun,
 			ExecutionMode:              state.Blueprint.ExecutionMode,
 			SingleAgentName:            state.Blueprint.SingleAgent.Agent,
 			SingleAgentModel:           state.Blueprint.SingleAgent.Model,
 			SingleAgentReasoningEffort: state.Blueprint.SingleAgent.ReasoningEffort,
+		}
+		if req.Blueprint.ConsensusThreshold != nil {
+			merged.ConsensusThreshold = *req.Blueprint.ConsensusThreshold
+		}
+		if req.Blueprint.MaxRetries != nil {
+			merged.MaxRetries = *req.Blueprint.MaxRetries
+		}
+		if req.Blueprint.TimeoutSeconds != nil {
+			merged.TimeoutSeconds = *req.Blueprint.TimeoutSeconds
 		}
 		if req.Blueprint.ExecutionMode != nil {
 			merged.ExecutionMode = *req.Blueprint.ExecutionMode
@@ -544,6 +688,14 @@ func (s *Server) handleUpdateWorkflow(w http.ResponseWriter, r *http.Request) {
 		state.Blueprint.SingleAgent.Agent = merged.SingleAgentName
 		state.Blueprint.SingleAgent.Model = merged.SingleAgentModel
 		state.Blueprint.SingleAgent.ReasoningEffort = merged.SingleAgentReasoningEffort
+		state.Blueprint.Consensus.Threshold = merged.ConsensusThreshold
+		state.Blueprint.MaxRetries = merged.MaxRetries
+		if merged.TimeoutSeconds > 0 {
+			state.Blueprint.Timeout = time.Duration(merged.TimeoutSeconds) * time.Second
+		} else {
+			// 0 clears any workflow-level timeout override so global config can apply.
+			state.Blueprint.Timeout = 0
+		}
 	}
 	if req.Status != "" {
 		state.Status = core.WorkflowStatus(req.Status)
@@ -648,24 +800,70 @@ func (s *Server) handleActivateWorkflow(w http.ResponseWriter, r *http.Request) 
 // stateToWorkflowResponse converts a WorkflowState to a WorkflowResponse.
 // This is a Server method to access the unified workflow running check.
 func (s *Server) stateToWorkflowResponse(ctx context.Context, state *core.WorkflowState, activeID core.WorkflowID) WorkflowResponse {
+	stateManager := s.getProjectStateManager(ctx)
+
+	// Persisted state: is it marked running in the DB?
+	runningInDB := false
+	if stateManager != nil {
+		if isRunning, err := stateManager.IsWorkflowRunning(ctx, state.WorkflowID); err == nil {
+			runningInDB = isRunning
+		} else {
+			s.logger.Warn("failed to check running_in_db for workflow response", "workflow_id", state.WorkflowID, "error", err)
+		}
+	}
+
+	// Control state: does this server have a ControlPlane for this workflow?
+	controlAvailable := false
+	if s.unifiedTracker != nil {
+		_, ok := s.unifiedTracker.GetControlPlane(state.WorkflowID)
+		controlAvailable = ok
+	} else if s.executor != nil {
+		controlAvailable = s.executor.IsRunning(string(state.WorkflowID))
+	}
+
+	var runningRec *core.RunningWorkflowRecord
+	if stateManager != nil {
+		if provider, ok := stateManager.(interface {
+			GetRunningWorkflowRecord(context.Context, core.WorkflowID) (*core.RunningWorkflowRecord, error)
+		}); ok {
+			if rec, err := provider.GetRunningWorkflowRecord(ctx, state.WorkflowID); err == nil {
+				runningRec = rec
+			} else {
+				s.logger.Warn("failed to load running_workflows metadata for workflow response", "workflow_id", state.WorkflowID, "error", err)
+			}
+		}
+	}
+
+	heartbeatAt := state.HeartbeatAt
+	if runningRec != nil && runningRec.HeartbeatAt != nil {
+		heartbeatAt = runningRec.HeartbeatAt
+	}
+
 	resp := WorkflowResponse{
-		ID:              string(state.WorkflowID),
-		ExecutionID:     state.ExecutionID,
-		Title:           state.Title,
-		Status:          string(state.Status),
-		CurrentPhase:    string(state.CurrentPhase),
-		Prompt:          state.Prompt,
-		OptimizedPrompt: state.OptimizedPrompt,
-		Attachments:     state.Attachments,
-		Error:           state.Error,
-		ReportPath:      state.ReportPath,
-		CreatedAt:       state.CreatedAt,
-		UpdatedAt:       state.UpdatedAt,
-		HeartbeatAt:     state.HeartbeatAt,
-		IsActive:        state.WorkflowID == activeID,
-		ActuallyRunning: s.isWorkflowRunning(ctx, string(state.WorkflowID)),
-		TaskCount:       len(state.Tasks),
-		AgentEvents:     state.AgentEvents,
+		ID:               string(state.WorkflowID),
+		ExecutionID:      state.ExecutionID,
+		Title:            state.Title,
+		Status:           string(state.Status),
+		CurrentPhase:     string(state.CurrentPhase),
+		Prompt:           state.Prompt,
+		OptimizedPrompt:  state.OptimizedPrompt,
+		Attachments:      state.Attachments,
+		Error:            state.Error,
+		ReportPath:       state.ReportPath,
+		CreatedAt:        state.CreatedAt,
+		UpdatedAt:        state.UpdatedAt,
+		HeartbeatAt:      heartbeatAt,
+		IsActive:         state.WorkflowID == activeID,
+		ActuallyRunning:  s.isWorkflowRunning(ctx, string(state.WorkflowID)),
+		RunningInDB:      runningInDB,
+		ControlAvailable: controlAvailable,
+		TaskCount:        len(state.Tasks),
+		AgentEvents:      state.AgentEvents,
+	}
+
+	if runningRec != nil {
+		resp.LockHolderPID = runningRec.LockHolderPID
+		resp.LockHolderHost = runningRec.LockHolderHost
 	}
 
 	if state.Metrics != nil {
@@ -692,11 +890,31 @@ func (s *Server) stateToWorkflowResponse(ctx context.Context, state *core.Workfl
 			MaxRetries:                 state.Blueprint.MaxRetries,
 			TimeoutSeconds:             int(state.Blueprint.Timeout.Seconds()),
 			DryRun:                     state.Blueprint.DryRun,
-			Sandbox:                    state.Blueprint.Sandbox,
 			ExecutionMode:              state.Blueprint.ExecutionMode,
 			SingleAgentName:            state.Blueprint.SingleAgent.Agent,
 			SingleAgentModel:           state.Blueprint.SingleAgent.Model,
 			SingleAgentReasoningEffort: state.Blueprint.SingleAgent.ReasoningEffort,
+			Consensus: &ConsensusDTO{
+				Enabled:             state.Blueprint.Consensus.Enabled,
+				Agent:               state.Blueprint.Consensus.Agent,
+				Threshold:           state.Blueprint.Consensus.Threshold,
+				Thresholds:          state.Blueprint.Consensus.Thresholds,
+				MinRounds:           state.Blueprint.Consensus.MinRounds,
+				MaxRounds:           state.Blueprint.Consensus.MaxRounds,
+				WarningThreshold:    state.Blueprint.Consensus.WarningThreshold,
+				StagnationThreshold: state.Blueprint.Consensus.StagnationThreshold,
+			},
+			Refiner: &RefinerDTO{
+				Enabled: state.Blueprint.Refiner.Enabled,
+				Agent:   state.Blueprint.Refiner.Agent,
+			},
+			Synthesizer: &SynthesizerDTO{
+				Agent: state.Blueprint.Synthesizer.Agent,
+			},
+			PlanSynthesizer: &PlanSynthesizerDTO{
+				Enabled: state.Blueprint.PlanSynthesizer.Enabled,
+				Agent:   state.Blueprint.PlanSynthesizer.Agent,
+			},
 		}
 	}
 
@@ -852,6 +1070,12 @@ func (s *Server) HandleRunWorkflow(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if execErr != nil {
+			// Prefer structured domain errors for correct HTTP status codes.
+			if status, ok := httpStatusForDomainError(execErr); ok {
+				respondError(w, status, execErr.Error())
+				return
+			}
+
 			// Map errors to HTTP status codes
 			errMsg := execErr.Error()
 			switch {
@@ -930,27 +1154,48 @@ func (s *Server) HandleRunWorkflow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create runner with execution context that preserves ProjectContext values.
-	// context.WithoutCancel detaches from HTTP request cancellation while maintaining
-	// access to project-scoped resources (StateManager, EventBus, etc.)
-	execCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 4*time.Hour)
-	handle.SetExecCancel(cancel)
-
 	// Reload state (it was updated by StartExecution)
 	state, err = stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
 	if err != nil {
-		cancel()
 		_ = s.unifiedTracker.RollbackExecution(ctx, core.WorkflowID(workflowID), "failed to reload state")
 		respondError(w, http.StatusInternalServerError, "failed to reload workflow state")
 		return
 	}
 
-	runner, notifier, err := factory.CreateRunner(execCtx, workflowID, handle.ControlPlane, state.Blueprint)
+	// Resolve the effective execution config so the execution timeout matches Settings.
+	effCfg, cfgErr := ResolveEffectiveExecutionConfig(ctx)
+	if cfgErr != nil {
+		_ = s.unifiedTracker.RollbackExecution(ctx, core.WorkflowID(workflowID), "failed to resolve effective configuration: "+cfgErr.Error())
+		status := http.StatusServiceUnavailable
+		msg := "workflow execution not available: " + cfgErr.Error()
+		if st, ok := httpStatusForDomainError(cfgErr); ok {
+			status = st
+			msg = cfgErr.Error()
+		}
+		respondError(w, status, msg)
+		return
+	}
+
+	execTimeout := effectiveWorkflowTimeout(effCfg.Config, state.Blueprint)
+
+	// Create runner with execution context that preserves ProjectContext values.
+	// context.WithoutCancel detaches from HTTP request cancellation while maintaining
+	// access to project-scoped resources (StateManager, EventBus, etc.)
+	execCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), execTimeout)
+	handle.SetExecCancel(cancel)
+
+	runner, notifier, err := factory.CreateRunner(execCtx, workflowID, handle.ControlPlane, state.Blueprint, state)
 	if err != nil {
 		cancel()
 		_ = s.unifiedTracker.RollbackExecution(ctx, core.WorkflowID(workflowID), "failed to create runner: "+err.Error())
 		s.logger.Error("failed to create runner", "workflow_id", workflowID, "error", err)
-		respondError(w, http.StatusServiceUnavailable, "workflow execution not available: "+err.Error())
+		status := http.StatusServiceUnavailable
+		msg := "workflow execution not available: " + err.Error()
+		if s, ok := httpStatusForDomainError(err); ok {
+			status = s
+			msg = err.Error()
+		}
+		respondError(w, status, msg)
 		return
 	}
 
@@ -1005,6 +1250,14 @@ func (s *Server) executeWorkflowAsync(
 	workflowID string,
 	handle *ExecutionHandle,
 ) {
+	defer func() {
+		if r := recover(); r != nil {
+			s.logger.Error("panic in workflow execution",
+				"workflow_id", workflowID,
+				"panic", fmt.Sprintf("%v", r))
+		}
+	}()
+
 	// Capture cleanup context at the start to preserve ProjectContext for FinishExecution.
 	// This ensures cleanup happens in the correct project's DB even if the execution times out.
 	cleanupCtx := context.WithoutCancel(ctx)
@@ -1064,41 +1317,114 @@ func (s *Server) handleCancelWorkflow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Use UnifiedTracker for cancel operation
+	ctx := r.Context()
+	stateManager := s.getProjectStateManager(ctx)
+
+	// Use UnifiedTracker for cancel operation (preferred: has access to ForceStop recovery).
 	if s.unifiedTracker != nil {
-		if err := s.unifiedTracker.Cancel(core.WorkflowID(workflowID)); err != nil {
-			if strings.Contains(err.Error(), "not running") {
-				respondError(w, http.StatusConflict, "workflow is not running")
-			} else if strings.Contains(err.Error(), "already being cancelled") {
-				respondError(w, http.StatusConflict, "workflow is already being cancelled")
-			} else {
-				respondError(w, http.StatusInternalServerError, err.Error())
-			}
+		err := s.unifiedTracker.Cancel(core.WorkflowID(workflowID))
+		if err == nil {
+			respondJSON(w, http.StatusAccepted, WorkflowControlResponse{
+				ID:      workflowID,
+				Status:  "cancelling",
+				Message: "Workflow cancellation requested. In-flight agent processes will be interrupted.",
+			})
 			return
 		}
-	} else if s.executor != nil {
-		// Fallback to executor if tracker not available
+
+		// Idempotence: treat "already being cancelled" as success.
+		if strings.Contains(err.Error(), "already being cancelled") {
+			respondJSON(w, http.StatusAccepted, WorkflowControlResponse{
+				ID:      workflowID,
+				Status:  "cancelling",
+				Message: "Workflow cancellation already requested.",
+			})
+			return
+		}
+
+		// If not controllable in-memory, we might still have a DB running marker from a previous crash.
+		if strings.Contains(err.Error(), "not running") && stateManager != nil {
+			runningInDB, dbErr := stateManager.IsWorkflowRunning(ctx, core.WorkflowID(workflowID))
+			if dbErr != nil {
+				s.logger.Error("failed to check running status in DB during cancel recovery", "workflow_id", workflowID, "error", dbErr)
+				respondError(w, http.StatusInternalServerError, "failed to check workflow running status")
+				return
+			}
+
+			// Idempotence: if not running in DB either, return OK (no-op).
+			if !runningInDB {
+				respondJSON(w, http.StatusOK, WorkflowControlResponse{
+					ID:      workflowID,
+					Status:  "stopped",
+					Message: "Workflow is not running.",
+				})
+				return
+			}
+
+			// Best-effort: if we can prove the previous lock-holder is dead on this host, auto-recover.
+			var rec *core.RunningWorkflowRecord
+			if provider, ok := stateManager.(interface {
+				GetRunningWorkflowRecord(context.Context, core.WorkflowID) (*core.RunningWorkflowRecord, error)
+			}); ok {
+				rec, _ = provider.GetRunningWorkflowRecord(ctx, core.WorkflowID(workflowID))
+			}
+
+			if isProvablyOrphan(rec) {
+				if forceErr := s.unifiedTracker.ForceStop(ctx, core.WorkflowID(workflowID)); forceErr != nil {
+					s.logger.Error("failed to force-stop orphaned workflow during cancel recovery", "workflow_id", workflowID, "error", forceErr)
+					respondError(w, http.StatusInternalServerError, "failed to recover orphaned workflow")
+					return
+				}
+				respondJSON(w, http.StatusOK, WorkflowControlResponse{
+					ID:      workflowID,
+					Status:  "stopped",
+					Message: "Orphan recovered: workflow was forcibly stopped.",
+				})
+				return
+			}
+
+			msg := "workflow is marked running in the DB but this server has no control handle; use POST /force-stop to recover"
+			if rec != nil && rec.LockHolderHost != "" {
+				if rec.LockHolderPID != nil {
+					msg = fmt.Sprintf("workflow is marked running in DB but not controllable (holder pid %d on %s); use POST /force-stop to recover", *rec.LockHolderPID, rec.LockHolderHost)
+				} else {
+					msg = fmt.Sprintf("workflow is marked running in DB but not controllable (holder on %s); use POST /force-stop to recover", rec.LockHolderHost)
+				}
+			}
+			respondError(w, http.StatusConflict, msg)
+			return
+		}
+
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	// Fallback to executor if tracker not available.
+	if s.executor != nil {
 		if err := s.executor.Cancel(workflowID); err != nil {
 			if strings.Contains(err.Error(), "not running") {
 				respondError(w, http.StatusConflict, "workflow is not running")
 			} else if strings.Contains(err.Error(), "already being cancelled") {
-				respondError(w, http.StatusConflict, "workflow is already being cancelled")
+				respondJSON(w, http.StatusAccepted, WorkflowControlResponse{
+					ID:      workflowID,
+					Status:  "cancelling",
+					Message: "Workflow cancellation already requested.",
+				})
 			} else {
 				respondError(w, http.StatusInternalServerError, err.Error())
 			}
 			return
 		}
-	} else {
-		respondError(w, http.StatusConflict, "workflow is not running")
+
+		respondJSON(w, http.StatusAccepted, WorkflowControlResponse{
+			ID:      workflowID,
+			Status:  "cancelling",
+			Message: "Workflow cancellation requested. In-flight agent processes will be interrupted.",
+		})
 		return
 	}
 
-	// Return success response (actual state change happens asynchronously)
-	respondJSON(w, http.StatusAccepted, WorkflowControlResponse{
-		ID:      workflowID,
-		Status:  "cancelling",
-		Message: "Workflow cancellation requested. In-flight agent processes will be interrupted.",
-	})
+	respondError(w, http.StatusServiceUnavailable, "workflow management not available")
 }
 
 // handleForceStopWorkflow forcibly stops a workflow, even if it doesn't have an active handle.
@@ -1200,7 +1526,14 @@ func (s *Server) handleResumeWorkflow(w http.ResponseWriter, r *http.Request) {
 			if strings.Contains(err.Error(), "not running") {
 				respondError(w, http.StatusConflict, "workflow is not running")
 			} else if strings.Contains(err.Error(), "not paused") {
-				respondError(w, http.StatusConflict, "workflow is not paused")
+				ctx := r.Context()
+				if s.isZombieWorkflow(ctx, workflowID) {
+					respondError(w, http.StatusConflict,
+						"workflow appears to be a zombie (stale heartbeat). Use POST /force-stop then re-run")
+				} else {
+					respondError(w, http.StatusConflict,
+						"workflow is not paused. If the workflow appears stuck, use POST /force-stop to recover")
+				}
 			} else {
 				respondError(w, http.StatusInternalServerError, err.Error())
 			}
@@ -1317,27 +1650,48 @@ func (s *Server) HandleAnalyzeWorkflow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create execution context that preserves ProjectContext values.
-	// context.WithoutCancel detaches from HTTP request cancellation while maintaining
-	// access to project-scoped resources (StateManager, EventBus, etc.)
-	execCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 4*time.Hour)
-	handle.SetExecCancel(cancel)
-
 	// Reload state (it was updated by StartExecution)
 	state, err = stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
 	if err != nil {
-		cancel()
 		_ = s.unifiedTracker.RollbackExecution(ctx, core.WorkflowID(workflowID), "failed to reload state")
 		respondError(w, http.StatusInternalServerError, "failed to reload workflow state")
 		return
 	}
 
-	runner, notifier, err := factory.CreateRunner(execCtx, workflowID, handle.ControlPlane, state.Blueprint)
+	// Resolve the effective execution config so the execution timeout matches Settings.
+	effCfg, cfgErr := ResolveEffectiveExecutionConfig(ctx)
+	if cfgErr != nil {
+		_ = s.unifiedTracker.RollbackExecution(ctx, core.WorkflowID(workflowID), "failed to resolve effective configuration: "+cfgErr.Error())
+		status := http.StatusServiceUnavailable
+		msg := "workflow execution not available: " + cfgErr.Error()
+		if st, ok := httpStatusForDomainError(cfgErr); ok {
+			status = st
+			msg = cfgErr.Error()
+		}
+		respondError(w, status, msg)
+		return
+	}
+
+	execTimeout := execTimeoutForAnalyze(effCfg.Config, state.Blueprint)
+
+	// Create execution context that preserves ProjectContext values.
+	// context.WithoutCancel detaches from HTTP request cancellation while maintaining
+	// access to project-scoped resources (StateManager, EventBus, etc.)
+	execCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), execTimeout)
+	handle.SetExecCancel(cancel)
+
+	runner, notifier, err := factory.CreateRunner(execCtx, workflowID, handle.ControlPlane, state.Blueprint, state)
 	if err != nil {
 		cancel()
 		_ = s.unifiedTracker.RollbackExecution(ctx, core.WorkflowID(workflowID), "failed to create runner: "+err.Error())
 		s.logger.Error("failed to create runner", "workflow_id", workflowID, "error", err)
-		respondError(w, http.StatusServiceUnavailable, "workflow execution not available: "+err.Error())
+		status := http.StatusServiceUnavailable
+		msg := "workflow execution not available: " + err.Error()
+		if s, ok := httpStatusForDomainError(err); ok {
+			status = s
+			msg = err.Error()
+		}
+		respondError(w, status, msg)
 		return
 	}
 
@@ -1358,6 +1712,7 @@ func (s *Server) HandleAnalyzeWorkflow(w http.ResponseWriter, r *http.Request) {
 		handle.ConfirmStarted()
 		notifier.WorkflowStarted(state.Prompt)
 
+		phaseStart := time.Now()
 		err := runner.AnalyzeWithState(execCtx, state)
 		if err != nil {
 			s.logger.Error("analyze phase failed", "workflow_id", workflowID, "error", err)
@@ -1368,7 +1723,7 @@ func (s *Server) HandleAnalyzeWorkflow(w http.ResponseWriter, r *http.Request) {
 		// Load final state and emit completion
 		finalState, _ := stateManager.LoadByID(cleanupCtx, core.WorkflowID(workflowID))
 		if finalState != nil {
-			notifier.PhaseCompleted(string(core.PhaseAnalyze), time.Since(state.UpdatedAt))
+			notifier.PhaseCompleted(string(core.PhaseAnalyze), time.Since(phaseStart))
 		}
 	}()
 
@@ -1476,23 +1831,44 @@ func (s *Server) HandlePlanWorkflow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create execution context that preserves ProjectContext values.
-	execCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Hour)
-	handle.SetExecCancel(cancel)
-
 	state, err = stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
 	if err != nil {
-		cancel()
 		_ = s.unifiedTracker.RollbackExecution(ctx, core.WorkflowID(workflowID), "failed to reload state")
 		respondError(w, http.StatusInternalServerError, "failed to reload workflow state")
 		return
 	}
 
-	runner, notifier, err := factory.CreateRunner(execCtx, workflowID, handle.ControlPlane, state.Blueprint)
+	// Resolve the effective execution config so the execution timeout matches Settings.
+	effCfg, cfgErr := ResolveEffectiveExecutionConfig(ctx)
+	if cfgErr != nil {
+		_ = s.unifiedTracker.RollbackExecution(ctx, core.WorkflowID(workflowID), "failed to resolve effective configuration: "+cfgErr.Error())
+		status := http.StatusServiceUnavailable
+		msg := "workflow execution not available: " + cfgErr.Error()
+		if st, ok := httpStatusForDomainError(cfgErr); ok {
+			status = st
+			msg = cfgErr.Error()
+		}
+		respondError(w, status, msg)
+		return
+	}
+
+	execTimeout := execTimeoutForPlan(effCfg.Config, state.Blueprint)
+
+	// Create execution context that preserves ProjectContext values.
+	execCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), execTimeout)
+	handle.SetExecCancel(cancel)
+
+	runner, notifier, err := factory.CreateRunner(execCtx, workflowID, handle.ControlPlane, state.Blueprint, state)
 	if err != nil {
 		cancel()
 		_ = s.unifiedTracker.RollbackExecution(ctx, core.WorkflowID(workflowID), "failed to create runner: "+err.Error())
-		respondError(w, http.StatusServiceUnavailable, "workflow execution not available: "+err.Error())
+		status := http.StatusServiceUnavailable
+		msg := "workflow execution not available: " + err.Error()
+		if s, ok := httpStatusForDomainError(err); ok {
+			status = s
+			msg = err.Error()
+		}
+		respondError(w, status, msg)
 		return
 	}
 
@@ -1510,8 +1886,8 @@ func (s *Server) HandlePlanWorkflow(w http.ResponseWriter, r *http.Request) {
 		}()
 
 		handle.ConfirmStarted()
-		notifier.PhaseStarted(core.PhasePlan)
 
+		phaseStart := time.Now()
 		err := runner.PlanWithState(execCtx, state)
 		if err != nil {
 			s.logger.Error("plan phase failed", "workflow_id", workflowID, "error", err)
@@ -1519,7 +1895,7 @@ func (s *Server) HandlePlanWorkflow(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		notifier.PhaseCompleted(string(core.PhasePlan), time.Since(state.UpdatedAt))
+		notifier.PhaseCompleted(string(core.PhasePlan), time.Since(phaseStart))
 	}()
 
 	if err := handle.WaitForConfirmation(s.unifiedTracker.ConfirmTimeout()); err != nil {
@@ -1628,23 +2004,44 @@ func (s *Server) HandleReplanWorkflow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create execution context that preserves ProjectContext values.
-	execCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Hour)
-	handle.SetExecCancel(cancel)
-
 	state, err = stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
 	if err != nil {
-		cancel()
 		_ = s.unifiedTracker.RollbackExecution(ctx, core.WorkflowID(workflowID), "failed to reload state")
 		respondError(w, http.StatusInternalServerError, "failed to reload workflow state")
 		return
 	}
 
-	runner, notifier, err := factory.CreateRunner(execCtx, workflowID, handle.ControlPlane, state.Blueprint)
+	// Resolve the effective execution config so the execution timeout matches Settings.
+	effCfg, cfgErr := ResolveEffectiveExecutionConfig(ctx)
+	if cfgErr != nil {
+		_ = s.unifiedTracker.RollbackExecution(ctx, core.WorkflowID(workflowID), "failed to resolve effective configuration: "+cfgErr.Error())
+		status := http.StatusServiceUnavailable
+		msg := "workflow execution not available: " + cfgErr.Error()
+		if st, ok := httpStatusForDomainError(cfgErr); ok {
+			status = st
+			msg = cfgErr.Error()
+		}
+		respondError(w, status, msg)
+		return
+	}
+
+	execTimeout := execTimeoutForPlan(effCfg.Config, state.Blueprint)
+
+	// Create execution context that preserves ProjectContext values.
+	execCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), execTimeout)
+	handle.SetExecCancel(cancel)
+
+	runner, notifier, err := factory.CreateRunner(execCtx, workflowID, handle.ControlPlane, state.Blueprint, state)
 	if err != nil {
 		cancel()
 		_ = s.unifiedTracker.RollbackExecution(ctx, core.WorkflowID(workflowID), "failed to create runner: "+err.Error())
-		respondError(w, http.StatusServiceUnavailable, "workflow execution not available: "+err.Error())
+		status := http.StatusServiceUnavailable
+		msg := "workflow execution not available: " + err.Error()
+		if s, ok := httpStatusForDomainError(err); ok {
+			status = s
+			msg = err.Error()
+		}
+		respondError(w, status, msg)
 		return
 	}
 
@@ -1664,8 +2061,8 @@ func (s *Server) HandleReplanWorkflow(w http.ResponseWriter, r *http.Request) {
 		}()
 
 		handle.ConfirmStarted()
-		notifier.PhaseStarted(core.PhasePlan)
 
+		phaseStart := time.Now()
 		err := runner.ReplanWithState(execCtx, state, additionalContext)
 		if err != nil {
 			s.logger.Error("replan failed", "workflow_id", workflowID, "error", err)
@@ -1673,7 +2070,7 @@ func (s *Server) HandleReplanWorkflow(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		notifier.PhaseCompleted(string(core.PhasePlan), time.Since(state.UpdatedAt))
+		notifier.PhaseCompleted(string(core.PhasePlan), time.Since(phaseStart))
 	}()
 
 	if err := handle.WaitForConfirmation(s.unifiedTracker.ConfirmTimeout()); err != nil {
@@ -1783,23 +2180,44 @@ func (s *Server) HandleExecuteWorkflow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create execution context that preserves ProjectContext values.
-	execCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 8*time.Hour)
-	handle.SetExecCancel(cancel)
-
 	state, err = stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
 	if err != nil {
-		cancel()
 		_ = s.unifiedTracker.RollbackExecution(ctx, core.WorkflowID(workflowID), "failed to reload state")
 		respondError(w, http.StatusInternalServerError, "failed to reload workflow state")
 		return
 	}
 
-	runner, notifier, err := factory.CreateRunner(execCtx, workflowID, handle.ControlPlane, state.Blueprint)
+	// Resolve the effective execution config so the execution timeout matches Settings.
+	effCfg, cfgErr := ResolveEffectiveExecutionConfig(ctx)
+	if cfgErr != nil {
+		_ = s.unifiedTracker.RollbackExecution(ctx, core.WorkflowID(workflowID), "failed to resolve effective configuration: "+cfgErr.Error())
+		status := http.StatusServiceUnavailable
+		msg := "workflow execution not available: " + cfgErr.Error()
+		if st, ok := httpStatusForDomainError(cfgErr); ok {
+			status = st
+			msg = cfgErr.Error()
+		}
+		respondError(w, status, msg)
+		return
+	}
+
+	execTimeout := effectiveWorkflowTimeout(effCfg.Config, state.Blueprint)
+
+	// Create execution context that preserves ProjectContext values.
+	execCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), execTimeout)
+	handle.SetExecCancel(cancel)
+
+	runner, notifier, err := factory.CreateRunner(execCtx, workflowID, handle.ControlPlane, state.Blueprint, state)
 	if err != nil {
 		cancel()
 		_ = s.unifiedTracker.RollbackExecution(ctx, core.WorkflowID(workflowID), "failed to create runner: "+err.Error())
-		respondError(w, http.StatusServiceUnavailable, "workflow execution not available: "+err.Error())
+		status := http.StatusServiceUnavailable
+		msg := "workflow execution not available: " + err.Error()
+		if s, ok := httpStatusForDomainError(err); ok {
+			status = s
+			msg = err.Error()
+		}
+		respondError(w, status, msg)
 		return
 	}
 
@@ -1817,8 +2235,8 @@ func (s *Server) HandleExecuteWorkflow(w http.ResponseWriter, r *http.Request) {
 		}()
 
 		handle.ConfirmStarted()
-		notifier.PhaseStarted(core.PhaseExecute)
 
+		phaseStart := time.Now()
 		err := runner.ResumeWithState(execCtx, state)
 		if err != nil {
 			s.logger.Error("execute phase failed", "workflow_id", workflowID, "error", err)
@@ -1828,7 +2246,7 @@ func (s *Server) HandleExecuteWorkflow(w http.ResponseWriter, r *http.Request) {
 
 		finalState, _ := stateManager.LoadByID(cleanupCtx, core.WorkflowID(workflowID))
 		if finalState != nil && finalState.Status == core.WorkflowStatusCompleted {
-			notifier.WorkflowCompleted(time.Since(state.UpdatedAt))
+			notifier.WorkflowCompleted(time.Since(phaseStart))
 		}
 	}()
 

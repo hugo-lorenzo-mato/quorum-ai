@@ -468,6 +468,27 @@ func TestBlueprintDTO_JSON_Roundtrip(t *testing.T) {
 		SingleAgentName:            "claude",
 		SingleAgentModel:           "claude-3-sonnet",
 		SingleAgentReasoningEffort: "high",
+		Consensus: &ConsensusDTO{
+			Enabled:             true,
+			Agent:               "moderator",
+			Threshold:           0.75,
+			Thresholds:          map[string]float64{"accuracy": 0.8, "completeness": 0.7},
+			MinRounds:           2,
+			MaxRounds:           5,
+			WarningThreshold:    0.5,
+			StagnationThreshold: 0.05,
+		},
+		Refiner: &RefinerDTO{
+			Enabled: true,
+			Agent:   "refiner-agent",
+		},
+		Synthesizer: &SynthesizerDTO{
+			Agent: "synthesizer-agent",
+		},
+		PlanSynthesizer: &PlanSynthesizerDTO{
+			Enabled: true,
+			Agent:   "plan-synth-agent",
+		},
 	}
 
 	data, err := json.Marshal(original)
@@ -497,6 +518,62 @@ func TestBlueprintDTO_JSON_Roundtrip(t *testing.T) {
 	}
 	if decoded.DryRun != original.DryRun {
 		t.Errorf("DryRun = %v, want %v", decoded.DryRun, original.DryRun)
+	}
+
+	// Verify new pipeline config fields round-trip correctly
+	if decoded.Consensus == nil {
+		t.Fatal("Consensus is nil after roundtrip")
+	}
+	if decoded.Consensus.Enabled != true {
+		t.Errorf("Consensus.Enabled = %v, want true", decoded.Consensus.Enabled)
+	}
+	if decoded.Consensus.Agent != "moderator" {
+		t.Errorf("Consensus.Agent = %q, want %q", decoded.Consensus.Agent, "moderator")
+	}
+	if decoded.Consensus.Threshold != 0.75 {
+		t.Errorf("Consensus.Threshold = %v, want %v", decoded.Consensus.Threshold, 0.75)
+	}
+	if len(decoded.Consensus.Thresholds) != 2 {
+		t.Errorf("Consensus.Thresholds len = %d, want 2", len(decoded.Consensus.Thresholds))
+	}
+	if decoded.Consensus.MinRounds != 2 {
+		t.Errorf("Consensus.MinRounds = %d, want 2", decoded.Consensus.MinRounds)
+	}
+	if decoded.Consensus.MaxRounds != 5 {
+		t.Errorf("Consensus.MaxRounds = %d, want 5", decoded.Consensus.MaxRounds)
+	}
+	if decoded.Consensus.WarningThreshold != 0.5 {
+		t.Errorf("Consensus.WarningThreshold = %v, want 0.5", decoded.Consensus.WarningThreshold)
+	}
+	if decoded.Consensus.StagnationThreshold != 0.05 {
+		t.Errorf("Consensus.StagnationThreshold = %v, want 0.05", decoded.Consensus.StagnationThreshold)
+	}
+
+	if decoded.Refiner == nil {
+		t.Fatal("Refiner is nil after roundtrip")
+	}
+	if decoded.Refiner.Enabled != true {
+		t.Errorf("Refiner.Enabled = %v, want true", decoded.Refiner.Enabled)
+	}
+	if decoded.Refiner.Agent != "refiner-agent" {
+		t.Errorf("Refiner.Agent = %q, want %q", decoded.Refiner.Agent, "refiner-agent")
+	}
+
+	if decoded.Synthesizer == nil {
+		t.Fatal("Synthesizer is nil after roundtrip")
+	}
+	if decoded.Synthesizer.Agent != "synthesizer-agent" {
+		t.Errorf("Synthesizer.Agent = %q, want %q", decoded.Synthesizer.Agent, "synthesizer-agent")
+	}
+
+	if decoded.PlanSynthesizer == nil {
+		t.Fatal("PlanSynthesizer is nil after roundtrip")
+	}
+	if decoded.PlanSynthesizer.Enabled != true {
+		t.Errorf("PlanSynthesizer.Enabled = %v, want true", decoded.PlanSynthesizer.Enabled)
+	}
+	if decoded.PlanSynthesizer.Agent != "plan-synth-agent" {
+		t.Errorf("PlanSynthesizer.Agent = %q, want %q", decoded.PlanSynthesizer.Agent, "plan-synth-agent")
 	}
 }
 
@@ -529,6 +606,20 @@ func TestBlueprintDTO_Backward_Compatibility(t *testing.T) {
 	}
 	if bp.IsSingleAgentMode() {
 		t.Errorf("IsSingleAgentMode() = true, want false")
+	}
+
+	// New pipeline config fields should be nil when absent from JSON
+	if bp.Consensus != nil {
+		t.Errorf("Consensus = %v, want nil", bp.Consensus)
+	}
+	if bp.Refiner != nil {
+		t.Errorf("Refiner = %v, want nil", bp.Refiner)
+	}
+	if bp.Synthesizer != nil {
+		t.Errorf("Synthesizer = %v, want nil", bp.Synthesizer)
+	}
+	if bp.PlanSynthesizer != nil {
+		t.Errorf("PlanSynthesizer = %v, want nil", bp.PlanSynthesizer)
 	}
 }
 

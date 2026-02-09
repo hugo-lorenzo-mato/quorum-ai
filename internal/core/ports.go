@@ -66,7 +66,6 @@ type ExecuteOptions struct {
 	WorkDir         string
 	AllowedTools    []string
 	DeniedTools     []string
-	Sandbox         bool
 	Phase           Phase  // Current workflow phase (for phase-specific behavior)
 	ReasoningEffort string // Reasoning effort level: minimal, low, medium, high, xhigh (for supporting models)
 }

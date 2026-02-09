@@ -228,6 +228,14 @@ func (a *EventBusAdapter) eventToMsg(event events.Event) tea.Msg {
 			Duration:       e.Duration,
 		}
 
+	case events.AgentStreamEvent:
+		return AgentEventMsg{
+			Kind:    string(e.EventKind),
+			Agent:   e.Agent,
+			Message: e.Message,
+			Data:    e.Data,
+		}
+
 	default:
 		return nil
 	}

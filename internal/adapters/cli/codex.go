@@ -110,10 +110,9 @@ func (c *CodexAdapter) buildArgs(opts core.ExecuteOptions) []string {
 	reasoningEffort := c.getReasoningEffort(opts)
 	reasoningEffort = core.NormalizeReasoningEffortForModel(model, reasoningEffort)
 
-	// Headless approvals/sandbox via config overrides
+	// Headless approvals via config overrides
 	args = append(args,
 		"-c", `approval_policy="never"`,
-		"-c", `sandbox_mode="workspace-write"`,
 		"-c", `model_reasoning_effort="`+reasoningEffort+`"`,
 		"-c", `skip_git_repo_check=true`,
 	)

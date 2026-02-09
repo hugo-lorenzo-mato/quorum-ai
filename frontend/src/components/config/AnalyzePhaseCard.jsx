@@ -39,9 +39,9 @@ export function AnalyzePhaseCard() {
         <TextInputSetting
           label="Timeout"
           tooltip="Maximum time allowed for the analyze phase"
-          value={analyzeConfig.timeout || '2h'}
+          value={analyzeConfig.timeout || '8h'}
           onChange={(val) => setField('phases.analyze.timeout', val)}
-          placeholder="2h"
+          placeholder="8h"
         />
       </SettingSection>
 
@@ -104,6 +104,14 @@ export function AnalyzePhaseCard() {
               step={0.05}
               value={analyzeConfig.moderator?.threshold ?? 0.85}
               onChange={(val) => setField('phases.analyze.moderator.threshold', val)}
+            />
+            <NumberInputSetting
+              label="Min Successful Agents"
+              tooltip="Minimum number of agents that must succeed per round. If fewer succeed, the analyze phase fails."
+              min={1}
+              max={10}
+              value={analyzeConfig.moderator?.min_successful_agents ?? 2}
+              onChange={(val) => setField('phases.analyze.moderator.min_successful_agents', val)}
             />
             <NumberInputSetting
               label="Min Rounds"

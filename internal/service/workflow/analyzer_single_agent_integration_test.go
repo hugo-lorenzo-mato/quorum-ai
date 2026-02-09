@@ -62,7 +62,6 @@ func TestIntegration_Analyzer_SingleAgentMode_BypassesConsensus(t *testing.T) {
 		Logger:     logging.NewNop(),
 		Config: &Config{
 			DryRun:       false,
-			Sandbox:      true,
 			DefaultAgent: "claude",
 			SingleAgent: SingleAgentConfig{
 				Enabled: true,
@@ -164,7 +163,6 @@ func TestIntegration_Analyzer_SingleAgentMode_UsesSpecifiedAgent(t *testing.T) {
 		Logger:     logging.NewNop(),
 		Config: &Config{
 			DryRun:       false,
-			Sandbox:      true,
 			DefaultAgent: "claude",
 			SingleAgent: SingleAgentConfig{
 				Enabled: true,
@@ -236,7 +234,6 @@ func TestIntegration_Analyzer_SingleAgentMode_ModelOverride(t *testing.T) {
 		Logger:     logging.NewNop(),
 		Config: &Config{
 			DryRun:       false,
-			Sandbox:      true,
 			DefaultAgent: "claude",
 			SingleAgent: SingleAgentConfig{
 				Enabled: true,
@@ -375,7 +372,6 @@ func TestIntegration_Analyzer_MultiAgentMode_UsesModerator(t *testing.T) {
 		Logger:     logging.NewNop(),
 		Config: &Config{
 			DryRun:       false,
-			Sandbox:      true,
 			DefaultAgent: "claude",
 			SingleAgent: SingleAgentConfig{
 				Enabled: false, // Multi-agent mode

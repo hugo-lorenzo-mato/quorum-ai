@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/api/middleware"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/kanban"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/project"
 )
@@ -41,6 +42,33 @@ func (p *KanbanStatePoolProvider) ListActiveProjects(ctx context.Context) ([]kan
 			continue
 		}
 
+		result = append(result, kanban.ProjectInfo{
+			ID:   proj.ID,
+			Name: proj.Name,
+			Path: proj.Path,
+		})
+	}
+
+	return result, nil
+}
+
+// ListLoadedProjects returns only projects whose contexts are already loaded in the pool.
+// This avoids initializing new project contexts, preventing pool eviction pressure.
+func (p *KanbanStatePoolProvider) ListLoadedProjects(ctx context.Context) ([]kanban.ProjectInfo, error) {
+	if p.pool == nil || p.registry == nil {
+		return nil, nil
+	}
+
+	loadedIDs := p.pool.GetActiveProjects()
+	result := make([]kanban.ProjectInfo, 0, len(loadedIDs))
+	for _, id := range loadedIDs {
+		proj, err := p.registry.GetProject(ctx, id)
+		if err != nil || proj == nil {
+			continue
+		}
+		if proj.Status == project.StatusOffline {
+			continue
+		}
 		result = append(result, kanban.ProjectInfo{
 			ID:   proj.ID,
 			Name: proj.Name,
@@ -89,6 +117,24 @@ func (p *KanbanStatePoolProvider) GetProjectEventBus(ctx context.Context, projec
 	}
 
 	return pc.EventBus
+}
+
+// GetProjectExecutionContext returns a context decorated with the ProjectContext.
+// This is used for background execution (Kanban) so the executor sees project-scoped resources.
+func (p *KanbanStatePoolProvider) GetProjectExecutionContext(ctx context.Context, projectID string) (context.Context, error) {
+	if p.pool == nil {
+		return nil, fmt.Errorf("state pool not configured")
+	}
+
+	pc, err := p.pool.GetContext(ctx, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("getting project context: %w", err)
+	}
+	if pc == nil {
+		return nil, fmt.Errorf("project context not available")
+	}
+
+	return middleware.WithProjectContext(ctx, pc), nil
 }
 
 // Ensure KanbanStatePoolProvider implements kanban.ProjectStateProvider

@@ -227,6 +227,36 @@ func ValidateBlueprint(bp *BlueprintDTO, agents config.AgentsConfig) *Validation
 		return nil
 	}
 
+	// Validate numeric fields (independent of execution mode).
+	// Note: These fields are optional and default to 0 when omitted.
+	// - consensus_threshold: 0 means "unset", otherwise must be in [0, 1]
+	// - max_retries: 0 means "unset" (or "use global"), otherwise must be in [0, 10]
+	// - timeout_seconds: 0 means "unset", otherwise must be >= 0
+	if bp.ConsensusThreshold < 0 || bp.ConsensusThreshold > 1 {
+		return &ValidationFieldError{
+			Field:   "consensus_threshold",
+			Value:   bp.ConsensusThreshold,
+			Message: "must be between 0 and 1",
+			Code:    ErrCodeInvalidRange,
+		}
+	}
+	if bp.MaxRetries < 0 || bp.MaxRetries > 10 {
+		return &ValidationFieldError{
+			Field:   "max_retries",
+			Value:   bp.MaxRetries,
+			Message: "must be between 0 and 10",
+			Code:    ErrCodeInvalidRange,
+		}
+	}
+	if bp.TimeoutSeconds < 0 {
+		return &ValidationFieldError{
+			Field:   "timeout_seconds",
+			Value:   bp.TimeoutSeconds,
+			Message: "must be >= 0",
+			Code:    ErrCodeInvalidRange,
+		}
+	}
+
 	// Validate execution_mode value
 	mode := strings.TrimSpace(bp.ExecutionMode)
 	validModes := map[string]bool{

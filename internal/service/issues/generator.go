@@ -441,6 +441,7 @@ func (g *Generator) Generate(ctx context.Context, opts GenerateOptions) (*Genera
 		for _, task := range tasks {
 			var taskTitle, taskBody string
 			var taskAISucceeded bool
+			var err error
 
 			// Try LLM-based generation if enabled
 			if g.config.Generator.Enabled {
@@ -1179,7 +1180,6 @@ func (g *Generator) GenerateIssueFiles(ctx context.Context, workflowID string) (
 				Model:           g.config.Generator.Model,
 				Format:          core.OutputFormatText,
 				Timeout:         timeout,
-				Sandbox:         false,
 				WorkDir:         cwd,
 				ReasoningEffort: g.config.Generator.ReasoningEffort,
 			})

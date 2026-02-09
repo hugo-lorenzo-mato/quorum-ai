@@ -22,11 +22,11 @@ func TestLoader_Defaults(t *testing.T) {
 	}
 
 	// Verify workflow defaults
-	if cfg.Workflow.Timeout != "12h" {
-		t.Errorf("Workflow.Timeout = %q, want %q", cfg.Workflow.Timeout, "12h")
+	if cfg.Workflow.Timeout != "16h" {
+		t.Errorf("Workflow.Timeout = %q, want %q", cfg.Workflow.Timeout, "16h")
 	}
-	if cfg.Phases.Analyze.Timeout != "2h" {
-		t.Errorf("Phases.Analyze.Timeout = %q, want %q", cfg.Phases.Analyze.Timeout, "2h")
+	if cfg.Phases.Analyze.Timeout != "8h" {
+		t.Errorf("Phases.Analyze.Timeout = %q, want %q", cfg.Phases.Analyze.Timeout, "8h")
 	}
 	if cfg.Phases.Plan.Timeout != "1h" {
 		t.Errorf("Phases.Plan.Timeout = %q, want %q", cfg.Phases.Plan.Timeout, "1h")
@@ -55,6 +55,9 @@ func TestLoader_Defaults(t *testing.T) {
 	// Verify moderator defaults
 	if cfg.Phases.Analyze.Moderator.Threshold != 0.80 {
 		t.Errorf("Phases.Analyze.Moderator.Threshold = %f, want %f", cfg.Phases.Analyze.Moderator.Threshold, 0.80)
+	}
+	if cfg.Phases.Analyze.Moderator.MinSuccessfulAgents != 2 {
+		t.Errorf("Phases.Analyze.Moderator.MinSuccessfulAgents = %d, want %d", cfg.Phases.Analyze.Moderator.MinSuccessfulAgents, 2)
 	}
 }
 
@@ -375,15 +378,30 @@ func TestLoader_DefaultConfigFile(t *testing.T) {
 	}
 }
 
-func TestDefaultConfig_SandboxEnabled(t *testing.T) {
+func TestDefaultConfig_HeartbeatEnabled(t *testing.T) {
 	loader := NewLoader()
 	cfg, err := loader.Load()
 	if err != nil {
 		t.Fatalf("Failed to load config: %v", err)
 	}
 
-	if !cfg.Workflow.Sandbox {
-		t.Error("Expected workflow.sandbox to default to true")
+	if !cfg.Workflow.Heartbeat.Enabled {
+		t.Error("Expected workflow.heartbeat.enabled to default to true")
+	}
+	if cfg.Workflow.Heartbeat.Interval != "30s" {
+		t.Errorf("Workflow.Heartbeat.Interval = %q, want %q", cfg.Workflow.Heartbeat.Interval, "30s")
+	}
+	if cfg.Workflow.Heartbeat.StaleThreshold != "2m" {
+		t.Errorf("Workflow.Heartbeat.StaleThreshold = %q, want %q", cfg.Workflow.Heartbeat.StaleThreshold, "2m")
+	}
+	if cfg.Workflow.Heartbeat.CheckInterval != "60s" {
+		t.Errorf("Workflow.Heartbeat.CheckInterval = %q, want %q", cfg.Workflow.Heartbeat.CheckInterval, "60s")
+	}
+	if !cfg.Workflow.Heartbeat.AutoResume {
+		t.Error("Expected workflow.heartbeat.auto_resume to default to true")
+	}
+	if cfg.Workflow.Heartbeat.MaxResumes != 1 {
+		t.Errorf("Workflow.Heartbeat.MaxResumes = %d, want %d", cfg.Workflow.Heartbeat.MaxResumes, 1)
 	}
 }
 

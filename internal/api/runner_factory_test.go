@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
@@ -20,7 +21,7 @@ func TestRunnerFactory_CreateRunner_MissingStateManager(t *testing.T) {
 	defer eventBus.Close()
 	factory := NewRunnerFactory(nil, nil, eventBus, nil, nil)
 
-	_, _, err := factory.CreateRunner(context.Background(), "wf-test", nil, nil)
+	_, _, err := factory.CreateRunner(context.Background(), "wf-test", nil, nil, nil)
 	if err == nil {
 		t.Error("expected error for missing state manager")
 	}
@@ -38,7 +39,7 @@ func TestRunnerFactory_CreateRunner_MissingEventBus(t *testing.T) {
 		nil,
 	)
 
-	_, _, err := factory.CreateRunner(context.Background(), "wf-test", nil, nil)
+	_, _, err := factory.CreateRunner(context.Background(), "wf-test", nil, nil, nil)
 	if err == nil {
 		t.Error("expected error for missing event bus")
 	}
@@ -47,22 +48,22 @@ func TestRunnerFactory_CreateRunner_MissingEventBus(t *testing.T) {
 	}
 }
 
-func TestRunnerFactory_CreateRunner_MissingConfigLoader(t *testing.T) {
+func TestRunnerFactory_CreateRunner_MissingProjectContext(t *testing.T) {
 	eventBus := events.New(10)
 	defer eventBus.Close()
 	factory := NewRunnerFactory(
 		newMockStateManager(),
 		&mockAgentRegistry{},
 		eventBus,
-		nil, // missing config loader
+		nil,
 		nil,
 	)
 
-	_, _, err := factory.CreateRunner(context.Background(), "wf-test", nil, nil)
+	_, _, err := factory.CreateRunner(context.Background(), "wf-test", nil, nil, nil)
 	if err == nil {
-		t.Error("expected error for missing config loader")
+		t.Error("expected error for missing project context")
 	}
-	if err.Error() != "config loader not configured" {
+	if !strings.Contains(err.Error(), "PROJECT_CONTEXT_REQUIRED") {
 		t.Errorf("unexpected error: %v", err)
 	}
 }

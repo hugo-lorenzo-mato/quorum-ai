@@ -275,7 +275,7 @@ func TestExecuteCmd_Flags(t *testing.T) {
 	}
 
 	// Test flags exist
-	flags := []string{"dry-run", "max-retries", "output", "sandbox", "single-agent", "agent", "model"}
+	flags := []string{"dry-run", "max-retries", "output", "single-agent", "agent", "model"}
 	for _, flagName := range flags {
 		if executeCmd.Flags().Lookup(flagName) == nil {
 			t.Errorf("execute command missing flag: %s", flagName)

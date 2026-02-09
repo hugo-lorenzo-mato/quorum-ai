@@ -94,7 +94,7 @@ func runAnalyze(_ *cobra.Command, args []string) error {
 	}
 
 	// Initialize phase runner dependencies
-	deps, err := InitPhaseRunner(ctx, core.PhaseAnalyze, analyzeMaxRetries, analyzeDryRun, false)
+	deps, err := InitPhaseRunner(ctx, core.PhaseAnalyze, analyzeMaxRetries, analyzeDryRun)
 	if err != nil {
 		return err
 	}

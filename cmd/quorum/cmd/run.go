@@ -274,7 +274,6 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 		Timeout:      timeout,
 		MaxRetries:   runMaxRetries,
 		DryRun:       runDryRun,
-		Sandbox:      cfg.Workflow.Sandbox,
 		DenyTools:    cfg.Workflow.DenyTools,
 		DefaultAgent: defaultAgent,
 		AgentPhaseModels: map[string]map[string]string{
@@ -423,13 +422,12 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 	// Create mode enforcer from config
 	modeEnforcer := service.NewModeEnforcer(service.ExecutionMode{
 		DryRun:      runnerConfig.DryRun,
-		Sandbox:     runnerConfig.Sandbox,
 		DeniedTools: runnerConfig.DenyTools,
 	})
 	modeEnforcerAdapter := workflow.NewModeEnforcerAdapter(modeEnforcer)
 
 	// Create workflow runner using modular architecture (ADR-0005)
-	runner := workflow.NewRunner(workflow.RunnerDeps{
+	runner, err := workflow.NewRunner(workflow.RunnerDeps{
 		Config:            runnerConfig,
 		State:             stateAdapter,
 		Agents:            registry,
@@ -450,6 +448,9 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 		ModeEnforcer:      modeEnforcerAdapter,
 		ProjectRoot:       projectRoot,
 	})
+	if err != nil {
+		return err
+	}
 
 	// Connect agent streaming events to the output notifier for real-time progress
 	registry.SetEventHandler(func(event core.AgentEvent) {

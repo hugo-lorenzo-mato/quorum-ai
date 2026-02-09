@@ -128,6 +128,14 @@ type WorkflowProgressMsg struct {
 	Requests   int
 }
 
+// AgentEventMsg signals a real-time agent streaming event (tool use, thinking, etc.).
+type AgentEventMsg struct {
+	Kind    string
+	Agent   string
+	Message string
+	Data    map[string]interface{}
+}
+
 // PauseCmd creates a command to pause the workflow.
 func PauseCmd(cp *control.ControlPlane) tea.Cmd {
 	return func() tea.Msg {

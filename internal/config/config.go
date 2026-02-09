@@ -101,7 +101,6 @@ type WorkflowConfig struct {
 	Timeout    string          `mapstructure:"timeout" yaml:"timeout"`
 	MaxRetries int             `mapstructure:"max_retries" yaml:"max_retries"`
 	DryRun     bool            `mapstructure:"dry_run" yaml:"dry_run"`
-	Sandbox    bool            `mapstructure:"sandbox" yaml:"sandbox"`
 	DenyTools  []string        `mapstructure:"deny_tools" yaml:"deny_tools"`
 	Heartbeat  HeartbeatConfig `mapstructure:"heartbeat" yaml:"heartbeat"`
 }
@@ -135,6 +134,9 @@ type PhasesConfig struct {
 type AnalyzePhaseConfig struct {
 	// Timeout for the entire analysis phase (e.g., "2h").
 	Timeout string `mapstructure:"timeout" yaml:"timeout"`
+	// ProcessGracePeriod is how long to wait after an agent signals logical completion
+	// before killing the process (e.g., "30s"). Default: 30s.
+	ProcessGracePeriod string `mapstructure:"process_grace_period" yaml:"process_grace_period"`
 	// Refiner refines and clarifies the prompt before analysis.
 	Refiner RefinerConfig `mapstructure:"refiner" yaml:"refiner"`
 	// Moderator evaluates consensus between agent analyses.
@@ -181,6 +183,13 @@ type ModeratorConfig struct {
 	// Keys: "analysis", "design", "bugfix", "refactor". If a task type matches,
 	// its threshold is used instead of the default Threshold.
 	Thresholds map[string]float64 `mapstructure:"thresholds" yaml:"thresholds"`
+	// MinSuccessfulAgents is the minimum number of agents that must succeed in a
+	// given analysis/refinement round before continuing (default: 2).
+	//
+	// This is different from MinRounds/MaxRounds:
+	// - MinSuccessfulAgents: per-round success requirement (availability)
+	// - MinRounds/MaxRounds: number of moderator refinement rounds (quality loop)
+	MinSuccessfulAgents int `mapstructure:"min_successful_agents" yaml:"min_successful_agents"`
 	// MinRounds is the minimum refinement rounds before accepting consensus (default: 2).
 	MinRounds int `mapstructure:"min_rounds" yaml:"min_rounds"`
 	// MaxRounds limits the number of refinement rounds (default: 5).

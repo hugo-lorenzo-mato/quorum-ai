@@ -163,6 +163,9 @@ func (c *CopilotAdapter) Execute(ctx context.Context, opts core.ExecuteOptions) 
 	startTime := time.Now()
 
 	if err := cmd.Start(); err != nil {
+		if ctx.Err() != nil {
+			return nil, core.ErrTimeout(fmt.Sprintf("starting command: %v (context: %v)", err, ctx.Err()))
+		}
 		return nil, fmt.Errorf("starting command: %w", err)
 	}
 

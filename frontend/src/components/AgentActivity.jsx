@@ -81,6 +81,33 @@ function getActivityIcon(eventKind) {
   }
 }
 
+// Format token counts compactly: 1500 → "1.5K", 1200000 → "1.2M"
+function formatTokens(count) {
+  if (count == null) return '';
+  if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M`;
+  if (count >= 1_000) return `${(count / 1_000).toFixed(1)}K`;
+  return String(count);
+}
+
+// Summarize tool args: prioritize common keys, truncate to maxLen
+function summarizeToolArgs(args) {
+  if (!args || typeof args !== 'object') return '';
+  const priorityKeys = ['command', 'path', 'file_path', 'pattern', 'query', 'url'];
+  for (const key of priorityKeys) {
+    if (args[key]) {
+      const val = String(args[key]);
+      return val.length > 60 ? val.slice(0, 57) + '...' : val;
+    }
+  }
+  // Fallback: first value
+  const firstKey = Object.keys(args)[0];
+  if (firstKey) {
+    const val = String(args[firstKey]);
+    return val.length > 60 ? val.slice(0, 57) + '...' : val;
+  }
+  return '';
+}
+
 // TUI-style progress bar for a single agent
 function AgentProgressBar({ agent }) {
   const color = getAgentColor(agent.name);
@@ -98,6 +125,8 @@ function AgentProgressBar({ agent }) {
   // Only use durationMs if agent is actually done (completed or error)
   const shouldUseDuration = (isDone || isError) && agent.durationMs != null;
   const elapsed = startTime ? formatElapsed(startTime, shouldUseDuration ? agent.durationMs : null) : '';
+
+  const data = agent.data || {};
 
   return (
     <div className="flex items-center gap-3 py-1.5 font-mono text-xs">
@@ -134,13 +163,32 @@ function AgentProgressBar({ agent }) {
           {activityIcon}
         </span>
         {/* Show phase/role if available (e.g., "[moderator] thinking...") */}
-        {agent.data?.phase && isActive && (
-          <span className="text-muted-foreground text-xs">[{agent.data.phase}]</span>
+        {data.phase && isActive && (
+          <span className="text-muted-foreground text-xs">[{data.phase}]</span>
         )}
         <span className="text-muted-foreground truncate">
           {agent.message || (isDone ? 'done' : isActive ? 'processing...' : isError ? 'failed' : 'idle')}
         </span>
+        {/* Show tool name for tool_use status */}
+        {agent.status === 'tool_use' && data.tool && (
+          <span className="font-mono text-foreground/70 truncate" data-testid="progress-tool">
+            {data.tool}
+          </span>
+        )}
+        {/* Show command for Codex-style data */}
+        {data.command && agent.status === 'tool_use' && (
+          <span className="font-mono text-muted-foreground truncate max-w-[200px]" data-testid="progress-command">
+            {data.command.length > 50 ? data.command.slice(0, 47) + '...' : data.command}
+          </span>
+        )}
       </div>
+
+      {/* Token usage for completed agents */}
+      {isDone && data.tokens_in != null && (
+        <span className="text-muted-foreground font-mono whitespace-nowrap" data-testid="progress-tokens">
+          {formatTokens(data.tokens_in)}in/{formatTokens(data.tokens_out)}out
+        </span>
+      )}
 
       {/* Elapsed time */}
       {elapsed && (
@@ -151,9 +199,17 @@ function AgentProgressBar({ agent }) {
 }
 
 function ActivityEntry({ entry }) {
+  const [expanded, setExpanded] = useState(false);
   const color = getAgentColor(entry.agent);
   const Icon = EVENT_ICONS[entry.eventKind] || Activity;
   const isActive = ['started', 'thinking', 'tool_use', 'progress'].includes(entry.eventKind);
+
+  const data = entry.data || {};
+  const hasDetail = !!(
+    data.tool || data.args || data.command || data.thinking_text ||
+    data.reasoning_text || data.exit_code != null || data.tokens_in != null ||
+    data.result || data.text
+  );
 
   const timeStr = useMemo(() => {
     if (!entry.timestamp) return '';
@@ -162,23 +218,108 @@ function ActivityEntry({ entry }) {
   }, [entry.timestamp]);
 
   return (
-    <div className="flex items-start gap-3 py-2 px-3 rounded-lg hover:bg-accent/30 transition-colors animate-fade-in">
-      <div className={`p-1.5 rounded-lg ${color.bg} mt-0.5`}>
-        <Icon className={`w-3.5 h-3.5 ${color.text} ${isActive && entry.eventKind !== 'progress' ? 'animate-pulse' : ''}`} />
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <span className={`text-xs font-medium ${color.text}`}>{entry.agent}</span>
-          {entry.data?.phase && (
-            <span className="text-xs text-muted-foreground">[{entry.data.phase}]</span>
-          )}
-          <span className="text-xs text-muted-foreground">{entry.eventKind}</span>
+    <div
+      className={`rounded-lg hover:bg-accent/30 transition-colors animate-fade-in ${hasDetail ? 'cursor-pointer' : ''}`}
+      onClick={hasDetail ? () => setExpanded(e => !e) : undefined}
+      data-testid="activity-entry"
+    >
+      <div className="flex items-start gap-3 py-2 px-3">
+        <div className={`p-1.5 rounded-lg ${color.bg} mt-0.5`}>
+          <Icon className={`w-3.5 h-3.5 ${color.text} ${isActive && entry.eventKind !== 'progress' ? 'animate-pulse' : ''}`} />
         </div>
-        {entry.message && (
-          <p className="text-xs text-muted-foreground truncate mt-0.5">{entry.message}</p>
-        )}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className={`text-xs font-medium ${color.text}`}>{entry.agent}</span>
+            {data.phase && (
+              <span className="text-xs text-muted-foreground">[{data.phase}]</span>
+            )}
+            <span className="text-xs text-muted-foreground">{entry.eventKind}</span>
+          </div>
+          {entry.message && (
+            <p className="text-xs text-muted-foreground truncate mt-0.5">{entry.message}</p>
+          )}
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-muted-foreground whitespace-nowrap">{timeStr}</span>
+          {hasDetail && (
+            <ChevronDown
+              className={`w-3 h-3 text-muted-foreground transition-transform ${expanded ? 'rotate-180' : ''}`}
+              data-testid="expand-chevron"
+            />
+          )}
+        </div>
       </div>
-      <span className="text-xs text-muted-foreground whitespace-nowrap">{timeStr}</span>
+
+      {/* Expanded detail panel */}
+      {expanded && hasDetail && (
+        <div className="ml-9 pb-2 px-3 space-y-1 animate-fade-in" data-testid="entry-detail">
+          {data.tool && (
+            <div className="flex items-center gap-2 text-xs">
+              <span className="w-14 text-muted-foreground shrink-0">Tool</span>
+              <span className="font-mono text-foreground">{data.tool}</span>
+            </div>
+          )}
+          {data.args && (
+            <div className="flex items-start gap-2 text-xs">
+              <span className="w-14 text-muted-foreground shrink-0 mt-0.5">Args</span>
+              <pre className="font-mono text-foreground/80 bg-accent/20 rounded px-2 py-1 max-h-32 overflow-auto text-[11px] whitespace-pre-wrap break-all">
+                {typeof data.args === 'string' ? data.args : JSON.stringify(data.args, null, 2)}
+              </pre>
+            </div>
+          )}
+          {data.command && (
+            <div className="flex items-center gap-2 text-xs">
+              <span className="w-14 text-muted-foreground shrink-0">Cmd</span>
+              <code className="font-mono text-foreground/80">{data.command}</code>
+            </div>
+          )}
+          {(data.thinking_text || data.reasoning_text) && (
+            <div className="flex items-start gap-2 text-xs">
+              <span className="w-14 text-muted-foreground shrink-0 mt-0.5">Think</span>
+              <span className="italic text-muted-foreground line-clamp-3">
+                {data.thinking_text || data.reasoning_text}
+              </span>
+            </div>
+          )}
+          {data.result && (
+            <div className="flex items-start gap-2 text-xs">
+              <span className="w-14 text-muted-foreground shrink-0 mt-0.5">Result</span>
+              <pre className="font-mono text-foreground/80 bg-accent/20 rounded px-2 py-1 max-h-32 overflow-auto text-[11px] whitespace-pre-wrap break-all">
+                {data.result}
+              </pre>
+            </div>
+          )}
+          {data.text && (
+            <div className="flex items-start gap-2 text-xs">
+              <span className="w-14 text-muted-foreground shrink-0 mt-0.5">Text</span>
+              <span className="text-muted-foreground line-clamp-3">{data.text}</span>
+            </div>
+          )}
+          {data.exit_code != null && (
+            <div className="flex items-center gap-2 text-xs">
+              <span className="w-14 text-muted-foreground shrink-0">Exit</span>
+              <span
+                className={`font-mono px-1.5 py-0.5 rounded text-[11px] ${
+                  data.exit_code === 0
+                    ? 'bg-success/10 text-success'
+                    : 'bg-error/10 text-error'
+                }`}
+                data-testid="exit-code-badge"
+              >
+                {data.exit_code}
+              </span>
+            </div>
+          )}
+          {data.tokens_in != null && (
+            <div className="flex items-center gap-2 text-xs">
+              <span className="w-14 text-muted-foreground shrink-0">Tokens</span>
+              <span className="font-mono text-muted-foreground">
+                {formatTokens(data.tokens_in)} in / {formatTokens(data.tokens_out)} out
+              </span>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

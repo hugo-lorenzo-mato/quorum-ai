@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
@@ -214,6 +215,12 @@ func TestCodexStreamParser_ParseLine(t *testing.T) {
 			wantAgent: "codex",
 		},
 		{
+			name:      "item.started agent_message",
+			line:      `{"type":"item.started","item":{"id":"item_3","type":"agent_message"}}`,
+			wantType:  core.AgentEventProgress,
+			wantAgent: "codex",
+		},
+		{
 			name:      "item.completed reasoning",
 			line:      `{"type":"item.completed","item":{"id":"item_0","type":"reasoning","text":"**Listing files in the directory**"}}`,
 			wantType:  core.AgentEventThinking,
@@ -222,6 +229,12 @@ func TestCodexStreamParser_ParseLine(t *testing.T) {
 		{
 			name:      "item.completed command_execution",
 			line:      `{"type":"item.completed","item":{"id":"item_1","type":"command_execution","command":"ls","exit_code":0,"status":"completed"}}`,
+			wantType:  core.AgentEventProgress,
+			wantAgent: "codex",
+		},
+		{
+			name:      "item.completed agent_message",
+			line:      `{"type":"item.completed","item":{"id":"item_3","type":"agent_message","text":"Here is my analysis..."}}`,
 			wantType:  core.AgentEventProgress,
 			wantAgent: "codex",
 		},
@@ -473,9 +486,9 @@ func TestExtractTextFromJSONLine(t *testing.T) {
 			want: "Final gemini response",
 		},
 		{
-			name: "codex agent_message",
+			name: "codex agent_message (with trailing newline)",
 			line: `{"type":"item.completed","item":{"type":"agent_message","text":"Codex says hello"}}`,
-			want: "Codex says hello",
+			want: "Codex says hello\n",
 		},
 		{
 			name: "codex reasoning (no text extracted)",
@@ -492,4 +505,213 @@ func TestExtractTextFromJSONLine(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestClaudeStreamParser_ThinkingWithData(t *testing.T) {
+	parser := &ClaudeStreamParser{}
+	events := parser.ParseLine(`{"type":"assistant","message":{"content":[{"type":"thinking","text":"Let me analyze the code structure..."}]}}`)
+	if len(events) == 0 {
+		t.Fatal("expected at least one event")
+	}
+	event := events[0]
+	if event.Type != core.AgentEventThinking {
+		t.Errorf("type = %v, want %v", event.Type, core.AgentEventThinking)
+	}
+	text, ok := event.Data["thinking_text"].(string)
+	if !ok {
+		t.Fatal("expected thinking_text in data")
+	}
+	if text != "Let me analyze the code structure..." {
+		t.Errorf("thinking_text = %q, want %q", text, "Let me analyze the code structure...")
+	}
+}
+
+func TestCodexStreamParser_ReasoningWithData(t *testing.T) {
+	parser := &CodexStreamParser{}
+	events := parser.ParseLine(`{"type":"item.completed","item":{"id":"item_0","type":"reasoning","text":"**Listing files in the directory**"}}`)
+	if len(events) == 0 {
+		t.Fatal("expected at least one event")
+	}
+	event := events[0]
+	if event.Type != core.AgentEventThinking {
+		t.Errorf("type = %v, want %v", event.Type, core.AgentEventThinking)
+	}
+	text, ok := event.Data["reasoning_text"].(string)
+	if !ok {
+		t.Fatal("expected reasoning_text in data")
+	}
+	if text != "**Listing files in the directory**" {
+		t.Errorf("reasoning_text = %q", text)
+	}
+}
+
+func TestCodexStreamParser_CommandCompletedWithData(t *testing.T) {
+	parser := &CodexStreamParser{}
+	events := parser.ParseLine(`{"type":"item.completed","item":{"id":"item_1","type":"command_execution","command":"ls -la","exit_code":0,"status":"completed"}}`)
+	if len(events) == 0 {
+		t.Fatal("expected at least one event")
+	}
+	event := events[0]
+	if event.Type != core.AgentEventProgress {
+		t.Errorf("type = %v, want %v", event.Type, core.AgentEventProgress)
+	}
+	cmd, ok := event.Data["command"].(string)
+	if !ok || cmd != "ls -la" {
+		t.Errorf("command = %v, want %v", cmd, "ls -la")
+	}
+	// exit_code is deserialized as float64 from JSON
+	exitCode, ok := event.Data["exit_code"].(int)
+	if !ok || exitCode != 0 {
+		t.Errorf("exit_code = %v (type %T), want 0", event.Data["exit_code"], event.Data["exit_code"])
+	}
+}
+
+func TestCodexStreamParser_CommandCompletedNonZeroExit(t *testing.T) {
+	parser := &CodexStreamParser{}
+	events := parser.ParseLine(`{"type":"item.completed","item":{"id":"item_1","type":"command_execution","command":"false","exit_code":1,"status":"completed"}}`)
+	if len(events) == 0 {
+		t.Fatal("expected at least one event")
+	}
+	event := events[0]
+	exitCode, ok := event.Data["exit_code"].(int)
+	if !ok || exitCode != 1 {
+		t.Errorf("exit_code = %v (type %T), want 1", event.Data["exit_code"], event.Data["exit_code"])
+	}
+}
+
+func TestCodexStreamParser_AgentMessageWithData(t *testing.T) {
+	parser := &CodexStreamParser{}
+	events := parser.ParseLine(`{"type":"item.completed","item":{"id":"item_3","type":"agent_message","text":"Here is my analysis of the code..."}}`)
+	if len(events) == 0 {
+		t.Fatal("expected at least one event")
+	}
+	event := events[0]
+	text, ok := event.Data["text"].(string)
+	if !ok {
+		t.Fatal("expected text in data")
+	}
+	if text != "Here is my analysis of the code..." {
+		t.Errorf("text = %q", text)
+	}
+}
+
+func TestGeminiStreamParser_ThinkingWithData(t *testing.T) {
+	parser := &GeminiStreamParser{}
+	events := parser.ParseLine(`{"type":"thinking","text":"Processing the request..."}`)
+	if len(events) == 0 {
+		t.Fatal("expected at least one event")
+	}
+	event := events[0]
+	if event.Type != core.AgentEventThinking {
+		t.Errorf("type = %v, want %v", event.Type, core.AgentEventThinking)
+	}
+	text, ok := event.Data["thinking_text"].(string)
+	if !ok {
+		t.Fatal("expected thinking_text in data")
+	}
+	if text != "Processing the request..." {
+		t.Errorf("thinking_text = %q", text)
+	}
+}
+
+func TestGeminiStreamParser_ToolResultWithData(t *testing.T) {
+	parser := &GeminiStreamParser{}
+	events := parser.ParseLine(`{"type":"tool_result","tool_name":"read_file","result":"package main\nfunc main() {}"}`)
+	if len(events) == 0 {
+		t.Fatal("expected at least one event")
+	}
+	event := events[0]
+	if event.Type != core.AgentEventProgress {
+		t.Errorf("type = %v, want %v", event.Type, core.AgentEventProgress)
+	}
+	tool, ok := event.Data["tool"].(string)
+	if !ok || tool != "read_file" {
+		t.Errorf("tool = %v, want read_file", tool)
+	}
+	result, ok := event.Data["result"].(string)
+	if !ok {
+		t.Fatal("expected result in data")
+	}
+	if result != "package main\nfunc main() {}" {
+		t.Errorf("result = %q", result)
+	}
+}
+
+func TestTruncateDataValue(t *testing.T) {
+	tests := []struct {
+		name   string
+		input  string
+		maxLen int
+		want   string
+	}{
+		{"short string", "hello", 200, "hello"},
+		{"exact length", "abc", 3, "abc"},
+		{"truncated", "hello world this is long", 10, "hello worl...[truncated]"},
+		{"empty", "", 200, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := truncateDataValue(tt.input, tt.maxLen)
+			if got != tt.want {
+				t.Errorf("truncateDataValue(%q, %d) = %q, want %q", tt.input, tt.maxLen, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestTruncateDataAny(t *testing.T) {
+	t.Run("nil value", func(t *testing.T) {
+		got := truncateDataAny(nil, 500)
+		if got != nil {
+			t.Errorf("expected nil, got %v", got)
+		}
+	})
+
+	t.Run("string value", func(t *testing.T) {
+		got := truncateDataAny("hello", 500)
+		if got != "hello" {
+			t.Errorf("expected hello, got %v", got)
+		}
+	})
+
+	t.Run("small map preserved", func(t *testing.T) {
+		input := map[string]any{"command": "ls"}
+		got := truncateDataAny(input, 500)
+		m, ok := got.(map[string]any)
+		if !ok {
+			t.Fatalf("expected map, got %T", got)
+		}
+		if m["command"] != "ls" {
+			t.Errorf("expected command=ls, got %v", m["command"])
+		}
+	})
+
+	t.Run("large map serialized and truncated", func(t *testing.T) {
+		input := map[string]any{
+			"a": "value1",
+			"b": "value2",
+			"c": "value3",
+			"d": "value4",
+		}
+		got := truncateDataAny(input, 20)
+		s, ok := got.(string)
+		if !ok {
+			t.Fatalf("expected string, got %T", got)
+		}
+		if !strings.HasSuffix(s, "...[truncated]") {
+			t.Errorf("expected truncated suffix, got %q", s)
+		}
+	})
+
+	t.Run("long string truncated", func(t *testing.T) {
+		input := strings.Repeat("x", 600)
+		got := truncateDataAny(input, 500)
+		s, ok := got.(string)
+		if !ok {
+			t.Fatalf("expected string, got %T", got)
+		}
+		if len(s) > 520 { // 500 + len("...[truncated]")
+			t.Errorf("expected truncated string, got len=%d", len(s))
+		}
+	})
 }

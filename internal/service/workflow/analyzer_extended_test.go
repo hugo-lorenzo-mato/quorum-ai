@@ -49,7 +49,6 @@ func TestAnalyzer_Run_AgentExecutionError(t *testing.T) {
 		Logger:     logging.NewNop(),
 		Config: &Config{
 			DryRun:       false,
-			Sandbox:      true,
 			DefaultAgent: "claude",
 		},
 	}

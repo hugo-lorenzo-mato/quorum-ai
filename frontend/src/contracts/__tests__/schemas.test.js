@@ -92,7 +92,6 @@ describe('Contract Schemas', () => {
         timeout: '30m',
         max_retries: 3,
         dry_run: false,
-        sandbox: true,
         deny_tools: ['rm', 'sudo'],
         heartbeat: {
           enabled: true,
@@ -336,7 +335,6 @@ describe('Full Config Response Contract', () => {
           timeout: '30m',
           max_retries: 2,
           dry_run: false,
-          sandbox: true,
           deny_tools: [],
           heartbeat: {
             enabled: true,

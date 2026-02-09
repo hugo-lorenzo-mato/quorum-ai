@@ -344,7 +344,6 @@ func (p *Planner) executeComprehensivePlanning(
 			Format:  core.OutputFormatJSON, // Response should be JSON manifest only
 			Model:   model,
 			Timeout: wctx.Config.PhaseTimeouts.Plan,
-			Sandbox: wctx.Config.Sandbox,
 			Phase:   core.PhasePlan,
 			WorkDir: wctx.ProjectRoot,
 		})

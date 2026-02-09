@@ -244,6 +244,29 @@ const useWorkflowStore = create((set, get) => ({
     }
   },
 
+  forceStopWorkflow: async (id) => {
+    set({ loading: true, error: null });
+    try {
+      await workflowApi.forceStop(id);
+      // Force-stop updates DB state; re-fetch the workflow so UI reflects the real status/error.
+      const workflow = await workflowApi.get(id);
+      const { workflows, activeWorkflow } = get();
+      const updated = workflows.map(w => w.id === id ? workflow : w);
+      if (!workflows.find(w => w.id === id)) {
+        updated.push(workflow);
+      }
+      set({
+        workflows: updated,
+        activeWorkflow: activeWorkflow?.id === id ? workflow : activeWorkflow,
+        loading: false,
+      });
+      return workflow;
+    } catch (error) {
+      set({ error: error.message, loading: false });
+      return null;
+    }
+  },
+
   // Phase-specific workflow actions
   /**
    * Run only the analyze phase of a workflow.

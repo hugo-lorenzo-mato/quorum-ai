@@ -496,8 +496,6 @@ func (e *Executor) enforceMode(ctx context.Context, wctx *Context, task *core.Ta
 		Tool:           task.CLI,
 		HasSideEffects: !wctx.Config.DryRun,
 		InWorkspace:    true,
-		// In sandbox mode, LLM operations are allowed but shell commands aren't
-		AllowedInSandbox: true,
 	}
 
 	if err := wctx.ModeEnforcer.CanExecute(ctx, op); err != nil {
@@ -604,7 +602,6 @@ func (e *Executor) executeWithRetry(ctx context.Context, wctx *Context, agent co
 			Format:      core.OutputFormatText,
 			Model:       model,
 			Timeout:     wctx.Config.PhaseTimeouts.Execute,
-			Sandbox:     wctx.Config.Sandbox,
 			DeniedTools: e.denyTools,
 			WorkDir:     workDir, // Execute in worktree if available
 			Phase:       core.PhaseExecute,

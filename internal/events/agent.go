@@ -45,12 +45,24 @@ type AgentStreamEvent struct {
 
 // NewAgentStreamEvent creates a new agent stream event.
 func NewAgentStreamEvent(workflowID, projectID string, kind AgentEventType, agent, message string) AgentStreamEvent {
+	return NewAgentStreamEventAt(time.Now(), workflowID, projectID, kind, agent, message)
+}
+
+// NewAgentStreamEventAt creates an agent stream event with a caller-supplied timestamp.
+// This ensures SSE and persistence paths share the exact same timestamp, preventing
+// frontend deduplication mismatches.
+func NewAgentStreamEventAt(ts time.Time, workflowID, projectID string, kind AgentEventType, agent, message string) AgentStreamEvent {
 	return AgentStreamEvent{
-		BaseEvent: NewBaseEvent(TypeAgentEvent, workflowID, projectID),
+		BaseEvent: BaseEvent{
+			Type:     TypeAgentEvent,
+			Time:     ts,
+			Workflow: workflowID,
+			Project:  projectID,
+		},
 		EventKind: kind,
 		Agent:     agent,
 		Message:   message,
-		EventTime: time.Now(),
+		EventTime: ts,
 	}
 }
 

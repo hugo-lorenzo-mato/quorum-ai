@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -89,8 +90,6 @@ type Context struct {
 type ModeEnforcerInterface interface {
 	// CanExecute checks if an operation can be executed.
 	CanExecute(ctx context.Context, op ModeOperation) error
-	// IsSandboxed returns whether sandbox mode is enabled.
-	IsSandboxed() bool
 	// IsDryRun returns whether dry-run mode is enabled.
 	IsDryRun() bool
 }
@@ -103,14 +102,12 @@ type ModeOperation struct {
 	HasSideEffects       bool
 	RequiresConfirmation bool
 	InWorkspace          bool
-	AllowedInSandbox     bool
 	IsDestructive        bool
 }
 
 // Config holds workflow configuration.
 type Config struct {
 	DryRun       bool
-	Sandbox      bool
 	DenyTools    []string
 	DefaultAgent string
 	// AgentPhaseModels allows per-agent, per-phase model overrides.
@@ -153,6 +150,9 @@ type ModeratorConfig struct {
 	// Keys: "analysis", "design", "bugfix", "refactor". If a task type matches,
 	// its threshold is used instead of the default Threshold.
 	Thresholds map[string]float64
+	// MinSuccessfulAgents is the minimum number of agents that must succeed
+	// in a given analysis/refinement round before continuing (default: 2).
+	MinSuccessfulAgents int
 	// MinRounds is the minimum number of rounds before accepting consensus (default: 2).
 	MinRounds int
 	// MaxRounds limits the number of V(n) refinement rounds (default: 5).
@@ -180,9 +180,10 @@ type SingleAgentConfig struct {
 
 // PhaseTimeouts holds timeout durations for each workflow phase.
 type PhaseTimeouts struct {
-	Analyze time.Duration
-	Plan    time.Duration
-	Execute time.Duration
+	Analyze            time.Duration
+	Plan               time.Duration
+	Execute            time.Duration
+	ProcessGracePeriod time.Duration // Time to wait after logical completion before killing (default: 30s)
 }
 
 // FinalizationConfig configures post-task git operations.
@@ -276,7 +277,7 @@ type TaskExecuteParams struct {
 	Task    *core.Task
 	Context string
 	WorkDir string
-	// Constraints are optional additional rules for the agent (e.g., policy, sandbox limits).
+	// Constraints are optional additional rules for the agent (e.g., policy limits).
 	Constraints []string
 }
 
@@ -385,6 +386,21 @@ func (c *Context) GetContextString() string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return BuildContextString(c.State)
+}
+
+// ResolveFilePath returns an absolute path for filesystem operations (os.Stat, os.ReadFile).
+// If the path is already absolute, it's returned as-is.
+// If the path is relative and ProjectRoot is set, it's resolved against ProjectRoot.
+// This ensures file checks work correctly in multi-project mode where the server's
+// CWD may differ from the project root.
+func (c *Context) ResolveFilePath(path string) string {
+	if path == "" || filepath.IsAbs(path) {
+		return path
+	}
+	if c != nil && c.ProjectRoot != "" {
+		return filepath.Join(c.ProjectRoot, path)
+	}
+	return path
 }
 
 // CheckControl applies workflow-level control checks (cancel + pause).

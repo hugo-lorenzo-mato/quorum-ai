@@ -125,6 +125,19 @@ git:
     pr_base_branch: ""    # Target branch (empty = repository default)
     merge_strategy: squash  # merge | squash | rebase
 
+# Workflow execution settings
+workflow:
+  timeout: 16h
+  max_retries: 3
+  heartbeat:
+    # Heartbeat monitoring is always active (cannot be disabled).
+    # Intervals can be tuned below.
+    interval: 30s
+    stale_threshold: 2m
+    check_interval: 60s
+    auto_resume: true
+    max_resumes: 1
+
 # Issue generation
 issues:
   enabled: true

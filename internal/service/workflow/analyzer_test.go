@@ -316,7 +316,6 @@ func TestAnalyzer_Run_WithModeratorDisabled_ReturnsError(t *testing.T) {
 		Logger:     logging.NewNop(),
 		Config: &Config{
 			DryRun:       false,
-			Sandbox:      true,
 			DefaultAgent: "claude",
 		},
 	}
@@ -760,7 +759,6 @@ func TestAnalyzer_Run_SingleAgentMode(t *testing.T) {
 		Logger:     logging.NewNop(),
 		Config: &Config{
 			DryRun:       false,
-			Sandbox:      true,
 			DefaultAgent: "claude",
 			SingleAgent: SingleAgentConfig{
 				Enabled: true,

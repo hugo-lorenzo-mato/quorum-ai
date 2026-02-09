@@ -691,10 +691,9 @@ func configToFullResponse(cfg *config.Config) FullConfigResponse {
 			Timeout:    cfg.Workflow.Timeout,
 			MaxRetries: cfg.Workflow.MaxRetries,
 			DryRun:     cfg.Workflow.DryRun,
-			Sandbox:    cfg.Workflow.Sandbox,
 			DenyTools:  denyTools,
 			Heartbeat: HeartbeatConfigResponse{
-				Enabled:        cfg.Workflow.Heartbeat.Enabled,
+				Enabled:        true, // Heartbeat is always active; field kept for API compat
 				Interval:       cfg.Workflow.Heartbeat.Interval,
 				StaleThreshold: cfg.Workflow.Heartbeat.StaleThreshold,
 				CheckInterval:  cfg.Workflow.Heartbeat.CheckInterval,
@@ -713,6 +712,7 @@ func configToFullResponse(cfg *config.Config) FullConfigResponse {
 					Enabled:             cfg.Phases.Analyze.Moderator.Enabled,
 					Agent:               cfg.Phases.Analyze.Moderator.Agent,
 					Threshold:           cfg.Phases.Analyze.Moderator.Threshold,
+					MinSuccessfulAgents: cfg.Phases.Analyze.Moderator.MinSuccessfulAgents,
 					MinRounds:           cfg.Phases.Analyze.Moderator.MinRounds,
 					MaxRounds:           cfg.Phases.Analyze.Moderator.MaxRounds,
 					WarningThreshold:    cfg.Phases.Analyze.Moderator.WarningThreshold,
@@ -974,9 +974,6 @@ func applyWorkflowUpdates(cfg *config.WorkflowConfig, update *WorkflowConfigUpda
 	if update.DryRun != nil {
 		cfg.DryRun = *update.DryRun
 	}
-	if update.Sandbox != nil {
-		cfg.Sandbox = *update.Sandbox
-	}
 	if update.DenyTools != nil {
 		cfg.DenyTools = *update.DenyTools
 	}
@@ -986,9 +983,7 @@ func applyWorkflowUpdates(cfg *config.WorkflowConfig, update *WorkflowConfigUpda
 }
 
 func applyHeartbeatUpdates(cfg *config.HeartbeatConfig, update *HeartbeatConfigUpdate) {
-	if update.Enabled != nil {
-		cfg.Enabled = *update.Enabled
-	}
+	// Enabled is intentionally ignored — heartbeat is always active.
 	if update.Interval != nil {
 		cfg.Interval = *update.Interval
 	}
@@ -1039,6 +1034,9 @@ func applyAnalyzePhaseUpdates(cfg *config.AnalyzePhaseConfig, update *AnalyzePha
 		}
 		if update.Moderator.Threshold != nil {
 			cfg.Moderator.Threshold = *update.Moderator.Threshold
+		}
+		if update.Moderator.MinSuccessfulAgents != nil {
+			cfg.Moderator.MinSuccessfulAgents = *update.Moderator.MinSuccessfulAgents
 		}
 		if update.Moderator.MinRounds != nil {
 			cfg.Moderator.MinRounds = *update.Moderator.MinRounds

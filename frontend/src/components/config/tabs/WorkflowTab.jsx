@@ -22,7 +22,6 @@ function WorkflowSection() {
   const timeout = useConfigField('workflow.timeout');
   const maxRetries = useConfigField('workflow.max_retries');
   const dryRun = useConfigField('workflow.dry_run');
-  const sandbox = useConfigField('workflow.sandbox');
   const denyTools = useConfigField('workflow.deny_tools');
 
   return (
@@ -60,16 +59,6 @@ function WorkflowSection() {
         disabled={dryRun.disabled}
       />
 
-      <ToggleSetting
-        label="Sandbox Mode"
-        description="Run commands in sandboxed environment"
-        tooltip="Provides an additional layer of security by isolating agent command execution."
-        checked={sandbox.value}
-        onChange={sandbox.onChange}
-        error={sandbox.error}
-        disabled={sandbox.disabled}
-      />
-
       <ArrayInputSetting
         label="Denied Tools"
         tooltip="List of tool names to deny agents from using. Example: 'Bash', 'Write', 'Edit'."
@@ -85,30 +74,17 @@ function WorkflowSection() {
 }
 
 function HeartbeatSection() {
-  const enabled = useConfigField('workflow.heartbeat.enabled');
   const interval = useConfigField('workflow.heartbeat.interval');
   const staleThreshold = useConfigField('workflow.heartbeat.stale_threshold');
   const checkInterval = useConfigField('workflow.heartbeat.check_interval');
   const autoResume = useConfigField('workflow.heartbeat.auto_resume');
   const maxResumes = useConfigField('workflow.heartbeat.max_resumes');
 
-  const isDisabled = !enabled.value;
-
   return (
     <SettingSection
       title="Heartbeat Monitoring"
-      description="Detect and recover from zombie workflows that stop responding"
+      description="Automatically detects and recovers zombie workflows that stop responding. Always active."
     >
-      <ToggleSetting
-        label="Enable Heartbeat"
-        description="Monitor workflow health and detect zombies"
-        tooltip="When enabled, workflows periodically write heartbeats. If heartbeats stop, the workflow is considered a zombie."
-        checked={enabled.value}
-        onChange={enabled.onChange}
-        error={enabled.error}
-        disabled={enabled.disabled}
-      />
-
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <DurationInputSetting
           label="Heartbeat Interval"
@@ -116,7 +92,7 @@ function HeartbeatSection() {
           value={interval.value || ''}
           onChange={interval.onChange}
           error={interval.error}
-          disabled={interval.disabled || isDisabled}
+          disabled={interval.disabled}
         />
 
         <DurationInputSetting
@@ -125,7 +101,7 @@ function HeartbeatSection() {
           value={staleThreshold.value || ''}
           onChange={staleThreshold.onChange}
           error={staleThreshold.error}
-          disabled={staleThreshold.disabled || isDisabled}
+          disabled={staleThreshold.disabled}
         />
 
         <DurationInputSetting
@@ -134,7 +110,7 @@ function HeartbeatSection() {
           value={checkInterval.value || ''}
           onChange={checkInterval.onChange}
           error={checkInterval.error}
-          disabled={checkInterval.disabled || isDisabled}
+          disabled={checkInterval.disabled}
         />
       </div>
 
@@ -145,7 +121,7 @@ function HeartbeatSection() {
         checked={autoResume.value}
         onChange={autoResume.onChange}
         error={autoResume.error}
-        disabled={autoResume.disabled || isDisabled}
+        disabled={autoResume.disabled}
       />
 
       {autoResume.value && (
@@ -164,7 +140,7 @@ function HeartbeatSection() {
         value={maxResumes.value}
         onChange={maxResumes.onChange}
         error={maxResumes.error}
-        disabled={maxResumes.disabled || isDisabled || !autoResume.value}
+        disabled={maxResumes.disabled || !autoResume.value}
       />
     </SettingSection>
   );

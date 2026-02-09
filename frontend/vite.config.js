@@ -15,6 +15,8 @@ export default defineConfig({
           'vendor-editor': ['@monaco-editor/react'],
           'vendor-flow': ['reactflow'],
           'vendor-markdown': ['react-markdown', 'react-syntax-highlighter', 'remark-gfm', 'remark-breaks'],
+          'vendor-icons': ['lucide-react'],
+          'vendor-utils': ['zustand', 'turndown', 'clsx', 'tailwind-merge'],
         },
       },
     },

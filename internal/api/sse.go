@@ -43,6 +43,7 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 
 	// Subscribe to project-scoped events
 	eventCh := eventBus.Subscribe()
+	defer eventBus.Unsubscribe(eventCh)
 
 	projectID := getProjectID(ctx)
 	s.logger.Info("SSE client connected", "remote_addr", r.RemoteAddr, "project_id", projectID)
@@ -248,6 +249,20 @@ func (s *Server) sendEventToClient(w http.ResponseWriter, flusher http.Flusher, 
 			"timestamp":      e.Timestamp(),
 		}
 
+	case events.ConfigLoadedEvent:
+		payload = map[string]interface{}{
+			"workflow_id":    e.WorkflowID(),
+			"config_path":    e.ConfigPath,
+			"config_scope":   e.ConfigScope,
+			"config_mode":    e.ConfigMode,
+			"file_etag":      e.FileETag,
+			"effective_etag": e.EffectiveETag,
+			"execution_id":   e.ExecutionID,
+			"snapshot_path":  e.SnapshotPath,
+			"warning":        e.Warning,
+			"timestamp":      e.Timestamp(),
+		}
+
 	// Kanban events
 	case events.KanbanWorkflowMovedEvent:
 		payload = map[string]interface{}{
@@ -300,6 +315,30 @@ func (s *Server) sendEventToClient(w http.ResponseWriter, flusher http.Flusher, 
 			"timestamp":            e.Timestamp(),
 		}
 
+	case events.PhaseStartedEvent:
+		payload = map[string]interface{}{
+			"workflow_id": e.WorkflowID(),
+			"phase":       e.Phase,
+			"timestamp":   e.Timestamp(),
+		}
+
+	case events.PhaseCompletedEvent:
+		payload = map[string]interface{}{
+			"workflow_id": e.WorkflowID(),
+			"phase":       e.Phase,
+			"duration":    e.Duration.String(),
+			"timestamp":   e.Timestamp(),
+		}
+
+	case events.LogEvent:
+		payload = map[string]interface{}{
+			"workflow_id": e.WorkflowID(),
+			"level":       e.Level,
+			"message":     e.Message,
+			"fields":      e.Fields,
+			"timestamp":   e.Timestamp(),
+		}
+
 	default:
 		// Generic event handling
 		payload = map[string]interface{}{
@@ -330,8 +369,9 @@ func NewSSEClient(eventBus *events.EventBus) *SSEClient {
 	}
 }
 
-// Close closes the SSE client.
+// Close closes the SSE client and unsubscribes from the event bus.
 func (c *SSEClient) Close() {
+	c.eventBus.Unsubscribe(c.eventCh)
 	c.cancel()
 }
 

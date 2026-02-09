@@ -4,12 +4,44 @@ import TurndownService from 'turndown';
 import VoiceInputButton from './VoiceInputButton';
 import { getModelsForAgent, getReasoningLevels, supportsReasoning, useEnums } from '../lib/agents';
 
+function formatBlueprintTimeout(seconds) {
+  const s = Number(seconds || 0);
+  if (!Number.isFinite(s) || s <= 0) return '';
+  const whole = Math.floor(s);
+  if (whole % 3600 === 0) return `${whole / 3600}h`;
+  if (whole % 60 === 0) return `${whole / 60}m`;
+  return `${whole}s`;
+}
+
+function parseDurationToSeconds(input) {
+  const raw = (input || '').trim();
+  if (!raw) return 0;
+
+  // Allow plain integer => seconds
+  if (/^\d+$/.test(raw)) return parseInt(raw, 10);
+
+  const match = raw.match(/^(\d+(?:\.\d+)?)([hms])$/i);
+  if (!match) return Number.NaN;
+
+  const value = Number.parseFloat(match[1]);
+  const unit = match[2].toLowerCase();
+  if (!Number.isFinite(value) || value < 0) return Number.NaN;
+
+  let seconds = value;
+  if (unit === 'h') seconds *= 3600;
+  else if (unit === 'm') seconds *= 60;
+  else if (unit !== 's') return Number.NaN;
+
+  return Math.round(seconds);
+}
+
 /**
  * EditWorkflowModal - Clean modal for editing workflow title and prompt
  */
 export default function EditWorkflowModal({ isOpen, onClose, workflow, onSave, canEditPrompt = true }) {
   const [title, setTitle] = useState('');
   const [prompt, setPrompt] = useState('');
+  const [timeoutOverride, setTimeoutOverride] = useState('');
   const [executionMode, setExecutionMode] = useState('multi_agent');
   const [singleAgentName, setSingleAgentName] = useState('claude');
   const [singleAgentModel, setSingleAgentModel] = useState('');
@@ -23,7 +55,7 @@ export default function EditWorkflowModal({ isOpen, onClose, workflow, onSave, c
   // Subscribe for enums updates (models/reasoning)
   useEnums();
 
-  const canEditConfig = workflow?.status === 'pending';
+  const canEditConfig = workflow?.status !== 'running' && workflow?.status !== 'cancelling';
 
   const AGENT_OPTIONS = [
     { value: 'claude', label: 'Claude' },
@@ -46,6 +78,7 @@ export default function EditWorkflowModal({ isOpen, onClose, workflow, onSave, c
     if (isOpen && workflow) {
       setTitle(workflow.title || '');
       setPrompt(workflow.prompt || '');
+      setTimeoutOverride(formatBlueprintTimeout(workflow.blueprint?.timeout_seconds));
       const mode = workflow.blueprint?.execution_mode === 'single_agent' ? 'single_agent' : 'multi_agent';
       setExecutionMode(mode);
       setSingleAgentName(workflow.blueprint?.single_agent_name || 'claude');
@@ -90,7 +123,7 @@ export default function EditWorkflowModal({ isOpen, onClose, workflow, onSave, c
         updates.prompt = prompt;
       }
 
-      // Allow editing execution mode + single-agent config only when pending.
+      // Allow editing blueprint overrides only when workflow is not running.
       if (canEditConfig) {
         const originalMode = workflow.blueprint?.execution_mode === 'single_agent' ? 'single_agent' : 'multi_agent';
         const nextMode = executionMode === 'single_agent' ? 'single_agent' : 'multi_agent';
@@ -133,6 +166,22 @@ export default function EditWorkflowModal({ isOpen, onClose, workflow, onSave, c
                 single_agent_reasoning_effort: effectiveSingleAgentReasoningEffort,
               }
             : { execution_mode: 'multi_agent' };
+        }
+
+        // Workflow-level timeout override (blueprint.timeout_seconds).
+        // Empty clears override and falls back to global workflow.timeout.
+        const originalTimeoutSeconds = Number(workflow.blueprint?.timeout_seconds || 0);
+        const nextTimeoutSeconds = parseDurationToSeconds(timeoutOverride);
+        if (Number.isNaN(nextTimeoutSeconds) || nextTimeoutSeconds < 0) {
+          setError("Invalid workflow timeout override. Use e.g. '16h', '30m', '45s', or a number of seconds.");
+          setSaving(false);
+          return;
+        }
+        if (nextTimeoutSeconds !== originalTimeoutSeconds) {
+          updates.blueprint = {
+            ...(updates.blueprint || {}),
+            timeout_seconds: nextTimeoutSeconds,
+          };
         }
       }
 
@@ -280,9 +329,23 @@ export default function EditWorkflowModal({ isOpen, onClose, workflow, onSave, c
 
           {canEditConfig && (
             <div className="p-3 rounded-lg border border-border bg-muted/20">
-              <p className="text-sm font-medium text-foreground mb-2">
-                Execution mode
-              </p>
+              <p className="text-sm font-medium text-foreground mb-2">Blueprint overrides</p>
+
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-foreground mb-1.5">
+                  Workflow timeout <span className="text-muted-foreground font-normal">(optional)</span>
+                </label>
+                <input
+                  type="text"
+                  value={timeoutOverride}
+                  onChange={(e) => setTimeoutOverride(e.target.value)}
+                  placeholder="e.g., 16h (leave empty to use global Settings)"
+                  className="w-full px-3 py-2 rounded-lg border border-input bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background transition-shadow text-sm"
+                />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Format: <code className="font-mono">16h</code>, <code className="font-mono">30m</code>, <code className="font-mono">45s</code>, or seconds (e.g., <code className="font-mono">3600</code>). Empty clears the override.
+                </p>
+              </div>
 
               <div className="space-y-2">
                 <label className={`flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-all ${

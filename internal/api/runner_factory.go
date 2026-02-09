@@ -3,7 +3,12 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
 
 	cli "github.com/hugo-lorenzo-mato/quorum-ai/internal/adapters/cli"
 	webadapters "github.com/hugo-lorenzo-mato/quorum-ai/internal/adapters/web"
@@ -60,14 +65,19 @@ func (f *RunnerFactory) WithHeartbeat(hb *workflow.HeartbeatManager) *RunnerFact
 //   - workflowID: The ID of the workflow being executed
 //   - cp: Optional ControlPlane for pause/resume/cancel (may be nil)
 //   - wfConfig: Optional workflow-specific configuration overrides (may be nil)
+//   - state: Optional loaded workflow state (used for config snapshot + checkpoints)
 //
 // Returns:
 //   - *workflow.Runner: Fully configured runner
 //   - *webadapters.WebOutputNotifier: The notifier (for lifecycle events)
 //   - error: Any error during setup
-func (f *RunnerFactory) CreateRunner(ctx context.Context, workflowID string, cp *control.ControlPlane, bp *core.Blueprint) (*workflow.Runner, *webadapters.WebOutputNotifier, error) {
+func (f *RunnerFactory) CreateRunner(ctx context.Context, workflowID string, cp *control.ControlPlane, bp *core.Blueprint, state *core.WorkflowState) (*workflow.Runner, *webadapters.WebOutputNotifier, error) {
 	// Get project-scoped StateManager if available
 	stateManager := GetStateManagerFromContext(ctx, f.stateManager)
+	logger := f.logger
+	if logger == nil {
+		logger = logging.NewNop()
+	}
 
 	// Validate prerequisites
 	if stateManager == nil {
@@ -76,15 +86,13 @@ func (f *RunnerFactory) CreateRunner(ctx context.Context, workflowID string, cp 
 	if f.eventBus == nil {
 		return nil, nil, fmt.Errorf("event bus not configured")
 	}
-	if f.configLoader == nil {
-		return nil, nil, fmt.Errorf("config loader not configured")
-	}
 
-	// Load configuration
-	cfg, err := f.configLoader.Load()
+	// Resolve the effective config deterministically from ProjectContext.
+	effCfg, err := ResolveEffectiveExecutionConfig(ctx)
 	if err != nil {
-		return nil, nil, fmt.Errorf("loading config: %w", err)
+		return nil, nil, fmt.Errorf("resolving effective execution config: %w", err)
 	}
+	cfg := effCfg.Config
 
 	// Build a fresh agent registry from the (project-scoped) config.
 	// This makes config changes effective immediately without requiring server restart.
@@ -102,12 +110,101 @@ func (f *RunnerFactory) CreateRunner(ctx context.Context, workflowID string, cp 
 	// Create web output notifier (bridges to EventBus)
 	outputNotifier := webadapters.NewWebOutputNotifier(eventBus, workflowID)
 
+	// Connect agent streaming events to the output notifier for real-time progress
+	registry.SetEventHandler(func(event core.AgentEvent) {
+		outputNotifier.AgentEvent(string(event.Type), event.Agent, event.Message, event.Data)
+	})
+
+	// Snapshot the config used for this execution attempt (best-effort).
+	// This must happen before the runner starts so that failures are still auditable.
+	predictedExecID := 0
+	reportRelPath := filepath.Join(".quorum", "runs", workflowID)
+	snapshotRelPath := ""
+	snapshotFullPath := ""
+	st := state
+	if st == nil {
+		loaded, loadErr := stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
+		if loadErr != nil {
+			logger.Warn("failed to load workflow state for config snapshot", "workflow_id", workflowID, "error", loadErr)
+		} else {
+			st = loaded
+		}
+	}
+
+	if st != nil {
+		predictedExecID = st.ExecutionID + 1
+		if strings.TrimSpace(st.ReportPath) != "" {
+			reportRelPath = st.ReportPath
+		}
+
+		snapshotName := fmt.Sprintf("config-used-exec-%d.yaml", predictedExecID)
+		snapshotRelPath = filepath.Join(reportRelPath, snapshotName)
+		snapshotFullPath = filepath.Join(projectRoot, snapshotRelPath)
+
+		// Ensure report directory exists and write snapshot file (do not fail runner creation on errors).
+		if err := os.MkdirAll(filepath.Dir(snapshotFullPath), 0o750); err != nil {
+			logger.Warn("failed to create report directory for config snapshot", "path", filepath.Dir(snapshotFullPath), "error", err)
+		} else {
+			if _, err := os.Stat(snapshotFullPath); err == nil {
+				logger.Warn("config snapshot already exists, not overwriting", "path", snapshotFullPath)
+			} else if os.IsNotExist(err) {
+				if err := os.WriteFile(snapshotFullPath, effCfg.RawYAML, 0o600); err != nil {
+					logger.Warn("failed to write config snapshot", "path", snapshotFullPath, "error", err)
+				}
+			} else {
+				logger.Warn("failed to stat config snapshot", "path", snapshotFullPath, "error", err)
+			}
+		}
+
+		// Persist checkpoint metadata for debugging/retries.
+		if st.Checkpoints == nil {
+			st.Checkpoints = make([]core.Checkpoint, 0)
+		}
+
+		meta := map[string]interface{}{
+			"execution_id":   predictedExecID,
+			"config_path":    effCfg.ConfigPath,
+			"config_scope":   effCfg.ConfigScope,
+			"config_mode":    effCfg.ConfigMode,
+			"file_etag":      effCfg.FileETag,
+			"effective_etag": effCfg.EffectiveETag,
+			"snapshot_path":  snapshotRelPath,
+		}
+		data, _ := json.Marshal(meta) // Best-effort metadata
+
+		st.Checkpoints = append(st.Checkpoints, core.Checkpoint{
+			ID:        fmt.Sprintf("config-snapshot-%d", time.Now().UnixNano()),
+			Type:      "config_snapshot",
+			Phase:     st.CurrentPhase,
+			Timestamp: time.Now(),
+			Message:   fmt.Sprintf("Loaded execution config (%s/%s): %s", effCfg.ConfigScope, effCfg.ConfigMode, effCfg.ConfigPath),
+			Data:      data,
+		})
+		if err := stateManager.Save(ctx, st); err != nil {
+			logger.Warn("failed to persist config snapshot checkpoint", "workflow_id", workflowID, "error", err)
+		}
+
+		// Emit SSE event so the Web UI can display config provenance.
+		eventBus.Publish(events.NewConfigLoadedEvent(
+			workflowID,
+			getProjectID(ctx),
+			effCfg.ConfigPath,
+			effCfg.ConfigScope,
+			effCfg.ConfigMode,
+			effCfg.FileETag,
+			effCfg.EffectiveETag,
+			predictedExecID,
+			snapshotRelPath,
+			"",
+		))
+	}
+
 	// Build runner using RunnerBuilder (Task-6 unification)
 	builder := workflow.NewRunnerBuilder().
 		WithConfig(cfg).
 		WithStateManager(stateManager).
 		WithAgentRegistry(registry).
-		WithLogger(f.logger).
+		WithLogger(logger).
 		WithOutputNotifier(outputNotifier).
 		WithControlPlane(cp).
 		WithHeartbeat(f.heartbeat).
@@ -123,12 +220,10 @@ func (f *RunnerFactory) CreateRunner(ctx context.Context, workflowID string, cp 
 			ConsensusThreshold:         bp.Consensus.Threshold,
 			MaxRetries:                 bp.MaxRetries,
 			Timeout:                    bp.Timeout,
-			DryRun:                     bp.DryRun,
-			Sandbox:                    bp.Sandbox,
-			// Since these come from core.Blueprint which already has resolved values,
-			// we treat them as explicit overrides.
-			HasDryRun:  true,
-			HasSandbox: true,
+			// NOTE: We intentionally do NOT treat dry-run as a blueprint-level override.
+			// It is controlled globally via settings (workflow.dry_run).
+			// Blueprint doesn't carry explicit "has_*" flags for booleans, so treating it
+			// as an override could make omitted fields accidentally flip behavior.
 		})
 	}
 
@@ -156,7 +251,9 @@ func (s *Server) RunnerFactoryForContext(ctx context.Context) *RunnerFactory {
 	eventBus := s.getProjectEventBus(ctx)
 	configLoader := s.getProjectConfigLoader(ctx)
 
-	if stateManager == nil || eventBus == nil || configLoader == nil {
+	// NOTE: configLoader may be nil in some legacy/server-startup scenarios; runner creation
+	// resolves the effective execution config from ProjectContext.
+	if stateManager == nil || eventBus == nil {
 		return nil
 	}
 

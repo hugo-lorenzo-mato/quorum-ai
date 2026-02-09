@@ -177,7 +177,6 @@ func TestBuildRunnerConfigFromConfig_WorkflowSettings(t *testing.T) {
 			Timeout:    "6h",
 			MaxRetries: 5,
 			DryRun:     true,
-			Sandbox:    true,
 			DenyTools:  []string{"rm", "delete"},
 		},
 		Agents: config.AgentsConfig{
@@ -195,9 +194,6 @@ func TestBuildRunnerConfigFromConfig_WorkflowSettings(t *testing.T) {
 	}
 	if !runnerCfg.DryRun {
 		t.Error("DryRun = false, want true")
-	}
-	if !runnerCfg.Sandbox {
-		t.Error("Sandbox = false, want true")
 	}
 	if len(runnerCfg.DenyTools) != 2 {
 		t.Errorf("DenyTools length = %d, want 2", len(runnerCfg.DenyTools))
@@ -309,19 +305,6 @@ func TestRunnerBuilder_WithDryRun(t *testing.T) {
 	}
 	if b.dryRun == nil || !*b.dryRun {
 		t.Error("dryRun should be set to true")
-	}
-}
-
-func TestRunnerBuilder_WithSandbox(t *testing.T) {
-	b := NewRunnerBuilder()
-
-	result := b.WithSandbox(true)
-
-	if result != b {
-		t.Error("WithSandbox should return same builder for chaining")
-	}
-	if b.sandbox == nil || !*b.sandbox {
-		t.Error("sandbox should be set to true")
 	}
 }
 
@@ -593,7 +576,6 @@ func TestRunnerBuilder_buildRunnerConfig_Overrides(t *testing.T) {
 		Workflow: config.WorkflowConfig{
 			MaxRetries: 1,
 			DryRun:     true,
-			Sandbox:    false,
 		},
 		Phases: config.PhasesConfig{
 			Analyze: config.AnalyzePhaseConfig{
@@ -632,19 +614,14 @@ func TestRunnerBuilder_buildRunnerConfig_Overrides(t *testing.T) {
 			},
 		},
 		{
-			name: "override dry run and sandbox",
+			name: "override dry run",
 			workflowConfig: &WorkflowConfigOverride{
 				DryRun:     false,
-				Sandbox:    true,
 				HasDryRun:  true,
-				HasSandbox: true,
 			},
 			expected: func(t *testing.T, rc *RunnerConfig) {
 				if rc.DryRun != false {
 					t.Errorf("DryRun = %v, want false", rc.DryRun)
-				}
-				if rc.Sandbox != true {
-					t.Errorf("Sandbox = %v, want true", rc.Sandbox)
 				}
 			},
 		},

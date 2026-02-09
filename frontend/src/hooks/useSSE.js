@@ -27,6 +27,7 @@ export default function useSSE() {
   const reconnectTimeoutRef = useRef(null);
   const pollingIntervalRef = useRef(null);
   const connectRef = useRef(null);
+  const handleEventRef = useRef(null);
   const [connectionMode, setConnectionModeLocal] = useState(CONNECTION_MODE.DISCONNECTED);
 
   // Project context for filtering
@@ -190,6 +191,16 @@ export default function useSSE() {
         handleAgentEvent(data);
         break;
 
+      // Config / provenance events
+      case 'config_loaded':
+        // Persisted by ingestSSEEvent; no store updates required.
+        break;
+
+      // Log events
+      case 'log':
+        // Persisted by ingestSSEEvent; no further store updates needed.
+        break;
+
       // Kanban events
       case 'kanban_workflow_moved':
         handleKanbanWorkflowMoved(data);
@@ -291,6 +302,12 @@ export default function useSSE() {
     currentProjectId,
   ]);
 
+  // Keep ref in sync so connect() always calls the latest handleEvent
+  // without needing it as a dependency (which would destabilize connect).
+  useEffect(() => {
+    handleEventRef.current = handleEvent;
+  }, [handleEvent]);
+
   const connect = useCallback(() => {
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
@@ -335,7 +352,7 @@ export default function useSSE() {
     eventSource.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        handleEvent('message', data);
+        handleEventRef.current('message', data);
       } catch (error) {
         console.error('Failed to parse SSE message:', error);
       }
@@ -362,6 +379,8 @@ export default function useSSE() {
       'agent_event',
       'issues_generation_progress',
       'issues_publishing_progress',
+      'config_loaded',
+      'log',
       'kanban_workflow_moved',
       'kanban_execution_started',
       'kanban_execution_completed',
@@ -374,13 +393,13 @@ export default function useSSE() {
       eventSource.addEventListener(eventType, (event) => {
         try {
           const data = JSON.parse(event.data);
-          handleEvent(eventType, data);
+          handleEventRef.current(eventType, data);
         } catch (error) {
           console.error(`Failed to parse ${eventType} event:`, error);
         }
       });
     });
-  }, [handleEvent, setConnectionMode, setSSEConnected, startPolling, stopPolling, currentProjectId]);
+  }, [setConnectionMode, setSSEConnected, startPolling, stopPolling, currentProjectId]);
 
   // Keep ref updated for reconnection
   useEffect(() => {

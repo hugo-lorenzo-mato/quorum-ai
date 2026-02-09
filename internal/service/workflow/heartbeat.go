@@ -52,6 +52,9 @@ type HeartbeatManager struct {
 	mu     sync.Mutex
 	active map[core.WorkflowID]context.CancelFunc
 
+	// Track last successful heartbeat write per workflow (in-memory, cheap to check)
+	lastWriteSuccess map[core.WorkflowID]time.Time
+
 	// Zombie detector
 	detectorCancel context.CancelFunc
 	zombieHandler  ZombieHandler
@@ -64,10 +67,11 @@ func NewHeartbeatManager(
 	logger *slog.Logger,
 ) *HeartbeatManager {
 	return &HeartbeatManager{
-		config:       config,
-		stateManager: stateManager,
-		logger:       logger,
-		active:       make(map[core.WorkflowID]context.CancelFunc),
+		config:           config,
+		stateManager:     stateManager,
+		logger:           logger,
+		active:           make(map[core.WorkflowID]context.CancelFunc),
+		lastWriteSuccess: make(map[core.WorkflowID]time.Time),
 	}
 }
 
@@ -88,6 +92,7 @@ func (h *HeartbeatManager) Start(workflowID core.WorkflowID) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	h.active[workflowID] = cancel
+	h.lastWriteSuccess[workflowID] = time.Now()
 
 	go h.heartbeatLoop(ctx, workflowID)
 
@@ -102,6 +107,7 @@ func (h *HeartbeatManager) Stop(workflowID core.WorkflowID) {
 	if cancel, exists := h.active[workflowID]; exists {
 		cancel()
 		delete(h.active, workflowID)
+		delete(h.lastWriteSuccess, workflowID)
 		h.logger.Debug("stopped heartbeat tracking", "workflow_id", workflowID)
 	}
 }
@@ -112,6 +118,19 @@ func (h *HeartbeatManager) IsTracking(workflowID core.WorkflowID) bool {
 	defer h.mu.Unlock()
 	_, exists := h.active[workflowID]
 	return exists
+}
+
+// IsHealthy reports whether a workflow's heartbeat is being written successfully.
+// Returns false if the workflow is not tracked or its last successful write
+// is older than StaleThreshold.
+func (h *HeartbeatManager) IsHealthy(workflowID core.WorkflowID) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	lastWrite, ok := h.lastWriteSuccess[workflowID]
+	if !ok {
+		return false
+	}
+	return time.Since(lastWrite) < h.config.StaleThreshold
 }
 
 // heartbeatLoop writes heartbeats periodically until stopped.
@@ -141,6 +160,10 @@ func (h *HeartbeatManager) writeHeartbeat(workflowID core.WorkflowID) {
 		h.logger.Warn("failed to write heartbeat",
 			"workflow_id", workflowID,
 			"error", err)
+	} else {
+		h.mu.Lock()
+		h.lastWriteSuccess[workflowID] = time.Now()
+		h.mu.Unlock()
 	}
 }
 
@@ -200,9 +223,20 @@ func (h *HeartbeatManager) detectZombies() {
 	}
 
 	for _, zombie := range zombies {
-		// Skip if we're actively tracking this workflow (heartbeat write failed but still alive)
 		if h.IsTracking(zombie.WorkflowID) {
-			continue
+			// Tracked workflows might have temporary heartbeat write failures.
+			// Only treat as zombie if heartbeat is critically stale (3x threshold).
+			if zombie.HeartbeatAt != nil {
+				staleDuration := time.Since(*zombie.HeartbeatAt)
+				if staleDuration < 3*h.config.StaleThreshold {
+					continue // Likely temporary — skip
+				}
+			}
+			// Critically stale despite being tracked — real zombie within this server session
+			h.logger.Warn("tracked workflow has critically stale heartbeat, treating as zombie",
+				"workflow_id", zombie.WorkflowID,
+				"heartbeat_at", zombie.HeartbeatAt)
+			h.Stop(zombie.WorkflowID) // Clean up tracking before handling
 		}
 
 		h.logger.Warn("zombie workflow detected",
@@ -320,6 +354,7 @@ func (h *HeartbeatManager) Shutdown() {
 		cancel()
 		delete(h.active, workflowID)
 	}
+	h.lastWriteSuccess = make(map[core.WorkflowID]time.Time)
 
 	h.logger.Info("heartbeat manager shutdown complete")
 }

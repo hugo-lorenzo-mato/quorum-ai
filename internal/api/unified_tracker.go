@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -217,6 +218,9 @@ func (t *UnifiedTracker) StartExecution(ctx context.Context, workflowID core.Wor
 
 		// Mark as running in DB
 		if err := atomic.SetWorkflowRunning(workflowID); err != nil {
+			if errors.Is(err, core.ErrState("WORKFLOW_ALREADY_RUNNING", "")) {
+				return fmt.Errorf("workflow is already running (in database)")
+			}
 			return fmt.Errorf("marking workflow as running: %w", err)
 		}
 
@@ -306,21 +310,27 @@ func (t *UnifiedTracker) FinishExecution(ctx context.Context, workflowID core.Wo
 
 // IsRunning checks if a workflow is currently running.
 // Checks in-memory first (fast path), then DB (authoritative).
+// When a handle exists but the heartbeat is unhealthy, the workflow is considered
+// not running (zombie). When heartbeat is disabled, trusts the handle.
 // The StateManager is obtained from the context if a ProjectContext is available.
 func (t *UnifiedTracker) IsRunning(ctx context.Context, workflowID core.WorkflowID) bool {
-	// Fast path: check in-memory
 	t.mu.RLock()
 	_, exists := t.handles[workflowID]
 	t.mu.RUnlock()
 
 	if exists {
+		// Handle exists, but verify the heartbeat is healthy (when available).
+		// A stale heartbeat means the execution goroutine is hung.
+		// When heartbeat is nil (disabled), this check is skipped and we
+		// trust the handle — zombies must be resolved via manual ForceStop.
+		if t.heartbeat != nil && !t.heartbeat.IsHealthy(workflowID) {
+			return false
+		}
 		return true
 	}
 
-	// Get project-scoped StateManager if available
-	stateManager := GetStateManagerFromContext(ctx, t.stateManager)
-
 	// Slow path: check DB (another process might be running it)
+	stateManager := GetStateManagerFromContext(ctx, t.stateManager)
 	isRunning, err := stateManager.IsWorkflowRunning(ctx, workflowID)
 	if err != nil {
 		t.logger.Warn("failed to check running status in DB",
@@ -338,6 +348,15 @@ func (t *UnifiedTracker) IsRunningInMemory(workflowID core.WorkflowID) bool {
 	defer t.mu.RUnlock()
 	_, exists := t.handles[workflowID]
 	return exists
+}
+
+// IsHeartbeatHealthy checks if a workflow's heartbeat is being written successfully.
+// When heartbeat is disabled (nil), returns true (assume healthy — no data to say otherwise).
+func (t *UnifiedTracker) IsHeartbeatHealthy(workflowID core.WorkflowID) bool {
+	if t.heartbeat == nil {
+		return true // No heartbeat system → assume healthy
+	}
+	return t.heartbeat.IsHealthy(workflowID)
 }
 
 // GetHandle returns the ExecutionHandle for a running workflow.
@@ -404,22 +423,39 @@ func (t *UnifiedTracker) Resume(workflowID core.WorkflowID) error {
 	return nil
 }
 
-// ForceStop forcibly stops a workflow, even if it doesn't have an active handle.
-// This is used for zombie workflows that appear running in the DB but have no in-memory state
-// (e.g., after server restart). Unlike Cancel, ForceStop works without a ControlPlane.
+// ForceStop forcibly stops a workflow, cleaning up both in-memory and DB state.
+// This is the primary recovery mechanism for zombie workflows. Unlike Cancel,
+// ForceStop works without a ControlPlane and removes the in-memory handle to
+// prevent the "already running" error on subsequent /run requests.
 func (t *UnifiedTracker) ForceStop(ctx context.Context, workflowID core.WorkflowID) error {
-	// Try graceful cancel if handle exists
-	t.mu.RLock()
+	// Extract and remove handle from in-memory tracking.
+	t.mu.Lock()
 	handle, exists := t.handles[workflowID]
-	t.mu.RUnlock()
+	if exists {
+		delete(t.handles, workflowID)
+	}
+	t.mu.Unlock()
 
+	// Cancel execution if handle was present.
 	if exists && handle != nil {
 		if cp := handle.ControlPlane; cp != nil && !cp.IsCancelled() {
 			cp.Cancel()
 			t.logger.Info("workflow cancellation requested via force-stop", "workflow_id", workflowID)
 		}
-		// Also cancel the execution context to interrupt in-flight work.
 		handle.CancelExec()
+		handle.MarkDone()
+
+		// Wait briefly for the goroutine to finish its own cleanup (FinishExecution).
+		select {
+		case <-handle.Done():
+		case <-time.After(2 * time.Second):
+			t.logger.Debug("force-stop: goroutine did not finish within grace period", "workflow_id", workflowID)
+		}
+	}
+
+	// Stop heartbeat tracking.
+	if t.heartbeat != nil {
+		t.heartbeat.Stop(workflowID)
 	}
 
 	// Get state manager from context or use default
@@ -444,7 +480,7 @@ func (t *UnifiedTracker) ForceStop(ctx context.Context, workflowID core.Workflow
 		// Only update if still running
 		if state.Status == core.WorkflowStatusRunning {
 			state.Status = core.WorkflowStatusFailed
-			state.Error = "Workflow forcibly stopped (orphaned after server restart)"
+			state.Error = "Workflow forcibly stopped (orphaned or zombie)"
 			state.UpdatedAt = time.Now()
 			state.Checkpoints = append(state.Checkpoints, core.Checkpoint{
 				ID:        fmt.Sprintf("force-stop-%d", time.Now().UnixNano()),
@@ -527,37 +563,104 @@ func (t *UnifiedTracker) RollbackExecution(ctx context.Context, workflowID core.
 // CleanupOrphanedWorkflows finds and cleans up workflows that are marked as running
 // in the DB but have no in-memory handle (orphaned due to crash/restart).
 func (t *UnifiedTracker) CleanupOrphanedWorkflows(ctx context.Context) (int, error) {
+	// Get project-scoped StateManager if available.
+	stateManager := GetStateManagerFromContext(ctx, t.stateManager)
+
 	// Get all running workflows from DB
-	runningIDs, err := t.stateManager.ListRunningWorkflows(ctx)
+	runningIDs, err := stateManager.ListRunningWorkflows(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("listing running workflows: %w", err)
 	}
 
 	cleaned := 0
 	for _, id := range runningIDs {
-		// If not in memory, it's orphaned
+		// If tracked in-memory, check if the goroutine finished without cleanup.
 		if t.IsRunningInMemory(id) {
+			handle, _ := t.GetHandle(id)
+			if handle != nil {
+				select {
+				case <-handle.Done():
+					// Goroutine finished but FinishExecution never called
+					t.logger.Warn("detected finished-but-uncleaned workflow, forcing cleanup",
+						"workflow_id", id)
+					if err := t.ForceStop(ctx, id); err != nil {
+						t.logger.Error("failed to force-stop uncleaned workflow",
+							"workflow_id", id, "error", err)
+					}
+					cleaned++
+				default:
+					// Goroutine still alive, skip
+				}
+			}
 			continue
 		}
 
-		t.logger.Warn("cleaning up orphaned workflow",
-			"workflow_id", id)
+		// Without lock-holder metadata, we cannot safely distinguish between:
+		// - A workflow orphaned by a crash/restart (safe to recover)
+		// - A workflow running in a different server process (unsafe to touch)
+		provider, ok := stateManager.(interface {
+			GetRunningWorkflowRecord(context.Context, core.WorkflowID) (*core.RunningWorkflowRecord, error)
+		})
+		if !ok {
+			t.logger.Warn("skipping orphan cleanup: state manager does not expose running_workflows metadata",
+				"workflow_id", id)
+			continue
+		}
 
-		// Clear running status
-		if err := t.stateManager.ClearWorkflowRunning(ctx, id); err != nil {
-			t.logger.Error("failed to clear orphaned workflow",
+		rec, err := provider.GetRunningWorkflowRecord(ctx, id)
+		if err != nil {
+			t.logger.Warn("skipping orphan cleanup: failed to read running_workflows record",
 				"workflow_id", id,
 				"error", err)
 			continue
 		}
+		if rec == nil {
+			// Not actually running anymore (or already cleared).
+			continue
+		}
 
-		// Update state to failed
-		state, err := t.stateManager.LoadByID(ctx, id)
-		if err == nil && state != nil {
-			state.Status = core.WorkflowStatusFailed
-			state.Error = "Orphaned workflow (server restarted during execution)"
-			state.UpdatedAt = time.Now()
-			_ = t.stateManager.Save(ctx, state)
+		if !isProvablyOrphan(rec) {
+			t.logger.Info("skipping orphan cleanup: lock holder still alive or remote",
+				"workflow_id", id,
+				"lock_holder_pid", rec.LockHolderPID,
+				"lock_holder_host", rec.LockHolderHost)
+			continue
+		}
+
+		t.logger.Warn("cleaning up orphaned workflow",
+			"workflow_id", id,
+			"lock_holder_pid", rec.LockHolderPID,
+			"lock_holder_host", rec.LockHolderHost)
+
+		// Clear running marker + update workflow state atomically.
+		err = stateManager.ExecuteAtomically(ctx, func(atomic core.AtomicStateContext) error {
+			if err := atomic.ClearWorkflowRunning(id); err != nil {
+				return err
+			}
+
+			state, err := atomic.LoadByID(id)
+			if err != nil || state == nil {
+				return err
+			}
+
+			// Only update if still running.
+			if state.Status == core.WorkflowStatusRunning {
+				state.Status = core.WorkflowStatusFailed
+				if rec.LockHolderPID != nil && rec.LockHolderHost != "" {
+					state.Error = fmt.Sprintf("Orphaned workflow (previous holder pid %d on %s is not alive)", *rec.LockHolderPID, rec.LockHolderHost)
+				} else {
+					state.Error = "Orphaned workflow (previous holder is not alive)"
+				}
+				state.UpdatedAt = time.Now()
+				return atomic.Save(state)
+			}
+			return nil
+		})
+		if err != nil {
+			t.logger.Error("failed to recover orphaned workflow",
+				"workflow_id", id,
+				"error", err)
+			continue
 		}
 
 		cleaned++

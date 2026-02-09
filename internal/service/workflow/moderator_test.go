@@ -43,6 +43,26 @@ func TestNewSemanticModerator_UsesConfigValues(t *testing.T) {
 	}
 }
 
+func TestSemanticModerator_UsesConfiguredAgentAsPrimary(t *testing.T) {
+	// The moderator agent is determined by config (UI dropdown selection).
+	// At runtime, the configured agent is always tried first. If it fails
+	// after retries, ONE fallback agent with phases.moderate: true is tried
+	// — not all of them.
+	config := ModeratorConfig{
+		Enabled: true,
+		Agent:   "copilot",
+	}
+	moderator, err := NewSemanticModerator(config)
+	if err != nil {
+		t.Fatalf("NewSemanticModerator() error = %v", err)
+	}
+
+	// The moderator should always report the configured agent as primary
+	if got := moderator.GetConfig().Agent; got != "copilot" {
+		t.Errorf("GetConfig().Agent = %q, want %q", got, "copilot")
+	}
+}
+
 func TestNewSemanticModerator_CustomConfig(t *testing.T) {
 	// Note: Model is resolved at runtime from AgentPhaseModels[Agent][analyze]
 	config := ModeratorConfig{

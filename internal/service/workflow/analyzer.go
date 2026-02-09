@@ -164,6 +164,15 @@ func (a *Analyzer) runSingleAgentAnalysis(ctx context.Context, wctx *Context) er
 	if wctx.Report != nil && wctx.Report.IsEnabled() {
 		outputFilePath = wctx.Report.SingleAgentAnalysisPath(agentName, model)
 	}
+	absOutputPath := wctx.ResolveFilePath(outputFilePath)
+
+	// Ensure output directory exists before execution (file enforcement)
+	if absOutputPath != "" {
+		enforcement := NewFileEnforcement(wctx.Logger)
+		if err := enforcement.EnsureDirectory(absOutputPath); err != nil {
+			wctx.Logger.Warn("failed to ensure output directory", "path", absOutputPath, "error", err)
+		}
+	}
 
 	// Render analysis prompt
 	prompt, err := wctx.Prompts.RenderAnalyzeV1(AnalyzeV1Params{
@@ -194,17 +203,71 @@ func (a *Analyzer) runSingleAgentAnalysis(ctx context.Context, wctx *Context) er
 		if ctrlErr := wctx.CheckControl(ctx); ctrlErr != nil {
 			return ctrlErr
 		}
+		// Pre-retry: if output file already exists with substantial content, use it.
+		// This recovers from the case where the agent wrote output but cmd.Wait() failed.
+		if absOutputPath != "" {
+			if info, statErr := os.Stat(absOutputPath); statErr == nil && info.Size() > 1024 {
+				content, readErr := os.ReadFile(absOutputPath)
+				if readErr == nil && isValidAnalysisOutput(string(content)) {
+					wctx.Logger.Info("recovered single-agent output from file written by previous attempt",
+						"agent", agentName, "path", absOutputPath, "size", len(content))
+					result = &core.ExecuteResult{Output: string(content), Model: model}
+					return nil
+				}
+			}
+		}
+
+		attemptCtx, cancelAttempt := context.WithCancelCause(ctx)
+		defer cancelAttempt(nil)
+
+		// Launch output file watchdog for recovery/reaping if agent hangs after writing.
+		var watchdog *OutputWatchdog
+		stableOutputCh := make(chan string, 1)
+		if absOutputPath != "" {
+			watchdog = NewOutputWatchdog(absOutputPath, DefaultWatchdogConfig(), wctx.Logger)
+			watchdog.Start()
+			defer watchdog.Stop()
+
+			go func() {
+				select {
+				case content := <-watchdog.StableCh():
+					select {
+					case stableOutputCh <- content:
+					default:
+					}
+					cancelAttempt(core.ErrExecution(watchdogStableOutputCode, "output file stabilized; reaping hung agent process"))
+				case <-attemptCtx.Done():
+				}
+			}()
+		}
+
 		var execErr error
-		result, execErr = agent.Execute(ctx, core.ExecuteOptions{
+		result, execErr = agent.Execute(attemptCtx, core.ExecuteOptions{
 			Prompt:          prompt,
 			Format:          core.OutputFormatText,
 			Model:           model,
 			Timeout:         wctx.Config.PhaseTimeouts.Analyze,
-			Sandbox:         wctx.Config.Sandbox,
 			Phase:           core.PhaseAnalyze,
 			ReasoningEffort: wctx.Config.SingleAgent.ReasoningEffort,
 			WorkDir:         wctx.ProjectRoot,
 		})
+
+		// If execution was cancelled after the output file stabilized, treat it as success.
+		if execErr != nil {
+			select {
+			case content := <-stableOutputCh:
+				if !isValidAnalysisOutput(content) {
+					wctx.Logger.Warn("watchdog reap: stable file rejected (unstructured content)",
+						"agent", agentName, "path", absOutputPath, "size", len(content))
+					return execErr
+				}
+				wctx.Logger.Info("watchdog reap: using stable single-agent output file",
+					"agent", agentName, "path", absOutputPath, "size", len(content))
+				result = &core.ExecuteResult{Output: content, Model: model}
+				return nil
+			default:
+			}
+		}
 		return execErr
 	})
 
@@ -221,6 +284,43 @@ func (a *Analyzer) runSingleAgentAnalysis(ctx context.Context, wctx *Context) er
 			})
 		}
 		return fmt.Errorf("single-agent analysis failed: %w", err)
+	}
+
+	// Some CLIs write to file but return empty stdout. Prefer the file content in that case.
+	if absOutputPath != "" && (result == nil || strings.TrimSpace(result.Output) == "") {
+		if content, readErr := os.ReadFile(absOutputPath); readErr == nil && strings.TrimSpace(string(content)) != "" {
+			if result == nil {
+				result = &core.ExecuteResult{}
+			}
+			result.Output = string(content)
+			if result.Model == "" {
+				result.Model = model
+			}
+			wctx.Logger.Info("file enforcement: using single-agent output file content (stdout empty)",
+				"agent", agentName, "path", absOutputPath, "size", len(content))
+		}
+	}
+
+	// Quality gate: reject outputs that look like intermediate agent narration
+	// rather than a real analysis.
+	if result != nil && result.Output != "" && !isValidAnalysisOutput(result.Output) {
+		wctx.Logger.Warn("single-agent output rejected: does not look like structured analysis",
+			"agent", agentName,
+			"size", len(result.Output),
+			"newlines", strings.Count(result.Output, "\n"),
+		)
+		return fmt.Errorf("agent %s produced unstructured output (%d bytes, no markdown headers)", agentName, len(result.Output))
+	}
+
+	// Ensure output file exists (file enforcement fallback)
+	if absOutputPath != "" && result != nil && result.Output != "" {
+		enforcement := NewFileEnforcement(wctx.Logger)
+		createdByLLM, verifyErr := enforcement.VerifyOrWriteFallback(absOutputPath, result.Output)
+		if verifyErr != nil {
+			wctx.Logger.Warn("file enforcement failed", "path", absOutputPath, "error", verifyErr)
+		} else if !createdByLLM {
+			wctx.Logger.Debug("created fallback file from stdout", "path", absOutputPath)
+		}
 	}
 
 	// Emit completed event
@@ -391,7 +491,7 @@ func (a *Analyzer) runModeratorRound(ctx context.Context, wctx *Context, round i
 		wctx.Output.Log("info", "analyzer", fmt.Sprintf("Round %d: Running moderator evaluation", round))
 	}
 
-	evalResult, evalErr := a.runModeratorWithFallback(ctx, wctx, round, currentOutputs)
+	evalResult, evalErr := a.runModeratorWithRetry(ctx, wctx, round, currentOutputs)
 	if evalErr != nil {
 		return nil, fmt.Errorf("moderator evaluation round %d: %w", round, evalErr)
 	}
@@ -600,7 +700,28 @@ func (a *Analyzer) runVnRefinement(ctx context.Context, wctx *Context, round int
 			// Get this agent's previous analysis
 			prevOutput, hasPrevious := previousByAgent[name]
 			if !hasPrevious {
-				// If this agent didn't participate before, treat as new V1
+				// Agent didn't participate in previous round (e.g., timed out and output
+				// wasn't saved in checkpoint). Check if a V(n) output file already exists
+				// on disk from a previous attempt before falling back to V1 analysis.
+				model := ResolvePhaseModel(wctx.Config, name, core.PhaseAnalyze, "")
+				if wctx.Report != nil && wctx.Report.IsEnabled() {
+					vnPath := wctx.Report.VnAnalysisPath(name, model, round)
+					absVnPath := wctx.ResolveFilePath(vnPath)
+					if cached, loadErr := loadExistingAnalysis(absVnPath, name, model); loadErr == nil {
+						wctx.Logger.Info("recovered V(n) analysis from disk (agent missing from checkpoint)",
+							"agent", name, "round", round, "path", absVnPath)
+						if wctx.Output != nil {
+							wctx.Output.Log("info", "analyzer", fmt.Sprintf("Recovered V%d analysis for %s from disk", round, name))
+						}
+						cached.AgentName = fmt.Sprintf("v%d-%s", round, name)
+						mu.Lock()
+						outputs = append(outputs, *cached)
+						mu.Unlock()
+						return
+					}
+				}
+
+				// No V(n) file found — fall back to V1 analysis
 				output, err := a.runAnalysisWithAgent(ctx, wctx, name)
 				if err != nil {
 					mu.Lock()
@@ -629,8 +750,13 @@ func (a *Analyzer) runVnRefinement(ctx context.Context, wctx *Context, round int
 
 	wg.Wait()
 
-	// Need at least 2 successful outputs
-	const minRequired = 2
+	// Need at least N successful outputs (default: 2).
+	// This is configurable to allow degraded operation when one agent is flaky/timeouts,
+	// but the default remains 2 because single-agent "consensus" has no cross-validation value.
+	minRequired := 2
+	if wctx.Config != nil && wctx.Config.Moderator.MinSuccessfulAgents > 0 {
+		minRequired = wctx.Config.Moderator.MinSuccessfulAgents
+	}
 	if len(outputs) < minRequired {
 		var errMsgs []string
 		for agent, err := range errors {
@@ -659,6 +785,10 @@ func (a *Analyzer) runVnRefinementWithAgent(ctx context.Context, wctx *Context, 
 		outputFilePath = wctx.Report.VnAnalysisPath(agentName, model, round)
 	}
 
+	// Resolve to absolute path for filesystem operations (multi-project safety).
+	// The relative outputFilePath is kept for the prompt (agent runs in ProjectRoot).
+	absOutputPath := wctx.ResolveFilePath(outputFilePath)
+
 	// Compute prompt hash for cache validation
 	promptHash := computePromptHash(wctx.State)
 
@@ -682,12 +812,12 @@ func (a *Analyzer) runVnRefinementWithAgent(ctx context.Context, wctx *Context, 
 	}
 
 	// 2. Backward compatibility: file exists but no checkpoint
-	if outputFilePath != "" {
-		if output, err := loadExistingAnalysis(outputFilePath, agentName, model); err == nil {
+	if absOutputPath != "" {
+		if output, err := loadExistingAnalysis(absOutputPath, agentName, model); err == nil {
 			wctx.Logger.Info("using existing Vn analysis (no checkpoint, metrics unavailable)",
 				"agent", agentName,
 				"round", round,
-				"path", outputFilePath,
+				"path", absOutputPath,
 			)
 			if wctx.Output != nil {
 				wctx.Output.Log("info", "analyzer", fmt.Sprintf("Using existing V%d analysis for %s (legacy cache)", round, agentName))
@@ -704,10 +834,10 @@ func (a *Analyzer) runVnRefinementWithAgent(ctx context.Context, wctx *Context, 
 	}
 
 	// Ensure output directory exists before execution (file enforcement)
-	if outputFilePath != "" {
+	if absOutputPath != "" {
 		enforcement := NewFileEnforcement(wctx.Logger)
-		if err := enforcement.EnsureDirectory(outputFilePath); err != nil {
-			wctx.Logger.Warn("failed to ensure output directory", "path", outputFilePath, "error", err)
+		if err := enforcement.EnsureDirectory(absOutputPath); err != nil {
+			wctx.Logger.Warn("failed to ensure output directory", "path", absOutputPath, "error", err)
 		}
 	}
 
@@ -769,21 +899,75 @@ func (a *Analyzer) runVnRefinementWithAgent(ctx context.Context, wctx *Context, 
 		})
 	}
 
+	// Launch output file watchdog for recovery if agent hangs after writing
+	var watchdog *OutputWatchdog
+	if absOutputPath != "" {
+		watchdog = NewOutputWatchdog(absOutputPath, DefaultWatchdogConfig(), wctx.Logger)
+		watchdog.Start()
+		defer watchdog.Stop()
+	}
+
 	var result *core.ExecuteResult
 	err = wctx.Retry.Execute(func() error {
 		if ctrlErr := wctx.CheckControl(ctx); ctrlErr != nil {
 			return ctrlErr
 		}
+		// Pre-retry: if output file already exists with substantial content, use it.
+		// This recovers from the case where the agent wrote output but cmd.Wait() failed.
+		if absOutputPath != "" {
+			if info, statErr := os.Stat(absOutputPath); statErr == nil && info.Size() > 1024 {
+				content, readErr := os.ReadFile(absOutputPath)
+				if readErr == nil && isValidAnalysisOutput(string(content)) {
+					wctx.Logger.Info("recovered Vn output from file written by previous attempt",
+						"agent", agentName, "round", round, "path", absOutputPath, "size", len(content))
+					result = &core.ExecuteResult{Output: string(content), Model: model}
+					return nil
+				}
+			}
+		}
+		attemptCtx, cancelAttempt := context.WithCancelCause(ctx)
+		defer cancelAttempt(nil)
+
+		stableOutputCh := make(chan string, 1)
+		if watchdog != nil {
+			go func() {
+				select {
+				case content := <-watchdog.StableCh():
+					select {
+					case stableOutputCh <- content:
+					default:
+					}
+					cancelAttempt(core.ErrExecution(watchdogStableOutputCode, "output file stabilized; reaping hung agent process"))
+				case <-attemptCtx.Done():
+				}
+			}()
+		}
+
 		var execErr error
-		result, execErr = agent.Execute(ctx, core.ExecuteOptions{
+		result, execErr = agent.Execute(attemptCtx, core.ExecuteOptions{
 			Prompt:  prompt,
 			Format:  core.OutputFormatText,
 			Model:   model,
 			Timeout: wctx.Config.PhaseTimeouts.Analyze,
-			Sandbox: wctx.Config.Sandbox,
 			Phase:   core.PhaseAnalyze,
 			WorkDir: wctx.ProjectRoot,
 		})
+		// If execution was cancelled after the output file stabilized, treat it as success.
+		if execErr != nil {
+			select {
+			case content := <-stableOutputCh:
+				if !isValidAnalysisOutput(content) {
+					wctx.Logger.Warn("watchdog reap: stable Vn file rejected (unstructured content)",
+						"agent", agentName, "round", round, "path", absOutputPath, "size", len(content))
+					return execErr
+				}
+				wctx.Logger.Info("watchdog reap: using stable Vn output file",
+					"agent", agentName, "round", round, "path", absOutputPath, "size", len(content))
+				result = &core.ExecuteResult{Output: content, Model: model}
+				return nil
+			default:
+			}
+		}
 		return execErr
 	})
 
@@ -797,6 +981,40 @@ func (a *Analyzer) runVnRefinementWithAgent(ctx context.Context, wctx *Context, 
 			})
 		}
 		return AnalysisOutput{}, err
+	}
+
+	// Some CLIs write to file but return empty stdout. Prefer the file content in that case.
+	if absOutputPath != "" && (result == nil || strings.TrimSpace(result.Output) == "") {
+		if content, readErr := os.ReadFile(absOutputPath); readErr == nil && strings.TrimSpace(string(content)) != "" {
+			if result == nil {
+				result = &core.ExecuteResult{}
+			}
+			result.Output = string(content)
+			if result.Model == "" {
+				result.Model = model
+			}
+			wctx.Logger.Info("file enforcement: using Vn output file content (stdout empty)",
+				"agent", agentName, "round", round, "path", absOutputPath, "size", len(content))
+		}
+	}
+
+	// Quality gate: reject outputs that look like intermediate agent narration
+	// (e.g., concatenated Codex agent_message planning text) rather than a real analysis.
+	if result != nil && result.Output != "" && !isValidAnalysisOutput(result.Output) {
+		wctx.Logger.Warn("Vn output rejected: does not look like structured analysis",
+			"agent", agentName, "round", round,
+			"size", len(result.Output),
+			"newlines", strings.Count(result.Output, "\n"),
+		)
+		if wctx.Output != nil {
+			wctx.Output.AgentEvent("error", agentName,
+				fmt.Sprintf("V%d output rejected (unstructured content, %d bytes)", round, len(result.Output)),
+				map[string]interface{}{
+					"phase": fmt.Sprintf("analyze_v%d", round),
+					"round": round,
+				})
+		}
+		return AnalysisOutput{}, fmt.Errorf("agent %s produced unstructured output (%d bytes, no markdown headers)", agentName, len(result.Output))
 	}
 
 	durationMS := time.Since(startTime).Milliseconds()
@@ -813,13 +1031,13 @@ func (a *Analyzer) runVnRefinementWithAgent(ctx context.Context, wctx *Context, 
 	}
 
 	// Ensure output file exists (file enforcement fallback)
-	if outputFilePath != "" && result != nil && result.Output != "" {
+	if absOutputPath != "" && result != nil && result.Output != "" {
 		enforcement := NewFileEnforcement(wctx.Logger)
-		createdByLLM, verifyErr := enforcement.VerifyOrWriteFallback(outputFilePath, result.Output)
+		createdByLLM, verifyErr := enforcement.VerifyOrWriteFallback(absOutputPath, result.Output)
 		if verifyErr != nil {
-			wctx.Logger.Warn("file enforcement failed", "path", outputFilePath, "error", verifyErr)
+			wctx.Logger.Warn("file enforcement failed", "path", absOutputPath, "error", verifyErr)
 		} else if !createdByLLM {
-			wctx.Logger.Debug("created fallback file from stdout", "path", outputFilePath)
+			wctx.Logger.Debug("created fallback file from stdout", "path", absOutputPath)
 		}
 	}
 
@@ -827,8 +1045,8 @@ func (a *Analyzer) runVnRefinementWithAgent(ctx context.Context, wctx *Context, 
 	output := parseAnalysisOutputWithMetrics(outputName, model, result, durationMS)
 
 	// Create checkpoint for future resume with full metrics
-	if outputFilePath != "" {
-		if cpErr := createAnalysisCheckpoint(wctx, agentName, model, round, outputFilePath, output, promptHash); cpErr != nil {
+	if absOutputPath != "" {
+		if cpErr := createAnalysisCheckpoint(wctx, agentName, model, round, absOutputPath, output, promptHash); cpErr != nil {
 			wctx.Logger.Warn("failed to create Vn analysis checkpoint", "agent", agentName, "round", round, "error", cpErr)
 		}
 	}
@@ -887,9 +1105,11 @@ func (a *Analyzer) runV1Analysis(ctx context.Context, wctx *Context) ([]Analysis
 		"total", len(agentNames),
 	)
 
-	// Need at least 2 successful outputs for meaningful consensus
-	// Without at least 2 agents, there's no cross-validation benefit
-	const minRequired = 2
+	// Need at least N successful outputs (default: 2) for meaningful cross-validation.
+	minRequired := 2
+	if wctx.Config != nil && wctx.Config.Moderator.MinSuccessfulAgents > 0 {
+		minRequired = wctx.Config.Moderator.MinSuccessfulAgents
+	}
 
 	if len(outputs) < minRequired {
 		// Collect error messages
@@ -932,6 +1152,9 @@ func (a *Analyzer) runAnalysisWithAgent(ctx context.Context, wctx *Context, agen
 		outputFilePath = wctx.Report.V1AnalysisPath(agentName, model)
 	}
 
+	// Resolve to absolute path for filesystem operations (multi-project safety).
+	absOutputPath := wctx.ResolveFilePath(outputFilePath)
+
 	// Compute prompt hash for cache validation
 	promptHash := computePromptHash(wctx.State)
 
@@ -954,11 +1177,11 @@ func (a *Analyzer) runAnalysisWithAgent(ctx context.Context, wctx *Context, agen
 	}
 
 	// 2. Backward compatibility: file exists but no checkpoint
-	if outputFilePath != "" {
-		if output, err := loadExistingAnalysis(outputFilePath, agentName, model); err == nil {
+	if absOutputPath != "" {
+		if output, err := loadExistingAnalysis(absOutputPath, agentName, model); err == nil {
 			wctx.Logger.Info("using existing V1 analysis (no checkpoint, metrics unavailable)",
 				"agent", agentName,
-				"path", outputFilePath,
+				"path", absOutputPath,
 			)
 			if wctx.Output != nil {
 				wctx.Output.Log("info", "analyzer", fmt.Sprintf("Using existing V1 analysis for %s (legacy cache)", agentName))
@@ -975,10 +1198,10 @@ func (a *Analyzer) runAnalysisWithAgent(ctx context.Context, wctx *Context, agen
 	}
 
 	// Ensure output directory exists before execution (file enforcement)
-	if outputFilePath != "" {
+	if absOutputPath != "" {
 		enforcement := NewFileEnforcement(wctx.Logger)
-		if err := enforcement.EnsureDirectory(outputFilePath); err != nil {
-			wctx.Logger.Warn("failed to ensure output directory", "path", outputFilePath, "error", err)
+		if err := enforcement.EnsureDirectory(absOutputPath); err != nil {
+			wctx.Logger.Warn("failed to ensure output directory", "path", absOutputPath, "error", err)
 		}
 	}
 
@@ -1004,22 +1227,76 @@ func (a *Analyzer) runAnalysisWithAgent(ctx context.Context, wctx *Context, agen
 		})
 	}
 
+	// Launch output file watchdog for recovery if agent hangs after writing
+	var watchdog *OutputWatchdog
+	if absOutputPath != "" {
+		watchdog = NewOutputWatchdog(absOutputPath, DefaultWatchdogConfig(), wctx.Logger)
+		watchdog.Start()
+		defer watchdog.Stop()
+	}
+
 	// Execute with retry
 	var result *core.ExecuteResult
 	err = wctx.Retry.Execute(func() error {
 		if ctrlErr := wctx.CheckControl(ctx); ctrlErr != nil {
 			return ctrlErr
 		}
+		// Pre-retry: if output file already exists with substantial content, use it.
+		// This recovers from the case where the agent wrote output but cmd.Wait() failed.
+		if absOutputPath != "" {
+			if info, statErr := os.Stat(absOutputPath); statErr == nil && info.Size() > 1024 {
+				content, readErr := os.ReadFile(absOutputPath)
+				if readErr == nil && isValidAnalysisOutput(string(content)) {
+					wctx.Logger.Info("recovered output from file written by previous attempt",
+						"agent", agentName, "path", absOutputPath, "size", len(content))
+					result = &core.ExecuteResult{Output: string(content), Model: model}
+					return nil
+				}
+			}
+		}
+		attemptCtx, cancelAttempt := context.WithCancelCause(ctx)
+		defer cancelAttempt(nil)
+
+		stableOutputCh := make(chan string, 1)
+		if watchdog != nil {
+			go func() {
+				select {
+				case content := <-watchdog.StableCh():
+					select {
+					case stableOutputCh <- content:
+					default:
+					}
+					cancelAttempt(core.ErrExecution(watchdogStableOutputCode, "output file stabilized; reaping hung agent process"))
+				case <-attemptCtx.Done():
+				}
+			}()
+		}
+
 		var execErr error
-		result, execErr = agent.Execute(ctx, core.ExecuteOptions{
+		result, execErr = agent.Execute(attemptCtx, core.ExecuteOptions{
 			Prompt:  prompt,
 			Format:  core.OutputFormatText,
 			Model:   model,
 			Timeout: wctx.Config.PhaseTimeouts.Analyze,
-			Sandbox: wctx.Config.Sandbox,
 			Phase:   core.PhaseAnalyze,
 			WorkDir: wctx.ProjectRoot,
 		})
+		// If execution was cancelled after the output file stabilized, treat it as success.
+		if execErr != nil {
+			select {
+			case content := <-stableOutputCh:
+				if !isValidAnalysisOutput(content) {
+					wctx.Logger.Warn("watchdog reap: stable file rejected (unstructured content)",
+						"agent", agentName, "path", absOutputPath, "size", len(content))
+					return execErr
+				}
+				wctx.Logger.Info("watchdog reap: using stable output file",
+					"agent", agentName, "path", absOutputPath, "size", len(content))
+				result = &core.ExecuteResult{Output: content, Model: model}
+				return nil
+			default:
+			}
+		}
 		return execErr
 	})
 
@@ -1033,6 +1310,32 @@ func (a *Analyzer) runAnalysisWithAgent(ctx context.Context, wctx *Context, agen
 			})
 		}
 		return AnalysisOutput{}, err
+	}
+
+	// Some CLIs write to file but return empty stdout. Prefer the file content in that case.
+	if absOutputPath != "" && (result == nil || strings.TrimSpace(result.Output) == "") {
+		if content, readErr := os.ReadFile(absOutputPath); readErr == nil && strings.TrimSpace(string(content)) != "" {
+			if result == nil {
+				result = &core.ExecuteResult{}
+			}
+			result.Output = string(content)
+			if result.Model == "" {
+				result.Model = model
+			}
+			wctx.Logger.Info("file enforcement: using output file content (stdout empty)",
+				"agent", agentName, "path", absOutputPath, "size", len(content))
+		}
+	}
+
+	// Quality gate: reject outputs that look like intermediate agent narration
+	// rather than a real analysis.
+	if result != nil && result.Output != "" && !isValidAnalysisOutput(result.Output) {
+		wctx.Logger.Warn("V1 output rejected: does not look like structured analysis",
+			"agent", agentName,
+			"size", len(result.Output),
+			"newlines", strings.Count(result.Output, "\n"),
+		)
+		return AnalysisOutput{}, fmt.Errorf("agent %s produced unstructured output (%d bytes, no markdown headers)", agentName, len(result.Output))
 	}
 
 	// Emit completed event
@@ -1051,13 +1354,13 @@ func (a *Analyzer) runAnalysisWithAgent(ctx context.Context, wctx *Context, agen
 
 	// Ensure output file exists (file enforcement fallback)
 	// If LLM didn't write to the file, write stdout as fallback
-	if outputFilePath != "" && result != nil && result.Output != "" {
+	if absOutputPath != "" && result != nil && result.Output != "" {
 		enforcement := NewFileEnforcement(wctx.Logger)
-		createdByLLM, verifyErr := enforcement.VerifyOrWriteFallback(outputFilePath, result.Output)
+		createdByLLM, verifyErr := enforcement.VerifyOrWriteFallback(absOutputPath, result.Output)
 		if verifyErr != nil {
-			wctx.Logger.Warn("file enforcement failed", "path", outputFilePath, "error", verifyErr)
+			wctx.Logger.Warn("file enforcement failed", "path", absOutputPath, "error", verifyErr)
 		} else if !createdByLLM {
-			wctx.Logger.Debug("created fallback file from stdout", "path", outputFilePath)
+			wctx.Logger.Debug("created fallback file from stdout", "path", absOutputPath)
 		}
 	}
 
@@ -1067,8 +1370,8 @@ func (a *Analyzer) runAnalysisWithAgent(ctx context.Context, wctx *Context, agen
 	output := parseAnalysisOutputWithMetrics(outputName, model, result, durationMS)
 
 	// Create checkpoint for future resume with full metrics
-	if outputFilePath != "" {
-		if cpErr := createAnalysisCheckpoint(wctx, agentName, model, 1, outputFilePath, output, promptHash); cpErr != nil {
+	if absOutputPath != "" {
+		if cpErr := createAnalysisCheckpoint(wctx, agentName, model, 1, absOutputPath, output, promptHash); cpErr != nil {
 			wctx.Logger.Warn("failed to create analysis checkpoint", "agent", agentName, "error", cpErr)
 		}
 	}
@@ -1112,6 +1415,15 @@ func (a *Analyzer) consolidateAnalysis(ctx context.Context, wctx *Context, outpu
 	var outputFilePath string
 	if wctx.Report != nil && wctx.Report.IsEnabled() {
 		outputFilePath = wctx.Report.ConsolidatedAnalysisPath()
+	}
+	absOutputPath := wctx.ResolveFilePath(outputFilePath)
+
+	// Ensure output directory exists before execution (file enforcement)
+	if absOutputPath != "" {
+		enforcement := NewFileEnforcement(wctx.Logger)
+		if err := enforcement.EnsureDirectory(absOutputPath); err != nil {
+			wctx.Logger.Warn("failed to ensure output directory", "path", absOutputPath, "error", err)
+		}
 	}
 
 	// Build summaries of analyses to avoid context overflow in synthesis
@@ -1163,22 +1475,72 @@ func (a *Analyzer) consolidateAnalysis(ctx context.Context, wctx *Context, outpu
 		})
 	}
 
+	// Launch output file watchdog for recovery/reaping if agent hangs after writing
+	var watchdog *OutputWatchdog
+	if absOutputPath != "" {
+		watchdog = NewOutputWatchdog(absOutputPath, DefaultWatchdogConfig(), wctx.Logger)
+		watchdog.Start()
+		defer watchdog.Stop()
+	}
+
 	// Execute with retry
 	var result *core.ExecuteResult
 	err = wctx.Retry.Execute(func() error {
 		if ctrlErr := wctx.CheckControl(ctx); ctrlErr != nil {
 			return ctrlErr
 		}
+		// Pre-retry: if output file already exists with substantial content, use it.
+		// This recovers from the case where the agent wrote output but cmd.Wait() failed.
+		if absOutputPath != "" {
+			if info, statErr := os.Stat(absOutputPath); statErr == nil && info.Size() > 1024 {
+				content, readErr := os.ReadFile(absOutputPath)
+				if readErr == nil {
+					wctx.Logger.Info("recovered synthesis output from file written by previous attempt",
+						"agent", synthesizerAgent, "path", absOutputPath, "size", len(content))
+					result = &core.ExecuteResult{Output: string(content), Model: model}
+					return nil
+				}
+			}
+		}
+
+		attemptCtx, cancelAttempt := context.WithCancelCause(ctx)
+		defer cancelAttempt(nil)
+
+		stableOutputCh := make(chan string, 1)
+		if watchdog != nil {
+			go func() {
+				select {
+				case content := <-watchdog.StableCh():
+					select {
+					case stableOutputCh <- content:
+					default:
+					}
+					cancelAttempt(core.ErrExecution(watchdogStableOutputCode, "output file stabilized; reaping hung agent process"))
+				case <-attemptCtx.Done():
+				}
+			}()
+		}
+
 		var execErr error
-		result, execErr = agent.Execute(ctx, core.ExecuteOptions{
+		result, execErr = agent.Execute(attemptCtx, core.ExecuteOptions{
 			Prompt:  prompt,
 			Format:  core.OutputFormatText,
 			Model:   model,
 			Timeout: wctx.Config.PhaseTimeouts.Analyze,
-			Sandbox: wctx.Config.Sandbox,
 			Phase:   core.PhaseAnalyze,
 			WorkDir: wctx.ProjectRoot,
 		})
+		// If execution was cancelled after the output file stabilized, treat it as success.
+		if execErr != nil {
+			select {
+			case content := <-stableOutputCh:
+				wctx.Logger.Info("watchdog reap: using stable synthesis output file",
+					"agent", synthesizerAgent, "path", absOutputPath, "size", len(content))
+				result = &core.ExecuteResult{Output: content, Model: model}
+				return nil
+			default:
+			}
+		}
 		return execErr
 	})
 
@@ -1201,6 +1563,32 @@ func (a *Analyzer) consolidateAnalysis(ctx context.Context, wctx *Context, outpu
 
 	durationMS := time.Since(startTime).Milliseconds()
 
+	// Some CLIs write to file but return empty stdout. Prefer the file content in that case.
+	if absOutputPath != "" && (result == nil || strings.TrimSpace(result.Output) == "") {
+		if content, readErr := os.ReadFile(absOutputPath); readErr == nil && strings.TrimSpace(string(content)) != "" {
+			if result == nil {
+				result = &core.ExecuteResult{}
+			}
+			result.Output = string(content)
+			if result.Model == "" {
+				result.Model = model
+			}
+			wctx.Logger.Info("file enforcement: using synthesis output file content (stdout empty)",
+				"agent", synthesizerAgent, "path", absOutputPath, "size", len(content))
+		}
+	}
+
+	// Ensure output file exists (file enforcement fallback)
+	if absOutputPath != "" && result != nil && result.Output != "" {
+		enforcement := NewFileEnforcement(wctx.Logger)
+		createdByLLM, verifyErr := enforcement.VerifyOrWriteFallback(absOutputPath, result.Output)
+		if verifyErr != nil {
+			wctx.Logger.Warn("file enforcement failed", "path", absOutputPath, "error", verifyErr)
+		} else if !createdByLLM {
+			wctx.Logger.Debug("created fallback file from stdout", "path", absOutputPath)
+		}
+	}
+
 	// Emit completed event
 	if wctx.Output != nil {
 		wctx.Output.AgentEvent("completed", synthesizerAgent, "Synthesis completed", map[string]interface{}{
@@ -1219,6 +1607,13 @@ func (a *Analyzer) consolidateAnalysis(ctx context.Context, wctx *Context, outpu
 	)
 
 	// Store the LLM-synthesized analysis as checkpoint
+	if strings.TrimSpace(result.Output) == "" {
+		wctx.Logger.Warn("synthesis returned empty output, using fallback concatenation",
+			"agent", synthesizerAgent,
+			"model", model,
+		)
+		return a.synthesizeAnalysisFallback(wctx, outputs)
+	}
 	return wctx.Checkpoint.CreateCheckpoint(wctx.State, "consolidated_analysis", map[string]interface{}{
 		"content":     result.Output,
 		"agent_count": len(outputs),
@@ -1497,8 +1892,8 @@ func (a *Analyzer) continueFromCheckpoint(ctx context.Context, wctx *Context, sa
 			wctx.Output.Log("info", "analyzer", fmt.Sprintf("Round %d: Running moderator evaluation (resumed)", round))
 		}
 
-		// Run moderator evaluation with retry and fallback support
-		evalResult, evalErr := a.runModeratorWithFallback(ctx, wctx, round, currentOutputs)
+		// Run moderator evaluation with retry support
+		evalResult, evalErr := a.runModeratorWithRetry(ctx, wctx, round, currentOutputs)
 		if evalErr != nil {
 			return fmt.Errorf("moderator evaluation round %d: %w", round, evalErr)
 		}
@@ -1631,151 +2026,138 @@ func isTransientModeratorError(err error) bool {
 		core.IsRetryable(err)
 }
 
-// runModeratorWithFallback runs the moderator evaluation with retry and fallback support.
-// If the primary moderator agent fails, it tries fallback agents configured with moderate phase.
-func (a *Analyzer) runModeratorWithFallback(ctx context.Context, wctx *Context, round int, outputs []AnalysisOutput) (*ModeratorEvaluationResult, error) {
-	// Build list of fallback agents for moderator role
-	fallbackAgents := a.buildModeratorFallbackChain(wctx)
+// runModeratorWithRetry runs the moderator evaluation with retry support.
+// Tries the configured moderator agent first (up to maxRetries for transient errors).
+// If the primary fails completely, falls back to ONE other agent that has the
+// "moderate" phase enabled in the project config.
+func (a *Analyzer) runModeratorWithRetry(ctx context.Context, wctx *Context, round int, outputs []AnalysisOutput) (*ModeratorEvaluationResult, error) {
+	primaryAgent := a.moderator.GetConfig().Agent
+	const maxRetries = 2
 
-	var lastErr error
-	var triedAgents []string
-	var lastAgent string
-	var lastAttempt int
-	globalAttempt := 0 // Global attempt counter for unique file naming
-
-	for agentIdx, agentName := range fallbackAgents {
-		isPrimary := agentIdx == 0
-		lastAgent = agentName
-
-		// Try up to 2 attempts with each agent
-		for attempt := 1; attempt <= 2; attempt++ {
-			globalAttempt++ // Increment global counter for each attempt
-			lastAttempt = globalAttempt
-
-			if !isPrimary || attempt > 1 {
-				wctx.Logger.Info("trying moderator evaluation",
-					"round", round,
-					"agent", agentName,
-					"is_fallback", !isPrimary,
-					"attempt", attempt,
-					"global_attempt", globalAttempt,
-				)
-				if wctx.Output != nil {
-					if isPrimary {
-						wctx.Output.Log("info", "analyzer",
-							fmt.Sprintf("Round %d: Retrying moderator with %s (attempt %d)", round, agentName, attempt))
-					} else {
-						wctx.Output.Log("info", "analyzer",
-							fmt.Sprintf("Round %d: Trying fallback moderator %s (attempt %d)", round, agentName, globalAttempt))
-					}
-				}
-			}
-
-			// Use EvaluateWithAgent to allow fallback to alternative agents
-			// Pass globalAttempt for unique file naming per attempt
-			evalResult, evalErr := a.moderator.EvaluateWithAgent(ctx, wctx, round, globalAttempt, outputs, agentName)
-			if evalErr == nil {
-				// Success - log if we used a fallback
-				if !isPrimary {
-					wctx.Logger.Info("fallback moderator succeeded",
-						"round", round,
-						"agent", agentName,
-						"previous_failures", triedAgents,
-					)
-					if wctx.Output != nil {
-						wctx.Output.Log("success", "analyzer",
-							fmt.Sprintf("Round %d: Fallback moderator %s succeeded (after trying: %v)", round, agentName, triedAgents))
-					}
-				}
-				return evalResult, nil
-			}
-
-			lastErr = evalErr
-
-			// Log the error with detailed context
-			wctx.Logger.Warn("moderator evaluation failed",
-				"round", round,
-				"agent", agentName,
-				"attempt", attempt,
-				"is_fallback", !isPrimary,
-				"error", evalErr,
-				"is_transient", isTransientModeratorError(evalErr),
-				"is_validation", IsModeratorValidationError(evalErr),
-			)
-
-			// Decide whether to retry same agent or move to fallback
-			if attempt < 2 && isTransientModeratorError(evalErr) {
-				if wctx.Output != nil {
-					wctx.Output.Log("warn", "analyzer",
-						fmt.Sprintf("Round %d: %s failed (%v), retrying in 30s...", round, agentName, evalErr))
-				}
-				time.Sleep(30 * time.Second)
-				continue
-			}
-
-			// If validation error or non-transient, move to next agent
-			break
-		}
-
-		// Track that we tried this agent
-		triedAgents = append(triedAgents, agentName)
+	// Try the configured moderator agent
+	primaryErr := a.tryModeratorAgent(ctx, wctx, round, outputs, primaryAgent, maxRetries, 1)
+	if primaryErr.result != nil {
+		return primaryErr.result, nil
 	}
 
-	// All agents failed - create detailed error checkpoint for debugging
+	// Primary failed — try ONE fallback agent with moderate phase enabled
+	fallbackAgent := a.pickModeratorFallback(wctx, primaryAgent)
+	if fallbackAgent != "" {
+		wctx.Logger.Info("primary moderator failed, trying fallback",
+			"round", round,
+			"primary", primaryAgent,
+			"fallback", fallbackAgent,
+			"primary_error", primaryErr.err,
+		)
+		if wctx.Output != nil {
+			wctx.Output.Log("info", "analyzer",
+				fmt.Sprintf("Round %d: Primary moderator %s failed, trying fallback %s", round, primaryAgent, fallbackAgent))
+		}
+
+		// Offset attempt numbers so file naming stays unique
+		fallbackResult := a.tryModeratorAgent(ctx, wctx, round, outputs, fallbackAgent, maxRetries, maxRetries+1)
+		if fallbackResult.result != nil {
+			if wctx.Output != nil {
+				wctx.Output.Log("success", "analyzer",
+					fmt.Sprintf("Round %d: Fallback moderator %s succeeded", round, fallbackAgent))
+			}
+			return fallbackResult.result, nil
+		}
+	}
+
+	// All attempts exhausted
+	lastErr := primaryErr.err
+	lastAgent := primaryAgent
+	if fallbackAgent != "" {
+		lastAgent = fallbackAgent
+	}
+
 	if wctx.Checkpoint != nil {
+		tried := []string{primaryAgent}
+		if fallbackAgent != "" {
+			tried = append(tried, fallbackAgent)
+		}
 		_ = wctx.Checkpoint.ErrorCheckpointWithContext(wctx.State, lastErr, service.ErrorCheckpointDetails{
 			Agent:             lastAgent,
 			Round:             round,
-			Attempt:           lastAttempt,
 			IsTransient:       isTransientModeratorError(lastErr),
 			IsValidationError: IsModeratorValidationError(lastErr),
-			FallbacksTried:    triedAgents,
-			Extra: map[string]string{
-				"total_agents":  fmt.Sprintf("%d", len(fallbackAgents)),
-				"outputs_count": fmt.Sprintf("%d", len(outputs)),
-			},
+			FallbacksTried:    tried,
 		})
 	}
 
-	// All agents failed
-	return nil, fmt.Errorf("all moderator agents failed (tried %d agents: %v, last error: %w)", len(fallbackAgents), triedAgents, lastErr)
+	if fallbackAgent != "" {
+		return nil, fmt.Errorf("moderator agents failed (primary %s, fallback %s): %w", primaryAgent, fallbackAgent, lastErr)
+	}
+	return nil, fmt.Errorf("moderator agent %s failed after %d attempts: %w", primaryAgent, maxRetries, lastErr)
 }
 
-// buildModeratorFallbackChain builds a list of agents to try for moderator evaluation.
-// Primary is the configured moderator agent, fallbacks are other agents with moderate phase enabled.
-func (a *Analyzer) buildModeratorFallbackChain(wctx *Context) []string {
-	primaryAgent := a.moderator.GetConfig().Agent
-	agents := []string{primaryAgent}
+// moderatorAttemptResult holds the outcome of trying a moderator agent.
+type moderatorAttemptResult struct {
+	result *ModeratorEvaluationResult
+	err    error
+}
 
-	// Strict allowlist: fallbacks must be explicitly enabled for the "moderate" role
-	// in the per-project phase configuration.
-	fallbackCandidates := make([]string, 0)
+// tryModeratorAgent tries a single agent up to maxRetries times, retrying only on transient errors.
+// attemptOffset is added to the attempt number for unique file naming across primary/fallback.
+func (a *Analyzer) tryModeratorAgent(ctx context.Context, wctx *Context, round int, outputs []AnalysisOutput, agentName string, maxRetries int, attemptOffset int) moderatorAttemptResult {
+	var lastErr error
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		if attempt > 1 {
+			wctx.Logger.Info("retrying moderator evaluation",
+				"round", round,
+				"agent", agentName,
+				"attempt", attempt,
+			)
+			if wctx.Output != nil {
+				wctx.Output.Log("info", "analyzer",
+					fmt.Sprintf("Round %d: Retrying moderator %s (attempt %d/%d)", round, agentName, attempt, maxRetries))
+			}
+			time.Sleep(30 * time.Second)
+		}
+
+		globalAttempt := attemptOffset + attempt - 1
+		evalResult, evalErr := a.moderator.EvaluateWithAgent(ctx, wctx, round, globalAttempt, outputs, agentName)
+		if evalErr == nil {
+			return moderatorAttemptResult{result: evalResult}
+		}
+
+		lastErr = evalErr
+		wctx.Logger.Warn("moderator evaluation failed",
+			"round", round,
+			"agent", agentName,
+			"attempt", attempt,
+			"error", evalErr,
+			"is_transient", isTransientModeratorError(evalErr),
+		)
+
+		if !isTransientModeratorError(evalErr) {
+			break
+		}
+	}
+	return moderatorAttemptResult{err: lastErr}
+}
+
+// pickModeratorFallback returns ONE fallback agent that has the "moderate" phase
+// enabled in the project config, excluding the primary. Returns "" if none available.
+func (a *Analyzer) pickModeratorFallback(wctx *Context, primaryAgent string) string {
+	var candidates []string
 	for agentName, phases := range wctx.Config.ProjectAgentPhases {
 		if agentName == primaryAgent {
 			continue
 		}
 		for _, p := range phases {
 			if p == "moderate" {
-				fallbackCandidates = append(fallbackCandidates, agentName)
+				candidates = append(candidates, agentName)
 				break
 			}
 		}
 	}
-	sort.Strings(fallbackCandidates) // Stable, predictable ordering
-	agents = append(agents, fallbackCandidates...)
-
-	// Limit to max 3 fallback agents to avoid infinite retries
-	if len(agents) > 4 {
-		agents = agents[:4]
+	if len(candidates) == 0 {
+		return ""
 	}
-
-	wctx.Logger.Debug("moderator fallback chain built",
-		"primary", primaryAgent,
-		"total_agents", len(agents),
-		"chain", agents,
-	)
-
-	return agents
+	sort.Strings(candidates)
+	return candidates[0]
 }
 
 // compactAnalysisOutput is a compact representation of AnalysisOutput for checkpoint storage.

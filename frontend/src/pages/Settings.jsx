@@ -49,7 +49,7 @@ const TABS = [
     group: 'Project',
     icon: WorkflowIcon, 
     component: WorkflowTab,
-    keywords: ['timeout', 'retry', 'dry run', 'sandbox', 'state', 'database', 'backend'] 
+    keywords: ['timeout', 'retry', 'dry run', 'state', 'database', 'backend'] 
   },
   { 
     id: 'agents', 

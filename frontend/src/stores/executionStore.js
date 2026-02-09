@@ -90,6 +90,7 @@ function mergeTimeline(existing, incoming) {
 }
 
 function updateAgentStatusFromEvent(existing, eventKind, payload) {
+  if (eventKind === 'chunk') return existing || {};
   const ts = toIsoTimestamp(payload?.timestamp) || toIsoTimestamp(payload?.ts) || null;
   const data = payload?.data;
 
@@ -151,8 +152,32 @@ function entryFromSSE(eventType, data, executionId) {
   if (eventType === 'workflow_state_updated') return null;
   if (eventType === 'task_progress') return null;
 
+  if (eventType === 'config_loaded') {
+    const scope = safeStr(data?.config_scope) || 'unknown';
+    const mode = safeStr(data?.config_mode) || 'unknown';
+    const path = safeStr(data?.config_path);
+    const snapshot = safeStr(data?.snapshot_path);
+    const usedExecId = data?.execution_id ?? executionId;
+
+    const parts = [];
+    if (path) parts.push(path);
+    if (snapshot) parts.push(`snapshot: ${snapshot}`);
+    if (data?.execution_id != null) parts.push(`exec ${safeStr(data.execution_id)}`);
+
+    return {
+      kind: 'workflow',
+      event: eventType,
+      title: `Config loaded · ${scope}/${mode}`,
+      message: parts.join(' · '),
+      ts,
+      data,
+      executionId: usedExecId,
+    };
+  }
+
   if (eventType === 'agent_event') {
     const eventKind = safeStr(data?.event_kind) || 'progress';
+    if (eventKind === 'chunk') return null;
     const agent = safeStr(data?.agent) || 'agent';
     const message = safeStr(data?.message);
     return {
@@ -182,6 +207,21 @@ function entryFromSSE(eventType, data, executionId) {
       event: eventType,
       phase,
       title,
+      message,
+      ts,
+      data,
+      executionId,
+    };
+  }
+
+  if (eventType === 'log') {
+    const level = safeStr(data?.level) || 'info';
+    const message = safeStr(data?.message);
+    if (!message) return null;
+    return {
+      kind: 'log',
+      event: eventType,
+      title: `Log [${level}]`,
       message,
       ts,
       data,
@@ -325,8 +365,12 @@ const useExecutionStore = create(
 
         const persisted = Array.isArray(workflow.agent_events) ? workflow.agent_events : [];
         if (persisted.length > 0) {
+          // NOTE: we intentionally omit the backend-assigned `id` so that
+          // normalizeTimelineEntry computes a synthetic ID from the entry
+          // content.  This ensures hydrated events merge correctly with
+          // events that arrived earlier via the real-time SSE path (which
+          // also use synthetic IDs).
           const persistedEntries = persisted.map((e) => ({
-            id: e.id,
             kind: 'agent',
             event: e.event_kind,
             agent: e.agent,
@@ -369,4 +413,3 @@ const useExecutionStore = create(
 );
 
 export default useExecutionStore;
-
