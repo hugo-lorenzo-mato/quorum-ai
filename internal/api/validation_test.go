@@ -15,6 +15,7 @@ import (
 )
 
 func TestConvertValidationErrors(t *testing.T) {
+	t.Parallel()
 	errs := config.ValidationErrors{
 		{Field: "workflow.max_retries", Value: 15, Message: "must be between 0 and 10"},
 		{Field: "log.level", Value: "verbose", Message: "must be one of: debug, info, warn, error"},
@@ -30,6 +31,7 @@ func TestConvertValidationErrors(t *testing.T) {
 }
 
 func TestInferErrorCode(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		message string
 		want    string
@@ -57,6 +59,7 @@ func TestInferErrorCode(t *testing.T) {
 }
 
 func TestHandleValidateConfig_ValidConfig(t *testing.T) {
+	t.Parallel()
 	stateManager := newMockStateManager()
 	eventBus := events.New(100)
 	server := NewServer(stateManager, eventBus)
@@ -87,6 +90,7 @@ func TestHandleValidateConfig_ValidConfig(t *testing.T) {
 }
 
 func TestHandleValidateConfig_InvalidJSON(t *testing.T) {
+	t.Parallel()
 	stateManager := newMockStateManager()
 	eventBus := events.New(100)
 	server := NewServer(stateManager, eventBus)
@@ -101,6 +105,7 @@ func TestHandleValidateConfig_InvalidJSON(t *testing.T) {
 }
 
 func TestHandleValidateConfig_InvalidLogLevel(t *testing.T) {
+	t.Parallel()
 	stateManager := newMockStateManager()
 	eventBus := events.New(100)
 	server := NewServer(stateManager, eventBus)
@@ -138,6 +143,7 @@ func TestHandleValidateConfig_InvalidLogLevel(t *testing.T) {
 }
 
 func TestHandleUpdateConfig_ValidationErrors(t *testing.T) {
+	t.Parallel()
 	stateManager := newMockStateManager()
 	eventBus := events.New(100)
 	server := NewServer(stateManager, eventBus)
@@ -164,6 +170,7 @@ func TestHandleUpdateConfig_ValidationErrors(t *testing.T) {
 }
 
 func TestHandleUpdateConfig_ValidUpdate(t *testing.T) {
+	t.Parallel()
 	// Create temp directory and change to it for test isolation
 	tmpDir := t.TempDir()
 	origDir, err := os.Getwd()
@@ -196,6 +203,7 @@ func TestHandleUpdateConfig_ValidUpdate(t *testing.T) {
 }
 
 func TestHandleUpdateConfig_InvalidIssuesProvider(t *testing.T) {
+	t.Parallel()
 	stateManager := newMockStateManager()
 	eventBus := events.New(100)
 	server := NewServer(stateManager, eventBus)
@@ -227,6 +235,7 @@ func TestHandleUpdateConfig_InvalidIssuesProvider(t *testing.T) {
 }
 
 func TestValidationErrorCodes(t *testing.T) {
+	t.Parallel()
 	// Test that all error codes are defined correctly
 	codes := []string{
 		ErrCodeRequired,
@@ -247,6 +256,7 @@ func TestValidationErrorCodes(t *testing.T) {
 }
 
 func TestValidateBlueprint(t *testing.T) {
+	t.Parallel()
 	// Setup agents config with enabled and disabled agents
 	agents := config.AgentsConfig{
 		Claude: config.AgentConfig{Enabled: true},
@@ -434,6 +444,7 @@ func TestValidateBlueprint(t *testing.T) {
 }
 
 func TestAgentsConfig_EnabledAgentNames(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		agents   config.AgentsConfig

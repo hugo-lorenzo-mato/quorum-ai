@@ -257,6 +257,7 @@ func (a *mockAtomicStateContext) IsWorkflowRunning(id core.WorkflowID) (bool, er
 }
 
 func TestHealthEndpoint(t *testing.T) {
+	t.Parallel()
 	sm := newMockStateManager()
 	eb := events.New(100)
 	srv := NewServer(sm, eb)
@@ -281,6 +282,7 @@ func TestHealthEndpoint(t *testing.T) {
 }
 
 func TestListWorkflowsEmpty(t *testing.T) {
+	t.Parallel()
 	sm := newMockStateManager()
 	eb := events.New(100)
 	srv := NewServer(sm, eb)
@@ -305,6 +307,7 @@ func TestListWorkflowsEmpty(t *testing.T) {
 }
 
 func TestCreateWorkflow(t *testing.T) {
+	t.Parallel()
 	sm := newMockStateManager()
 	eb := events.New(100)
 	srv := NewServer(sm, eb)
@@ -343,6 +346,7 @@ func TestCreateWorkflow(t *testing.T) {
 }
 
 func TestCreateWorkflowMissingPrompt(t *testing.T) {
+	t.Parallel()
 	sm := newMockStateManager()
 	eb := events.New(100)
 	srv := NewServer(sm, eb)
@@ -362,6 +366,7 @@ func TestCreateWorkflowMissingPrompt(t *testing.T) {
 }
 
 func TestGetWorkflow(t *testing.T) {
+	t.Parallel()
 	sm := newMockStateManager()
 	eb := events.New(100)
 	srv := NewServer(sm, eb)
@@ -409,6 +414,7 @@ func TestGetWorkflow(t *testing.T) {
 }
 
 func TestGetWorkflowNotFound(t *testing.T) {
+	t.Parallel()
 	sm := newMockStateManager()
 	eb := events.New(100)
 	srv := NewServer(sm, eb)
@@ -424,6 +430,7 @@ func TestGetWorkflowNotFound(t *testing.T) {
 }
 
 func TestListTasks(t *testing.T) {
+	t.Parallel()
 	sm := newMockStateManager()
 	eb := events.New(100)
 	srv := NewServer(sm, eb)
@@ -480,6 +487,7 @@ func TestListTasks(t *testing.T) {
 }
 
 func TestGetTask(t *testing.T) {
+	t.Parallel()
 	sm := newMockStateManager()
 	eb := events.New(100)
 	srv := NewServer(sm, eb)
@@ -537,6 +545,7 @@ func TestGetTask(t *testing.T) {
 }
 
 func TestGetTaskNotFound(t *testing.T) {
+	t.Parallel()
 	sm := newMockStateManager()
 	eb := events.New(100)
 	srv := NewServer(sm, eb)
@@ -570,6 +579,7 @@ func TestGetTaskNotFound(t *testing.T) {
 }
 
 func TestActivateWorkflow(t *testing.T) {
+	t.Parallel()
 	sm := newMockStateManager()
 	eb := events.New(100)
 	srv := NewServer(sm, eb)
@@ -631,6 +641,7 @@ func TestActivateWorkflow(t *testing.T) {
 }
 
 func TestUpdateWorkflow(t *testing.T) {
+	t.Parallel()
 	sm := newMockStateManager()
 	eb := events.New(100)
 	srv := NewServer(sm, eb)
@@ -685,6 +696,7 @@ func TestUpdateWorkflow(t *testing.T) {
 }
 
 func TestGetActiveWorkflow(t *testing.T) {
+	t.Parallel()
 	sm := newMockStateManager()
 	eb := events.New(100)
 	srv := NewServer(sm, eb)
@@ -732,6 +744,7 @@ func TestGetActiveWorkflow(t *testing.T) {
 }
 
 func TestGetActiveWorkflowNone(t *testing.T) {
+	t.Parallel()
 	sm := newMockStateManager()
 	eb := events.New(100)
 	srv := NewServer(sm, eb)

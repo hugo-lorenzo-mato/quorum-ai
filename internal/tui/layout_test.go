@@ -8,6 +8,7 @@ import (
 )
 
 func TestLayout_Right(t *testing.T) {
+	t.Parallel()
 	layout := tui.NewLayout(80, 24)
 	result := layout.Right("test")
 	if len(result) == 0 {
@@ -16,6 +17,7 @@ func TestLayout_Right(t *testing.T) {
 }
 
 func TestLayout_Box(t *testing.T) {
+	t.Parallel()
 	layout := tui.NewLayout(80, 24)
 
 	// Test with title
@@ -39,6 +41,7 @@ func TestLayout_Box(t *testing.T) {
 }
 
 func TestLayout_Columns_Empty(t *testing.T) {
+	t.Parallel()
 	layout := tui.NewLayout(80, 24)
 	result := layout.Columns()
 	if result != "" {
@@ -47,6 +50,7 @@ func TestLayout_Columns_Empty(t *testing.T) {
 }
 
 func TestLayout_Columns_Single(t *testing.T) {
+	t.Parallel()
 	layout := tui.NewLayout(80, 24)
 	result := layout.Columns("single")
 	if len(result) == 0 {
@@ -55,6 +59,7 @@ func TestLayout_Columns_Single(t *testing.T) {
 }
 
 func TestSpacer(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		lines int
 		want  int
@@ -73,6 +78,7 @@ func TestSpacer(t *testing.T) {
 }
 
 func TestBadge(t *testing.T) {
+	t.Parallel()
 	style := lipgloss.NewStyle().Bold(true)
 	result := tui.Badge("test", style)
 	if len(result) == 0 {
@@ -81,6 +87,7 @@ func TestBadge(t *testing.T) {
 }
 
 func TestTruncate_EdgeCases(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name  string
 		input string
@@ -107,6 +114,7 @@ func TestTruncate_EdgeCases(t *testing.T) {
 }
 
 func TestWrap_EdgeCases(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name  string
 		input string
@@ -128,6 +136,7 @@ func TestWrap_EdgeCases(t *testing.T) {
 }
 
 func TestDivider_DefaultChar(t *testing.T) {
+	t.Parallel()
 	result := tui.Divider(10, "")
 	if len(result) == 0 {
 		t.Error("Divider() with empty char returned empty string")
@@ -135,6 +144,7 @@ func TestDivider_DefaultChar(t *testing.T) {
 }
 
 func TestTable_EdgeCases(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		headers []string

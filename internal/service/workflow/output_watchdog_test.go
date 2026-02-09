@@ -14,6 +14,7 @@ func (nopLogger) Info(_ string, _ ...interface{})  {}
 func (nopLogger) Warn(_ string, _ ...interface{})  {}
 
 func TestOutputWatchdog_FileDoesNotExist(t *testing.T) {
+	t.Parallel()
 	cfg := OutputWatchdogConfig{
 		PollInterval:    10 * time.Millisecond,
 		StabilityWindow: 30 * time.Millisecond,
@@ -32,6 +33,7 @@ func TestOutputWatchdog_FileDoesNotExist(t *testing.T) {
 }
 
 func TestOutputWatchdog_FileTooSmall(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "output.md")
 	if err := os.WriteFile(path, []byte("tiny"), 0o644); err != nil {
@@ -56,6 +58,7 @@ func TestOutputWatchdog_FileTooSmall(t *testing.T) {
 }
 
 func TestOutputWatchdog_GrowingFileThenStable(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "output.md")
 
@@ -95,6 +98,7 @@ func TestOutputWatchdog_GrowingFileThenStable(t *testing.T) {
 }
 
 func TestOutputWatchdog_StableFile(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "output.md")
 
@@ -126,6 +130,7 @@ func TestOutputWatchdog_StableFile(t *testing.T) {
 }
 
 func TestOutputWatchdog_StopClean(t *testing.T) {
+	t.Parallel()
 	cfg := OutputWatchdogConfig{
 		PollInterval:    10 * time.Millisecond,
 		StabilityWindow: 30 * time.Millisecond,

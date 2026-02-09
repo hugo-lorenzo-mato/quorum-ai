@@ -109,6 +109,7 @@ func (m *mockResilienceCheckpoint) CreateCheckpoint(_ *core.WorkflowState, _ str
 // deactivates the workflow to prevent ghost workflows.
 // Regression: wf-20260130-030319-atstd remained active after failing.
 func TestRunner_HandleError_DeactivatesWorkflow(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	stateManager := newMockResilienceStateManager()
 	checkpoint := &mockResilienceCheckpoint{}
@@ -161,6 +162,7 @@ func TestRunner_HandleError_DeactivatesWorkflow(t *testing.T) {
 // TestRunner_HandleError_WritesErrorFile verifies that handleError writes
 // error details to the report directory.
 func TestRunner_HandleError_WritesErrorFile(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	tmpDir := t.TempDir()
 	stateManager := newMockResilienceStateManager()
@@ -232,6 +234,7 @@ func TestRunner_HandleError_WritesErrorFile(t *testing.T) {
 // Regression: wf-20260130-030319-atstd had no report directory because it failed
 // before Initialize() was called.
 func TestRunner_CreateContext_InitializesReportDirectory(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 
 	runner := &Runner{
@@ -285,6 +288,7 @@ func TestRunner_CreateContext_InitializesReportDirectory(t *testing.T) {
 // TestRunner_CreateContext_ReusesExistingReportPath verifies that createContext
 // reuses the existing report path when resuming a workflow.
 func TestRunner_CreateContext_ReusesExistingReportPath(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	existingPath := filepath.Join(tmpDir, "wf-existing-path")
 
@@ -334,6 +338,7 @@ func TestRunner_CreateContext_ReusesExistingReportPath(t *testing.T) {
 // TestRunner_RunWithState_ValidationFailure_DeactivatesWorkflow verifies that
 // RunWithState's markFailed helper properly deactivates the workflow.
 func TestRunner_RunWithState_ValidationFailure_DeactivatesWorkflow(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	stateManager := newMockResilienceStateManager()
 

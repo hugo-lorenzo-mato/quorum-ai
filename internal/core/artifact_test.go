@@ -3,6 +3,7 @@ package core
 import "testing"
 
 func TestArtifact_Builder(t *testing.T) {
+	t.Parallel()
 	artifact := NewArtifact("a1", ArtifactTypeAnalysis, "t1")
 	if artifact.ID != "a1" || artifact.Type != ArtifactTypeAnalysis || artifact.TaskID != "t1" {
 		t.Fatalf("unexpected artifact fields: %+v", artifact)
@@ -30,6 +31,7 @@ func TestArtifact_Builder(t *testing.T) {
 }
 
 func TestArtifact_Validate(t *testing.T) {
+	t.Parallel()
 	artifact := NewArtifact("a1", ArtifactTypeAnalysis, "t1")
 	if err := artifact.Validate(); err == nil {
 		t.Fatalf("expected error when content and path are empty")
@@ -52,6 +54,7 @@ func TestArtifact_Validate(t *testing.T) {
 }
 
 func TestArtifactType_Valid(t *testing.T) {
+	t.Parallel()
 	for _, typ := range AllArtifactTypes() {
 		if !ValidArtifactType(typ) {
 			t.Fatalf("expected valid type %s", typ)

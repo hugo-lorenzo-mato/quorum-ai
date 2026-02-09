@@ -3,6 +3,7 @@ package core
 import "testing"
 
 func TestNormalizeReasoningEffortForModel(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name   string
 		model  string
@@ -82,6 +83,7 @@ func TestNormalizeReasoningEffortForModel(t *testing.T) {
 }
 
 func TestNormalizeClaudeEffort(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name   string
 		model  string
@@ -149,6 +151,7 @@ func TestNormalizeClaudeEffort(t *testing.T) {
 }
 
 func TestSupportedReasoningEffortsForModel(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		model  string
 		expect []string
@@ -176,6 +179,7 @@ func TestSupportedReasoningEffortsForModel(t *testing.T) {
 }
 
 func TestSupportedEffortsForClaudeModel(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		model  string
 		expect []string
@@ -202,6 +206,7 @@ func TestSupportedEffortsForClaudeModel(t *testing.T) {
 }
 
 func TestGetModelReasoningEfforts(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name   string
 		agent  string
@@ -236,6 +241,7 @@ func TestGetModelReasoningEfforts(t *testing.T) {
 }
 
 func TestGetMaxReasoningEffort(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		model  string
 		expect string
@@ -259,6 +265,7 @@ func TestGetMaxReasoningEffort(t *testing.T) {
 }
 
 func TestGetMaxClaudeEffort(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		model  string
 		expect string

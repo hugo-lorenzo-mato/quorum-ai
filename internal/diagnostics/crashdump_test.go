@@ -11,6 +11,7 @@ import (
 )
 
 func TestNewCrashDumpWriter(t *testing.T) {
+	t.Parallel()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	writer := NewCrashDumpWriter(
@@ -36,6 +37,7 @@ func TestNewCrashDumpWriter(t *testing.T) {
 }
 
 func TestCrashDumpWriter_SetCurrentContext(t *testing.T) {
+	t.Parallel()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	writer := NewCrashDumpWriter("", 10, true, false, logger, nil)
@@ -54,6 +56,7 @@ func TestCrashDumpWriter_SetCurrentContext(t *testing.T) {
 }
 
 func TestCrashDumpWriter_SetCurrentCommand(t *testing.T) {
+	t.Parallel()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	writer := NewCrashDumpWriter("", 10, true, false, logger, nil)
@@ -90,6 +93,7 @@ func TestCrashDumpWriter_SetCurrentCommand(t *testing.T) {
 }
 
 func TestCrashDumpWriter_WriteCrashDump(t *testing.T) {
+	t.Parallel()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	// Create temp directory for test
@@ -151,6 +155,7 @@ func TestCrashDumpWriter_WriteCrashDump(t *testing.T) {
 }
 
 func TestCrashDumpWriter_CleanupOldDumps(t *testing.T) {
+	t.Parallel()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	// Create temp directory for test
@@ -192,6 +197,7 @@ func TestCrashDumpWriter_CleanupOldDumps(t *testing.T) {
 }
 
 func TestLoadLatestCrashDump(t *testing.T) {
+	t.Parallel()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	// Create temp directory for test
@@ -217,6 +223,7 @@ func TestLoadLatestCrashDump(t *testing.T) {
 }
 
 func TestLoadLatestCrashDump_NoDumps(t *testing.T) {
+	t.Parallel()
 	tempDir := t.TempDir()
 
 	_, err := LoadLatestCrashDump(tempDir)
@@ -226,6 +233,7 @@ func TestLoadLatestCrashDump_NoDumps(t *testing.T) {
 }
 
 func TestCrashDumpWriter_RedactEnvironment(t *testing.T) {
+	t.Parallel()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	writer := NewCrashDumpWriter("", 10, false, true, logger, nil)
@@ -254,6 +262,7 @@ func TestCrashDumpWriter_RedactEnvironment(t *testing.T) {
 }
 
 func TestCrashDumpWriter_RecoverAndReturn(t *testing.T) {
+	t.Parallel()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	tempDir := t.TempDir()
@@ -295,6 +304,7 @@ func TestCrashDumpWriter_RecoverAndReturn(t *testing.T) {
 }
 
 func TestCrashDumpWriter_WriteCrashDump_WithMonitor(t *testing.T) {
+	t.Parallel()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	tempDir := t.TempDir()

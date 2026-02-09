@@ -10,6 +10,7 @@ import (
 )
 
 func TestNewRunnerFactory(t *testing.T) {
+	t.Parallel()
 	factory := NewRunnerFactory(nil, nil, nil, nil, nil)
 	if factory == nil {
 		t.Error("NewRunnerFactory returned nil")
@@ -17,6 +18,7 @@ func TestNewRunnerFactory(t *testing.T) {
 }
 
 func TestRunnerFactory_CreateRunner_MissingStateManager(t *testing.T) {
+	t.Parallel()
 	eventBus := events.New(10)
 	defer eventBus.Close()
 	factory := NewRunnerFactory(nil, nil, eventBus, nil, nil)
@@ -31,6 +33,7 @@ func TestRunnerFactory_CreateRunner_MissingStateManager(t *testing.T) {
 }
 
 func TestRunnerFactory_CreateRunner_MissingEventBus(t *testing.T) {
+	t.Parallel()
 	factory := NewRunnerFactory(
 		newMockStateManager(),
 		&mockAgentRegistry{},
@@ -49,6 +52,7 @@ func TestRunnerFactory_CreateRunner_MissingEventBus(t *testing.T) {
 }
 
 func TestRunnerFactory_CreateRunner_MissingProjectContext(t *testing.T) {
+	t.Parallel()
 	eventBus := events.New(10)
 	defer eventBus.Close()
 	factory := NewRunnerFactory(

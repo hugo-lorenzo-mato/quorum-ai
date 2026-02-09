@@ -93,6 +93,7 @@ func (m *mockWorkflowWorktreeManager) ListActiveWorkflows(_ context.Context) ([]
 
 // TestContext_UseWorkflowIsolation tests the UseWorkflowIsolation method.
 func TestContext_UseWorkflowIsolation(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		ctx      *Context
@@ -164,6 +165,7 @@ func TestContext_UseWorkflowIsolation(t *testing.T) {
 
 // TestExecutor_setupWorkflowScopedWorktree_Isolation tests worktree creation with isolation enabled.
 func TestExecutor_setupWorkflowScopedWorktree_Isolation(t *testing.T) {
+	t.Parallel()
 	mockWtMgr := &mockWorkflowWorktreeManager{
 		createInfo: &core.WorktreeInfo{
 			Path:   "/tmp/worktrees/wf-001/task-001",
@@ -205,6 +207,7 @@ func TestExecutor_setupWorkflowScopedWorktree_Isolation(t *testing.T) {
 
 // TestExecutor_setupWorkflowScopedWorktree_Fallback tests fallback to legacy worktree.
 func TestExecutor_setupWorkflowScopedWorktree_Fallback(t *testing.T) {
+	t.Parallel()
 	mockLegacyMgr := &mockWorktreeManager{
 		createInfo: &core.WorktreeInfo{
 			Path:   "/tmp/worktrees/task-001",
@@ -234,6 +237,7 @@ func TestExecutor_setupWorkflowScopedWorktree_Fallback(t *testing.T) {
 
 // TestExecutor_setupWorkflowScopedWorktree_NotEnabled tests when useWorktrees is false.
 func TestExecutor_setupWorkflowScopedWorktree_NotEnabled(t *testing.T) {
+	t.Parallel()
 	executor := &Executor{}
 	wctx := &Context{
 		GitIsolation:      &GitIsolationConfig{Enabled: true},
@@ -256,6 +260,7 @@ func TestExecutor_setupWorkflowScopedWorktree_NotEnabled(t *testing.T) {
 
 // TestExecutor_mergeTaskToWorkflow_Success tests successful merge.
 func TestExecutor_mergeTaskToWorkflow_Success(t *testing.T) {
+	t.Parallel()
 	mockWtMgr := &mockWorkflowWorktreeManager{}
 
 	executor := &Executor{}
@@ -285,6 +290,7 @@ func TestExecutor_mergeTaskToWorkflow_Success(t *testing.T) {
 
 // TestExecutor_mergeTaskToWorkflow_DefaultStrategy tests default merge strategy.
 func TestExecutor_mergeTaskToWorkflow_DefaultStrategy(t *testing.T) {
+	t.Parallel()
 	mockWtMgr := &mockWorkflowWorktreeManager{}
 
 	executor := &Executor{}
@@ -311,6 +317,7 @@ func TestExecutor_mergeTaskToWorkflow_DefaultStrategy(t *testing.T) {
 
 // TestExecutor_mergeTaskToWorkflow_Conflict tests merge conflict handling.
 func TestExecutor_mergeTaskToWorkflow_Conflict(t *testing.T) {
+	t.Parallel()
 	mockWtMgr := &mockWorkflowWorktreeManager{
 		mergeErr: errors.New("merge conflict: files conflict"),
 	}
@@ -346,6 +353,7 @@ func TestExecutor_mergeTaskToWorkflow_Conflict(t *testing.T) {
 
 // TestExecutor_mergeTaskToWorkflow_NoIsolation tests merge when isolation is disabled.
 func TestExecutor_mergeTaskToWorkflow_NoIsolation(t *testing.T) {
+	t.Parallel()
 	mockWtMgr := &mockWorkflowWorktreeManager{}
 
 	executor := &Executor{}
@@ -369,6 +377,7 @@ func TestExecutor_mergeTaskToWorkflow_NoIsolation(t *testing.T) {
 
 // TestExecutor_cleanupWorkflowScopedWorktree_Isolation tests cleanup with isolation.
 func TestExecutor_cleanupWorkflowScopedWorktree_Isolation(t *testing.T) {
+	t.Parallel()
 	mockWtMgr := &mockWorkflowWorktreeManager{}
 
 	executor := &Executor{}
@@ -396,6 +405,7 @@ func TestExecutor_cleanupWorkflowScopedWorktree_Isolation(t *testing.T) {
 
 // TestExecutor_cleanupWorkflowScopedWorktree_NotCreated tests cleanup when worktree was not created.
 func TestExecutor_cleanupWorkflowScopedWorktree_NotCreated(t *testing.T) {
+	t.Parallel()
 	mockWtMgr := &mockWorkflowWorktreeManager{}
 
 	executor := &Executor{}
@@ -420,6 +430,7 @@ func TestExecutor_cleanupWorkflowScopedWorktree_NotCreated(t *testing.T) {
 
 // TestExecutor_setupWorktreeWithIsolation_CreateError tests error handling during worktree creation.
 func TestExecutor_setupWorktreeWithIsolation_CreateError(t *testing.T) {
+	t.Parallel()
 	mockWtMgr := &mockWorkflowWorktreeManager{
 		createErr: errors.New("disk full"),
 	}

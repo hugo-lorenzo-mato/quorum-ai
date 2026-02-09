@@ -8,6 +8,7 @@ import (
 )
 
 func TestClaudeStreamParser_ParseLine(t *testing.T) {
+	t.Parallel()
 	parser := &ClaudeStreamParser{}
 
 	tests := []struct {
@@ -87,6 +88,7 @@ func TestClaudeStreamParser_ParseLine(t *testing.T) {
 }
 
 func TestClaudeStreamParser_ParseLine_EmptyLine(t *testing.T) {
+	t.Parallel()
 	parser := &ClaudeStreamParser{}
 	events := parser.ParseLine("")
 	if events != nil {
@@ -95,6 +97,7 @@ func TestClaudeStreamParser_ParseLine_EmptyLine(t *testing.T) {
 }
 
 func TestClaudeStreamParser_ParseLine_InvalidJSON(t *testing.T) {
+	t.Parallel()
 	parser := &ClaudeStreamParser{}
 	events := parser.ParseLine("{invalid json")
 	if events != nil {
@@ -103,6 +106,7 @@ func TestClaudeStreamParser_ParseLine_InvalidJSON(t *testing.T) {
 }
 
 func TestGeminiStreamParser_ParseLine(t *testing.T) {
+	t.Parallel()
 	parser := &GeminiStreamParser{}
 
 	tests := []struct {
@@ -182,6 +186,7 @@ func TestGeminiStreamParser_ParseLine(t *testing.T) {
 }
 
 func TestCodexStreamParser_ParseLine(t *testing.T) {
+	t.Parallel()
 	parser := &CodexStreamParser{}
 
 	tests := []struct {
@@ -271,6 +276,7 @@ func TestCodexStreamParser_ParseLine(t *testing.T) {
 }
 
 func TestCopilotLogParser_ParseLine(t *testing.T) {
+	t.Parallel()
 	parser := NewCopilotLogParser()
 
 	tests := []struct {
@@ -319,6 +325,7 @@ func TestCopilotLogParser_ParseLine(t *testing.T) {
 }
 
 func TestEventAggregator_ShouldEmit(t *testing.T) {
+	t.Parallel()
 	agg := NewEventAggregator()
 
 	// Important events should always be emitted
@@ -338,6 +345,7 @@ func TestEventAggregator_ShouldEmit(t *testing.T) {
 }
 
 func TestEventAggregator_RateLimiting(t *testing.T) {
+	t.Parallel()
 	agg := NewEventAggregator()
 
 	// First event should be emitted
@@ -354,6 +362,7 @@ func TestEventAggregator_RateLimiting(t *testing.T) {
 }
 
 func TestParserAgentNames(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		parser StreamParser
 		name   string
@@ -375,6 +384,7 @@ func TestParserAgentNames(t *testing.T) {
 }
 
 func TestOpenCodeStreamParser_ParseLine(t *testing.T) {
+	t.Parallel()
 	parser := &OpenCodeStreamParser{}
 
 	tests := []struct {
@@ -440,6 +450,7 @@ func TestOpenCodeStreamParser_ParseLine(t *testing.T) {
 }
 
 func TestExtractTextFromJSONLine(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		line string
@@ -508,6 +519,7 @@ func TestExtractTextFromJSONLine(t *testing.T) {
 }
 
 func TestClaudeStreamParser_ThinkingWithData(t *testing.T) {
+	t.Parallel()
 	parser := &ClaudeStreamParser{}
 	events := parser.ParseLine(`{"type":"assistant","message":{"content":[{"type":"thinking","text":"Let me analyze the code structure..."}]}}`)
 	if len(events) == 0 {
@@ -527,6 +539,7 @@ func TestClaudeStreamParser_ThinkingWithData(t *testing.T) {
 }
 
 func TestCodexStreamParser_ReasoningWithData(t *testing.T) {
+	t.Parallel()
 	parser := &CodexStreamParser{}
 	events := parser.ParseLine(`{"type":"item.completed","item":{"id":"item_0","type":"reasoning","text":"**Listing files in the directory**"}}`)
 	if len(events) == 0 {
@@ -546,6 +559,7 @@ func TestCodexStreamParser_ReasoningWithData(t *testing.T) {
 }
 
 func TestCodexStreamParser_CommandCompletedWithData(t *testing.T) {
+	t.Parallel()
 	parser := &CodexStreamParser{}
 	events := parser.ParseLine(`{"type":"item.completed","item":{"id":"item_1","type":"command_execution","command":"ls -la","exit_code":0,"status":"completed"}}`)
 	if len(events) == 0 {
@@ -567,6 +581,7 @@ func TestCodexStreamParser_CommandCompletedWithData(t *testing.T) {
 }
 
 func TestCodexStreamParser_CommandCompletedNonZeroExit(t *testing.T) {
+	t.Parallel()
 	parser := &CodexStreamParser{}
 	events := parser.ParseLine(`{"type":"item.completed","item":{"id":"item_1","type":"command_execution","command":"false","exit_code":1,"status":"completed"}}`)
 	if len(events) == 0 {
@@ -580,6 +595,7 @@ func TestCodexStreamParser_CommandCompletedNonZeroExit(t *testing.T) {
 }
 
 func TestCodexStreamParser_AgentMessageWithData(t *testing.T) {
+	t.Parallel()
 	parser := &CodexStreamParser{}
 	events := parser.ParseLine(`{"type":"item.completed","item":{"id":"item_3","type":"agent_message","text":"Here is my analysis of the code..."}}`)
 	if len(events) == 0 {
@@ -596,6 +612,7 @@ func TestCodexStreamParser_AgentMessageWithData(t *testing.T) {
 }
 
 func TestGeminiStreamParser_ThinkingWithData(t *testing.T) {
+	t.Parallel()
 	parser := &GeminiStreamParser{}
 	events := parser.ParseLine(`{"type":"thinking","text":"Processing the request..."}`)
 	if len(events) == 0 {
@@ -615,6 +632,7 @@ func TestGeminiStreamParser_ThinkingWithData(t *testing.T) {
 }
 
 func TestGeminiStreamParser_ToolResultWithData(t *testing.T) {
+	t.Parallel()
 	parser := &GeminiStreamParser{}
 	events := parser.ParseLine(`{"type":"tool_result","tool_name":"read_file","result":"package main\nfunc main() {}"}`)
 	if len(events) == 0 {
@@ -638,6 +656,7 @@ func TestGeminiStreamParser_ToolResultWithData(t *testing.T) {
 }
 
 func TestTruncateDataValue(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name   string
 		input  string
@@ -660,6 +679,7 @@ func TestTruncateDataValue(t *testing.T) {
 }
 
 func TestTruncateDataAny(t *testing.T) {
+	t.Parallel()
 	t.Run("nil value", func(t *testing.T) {
 		got := truncateDataAny(nil, 500)
 		if got != nil {

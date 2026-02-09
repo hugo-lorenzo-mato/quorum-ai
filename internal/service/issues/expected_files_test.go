@@ -7,6 +7,7 @@ import (
 )
 
 func TestBuildExpectedIssueFiles_WithConsolidatedAndTasks(t *testing.T) {
+	t.Parallel()
 	gen := &Generator{}
 
 	taskFiles := []service.IssueTaskFile{
@@ -56,6 +57,7 @@ func TestBuildExpectedIssueFiles_WithConsolidatedAndTasks(t *testing.T) {
 }
 
 func TestBuildExpectedIssueFiles_NoConsolidated(t *testing.T) {
+	t.Parallel()
 	gen := &Generator{}
 
 	taskFiles := []service.IssueTaskFile{
@@ -78,6 +80,7 @@ func TestBuildExpectedIssueFiles_NoConsolidated(t *testing.T) {
 }
 
 func TestBuildExpectedIssueFiles_EmptyTaskFiles(t *testing.T) {
+	t.Parallel()
 	gen := &Generator{}
 
 	expected := gen.buildExpectedIssueFiles("/path/to/consolidated.md", nil)
@@ -93,6 +96,7 @@ func TestBuildExpectedIssueFiles_EmptyTaskFiles(t *testing.T) {
 }
 
 func TestBuildExpectedIssueFiles_NeitherConsolidatedNorTasks(t *testing.T) {
+	t.Parallel()
 	gen := &Generator{}
 
 	expected := gen.buildExpectedIssueFiles("", nil)
@@ -103,6 +107,7 @@ func TestBuildExpectedIssueFiles_NeitherConsolidatedNorTasks(t *testing.T) {
 }
 
 func TestBuildExpectedIssueFiles_TaskReferenceIndependence(t *testing.T) {
+	t.Parallel()
 	gen := &Generator{}
 
 	taskFiles := []service.IssueTaskFile{
@@ -121,6 +126,7 @@ func TestBuildExpectedIssueFiles_TaskReferenceIndependence(t *testing.T) {
 }
 
 func TestExpectedIssueFile_Fields(t *testing.T) {
+	t.Parallel()
 	task := &service.IssueTaskFile{ID: "task-1", Slug: "test", Index: 1}
 	eif := expectedIssueFile{
 		FileName: "01-test.md",
@@ -144,6 +150,7 @@ func TestExpectedIssueFile_Fields(t *testing.T) {
 }
 
 func TestBuildExpectedIssueFiles_ManyTasks(t *testing.T) {
+	t.Parallel()
 	gen := &Generator{}
 
 	taskFiles := make([]service.IssueTaskFile, 15)

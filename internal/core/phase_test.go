@@ -3,6 +3,7 @@ package core
 import "testing"
 
 func TestPhase_Order(t *testing.T) {
+	t.Parallel()
 	if PhaseOrder(PhaseRefine) != 0 {
 		t.Fatalf("expected refine order 0")
 	}
@@ -24,6 +25,7 @@ func TestPhase_Order(t *testing.T) {
 }
 
 func TestPhase_Navigation(t *testing.T) {
+	t.Parallel()
 	if NextPhase(PhaseRefine) != PhaseAnalyze {
 		t.Fatalf("expected next refine to be analyze")
 	}
@@ -55,6 +57,7 @@ func TestPhase_Navigation(t *testing.T) {
 }
 
 func TestPhase_Validation(t *testing.T) {
+	t.Parallel()
 	for _, phase := range AllPhases() {
 		if !ValidPhase(phase) {
 			t.Fatalf("expected phase %s to be valid", phase)
@@ -70,6 +73,7 @@ func TestPhase_Validation(t *testing.T) {
 }
 
 func TestPhase_Parse(t *testing.T) {
+	t.Parallel()
 	p, err := ParsePhase("plan")
 	if err != nil {
 		t.Fatalf("unexpected error parsing phase: %v", err)
@@ -84,6 +88,7 @@ func TestPhase_Parse(t *testing.T) {
 }
 
 func TestPhase_Description(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		phase Phase
 		want  string

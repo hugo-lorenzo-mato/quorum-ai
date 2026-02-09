@@ -10,6 +10,7 @@ import (
 )
 
 func TestNewOpenCodeAdapter(t *testing.T) {
+	t.Parallel()
 	t.Run("creates adapter with defaults", func(t *testing.T) {
 		cfg := AgentConfig{}
 		agent, err := NewOpenCodeAdapter(cfg)
@@ -44,11 +45,13 @@ func TestNewOpenCodeAdapter(t *testing.T) {
 }
 
 func TestOpenCodeAdapter_Name(t *testing.T) {
+	t.Parallel()
 	adapter := createTestOpenCodeAdapter(t)
 	assert.Equal(t, "opencode", adapter.Name())
 }
 
 func TestOpenCodeAdapter_Capabilities(t *testing.T) {
+	t.Parallel()
 	adapter := createTestOpenCodeAdapter(t)
 	caps := adapter.Capabilities()
 
@@ -61,6 +64,7 @@ func TestOpenCodeAdapter_Capabilities(t *testing.T) {
 }
 
 func TestOpenCodeAdapter_DetectProfile(t *testing.T) {
+	t.Parallel()
 	adapter := createTestOpenCodeAdapter(t)
 
 	tests := []struct {
@@ -194,6 +198,7 @@ func TestOpenCodeAdapter_DetectProfile(t *testing.T) {
 }
 
 func TestOpenCodeAdapter_ResolveModel(t *testing.T) {
+	t.Parallel()
 	t.Run("explicit_model_takes_priority", func(t *testing.T) {
 		adapter := createTestOpenCodeAdapter(t)
 
@@ -246,6 +251,7 @@ func TestOpenCodeAdapter_ResolveModel(t *testing.T) {
 }
 
 func TestOpenCodeAdapter_BuildArgs(t *testing.T) {
+	t.Parallel()
 	adapter := createTestOpenCodeAdapter(t)
 
 	t.Run("includes_run_command", func(t *testing.T) {
@@ -281,6 +287,7 @@ func TestOpenCodeAdapter_BuildArgs(t *testing.T) {
 }
 
 func TestOpenCodeAdapter_ParseOutput(t *testing.T) {
+	t.Parallel()
 	adapter := createTestOpenCodeAdapter(t)
 
 	t.Run("successful_output_sets_model", func(t *testing.T) {

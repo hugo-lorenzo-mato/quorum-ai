@@ -27,6 +27,7 @@ func newIntegrationTestServerWithEnabledAgent(t *testing.T, agent string) *testS
 // TestIntegration_CreateWorkflow_WithExecutionMode tests creating workflows
 // with different execution mode configurations.
 func TestIntegration_CreateWorkflow_WithExecutionMode(t *testing.T) {
+	t.Parallel()
 	ts := newIntegrationTestServerWithEnabledAgent(t, "claude")
 
 	t.Run("create workflow with single-agent mode", func(t *testing.T) {
@@ -149,6 +150,7 @@ func TestIntegration_CreateWorkflow_WithExecutionMode(t *testing.T) {
 // TestIntegration_GetWorkflow_IncludesExecutionMode tests that getting a workflow
 // returns the execution mode configuration.
 func TestIntegration_GetWorkflow_IncludesExecutionMode(t *testing.T) {
+	t.Parallel()
 	ts := newIntegrationTestServerWithEnabledAgent(t, "claude")
 
 	// Create a workflow with single-agent mode
@@ -217,6 +219,7 @@ func TestIntegration_GetWorkflow_IncludesExecutionMode(t *testing.T) {
 // TestIntegration_ListWorkflows_IncludesExecutionMode tests that listing workflows
 // returns execution mode configuration for each workflow.
 func TestIntegration_ListWorkflows_IncludesExecutionMode(t *testing.T) {
+	t.Parallel()
 	ts := newIntegrationTestServerWithEnabledAgent(t, "claude")
 
 	// Create workflows with different execution modes
@@ -285,6 +288,7 @@ func TestIntegration_ListWorkflows_IncludesExecutionMode(t *testing.T) {
 // TestIntegration_WorkflowConfigPersistence tests that workflow config is persisted
 // correctly across create and get operations.
 func TestIntegration_WorkflowConfigPersistence(t *testing.T) {
+	t.Parallel()
 	ts := newIntegrationTestServerWithEnabledAgent(t, "claude")
 
 	t.Run("full config is persisted", func(t *testing.T) {
@@ -354,6 +358,7 @@ func TestIntegration_WorkflowConfigPersistence(t *testing.T) {
 // TestIntegration_WorkflowState_ConfigMapping tests that WorkflowState correctly
 // maps config between API and core types.
 func TestIntegration_WorkflowState_ConfigMapping(t *testing.T) {
+	t.Parallel()
 	// Test that core.WorkflowState config fields are properly set
 	sm := newThreadSafeMockStateManager()
 

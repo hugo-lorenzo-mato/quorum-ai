@@ -6,6 +6,7 @@ import (
 )
 
 func TestNewSemanticModerator_UsesConfigValues(t *testing.T) {
+	t.Parallel()
 	// Configuration defaults are set in internal/config/loader.go
 	// The moderator should use whatever values come from the config
 	// Note: Model is resolved at runtime from AgentPhaseModels[Agent][analyze]
@@ -44,6 +45,7 @@ func TestNewSemanticModerator_UsesConfigValues(t *testing.T) {
 }
 
 func TestSemanticModerator_UsesConfiguredAgentAsPrimary(t *testing.T) {
+	t.Parallel()
 	// The moderator agent is determined by config (UI dropdown selection).
 	// At runtime, the configured agent is always tried first. If it fails
 	// after retries, ONE fallback agent with phases.moderate: true is tried
@@ -64,6 +66,7 @@ func TestSemanticModerator_UsesConfiguredAgentAsPrimary(t *testing.T) {
 }
 
 func TestNewSemanticModerator_CustomConfig(t *testing.T) {
+	t.Parallel()
 	// Note: Model is resolved at runtime from AgentPhaseModels[Agent][analyze]
 	config := ModeratorConfig{
 		Enabled:             true,
@@ -100,6 +103,7 @@ func TestNewSemanticModerator_CustomConfig(t *testing.T) {
 }
 
 func TestNewSemanticModerator_RequiresAgentWhenEnabled(t *testing.T) {
+	t.Parallel()
 	// Model is resolved at runtime from AgentPhaseModels, so only Agent is required
 	config := ModeratorConfig{
 		Enabled: true,
@@ -115,6 +119,7 @@ func TestNewSemanticModerator_RequiresAgentWhenEnabled(t *testing.T) {
 }
 
 func TestNewSemanticModerator_DisabledDoesNotRequireAgentOrModel(t *testing.T) {
+	t.Parallel()
 	// When disabled, agent and model are not required
 	config := ModeratorConfig{
 		Enabled: false,
@@ -130,6 +135,7 @@ func TestNewSemanticModerator_DisabledDoesNotRequireAgentOrModel(t *testing.T) {
 }
 
 func TestNewSemanticModerator_MinRoundsExceedsMaxRounds(t *testing.T) {
+	t.Parallel()
 	// Test that min_rounds is clamped to max_rounds when it exceeds
 	config := ModeratorConfig{
 		Enabled:   true,
@@ -148,6 +154,7 @@ func TestNewSemanticModerator_MinRoundsExceedsMaxRounds(t *testing.T) {
 }
 
 func TestNewSemanticModerator_MinRoundsExceedsCustomMaxRounds(t *testing.T) {
+	t.Parallel()
 	config := ModeratorConfig{
 		Enabled:   true,
 		Agent:     "claude",
@@ -166,6 +173,7 @@ func TestNewSemanticModerator_MinRoundsExceedsCustomMaxRounds(t *testing.T) {
 }
 
 func TestSemanticModerator_IsEnabled(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		config  ModeratorConfig
@@ -203,6 +211,7 @@ func TestSemanticModerator_IsEnabled(t *testing.T) {
 }
 
 func TestParseModeratorResponse(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name           string
 		output         string
@@ -478,6 +487,7 @@ agreements_count: 1
 }
 
 func TestExtractModeratorSection(t *testing.T) {
+	t.Parallel()
 	text := `# Report
 
 ## Agreements
@@ -513,6 +523,7 @@ Some content here.`
 }
 
 func TestTruncateText(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name      string
 		input     string
@@ -567,6 +578,7 @@ func TestTruncateText(t *testing.T) {
 }
 
 func TestBuildAnalysisSummary(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		input    AnalysisOutput
@@ -622,6 +634,7 @@ func TestBuildAnalysisSummary(t *testing.T) {
 }
 
 func TestDetectTaskType(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		prompt   string
 		expected string
@@ -657,6 +670,7 @@ func TestDetectTaskType(t *testing.T) {
 }
 
 func TestEffectiveThreshold(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name       string
 		config     ModeratorConfig

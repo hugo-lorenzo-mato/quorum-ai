@@ -8,6 +8,7 @@ import (
 )
 
 func TestPRCreateOptions(t *testing.T) {
+	t.Parallel()
 	opts := github.PRCreateOptions{
 		Title:     "Test PR",
 		Body:      "Description",
@@ -27,6 +28,7 @@ func TestPRCreateOptions(t *testing.T) {
 }
 
 func TestPRUpdateOptions(t *testing.T) {
+	t.Parallel()
 	opts := github.PRUpdateOptions{
 		Title:        "Updated Title",
 		Body:         "Updated Body",
@@ -40,6 +42,7 @@ func TestPRUpdateOptions(t *testing.T) {
 }
 
 func TestPullRequest(t *testing.T) {
+	t.Parallel()
 	pr := github.PullRequest{
 		Number:    123,
 		Title:     "Test PR",
@@ -62,6 +65,7 @@ func TestPullRequest(t *testing.T) {
 // TestGitHubClient_ParsePR tests PR JSON parsing.
 // Note: Full client tests require gh CLI to be installed and authenticated.
 func TestGitHubClient_ParsePRJSON(t *testing.T) {
+	t.Parallel()
 	json := `{
 		"number": 123,
 		"title": "Test PR",
@@ -83,6 +87,7 @@ func TestGitHubClient_ParsePRJSON(t *testing.T) {
 // They are marked as integration tests.
 
 func TestGitHubClient_Repo(t *testing.T) {
+	t.Parallel()
 	// This is a unit test that doesn't require gh CLI
 	t.Run("repo string format", func(t *testing.T) {
 		// Since we can't create a real client without gh auth,
@@ -94,6 +99,7 @@ func TestGitHubClient_Repo(t *testing.T) {
 
 // Integration test that would run only with gh CLI available
 func TestGitHubClient_Integration(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
 	}

@@ -10,6 +10,7 @@ import (
 )
 
 func TestNewClientWithRunner_AuthSuccess(t *testing.T) {
+	t.Parallel()
 	runner := NewMockRunner()
 	runner.OnCommand("gh auth status").Return("")
 
@@ -27,6 +28,7 @@ func TestNewClientWithRunner_AuthSuccess(t *testing.T) {
 }
 
 func TestNewClientWithRunner_AuthFailed(t *testing.T) {
+	t.Parallel()
 	runner := NewMockRunner()
 	runner.OnCommand("gh auth status").ReturnError(errors.New("not authenticated"))
 
@@ -42,6 +44,7 @@ func TestNewClientWithRunner_AuthFailed(t *testing.T) {
 }
 
 func TestNewClientFromRepoWithRunner(t *testing.T) {
+	t.Parallel()
 	runner := NewMockRunner()
 	runner.OnCommand("gh repo view --json owner,name").ReturnJSON(`{
 		"owner": {"login": "testowner"},
@@ -60,6 +63,7 @@ func TestNewClientFromRepoWithRunner(t *testing.T) {
 }
 
 func TestClient_CreatePR(t *testing.T) {
+	t.Parallel()
 	runner := NewMockRunner()
 	runner.OnCommand("gh pr create").Return("https://github.com/owner/repo/pull/123")
 	runner.OnCommand("gh pr view").ReturnJSON(`{
@@ -101,6 +105,7 @@ func TestClient_CreatePR(t *testing.T) {
 }
 
 func TestClient_CreatePR_WithOptions(t *testing.T) {
+	t.Parallel()
 	runner := NewMockRunner()
 	runner.OnCommand("gh pr create").Return("https://github.com/owner/repo/pull/1")
 	runner.OnCommand("gh pr view").ReturnJSON(`{
@@ -149,6 +154,7 @@ func TestClient_CreatePR_WithOptions(t *testing.T) {
 }
 
 func TestClient_GetPR(t *testing.T) {
+	t.Parallel()
 	runner := NewMockRunner()
 	runner.OnCommand("gh pr view 42").ReturnJSON(`{
 		"number": 42,
@@ -190,6 +196,7 @@ func TestClient_GetPR(t *testing.T) {
 }
 
 func TestClient_GetPR_NotFound(t *testing.T) {
+	t.Parallel()
 	runner := NewMockRunner()
 	runner.OnCommand("gh pr view 999").ReturnError(errors.New("Could not find pull request"))
 
@@ -202,6 +209,7 @@ func TestClient_GetPR_NotFound(t *testing.T) {
 }
 
 func TestClient_ListPRs(t *testing.T) {
+	t.Parallel()
 	runner := NewMockRunner()
 	runner.OnCommand("gh pr list").ReturnJSON(`[
 		{
@@ -260,6 +268,7 @@ func TestClient_ListPRs(t *testing.T) {
 }
 
 func TestClient_MergePR(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name   string
 		method string
@@ -291,6 +300,7 @@ func TestClient_MergePR(t *testing.T) {
 }
 
 func TestClient_ClosePR(t *testing.T) {
+	t.Parallel()
 	runner := NewMockRunner()
 	runner.OnCommand("gh pr close").Return("")
 
@@ -307,6 +317,7 @@ func TestClient_ClosePR(t *testing.T) {
 }
 
 func TestClient_AddComment(t *testing.T) {
+	t.Parallel()
 	runner := NewMockRunner()
 	runner.OnCommand("gh pr comment").Return("")
 
@@ -323,6 +334,7 @@ func TestClient_AddComment(t *testing.T) {
 }
 
 func TestClient_RequestReview(t *testing.T) {
+	t.Parallel()
 	runner := NewMockRunner()
 	runner.OnCommand("gh pr edit").Return("")
 
@@ -339,6 +351,7 @@ func TestClient_RequestReview(t *testing.T) {
 }
 
 func TestClient_GetDefaultBranch(t *testing.T) {
+	t.Parallel()
 	runner := NewMockRunner()
 	runner.OnCommand("gh repo view").ReturnJSON(`{
 		"defaultBranchRef": {"name": "main"}
@@ -357,6 +370,7 @@ func TestClient_GetDefaultBranch(t *testing.T) {
 }
 
 func TestClient_UpdatePR(t *testing.T) {
+	t.Parallel()
 	runner := NewMockRunner()
 	runner.OnCommand("gh pr edit").Return("")
 
@@ -380,6 +394,7 @@ func TestClient_UpdatePR(t *testing.T) {
 }
 
 func TestClient_MarkPRReady(t *testing.T) {
+	t.Parallel()
 	runner := NewMockRunner()
 	runner.OnCommand("gh pr ready").Return("")
 
@@ -396,6 +411,7 @@ func TestClient_MarkPRReady(t *testing.T) {
 }
 
 func TestClient_CreateIssue(t *testing.T) {
+	t.Parallel()
 	runner := NewMockRunner()
 	runner.OnCommand("gh issue create").Return("https://github.com/owner/repo/issues/42")
 
@@ -412,6 +428,7 @@ func TestClient_CreateIssue(t *testing.T) {
 }
 
 func TestClient_GetRepo(t *testing.T) {
+	t.Parallel()
 	runner := NewMockRunner()
 	runner.OnCommand("gh repo view").ReturnJSON(`{
 		"owner": {"login": "testowner"},
@@ -443,6 +460,7 @@ func TestClient_GetRepo(t *testing.T) {
 }
 
 func TestClient_ValidateToken(t *testing.T) {
+	t.Parallel()
 	runner := NewMockRunner()
 	runner.OnCommand("gh auth status").Return("")
 
@@ -455,6 +473,7 @@ func TestClient_ValidateToken(t *testing.T) {
 }
 
 func TestClient_GetAuthenticatedUser(t *testing.T) {
+	t.Parallel()
 	runner := NewMockRunner()
 	runner.OnCommand("gh api user").Return("testuser")
 
@@ -471,6 +490,7 @@ func TestClient_GetAuthenticatedUser(t *testing.T) {
 }
 
 func TestClient_GetCheckStatus(t *testing.T) {
+	t.Parallel()
 	runner := NewMockRunner()
 	runner.OnCommand("gh pr checks").ReturnJSON(`[
 		{
@@ -510,6 +530,7 @@ func TestClient_GetCheckStatus(t *testing.T) {
 }
 
 func TestClient_GetCheckStatus_Pending(t *testing.T) {
+	t.Parallel()
 	runner := NewMockRunner()
 	runner.OnCommand("gh pr checks").ReturnJSON(`[
 		{
@@ -538,6 +559,7 @@ func TestClient_GetCheckStatus_Pending(t *testing.T) {
 }
 
 func TestClient_GetCheckStatus_Failed(t *testing.T) {
+	t.Parallel()
 	runner := NewMockRunner()
 	runner.OnCommand("gh pr checks").ReturnJSON(`[
 		{
@@ -566,6 +588,7 @@ func TestClient_GetCheckStatus_Failed(t *testing.T) {
 }
 
 func TestClient_Timeout(t *testing.T) {
+	t.Parallel()
 	runner := NewMockRunner()
 	// Don't set a response - will use default which fails
 
@@ -579,6 +602,7 @@ func TestClient_Timeout(t *testing.T) {
 }
 
 func TestMockRunner_CallTracking(t *testing.T) {
+	t.Parallel()
 	runner := NewMockRunner()
 	runner.DefaultResponse = &MockResponse{Output: "ok"}
 

@@ -8,6 +8,7 @@ import (
 )
 
 func TestDeduplicator_GetOrCreateState_New(t *testing.T) {
+	t.Parallel()
 	tempDir := t.TempDir()
 	dedup := NewDeduplicator(tempDir)
 
@@ -31,6 +32,7 @@ func TestDeduplicator_GetOrCreateState_New(t *testing.T) {
 }
 
 func TestDeduplicator_GetOrCreateState_Existing(t *testing.T) {
+	t.Parallel()
 	tempDir := t.TempDir()
 	dedup := NewDeduplicator(tempDir)
 
@@ -56,6 +58,7 @@ func TestDeduplicator_GetOrCreateState_Existing(t *testing.T) {
 }
 
 func TestDeduplicator_GetOrCreateState_ChecksumMismatch(t *testing.T) {
+	t.Parallel()
 	tempDir := t.TempDir()
 	dedup := NewDeduplicator(tempDir)
 
@@ -82,6 +85,7 @@ func TestDeduplicator_GetOrCreateState_ChecksumMismatch(t *testing.T) {
 }
 
 func TestGenerationState_IsComplete(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		state    GenerationState
@@ -124,6 +128,7 @@ func TestGenerationState_IsComplete(t *testing.T) {
 }
 
 func TestGenerationState_GetGeneratedFilePaths(t *testing.T) {
+	t.Parallel()
 	state := &GenerationState{
 		GeneratedFiles: []GeneratedFileInfo{
 			{Filename: "00-consolidated.md"},
@@ -152,6 +157,7 @@ func TestGenerationState_GetGeneratedFilePaths(t *testing.T) {
 }
 
 func TestDeduplicator_MarkFileGenerated(t *testing.T) {
+	t.Parallel()
 	dedup := NewDeduplicator(t.TempDir())
 	state := &GenerationState{WorkflowID: "test"}
 
@@ -177,6 +183,7 @@ func TestDeduplicator_MarkFileGenerated(t *testing.T) {
 }
 
 func TestDeduplicator_MarkIssueCreated(t *testing.T) {
+	t.Parallel()
 	dedup := NewDeduplicator(t.TempDir())
 	state := &GenerationState{WorkflowID: "test"}
 
@@ -199,6 +206,7 @@ func TestDeduplicator_MarkIssueCreated(t *testing.T) {
 }
 
 func TestDeduplicator_MarkComplete(t *testing.T) {
+	t.Parallel()
 	dedup := NewDeduplicator(t.TempDir())
 	state := &GenerationState{
 		WorkflowID:   "test",
@@ -219,6 +227,7 @@ func TestDeduplicator_MarkComplete(t *testing.T) {
 }
 
 func TestDeduplicator_MarkFailed(t *testing.T) {
+	t.Parallel()
 	dedup := NewDeduplicator(t.TempDir())
 	state := &GenerationState{WorkflowID: "test"}
 
@@ -239,6 +248,7 @@ func (e *testError) Error() string {
 }
 
 func TestDeduplicator_SaveAndLoad(t *testing.T) {
+	t.Parallel()
 	tempDir := t.TempDir()
 	dedup := NewDeduplicator(tempDir)
 
@@ -282,6 +292,7 @@ func TestDeduplicator_SaveAndLoad(t *testing.T) {
 }
 
 func TestDeduplicator_Delete(t *testing.T) {
+	t.Parallel()
 	tempDir := t.TempDir()
 	dedup := NewDeduplicator(tempDir)
 
@@ -304,6 +315,7 @@ func TestDeduplicator_Delete(t *testing.T) {
 }
 
 func TestDeduplicator_Delete_NonExistent(t *testing.T) {
+	t.Parallel()
 	tempDir := t.TempDir()
 	dedup := NewDeduplicator(tempDir)
 
@@ -314,6 +326,7 @@ func TestDeduplicator_Delete_NonExistent(t *testing.T) {
 }
 
 func TestDeduplicator_HasExistingIssues(t *testing.T) {
+	t.Parallel()
 	tempDir := t.TempDir()
 	dedup := NewDeduplicator(tempDir)
 
@@ -339,6 +352,7 @@ func TestDeduplicator_HasExistingIssues(t *testing.T) {
 }
 
 func TestDeduplicator_GetExistingIssueNumbers(t *testing.T) {
+	t.Parallel()
 	tempDir := t.TempDir()
 	dedup := NewDeduplicator(tempDir)
 
@@ -364,6 +378,7 @@ func TestDeduplicator_GetExistingIssueNumbers(t *testing.T) {
 }
 
 func TestCalculateInputChecksum(t *testing.T) {
+	t.Parallel()
 	tempDir := t.TempDir()
 
 	// Create test files
@@ -399,6 +414,7 @@ func TestCalculateInputChecksum(t *testing.T) {
 }
 
 func TestCalculateInputChecksum_DifferentContent(t *testing.T) {
+	t.Parallel()
 	tempDir := t.TempDir()
 
 	// Create test files
@@ -421,6 +437,7 @@ func TestCalculateInputChecksum_DifferentContent(t *testing.T) {
 }
 
 func TestCalculateInputChecksum_EmptyConsolidated(t *testing.T) {
+	t.Parallel()
 	tempDir := t.TempDir()
 
 	taskPath := filepath.Join(tempDir, "task.md")
@@ -437,6 +454,7 @@ func TestCalculateInputChecksum_EmptyConsolidated(t *testing.T) {
 }
 
 func TestCalculateInputChecksum_FileNotFound(t *testing.T) {
+	t.Parallel()
 	_, err := CalculateInputChecksum("/nonexistent/file.md", nil)
 
 	if err == nil {
@@ -445,6 +463,7 @@ func TestCalculateInputChecksum_FileNotFound(t *testing.T) {
 }
 
 func TestChecksumBytes(t *testing.T) {
+	t.Parallel()
 	data := []byte("test content")
 
 	checksum := checksumBytes(data)

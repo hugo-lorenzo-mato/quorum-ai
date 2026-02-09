@@ -164,6 +164,7 @@ func testLogger() *slog.Logger {
 }
 
 func TestNewEngine(t *testing.T) {
+	t.Parallel()
 	exec := &mockWorkflowExecutor{}
 	stateMgr := newMockKanbanStateManager()
 	eventBus := events.New(100)
@@ -189,6 +190,7 @@ func TestNewEngine(t *testing.T) {
 }
 
 func TestNewEngine_CustomTickInterval(t *testing.T) {
+	t.Parallel()
 	cfg := EngineConfig{
 		Executor:     &mockWorkflowExecutor{},
 		StateManager: newMockKanbanStateManager(),
@@ -204,6 +206,7 @@ func TestNewEngine_CustomTickInterval(t *testing.T) {
 }
 
 func TestNewEngine_DefaultTickInterval(t *testing.T) {
+	t.Parallel()
 	cfg := EngineConfig{
 		Executor:     &mockWorkflowExecutor{},
 		StateManager: newMockKanbanStateManager(),
@@ -219,6 +222,7 @@ func TestNewEngine_DefaultTickInterval(t *testing.T) {
 }
 
 func TestEngine_EnableDisable(t *testing.T) {
+	t.Parallel()
 	stateMgr := newMockKanbanStateManager()
 	eventBus := events.New(100)
 
@@ -253,6 +257,7 @@ func TestEngine_EnableDisable(t *testing.T) {
 }
 
 func TestEngine_EnableWithOpenCircuitBreaker(t *testing.T) {
+	t.Parallel()
 	engine := NewEngine(EngineConfig{
 		Executor:     &mockWorkflowExecutor{},
 		StateManager: newMockKanbanStateManager(),
@@ -276,6 +281,7 @@ func TestEngine_EnableWithOpenCircuitBreaker(t *testing.T) {
 }
 
 func TestEngine_ResetCircuitBreaker(t *testing.T) {
+	t.Parallel()
 	stateMgr := newMockKanbanStateManager()
 	eventBus := events.New(100)
 
@@ -305,6 +311,7 @@ func TestEngine_ResetCircuitBreaker(t *testing.T) {
 }
 
 func TestEngine_GetState(t *testing.T) {
+	t.Parallel()
 	engine := NewEngine(EngineConfig{
 		Executor:     &mockWorkflowExecutor{},
 		StateManager: newMockKanbanStateManager(),
@@ -329,6 +336,7 @@ func TestEngine_GetState(t *testing.T) {
 }
 
 func TestEngine_LoadPersistedState(t *testing.T) {
+	t.Parallel()
 	stateMgr := newMockKanbanStateManager()
 	wfID := "wf-123"
 	lastFailure := time.Now().Add(-time.Hour)
@@ -373,6 +381,7 @@ func TestEngine_LoadPersistedState(t *testing.T) {
 }
 
 func TestEngine_Tick_PicksWorkflow(t *testing.T) {
+	t.Parallel()
 	exec := &mockWorkflowExecutor{}
 	stateMgr := newMockKanbanStateManager()
 	eventBus := events.New(100)
@@ -434,6 +443,7 @@ func TestEngine_Tick_PicksWorkflow(t *testing.T) {
 }
 
 func TestEngine_Tick_DoesNotPickWhenDisabled(t *testing.T) {
+	t.Parallel()
 	exec := &mockWorkflowExecutor{}
 	stateMgr := newMockKanbanStateManager()
 
@@ -472,6 +482,7 @@ func TestEngine_Tick_DoesNotPickWhenDisabled(t *testing.T) {
 }
 
 func TestEngine_Tick_DoesNotPickWithOpenCircuitBreaker(t *testing.T) {
+	t.Parallel()
 	exec := &mockWorkflowExecutor{}
 	stateMgr := newMockKanbanStateManager()
 
@@ -514,6 +525,7 @@ func TestEngine_Tick_DoesNotPickWithOpenCircuitBreaker(t *testing.T) {
 }
 
 func TestEngine_HandleWorkflowCompleted(t *testing.T) {
+	t.Parallel()
 	stateMgr := newMockKanbanStateManager()
 	eventBus := events.New(100)
 
@@ -562,6 +574,7 @@ func TestEngine_HandleWorkflowCompleted(t *testing.T) {
 }
 
 func TestEngine_HandleWorkflowFailed(t *testing.T) {
+	t.Parallel()
 	stateMgr := newMockKanbanStateManager()
 	eventBus := events.New(100)
 
@@ -607,6 +620,7 @@ func TestEngine_HandleWorkflowFailed(t *testing.T) {
 }
 
 func TestEngine_CircuitBreakerTrips(t *testing.T) {
+	t.Parallel()
 	stateMgr := newMockKanbanStateManager()
 	eventBus := events.New(100)
 
@@ -652,6 +666,7 @@ func TestEngine_CircuitBreakerTrips(t *testing.T) {
 }
 
 func TestEngine_RecoverInterrupted_Completed(t *testing.T) {
+	t.Parallel()
 	stateMgr := newMockKanbanStateManager()
 
 	wfID := "wf-recovered"
@@ -695,6 +710,7 @@ func TestEngine_RecoverInterrupted_Completed(t *testing.T) {
 }
 
 func TestEngine_RecoverInterrupted_Failed(t *testing.T) {
+	t.Parallel()
 	stateMgr := newMockKanbanStateManager()
 
 	wfID := "wf-failed-recovery"
@@ -737,6 +753,7 @@ func TestEngine_RecoverInterrupted_Failed(t *testing.T) {
 }
 
 func TestEngine_RecoverInterrupted_Deleted(t *testing.T) {
+	t.Parallel()
 	stateMgr := newMockKanbanStateManager()
 
 	wfID := "wf-deleted"
@@ -771,6 +788,7 @@ func TestEngine_RecoverInterrupted_Deleted(t *testing.T) {
 }
 
 func TestEngine_GracefulStop(t *testing.T) {
+	t.Parallel()
 	engine := NewEngine(EngineConfig{
 		Executor:     &mockWorkflowExecutor{},
 		StateManager: newMockKanbanStateManager(),

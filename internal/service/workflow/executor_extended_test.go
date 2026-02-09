@@ -5,6 +5,7 @@ import (
 )
 
 func TestShouldUseWorktrees(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name       string
 		mode       string
@@ -36,6 +37,7 @@ func TestShouldUseWorktrees(t *testing.T) {
 }
 
 func TestNewExecutor(t *testing.T) {
+	t.Parallel()
 	dag := &mockDAGBuilder{}
 	saver := &mockStateSaver{}
 	denyTools := []string{"rm", "sudo"}

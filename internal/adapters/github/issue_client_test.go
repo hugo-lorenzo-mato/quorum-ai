@@ -8,6 +8,7 @@ import (
 )
 
 func TestParseIssueNumberFromURL(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		url     string
@@ -64,6 +65,7 @@ func TestParseIssueNumberFromURL(t *testing.T) {
 }
 
 func TestParseIssueJSON(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		json    string
@@ -163,6 +165,7 @@ func TestParseIssueJSON(t *testing.T) {
 }
 
 func TestIssueClientAdapter_CreateIssue(t *testing.T) {
+	t.Parallel()
 	mockRunner := NewMockRunner()
 
 	// Setup mock responses
@@ -202,6 +205,7 @@ func TestIssueClientAdapter_CreateIssue(t *testing.T) {
 }
 
 func TestIssueClientAdapter_CloseIssue(t *testing.T) {
+	t.Parallel()
 	mockRunner := NewMockRunner()
 	mockRunner.OnCommand("gh issue close 42").Return("")
 
@@ -220,6 +224,7 @@ func TestIssueClientAdapter_CloseIssue(t *testing.T) {
 }
 
 func TestIssueClientAdapter_AddIssueComment(t *testing.T) {
+	t.Parallel()
 	mockRunner := NewMockRunner()
 	mockRunner.OnCommand("gh issue comment 42").Return("")
 
@@ -238,6 +243,7 @@ func TestIssueClientAdapter_AddIssueComment(t *testing.T) {
 }
 
 func TestIssueClientAdapter_GetIssue(t *testing.T) {
+	t.Parallel()
 	mockRunner := NewMockRunner()
 	mockRunner.OnCommand("gh issue view 42").Return(`{
 		"id": 112233,
@@ -275,6 +281,7 @@ func TestIssueClientAdapter_GetIssue(t *testing.T) {
 }
 
 func TestIssueClientAdapter_UpdateIssue(t *testing.T) {
+	t.Parallel()
 	mockRunner := NewMockRunner()
 	mockRunner.OnCommand("gh issue edit 42").Return("")
 

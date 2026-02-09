@@ -237,6 +237,7 @@ func (m *mockCheckpointCreator) CreateCheckpoint(_ *core.WorkflowState, checkpoi
 }
 
 func TestNewAnalyzer(t *testing.T) {
+	t.Parallel()
 	config := ModeratorConfig{
 		Enabled:   true,
 		Agent:     "claude",
@@ -258,6 +259,7 @@ func TestNewAnalyzer(t *testing.T) {
 }
 
 func TestNewAnalyzer_Disabled(t *testing.T) {
+	t.Parallel()
 	config := ModeratorConfig{
 		Enabled: false,
 	}
@@ -273,6 +275,7 @@ func TestNewAnalyzer_Disabled(t *testing.T) {
 }
 
 func TestAnalyzer_Run_WithModeratorDisabled_ReturnsError(t *testing.T) {
+	t.Parallel()
 	// When moderator is disabled, analyzer.Run should return an error
 	// because the new design requires semantic moderator for consensus
 	config := ModeratorConfig{
@@ -330,6 +333,7 @@ func TestAnalyzer_Run_WithModeratorDisabled_ReturnsError(t *testing.T) {
 }
 
 func TestAnalyzer_Run_NoAgents(t *testing.T) {
+	t.Parallel()
 	config := ModeratorConfig{
 		Enabled:   true,
 		Agent:     "claude",
@@ -365,6 +369,7 @@ func TestAnalyzer_Run_NoAgents(t *testing.T) {
 }
 
 func TestParseAnalysisOutput(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name       string
 		agentName  string
@@ -421,6 +426,7 @@ func TestParseAnalysisOutput(t *testing.T) {
 }
 
 func TestParseAnalysisOutput_Markdown(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name       string
 		output     string
@@ -515,6 +521,7 @@ Some additional thoughts about claims.
 }
 
 func TestGetConsolidatedAnalysis(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		state       *core.WorkflowState
@@ -578,6 +585,7 @@ func TestGetConsolidatedAnalysis(t *testing.T) {
 }
 
 func TestAnalyzer_Run_SkipsWhenPhaseCompleted(t *testing.T) {
+	t.Parallel()
 	config := ModeratorConfig{
 		Enabled:   true,
 		Agent:     "claude",
@@ -630,6 +638,7 @@ func TestAnalyzer_Run_SkipsWhenPhaseCompleted(t *testing.T) {
 }
 
 func TestIsPhaseCompleted(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name       string
 		state      *core.WorkflowState
@@ -713,6 +722,7 @@ func TestIsPhaseCompleted(t *testing.T) {
 }
 
 func TestAnalyzer_Run_SingleAgentMode(t *testing.T) {
+	t.Parallel()
 	// When single_agent.enabled is true, the analyzer should bypass multi-agent consensus
 	// and run with just the specified agent
 	config := ModeratorConfig{
@@ -799,6 +809,7 @@ func TestAnalyzer_Run_SingleAgentMode(t *testing.T) {
 }
 
 func TestAnalyzer_Run_SingleAgentMode_NoAgentSpecified(t *testing.T) {
+	t.Parallel()
 	// When single_agent.enabled is true but agent is empty, should return error
 	config := ModeratorConfig{
 		Enabled: false,
@@ -853,6 +864,7 @@ func TestAnalyzer_Run_SingleAgentMode_NoAgentSpecified(t *testing.T) {
 }
 
 func TestAnalyzer_Run_SingleAgentMode_AgentNotFound(t *testing.T) {
+	t.Parallel()
 	// When single_agent.agent references a non-existent agent, should return error
 	config := ModeratorConfig{
 		Enabled: false,
@@ -901,6 +913,7 @@ func TestAnalyzer_Run_SingleAgentMode_AgentNotFound(t *testing.T) {
 }
 
 func TestAnalyzer_Run_SingleAgentMode_WithModelOverride(t *testing.T) {
+	t.Parallel()
 	// When single_agent.model is specified, it should be used instead of the default
 	config := ModeratorConfig{
 		Enabled: false,

@@ -11,6 +11,7 @@ import (
 )
 
 func TestAtomicWrite_BasicOperation(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.yaml")
 
@@ -34,6 +35,7 @@ func TestAtomicWrite_BasicOperation(t *testing.T) {
 }
 
 func TestAtomicWrite_OverwriteExisting(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.yaml")
 
@@ -56,6 +58,7 @@ func TestAtomicWrite_OverwriteExisting(t *testing.T) {
 }
 
 func TestAtomicWrite_PreservesPermissions(t *testing.T) {
+	t.Parallel()
 	if runtime.GOOS == "windows" {
 		t.Skip("Skipping permission test on Windows - Unix permissions not supported")
 	}
@@ -81,6 +84,7 @@ func TestAtomicWrite_PreservesPermissions(t *testing.T) {
 }
 
 func TestAtomicWrite_ConcurrentWrites(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.yaml")
 
@@ -109,6 +113,7 @@ func TestAtomicWrite_ConcurrentWrites(t *testing.T) {
 }
 
 func TestCalculateETag(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		content []byte
@@ -139,6 +144,7 @@ func TestCalculateETag(t *testing.T) {
 }
 
 func TestCalculateETag_DifferentContent(t *testing.T) {
+	t.Parallel()
 	content1 := []byte("log:\n  level: info\n")
 	content2 := []byte("log:\n  level: debug\n")
 
@@ -151,6 +157,7 @@ func TestCalculateETag_DifferentContent(t *testing.T) {
 }
 
 func TestAtomicWrite_FailsOnInvalidPath(t *testing.T) {
+	t.Parallel()
 	if runtime.GOOS == "windows" {
 		t.Skip("Skipping invalid path test on Windows - path handling differs")
 	}

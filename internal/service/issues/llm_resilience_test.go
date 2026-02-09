@@ -32,6 +32,7 @@ func (m *mockAgent) Capabilities() core.Capabilities {
 func (m *mockAgent) Ping(ctx context.Context) error { return nil }
 
 func TestCircuitBreaker_InitialState(t *testing.T) {
+	t.Parallel()
 	cb := NewLLMCircuitBreaker(3, 30*time.Second)
 
 	if cb.IsOpen() {
@@ -48,6 +49,7 @@ func TestCircuitBreaker_InitialState(t *testing.T) {
 }
 
 func TestCircuitBreaker_OpensAfterThreshold(t *testing.T) {
+	t.Parallel()
 	cb := NewLLMCircuitBreaker(3, 30*time.Second)
 
 	// Record failures up to threshold
@@ -73,6 +75,7 @@ func TestCircuitBreaker_OpensAfterThreshold(t *testing.T) {
 }
 
 func TestCircuitBreaker_SuccessResetsFailures(t *testing.T) {
+	t.Parallel()
 	cb := NewLLMCircuitBreaker(3, 30*time.Second)
 
 	// Record some failures
@@ -97,6 +100,7 @@ func TestCircuitBreaker_SuccessResetsFailures(t *testing.T) {
 }
 
 func TestCircuitBreaker_HalfOpenState(t *testing.T) {
+	t.Parallel()
 	// Use very short reset timeout for testing
 	cb := NewLLMCircuitBreaker(2, 10*time.Millisecond)
 
@@ -125,6 +129,7 @@ func TestCircuitBreaker_HalfOpenState(t *testing.T) {
 }
 
 func TestCircuitBreaker_HalfOpenFailure(t *testing.T) {
+	t.Parallel()
 	// Use very short reset timeout for testing
 	cb := NewLLMCircuitBreaker(2, 10*time.Millisecond)
 
@@ -151,6 +156,7 @@ func TestCircuitBreaker_HalfOpenFailure(t *testing.T) {
 }
 
 func TestCircuitBreaker_Reset(t *testing.T) {
+	t.Parallel()
 	cb := NewLLMCircuitBreaker(2, 30*time.Second)
 
 	// Open the circuit
@@ -174,6 +180,7 @@ func TestCircuitBreaker_Reset(t *testing.T) {
 }
 
 func TestLLMMetrics_GetAverageLatencyMs(t *testing.T) {
+	t.Parallel()
 	metrics := &LLMMetrics{}
 
 	// No calls yet
@@ -192,6 +199,7 @@ func TestLLMMetrics_GetAverageLatencyMs(t *testing.T) {
 }
 
 func TestLLMMetrics_GetSuccessRate(t *testing.T) {
+	t.Parallel()
 	metrics := &LLMMetrics{}
 
 	// No calls yet
@@ -210,6 +218,7 @@ func TestLLMMetrics_GetSuccessRate(t *testing.T) {
 }
 
 func TestIsTransientError_RateLimiting(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		err       error
 		transient bool
@@ -230,6 +239,7 @@ func TestIsTransientError_RateLimiting(t *testing.T) {
 }
 
 func TestIsTransientError_Timeout(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		err       error
 		transient bool
@@ -250,6 +260,7 @@ func TestIsTransientError_Timeout(t *testing.T) {
 }
 
 func TestIsTransientError_Network(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		err       error
 		transient bool
@@ -271,6 +282,7 @@ func TestIsTransientError_Network(t *testing.T) {
 }
 
 func TestIsTransientError_ServerErrors(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		err       error
 		transient bool
@@ -291,6 +303,7 @@ func TestIsTransientError_ServerErrors(t *testing.T) {
 }
 
 func TestIsTransientError_NonTransient(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		err       error
 		transient bool
@@ -317,6 +330,7 @@ func TestIsTransientError_NonTransient(t *testing.T) {
 }
 
 func TestDefaultLLMResilienceConfig(t *testing.T) {
+	t.Parallel()
 	cfg := DefaultLLMResilienceConfig()
 
 	if cfg.MaxRetries != 3 {
@@ -343,6 +357,7 @@ func TestDefaultLLMResilienceConfig(t *testing.T) {
 }
 
 func TestResilientLLMExecutor_Success(t *testing.T) {
+	t.Parallel()
 	agent := &mockAgent{
 		executeFunc: func(ctx context.Context, opts core.ExecuteOptions) (*core.ExecuteResult, error) {
 			return &core.ExecuteResult{Output: "success"}, nil
@@ -365,6 +380,7 @@ func TestResilientLLMExecutor_Success(t *testing.T) {
 }
 
 func TestResilientLLMExecutor_DisabledCallsDirectly(t *testing.T) {
+	t.Parallel()
 	callCount := 0
 	agent := &mockAgent{
 		executeFunc: func(ctx context.Context, opts core.ExecuteOptions) (*core.ExecuteResult, error) {
@@ -388,6 +404,7 @@ func TestResilientLLMExecutor_DisabledCallsDirectly(t *testing.T) {
 }
 
 func TestResilientLLMExecutor_CircuitOpen(t *testing.T) {
+	t.Parallel()
 	agent := &mockAgent{
 		executeFunc: func(ctx context.Context, opts core.ExecuteOptions) (*core.ExecuteResult, error) {
 			return nil, errors.New("service unavailable")
@@ -412,6 +429,7 @@ func TestResilientLLMExecutor_CircuitOpen(t *testing.T) {
 }
 
 func TestResilientLLMExecutor_ResetCircuitBreaker(t *testing.T) {
+	t.Parallel()
 	agent := &mockAgent{
 		executeFunc: func(ctx context.Context, opts core.ExecuteOptions) (*core.ExecuteResult, error) {
 			return nil, errors.New("error")
@@ -439,6 +457,7 @@ func TestResilientLLMExecutor_ResetCircuitBreaker(t *testing.T) {
 }
 
 func TestNewLLMCircuitBreaker_DefaultValues(t *testing.T) {
+	t.Parallel()
 	// Test with zero/negative values
 	cb := NewLLMCircuitBreaker(0, 0)
 
@@ -453,6 +472,7 @@ func TestNewLLMCircuitBreaker_DefaultValues(t *testing.T) {
 }
 
 func TestContains(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		s        string
 		substrs  []string
@@ -474,6 +494,7 @@ func TestContains(t *testing.T) {
 }
 
 func TestNonRetryableError(t *testing.T) {
+	t.Parallel()
 	originalErr := errors.New("invalid api key")
 	nre := &nonRetryableError{err: originalErr}
 

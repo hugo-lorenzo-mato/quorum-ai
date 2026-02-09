@@ -11,6 +11,9 @@ import (
 )
 
 func TestGitClient_NewClient(t *testing.T) {
+	t.Parallel()
+	t.Parallel()
+	
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	repo.Commit("Initial commit")
@@ -24,6 +27,9 @@ func TestGitClient_NewClient(t *testing.T) {
 }
 
 func TestGitClient_NewClient_NotARepo(t *testing.T) {
+	t.Parallel()
+	t.Parallel()
+	
 	dir := testutil.TempDir(t)
 
 	_, err := git.NewClient(dir)
@@ -31,6 +37,9 @@ func TestGitClient_NewClient_NotARepo(t *testing.T) {
 }
 
 func TestGitClient_Status(t *testing.T) {
+	t.Parallel()
+	t.Parallel()
+	
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	repo.Commit("Initial commit")
@@ -60,6 +69,7 @@ func TestGitClient_Status(t *testing.T) {
 }
 
 func TestGitClient_CurrentBranch(t *testing.T) {
+	t.Parallel()
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	repo.Commit("Initial commit")
@@ -73,6 +83,7 @@ func TestGitClient_CurrentBranch(t *testing.T) {
 }
 
 func TestGitClient_CreateBranch(t *testing.T) {
+	t.Parallel()
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	repo.Commit("Initial commit")
@@ -90,6 +101,7 @@ func TestGitClient_CreateBranch(t *testing.T) {
 }
 
 func TestGitClient_ListBranches(t *testing.T) {
+	t.Parallel()
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	repo.Commit("Initial commit")
@@ -107,6 +119,7 @@ func TestGitClient_ListBranches(t *testing.T) {
 }
 
 func TestGitClient_BranchExists(t *testing.T) {
+	t.Parallel()
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	repo.Commit("Initial commit")
@@ -124,6 +137,7 @@ func TestGitClient_BranchExists(t *testing.T) {
 }
 
 func TestGitClient_CommitAll(t *testing.T) {
+	t.Parallel()
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	repo.Commit("Initial commit")
@@ -149,6 +163,7 @@ func TestGitClient_CommitAll(t *testing.T) {
 }
 
 func TestGitClient_Log(t *testing.T) {
+	t.Parallel()
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	repo.Commit("First")
@@ -171,6 +186,7 @@ func TestGitClient_Log(t *testing.T) {
 }
 
 func TestGitClient_Diff(t *testing.T) {
+	t.Parallel()
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	repo.Commit("Initial commit")
@@ -192,6 +208,7 @@ func TestGitClient_Diff(t *testing.T) {
 }
 
 func TestGitClient_Checkout(t *testing.T) {
+	t.Parallel()
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	repo.Commit("Initial commit")
@@ -215,6 +232,7 @@ func TestGitClient_Checkout(t *testing.T) {
 }
 
 func TestGitClient_DeleteBranch(t *testing.T) {
+	t.Parallel()
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	repo.Commit("Initial commit")
@@ -237,6 +255,7 @@ func TestGitClient_DeleteBranch(t *testing.T) {
 }
 
 func TestGitClient_CurrentCommit(t *testing.T) {
+	t.Parallel()
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	expectedHash := repo.Commit("Initial commit")
@@ -250,6 +269,7 @@ func TestGitClient_CurrentCommit(t *testing.T) {
 }
 
 func TestGitClient_DefaultBranch(t *testing.T) {
+	t.Parallel()
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	repo.Commit("Initial commit")
@@ -263,6 +283,7 @@ func TestGitClient_DefaultBranch(t *testing.T) {
 }
 
 func TestGitClient_Add(t *testing.T) {
+	t.Parallel()
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	repo.Commit("Initial commit")
@@ -290,6 +311,7 @@ func TestGitClient_Add(t *testing.T) {
 // =============================================================================
 
 func TestGitClient_Merge_FastForward(t *testing.T) {
+	t.Parallel()
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	repo.Commit("Initial commit")
@@ -313,6 +335,7 @@ func TestGitClient_Merge_FastForward(t *testing.T) {
 }
 
 func TestGitClient_Merge_NoFastForward(t *testing.T) {
+	t.Parallel()
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	repo.Commit("Initial commit")
@@ -341,6 +364,7 @@ func TestGitClient_Merge_NoFastForward(t *testing.T) {
 }
 
 func TestGitClient_Merge_Conflict(t *testing.T) {
+	t.Parallel()
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("conflict.txt", "original")
 	repo.Commit("Initial commit")
@@ -385,6 +409,7 @@ func TestGitClient_Merge_Conflict(t *testing.T) {
 }
 
 func TestGitClient_Merge_AlreadyUpToDate(t *testing.T) {
+	t.Parallel()
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	repo.Commit("Initial commit")
@@ -402,6 +427,7 @@ func TestGitClient_Merge_AlreadyUpToDate(t *testing.T) {
 }
 
 func TestGitClient_AbortMerge_NoMergeInProgress(t *testing.T) {
+	t.Parallel()
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	repo.Commit("Initial commit")
@@ -419,6 +445,7 @@ func TestGitClient_AbortMerge_NoMergeInProgress(t *testing.T) {
 // =============================================================================
 
 func TestGitClient_Rebase_Success(t *testing.T) {
+	t.Parallel()
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	repo.Commit("Initial commit")
@@ -447,6 +474,7 @@ func TestGitClient_Rebase_Success(t *testing.T) {
 }
 
 func TestGitClient_Rebase_Conflict(t *testing.T) {
+	t.Parallel()
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("conflict.txt", "original")
 	repo.Commit("Initial commit")
@@ -486,6 +514,7 @@ func TestGitClient_Rebase_Conflict(t *testing.T) {
 }
 
 func TestGitClient_AbortRebase_NoRebaseInProgress(t *testing.T) {
+	t.Parallel()
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	repo.Commit("Initial commit")
@@ -499,6 +528,7 @@ func TestGitClient_AbortRebase_NoRebaseInProgress(t *testing.T) {
 }
 
 func TestGitClient_HasRebaseInProgress_False(t *testing.T) {
+	t.Parallel()
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	repo.Commit("Initial commit")
@@ -516,6 +546,7 @@ func TestGitClient_HasRebaseInProgress_False(t *testing.T) {
 // =============================================================================
 
 func TestGitClient_ResetHard(t *testing.T) {
+	t.Parallel()
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	firstCommit := repo.Commit("Initial commit")
@@ -537,6 +568,7 @@ func TestGitClient_ResetHard(t *testing.T) {
 }
 
 func TestGitClient_ResetSoft(t *testing.T) {
+	t.Parallel()
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	firstCommit := repo.Commit("Initial commit")
@@ -562,6 +594,7 @@ func TestGitClient_ResetSoft(t *testing.T) {
 // =============================================================================
 
 func TestGitClient_CherryPick(t *testing.T) {
+	t.Parallel()
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	repo.Commit("Initial commit")
@@ -591,6 +624,7 @@ func TestGitClient_CherryPick(t *testing.T) {
 }
 
 func TestGitClient_CherryPick_Conflict(t *testing.T) {
+	t.Parallel()
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("conflict.txt", "original")
 	repo.Commit("Initial commit")
@@ -619,6 +653,7 @@ func TestGitClient_CherryPick_Conflict(t *testing.T) {
 }
 
 func TestGitClient_AbortCherryPick_NoCherryPickInProgress(t *testing.T) {
+	t.Parallel()
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	repo.Commit("Initial commit")
@@ -636,6 +671,7 @@ func TestGitClient_AbortCherryPick_NoCherryPickInProgress(t *testing.T) {
 // =============================================================================
 
 func TestGitClient_RevParse(t *testing.T) {
+	t.Parallel()
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	expectedHash := repo.Commit("Initial commit")
@@ -649,6 +685,7 @@ func TestGitClient_RevParse(t *testing.T) {
 }
 
 func TestGitClient_IsAncestor(t *testing.T) {
+	t.Parallel()
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	firstCommit := repo.Commit("Initial commit")
@@ -675,6 +712,7 @@ func TestGitClient_IsAncestor(t *testing.T) {
 // =============================================================================
 
 func TestGitClient_HasUncommittedChanges(t *testing.T) {
+	t.Parallel()
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	repo.Commit("Initial commit")
@@ -695,6 +733,7 @@ func TestGitClient_HasUncommittedChanges(t *testing.T) {
 }
 
 func TestGitClient_HasUncommittedChanges_Modified(t *testing.T) {
+	t.Parallel()
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	repo.Commit("Initial commit")

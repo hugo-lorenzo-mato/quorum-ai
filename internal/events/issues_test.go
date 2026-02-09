@@ -6,6 +6,7 @@ import (
 )
 
 func TestNewIssuesGenerationProgressEvent(t *testing.T) {
+	t.Parallel()
 	before := time.Now()
 	event := NewIssuesGenerationProgressEvent(IssuesGenerationProgressParams{
 		WorkflowID:  "wf-gen-1",
@@ -60,6 +61,7 @@ func TestNewIssuesGenerationProgressEvent(t *testing.T) {
 }
 
 func TestNewIssuesPublishingProgressEvent(t *testing.T) {
+	t.Parallel()
 	before := time.Now()
 	event := NewIssuesPublishingProgressEvent(IssuesPublishingProgressParams{
 		WorkflowID:  "wf-pub-1",
@@ -118,6 +120,7 @@ func TestNewIssuesPublishingProgressEvent(t *testing.T) {
 }
 
 func TestIssuesEventTypeConstants(t *testing.T) {
+	t.Parallel()
 	if TypeIssuesGenerationProgress != "issues_generation_progress" {
 		t.Errorf("expected TypeIssuesGenerationProgress to be 'issues_generation_progress', got %q", TypeIssuesGenerationProgress)
 	}
@@ -127,11 +130,13 @@ func TestIssuesEventTypeConstants(t *testing.T) {
 }
 
 func TestIssuesGenerationProgressEvent_ImplementsEventInterface(t *testing.T) {
+	t.Parallel()
 	event := NewIssuesGenerationProgressEvent(IssuesGenerationProgressParams{WorkflowID: "wf-1", ProjectID: "proj-1", Stage: "start"})
 	var _ Event = event // Compile-time check
 }
 
 func TestIssuesPublishingProgressEvent_ImplementsEventInterface(t *testing.T) {
+	t.Parallel()
 	event := NewIssuesPublishingProgressEvent(IssuesPublishingProgressParams{WorkflowID: "wf-1", ProjectID: "proj-1", Stage: "start"})
 	var _ Event = event // Compile-time check
 }

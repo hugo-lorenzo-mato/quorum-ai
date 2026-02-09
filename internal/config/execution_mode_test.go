@@ -3,6 +3,7 @@ package config
 import "testing"
 
 func TestExecutionMode_Constants(t *testing.T) {
+	t.Parallel()
 	// Verify constant values are as expected
 	if ExecutionModeMultiAgent != "multi_agent" {
 		t.Errorf("ExecutionModeMultiAgent = %q, want %q", ExecutionModeMultiAgent, "multi_agent")
@@ -13,6 +14,7 @@ func TestExecutionMode_Constants(t *testing.T) {
 }
 
 func TestExecutionMode_IsValid(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		mode     ExecutionMode
@@ -37,6 +39,7 @@ func TestExecutionMode_IsValid(t *testing.T) {
 }
 
 func TestExecutionMode_IsSingleAgent(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		mode     ExecutionMode
@@ -58,12 +61,14 @@ func TestExecutionMode_IsSingleAgent(t *testing.T) {
 }
 
 func TestDefaultExecutionMode(t *testing.T) {
+	t.Parallel()
 	if got := DefaultExecutionMode(); got != ExecutionModeMultiAgent {
 		t.Errorf("DefaultExecutionMode() = %v, want %v", got, ExecutionModeMultiAgent)
 	}
 }
 
 func TestExecutionMode_String(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		mode     ExecutionMode

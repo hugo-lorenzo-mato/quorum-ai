@@ -10,6 +10,7 @@ import (
 )
 
 func TestParseTaskFile_ValidFile(t *testing.T) {
+	t.Parallel()
 	content := `# Task: Create Web Server
 
 **Task ID**: task-1
@@ -36,6 +37,7 @@ This is the context section.
 }
 
 func TestParseTaskFile_WithDependencies(t *testing.T) {
+	t.Parallel()
 	content := `# Task: Update Database
 
 **Task ID**: task-5
@@ -57,6 +59,7 @@ func TestParseTaskFile_WithDependencies(t *testing.T) {
 }
 
 func TestParseTaskFile_MissingTaskID(t *testing.T) {
+	t.Parallel()
 	content := `# Task: No ID Task
 
 **Assigned Agent**: claude
@@ -72,6 +75,7 @@ func TestParseTaskFile_MissingTaskID(t *testing.T) {
 }
 
 func TestParseTaskFile_FallbackNameFromFilename(t *testing.T) {
+	t.Parallel()
 	content := `**Task ID**: task-1
 **Assigned Agent**: claude
 **Complexity**: low
@@ -89,6 +93,7 @@ func TestParseTaskFile_FallbackNameFromFilename(t *testing.T) {
 }
 
 func TestParseTaskFile_DefaultComplexity(t *testing.T) {
+	t.Parallel()
 	content := `# Task: Simple Task
 
 **Task ID**: task-1
@@ -106,6 +111,7 @@ func TestParseTaskFile_DefaultComplexity(t *testing.T) {
 }
 
 func TestParseDependencies_None(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		input    string
 		expected []string
@@ -124,6 +130,7 @@ func TestParseDependencies_None(t *testing.T) {
 }
 
 func TestParseDependencies_Multiple(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		input    string
 		expected []string
@@ -141,6 +148,7 @@ func TestParseDependencies_Multiple(t *testing.T) {
 }
 
 func TestExtractTaskNameFromFilename(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		filename string
 		expected string
@@ -158,6 +166,7 @@ func TestExtractTaskNameFromFilename(t *testing.T) {
 }
 
 func TestComputeExecutionLevels_NoDependencies(t *testing.T) {
+	t.Parallel()
 	tasks := []TaskManifestItem{
 		{ID: "task-1", Dependencies: []string{}},
 		{ID: "task-2", Dependencies: []string{}},
@@ -176,6 +185,7 @@ func TestComputeExecutionLevels_NoDependencies(t *testing.T) {
 }
 
 func TestComputeExecutionLevels_LinearDependencies(t *testing.T) {
+	t.Parallel()
 	tasks := []TaskManifestItem{
 		{ID: "task-1", Dependencies: []string{}},
 		{ID: "task-2", Dependencies: []string{"task-1"}},
@@ -193,6 +203,7 @@ func TestComputeExecutionLevels_LinearDependencies(t *testing.T) {
 }
 
 func TestComputeExecutionLevels_DiamondDependency(t *testing.T) {
+	t.Parallel()
 	// Diamond pattern:
 	//      task-1
 	//      /    \
@@ -218,6 +229,7 @@ func TestComputeExecutionLevels_DiamondDependency(t *testing.T) {
 }
 
 func TestComputeExecutionLevels_CircularDependency(t *testing.T) {
+	t.Parallel()
 	tasks := []TaskManifestItem{
 		{ID: "task-1", Dependencies: []string{"task-3"}},
 		{ID: "task-2", Dependencies: []string{"task-1"}},
@@ -230,6 +242,7 @@ func TestComputeExecutionLevels_CircularDependency(t *testing.T) {
 }
 
 func TestComputeExecutionLevels_MissingDependency(t *testing.T) {
+	t.Parallel()
 	// task-2 depends on task-99 which doesn't exist
 	tasks := []TaskManifestItem{
 		{ID: "task-1", Dependencies: []string{}},
@@ -246,12 +259,14 @@ func TestComputeExecutionLevels_MissingDependency(t *testing.T) {
 }
 
 func TestComputeExecutionLevels_Empty(t *testing.T) {
+	t.Parallel()
 	levels, err := computeExecutionLevels([]TaskManifestItem{})
 	require.NoError(t, err)
 	assert.Nil(t, levels)
 }
 
 func TestGenerateManifestFromFilesystem_Success(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 
 	// Create valid task files
@@ -291,6 +306,7 @@ func TestGenerateManifestFromFilesystem_Success(t *testing.T) {
 }
 
 func TestGenerateManifestFromFilesystem_NoFiles(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 
 	_, err := generateManifestFromFilesystem(tmpDir)
@@ -299,6 +315,7 @@ func TestGenerateManifestFromFilesystem_NoFiles(t *testing.T) {
 }
 
 func TestGenerateManifestFromFilesystem_PartialSuccess(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 
 	// Create one valid and one invalid task file
@@ -328,6 +345,7 @@ Missing task ID header here
 }
 
 func TestGenerateManifestFromFilesystem_AllInvalid(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 
 	createTaskFileInDir(t, tmpDir, "task-1-invalid.md", `# Task: Invalid
@@ -346,6 +364,7 @@ Still no task ID
 }
 
 func TestGenerateManifestFromFilesystem_CircularDeps(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 
 	createTaskFileInDir(t, tmpDir, "task-1-a.md", `# Task: A

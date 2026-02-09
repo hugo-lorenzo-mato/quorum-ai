@@ -86,6 +86,7 @@ func (m *mockOutputNotifier) Log(_, _, _ string) {}
 func (m *mockOutputNotifier) AgentEvent(_, _, _ string, _ map[string]interface{}) {}
 
 func TestExecutor_Run_AllTasksCompleted(t *testing.T) {
+	t.Parallel()
 	dag := &mockDAGBuilder{}
 	saver := &mockStateSaver{}
 	executor := NewExecutor(dag, saver, nil)
@@ -152,6 +153,7 @@ func TestExecutor_Run_AllTasksCompleted(t *testing.T) {
 }
 
 func TestExecutor_Run_DryRunMode(t *testing.T) {
+	t.Parallel()
 	dag := &mockDAGBuilder{}
 	saver := &mockStateSaver{}
 	executor := NewExecutor(dag, saver, nil)
@@ -202,6 +204,7 @@ func TestExecutor_Run_DryRunMode(t *testing.T) {
 }
 
 func TestExecutor_Run_NoReadyTasks(t *testing.T) {
+	t.Parallel()
 	// Create a DAG with no tasks registered but tasks in state
 	dag := &mockDAGBuilder{}
 	saver := &mockStateSaver{}
@@ -247,6 +250,7 @@ func TestExecutor_Run_NoReadyTasks(t *testing.T) {
 }
 
 func TestExecutor_Run_AgentExecutionFails(t *testing.T) {
+	t.Parallel()
 	dag := &mockDAGBuilder{}
 	saver := &mockStateSaver{}
 	executor := NewExecutor(dag, saver, nil)
@@ -300,6 +304,7 @@ func TestExecutor_Run_AgentExecutionFails(t *testing.T) {
 }
 
 func TestExecutor_Run_WithWorktrees(t *testing.T) {
+	t.Parallel()
 	dag := &mockDAGBuilder{}
 	saver := &mockStateSaver{}
 	executor := NewExecutor(dag, saver, nil)
@@ -363,6 +368,7 @@ func TestExecutor_Run_WithWorktrees(t *testing.T) {
 }
 
 func TestExecutor_Run_WorktreeCreateFails(t *testing.T) {
+	t.Parallel()
 	dag := &mockDAGBuilder{}
 	saver := &mockStateSaver{}
 	executor := NewExecutor(dag, saver, nil)
@@ -422,6 +428,7 @@ func TestExecutor_Run_WorktreeCreateFails(t *testing.T) {
 }
 
 func TestExecutor_Run_RateLimitFails(t *testing.T) {
+	t.Parallel()
 	dag := &mockDAGBuilder{}
 	saver := &mockStateSaver{}
 	executor := NewExecutor(dag, saver, nil)
@@ -470,6 +477,7 @@ func TestExecutor_Run_RateLimitFails(t *testing.T) {
 }
 
 func TestExecutor_Run_PromptRenderFails(t *testing.T) {
+	t.Parallel()
 	dag := &mockDAGBuilder{}
 	saver := &mockStateSaver{}
 	executor := NewExecutor(dag, saver, nil)
@@ -520,6 +528,7 @@ func TestExecutor_Run_PromptRenderFails(t *testing.T) {
 }
 
 func TestExecutor_Run_AgentNotFound(t *testing.T) {
+	t.Parallel()
 	dag := &mockDAGBuilder{}
 	saver := &mockStateSaver{}
 	executor := NewExecutor(dag, saver, nil)
@@ -566,6 +575,7 @@ func TestExecutor_Run_AgentNotFound(t *testing.T) {
 }
 
 func TestExecutor_Run_ParallelTasks(t *testing.T) {
+	t.Parallel()
 	dag := &mockDAGBuilder{}
 	saver := &mockStateSaver{}
 	executor := NewExecutor(dag, saver, nil)
@@ -631,6 +641,7 @@ func TestExecutor_Run_ParallelTasks(t *testing.T) {
 }
 
 func TestExecutor_Run_SkipsAlreadyCompletedTasks(t *testing.T) {
+	t.Parallel()
 	dag := &mockDAGBuilder{}
 	saver := &mockStateSaver{}
 	executor := NewExecutor(dag, saver, nil)
@@ -678,6 +689,7 @@ func TestExecutor_Run_SkipsAlreadyCompletedTasks(t *testing.T) {
 }
 
 func TestExecutor_Run_UsesDefaultAgentWhenNoCLI(t *testing.T) {
+	t.Parallel()
 	dag := &mockDAGBuilder{}
 	saver := &mockStateSaver{}
 	executor := NewExecutor(dag, saver, nil)
@@ -727,6 +739,7 @@ func TestExecutor_Run_UsesDefaultAgentWhenNoCLI(t *testing.T) {
 }
 
 func TestExecutor_Run_UpdatesMetrics(t *testing.T) {
+	t.Parallel()
 	dag := &mockDAGBuilder{}
 	saver := &mockStateSaver{}
 	executor := NewExecutor(dag, saver, nil)
@@ -795,6 +808,7 @@ func TestExecutor_Run_UpdatesMetrics(t *testing.T) {
 }
 
 func TestExecutor_Run_SaveStateFails(t *testing.T) {
+	t.Parallel()
 	dag := &mockDAGBuilder{}
 	saver := &mockStateSaver{err: errors.New("save failed")}
 	executor := NewExecutor(dag, saver, nil)
@@ -844,6 +858,7 @@ func TestExecutor_Run_SaveStateFails(t *testing.T) {
 }
 
 func TestExecutor_Run_NoTasks(t *testing.T) {
+	t.Parallel()
 	dag := &mockDAGBuilder{}
 	saver := &mockStateSaver{}
 	executor := NewExecutor(dag, saver, nil)

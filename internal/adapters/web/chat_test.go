@@ -101,6 +101,7 @@ func setupTestRouter(h *ChatHandler) *chi.Mux {
 }
 
 func TestCreateSession(t *testing.T) {
+	t.Parallel()
 	registry := newMockAgentRegistry()
 	eventBus := events.New(10)
 	defer eventBus.Close()
@@ -168,6 +169,7 @@ func TestCreateSession(t *testing.T) {
 }
 
 func TestListSessions(t *testing.T) {
+	t.Parallel()
 	h := NewChatHandler(nil, nil, nil, nil)
 	r := setupTestRouter(h)
 	projectRoot := h.getProjectRoot(context.Background())
@@ -205,6 +207,7 @@ func TestListSessions(t *testing.T) {
 }
 
 func TestGetSession(t *testing.T) {
+	t.Parallel()
 	h := NewChatHandler(nil, nil, nil, nil)
 	r := setupTestRouter(h)
 
@@ -258,6 +261,7 @@ func TestGetSession(t *testing.T) {
 }
 
 func TestDeleteSession(t *testing.T) {
+	t.Parallel()
 	h := NewChatHandler(nil, nil, nil, nil)
 	r := setupTestRouter(h)
 
@@ -290,6 +294,7 @@ func TestDeleteSession(t *testing.T) {
 }
 
 func TestGetMessages(t *testing.T) {
+	t.Parallel()
 	h := NewChatHandler(nil, nil, nil, nil)
 	r := setupTestRouter(h)
 
@@ -321,6 +326,7 @@ func TestGetMessages(t *testing.T) {
 }
 
 func TestSendMessage(t *testing.T) {
+	t.Parallel()
 	registry := newMockAgentRegistry()
 	eventBus := events.New(10)
 	defer eventBus.Close()
@@ -396,6 +402,7 @@ func TestSendMessage(t *testing.T) {
 }
 
 func TestSetAgent(t *testing.T) {
+	t.Parallel()
 	registry := newMockAgentRegistry()
 	h := NewChatHandler(registry, nil, nil, nil)
 	r := setupTestRouter(h)
@@ -453,6 +460,7 @@ func TestSetAgent(t *testing.T) {
 }
 
 func TestSetModel(t *testing.T) {
+	t.Parallel()
 	h := NewChatHandler(nil, nil, nil, nil)
 	r := setupTestRouter(h)
 
@@ -477,6 +485,7 @@ func TestSetModel(t *testing.T) {
 }
 
 func TestChatHandlerWithNilDependencies(t *testing.T) {
+	t.Parallel()
 	// Handler should work with nil dependencies for basic operations
 	h := NewChatHandler(nil, nil, nil, nil)
 	r := setupTestRouter(h)

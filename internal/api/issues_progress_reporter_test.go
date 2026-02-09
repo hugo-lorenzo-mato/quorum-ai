@@ -9,6 +9,7 @@ import (
 )
 
 func TestIssuesSSEProgressReporter_Generation(t *testing.T) {
+	t.Parallel()
 	bus := events.New(10)
 	defer bus.Close()
 
@@ -70,6 +71,7 @@ func TestIssuesSSEProgressReporter_Generation(t *testing.T) {
 }
 
 func TestIssuesSSEProgressReporter_Publishing(t *testing.T) {
+	t.Parallel()
 	bus := events.New(10)
 	defer bus.Close()
 
@@ -142,6 +144,7 @@ func TestIssuesSSEProgressReporter_Publishing(t *testing.T) {
 }
 
 func TestIssuesSSEProgressReporter_NilSafe(t *testing.T) {
+	t.Parallel()
 	// nil reporter should not panic
 	var nilReporter *issuesSSEProgressReporter
 	nilReporter.OnIssuesGenerationProgress("wf-1", "start", 0, 0, nil, "msg")
@@ -154,6 +157,7 @@ func TestIssuesSSEProgressReporter_NilSafe(t *testing.T) {
 }
 
 func TestIssuesSSEProgressReporter_WithNilIssue(t *testing.T) {
+	t.Parallel()
 	bus := events.New(10)
 	defer bus.Close()
 

@@ -38,6 +38,7 @@ func (m *mockAgentWithCallback) Capabilities() core.Capabilities {
 }
 
 func TestPlanner_Run_Success(t *testing.T) {
+	t.Parallel()
 	dag := &mockDAGBuilder{}
 	saver := &mockStateSaver{}
 	planner := NewPlanner(dag, saver)
@@ -109,6 +110,7 @@ func TestPlanner_Run_Success(t *testing.T) {
 }
 
 func TestPlanner_Run_NoAnalysis(t *testing.T) {
+	t.Parallel()
 	dag := &mockDAGBuilder{}
 	saver := &mockStateSaver{}
 	planner := NewPlanner(dag, saver)
@@ -149,6 +151,7 @@ func TestPlanner_Run_NoAnalysis(t *testing.T) {
 }
 
 func TestPlanner_Run_AgentNotFound(t *testing.T) {
+	t.Parallel()
 	dag := &mockDAGBuilder{}
 	saver := &mockStateSaver{}
 	planner := NewPlanner(dag, saver)
@@ -193,6 +196,7 @@ func TestPlanner_Run_AgentNotFound(t *testing.T) {
 }
 
 func TestPlanner_Run_RateLimitFails(t *testing.T) {
+	t.Parallel()
 	dag := &mockDAGBuilder{}
 	saver := &mockStateSaver{}
 	planner := NewPlanner(dag, saver)
@@ -240,6 +244,7 @@ func TestPlanner_Run_RateLimitFails(t *testing.T) {
 }
 
 func TestPlanner_Run_PromptRenderFails(t *testing.T) {
+	t.Parallel()
 	dag := &mockDAGBuilder{}
 	saver := &mockStateSaver{}
 	planner := NewPlanner(dag, saver)
@@ -289,6 +294,7 @@ func TestPlanner_Run_PromptRenderFails(t *testing.T) {
 }
 
 func TestPlanner_Run_AgentExecutionFails(t *testing.T) {
+	t.Parallel()
 	dag := &mockDAGBuilder{}
 	saver := &mockStateSaver{}
 	planner := NewPlanner(dag, saver)
@@ -337,6 +343,7 @@ func TestPlanner_Run_AgentExecutionFails(t *testing.T) {
 }
 
 func TestPlanner_Run_InvalidPlanOutput(t *testing.T) {
+	t.Parallel()
 	dag := &mockDAGBuilder{}
 	saver := &mockStateSaver{}
 	planner := NewPlanner(dag, saver)
@@ -387,6 +394,7 @@ func TestPlanner_Run_InvalidPlanOutput(t *testing.T) {
 }
 
 func TestPlanner_Run_DAGBuildFails(t *testing.T) {
+	t.Parallel()
 	dag := &mockDAGBuilderWithError{buildErr: errors.New("DAG build failed")}
 	saver := &mockStateSaver{}
 	planner := NewPlanner(dag, saver)
@@ -437,6 +445,7 @@ func TestPlanner_Run_DAGBuildFails(t *testing.T) {
 }
 
 func TestPlanner_Run_WithOutput(t *testing.T) {
+	t.Parallel()
 	dag := &mockDAGBuilder{}
 	saver := &mockStateSaver{}
 	planner := NewPlanner(dag, saver)
@@ -504,6 +513,7 @@ func TestPlanner_Run_WithOutput(t *testing.T) {
 }
 
 func TestPlanner_Run_WithDependencies(t *testing.T) {
+	t.Parallel()
 	dag := &mockDAGBuilder{}
 	saver := &mockStateSaver{}
 	planner := NewPlanner(dag, saver)
@@ -573,6 +583,7 @@ func TestPlanner_Run_WithDependencies(t *testing.T) {
 }
 
 func TestPlanner_Run_SaveStateFails(t *testing.T) {
+	t.Parallel()
 	dag := &mockDAGBuilder{}
 	saver := &mockStateSaver{err: errors.New("save failed")}
 	planner := NewPlanner(dag, saver)
@@ -643,6 +654,7 @@ func (m *mockDAGBuilderWithError) Build() (interface{}, error) {
 }
 
 func TestParsePlanItems_GeminiWithMultipleParts(t *testing.T) {
+	t.Parallel()
 	input := `{
 		"candidates": [{
 			"content": {
@@ -665,6 +677,7 @@ func TestParsePlanItems_GeminiWithMultipleParts(t *testing.T) {
 }
 
 func TestParsePlanItems_GeminiEmptyCandidate(t *testing.T) {
+	t.Parallel()
 	input := `{
 		"candidates": []
 	}`
@@ -676,6 +689,7 @@ func TestParsePlanItems_GeminiEmptyCandidate(t *testing.T) {
 }
 
 func TestParsePlanItems_GeminiEmptyParts(t *testing.T) {
+	t.Parallel()
 	input := `{
 		"candidates": [{
 			"content": {
@@ -691,6 +705,7 @@ func TestParsePlanItems_GeminiEmptyParts(t *testing.T) {
 }
 
 func TestExtractJSON_WithEscapedBackslash(t *testing.T) {
+	t.Parallel()
 	input := `{"key": "value with \\\\ backslash"}`
 	result := extractJSON(input)
 
@@ -700,6 +715,7 @@ func TestExtractJSON_WithEscapedBackslash(t *testing.T) {
 }
 
 func TestExtractJSON_NestedArrays(t *testing.T) {
+	t.Parallel()
 	input := `Prefix [[1, 2], [3, 4]] suffix`
 	result := extractJSON(input)
 
@@ -709,6 +725,7 @@ func TestExtractJSON_NestedArrays(t *testing.T) {
 }
 
 func TestRawToText_Number(t *testing.T) {
+	t.Parallel()
 	raw := json.RawMessage(`123`)
 	result := rawToText(raw)
 
@@ -719,6 +736,7 @@ func TestRawToText_Number(t *testing.T) {
 }
 
 func TestRawToText_Boolean(t *testing.T) {
+	t.Parallel()
 	raw := json.RawMessage(`true`)
 	result := rawToText(raw)
 
@@ -729,6 +747,7 @@ func TestRawToText_Boolean(t *testing.T) {
 }
 
 func TestRawToText_Null(t *testing.T) {
+	t.Parallel()
 	raw := json.RawMessage(`null`)
 	result := rawToText(raw)
 
@@ -738,6 +757,7 @@ func TestRawToText_Null(t *testing.T) {
 }
 
 func TestRawToText_ArrayWithEmptyText(t *testing.T) {
+	t.Parallel()
 	raw := json.RawMessage(`[{"text": ""}, {"text": "   "}]`)
 	result := rawToText(raw)
 
@@ -747,6 +767,7 @@ func TestRawToText_ArrayWithEmptyText(t *testing.T) {
 }
 
 func TestGetConsolidatedAnalysis_MultipleCheckpoints(t *testing.T) {
+	t.Parallel()
 	data1, _ := json.Marshal(map[string]interface{}{"content": "First analysis"})
 	data2, _ := json.Marshal(map[string]interface{}{"content": "Second analysis"})
 
@@ -767,6 +788,7 @@ func TestGetConsolidatedAnalysis_MultipleCheckpoints(t *testing.T) {
 }
 
 func TestGetConsolidatedAnalysis_NoCheckpoints(t *testing.T) {
+	t.Parallel()
 	state := &core.WorkflowState{
 		WorkflowRun: core.WorkflowRun{
 			Checkpoints: []core.Checkpoint{},
@@ -780,6 +802,7 @@ func TestGetConsolidatedAnalysis_NoCheckpoints(t *testing.T) {
 }
 
 func TestGetConsolidatedAnalysis_NilCheckpoints(t *testing.T) {
+	t.Parallel()
 	state := &core.WorkflowState{}
 
 	result := GetConsolidatedAnalysis(state)

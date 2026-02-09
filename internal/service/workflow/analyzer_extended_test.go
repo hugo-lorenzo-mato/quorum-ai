@@ -13,6 +13,7 @@ import (
 )
 
 func TestAnalyzer_Run_AgentExecutionError(t *testing.T) {
+	t.Parallel()
 	config := ModeratorConfig{
 		Enabled: false, // Disable moderator for this test
 	}
@@ -60,6 +61,7 @@ func TestAnalyzer_Run_AgentExecutionError(t *testing.T) {
 }
 
 func TestAnalysisOutput_Fields(t *testing.T) {
+	t.Parallel()
 	output := AnalysisOutput{
 		AgentName:       "claude",
 		RawOutput:       "Analysis result",
@@ -86,6 +88,7 @@ func TestAnalysisOutput_Fields(t *testing.T) {
 }
 
 func TestParseAnalysisOutput_PartialJSON(t *testing.T) {
+	t.Parallel()
 	// Test JSON with only some fields
 	result := &core.ExecuteResult{
 		Output: `{"claims":["claim1"],"other_field":"ignored"}`,
@@ -107,6 +110,7 @@ func TestParseAnalysisOutput_PartialJSON(t *testing.T) {
 }
 
 func TestParseAnalysisOutput_MalformedJSON(t *testing.T) {
+	t.Parallel()
 	result := &core.ExecuteResult{
 		Output: `{"claims": [invalid`,
 	}
@@ -126,6 +130,7 @@ func TestParseAnalysisOutput_MalformedJSON(t *testing.T) {
 }
 
 func TestGetConsolidatedAnalysis_InvalidJSON(t *testing.T) {
+	t.Parallel()
 	state := &core.WorkflowState{
 		WorkflowRun: core.WorkflowRun{
 			Checkpoints: []core.Checkpoint{
@@ -144,6 +149,7 @@ func TestGetConsolidatedAnalysis_InvalidJSON(t *testing.T) {
 }
 
 func TestGetConsolidatedAnalysis_MissingContent(t *testing.T) {
+	t.Parallel()
 	state := &core.WorkflowState{
 		WorkflowRun: core.WorkflowRun{
 			Checkpoints: []core.Checkpoint{
@@ -166,6 +172,7 @@ func TestGetConsolidatedAnalysis_MissingContent(t *testing.T) {
 // ============================================================================
 
 func TestComputePromptHash_Deterministic(t *testing.T) {
+	t.Parallel()
 	state := &core.WorkflowState{
 		WorkflowDefinition: core.WorkflowDefinition{
 			Prompt: "Analyze this codebase",
@@ -186,6 +193,7 @@ func TestComputePromptHash_Deterministic(t *testing.T) {
 }
 
 func TestComputePromptHash_DifferentPrompts(t *testing.T) {
+	t.Parallel()
 	state1 := &core.WorkflowState{WorkflowDefinition: core.WorkflowDefinition{Prompt: "Analyze this"}}
 	state2 := &core.WorkflowState{WorkflowDefinition: core.WorkflowDefinition{Prompt: "Analyze that"}}
 
@@ -198,6 +206,7 @@ func TestComputePromptHash_DifferentPrompts(t *testing.T) {
 }
 
 func TestComputeContentHash_Deterministic(t *testing.T) {
+	t.Parallel()
 	content := "Some analysis content"
 
 	hash1 := computeContentHash(content)
@@ -209,6 +218,7 @@ func TestComputeContentHash_Deterministic(t *testing.T) {
 }
 
 func TestGetAnalysisCheckpoint_Found(t *testing.T) {
+	t.Parallel()
 	promptHash := "abc123"
 	meta := AnalysisCheckpointMetadata{
 		AgentName:   "claude",
@@ -249,6 +259,7 @@ func TestGetAnalysisCheckpoint_Found(t *testing.T) {
 }
 
 func TestGetAnalysisCheckpoint_PromptHashMismatch(t *testing.T) {
+	t.Parallel()
 	meta := AnalysisCheckpointMetadata{
 		AgentName:  "claude",
 		Round:      1,
@@ -277,6 +288,7 @@ func TestGetAnalysisCheckpoint_PromptHashMismatch(t *testing.T) {
 }
 
 func TestGetAnalysisCheckpoint_WrongAgent(t *testing.T) {
+	t.Parallel()
 	meta := AnalysisCheckpointMetadata{
 		AgentName:  "gemini",
 		Round:      1,
@@ -305,6 +317,7 @@ func TestGetAnalysisCheckpoint_WrongAgent(t *testing.T) {
 }
 
 func TestGetAnalysisCheckpoint_WrongRound(t *testing.T) {
+	t.Parallel()
 	meta := AnalysisCheckpointMetadata{
 		AgentName:  "claude",
 		Round:      1, // V1 checkpoint
@@ -333,6 +346,7 @@ func TestGetAnalysisCheckpoint_WrongRound(t *testing.T) {
 }
 
 func TestRestoreAnalysisFromCheckpoint_Success(t *testing.T) {
+	t.Parallel()
 	// Create a temporary file with content
 	tmpDir := t.TempDir()
 	tmpFile := filepath.Join(tmpDir, "analysis.md")
@@ -376,6 +390,7 @@ func TestRestoreAnalysisFromCheckpoint_Success(t *testing.T) {
 }
 
 func TestRestoreAnalysisFromCheckpoint_ContentHashMismatch(t *testing.T) {
+	t.Parallel()
 	// Create a temporary file with content
 	tmpDir := t.TempDir()
 	tmpFile := filepath.Join(tmpDir, "analysis.md")
@@ -404,6 +419,7 @@ func TestRestoreAnalysisFromCheckpoint_ContentHashMismatch(t *testing.T) {
 }
 
 func TestRestoreAnalysisFromCheckpoint_FileNotFound(t *testing.T) {
+	t.Parallel()
 	meta := &AnalysisCheckpointMetadata{
 		AgentName:   "claude",
 		FilePath:    "/nonexistent/path/analysis.md",

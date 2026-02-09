@@ -12,6 +12,7 @@ import (
 )
 
 func TestNewOutput(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		mode     OutputMode
@@ -35,6 +36,7 @@ func TestNewOutput(t *testing.T) {
 }
 
 func TestFallbackOutputAdapter_Interface(t *testing.T) {
+	t.Parallel()
 	adapter := NewFallbackOutputAdapter(false, false)
 
 	// Test that it implements Output interface
@@ -64,6 +66,7 @@ func TestFallbackOutputAdapter_Interface(t *testing.T) {
 }
 
 func TestJSONOutputAdapter_Interface(t *testing.T) {
+	t.Parallel()
 	adapter := NewJSONOutputAdapter()
 
 	// Test that it implements Output interface
@@ -104,6 +107,7 @@ func TestJSONOutputAdapter_Interface(t *testing.T) {
 }
 
 func TestQuietOutput_Interface(t *testing.T) {
+	t.Parallel()
 	quiet := NewQuietOutput()
 
 	// Test that it implements Output interface
@@ -129,6 +133,7 @@ func TestQuietOutput_Interface(t *testing.T) {
 }
 
 func TestTUIOutput_Interface(t *testing.T) {
+	t.Parallel()
 	tuiOut := NewTUIOutput()
 
 	// Test that it implements Output interface
@@ -163,6 +168,7 @@ func TestTUIOutput_Interface(t *testing.T) {
 }
 
 func TestTUIOutput_PriorityNeverDrops(t *testing.T) {
+	t.Parallel()
 	output := NewTUIOutput()
 
 	// Fill the normal channel
@@ -188,6 +194,7 @@ func TestTUIOutput_PriorityNeverDrops(t *testing.T) {
 }
 
 func TestTUIOutput_DroppedEventsCounter(t *testing.T) {
+	t.Parallel()
 	output := NewTUIOutput()
 
 	// Fill the buffer
@@ -204,6 +211,7 @@ func TestTUIOutput_DroppedEventsCounter(t *testing.T) {
 }
 
 func TestTUIOutput_RingBufferBehavior(t *testing.T) {
+	t.Parallel()
 	output := NewTUIOutput()
 
 	// Send more events than buffer size
@@ -219,6 +227,7 @@ func TestTUIOutput_RingBufferBehavior(t *testing.T) {
 }
 
 func TestTUIOutput_CriticalEventsDelivered(t *testing.T) {
+	t.Parallel()
 	output := NewTUIOutput()
 
 	// Flood with normal events

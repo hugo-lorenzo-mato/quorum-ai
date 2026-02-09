@@ -11,6 +11,7 @@ import (
 )
 
 func TestNewFallbackOutput(t *testing.T) {
+	t.Parallel()
 	f := NewFallbackOutput(true, true)
 
 	if f == nil {
@@ -25,6 +26,7 @@ func TestNewFallbackOutput(t *testing.T) {
 }
 
 func TestFallbackOutput_WithWriter(t *testing.T) {
+	t.Parallel()
 	buf := &bytes.Buffer{}
 	f := NewFallbackOutput(false, false).WithWriter(buf)
 
@@ -34,6 +36,7 @@ func TestFallbackOutput_WithWriter(t *testing.T) {
 }
 
 func TestFallbackOutput_WorkflowStarted(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		useColor bool
@@ -82,6 +85,7 @@ func TestFallbackOutput_WorkflowStarted(t *testing.T) {
 }
 
 func TestFallbackOutput_PhaseStarted(t *testing.T) {
+	t.Parallel()
 	buf := &bytes.Buffer{}
 	f := NewFallbackOutput(false, false).WithWriter(buf)
 
@@ -94,6 +98,7 @@ func TestFallbackOutput_PhaseStarted(t *testing.T) {
 }
 
 func TestFallbackOutput_TaskStarted(t *testing.T) {
+	t.Parallel()
 	buf := &bytes.Buffer{}
 	f := NewFallbackOutput(false, false).WithWriter(buf)
 
@@ -110,6 +115,7 @@ func TestFallbackOutput_TaskStarted(t *testing.T) {
 }
 
 func TestFallbackOutput_TaskCompleted(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		verbose bool
@@ -148,6 +154,7 @@ func TestFallbackOutput_TaskCompleted(t *testing.T) {
 }
 
 func TestFallbackOutput_TaskFailed(t *testing.T) {
+	t.Parallel()
 	buf := &bytes.Buffer{}
 	f := NewFallbackOutput(false, false).WithWriter(buf)
 
@@ -165,6 +172,7 @@ func TestFallbackOutput_TaskFailed(t *testing.T) {
 }
 
 func TestFallbackOutput_TaskSkipped(t *testing.T) {
+	t.Parallel()
 	buf := &bytes.Buffer{}
 	f := NewFallbackOutput(false, false).WithWriter(buf)
 
@@ -181,6 +189,7 @@ func TestFallbackOutput_TaskSkipped(t *testing.T) {
 }
 
 func TestFallbackOutput_WorkflowCompleted(t *testing.T) {
+	t.Parallel()
 	buf := &bytes.Buffer{}
 	f := NewFallbackOutput(false, false).WithWriter(buf)
 
@@ -206,6 +215,7 @@ func TestFallbackOutput_WorkflowCompleted(t *testing.T) {
 }
 
 func TestFallbackOutput_WorkflowFailed(t *testing.T) {
+	t.Parallel()
 	buf := &bytes.Buffer{}
 	f := NewFallbackOutput(false, false).WithWriter(buf)
 
@@ -222,6 +232,7 @@ func TestFallbackOutput_WorkflowFailed(t *testing.T) {
 }
 
 func TestFallbackOutput_Log(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		level   string
@@ -253,6 +264,7 @@ func TestFallbackOutput_Log(t *testing.T) {
 }
 
 func TestFallbackOutput_Progress(t *testing.T) {
+	t.Parallel()
 	buf := &bytes.Buffer{}
 	f := NewFallbackOutput(false, false).WithWriter(buf)
 
@@ -268,6 +280,7 @@ func TestFallbackOutput_Progress(t *testing.T) {
 }
 
 func TestFallbackOutput_ProgressComplete(t *testing.T) {
+	t.Parallel()
 	buf := &bytes.Buffer{}
 	f := NewFallbackOutput(false, false).WithWriter(buf)
 
@@ -283,6 +296,7 @@ func TestFallbackOutput_ProgressComplete(t *testing.T) {
 }
 
 func TestFallbackOutput_StatusIcons(t *testing.T) {
+	t.Parallel()
 	f := NewFallbackOutput(false, false)
 
 	icons := []string{"pending", "running", "completed", "failed", "skipped"}
@@ -295,6 +309,7 @@ func TestFallbackOutput_StatusIcons(t *testing.T) {
 }
 
 func TestFallbackOutput_Colorize(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name      string
 		text      string
@@ -332,6 +347,7 @@ func TestFallbackOutput_Colorize(t *testing.T) {
 }
 
 func TestFallbackOutput_ProgressBar(t *testing.T) {
+	t.Parallel()
 	f := NewFallbackOutput(false, false)
 
 	bar := f.progressBar(50.0, 10)
@@ -342,6 +358,7 @@ func TestFallbackOutput_ProgressBar(t *testing.T) {
 }
 
 func TestFallbackOutput_CountCompleted(t *testing.T) {
+	t.Parallel()
 	f := NewFallbackOutput(false, false)
 
 	state := &core.WorkflowState{
@@ -362,6 +379,7 @@ func TestFallbackOutput_CountCompleted(t *testing.T) {
 }
 
 func TestNewJSONOutput(t *testing.T) {
+	t.Parallel()
 	j := NewJSONOutput()
 
 	if j == nil {
@@ -373,6 +391,7 @@ func TestNewJSONOutput(t *testing.T) {
 }
 
 func TestJSONOutput_WithWriter(t *testing.T) {
+	t.Parallel()
 	buf := &bytes.Buffer{}
 	j := NewJSONOutput().WithWriter(buf)
 
@@ -382,6 +401,7 @@ func TestJSONOutput_WithWriter(t *testing.T) {
 }
 
 func TestJSONOutput_WorkflowStarted(t *testing.T) {
+	t.Parallel()
 	buf := &bytes.Buffer{}
 	j := NewJSONOutput().WithWriter(buf)
 
@@ -397,6 +417,7 @@ func TestJSONOutput_WorkflowStarted(t *testing.T) {
 }
 
 func TestJSONOutput_PhaseStarted(t *testing.T) {
+	t.Parallel()
 	buf := &bytes.Buffer{}
 	j := NewJSONOutput().WithWriter(buf)
 
@@ -412,6 +433,7 @@ func TestJSONOutput_PhaseStarted(t *testing.T) {
 }
 
 func TestJSONOutput_TaskCompleted(t *testing.T) {
+	t.Parallel()
 	buf := &bytes.Buffer{}
 	j := NewJSONOutput().WithWriter(buf)
 
@@ -428,6 +450,7 @@ func TestJSONOutput_TaskCompleted(t *testing.T) {
 }
 
 func TestJSONOutput_TaskFailed(t *testing.T) {
+	t.Parallel()
 	buf := &bytes.Buffer{}
 	j := NewJSONOutput().WithWriter(buf)
 
@@ -445,6 +468,7 @@ func TestJSONOutput_TaskFailed(t *testing.T) {
 }
 
 func TestJSONOutput_WorkflowCompleted(t *testing.T) {
+	t.Parallel()
 	buf := &bytes.Buffer{}
 	j := NewJSONOutput().WithWriter(buf)
 
@@ -465,6 +489,7 @@ func TestJSONOutput_WorkflowCompleted(t *testing.T) {
 }
 
 func TestJSONOutput_WorkflowFailed(t *testing.T) {
+	t.Parallel()
 	buf := &bytes.Buffer{}
 	j := NewJSONOutput().WithWriter(buf)
 
@@ -481,6 +506,7 @@ func TestJSONOutput_WorkflowFailed(t *testing.T) {
 }
 
 func TestJSONOutput_Log(t *testing.T) {
+	t.Parallel()
 	buf := &bytes.Buffer{}
 	j := NewJSONOutput().WithWriter(buf)
 
@@ -499,6 +525,7 @@ func TestJSONOutput_Log(t *testing.T) {
 }
 
 func TestJSONEvent_Fields(t *testing.T) {
+	t.Parallel()
 	event := JSONEvent{
 		Type:      "test_event",
 		Timestamp: time.Now(),

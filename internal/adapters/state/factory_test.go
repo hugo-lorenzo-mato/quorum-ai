@@ -8,6 +8,7 @@ import (
 )
 
 func TestNewStateManager(t *testing.T) {
+	t.Parallel()
 	t.Run("creates sqlite manager and normalizes .db extension", func(t *testing.T) {
 		tmpDir, err := os.MkdirTemp("", "factory_test")
 		if err != nil {
@@ -36,6 +37,7 @@ func TestNewStateManager(t *testing.T) {
 }
 
 func TestCloseStateManager(t *testing.T) {
+	t.Parallel()
 	tmpDir, err := os.MkdirTemp("", "close_test")
 	if err != nil {
 		t.Fatal(err)

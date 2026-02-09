@@ -57,6 +57,7 @@ func (m memCheckpointCreator) CreateCheckpoint(state *core.WorkflowState, checkp
 }
 
 func TestRunner_ReconcileAnalysisArtifacts_CreatesMissingCheckpoints(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	tmpDir := t.TempDir()
 
@@ -106,6 +107,7 @@ func TestRunner_ReconcileAnalysisArtifacts_CreatesMissingCheckpoints(t *testing.
 }
 
 func TestRunner_ReconcileAnalysisArtifacts_DoesNotDuplicateConsolidatedCheckpoint(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	tmpDir := t.TempDir()
 

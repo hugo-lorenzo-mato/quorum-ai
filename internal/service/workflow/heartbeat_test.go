@@ -95,6 +95,7 @@ func newTestHeartbeatManager(sm core.StateManager) *HeartbeatManager {
 }
 
 func TestHeartbeatManager_IsHealthy_TrackedAndRecent(t *testing.T) {
+	t.Parallel()
 	sm := &heartbeatMockStateManager{}
 	hm := newTestHeartbeatManager(sm)
 	defer hm.Shutdown()
@@ -108,6 +109,7 @@ func TestHeartbeatManager_IsHealthy_TrackedAndRecent(t *testing.T) {
 }
 
 func TestHeartbeatManager_IsHealthy_TrackedButStale(t *testing.T) {
+	t.Parallel()
 	sm := &heartbeatMockStateManager{}
 	hm := newTestHeartbeatManager(sm)
 	defer hm.Shutdown()
@@ -126,6 +128,7 @@ func TestHeartbeatManager_IsHealthy_TrackedButStale(t *testing.T) {
 }
 
 func TestHeartbeatManager_IsHealthy_NotTracked(t *testing.T) {
+	t.Parallel()
 	sm := &heartbeatMockStateManager{}
 	hm := newTestHeartbeatManager(sm)
 	defer hm.Shutdown()
@@ -136,6 +139,7 @@ func TestHeartbeatManager_IsHealthy_NotTracked(t *testing.T) {
 }
 
 func TestHeartbeatManager_IsHealthy_AfterStop(t *testing.T) {
+	t.Parallel()
 	sm := &heartbeatMockStateManager{}
 	hm := newTestHeartbeatManager(sm)
 	defer hm.Shutdown()
@@ -155,6 +159,7 @@ func TestHeartbeatManager_IsHealthy_AfterStop(t *testing.T) {
 }
 
 func TestHeartbeatManager_WriteHeartbeat_UpdatesLastSuccess(t *testing.T) {
+	t.Parallel()
 	sm := &heartbeatMockStateManager{}
 	hm := newTestHeartbeatManager(sm)
 	defer hm.Shutdown()
@@ -180,6 +185,7 @@ func TestHeartbeatManager_WriteHeartbeat_UpdatesLastSuccess(t *testing.T) {
 }
 
 func TestHeartbeatManager_WriteHeartbeat_FailureDoesNotUpdateLastSuccess(t *testing.T) {
+	t.Parallel()
 	sm := &heartbeatMockStateManager{updateErr: errors.New("db error")}
 	hm := newTestHeartbeatManager(sm)
 	defer hm.Shutdown()
@@ -204,6 +210,7 @@ func TestHeartbeatManager_WriteHeartbeat_FailureDoesNotUpdateLastSuccess(t *test
 }
 
 func TestHeartbeatManager_DetectZombies_SkipsRecentTracked(t *testing.T) {
+	t.Parallel()
 	recentHeartbeat := time.Now().Add(-100 * time.Millisecond) // well within 3x threshold (1.5s)
 	zombieState := &core.WorkflowState{
 		WorkflowDefinition: core.WorkflowDefinition{
@@ -235,6 +242,7 @@ func TestHeartbeatManager_DetectZombies_SkipsRecentTracked(t *testing.T) {
 }
 
 func TestHeartbeatManager_DetectZombies_CatchesCriticallyStaleTracked(t *testing.T) {
+	t.Parallel()
 	// HeartbeatAt older than 3x stale threshold (3 * 500ms = 1.5s)
 	staleHeartbeat := time.Now().Add(-2 * time.Second)
 	zombieState := &core.WorkflowState{
@@ -275,6 +283,7 @@ func TestHeartbeatManager_DetectZombies_CatchesCriticallyStaleTracked(t *testing
 }
 
 func TestHeartbeatManager_DetectZombies_CatchesUntrackedZombie(t *testing.T) {
+	t.Parallel()
 	staleHeartbeat := time.Now().Add(-time.Hour)
 	zombieState := &core.WorkflowState{
 		WorkflowDefinition: core.WorkflowDefinition{
@@ -303,6 +312,7 @@ func TestHeartbeatManager_DetectZombies_CatchesUntrackedZombie(t *testing.T) {
 }
 
 func TestHeartbeatManager_PerWorkflowSM(t *testing.T) {
+	t.Parallel()
 	globalSM := &heartbeatMockStateManager{}
 	projectSM := &heartbeatMockStateManager{}
 	hm := newTestHeartbeatManager(globalSM)
@@ -333,6 +343,7 @@ func TestHeartbeatManager_PerWorkflowSM(t *testing.T) {
 }
 
 func TestHeartbeatManager_DetectZombies_MultiSM(t *testing.T) {
+	t.Parallel()
 	staleHeartbeat := time.Now().Add(-time.Hour)
 
 	globalZombie := &core.WorkflowState{
@@ -376,6 +387,7 @@ func TestHeartbeatManager_DetectZombies_MultiSM(t *testing.T) {
 }
 
 func TestHeartbeatManager_Stop_CleansUpSM(t *testing.T) {
+	t.Parallel()
 	globalSM := &heartbeatMockStateManager{}
 	projectSM := &heartbeatMockStateManager{}
 	hm := newTestHeartbeatManager(globalSM)

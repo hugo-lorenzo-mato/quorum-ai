@@ -6,6 +6,7 @@ import (
 )
 
 func TestDefaultChecksConfig(t *testing.T) {
+	t.Parallel()
 	cfg := DefaultChecksConfig()
 
 	if cfg.PollInterval != 30*time.Second {
@@ -20,6 +21,7 @@ func TestDefaultChecksConfig(t *testing.T) {
 }
 
 func TestChecksResult_IsPassing(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name   string
 		result ChecksResult
@@ -70,6 +72,7 @@ func TestChecksResult_IsPassing(t *testing.T) {
 }
 
 func TestChecksResult_HasFailures(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name   string
 		result ChecksResult
@@ -103,6 +106,7 @@ func TestChecksResult_HasFailures(t *testing.T) {
 }
 
 func TestChecksResult_Summary(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name   string
 		result ChecksResult
@@ -163,6 +167,7 @@ func TestChecksResult_Summary(t *testing.T) {
 }
 
 func TestCheckStatus_Fields(t *testing.T) {
+	t.Parallel()
 	now := time.Now()
 	status := CheckStatus{
 		Name:        "test",
@@ -191,6 +196,7 @@ func TestCheckStatus_Fields(t *testing.T) {
 }
 
 func TestNewChecksWaiter(t *testing.T) {
+	t.Parallel()
 	// Create a minimal client for testing (won't actually work without gh CLI)
 	// This just tests the constructor logic
 	waiter := &ChecksWaiter{
@@ -207,6 +213,7 @@ func TestNewChecksWaiter(t *testing.T) {
 }
 
 func TestChecksWaiter_WithPollInterval(t *testing.T) {
+	t.Parallel()
 	waiter := &ChecksWaiter{
 		pollInterval: 30 * time.Second,
 		timeout:      30 * time.Minute,
@@ -223,6 +230,7 @@ func TestChecksWaiter_WithPollInterval(t *testing.T) {
 }
 
 func TestChecksWaiter_WithTimeout(t *testing.T) {
+	t.Parallel()
 	waiter := &ChecksWaiter{
 		pollInterval: 30 * time.Second,
 		timeout:      30 * time.Minute,
@@ -239,6 +247,7 @@ func TestChecksWaiter_WithTimeout(t *testing.T) {
 }
 
 func TestChecksWaiter_WithRequiredChecks(t *testing.T) {
+	t.Parallel()
 	waiter := &ChecksWaiter{
 		pollInterval: 30 * time.Second,
 		timeout:      30 * time.Minute,
@@ -256,6 +265,7 @@ func TestChecksWaiter_WithRequiredChecks(t *testing.T) {
 }
 
 func TestChecksWaiter_isRequired(t *testing.T) {
+	t.Parallel()
 	waiter := &ChecksWaiter{
 		requiredChecks: []string{"test", "lint"},
 	}
@@ -282,6 +292,7 @@ func TestChecksWaiter_isRequired(t *testing.T) {
 }
 
 func TestChecksWaiter_isRequired_NoRequiredChecks(t *testing.T) {
+	t.Parallel()
 	waiter := &ChecksWaiter{
 		requiredChecks: []string{},
 	}
@@ -293,6 +304,7 @@ func TestChecksWaiter_isRequired_NoRequiredChecks(t *testing.T) {
 }
 
 func TestPRCreateOptions_Fields(t *testing.T) {
+	t.Parallel()
 	opts := PRCreateOptions{
 		Title:     "Test PR",
 		Body:      "Description",
@@ -327,6 +339,7 @@ func TestPRCreateOptions_Fields(t *testing.T) {
 }
 
 func TestPRUpdateOptions_Fields(t *testing.T) {
+	t.Parallel()
 	opts := PRUpdateOptions{
 		Title:        "Updated Title",
 		Body:         "Updated Body",
@@ -349,6 +362,7 @@ func TestPRUpdateOptions_Fields(t *testing.T) {
 }
 
 func TestPullRequest_Fields(t *testing.T) {
+	t.Parallel()
 	now := time.Now()
 	pr := PullRequest{
 		Number:    42,
@@ -388,6 +402,7 @@ func TestPullRequest_Fields(t *testing.T) {
 }
 
 func TestChecksConfig_Fields(t *testing.T) {
+	t.Parallel()
 	cfg := ChecksConfig{
 		PollInterval:   15 * time.Second,
 		Timeout:        10 * time.Minute,

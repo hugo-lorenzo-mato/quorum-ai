@@ -7,6 +7,7 @@ import (
 )
 
 func TestMatchFile_ConsolidatedVariousFormats(t *testing.T) {
+	t.Parallel()
 	taskFiles := []service.IssueTaskFile{
 		{ID: "task-1", Slug: "implement-auth"},
 		{ID: "task-2", Slug: "add-tests"},
@@ -47,6 +48,7 @@ func TestMatchFile_ConsolidatedVariousFormats(t *testing.T) {
 }
 
 func TestMatchFile_TaskExactName(t *testing.T) {
+	t.Parallel()
 	taskFiles := []service.IssueTaskFile{
 		{ID: "task-1", Slug: "implement-auth"},
 		{ID: "task-2", Slug: "add-unit-tests"},
@@ -85,6 +87,7 @@ func TestMatchFile_TaskExactName(t *testing.T) {
 }
 
 func TestMatchFile_TaskVariations(t *testing.T) {
+	t.Parallel()
 	taskFiles := []service.IssueTaskFile{
 		{ID: "task-1", Slug: "implement-login"},
 	}
@@ -135,6 +138,7 @@ func TestMatchFile_TaskVariations(t *testing.T) {
 }
 
 func TestMatchFile_NoMatch(t *testing.T) {
+	t.Parallel()
 	taskFiles := []service.IssueTaskFile{
 		{ID: "task-1", Slug: "implement-auth"},
 		{ID: "task-2", Slug: "add-tests"},
@@ -163,6 +167,7 @@ func TestMatchFile_NoMatch(t *testing.T) {
 }
 
 func TestMatchAll(t *testing.T) {
+	t.Parallel()
 	taskFiles := []service.IssueTaskFile{
 		{ID: "task-1", Slug: "implement-auth"},
 		{ID: "task-2", Slug: "add-tests"},
@@ -207,6 +212,7 @@ func TestMatchAll(t *testing.T) {
 }
 
 func TestMatchAll_HigherConfidencePrevails(t *testing.T) {
+	t.Parallel()
 	taskFiles := []service.IssueTaskFile{
 		{ID: "task-1", Slug: "implement-login"},
 	}
@@ -228,6 +234,7 @@ func TestMatchAll_HigherConfidencePrevails(t *testing.T) {
 }
 
 func TestGetMissingTasks(t *testing.T) {
+	t.Parallel()
 	taskFiles := []service.IssueTaskFile{
 		{ID: "task-1", Slug: "implement-auth"},
 		{ID: "task-2", Slug: "add-tests"},
@@ -253,6 +260,7 @@ func TestGetMissingTasks(t *testing.T) {
 }
 
 func TestGetMissingTasks_AllMatched(t *testing.T) {
+	t.Parallel()
 	taskFiles := []service.IssueTaskFile{
 		{ID: "task-1", Slug: "implement-auth"},
 		{ID: "task-2", Slug: "add-tests"},
@@ -273,6 +281,7 @@ func TestGetMissingTasks_AllMatched(t *testing.T) {
 }
 
 func TestExtractTaskNumber(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		filename string
 		expected int
@@ -301,6 +310,7 @@ func TestExtractTaskNumber(t *testing.T) {
 }
 
 func TestNormalizeTaskSlug(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		input    string
 		expected string
@@ -327,6 +337,7 @@ func TestNormalizeTaskSlug(t *testing.T) {
 }
 
 func TestMatchResult_Fields(t *testing.T) {
+	t.Parallel()
 	// Test MatchResult struct fields
 	result := MatchResult{
 		Matched:        true,
@@ -350,6 +361,7 @@ func TestMatchResult_Fields(t *testing.T) {
 }
 
 func TestFileMatcher_CaseInsensitive(t *testing.T) {
+	t.Parallel()
 	taskFiles := []service.IssueTaskFile{
 		{ID: "task-1", Slug: "implement-auth"},
 	}
@@ -380,6 +392,7 @@ func TestFileMatcher_CaseInsensitive(t *testing.T) {
 }
 
 func TestNewFileMatcher_EmptyTasks(t *testing.T) {
+	t.Parallel()
 	matcher := NewFileMatcher(nil)
 
 	// Should still match consolidated patterns
@@ -396,6 +409,7 @@ func TestNewFileMatcher_EmptyTasks(t *testing.T) {
 }
 
 func TestMatchAll_MultipleConsolidated(t *testing.T) {
+	t.Parallel()
 	taskFiles := []service.IssueTaskFile{
 		{ID: "task-1", Slug: "feature"},
 	}

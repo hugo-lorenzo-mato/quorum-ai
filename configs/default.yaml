@@ -130,6 +130,8 @@ agents:
     model: claude-opus-4-6
     # Claude-specific: effort level (low/medium/high/max). Only supported on Opus 4.6.
     reasoning_effort: high
+    # Max duration without stdout activity before killing the process. Default: 5m.
+    idle_timeout: "15m"
     # Per-task model overrides. Only specify phases that need a different model.
     # Unspecified phases use the default model above.
     phase_models:
@@ -158,6 +160,7 @@ agents:
     enabled: true
     path: gemini
     model: gemini-3-flash-preview
+    idle_timeout: "15m"
     phase_models:
       refine: gemini-3-pro-preview
       analyze: gemini-3-pro-preview
@@ -180,6 +183,7 @@ agents:
     model: gpt-5.3-codex
     # Codex-specific: default reasoning effort (none/minimal/low/medium/high/xhigh)
     reasoning_effort: high
+    idle_timeout: "15m"
     phase_models:
       refine: gpt-5.3-codex
       analyze: gpt-5.3-codex
@@ -207,6 +211,7 @@ agents:
     enabled: false
     path: copilot
     model: claude-sonnet-4-5
+    idle_timeout: "15m"
     # Available models: claude-sonnet-4-5 (default), claude-opus-4.6, claude-haiku-4.5, claude-sonnet-4, gpt-5
     phase_models:
       refine: claude-sonnet-4-5
@@ -230,6 +235,7 @@ agents:
     enabled: false
     path: opencode
     model: qwen2.5-coder
+    idle_timeout: "15m"
     phase_models:
       refine: qwen2.5-coder
       analyze: llama3.1

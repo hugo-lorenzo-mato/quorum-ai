@@ -14,6 +14,7 @@ import (
 )
 
 func TestUnifiedTracker_CancelCancelsExecContext(t *testing.T) {
+	t.Parallel()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	tracker := &UnifiedTracker{
 		logger:         logger,
@@ -52,6 +53,7 @@ func TestUnifiedTracker_CancelCancelsExecContext(t *testing.T) {
 }
 
 func TestUnifiedTracker_CancelBeforeSetExecCancel(t *testing.T) {
+	t.Parallel()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	tracker := &UnifiedTracker{
 		logger:         logger,
@@ -113,6 +115,7 @@ func newTestHeartbeat(sm core.StateManager) *workflow.HeartbeatManager {
 }
 
 func TestUnifiedTracker_IsRunning_ReturnsFalseWhenHeartbeatUnhealthy(t *testing.T) {
+	t.Parallel()
 	sm := testutil.NewMockStateManager()
 	hb := newTestHeartbeat(sm)
 	defer hb.Shutdown()
@@ -133,6 +136,7 @@ func TestUnifiedTracker_IsRunning_ReturnsFalseWhenHeartbeatUnhealthy(t *testing.
 }
 
 func TestUnifiedTracker_IsRunning_ReturnsTrueWhenHeartbeatHealthy(t *testing.T) {
+	t.Parallel()
 	sm := testutil.NewMockStateManager()
 	hb := newTestHeartbeat(sm)
 	defer hb.Shutdown()
@@ -156,6 +160,7 @@ func TestUnifiedTracker_IsRunning_ReturnsTrueWhenHeartbeatHealthy(t *testing.T) 
 }
 
 func TestUnifiedTracker_IsRunning_ReturnsTrueWhenNoHeartbeat(t *testing.T) {
+	t.Parallel()
 	sm := testutil.NewMockStateManager()
 
 	// heartbeat is nil — disabled mode
@@ -174,6 +179,7 @@ func TestUnifiedTracker_IsRunning_ReturnsTrueWhenNoHeartbeat(t *testing.T) {
 }
 
 func TestUnifiedTracker_IsRunning_FallsBackToDBWhenNoHandle(t *testing.T) {
+	t.Parallel()
 	sm := testutil.NewMockStateManager()
 	sm.SetState(&core.WorkflowState{
 		WorkflowDefinition: core.WorkflowDefinition{
@@ -195,6 +201,7 @@ func TestUnifiedTracker_IsRunning_FallsBackToDBWhenNoHandle(t *testing.T) {
 }
 
 func TestUnifiedTracker_ForceStop_CleansUpHandle(t *testing.T) {
+	t.Parallel()
 	sm := testutil.NewMockStateManager()
 	sm.SetState(&core.WorkflowState{
 		WorkflowDefinition: core.WorkflowDefinition{
@@ -224,6 +231,7 @@ func TestUnifiedTracker_ForceStop_CleansUpHandle(t *testing.T) {
 }
 
 func TestUnifiedTracker_ForceStop_StopsHeartbeat(t *testing.T) {
+	t.Parallel()
 	sm := testutil.NewMockStateManager()
 	sm.SetState(&core.WorkflowState{
 		WorkflowDefinition: core.WorkflowDefinition{
@@ -262,6 +270,7 @@ func TestUnifiedTracker_ForceStop_StopsHeartbeat(t *testing.T) {
 }
 
 func TestUnifiedTracker_ForceStop_WorksWithoutHeartbeat(t *testing.T) {
+	t.Parallel()
 	sm := testutil.NewMockStateManager()
 	sm.SetState(&core.WorkflowState{
 		WorkflowDefinition: core.WorkflowDefinition{
@@ -292,6 +301,7 @@ func TestUnifiedTracker_ForceStop_WorksWithoutHeartbeat(t *testing.T) {
 }
 
 func TestUnifiedTracker_ForceStop_FinishExecutionAfterForceStop_Idempotent(t *testing.T) {
+	t.Parallel()
 	sm := testutil.NewMockStateManager()
 	sm.SetState(&core.WorkflowState{
 		WorkflowDefinition: core.WorkflowDefinition{
@@ -322,6 +332,7 @@ func TestUnifiedTracker_ForceStop_FinishExecutionAfterForceStop_Idempotent(t *te
 }
 
 func TestUnifiedTracker_ForceStop_NewRunAfterForceStop(t *testing.T) {
+	t.Parallel()
 	sm := testutil.NewMockStateManager()
 	sm.SetState(&core.WorkflowState{
 		WorkflowDefinition: core.WorkflowDefinition{
@@ -369,6 +380,7 @@ func TestUnifiedTracker_ForceStop_NewRunAfterForceStop(t *testing.T) {
 }
 
 func TestUnifiedTracker_IsHeartbeatHealthy_NilHeartbeat(t *testing.T) {
+	t.Parallel()
 	tracker := NewUnifiedTracker(nil, nil, newTestLogger(), DefaultUnifiedTrackerConfig())
 
 	if !tracker.IsHeartbeatHealthy("wf-any") {
@@ -377,6 +389,7 @@ func TestUnifiedTracker_IsHeartbeatHealthy_NilHeartbeat(t *testing.T) {
 }
 
 func TestUnifiedTracker_CleanupOrphanedWorkflows_DetectsFinishedButUncleaned(t *testing.T) {
+	t.Parallel()
 	sm := testutil.NewMockStateManager()
 	id := core.WorkflowID("wf-uncleaned")
 	sm.SetState(&core.WorkflowState{

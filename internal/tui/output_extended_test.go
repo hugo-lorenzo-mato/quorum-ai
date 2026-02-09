@@ -11,6 +11,7 @@ import (
 )
 
 func TestTUIOutput_SendWorkflowState(t *testing.T) {
+	t.Parallel()
 	tuiOut := NewTUIOutput()
 
 	state := &core.WorkflowState{
@@ -28,6 +29,7 @@ func TestTUIOutput_SendWorkflowState(t *testing.T) {
 }
 
 func TestTUIOutput_TaskFailed_WithError(t *testing.T) {
+	t.Parallel()
 	tuiOut := NewTUIOutput()
 
 	task := &core.Task{
@@ -43,6 +45,7 @@ func TestTUIOutput_TaskFailed_WithError(t *testing.T) {
 }
 
 func TestTUIOutput_ConcurrentUpdates(t *testing.T) {
+	t.Parallel()
 	tuiOut := NewTUIOutput()
 
 	// Simulate concurrent updates
@@ -64,6 +67,7 @@ func TestTUIOutput_ConcurrentUpdates(t *testing.T) {
 }
 
 func TestOutputNotifierAdapter(t *testing.T) {
+	t.Parallel()
 	quiet := NewQuietOutput()
 	adapter := NewOutputNotifierAdapter(quiet)
 
@@ -84,6 +88,7 @@ func TestOutputNotifierAdapter(t *testing.T) {
 }
 
 func TestOutputNotifierAdapter_WithFallback(t *testing.T) {
+	t.Parallel()
 	fallback := NewFallbackOutputAdapter(true, true)
 	adapter := NewOutputNotifierAdapter(fallback)
 
@@ -105,6 +110,7 @@ func TestOutputNotifierAdapter_WithFallback(t *testing.T) {
 }
 
 func TestJSONOutputAdapter_AllMethods(t *testing.T) {
+	t.Parallel()
 	adapter := NewJSONOutputAdapter()
 	buf := &bytes.Buffer{}
 	adapter.json.writer = buf
@@ -159,6 +165,7 @@ func TestJSONOutputAdapter_AllMethods(t *testing.T) {
 }
 
 func TestFallbackOutputAdapter_AllMethods(t *testing.T) {
+	t.Parallel()
 	adapter := NewFallbackOutputAdapter(true, true)
 
 	// Test all phases
@@ -196,6 +203,7 @@ func TestFallbackOutputAdapter_AllMethods(t *testing.T) {
 }
 
 func TestNewOutput_AllModes(t *testing.T) {
+	t.Parallel()
 	modes := []OutputMode{
 		ModeTUI,
 		ModePlain,
@@ -214,6 +222,7 @@ func TestNewOutput_AllModes(t *testing.T) {
 }
 
 func TestTUIOutput_AfterClose(t *testing.T) {
+	t.Parallel()
 	tuiOut := NewTUIOutput()
 	_ = tuiOut.Close()
 
@@ -235,6 +244,7 @@ func TestTUIOutput_AfterClose(t *testing.T) {
 }
 
 func TestTUIOutput_NilError(t *testing.T) {
+	t.Parallel()
 	tuiOut := NewTUIOutput()
 
 	task := &core.Task{
@@ -250,6 +260,7 @@ func TestTUIOutput_NilError(t *testing.T) {
 }
 
 func TestOutputNotifierAdapter_NilOutput(t *testing.T) {
+	t.Parallel()
 	// Test with a quiet output that does nothing
 	quiet := NewQuietOutput()
 	adapter := NewOutputNotifierAdapter(quiet)
@@ -264,6 +275,7 @@ func TestOutputNotifierAdapter_NilOutput(t *testing.T) {
 }
 
 func TestQuietOutput_AllMethods(t *testing.T) {
+	t.Parallel()
 	quiet := NewQuietOutput()
 
 	// All methods should not panic and do nothing

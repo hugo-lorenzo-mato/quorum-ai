@@ -7,6 +7,7 @@ import (
 )
 
 func TestLoader_Defaults(t *testing.T) {
+	t.Parallel()
 	loader := NewLoader()
 	cfg, err := loader.Load()
 	if err != nil {
@@ -62,6 +63,7 @@ func TestLoader_Defaults(t *testing.T) {
 }
 
 func TestLoader_EnvOverride(t *testing.T) {
+	t.Parallel()
 	// Set environment variables
 	os.Setenv("QUORUM_LOG_LEVEL", "debug")
 	os.Setenv("QUORUM_WORKFLOW_MAX_RETRIES", "5")
@@ -91,6 +93,7 @@ func TestLoader_EnvOverride(t *testing.T) {
 }
 
 func TestLoader_MissingConfig(t *testing.T) {
+	t.Parallel()
 	// Create a loader without any config file
 	loader := NewLoader()
 	cfg, err := loader.Load()
@@ -108,6 +111,7 @@ func TestLoader_MissingConfig(t *testing.T) {
 }
 
 func TestLoader_ConfigFileOverride(t *testing.T) {
+	t.Parallel()
 	// Create a temporary config file
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "test-config.yaml")
@@ -159,6 +163,7 @@ phases:
 }
 
 func TestLoader_Precedence(t *testing.T) {
+	t.Parallel()
 	// Create a temporary config file
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "test-config.yaml")
@@ -189,6 +194,7 @@ log:
 }
 
 func TestLoader_InvalidConfigFile(t *testing.T) {
+	t.Parallel()
 	// Create a temporary invalid config file
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "invalid-config.yaml")
@@ -209,6 +215,7 @@ log:
 }
 
 func TestLoader_ConfigFileUsed(t *testing.T) {
+	t.Parallel()
 	// Create a temporary config file
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "test-config.yaml")
@@ -233,6 +240,7 @@ func TestLoader_ConfigFileUsed(t *testing.T) {
 }
 
 func TestLoader_NestedConfig(t *testing.T) {
+	t.Parallel()
 	// Create a temporary config file with nested values
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "test-config.yaml")
@@ -274,6 +282,7 @@ phases:
 }
 
 func TestLoader_LegacyKeyNormalization(t *testing.T) {
+	t.Parallel()
 	// Create a temporary config file with legacy (no underscore) keys
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "legacy-config.yaml")
@@ -324,6 +333,7 @@ issues:
 }
 
 func TestNewLoader(t *testing.T) {
+	t.Parallel()
 	loader := NewLoader()
 	if loader == nil {
 		t.Fatal("NewLoader() returned nil")
@@ -337,6 +347,7 @@ func TestNewLoader(t *testing.T) {
 }
 
 func TestLoader_WithEnvPrefix(t *testing.T) {
+	t.Parallel()
 	// Set environment variable with custom prefix
 	os.Setenv("CUSTOM_LOG_LEVEL", "error")
 	defer os.Unsetenv("CUSTOM_LOG_LEVEL")
@@ -353,6 +364,7 @@ func TestLoader_WithEnvPrefix(t *testing.T) {
 }
 
 func TestLoader_DefaultConfigFile(t *testing.T) {
+	t.Parallel()
 	// Test loading the default config file
 	loader := NewLoader().WithConfigFile("../../configs/default.yaml")
 	cfg, err := loader.Load()
@@ -379,6 +391,7 @@ func TestLoader_DefaultConfigFile(t *testing.T) {
 }
 
 func TestDefaultConfig_HeartbeatEnabled(t *testing.T) {
+	t.Parallel()
 	loader := NewLoader()
 	cfg, err := loader.Load()
 	if err != nil {
@@ -406,6 +419,7 @@ func TestDefaultConfig_HeartbeatEnabled(t *testing.T) {
 }
 
 func TestLoader_ModeratorDefaults(t *testing.T) {
+	t.Parallel()
 	loader := NewLoader()
 	cfg, err := loader.Load()
 	if err != nil {
@@ -441,6 +455,7 @@ func TestLoader_ModeratorDefaults(t *testing.T) {
 }
 
 func TestValidate_ValidConfig(t *testing.T) {
+	t.Parallel()
 	cfg := &Config{
 		Agents: AgentsConfig{
 			Default: "claude",
@@ -482,6 +497,7 @@ func TestValidate_ValidConfig(t *testing.T) {
 }
 
 func TestValidate_MissingDefaultAgent(t *testing.T) {
+	t.Parallel()
 	cfg := &Config{
 		Agents: AgentsConfig{
 			Default: "",
@@ -495,6 +511,7 @@ func TestValidate_MissingDefaultAgent(t *testing.T) {
 }
 
 func TestValidate_DefaultAgentNotEnabled(t *testing.T) {
+	t.Parallel()
 	cfg := &Config{
 		Agents: AgentsConfig{
 			Default: "claude",
@@ -511,6 +528,7 @@ func TestValidate_DefaultAgentNotEnabled(t *testing.T) {
 }
 
 func TestValidate_RefinerAgentMissing(t *testing.T) {
+	t.Parallel()
 	cfg := &Config{
 		Agents: AgentsConfig{
 			Default: "claude",
@@ -536,6 +554,7 @@ func TestValidate_RefinerAgentMissing(t *testing.T) {
 }
 
 func TestValidate_RefinerAgentNoModel(t *testing.T) {
+	t.Parallel()
 	cfg := &Config{
 		Agents: AgentsConfig{
 			Default: "claude",
@@ -561,6 +580,7 @@ func TestValidate_RefinerAgentNoModel(t *testing.T) {
 }
 
 func TestValidate_ModeratorAgentMissing(t *testing.T) {
+	t.Parallel()
 	cfg := &Config{
 		Agents: AgentsConfig{
 			Default: "claude",

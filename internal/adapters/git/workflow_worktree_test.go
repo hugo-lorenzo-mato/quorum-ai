@@ -19,6 +19,7 @@ func uniqueWorkflowID(prefix string) string {
 }
 
 func TestNewWorkflowWorktreeManager(t *testing.T) {
+	t.Parallel()
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	repo.Commit("Initial commit")
@@ -36,6 +37,7 @@ func TestNewWorkflowWorktreeManager(t *testing.T) {
 }
 
 func TestInitializeWorkflow(t *testing.T) {
+	t.Parallel()
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	repo.Commit("Initial commit")
@@ -67,6 +69,7 @@ func TestInitializeWorkflow(t *testing.T) {
 }
 
 func TestInitializeWorkflow_Reuse(t *testing.T) {
+	t.Parallel()
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	repo.Commit("Initial commit")
@@ -90,6 +93,7 @@ func TestInitializeWorkflow_Reuse(t *testing.T) {
 }
 
 func TestCreateTaskWorktree(t *testing.T) {
+	t.Parallel()
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	repo.Commit("Initial commit")
@@ -127,6 +131,7 @@ func TestCreateTaskWorktree(t *testing.T) {
 }
 
 func TestRemoveTaskWorktree(t *testing.T) {
+	t.Parallel()
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	repo.Commit("Initial commit")
@@ -165,6 +170,7 @@ func TestRemoveTaskWorktree(t *testing.T) {
 }
 
 func TestRemoveTaskWorktree_WithBranch(t *testing.T) {
+	t.Parallel()
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	repo.Commit("Initial commit")
@@ -197,6 +203,7 @@ func TestRemoveTaskWorktree_WithBranch(t *testing.T) {
 }
 
 func TestMergeTaskToWorkflow_Sequential(t *testing.T) {
+	t.Parallel()
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	repo.Commit("Initial commit")
@@ -241,6 +248,7 @@ func TestMergeTaskToWorkflow_Sequential(t *testing.T) {
 }
 
 func TestMergeAllTasksToWorkflow(t *testing.T) {
+	t.Parallel()
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	repo.Commit("Initial commit")
@@ -293,6 +301,7 @@ func TestMergeAllTasksToWorkflow(t *testing.T) {
 }
 
 func TestCleanupWorkflow(t *testing.T) {
+	t.Parallel()
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	repo.Commit("Initial commit")
@@ -335,6 +344,7 @@ func TestCleanupWorkflow(t *testing.T) {
 }
 
 func TestCleanupWorkflow_WithBranch(t *testing.T) {
+	t.Parallel()
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	repo.Commit("Initial commit")
@@ -366,6 +376,7 @@ func TestCleanupWorkflow_WithBranch(t *testing.T) {
 }
 
 func TestGetWorkflowStatus(t *testing.T) {
+	t.Parallel()
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	repo.Commit("Initial commit")
@@ -394,6 +405,7 @@ func TestGetWorkflowStatus(t *testing.T) {
 }
 
 func TestListActiveWorkflows(t *testing.T) {
+	t.Parallel()
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	repo.Commit("Initial commit")
@@ -427,6 +439,7 @@ func TestListActiveWorkflows(t *testing.T) {
 }
 
 func TestGetWorkflowBranch(t *testing.T) {
+	t.Parallel()
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	repo.Commit("Initial commit")
@@ -443,6 +456,7 @@ func TestGetWorkflowBranch(t *testing.T) {
 }
 
 func TestGetTaskBranch(t *testing.T) {
+	t.Parallel()
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	repo.Commit("Initial commit")
@@ -459,6 +473,7 @@ func TestGetTaskBranch(t *testing.T) {
 }
 
 func TestFinalizeWorkflow_NoMerge(t *testing.T) {
+	t.Parallel()
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	repo.Commit("Initial commit")
@@ -486,6 +501,7 @@ func TestFinalizeWorkflow_NoMerge(t *testing.T) {
 }
 
 func TestSanitizeForPath(t *testing.T) {
+	t.Parallel()
 	// Test via CreateTaskWorktree which uses sanitizeForPath internally
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")

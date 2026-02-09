@@ -40,6 +40,7 @@ func parseSSEPayload(t *testing.T, body string) (eventType string, payload map[s
 }
 
 func TestSendEventToClient_PhaseStarted(t *testing.T) {
+	t.Parallel()
 	bus := events.New(10)
 	s := newTestServer(bus)
 
@@ -64,6 +65,7 @@ func TestSendEventToClient_PhaseStarted(t *testing.T) {
 }
 
 func TestSendEventToClient_PhaseCompleted(t *testing.T) {
+	t.Parallel()
 	bus := events.New(10)
 	s := newTestServer(bus)
 
@@ -85,6 +87,7 @@ func TestSendEventToClient_PhaseCompleted(t *testing.T) {
 }
 
 func TestSendEventToClient_LogEvent(t *testing.T) {
+	t.Parallel()
 	bus := events.New(10)
 	s := newTestServer(bus)
 
@@ -110,6 +113,7 @@ func TestSendEventToClient_LogEvent(t *testing.T) {
 }
 
 func TestSSEClient_CloseUnsubscribes(t *testing.T) {
+	t.Parallel()
 	bus := events.New(10)
 	client := NewSSEClient(bus)
 	ch := client.Events()
@@ -127,6 +131,7 @@ func TestSSEClient_CloseUnsubscribes(t *testing.T) {
 }
 
 func TestSSEClient_EventsReceivable(t *testing.T) {
+	t.Parallel()
 	bus := events.New(10)
 	client := NewSSEClient(bus)
 	defer client.Close()
@@ -146,6 +151,7 @@ func TestSSEClient_EventsReceivable(t *testing.T) {
 }
 
 func TestSendEventToClient_IssuesGenerationProgress(t *testing.T) {
+	t.Parallel()
 	bus := events.New(10)
 	s := newTestServer(bus)
 
@@ -203,6 +209,7 @@ func TestSendEventToClient_IssuesGenerationProgress(t *testing.T) {
 }
 
 func TestSendEventToClient_IssuesPublishingProgress(t *testing.T) {
+	t.Parallel()
 	bus := events.New(10)
 	s := newTestServer(bus)
 

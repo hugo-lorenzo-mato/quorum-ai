@@ -14,6 +14,7 @@ import (
 // failed but still in active_workflow table).
 // Regression: wf-20260130-030319-atstd was active_workflow with status=failed.
 func TestSQLiteStateManager_GetActiveWorkflowID_DetectsGhostWorkflow(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "state.db")
@@ -76,6 +77,7 @@ func TestSQLiteStateManager_GetActiveWorkflowID_DetectsGhostWorkflow(t *testing.
 // TestSQLiteStateManager_GetActiveWorkflowID_DetectsOrphanReference verifies that
 // GetActiveWorkflowID detects references to non-existent workflows.
 func TestSQLiteStateManager_GetActiveWorkflowID_DetectsOrphanReference(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "state.db")
@@ -117,6 +119,7 @@ func TestSQLiteStateManager_GetActiveWorkflowID_DetectsOrphanReference(t *testin
 // TestSQLiteStateManager_GetActiveWorkflowID_PreservesValidWorkflow verifies that
 // GetActiveWorkflowID does NOT clean up workflows with valid statuses.
 func TestSQLiteStateManager_GetActiveWorkflowID_PreservesValidWorkflow(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name   string
 		status core.WorkflowStatus
@@ -176,6 +179,7 @@ func TestSQLiteStateManager_GetActiveWorkflowID_PreservesValidWorkflow(t *testin
 // TestSQLiteStateManager_GetActiveWorkflowID_DetectsCompletedWorkflow verifies that
 // GetActiveWorkflowID also cleans up completed workflows that are still marked as active.
 func TestSQLiteStateManager_GetActiveWorkflowID_DetectsCompletedWorkflow(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "state.db")
@@ -229,6 +233,7 @@ func TestSQLiteStateManager_GetActiveWorkflowID_DetectsCompletedWorkflow(t *test
 // TestSQLiteStateManager_DeactivateWorkflow_ClearsActiveWorkflow verifies that
 // DeactivateWorkflow properly clears the active workflow.
 func TestSQLiteStateManager_DeactivateWorkflow_ClearsActiveWorkflow(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "state.db")
@@ -294,6 +299,7 @@ func TestSQLiteStateManager_DeactivateWorkflow_ClearsActiveWorkflow(t *testing.T
 // TestSQLiteStateManager_FindWorkflowsByPrompt_DetectsDuplicates verifies that
 // FindWorkflowsByPrompt correctly identifies workflows with identical prompts.
 func TestSQLiteStateManager_FindWorkflowsByPrompt_DetectsDuplicates(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "state.db")
@@ -345,6 +351,7 @@ func TestSQLiteStateManager_FindWorkflowsByPrompt_DetectsDuplicates(t *testing.T
 // TestSQLiteStateManager_FindWorkflowsByPrompt_NoDuplicates verifies that
 // FindWorkflowsByPrompt returns empty for unique prompts.
 func TestSQLiteStateManager_FindWorkflowsByPrompt_NoDuplicates(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "state.db")

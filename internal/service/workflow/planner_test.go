@@ -80,6 +80,7 @@ func (m *mockStateSaver) Save(_ context.Context, state *core.WorkflowState) erro
 }
 
 func TestNewPlanner(t *testing.T) {
+	t.Parallel()
 	dag := &mockDAGBuilder{}
 	saver := &mockStateSaver{}
 
@@ -97,6 +98,7 @@ func TestNewPlanner(t *testing.T) {
 }
 
 func TestParsePlanItems_ValidJSONArray(t *testing.T) {
+	t.Parallel()
 	input := `[
 		{"id": "task-1", "name": "Task 1", "description": "First task", "cli": "claude", "dependencies": []},
 		{"id": "task-2", "name": "Task 2", "description": "Second task", "cli": "gemini", "dependencies": ["task-1"]}
@@ -126,6 +128,7 @@ func TestParsePlanItems_ValidJSONArray(t *testing.T) {
 }
 
 func TestParsePlanItems_WrappedTasks(t *testing.T) {
+	t.Parallel()
 	input := `{"tasks": [{"id": "task-1", "name": "Task 1", "description": "First task"}]}`
 
 	items, err := parsePlanItems(input)
@@ -143,6 +146,7 @@ func TestParsePlanItems_WrappedTasks(t *testing.T) {
 }
 
 func TestParsePlanItems_EmptyOutput(t *testing.T) {
+	t.Parallel()
 	_, err := parsePlanItems("")
 	if err == nil {
 		t.Error("parsePlanItems() should return error for empty output")
@@ -150,6 +154,7 @@ func TestParsePlanItems_EmptyOutput(t *testing.T) {
 }
 
 func TestParsePlanItems_WhitespaceOnly(t *testing.T) {
+	t.Parallel()
 	_, err := parsePlanItems("   \n\t  ")
 	if err == nil {
 		t.Error("parsePlanItems() should return error for whitespace only")
@@ -157,6 +162,7 @@ func TestParsePlanItems_WhitespaceOnly(t *testing.T) {
 }
 
 func TestParsePlanItems_InvalidJSON(t *testing.T) {
+	t.Parallel()
 	_, err := parsePlanItems("not json at all")
 	if err == nil {
 		t.Error("parsePlanItems() should return error for invalid JSON")
@@ -164,6 +170,7 @@ func TestParsePlanItems_InvalidJSON(t *testing.T) {
 }
 
 func TestParsePlanItems_EmbeddedJSON(t *testing.T) {
+	t.Parallel()
 	input := `Here is the plan:
 [{"id": "task-1", "name": "Task 1", "description": "Do something"}]
 That's all.`
@@ -179,6 +186,7 @@ That's all.`
 }
 
 func TestParsePlanItems_GeminiFormat(t *testing.T) {
+	t.Parallel()
 	input := `{
 		"candidates": [{
 			"content": {
@@ -200,6 +208,7 @@ func TestParsePlanItems_GeminiFormat(t *testing.T) {
 }
 
 func TestParsePlanItems_ResultWrapper(t *testing.T) {
+	t.Parallel()
 	input := `{"result": "[{\"id\": \"task-1\", \"name\": \"Task 1\", \"description\": \"Test\"}]"}`
 
 	items, err := parsePlanItems(input)
@@ -213,6 +222,7 @@ func TestParsePlanItems_ResultWrapper(t *testing.T) {
 }
 
 func TestParsePlanItems_ContentWrapper(t *testing.T) {
+	t.Parallel()
 	input := `{"content": "[{\"id\": \"task-1\", \"name\": \"Task 1\", \"description\": \"Test\"}]"}`
 
 	items, err := parsePlanItems(input)
@@ -226,6 +236,7 @@ func TestParsePlanItems_ContentWrapper(t *testing.T) {
 }
 
 func TestParsePlanItems_MissingTasksField(t *testing.T) {
+	t.Parallel()
 	input := `{"other_field": "value"}`
 
 	_, err := parsePlanItems(input)
@@ -235,6 +246,7 @@ func TestParsePlanItems_MissingTasksField(t *testing.T) {
 }
 
 func TestExtractJSON_Array(t *testing.T) {
+	t.Parallel()
 	input := `Some text before [{"key": "value"}] some text after`
 	result := extractJSON(input)
 
@@ -244,6 +256,7 @@ func TestExtractJSON_Array(t *testing.T) {
 }
 
 func TestExtractJSON_Object(t *testing.T) {
+	t.Parallel()
 	input := `Prefix {"key": "value"} suffix`
 	result := extractJSON(input)
 
@@ -253,6 +266,7 @@ func TestExtractJSON_Object(t *testing.T) {
 }
 
 func TestExtractJSON_Nested(t *testing.T) {
+	t.Parallel()
 	input := `Start {"outer": {"inner": "value"}} end`
 	result := extractJSON(input)
 
@@ -262,6 +276,7 @@ func TestExtractJSON_Nested(t *testing.T) {
 }
 
 func TestExtractJSON_WithStrings(t *testing.T) {
+	t.Parallel()
 	input := `Text {"key": "value with { braces }"} more`
 	result := extractJSON(input)
 
@@ -271,6 +286,7 @@ func TestExtractJSON_WithStrings(t *testing.T) {
 }
 
 func TestExtractJSON_NoJSON(t *testing.T) {
+	t.Parallel()
 	input := `No JSON here at all`
 	result := extractJSON(input)
 
@@ -280,6 +296,7 @@ func TestExtractJSON_NoJSON(t *testing.T) {
 }
 
 func TestExtractJSON_EscapedQuotes(t *testing.T) {
+	t.Parallel()
 	input := `{"key": "value with \"escaped\" quotes"}`
 	result := extractJSON(input)
 
@@ -289,6 +306,7 @@ func TestExtractJSON_EscapedQuotes(t *testing.T) {
 }
 
 func TestRawToText_DirectString(t *testing.T) {
+	t.Parallel()
 	raw := json.RawMessage(`"direct string value"`)
 	result := rawToText(raw)
 
@@ -298,6 +316,7 @@ func TestRawToText_DirectString(t *testing.T) {
 }
 
 func TestRawToText_PartsArray(t *testing.T) {
+	t.Parallel()
 	raw := json.RawMessage(`[{"text": "part1"}, {"text": "part2"}]`)
 	result := rawToText(raw)
 
@@ -307,6 +326,7 @@ func TestRawToText_PartsArray(t *testing.T) {
 }
 
 func TestRawToText_ObjectWithText(t *testing.T) {
+	t.Parallel()
 	raw := json.RawMessage(`{"text": "text value"}`)
 	result := rawToText(raw)
 
@@ -316,6 +336,7 @@ func TestRawToText_ObjectWithText(t *testing.T) {
 }
 
 func TestRawToText_ObjectWithContent(t *testing.T) {
+	t.Parallel()
 	raw := json.RawMessage(`{"content": "content value"}`)
 	result := rawToText(raw)
 
@@ -325,6 +346,7 @@ func TestRawToText_ObjectWithContent(t *testing.T) {
 }
 
 func TestRawToText_ObjectWithParts(t *testing.T) {
+	t.Parallel()
 	raw := json.RawMessage(`{"parts": [{"text": "p1"}, {"text": "p2"}]}`)
 	result := rawToText(raw)
 
@@ -334,6 +356,7 @@ func TestRawToText_ObjectWithParts(t *testing.T) {
 }
 
 func TestRawToText_EmptyArray(t *testing.T) {
+	t.Parallel()
 	raw := json.RawMessage(`[]`)
 	result := rawToText(raw)
 
@@ -343,6 +366,7 @@ func TestRawToText_EmptyArray(t *testing.T) {
 }
 
 func TestRawToText_InvalidJSON(t *testing.T) {
+	t.Parallel()
 	raw := json.RawMessage(`not json`)
 	result := rawToText(raw)
 
@@ -352,6 +376,7 @@ func TestRawToText_InvalidJSON(t *testing.T) {
 }
 
 func TestIsShellLikeAgent(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		input string
 		want  bool
@@ -387,6 +412,7 @@ func TestIsShellLikeAgent(t *testing.T) {
 }
 
 func TestResolveTaskAgent(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name         string
 		candidate    string
@@ -453,6 +479,7 @@ func TestResolveTaskAgent(t *testing.T) {
 }
 
 func TestPlanner_parsePlan(t *testing.T) {
+	t.Parallel()
 	dag := &mockDAGBuilder{}
 	saver := &mockStateSaver{}
 	planner := NewPlanner(dag, saver)
@@ -503,6 +530,7 @@ func TestPlanner_parsePlan(t *testing.T) {
 }
 
 func TestPlanner_parsePlan_EmptyOutput(t *testing.T) {
+	t.Parallel()
 	dag := &mockDAGBuilder{}
 	saver := &mockStateSaver{}
 	planner := NewPlanner(dag, saver)
@@ -520,6 +548,7 @@ func TestPlanner_parsePlan_EmptyOutput(t *testing.T) {
 }
 
 func TestPlanner_parsePlan_NoTasks(t *testing.T) {
+	t.Parallel()
 	dag := &mockDAGBuilder{}
 	saver := &mockStateSaver{}
 	planner := NewPlanner(dag, saver)
@@ -537,6 +566,7 @@ func TestPlanner_parsePlan_NoTasks(t *testing.T) {
 }
 
 func TestPlanner_parsePlan_UsesAgentField(t *testing.T) {
+	t.Parallel()
 	dag := &mockDAGBuilder{}
 	saver := &mockStateSaver{}
 	planner := NewPlanner(dag, saver)
@@ -564,6 +594,7 @@ func TestPlanner_parsePlan_UsesAgentField(t *testing.T) {
 }
 
 func TestParsePlanItems_TextWrapper(t *testing.T) {
+	t.Parallel()
 	input := `{"text": "[{\"id\": \"task-1\", \"name\": \"Task 1\", \"description\": \"Test\"}]"}`
 
 	items, err := parsePlanItems(input)
@@ -577,6 +608,7 @@ func TestParsePlanItems_TextWrapper(t *testing.T) {
 }
 
 func TestParsePlanItems_OutputWrapper(t *testing.T) {
+	t.Parallel()
 	input := `{"output": "[{\"id\": \"task-1\", \"name\": \"Task 1\", \"description\": \"Test\"}]"}`
 
 	items, err := parsePlanItems(input)
@@ -590,6 +622,7 @@ func TestParsePlanItems_OutputWrapper(t *testing.T) {
 }
 
 func TestExtractJSON_UnbalancedBraces(t *testing.T) {
+	t.Parallel()
 	input := `Text {"key": "value" extra text without closing`
 	result := extractJSON(input)
 
@@ -600,6 +633,7 @@ func TestExtractJSON_UnbalancedBraces(t *testing.T) {
 }
 
 func TestRawToText_EmptyPartsArray(t *testing.T) {
+	t.Parallel()
 	raw := json.RawMessage(`{"parts": []}`)
 	result := rawToText(raw)
 
@@ -609,6 +643,7 @@ func TestRawToText_EmptyPartsArray(t *testing.T) {
 }
 
 func TestRawToText_WhitespaceOnlyText(t *testing.T) {
+	t.Parallel()
 	raw := json.RawMessage(`{"text": "   "}`)
 	result := rawToText(raw)
 
@@ -618,6 +653,7 @@ func TestRawToText_WhitespaceOnlyText(t *testing.T) {
 }
 
 func TestTaskPlanItem_Fields(t *testing.T) {
+	t.Parallel()
 	item := TaskPlanItem{
 		ID:           "task-1",
 		Name:         "Test Task",
@@ -646,6 +682,7 @@ func TestTaskPlanItem_Fields(t *testing.T) {
 // =============================================================================
 
 func TestExtractJSON_MarkdownCodeBlock(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name  string
 		input string
@@ -699,6 +736,7 @@ func TestExtractJSON_MarkdownCodeBlock(t *testing.T) {
 }
 
 func TestExtractJSON_MixedContent(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name  string
 		input string
@@ -737,6 +775,7 @@ func TestExtractJSON_MixedContent(t *testing.T) {
 }
 
 func TestExtractJSON_EdgeCases(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name  string
 		input string
@@ -795,6 +834,7 @@ func TestExtractJSON_EdgeCases(t *testing.T) {
 }
 
 func TestExtractJSON_RealWorldCases(t *testing.T) {
+	t.Parallel()
 	// Simulates real CLI output patterns
 	tests := []struct {
 		name  string
@@ -849,6 +889,7 @@ The tasks should be organized by dependency.
 }
 
 func TestIsValidJSONStructure(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		input string
 		want  bool

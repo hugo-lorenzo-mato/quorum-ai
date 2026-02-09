@@ -197,6 +197,7 @@ func setupProjectsTest() (*mockRegistry, *ProjectsHandler, chi.Router) {
 }
 
 func TestProjectsHandler_ListProjects(t *testing.T) {
+	t.Parallel()
 	_, _, r := setupProjectsTest()
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects", nil)
@@ -231,6 +232,7 @@ func TestProjectsHandler_ListProjects(t *testing.T) {
 }
 
 func TestProjectsHandler_GetProject(t *testing.T) {
+	t.Parallel()
 	_, _, r := setupProjectsTest()
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/proj-1", nil)
@@ -256,6 +258,7 @@ func TestProjectsHandler_GetProject(t *testing.T) {
 }
 
 func TestProjectsHandler_GetProject_NotFound(t *testing.T) {
+	t.Parallel()
 	_, _, r := setupProjectsTest()
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/nonexistent", nil)
@@ -269,6 +272,7 @@ func TestProjectsHandler_GetProject_NotFound(t *testing.T) {
 }
 
 func TestProjectsHandler_CreateProject(t *testing.T) {
+	t.Parallel()
 	_, _, r := setupProjectsTest()
 
 	body := CreateProjectRequest{
@@ -298,6 +302,7 @@ func TestProjectsHandler_CreateProject(t *testing.T) {
 }
 
 func TestProjectsHandler_CreateProject_MissingPath(t *testing.T) {
+	t.Parallel()
 	_, _, r := setupProjectsTest()
 
 	body := CreateProjectRequest{
@@ -317,6 +322,7 @@ func TestProjectsHandler_CreateProject_MissingPath(t *testing.T) {
 }
 
 func TestProjectsHandler_UpdateProject(t *testing.T) {
+	t.Parallel()
 	_, _, r := setupProjectsTest()
 
 	newName := "Updated Name"
@@ -346,6 +352,7 @@ func TestProjectsHandler_UpdateProject(t *testing.T) {
 }
 
 func TestProjectsHandler_DeleteProject(t *testing.T) {
+	t.Parallel()
 	_, _, r := setupProjectsTest()
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/projects/proj-2", nil)
@@ -359,6 +366,7 @@ func TestProjectsHandler_DeleteProject(t *testing.T) {
 }
 
 func TestProjectsHandler_DeleteProject_NotFound(t *testing.T) {
+	t.Parallel()
 	_, _, r := setupProjectsTest()
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/projects/nonexistent", nil)
@@ -372,6 +380,7 @@ func TestProjectsHandler_DeleteProject_NotFound(t *testing.T) {
 }
 
 func TestProjectsHandler_ValidateProject(t *testing.T) {
+	t.Parallel()
 	_, _, r := setupProjectsTest()
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/proj-1/validate", nil)
@@ -394,6 +403,7 @@ func TestProjectsHandler_ValidateProject(t *testing.T) {
 }
 
 func TestProjectsHandler_GetDefaultProject(t *testing.T) {
+	t.Parallel()
 	_, _, r := setupProjectsTest()
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/default", nil)
@@ -419,6 +429,7 @@ func TestProjectsHandler_GetDefaultProject(t *testing.T) {
 }
 
 func TestProjectsHandler_SetDefaultProject(t *testing.T) {
+	t.Parallel()
 	_, _, r := setupProjectsTest()
 
 	body := SetDefaultProjectRequest{
@@ -450,6 +461,7 @@ func TestProjectsHandler_SetDefaultProject(t *testing.T) {
 }
 
 func TestProjectsHandler_SetDefaultProject_NotFound(t *testing.T) {
+	t.Parallel()
 	_, _, r := setupProjectsTest()
 
 	body := SetDefaultProjectRequest{

@@ -3,6 +3,7 @@ package workflow
 import "testing"
 
 func TestParseRefinerResult(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		output  string

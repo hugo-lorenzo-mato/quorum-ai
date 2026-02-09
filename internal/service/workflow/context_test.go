@@ -7,6 +7,7 @@ import (
 )
 
 func TestBuildContextString(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		state    *core.WorkflowState
@@ -79,6 +80,7 @@ func containsSubstring(s, substr string) bool {
 }
 
 func TestConfig_Defaults(t *testing.T) {
+	t.Parallel()
 	cfg := &Config{
 		DryRun:       false,
 		DefaultAgent: "claude",
@@ -93,6 +95,7 @@ func TestConfig_Defaults(t *testing.T) {
 }
 
 func TestResolvePhaseModel(t *testing.T) {
+	t.Parallel()
 	cfg := &Config{
 		AgentPhaseModels: map[string]map[string]string{
 			"claude": {

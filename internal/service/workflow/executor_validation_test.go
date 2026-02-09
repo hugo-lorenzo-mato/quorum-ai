@@ -18,6 +18,7 @@ func withGitChanges(files ...string) *GitChangesInfo {
 }
 
 func TestValidateTaskOutput_GitChangesAsPrimarySignal(t *testing.T) {
+	t.Parallel()
 	executor := &Executor{}
 
 	tests := []struct {
@@ -91,6 +92,7 @@ func TestValidateTaskOutput_GitChangesAsPrimarySignal(t *testing.T) {
 }
 
 func TestValidateTaskOutput_AnalysisTasks(t *testing.T) {
+	t.Parallel()
 	executor := &Executor{}
 
 	tests := []struct {
@@ -149,6 +151,7 @@ func TestValidateTaskOutput_AnalysisTasks(t *testing.T) {
 }
 
 func TestValidateTaskOutput_ImplementationTasksWithoutGitChanges(t *testing.T) {
+	t.Parallel()
 	executor := &Executor{}
 
 	// Implementation tasks without git changes should fail
@@ -208,6 +211,7 @@ func TestValidateTaskOutput_ImplementationTasksWithoutGitChanges(t *testing.T) {
 }
 
 func TestValidateTaskOutput_FileOpsDetection(t *testing.T) {
+	t.Parallel()
 	executor := &Executor{}
 
 	toolCallTests := []struct {
@@ -242,6 +246,7 @@ func TestValidateTaskOutput_FileOpsDetection(t *testing.T) {
 }
 
 func TestValidateTaskOutput_UnknownTaskType(t *testing.T) {
+	t.Parallel()
 	executor := &Executor{}
 
 	tests := []struct {
@@ -291,6 +296,7 @@ func TestValidateTaskOutput_UnknownTaskType(t *testing.T) {
 
 // TestValidateTaskOutput_CopilotScenario tests the exact scenario that was failing with Copilot
 func TestValidateTaskOutput_CopilotScenario(t *testing.T) {
+	t.Parallel()
 	executor := &Executor{}
 
 	// Copilot typically reports low tokens (estimated) but actually writes files
@@ -330,6 +336,7 @@ func TestValidateTaskOutput_CopilotScenario(t *testing.T) {
 // TestValidateTaskOutput_IssueScenario tests the original issue scenarios
 // These should now fail when no git changes are detected
 func TestValidateTaskOutput_IssueScenario(t *testing.T) {
+	t.Parallel()
 	executor := &Executor{}
 
 	// These are the actual values from the original issue
@@ -379,6 +386,7 @@ func TestValidateTaskOutput_IssueScenario(t *testing.T) {
 }
 
 func TestGitChangesInfo(t *testing.T) {
+	t.Parallel()
 	t.Run("empty struct has no changes", func(t *testing.T) {
 		info := &GitChangesInfo{}
 		if info.HasChanges {

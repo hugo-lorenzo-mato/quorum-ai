@@ -7,6 +7,7 @@ import (
 )
 
 func TestLegacyKeyNormalization_NoUnderscoreCollisions(t *testing.T) {
+	t.Parallel()
 	root := reflect.TypeOf(Config{})
 	structs := map[reflect.Type]struct{}{}
 	collectConfigStructTypes(root, structs)

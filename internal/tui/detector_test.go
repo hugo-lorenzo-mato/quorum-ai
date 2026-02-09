@@ -8,6 +8,7 @@ import (
 )
 
 func TestOutputMode_String_Unknown(t *testing.T) {
+	t.Parallel()
 	// Test unknown mode (value outside enum range)
 	mode := tui.OutputMode(999)
 	got := mode.String()
@@ -17,6 +18,7 @@ func TestOutputMode_String_Unknown(t *testing.T) {
 }
 
 func TestDetector_NoColor(t *testing.T) {
+	t.Parallel()
 	d := tui.NewDetector().NoColor(true)
 	// After setting NoColor, the detector should have it set
 	// We can't directly test the internal field, but we can test behavior
@@ -26,6 +28,7 @@ func TestDetector_NoColor(t *testing.T) {
 }
 
 func TestDetector_Detect_CIEnvironment(t *testing.T) {
+	t.Parallel()
 	// Save current env
 	originalCI := os.Getenv("CI")
 	originalGH := os.Getenv("GITHUB_ACTIONS")
@@ -57,6 +60,7 @@ func TestDetector_Detect_CIEnvironment(t *testing.T) {
 }
 
 func TestDetector_Detect_QuorumOutput(t *testing.T) {
+	t.Parallel()
 	// Save current env
 	originalCI := os.Getenv("CI")
 	originalGH := os.Getenv("GITHUB_ACTIONS")
@@ -81,6 +85,7 @@ func TestDetector_Detect_QuorumOutput(t *testing.T) {
 }
 
 func TestDetector_Detect_QuorumQuiet(t *testing.T) {
+	t.Parallel()
 	// Save current env
 	originalCI := os.Getenv("CI")
 	originalGH := os.Getenv("GITHUB_ACTIONS")
@@ -108,6 +113,7 @@ func TestDetector_Detect_QuorumQuiet(t *testing.T) {
 }
 
 func TestDetector_ShouldUseColor_NoColor(t *testing.T) {
+	t.Parallel()
 	d := tui.NewDetector().NoColor(true)
 	result := d.ShouldUseColor()
 	if result {
@@ -116,6 +122,7 @@ func TestDetector_ShouldUseColor_NoColor(t *testing.T) {
 }
 
 func TestDetector_ShouldUseColor_EnvNoColor(t *testing.T) {
+	t.Parallel()
 	// Save current env
 	originalNoColor := os.Getenv("NO_COLOR")
 	defer os.Setenv("NO_COLOR", originalNoColor)
@@ -129,6 +136,7 @@ func TestDetector_ShouldUseColor_EnvNoColor(t *testing.T) {
 }
 
 func TestDetector_ShouldUseColor_DumbTerminal(t *testing.T) {
+	t.Parallel()
 	// Save current env
 	originalNoColor := os.Getenv("NO_COLOR")
 	originalTerm := os.Getenv("TERM")
@@ -147,6 +155,7 @@ func TestDetector_ShouldUseColor_DumbTerminal(t *testing.T) {
 }
 
 func TestTerminalSize(t *testing.T) {
+	t.Parallel()
 	// This will likely return defaults since we're not in a real terminal
 	w, h := tui.TerminalSize()
 	// Should return reasonable defaults or actual values

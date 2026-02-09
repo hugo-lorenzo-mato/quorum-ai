@@ -9,6 +9,7 @@ import (
 )
 
 func TestValidateOutputPath_ValidFilenames(t *testing.T) {
+	t.Parallel()
 	baseDir := t.TempDir()
 
 	tests := []struct {
@@ -36,6 +37,7 @@ func TestValidateOutputPath_ValidFilenames(t *testing.T) {
 }
 
 func TestValidateOutputPath_PathTraversal(t *testing.T) {
+	t.Parallel()
 	baseDir := t.TempDir()
 
 	tests := []struct {
@@ -64,6 +66,7 @@ func TestValidateOutputPath_PathTraversal(t *testing.T) {
 }
 
 func TestValidateOutputPath_AbsolutePath(t *testing.T) {
+	t.Parallel()
 	baseDir := t.TempDir()
 
 	// Use OS-appropriate absolute paths
@@ -96,6 +99,7 @@ func TestValidateOutputPath_AbsolutePath(t *testing.T) {
 }
 
 func TestValidateOutputPath_EmptyFilename(t *testing.T) {
+	t.Parallel()
 	baseDir := t.TempDir()
 
 	_, err := ValidateOutputPath(baseDir, "")
@@ -108,6 +112,7 @@ func TestValidateOutputPath_EmptyFilename(t *testing.T) {
 }
 
 func TestSanitizeFilename_DangerousCharacters(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		input    string
 		expected string
@@ -156,6 +161,7 @@ func TestSanitizeFilename_DangerousCharacters(t *testing.T) {
 }
 
 func TestSanitizeFilename_PreservesValidNames(t *testing.T) {
+	t.Parallel()
 	tests := []string{
 		"valid-file.md",
 		"01-task-name.md",
@@ -177,6 +183,7 @@ func TestSanitizeFilename_PreservesValidNames(t *testing.T) {
 }
 
 func TestSanitizeFilename_ExtractsBasename(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		input    string
 		expected string
@@ -198,6 +205,7 @@ func TestSanitizeFilename_ExtractsBasename(t *testing.T) {
 }
 
 func TestIsValidIssueFilename_Valid(t *testing.T) {
+	t.Parallel()
 	tests := []string{
 		"issue.md",
 		"01-task.md",
@@ -216,6 +224,7 @@ func TestIsValidIssueFilename_Valid(t *testing.T) {
 }
 
 func TestIsValidIssueFilename_Invalid(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		filename string
 		reason   string
@@ -241,6 +250,7 @@ func TestIsValidIssueFilename_Invalid(t *testing.T) {
 }
 
 func TestIsValidIssueFilename_LengthBoundaries(t *testing.T) {
+	t.Parallel()
 	// Exactly 4 characters (minimum valid)
 	minValid := "a.md"
 	if !IsValidIssueFilename(minValid) {
@@ -267,6 +277,7 @@ func TestIsValidIssueFilename_LengthBoundaries(t *testing.T) {
 }
 
 func TestValidateAndSanitizeFilename_Valid(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		input    string
 		expected string
@@ -291,6 +302,7 @@ func TestValidateAndSanitizeFilename_Valid(t *testing.T) {
 }
 
 func TestValidateAndSanitizeFilename_SanitizesAndValidates(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		input    string
 		expected string
@@ -315,6 +327,7 @@ func TestValidateAndSanitizeFilename_SanitizesAndValidates(t *testing.T) {
 }
 
 func TestValidateAndSanitizeFilename_InvalidAfterSanitization(t *testing.T) {
+	t.Parallel()
 	// These inputs become invalid even after sanitization
 	tests := []string{
 		".", // Becomes "unnamed" which needs .md
@@ -334,6 +347,7 @@ func TestValidateAndSanitizeFilename_InvalidAfterSanitization(t *testing.T) {
 }
 
 func TestErrorTypes(t *testing.T) {
+	t.Parallel()
 	// Test that error types are properly defined and distinguishable
 	if ErrPathTraversal == ErrInvalidFilename {
 		t.Error("ErrPathTraversal and ErrInvalidFilename should be different")
@@ -347,6 +361,7 @@ func TestErrorTypes(t *testing.T) {
 }
 
 func TestValidateOutputPath_RealDirectory(t *testing.T) {
+	t.Parallel()
 	tempDir := t.TempDir()
 
 	tests := []struct {
@@ -383,6 +398,7 @@ func TestValidateOutputPath_RealDirectory(t *testing.T) {
 }
 
 func TestValidateOutputPath_WindowsPaths(t *testing.T) {
+	t.Parallel()
 	baseDir := t.TempDir()
 
 	// These should be caught regardless of OS
@@ -410,6 +426,7 @@ func TestValidateOutputPath_WindowsPaths(t *testing.T) {
 }
 
 func TestSanitizeFilename_EmptyInput(t *testing.T) {
+	t.Parallel()
 	// filepath.Base("") returns "." which becomes "unnamed" after sanitization
 	result := SanitizeFilename("")
 	// On Linux, filepath.Base("") returns ".", which is then preserved
@@ -420,6 +437,7 @@ func TestSanitizeFilename_EmptyInput(t *testing.T) {
 }
 
 func TestSanitizeFilename_WhitespaceOnly(t *testing.T) {
+	t.Parallel()
 	tests := []string{
 		"   ",
 		"\t\t",
@@ -439,6 +457,7 @@ func TestSanitizeFilename_WhitespaceOnly(t *testing.T) {
 
 // TestPathTraversalVectors tests various known path traversal attack vectors
 func TestPathTraversalVectors(t *testing.T) {
+	t.Parallel()
 	baseDir := t.TempDir()
 
 	// Common path traversal attack vectors

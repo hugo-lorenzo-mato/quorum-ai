@@ -12,6 +12,7 @@ import (
 )
 
 func TestIntegration_CreateAndGetWorkflow(t *testing.T) {
+	t.Parallel()
 	ts := newIntegrationTestServer(t)
 
 	// Create a workflow
@@ -40,6 +41,7 @@ func TestIntegration_CreateAndGetWorkflow(t *testing.T) {
 }
 
 func TestIntegration_RunWorkflow_MissingConfig(t *testing.T) {
+	t.Parallel()
 	// This test verifies behavior when config loader is not set
 	ts := newIntegrationTestServer(t)
 
@@ -63,6 +65,7 @@ func TestIntegration_RunWorkflow_MissingConfig(t *testing.T) {
 }
 
 func TestIntegration_SSE_Connection(t *testing.T) {
+	t.Parallel()
 	ts := newIntegrationTestServer(t)
 
 	// Connect SSE client
@@ -82,6 +85,7 @@ func TestIntegration_SSE_Connection(t *testing.T) {
 }
 
 func TestIntegration_SSE_ReceivesWorkflowEvents(t *testing.T) {
+	t.Parallel()
 	ts := newIntegrationTestServer(t)
 
 	// Connect SSE client first
@@ -122,6 +126,7 @@ func TestIntegration_SSE_ReceivesWorkflowEvents(t *testing.T) {
 }
 
 func TestIntegration_ConcurrentWorkflowCreation(t *testing.T) {
+	t.Parallel()
 	ts := newIntegrationTestServer(t)
 
 	// Create multiple workflows concurrently
@@ -178,6 +183,7 @@ func TestIntegration_ConcurrentWorkflowCreation(t *testing.T) {
 }
 
 func TestIntegration_RunWorkflow_NotFound(t *testing.T) {
+	t.Parallel()
 	ts := newIntegrationTestServer(t)
 
 	resp, err := ts.runWorkflow("nonexistent-workflow")
@@ -192,6 +198,7 @@ func TestIntegration_RunWorkflow_NotFound(t *testing.T) {
 }
 
 func TestIntegration_RunWorkflow_DoubleRun(t *testing.T) {
+	t.Parallel()
 	t.Skip("TODO: Fix test - markRunning/markFinished helpers were removed")
 	// This test needs to be refactored to use the StateManager interface
 	// to mark workflows as running, rather than relying on removed helper functions.

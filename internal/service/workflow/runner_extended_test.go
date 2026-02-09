@@ -11,6 +11,7 @@ import (
 )
 
 func TestNewRunner(t *testing.T) {
+	t.Parallel()
 	t.Run("with nil config uses defaults", func(t *testing.T) {
 		deps := RunnerDeps{
 			Config: nil,
@@ -99,6 +100,7 @@ func TestNewRunner(t *testing.T) {
 }
 
 func TestDefaultRunnerConfig_Values(t *testing.T) {
+	t.Parallel()
 	cfg := DefaultRunnerConfig()
 
 	if cfg.Timeout != time.Hour {
@@ -123,6 +125,7 @@ func TestDefaultRunnerConfig_Values(t *testing.T) {
 }
 
 func TestRunner_handleError(t *testing.T) {
+	t.Parallel()
 	checkpoint := &mockCheckpointCreator{}
 	state := &mockStateManager{}
 
@@ -157,6 +160,7 @@ func TestRunner_handleError(t *testing.T) {
 }
 
 func TestRunner_Run_ValidationErrors(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		prompt  string
@@ -194,6 +198,7 @@ func TestRunner_Run_ValidationErrors(t *testing.T) {
 }
 
 func TestRunner_Run_LockError(t *testing.T) {
+	t.Parallel()
 	registry := &mockAgentRegistry{}
 	registry.Register("claude", &mockAgent{})
 
@@ -215,6 +220,7 @@ func TestRunner_Run_LockError(t *testing.T) {
 }
 
 func TestGenerateWorkflowID_Uniqueness(t *testing.T) {
+	t.Parallel()
 	ids := make(map[string]bool)
 	count := 100
 
@@ -232,6 +238,7 @@ func TestGenerateWorkflowID_Uniqueness(t *testing.T) {
 }
 
 func TestRunner_Resume_NoState(t *testing.T) {
+	t.Parallel()
 	registry := &mockAgentRegistry{}
 	registry.Register("claude", &mockAgent{})
 
@@ -271,6 +278,7 @@ func (m *mockResumePointProvider) GetResumePoint(_ *core.WorkflowState) (*Resume
 }
 
 func TestResumePoint_Fields(t *testing.T) {
+	t.Parallel()
 	rp := ResumePoint{
 		Phase:     core.PhaseExecute,
 		TaskID:    "task-1",
@@ -289,6 +297,7 @@ func TestResumePoint_Fields(t *testing.T) {
 }
 
 func TestRunnerConfig_Fields(t *testing.T) {
+	t.Parallel()
 	cfg := &RunnerConfig{
 		Timeout:           2 * time.Hour,
 		MaxRetries:        5,

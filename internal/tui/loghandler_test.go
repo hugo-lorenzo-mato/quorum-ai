@@ -8,6 +8,7 @@ import (
 )
 
 func TestTUILogHandler_Handle(t *testing.T) {
+	t.Parallel()
 	output := NewTUIOutput()
 	handler := NewTUILogHandler(output, slog.LevelInfo)
 
@@ -24,6 +25,7 @@ func TestTUILogHandler_Handle(t *testing.T) {
 }
 
 func TestTUILogHandler_LevelFiltering(t *testing.T) {
+	t.Parallel()
 	output := NewTUIOutput()
 	handler := NewTUILogHandler(output, slog.LevelWarn)
 

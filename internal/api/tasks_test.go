@@ -12,6 +12,7 @@ import (
 )
 
 func TestHandleGetTask_IncludesOutputFile(t *testing.T) {
+	t.Parallel()
 	sm := newMockStateManager()
 	sm.workflows[core.WorkflowID("wf-1")] = &core.WorkflowState{
 		WorkflowDefinition: core.WorkflowDefinition{

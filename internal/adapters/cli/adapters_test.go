@@ -13,6 +13,7 @@ import (
 // =============================================================================
 
 func TestRegistry_NewRegistry(t *testing.T) {
+	t.Parallel()
 	r := NewRegistry()
 	if r == nil {
 		t.Fatal("NewRegistry() returned nil")
@@ -37,6 +38,7 @@ func TestRegistry_NewRegistry(t *testing.T) {
 }
 
 func TestRegistry_List(t *testing.T) {
+	t.Parallel()
 	r := NewRegistry()
 	list := r.List()
 
@@ -63,6 +65,7 @@ func TestRegistry_List(t *testing.T) {
 }
 
 func TestRegistry_Get(t *testing.T) {
+	t.Parallel()
 	r := NewRegistry()
 
 	agent, err := r.Get("claude")
@@ -78,6 +81,7 @@ func TestRegistry_Get(t *testing.T) {
 }
 
 func TestRegistry_Get_Unknown(t *testing.T) {
+	t.Parallel()
 	r := NewRegistry()
 
 	_, err := r.Get("unknown")
@@ -87,6 +91,7 @@ func TestRegistry_Get_Unknown(t *testing.T) {
 }
 
 func TestRegistry_Get_Caching(t *testing.T) {
+	t.Parallel()
 	r := NewRegistry()
 
 	agent1, _ := r.Get("claude")
@@ -98,6 +103,7 @@ func TestRegistry_Get_Caching(t *testing.T) {
 }
 
 func TestRegistry_Configure(t *testing.T) {
+	t.Parallel()
 	r := NewRegistry()
 
 	// Get agent first
@@ -119,6 +125,7 @@ func TestRegistry_Configure(t *testing.T) {
 }
 
 func TestRegistry_Register(t *testing.T) {
+	t.Parallel()
 	r := NewRegistry()
 
 	mockAgent := &mockTestAgent{name: "mock"}
@@ -138,6 +145,7 @@ func TestRegistry_Register(t *testing.T) {
 }
 
 func TestRegistry_ListEnabled(t *testing.T) {
+	t.Parallel()
 	r := NewRegistry()
 
 	// Initially no enabled (configured) agents
@@ -161,6 +169,7 @@ func TestRegistry_ListEnabled(t *testing.T) {
 // =============================================================================
 
 func TestClaudeAdapter_Name(t *testing.T) {
+	t.Parallel()
 	adapter, err := NewClaudeAdapter(AgentConfig{})
 	if err != nil {
 		t.Fatalf("NewClaudeAdapter() error = %v", err)
@@ -172,6 +181,7 @@ func TestClaudeAdapter_Name(t *testing.T) {
 }
 
 func TestClaudeAdapter_Capabilities(t *testing.T) {
+	t.Parallel()
 	adapter, err := NewClaudeAdapter(AgentConfig{})
 	if err != nil {
 		t.Fatalf("NewClaudeAdapter() error = %v", err)
@@ -197,6 +207,7 @@ func TestClaudeAdapter_Capabilities(t *testing.T) {
 }
 
 func TestClaudeAdapter_BuildArgs(t *testing.T) {
+	t.Parallel()
 	cfg := AgentConfig{
 		Model: "claude-sonnet-4-20250514",
 	}
@@ -222,6 +233,7 @@ func TestClaudeAdapter_BuildArgs(t *testing.T) {
 }
 
 func TestClaudeAdapter_ExtractUsage(t *testing.T) {
+	t.Parallel()
 	adapter, _ := NewClaudeAdapter(AgentConfig{})
 	claude := adapter.(*ClaudeAdapter)
 
@@ -246,6 +258,7 @@ func TestClaudeAdapter_ExtractUsage(t *testing.T) {
 // =============================================================================
 
 func TestGeminiAdapter_Name(t *testing.T) {
+	t.Parallel()
 	adapter, err := NewGeminiAdapter(AgentConfig{})
 	if err != nil {
 		t.Fatalf("NewGeminiAdapter() error = %v", err)
@@ -257,6 +270,7 @@ func TestGeminiAdapter_Name(t *testing.T) {
 }
 
 func TestGeminiAdapter_Capabilities(t *testing.T) {
+	t.Parallel()
 	adapter, err := NewGeminiAdapter(AgentConfig{})
 	if err != nil {
 		t.Fatalf("NewGeminiAdapter() error = %v", err)
@@ -273,6 +287,7 @@ func TestGeminiAdapter_Capabilities(t *testing.T) {
 }
 
 func TestGeminiAdapter_BuildArgs(t *testing.T) {
+	t.Parallel()
 	cfg := AgentConfig{Model: "gemini-2.5-flash"}
 	adapter, _ := NewGeminiAdapter(cfg)
 	gemini := adapter.(*GeminiAdapter)
@@ -301,6 +316,7 @@ func TestGeminiAdapter_BuildArgs(t *testing.T) {
 // =============================================================================
 
 func TestCodexAdapter_Name(t *testing.T) {
+	t.Parallel()
 	adapter, err := NewCodexAdapter(AgentConfig{})
 	if err != nil {
 		t.Fatalf("NewCodexAdapter() error = %v", err)
@@ -312,6 +328,7 @@ func TestCodexAdapter_Name(t *testing.T) {
 }
 
 func TestCodexAdapter_Capabilities(t *testing.T) {
+	t.Parallel()
 	adapter, err := NewCodexAdapter(AgentConfig{})
 	if err != nil {
 		t.Fatalf("NewCodexAdapter() error = %v", err)
@@ -331,6 +348,7 @@ func TestCodexAdapter_Capabilities(t *testing.T) {
 }
 
 func TestCodexAdapter_BuildArgs(t *testing.T) {
+	t.Parallel()
 	cfg := AgentConfig{
 		Model: "gpt-5.1-codex",
 	}
@@ -360,6 +378,7 @@ func TestCodexAdapter_BuildArgs(t *testing.T) {
 }
 
 func TestCodexAdapter_BuildArgs_NormalizesReasoningEffort(t *testing.T) {
+	t.Parallel()
 	cfg := AgentConfig{
 		Model: "gpt-5.2-codex",
 	}
@@ -379,6 +398,7 @@ func TestCodexAdapter_BuildArgs_NormalizesReasoningEffort(t *testing.T) {
 }
 
 func TestCodexAdapter_BuildArgs_DisablesWebSearchForMinimal(t *testing.T) {
+	t.Parallel()
 	cfg := AgentConfig{
 		Model: "gpt-5",
 	}
@@ -404,6 +424,7 @@ func TestCodexAdapter_BuildArgs_DisablesWebSearchForMinimal(t *testing.T) {
 // =============================================================================
 
 func TestCopilotAdapter_Name(t *testing.T) {
+	t.Parallel()
 	adapter, err := NewCopilotAdapter(AgentConfig{})
 	if err != nil {
 		t.Fatalf("NewCopilotAdapter() error = %v", err)
@@ -415,6 +436,7 @@ func TestCopilotAdapter_Name(t *testing.T) {
 }
 
 func TestCopilotAdapter_Capabilities(t *testing.T) {
+	t.Parallel()
 	adapter, err := NewCopilotAdapter(AgentConfig{})
 	if err != nil {
 		t.Fatalf("NewCopilotAdapter() error = %v", err)
@@ -437,6 +459,7 @@ func TestCopilotAdapter_Capabilities(t *testing.T) {
 }
 
 func TestCopilotAdapter_CleanANSI(t *testing.T) {
+	t.Parallel()
 	adapter, _ := NewCopilotAdapter(AgentConfig{})
 	copilot := adapter.(*CopilotAdapter)
 
@@ -478,6 +501,7 @@ func TestCopilotAdapter_CleanANSI(t *testing.T) {
 }
 
 func TestCopilotAdapter_EstimateTokens(t *testing.T) {
+	t.Parallel()
 	adapter, _ := NewCopilotAdapter(AgentConfig{})
 	copilot := adapter.(*CopilotAdapter)
 
@@ -493,6 +517,7 @@ func TestCopilotAdapter_EstimateTokens(t *testing.T) {
 // =============================================================================
 
 func TestBaseAdapter_TokenEstimate(t *testing.T) {
+	t.Parallel()
 	base := NewBaseAdapter(AgentConfig{}, nil)
 
 	// ~4 chars per token
@@ -506,6 +531,7 @@ func TestBaseAdapter_TokenEstimate(t *testing.T) {
 }
 
 func TestBaseAdapter_TruncateToTokenLimit(t *testing.T) {
+	t.Parallel()
 	base := NewBaseAdapter(AgentConfig{}, nil)
 
 	text := "This is a very long text that should be truncated to fit within the token limit"
@@ -519,6 +545,7 @@ func TestBaseAdapter_TruncateToTokenLimit(t *testing.T) {
 }
 
 func TestBaseAdapter_ExtractJSON(t *testing.T) {
+	t.Parallel()
 	base := NewBaseAdapter(AgentConfig{}, nil)
 
 	tests := []struct {
@@ -564,6 +591,7 @@ func TestBaseAdapter_ExtractJSON(t *testing.T) {
 }
 
 func TestBaseAdapter_Config(t *testing.T) {
+	t.Parallel()
 	cfg := AgentConfig{
 		Name:    "test",
 		Path:    "/usr/bin/test",
@@ -586,6 +614,7 @@ func TestBaseAdapter_Config(t *testing.T) {
 }
 
 func TestDefaultConfig(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		wantPath string

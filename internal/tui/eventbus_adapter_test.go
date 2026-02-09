@@ -8,6 +8,7 @@ import (
 )
 
 func TestEventBusAdapter_ConvertsEvents(t *testing.T) {
+	t.Parallel()
 	bus := events.New(10)
 	defer bus.Close()
 
@@ -33,6 +34,7 @@ func TestEventBusAdapter_ConvertsEvents(t *testing.T) {
 }
 
 func TestEventBusAdapter_HandlesPriority(t *testing.T) {
+	t.Parallel()
 	bus := events.New(10)
 	defer bus.Close()
 

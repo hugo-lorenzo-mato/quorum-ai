@@ -54,6 +54,7 @@ func newTestStateSQLite() *core.WorkflowState {
 }
 
 func TestSQLiteStateManager_Save(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "state.db")
 
@@ -78,6 +79,7 @@ func TestSQLiteStateManager_Save(t *testing.T) {
 }
 
 func TestSQLiteStateManager_Load(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "state.db")
 
@@ -120,6 +122,7 @@ func TestSQLiteStateManager_Load(t *testing.T) {
 }
 
 func TestSQLiteStateManager_LoadNonExistent(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "state.db")
 
@@ -141,6 +144,7 @@ func TestSQLiteStateManager_LoadNonExistent(t *testing.T) {
 }
 
 func TestSQLiteStateManager_LoadByID(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "state.db")
 
@@ -196,6 +200,7 @@ func TestSQLiteStateManager_LoadByID(t *testing.T) {
 }
 
 func TestSQLiteStateManager_ListWorkflows(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "state.db")
 
@@ -256,6 +261,7 @@ func TestSQLiteStateManager_ListWorkflows(t *testing.T) {
 }
 
 func TestSQLiteStateManager_ActiveWorkflow(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "state.db")
 
@@ -324,6 +330,7 @@ func TestSQLiteStateManager_ActiveWorkflow(t *testing.T) {
 // TestSQLiteStateManager_ActiveWorkflow_CleansUpOrphan verifies that GetActiveWorkflowID
 // auto-cleans orphan references (workflow ID set but workflow doesn't exist).
 func TestSQLiteStateManager_ActiveWorkflow_CleansUpOrphan(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "state.db")
 
@@ -354,6 +361,7 @@ func TestSQLiteStateManager_ActiveWorkflow_CleansUpOrphan(t *testing.T) {
 // TestSQLiteStateManager_ActiveWorkflow_CleansUpFailed verifies that GetActiveWorkflowID
 // auto-cleans ghost workflows (workflow in failed state but still active).
 func TestSQLiteStateManager_ActiveWorkflow_CleansUpFailed(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "state.db")
 
@@ -400,6 +408,7 @@ func TestSQLiteStateManager_ActiveWorkflow_CleansUpFailed(t *testing.T) {
 }
 
 func TestSQLiteStateManager_CleanupOnStartup_GhostWorkflow(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "state.db")
 	ctx := context.Background()
@@ -462,6 +471,7 @@ func TestSQLiteStateManager_CleanupOnStartup_GhostWorkflow(t *testing.T) {
 }
 
 func TestSQLiteStateManager_Tasks(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "state.db")
 
@@ -541,6 +551,7 @@ func TestSQLiteStateManager_Tasks(t *testing.T) {
 }
 
 func TestSQLiteStateManager_Checkpoints(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "state.db")
 
@@ -591,6 +602,7 @@ func TestSQLiteStateManager_Checkpoints(t *testing.T) {
 }
 
 func TestSQLiteStateManager_BackupRestore(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "state.db")
 
@@ -640,6 +652,7 @@ func TestSQLiteStateManager_BackupRestore(t *testing.T) {
 }
 
 func TestSQLiteStateManager_UpdateExisting(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "state.db")
 
@@ -686,6 +699,7 @@ func TestSQLiteStateManager_UpdateExisting(t *testing.T) {
 }
 
 func TestSQLiteStateManager_ConfigAndMetrics(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "state.db")
 
@@ -744,6 +758,7 @@ func TestSQLiteStateManager_ConfigAndMetrics(t *testing.T) {
 }
 
 func TestSQLiteStateManager_DeactivateWorkflow(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "state.db")
 
@@ -789,6 +804,7 @@ func TestSQLiteStateManager_DeactivateWorkflow(t *testing.T) {
 }
 
 func TestSQLiteStateManager_Save_IsDurableWithoutReleaseLock(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "state.db")
 
@@ -858,6 +874,7 @@ func TestSQLiteStateManager_Save_IsDurableWithoutReleaseLock(t *testing.T) {
 }
 
 func TestSQLiteStateManager_ArchiveWorkflows(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "state.db")
 
@@ -918,6 +935,7 @@ func TestSQLiteStateManager_ArchiveWorkflows(t *testing.T) {
 }
 
 func TestSQLiteStateManager_ArchiveWorkflows_SkipsRunning(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "state.db")
 
@@ -952,6 +970,7 @@ func TestSQLiteStateManager_ArchiveWorkflows_SkipsRunning(t *testing.T) {
 }
 
 func TestSQLiteStateManager_PurgeAllWorkflows(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "state.db")
 
@@ -1002,6 +1021,7 @@ func TestSQLiteStateManager_PurgeAllWorkflows(t *testing.T) {
 }
 
 func TestSQLiteStateManager_AcquireWorkflowLock_Success(t *testing.T) {
+	t.Parallel()
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	manager, err := NewSQLiteStateManager(dbPath)
 	if err != nil {
@@ -1030,6 +1050,7 @@ func TestSQLiteStateManager_AcquireWorkflowLock_Success(t *testing.T) {
 }
 
 func TestSQLiteStateManager_AcquireWorkflowLock_AlreadyHeld(t *testing.T) {
+	t.Parallel()
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	manager, err := NewSQLiteStateManager(dbPath)
 	if err != nil {
@@ -1064,6 +1085,7 @@ func TestSQLiteStateManager_AcquireWorkflowLock_AlreadyHeld(t *testing.T) {
 }
 
 func TestSQLiteStateManager_MultipleWorkflowLocks(t *testing.T) {
+	t.Parallel()
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	manager, err := NewSQLiteStateManager(dbPath)
 	if err != nil {
@@ -1101,6 +1123,7 @@ func TestSQLiteStateManager_MultipleWorkflowLocks(t *testing.T) {
 }
 
 func TestSQLiteStateManager_RefreshWorkflowLock(t *testing.T) {
+	t.Parallel()
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	manager, err := NewSQLiteStateManager(dbPath)
 	if err != nil {
@@ -1138,6 +1161,7 @@ func TestSQLiteStateManager_RefreshWorkflowLock(t *testing.T) {
 }
 
 func TestSQLiteStateManager_StaleLockDetection(t *testing.T) {
+	t.Parallel()
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	manager, err := NewSQLiteStateManager(dbPath, WithSQLiteLockTTL(1*time.Second))
 	if err != nil {
@@ -1174,6 +1198,7 @@ func TestSQLiteStateManager_StaleLockDetection(t *testing.T) {
 }
 
 func TestSQLiteStateManager_RunningWorkflowsTracking(t *testing.T) {
+	t.Parallel()
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	manager, err := NewSQLiteStateManager(dbPath)
 	if err != nil {
@@ -1241,6 +1266,7 @@ func TestSQLiteStateManager_RunningWorkflowsTracking(t *testing.T) {
 }
 
 func TestSQLiteStateManager_SetWorkflowRunning_DuplicateReturnsDomainError(t *testing.T) {
+	t.Parallel()
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	manager, err := NewSQLiteStateManager(dbPath)
 	if err != nil {
@@ -1270,6 +1296,7 @@ func TestSQLiteStateManager_SetWorkflowRunning_DuplicateReturnsDomainError(t *te
 }
 
 func TestSQLiteStateManager_GetRunningWorkflowRecord(t *testing.T) {
+	t.Parallel()
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	manager, err := NewSQLiteStateManager(dbPath)
 	if err != nil {
@@ -1320,6 +1347,7 @@ func TestSQLiteStateManager_GetRunningWorkflowRecord(t *testing.T) {
 }
 
 func TestSQLiteStateManager_ZombieWorkflowDetection(t *testing.T) {
+	t.Parallel()
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	manager, err := NewSQLiteStateManager(dbPath)
 	if err != nil {
@@ -1369,6 +1397,7 @@ func TestSQLiteStateManager_ZombieWorkflowDetection(t *testing.T) {
 }
 
 func TestSQLiteStateManager_UpdateWorkflowHeartbeat(t *testing.T) {
+	t.Parallel()
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	manager, err := NewSQLiteStateManager(dbPath)
 	if err != nil {
@@ -1426,6 +1455,7 @@ func TestSQLiteStateManager_UpdateWorkflowHeartbeat(t *testing.T) {
 }
 
 func TestSQLiteStateManager_WorkflowBranchPersistence(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "state.db")
 
@@ -1462,6 +1492,7 @@ func TestSQLiteStateManager_WorkflowBranchPersistence(t *testing.T) {
 }
 
 func TestSQLiteStateManager_TaskMergeFieldsPersistence(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "state.db")
 
@@ -1536,6 +1567,7 @@ func TestSQLiteStateManager_TaskMergeFieldsPersistence(t *testing.T) {
 }
 
 func TestSQLiteStateManager_WorkflowIsolationFieldsPersistence(t *testing.T) {
+	t.Parallel()
 	// Comprehensive test for all workflow isolation fields
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "state.db")
@@ -1652,6 +1684,7 @@ func TestSQLiteStateManager_WorkflowIsolationFieldsPersistence(t *testing.T) {
 }
 
 func TestSQLiteStateManager_AgentEvents(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "state.db")
 
@@ -1775,6 +1808,7 @@ func TestSQLiteStateManager_AgentEvents(t *testing.T) {
 }
 
 func TestSQLiteStateManager_AgentEventsEmpty(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "state.db")
 

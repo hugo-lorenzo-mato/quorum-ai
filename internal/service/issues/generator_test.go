@@ -65,6 +65,7 @@ func (m *mockIssueClient) LinkIssues(_ context.Context, _, _ int) error {
 }
 
 func TestGenerator_Generate_DryRun(t *testing.T) {
+	t.Parallel()
 	// Create temp directory structure
 	tmpDir := t.TempDir()
 	analyzeDir := filepath.Join(tmpDir, "analyze-phase")
@@ -174,6 +175,7 @@ Another task context.
 }
 
 func TestGenerator_Generate_CreateIssues(t *testing.T) {
+	t.Parallel()
 	// Create temp directory structure
 	tmpDir := t.TempDir()
 	analyzeDir := filepath.Join(tmpDir, "analyze-phase")
@@ -236,6 +238,7 @@ func TestGenerator_Generate_CreateIssues(t *testing.T) {
 }
 
 func TestGenerator_parseTaskFile(t *testing.T) {
+	t.Parallel()
 	content := `# Task: Implement Authentication
 
 **Task ID**: task-3
@@ -317,6 +320,7 @@ func (r *mockGenAgentRegistry) AvailableForPhaseWithConfig(_ context.Context, _ 
 }
 
 func TestGenerator_ReasoningEffortPassthrough(t *testing.T) {
+	t.Parallel()
 	// Create temp directory structure for a minimal generation scenario
 	tmpDir := t.TempDir()
 	analyzeDir := filepath.Join(tmpDir, "analyze-phase")
@@ -380,6 +384,7 @@ func TestGenerator_ReasoningEffortPassthrough(t *testing.T) {
 }
 
 func TestGenerator_ReasoningEffortEmpty(t *testing.T) {
+	t.Parallel()
 	// Verify that when ReasoningEffort is not configured, it is not set in ExecuteOptions
 	tmpDir := t.TempDir()
 	analyzeDir := filepath.Join(tmpDir, "analyze-phase")
@@ -431,6 +436,7 @@ func TestGenerator_ReasoningEffortEmpty(t *testing.T) {
 }
 
 func TestGenerator_DirectModeSkipsLLM(t *testing.T) {
+	t.Parallel()
 	// Verify that when Mode is "direct", Generate() uses the direct path (no LLM)
 	tmpDir := t.TempDir()
 	analyzeDir := filepath.Join(tmpDir, "analyze-phase")
@@ -480,6 +486,7 @@ func TestGenerator_DirectModeSkipsLLM(t *testing.T) {
 }
 
 func TestGenerator_formatTitle(t *testing.T) {
+	t.Parallel()
 	gen := &Generator{
 		config: config.IssuesConfig{
 			Template: config.IssueTemplateConfig{
@@ -520,6 +527,7 @@ func TestGenerator_formatTitle(t *testing.T) {
 }
 
 func TestDefaultGenerateOptions(t *testing.T) {
+	t.Parallel()
 	opts := DefaultGenerateOptions("wf-abc-123")
 	if opts.WorkflowID != "wf-abc-123" {
 		t.Errorf("WorkflowID = %q, want %q", opts.WorkflowID, "wf-abc-123")
@@ -539,6 +547,7 @@ func TestDefaultGenerateOptions(t *testing.T) {
 }
 
 func TestGenerationTracker_MarkGenerated(t *testing.T) {
+	t.Parallel()
 	tracker := &GenerationTracker{
 		StartTime:      time.Now(),
 		ExpectedFiles:  make(map[string]string),
@@ -554,6 +563,7 @@ func TestGenerationTracker_MarkGenerated(t *testing.T) {
 }
 
 func TestGenerationTracker_IsValidFile(t *testing.T) {
+	t.Parallel()
 	startTime := time.Now().Add(-1 * time.Minute)
 	tracker := &GenerationTracker{
 		StartTime:      startTime,
@@ -588,6 +598,7 @@ func TestGenerationTracker_IsValidFile(t *testing.T) {
 }
 
 func TestFuzzyMatchFilename(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		actual, expected string
 		want             bool
@@ -606,6 +617,7 @@ func TestFuzzyMatchFilename(t *testing.T) {
 }
 
 func TestExtractLeadingNumber(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		input string
 		want  string
@@ -624,6 +636,7 @@ func TestExtractLeadingNumber(t *testing.T) {
 }
 
 func TestGenerator_SetProgressReporter(t *testing.T) {
+	t.Parallel()
 	gen := NewGenerator(nil, config.IssuesConfig{}, "", t.TempDir(), nil)
 	if gen.progress != nil {
 		t.Error("progress should be nil initially")
@@ -634,6 +647,7 @@ func TestGenerator_SetProgressReporter(t *testing.T) {
 }
 
 func TestGenerator_GetIssueSet(t *testing.T) {
+	t.Parallel()
 	gen := NewGenerator(nil, config.IssuesConfig{}, "", t.TempDir(), nil)
 	set, err := gen.GetIssueSet(context.Background(), "wf-1")
 	if err != nil {
@@ -645,6 +659,7 @@ func TestGenerator_GetIssueSet(t *testing.T) {
 }
 
 func TestGenerator_ReadGeneratedIssues_InvalidWorkflowID(t *testing.T) {
+	t.Parallel()
 	gen := NewGenerator(nil, config.IssuesConfig{}, "", t.TempDir(), nil)
 	_, err := gen.ReadGeneratedIssues("../../../etc")
 	if err == nil {
@@ -653,6 +668,7 @@ func TestGenerator_ReadGeneratedIssues_InvalidWorkflowID(t *testing.T) {
 }
 
 func TestGenerator_ReadGeneratedIssues_EmptyDrafts(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	gen := NewGenerator(nil, config.IssuesConfig{}, "", tmpDir, nil)
 	// No draft directory exists, no fallback directory exists
@@ -666,6 +682,7 @@ func TestGenerator_ReadGeneratedIssues_EmptyDrafts(t *testing.T) {
 }
 
 func TestGenerator_ReadGeneratedIssues_FallbackPath(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	wfID := "wf-test-fallback"
 
@@ -693,6 +710,7 @@ func TestGenerator_ReadGeneratedIssues_FallbackPath(t *testing.T) {
 }
 
 func TestGenerator_CleanIssuesDirectory(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	wfID := "wf-clean-test"
 
@@ -717,6 +735,7 @@ func TestGenerator_CleanIssuesDirectory(t *testing.T) {
 }
 
 func TestGenerator_CleanIssuesDirectory_NonExistent(t *testing.T) {
+	t.Parallel()
 	gen := NewGenerator(nil, config.IssuesConfig{}, t.TempDir(), t.TempDir(), nil)
 	if err := gen.cleanIssuesDirectory("wf-nonexistent"); err != nil {
 		t.Errorf("cleanIssuesDirectory() for non-existent dir should not error: %v", err)
@@ -771,6 +790,7 @@ func (m *mockProgressReporter) OnIssuesPublishingProgress(p PublishingProgressPa
 }
 
 func TestGenerator_Generate_DryRun_WithProgressReporter(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	analyzeDir := filepath.Join(tmpDir, "analyze-phase")
 	tasksDir := filepath.Join(tmpDir, "plan-phase", "tasks")
@@ -848,6 +868,7 @@ func TestGenerator_Generate_DryRun_WithProgressReporter(t *testing.T) {
 }
 
 func TestGenerator_Generate_DryRun_OnlySubIssues(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	tasksDir := filepath.Join(tmpDir, "plan-phase", "tasks")
 
@@ -900,6 +921,7 @@ func TestGenerator_Generate_DryRun_OnlySubIssues(t *testing.T) {
 }
 
 func TestGenerator_Generate_DryRun_CustomLabelsAndAssignees(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	analyzeDir := filepath.Join(tmpDir, "analyze-phase")
 	tasksDir := filepath.Join(tmpDir, "plan-phase", "tasks")
@@ -983,6 +1005,7 @@ func TestGenerator_Generate_DryRun_CustomLabelsAndAssignees(t *testing.T) {
 }
 
 func TestGenerator_Generate_DryRun_NoTaskFiles(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	analyzeDir := filepath.Join(tmpDir, "analyze-phase")
 
@@ -1023,6 +1046,7 @@ func TestGenerator_Generate_DryRun_NoTaskFiles(t *testing.T) {
 }
 
 func TestGenerator_Generate_DryRun_ConsolidatedInConsensusDir(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	// Create the fallback consensus directory
 	consensusDir := filepath.Join(tmpDir, "analyze-phase", "consensus")
@@ -1065,6 +1089,7 @@ func TestGenerator_Generate_DryRun_ConsolidatedInConsensusDir(t *testing.T) {
 }
 
 func TestGenerator_Generate_DryRun_NoConsolidated(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	tasksDir := filepath.Join(tmpDir, "plan-phase", "tasks")
 	if err := os.MkdirAll(tasksDir, 0755); err != nil {
@@ -1113,6 +1138,7 @@ func TestGenerator_Generate_DryRun_NoConsolidated(t *testing.T) {
 }
 
 func TestGenerator_CreateIssuesFromInput_DryRun(t *testing.T) {
+	t.Parallel()
 	gen := NewGenerator(nil, config.IssuesConfig{}, "", t.TempDir(), nil)
 
 	inputs := []IssueInput{
@@ -1161,6 +1187,7 @@ func TestGenerator_CreateIssuesFromInput_DryRun(t *testing.T) {
 }
 
 func TestGenerator_CreateIssuesFromInput_DryRun_DefaultLabelsAndAssignees(t *testing.T) {
+	t.Parallel()
 	gen := NewGenerator(nil, config.IssuesConfig{}, "", t.TempDir(), nil)
 
 	inputs := []IssueInput{
@@ -1230,6 +1257,7 @@ func TestGenerator_CreateIssuesFromInput_DryRun_DefaultLabelsAndAssignees(t *tes
 }
 
 func TestGenerator_CreateIssuesFromInput_Create_WithLinking(t *testing.T) {
+	t.Parallel()
 	client := &mockIssueClient{}
 	gen := NewGenerator(client, config.IssuesConfig{}, "", t.TempDir(), nil)
 
@@ -1267,6 +1295,7 @@ func TestGenerator_CreateIssuesFromInput_Create_WithLinking(t *testing.T) {
 }
 
 func TestGenerator_CreateIssuesFromInput_Create_SubIssueError(t *testing.T) {
+	t.Parallel()
 	callCount := 0
 	client := &mockIssueClient{}
 	// Override to fail on second call (sub-issue)
@@ -1307,6 +1336,7 @@ func TestGenerator_CreateIssuesFromInput_Create_SubIssueError(t *testing.T) {
 }
 
 func TestGenerator_CreateIssuesFromInput_OnlySubIssues(t *testing.T) {
+	t.Parallel()
 	gen := NewGenerator(nil, config.IssuesConfig{}, "", t.TempDir(), nil)
 
 	inputs := []IssueInput{
@@ -1339,6 +1369,7 @@ func TestGenerator_CreateIssuesFromInput_OnlySubIssues(t *testing.T) {
 }
 
 func TestGenerator_formatTitle_DefaultFormat(t *testing.T) {
+	t.Parallel()
 	// Empty title format should use default
 	gen := &Generator{
 		config: config.IssuesConfig{
@@ -1355,6 +1386,7 @@ func TestGenerator_formatTitle_DefaultFormat(t *testing.T) {
 }
 
 func TestGenerator_formatTitle_WithTaskID(t *testing.T) {
+	t.Parallel()
 	gen := &Generator{
 		config: config.IssuesConfig{
 			Template: config.IssueTemplateConfig{
@@ -1370,6 +1402,7 @@ func TestGenerator_formatTitle_WithTaskID(t *testing.T) {
 }
 
 func TestGenerator_formatMainIssueBody(t *testing.T) {
+	t.Parallel()
 	gen := &Generator{}
 
 	body := gen.formatMainIssueBody("# Analysis Content", "wf-test-123")
@@ -1389,6 +1422,7 @@ func TestGenerator_formatMainIssueBody(t *testing.T) {
 }
 
 func TestGenerator_formatMainIssueBody_Truncation(t *testing.T) {
+	t.Parallel()
 	gen := &Generator{}
 
 	// Create very long content (>50000 chars)
@@ -1405,6 +1439,7 @@ func TestGenerator_formatMainIssueBody_Truncation(t *testing.T) {
 }
 
 func TestGenerator_formatTaskIssueBody(t *testing.T) {
+	t.Parallel()
 	gen := &Generator{}
 
 	task := TaskInfo{
@@ -1436,6 +1471,7 @@ func TestGenerator_formatTaskIssueBody(t *testing.T) {
 }
 
 func TestGenerator_formatTaskIssueBody_MinimalTask(t *testing.T) {
+	t.Parallel()
 	gen := &Generator{}
 
 	task := TaskInfo{
@@ -1459,6 +1495,7 @@ func TestGenerator_formatTaskIssueBody_MinimalTask(t *testing.T) {
 }
 
 func TestGenerator_extractTaskContent(t *testing.T) {
+	t.Parallel()
 	gen := &Generator{}
 
 	tests := []struct {
@@ -1489,6 +1526,7 @@ func TestGenerator_extractTaskContent(t *testing.T) {
 }
 
 func TestGenerator_splitIntoBatches(t *testing.T) {
+	t.Parallel()
 	gen := &Generator{}
 
 	tests := []struct {
@@ -1516,6 +1554,7 @@ func TestGenerator_splitIntoBatches(t *testing.T) {
 }
 
 func TestGenerator_readTaskFiles_GlobalTasksDir(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 
 	// Simulate the .quorum/runs/{wfID} structure for reportDir
@@ -1550,6 +1589,7 @@ func TestGenerator_readTaskFiles_GlobalTasksDir(t *testing.T) {
 }
 
 func TestGenerator_readConsolidatedAnalysis_Fallback(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	consensusDir := filepath.Join(tmpDir, "analyze-phase", "consensus")
 	if err := os.MkdirAll(consensusDir, 0755); err != nil {
@@ -1572,6 +1612,7 @@ func TestGenerator_readConsolidatedAnalysis_Fallback(t *testing.T) {
 }
 
 func TestGenerator_readConsolidatedAnalysis_NotFound(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	gen := NewGenerator(nil, config.IssuesConfig{}, tmpDir, tmpDir, nil)
 
@@ -1582,6 +1623,7 @@ func TestGenerator_readConsolidatedAnalysis_NotFound(t *testing.T) {
 }
 
 func TestGenerator_findIssueInCache(t *testing.T) {
+	t.Parallel()
 	gen := &Generator{}
 
 	issues := []IssuePreview{
@@ -1628,6 +1670,7 @@ func TestGenerator_findIssueInCache(t *testing.T) {
 }
 
 func TestGenerator_NewGenerationTracker(t *testing.T) {
+	t.Parallel()
 	tracker := NewGenerationTracker("wf-test")
 
 	if tracker.WorkflowID != "wf-test" {
@@ -1645,6 +1688,7 @@ func TestGenerator_NewGenerationTracker(t *testing.T) {
 }
 
 func TestGenerationTracker_AddExpected(t *testing.T) {
+	t.Parallel()
 	tracker := NewGenerationTracker("wf-test")
 	tracker.AddExpected("01-task.md", "task-1")
 	tracker.AddExpected("02-task.md", "task-2")
@@ -1658,6 +1702,7 @@ func TestGenerationTracker_AddExpected(t *testing.T) {
 }
 
 func TestGenerationTracker_GetMissingFiles(t *testing.T) {
+	t.Parallel()
 	tracker := NewGenerationTracker("wf-test")
 	tracker.AddExpected("01-task.md", "task-1")
 	tracker.AddExpected("02-task.md", "task-2")
@@ -1680,6 +1725,7 @@ func TestGenerationTracker_GetMissingFiles(t *testing.T) {
 }
 
 func TestGenerator_Generate_CreateIssues_WithError(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	analyzeDir := filepath.Join(tmpDir, "analyze-phase")
 	tasksDir := filepath.Join(tmpDir, "plan-phase", "tasks")
@@ -1718,6 +1764,7 @@ func TestGenerator_Generate_CreateIssues_WithError(t *testing.T) {
 }
 
 func TestGenerator_Generate_SubIssueCreateError(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	analyzeDir := filepath.Join(tmpDir, "analyze-phase")
 	tasksDir := filepath.Join(tmpDir, "plan-phase", "tasks")
@@ -1808,6 +1855,7 @@ func (f *failAfterNClient) LinkIssues(ctx context.Context, parent, child int) er
 }
 
 func TestGenerator_parseTaskFile_NoHeading(t *testing.T) {
+	t.Parallel()
 	gen := &Generator{}
 	content := "No heading here, just plain text content."
 	task := gen.parseTaskFile("5", "simple-task", content)
@@ -1822,6 +1870,7 @@ func TestGenerator_parseTaskFile_NoHeading(t *testing.T) {
 }
 
 func TestGenerator_parseTaskFile_TaskHeading(t *testing.T) {
+	t.Parallel()
 	gen := &Generator{}
 	content := "# Task: Custom Task Name\n\nContent here."
 	task := gen.parseTaskFile("7", "default-name", content)
@@ -1832,6 +1881,7 @@ func TestGenerator_parseTaskFile_TaskHeading(t *testing.T) {
 }
 
 func TestSanitizeFilename(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		input string
 		want  string
@@ -1854,6 +1904,7 @@ func TestSanitizeFilename(t *testing.T) {
 }
 
 func TestGenerator_GenerateIssueFiles_NoAgentRegistry(t *testing.T) {
+	t.Parallel()
 	gen := NewGenerator(nil, config.IssuesConfig{
 		Generator: config.IssueGeneratorConfig{
 			Enabled: true,
@@ -1871,6 +1922,7 @@ func TestGenerator_GenerateIssueFiles_NoAgentRegistry(t *testing.T) {
 }
 
 func TestGenerator_GenerateIssueFiles_AgentNotFound(t *testing.T) {
+	t.Parallel()
 	registry := &mockGenAgentRegistry{agents: map[string]core.Agent{}}
 	gen := NewGenerator(nil, config.IssuesConfig{
 		Generator: config.IssueGeneratorConfig{

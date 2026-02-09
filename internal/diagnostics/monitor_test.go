@@ -8,6 +8,7 @@ import (
 )
 
 func TestNewResourceMonitor(t *testing.T) {
+	t.Parallel()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	monitor := NewResourceMonitor(
@@ -29,6 +30,7 @@ func TestNewResourceMonitor(t *testing.T) {
 }
 
 func TestResourceMonitor_TakeSnapshot(t *testing.T) {
+	t.Parallel()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	monitor := NewResourceMonitor(
@@ -54,6 +56,7 @@ func TestResourceMonitor_TakeSnapshot(t *testing.T) {
 }
 
 func TestResourceMonitor_StartStop(t *testing.T) {
+	t.Parallel()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	monitor := NewResourceMonitor(
@@ -94,6 +97,7 @@ func TestResourceMonitor_StartStop(t *testing.T) {
 }
 
 func TestResourceMonitor_IncrementDecrementCommands(t *testing.T) {
+	t.Parallel()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	monitor := NewResourceMonitor(
@@ -130,6 +134,7 @@ func TestResourceMonitor_IncrementDecrementCommands(t *testing.T) {
 }
 
 func TestResourceMonitor_CheckHealth(t *testing.T) {
+	t.Parallel()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	// Use very low thresholds to trigger warnings
@@ -164,6 +169,7 @@ func TestResourceMonitor_CheckHealth(t *testing.T) {
 }
 
 func TestResourceMonitor_GetTrend(t *testing.T) {
+	t.Parallel()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	monitor := NewResourceMonitor(

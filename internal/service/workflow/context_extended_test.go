@@ -7,6 +7,7 @@ import (
 )
 
 func TestBuildContextString_EmptyState(t *testing.T) {
+	t.Parallel()
 	state := &core.WorkflowState{}
 
 	result := BuildContextString(state)
@@ -16,6 +17,7 @@ func TestBuildContextString_EmptyState(t *testing.T) {
 }
 
 func TestBuildContextString_NilTask(t *testing.T) {
+	t.Parallel()
 	state := &core.WorkflowState{
 		WorkflowDefinition: core.WorkflowDefinition{
 			WorkflowID: "wf-test",
@@ -37,6 +39,7 @@ func TestBuildContextString_NilTask(t *testing.T) {
 }
 
 func TestBuildContextString_MixedTaskStatuses(t *testing.T) {
+	t.Parallel()
 	state := &core.WorkflowState{
 		WorkflowDefinition: core.WorkflowDefinition{
 			WorkflowID: "wf-test",
@@ -67,6 +70,7 @@ func TestBuildContextString_MixedTaskStatuses(t *testing.T) {
 }
 
 func TestResolvePhaseModel_NilConfig(t *testing.T) {
+	t.Parallel()
 	result := ResolvePhaseModel(nil, "claude", core.PhaseAnalyze, "")
 	if result != "" {
 		t.Errorf("ResolvePhaseModel(nil) = %q, want empty", result)
@@ -74,6 +78,7 @@ func TestResolvePhaseModel_NilConfig(t *testing.T) {
 }
 
 func TestResolvePhaseModel_NilAgentPhaseModels(t *testing.T) {
+	t.Parallel()
 	cfg := &Config{
 		AgentPhaseModels: nil,
 	}
@@ -85,6 +90,7 @@ func TestResolvePhaseModel_NilAgentPhaseModels(t *testing.T) {
 }
 
 func TestResolvePhaseModel_UnknownAgent(t *testing.T) {
+	t.Parallel()
 	cfg := &Config{
 		AgentPhaseModels: map[string]map[string]string{
 			"claude": {"analyze": "opus"},
@@ -98,6 +104,7 @@ func TestResolvePhaseModel_UnknownAgent(t *testing.T) {
 }
 
 func TestResolvePhaseModel_WhitespaceTaskModel(t *testing.T) {
+	t.Parallel()
 	cfg := &Config{
 		AgentPhaseModels: map[string]map[string]string{
 			"claude": {"analyze": "opus"},
@@ -112,6 +119,7 @@ func TestResolvePhaseModel_WhitespaceTaskModel(t *testing.T) {
 }
 
 func TestResolvePhaseModel_WhitespacePhaseModel(t *testing.T) {
+	t.Parallel()
 	cfg := &Config{
 		AgentPhaseModels: map[string]map[string]string{
 			"claude": {"analyze": "   "}, // whitespace-only model
@@ -125,6 +133,7 @@ func TestResolvePhaseModel_WhitespacePhaseModel(t *testing.T) {
 }
 
 func TestConfig_AllFields(t *testing.T) {
+	t.Parallel()
 	cfg := &Config{
 		DryRun:       true,
 		DenyTools:    []string{"rm", "sudo"},
@@ -174,6 +183,7 @@ func TestConfig_AllFields(t *testing.T) {
 }
 
 func TestAnalyzeV1Params_Fields(t *testing.T) {
+	t.Parallel()
 	params := AnalyzeV1Params{
 		Prompt:  "Test prompt",
 		Context: "Test context",
@@ -188,6 +198,7 @@ func TestAnalyzeV1Params_Fields(t *testing.T) {
 }
 
 func TestPlanParams_Fields(t *testing.T) {
+	t.Parallel()
 	params := PlanParams{
 		Prompt:               "Test prompt",
 		ConsolidatedAnalysis: "Consolidated analysis",
@@ -206,6 +217,7 @@ func TestPlanParams_Fields(t *testing.T) {
 }
 
 func TestTaskExecuteParams_Fields(t *testing.T) {
+	t.Parallel()
 	task := &core.Task{
 		ID:          "task-1",
 		Name:        "Test Task",
@@ -225,6 +237,7 @@ func TestTaskExecuteParams_Fields(t *testing.T) {
 }
 
 func TestNopOutputNotifier_AllMethods(t *testing.T) {
+	t.Parallel()
 	notifier := NopOutputNotifier{}
 	task := &core.Task{ID: "test"}
 	state := &core.WorkflowState{}

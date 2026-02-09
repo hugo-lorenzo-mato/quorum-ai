@@ -11,18 +11,21 @@ import (
 )
 
 func TestModel_Init(t *testing.T) {
+	t.Parallel()
 	m := tui.New()
 	cmd := m.Init()
 	testutil.AssertTrue(t, cmd != nil, "Init should return a command")
 }
 
 func TestModel_View_NotReady(t *testing.T) {
+	t.Parallel()
 	m := tui.New()
 	view := m.View()
 	testutil.AssertContains(t, view, "Initializing")
 }
 
 func TestStatusStyle(t *testing.T) {
+	t.Parallel()
 	tests := []string{"pending", "running", "completed", "failed", "skipped", "unknown"}
 	for _, status := range tests {
 		style := tui.StatusStyle(status)
@@ -32,6 +35,7 @@ func TestStatusStyle(t *testing.T) {
 }
 
 func TestPhaseBadge(t *testing.T) {
+	t.Parallel()
 	phases := []string{"analyze", "plan", "execute", "unknown"}
 	for _, phase := range phases {
 		badge := tui.PhaseBadge(phase)
@@ -40,12 +44,14 @@ func TestPhaseBadge(t *testing.T) {
 }
 
 func TestLayout_Center(t *testing.T) {
+	t.Parallel()
 	layout := tui.NewLayout(80, 24)
 	centered := layout.Center("test")
 	testutil.AssertTrue(t, len(centered) > 0, "centered text should not be empty")
 }
 
 func TestLayout_Columns(t *testing.T) {
+	t.Parallel()
 	layout := tui.NewLayout(80, 24)
 	cols := layout.Columns("col1", "col2", "col3")
 	testutil.AssertContains(t, cols, "col1")
@@ -53,6 +59,7 @@ func TestLayout_Columns(t *testing.T) {
 }
 
 func TestTruncate(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		input    string
 		width    int
@@ -71,16 +78,19 @@ func TestTruncate(t *testing.T) {
 }
 
 func TestWrap(t *testing.T) {
+	t.Parallel()
 	result := tui.Wrap("this is a test string for wrapping", 10)
 	testutil.AssertContains(t, result, "\n")
 }
 
 func TestDivider(t *testing.T) {
+	t.Parallel()
 	div := tui.Divider(10, "-")
 	testutil.AssertEqual(t, len(div) > 0, true)
 }
 
 func TestTable(t *testing.T) {
+	t.Parallel()
 	headers := []string{"Name", "Value"}
 	rows := [][]string{
 		{"key1", "value1"},
@@ -93,6 +103,7 @@ func TestTable(t *testing.T) {
 }
 
 func TestOutputMode_String(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		mode     tui.OutputMode
 		expected string
@@ -109,6 +120,7 @@ func TestOutputMode_String(t *testing.T) {
 }
 
 func TestParseOutputMode(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		input    string
 		expected tui.OutputMode
@@ -127,12 +139,14 @@ func TestParseOutputMode(t *testing.T) {
 }
 
 func TestDetector_ForceMode(t *testing.T) {
+	t.Parallel()
 	d := tui.NewDetector().ForceMode(tui.ModeJSON)
 	mode := d.Detect()
 	testutil.AssertEqual(t, mode, tui.ModeJSON)
 }
 
 func TestFallbackOutput_WorkflowStarted(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	output := tui.NewFallbackOutput(false, true).WithWriter(&buf)
 
@@ -142,6 +156,7 @@ func TestFallbackOutput_WorkflowStarted(t *testing.T) {
 }
 
 func TestFallbackOutput_TaskCompleted(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	output := tui.NewFallbackOutput(false, true).WithWriter(&buf)
 
@@ -159,6 +174,7 @@ func TestFallbackOutput_TaskCompleted(t *testing.T) {
 }
 
 func TestFallbackOutput_Progress(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	output := tui.NewFallbackOutput(false, false).WithWriter(&buf)
 
@@ -168,6 +184,7 @@ func TestFallbackOutput_Progress(t *testing.T) {
 }
 
 func TestJSONOutput_WorkflowStarted(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	output := tui.NewJSONOutput().WithWriter(&buf)
 
@@ -178,12 +195,14 @@ func TestJSONOutput_WorkflowStarted(t *testing.T) {
 }
 
 func TestSpinner_View(t *testing.T) {
+	t.Parallel()
 	spinner := tui.NewSpinner()
 	view := spinner.View()
 	testutil.AssertTrue(t, len(view) > 0, "spinner view should not be empty")
 }
 
 func TestSpinner_WithStyle(t *testing.T) {
+	t.Parallel()
 	spinner := tui.NewSpinner().WithStyle("line")
 	view := spinner.View()
 	testutil.AssertTrue(t, len(view) > 0, "spinner view should not be empty")

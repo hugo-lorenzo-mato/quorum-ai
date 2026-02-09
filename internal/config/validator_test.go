@@ -100,6 +100,7 @@ func validConfig() *Config {
 }
 
 func TestValidator_ValidConfig(t *testing.T) {
+	t.Parallel()
 	cfg := validConfig()
 	v := NewValidator()
 	err := v.Validate(cfg)
@@ -109,6 +110,7 @@ func TestValidator_ValidConfig(t *testing.T) {
 }
 
 func TestValidator_InvalidLevel(t *testing.T) {
+	t.Parallel()
 	cfg := validConfig()
 	cfg.Log.Level = "invalid"
 
@@ -136,6 +138,7 @@ func TestValidator_InvalidLevel(t *testing.T) {
 }
 
 func TestValidator_InvalidFormat(t *testing.T) {
+	t.Parallel()
 	cfg := validConfig()
 	cfg.Log.Format = "invalid"
 
@@ -151,6 +154,7 @@ func TestValidator_InvalidFormat(t *testing.T) {
 }
 
 func TestValidator_InvalidPhaseModel(t *testing.T) {
+	t.Parallel()
 	cfg := validConfig()
 	cfg.Agents.Claude.PhaseModels = map[string]string{
 		"invalid": "claude-sonnet-4-20250514",
@@ -168,6 +172,7 @@ func TestValidator_InvalidPhaseModel(t *testing.T) {
 }
 
 func TestValidator_InvalidTimeout(t *testing.T) {
+	t.Parallel()
 	cfg := validConfig()
 	cfg.Workflow.Timeout = "invalid"
 
@@ -183,6 +188,7 @@ func TestValidator_InvalidTimeout(t *testing.T) {
 }
 
 func TestValidator_MaxRetriesOutOfRange(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name  string
 		value int
@@ -206,6 +212,7 @@ func TestValidator_MaxRetriesOutOfRange(t *testing.T) {
 }
 
 func TestValidator_ModeratorThresholdOutOfRange(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name  string
 		value float64
@@ -231,6 +238,7 @@ func TestValidator_ModeratorThresholdOutOfRange(t *testing.T) {
 }
 
 func TestValidator_IssuesInvalidProvider(t *testing.T) {
+	t.Parallel()
 	cfg := validConfig()
 	cfg.Issues.Enabled = true
 	cfg.Issues.Provider = "jira"
@@ -259,6 +267,7 @@ func TestValidator_IssuesInvalidProvider(t *testing.T) {
 }
 
 func TestValidator_IssuesInvalidLanguage(t *testing.T) {
+	t.Parallel()
 	cfg := validConfig()
 	cfg.Issues.Enabled = true
 	cfg.Issues.Template.Language = "klingon"
@@ -275,6 +284,7 @@ func TestValidator_IssuesInvalidLanguage(t *testing.T) {
 }
 
 func TestValidator_IssuesInvalidTone(t *testing.T) {
+	t.Parallel()
 	cfg := validConfig()
 	cfg.Issues.Enabled = true
 	cfg.Issues.Template.Tone = "funny"
@@ -291,6 +301,7 @@ func TestValidator_IssuesInvalidTone(t *testing.T) {
 }
 
 func TestValidator_IssuesGitLabRequiresProjectID(t *testing.T) {
+	t.Parallel()
 	cfg := validConfig()
 	cfg.Issues.Enabled = true
 	cfg.Issues.Provider = "gitlab"
@@ -308,6 +319,7 @@ func TestValidator_IssuesGitLabRequiresProjectID(t *testing.T) {
 }
 
 func TestValidator_MultipleErrors(t *testing.T) {
+	t.Parallel()
 	cfg := validConfig()
 	cfg.Log.Level = "invalid"
 	cfg.Log.Format = "invalid"
@@ -330,6 +342,7 @@ func TestValidator_MultipleErrors(t *testing.T) {
 }
 
 func TestValidator_UnknownAgent(t *testing.T) {
+	t.Parallel()
 	cfg := validConfig()
 	cfg.Agents.Default = "unknown-agent"
 
@@ -345,6 +358,7 @@ func TestValidator_UnknownAgent(t *testing.T) {
 }
 
 func TestValidator_AgentPathRequired(t *testing.T) {
+	t.Parallel()
 	cfg := validConfig()
 	cfg.Agents.Claude.Enabled = true
 	cfg.Agents.Claude.Path = ""
@@ -361,6 +375,7 @@ func TestValidator_AgentPathRequired(t *testing.T) {
 }
 
 func TestValidator_DisabledAgentSkipsValidation(t *testing.T) {
+	t.Parallel()
 	cfg := validConfig()
 	// Keep claude enabled as default, but disable gemini
 	cfg.Agents.Gemini.Enabled = false
@@ -378,6 +393,7 @@ func TestValidator_DisabledAgentSkipsValidation(t *testing.T) {
 // Each CLI tool should use its own optimized defaults.
 
 func TestValidator_EmptyStatePath(t *testing.T) {
+	t.Parallel()
 	cfg := validConfig()
 	cfg.State.Path = ""
 
@@ -389,6 +405,7 @@ func TestValidator_EmptyStatePath(t *testing.T) {
 }
 
 func TestValidator_InvalidLockTTL(t *testing.T) {
+	t.Parallel()
 	cfg := validConfig()
 	cfg.State.LockTTL = "not-a-duration"
 
@@ -400,6 +417,7 @@ func TestValidator_InvalidLockTTL(t *testing.T) {
 }
 
 func TestValidator_EmptyWorktreeDir(t *testing.T) {
+	t.Parallel()
 	cfg := validConfig()
 	cfg.Git.Worktree.Dir = ""
 
@@ -411,6 +429,7 @@ func TestValidator_EmptyWorktreeDir(t *testing.T) {
 }
 
 func TestValidator_EmptyGitHubRemote(t *testing.T) {
+	t.Parallel()
 	cfg := validConfig()
 	cfg.GitHub.Remote = ""
 
@@ -422,6 +441,7 @@ func TestValidator_EmptyGitHubRemote(t *testing.T) {
 }
 
 func TestValidationError_Error(t *testing.T) {
+	t.Parallel()
 	err := ValidationError{
 		Field:   "test.field",
 		Value:   "test-value",
@@ -441,6 +461,7 @@ func TestValidationError_Error(t *testing.T) {
 }
 
 func TestValidationErrors_Error(t *testing.T) {
+	t.Parallel()
 	errs := ValidationErrors{
 		{Field: "field1", Value: "v1", Message: "msg1"},
 		{Field: "field2", Value: "v2", Message: "msg2"},
@@ -456,6 +477,7 @@ func TestValidationErrors_Error(t *testing.T) {
 }
 
 func TestValidationErrors_HasErrors(t *testing.T) {
+	t.Parallel()
 	empty := ValidationErrors{}
 	if empty.HasErrors() {
 		t.Error("empty ValidationErrors should not have errors")
@@ -470,6 +492,7 @@ func TestValidationErrors_HasErrors(t *testing.T) {
 }
 
 func TestValidateConfig_Convenience(t *testing.T) {
+	t.Parallel()
 	cfg := validConfig()
 	err := ValidateConfig(cfg)
 	if err != nil {
@@ -478,6 +501,7 @@ func TestValidateConfig_Convenience(t *testing.T) {
 }
 
 func TestValidator_SingleAgentValidConfig(t *testing.T) {
+	t.Parallel()
 	cfg := validConfig()
 	// Enable single-agent mode with valid agent
 	cfg.Phases.Analyze.SingleAgent.Enabled = true
@@ -493,6 +517,7 @@ func TestValidator_SingleAgentValidConfig(t *testing.T) {
 }
 
 func TestValidator_SingleAgentMissingAgent(t *testing.T) {
+	t.Parallel()
 	cfg := validConfig()
 	// Enable single-agent mode without specifying agent
 	cfg.Phases.Analyze.SingleAgent.Enabled = true
@@ -511,6 +536,7 @@ func TestValidator_SingleAgentMissingAgent(t *testing.T) {
 }
 
 func TestValidator_SingleAgentUnknownAgent(t *testing.T) {
+	t.Parallel()
 	cfg := validConfig()
 	// Enable single-agent mode with unknown agent
 	cfg.Phases.Analyze.SingleAgent.Enabled = true
@@ -529,6 +555,7 @@ func TestValidator_SingleAgentUnknownAgent(t *testing.T) {
 }
 
 func TestValidator_SingleAgentWithDisabledAgent(t *testing.T) {
+	t.Parallel()
 	cfg := validConfig()
 	// Enable single-agent mode with a disabled agent
 	cfg.Phases.Analyze.SingleAgent.Enabled = true
@@ -548,6 +575,7 @@ func TestValidator_SingleAgentWithDisabledAgent(t *testing.T) {
 }
 
 func TestValidator_SingleAgentAndModeratorMutualExclusion(t *testing.T) {
+	t.Parallel()
 	cfg := validConfig()
 	// Enable both single-agent and moderator - should be mutually exclusive
 	cfg.Phases.Analyze.SingleAgent.Enabled = true
@@ -567,6 +595,7 @@ func TestValidator_SingleAgentAndModeratorMutualExclusion(t *testing.T) {
 }
 
 func TestValidator_SingleAgentDisabledIsValid(t *testing.T) {
+	t.Parallel()
 	cfg := validConfig()
 	// When single-agent is disabled, missing agent is OK
 	cfg.Phases.Analyze.SingleAgent.Enabled = false
@@ -583,6 +612,7 @@ func TestValidator_SingleAgentDisabledIsValid(t *testing.T) {
 }
 
 func TestValidator_IssuesInvalidMode(t *testing.T) {
+	t.Parallel()
 	cfg := validConfig()
 	cfg.Issues.Enabled = true
 	cfg.Issues.Mode = "batch"
@@ -599,6 +629,7 @@ func TestValidator_IssuesInvalidMode(t *testing.T) {
 }
 
 func TestValidator_IssuesValidModes(t *testing.T) {
+	t.Parallel()
 	for _, mode := range []string{"direct", "agent"} {
 		t.Run(mode, func(t *testing.T) {
 			cfg := validConfig()
@@ -615,6 +646,7 @@ func TestValidator_IssuesValidModes(t *testing.T) {
 }
 
 func TestValidator_IssuesInvalidRepository(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		repo string
@@ -645,6 +677,7 @@ func TestValidator_IssuesInvalidRepository(t *testing.T) {
 }
 
 func TestValidator_IssuesValidRepository(t *testing.T) {
+	t.Parallel()
 	cfg := validConfig()
 	cfg.Issues.Enabled = true
 	cfg.Issues.Repository = "owner/repo"
@@ -657,6 +690,7 @@ func TestValidator_IssuesValidRepository(t *testing.T) {
 }
 
 func TestValidator_IssuesInvalidTimeout(t *testing.T) {
+	t.Parallel()
 	cfg := validConfig()
 	cfg.Issues.Enabled = true
 	cfg.Issues.Timeout = "not-a-duration"
@@ -673,6 +707,7 @@ func TestValidator_IssuesInvalidTimeout(t *testing.T) {
 }
 
 func TestValidator_IssuesGeneratorInvalidReasoningEffort(t *testing.T) {
+	t.Parallel()
 	cfg := validConfig()
 	cfg.Issues.Enabled = true
 	cfg.Issues.Generator.Enabled = true
@@ -691,6 +726,7 @@ func TestValidator_IssuesGeneratorInvalidReasoningEffort(t *testing.T) {
 }
 
 func TestValidator_IssuesGeneratorValidReasoningEffort(t *testing.T) {
+	t.Parallel()
 	cfg := validConfig()
 	cfg.Issues.Enabled = true
 	cfg.Issues.Generator.Enabled = true
@@ -705,6 +741,7 @@ func TestValidator_IssuesGeneratorValidReasoningEffort(t *testing.T) {
 }
 
 func TestValidator_IssuesGeneratorInvalidAgent(t *testing.T) {
+	t.Parallel()
 	cfg := validConfig()
 	cfg.Issues.Enabled = true
 	cfg.Issues.Generator.Enabled = true
@@ -722,6 +759,7 @@ func TestValidator_IssuesGeneratorInvalidAgent(t *testing.T) {
 }
 
 func TestValidator_IssuesGeneratorNegativeMaxBodyLength(t *testing.T) {
+	t.Parallel()
 	cfg := validConfig()
 	cfg.Issues.Enabled = true
 	cfg.Issues.Generator.Enabled = true
@@ -740,6 +778,7 @@ func TestValidator_IssuesGeneratorNegativeMaxBodyLength(t *testing.T) {
 }
 
 func TestSingleAgentConfig_IsValid(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name   string
 		config SingleAgentConfig

@@ -28,6 +28,7 @@ func addChiURLParams(r *http.Request, params map[string]string) *http.Request {
 }
 
 func TestHandleRunWorkflow_WorkflowNotFound(t *testing.T) {
+	t.Parallel()
 	sm := newMockStateManager()
 	eb := events.New(100)
 	srv := NewServer(sm, eb, WithLogger(slog.Default()))
@@ -52,6 +53,7 @@ func TestHandleRunWorkflow_WorkflowNotFound(t *testing.T) {
 }
 
 func TestHandleRunWorkflow_AlreadyRunning(t *testing.T) {
+	t.Parallel()
 	sm := newMockStateManager()
 	sm.workflows[core.WorkflowID("wf-running")] = &core.WorkflowState{
 		WorkflowDefinition: core.WorkflowDefinition{
@@ -91,6 +93,7 @@ func TestHandleRunWorkflow_AlreadyRunning(t *testing.T) {
 }
 
 func TestHandleRunWorkflow_AlreadyCompleted(t *testing.T) {
+	t.Parallel()
 	sm := newMockStateManager()
 	sm.workflows[core.WorkflowID("wf-completed")] = &core.WorkflowState{
 		WorkflowDefinition: core.WorkflowDefinition{
@@ -122,6 +125,7 @@ func TestHandleRunWorkflow_AlreadyCompleted(t *testing.T) {
 }
 
 func TestHandleRunWorkflow_MissingStateManager(t *testing.T) {
+	t.Parallel()
 	eb := events.New(100)
 	srv := NewServer(nil, eb, WithLogger(slog.Default()))
 
@@ -137,6 +141,7 @@ func TestHandleRunWorkflow_MissingStateManager(t *testing.T) {
 }
 
 func TestHandleRunWorkflow_MissingConfigLoader(t *testing.T) {
+	t.Parallel()
 	sm := newMockStateManager()
 	sm.workflows[core.WorkflowID("wf-pending")] = &core.WorkflowState{
 		WorkflowDefinition: core.WorkflowDefinition{
@@ -180,6 +185,7 @@ func TestHandleRunWorkflow_MissingConfigLoader(t *testing.T) {
 }
 
 func TestHandleRunWorkflow_EmptyWorkflowID(t *testing.T) {
+	t.Parallel()
 	sm := newMockStateManager()
 	eb := events.New(100)
 	srv := NewServer(sm, eb, WithLogger(slog.Default()))
@@ -196,6 +202,7 @@ func TestHandleRunWorkflow_EmptyWorkflowID(t *testing.T) {
 }
 
 func TestHandleRunWorkflow_DoubleExecution(t *testing.T) {
+	t.Parallel()
 	sm := newMockStateManager()
 	sm.workflows[core.WorkflowID("wf-double")] = &core.WorkflowState{
 		WorkflowDefinition: core.WorkflowDefinition{
@@ -238,6 +245,7 @@ func TestHandleRunWorkflow_DoubleExecution(t *testing.T) {
 }
 
 func TestHandleRunWorkflow_StateValidation(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name          string
 		status        core.WorkflowStatus
@@ -315,6 +323,7 @@ func TestHandleRunWorkflow_StateValidation(t *testing.T) {
 }
 
 func TestHandleRunWorkflow_LoadError(t *testing.T) {
+	t.Parallel()
 	sm := newMockStateManager()
 	sm.loadErr = context.DeadlineExceeded // Simulate database timeout
 
@@ -341,6 +350,7 @@ func TestHandleRunWorkflow_LoadError(t *testing.T) {
 }
 
 func TestHandleGetWorkflow_IncludesReportPathAndOptimizedPrompt(t *testing.T) {
+	t.Parallel()
 	sm := newMockStateManager()
 	sm.workflows[core.WorkflowID("wf-artifacts")] = &core.WorkflowState{
 		WorkflowDefinition: core.WorkflowDefinition{
@@ -387,6 +397,7 @@ func TestHandleGetWorkflow_IncludesReportPathAndOptimizedPrompt(t *testing.T) {
 }
 
 func TestBlueprintDTO_IsSingleAgentMode(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		bp       *BlueprintDTO
@@ -424,6 +435,7 @@ func TestBlueprintDTO_IsSingleAgentMode(t *testing.T) {
 }
 
 func TestBlueprintDTO_GetExecutionMode(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		bp       *BlueprintDTO
@@ -461,6 +473,7 @@ func TestBlueprintDTO_GetExecutionMode(t *testing.T) {
 }
 
 func TestBlueprintDTO_JSON_Roundtrip(t *testing.T) {
+	t.Parallel()
 	original := BlueprintDTO{
 		ConsensusThreshold:         0.8,
 		DryRun:                     true,
@@ -578,6 +591,7 @@ func TestBlueprintDTO_JSON_Roundtrip(t *testing.T) {
 }
 
 func TestBlueprintDTO_Backward_Compatibility(t *testing.T) {
+	t.Parallel()
 	// JSON without new fields should deserialize correctly
 	oldJSON := `{"consensus_threshold": 0.75, "dry_run": true}`
 
@@ -624,6 +638,7 @@ func TestBlueprintDTO_Backward_Compatibility(t *testing.T) {
 }
 
 func TestCreateWorkflow_WithSingleAgentMode(t *testing.T) {
+	t.Parallel()
 	// Create a temp directory with config file that has claude enabled
 	tmpDir := t.TempDir()
 	configDir := filepath.Join(tmpDir, ".quorum")
@@ -704,6 +719,7 @@ agents:
 }
 
 func TestGetWorkflow_IncludesConfig(t *testing.T) {
+	t.Parallel()
 	sm := newMockStateManager()
 	eb := events.New(100)
 	srv := NewServer(sm, eb)
@@ -754,6 +770,7 @@ func TestGetWorkflow_IncludesConfig(t *testing.T) {
 }
 
 func TestUpdateWorkflow_AllowsConfigEditWhenPending(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	configDir := filepath.Join(tmpDir, ".quorum")
 	if err := os.MkdirAll(configDir, 0o755); err != nil {
@@ -841,6 +858,7 @@ agents:
 }
 
 func TestUpdateWorkflow_RejectsConfigEditWhenNotPending(t *testing.T) {
+	t.Parallel()
 	sm := newMockStateManager()
 	eb := events.New(100)
 	srv := NewServer(sm, eb)
@@ -883,6 +901,7 @@ func TestUpdateWorkflow_RejectsConfigEditWhenNotPending(t *testing.T) {
 }
 
 func TestUpdateWorkflow_ValidatesConfigEdits(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	configDir := filepath.Join(tmpDir, ".quorum")
 	if err := os.MkdirAll(configDir, 0o755); err != nil {

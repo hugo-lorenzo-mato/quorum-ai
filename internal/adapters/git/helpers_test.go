@@ -7,6 +7,7 @@ import (
 )
 
 func TestParseStatus_BranchInfo(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		input    string
@@ -62,6 +63,7 @@ func TestParseStatus_BranchInfo(t *testing.T) {
 }
 
 func TestParseStatus_Untracked(t *testing.T) {
+	t.Parallel()
 	input := `# branch.head main
 ? new-file.txt
 ? another-file.txt`
@@ -76,6 +78,7 @@ func TestParseStatus_Untracked(t *testing.T) {
 }
 
 func TestParseStatus_Conflicts(t *testing.T) {
+	t.Parallel()
 	input := `# branch.head main
 u UU conflicted.txt`
 
@@ -86,6 +89,7 @@ u UU conflicted.txt`
 }
 
 func TestParseStatus_Empty(t *testing.T) {
+	t.Parallel()
 	status := parseStatus("")
 	if status.Branch != "" {
 		t.Errorf("Branch = %q, want empty", status.Branch)
@@ -96,6 +100,7 @@ func TestParseStatus_Empty(t *testing.T) {
 }
 
 func TestStatus_IsClean(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name   string
 		status Status
@@ -148,6 +153,7 @@ func TestStatus_IsClean(t *testing.T) {
 }
 
 func TestParseStatusToCore(t *testing.T) {
+	t.Parallel()
 	input := `# branch.head main
 # branch.upstream origin/main
 # branch.ab +3 -1
@@ -170,6 +176,7 @@ func TestParseStatusToCore(t *testing.T) {
 }
 
 func TestParseWorktreesToCore(t *testing.T) {
+	t.Parallel()
 	input := `worktree /path/to/main
 HEAD abc123def456789012345678901234567890abcd
 branch refs/heads/main
@@ -209,6 +216,7 @@ locked`
 }
 
 func TestParseWorktreesToCore_Empty(t *testing.T) {
+	t.Parallel()
 	worktrees := parseWorktreesToCore("", "/main")
 	if len(worktrees) != 0 {
 		t.Errorf("len(worktrees) = %d, want 0", len(worktrees))
@@ -216,6 +224,7 @@ func TestParseWorktreesToCore_Empty(t *testing.T) {
 }
 
 func TestValidateWorktreeBranch(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		branch  string
 		wantErr bool
@@ -240,6 +249,7 @@ func TestValidateWorktreeBranch(t *testing.T) {
 }
 
 func TestValidateTaskID(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		taskID  string
 		wantErr bool
@@ -269,6 +279,7 @@ func TestValidateTaskID(t *testing.T) {
 }
 
 func TestValidateWorktreeName(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		wantErr bool
@@ -293,6 +304,7 @@ func TestValidateWorktreeName(t *testing.T) {
 }
 
 func TestNormalizeLabel(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		input  string
 		maxLen int
@@ -321,6 +333,7 @@ func TestNormalizeLabel(t *testing.T) {
 }
 
 func TestBuildWorktreeName(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name         string
 		task         *core.Task
@@ -387,6 +400,7 @@ func TestBuildWorktreeName(t *testing.T) {
 }
 
 func TestResolveWorktreeBranch(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		branch  string
@@ -433,6 +447,7 @@ func TestResolveWorktreeBranch(t *testing.T) {
 }
 
 func TestResolvePath(t *testing.T) {
+	t.Parallel()
 	// Test that resolvePath returns something for regular paths
 	result := resolvePath("/tmp")
 	if result == "" {
@@ -447,6 +462,7 @@ func TestResolvePath(t *testing.T) {
 }
 
 func TestCommit_Fields(t *testing.T) {
+	t.Parallel()
 	commit := Commit{
 		Hash:        "abc123",
 		AuthorName:  "Test User",
@@ -469,6 +485,7 @@ func TestCommit_Fields(t *testing.T) {
 }
 
 func TestWorktree_Fields(t *testing.T) {
+	t.Parallel()
 	wt := Worktree{
 		Path:     "/path/to/worktree",
 		Branch:   "feature",
@@ -499,6 +516,7 @@ func TestWorktree_Fields(t *testing.T) {
 }
 
 func TestWorktreeManager_parseWorktreeList(t *testing.T) {
+	t.Parallel()
 	// Create a minimal WorktreeManager for testing
 	manager := &WorktreeManager{prefix: "quorum-"}
 
@@ -600,6 +618,7 @@ detached`,
 }
 
 func TestStatus_Fields(t *testing.T) {
+	t.Parallel()
 	status := Status{
 		Branch:       "main",
 		Upstream:     "origin/main",
@@ -638,6 +657,7 @@ func TestStatus_Fields(t *testing.T) {
 }
 
 func TestParseStatus_OrdinaryChangedEntry(t *testing.T) {
+	t.Parallel()
 	// Format: 1 XY sub mH mI mW hH hI path
 	// The XY is at position 2-3, and path starts at position 113
 	// Test with actual git porcelain format
@@ -653,6 +673,7 @@ func TestParseStatus_OrdinaryChangedEntry(t *testing.T) {
 }
 
 func TestParseStatus_MultipleBranchInfo(t *testing.T) {
+	t.Parallel()
 	// Test parsing with malformed branch.ab line (less than 4 parts)
 	input := `# branch.head main
 # branch.ab +5`

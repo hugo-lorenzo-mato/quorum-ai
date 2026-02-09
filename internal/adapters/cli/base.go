@@ -57,8 +57,8 @@ type AgentConfig struct {
 	// GracePeriod is the time to wait after logical completion (result:success) before
 	// killing a hung process. Default: 30s.
 	GracePeriod time.Duration
-	// IdleTimeout is the max time allowed without stdout JSON events before
-	// killing a hung process. Default: 5m. Set to 0 to disable.
+	// IdleTimeout is the max time allowed without stdout/stderr activity before
+	// killing a hung process. Default: 15m. Set to 0 to disable.
 	IdleTimeout time.Duration
 }
 
@@ -388,13 +388,27 @@ func (b *BaseAdapter) ExecuteCommand(ctx context.Context, args []string, stdin, 
 // streamStderr reads stderr line by line, calling the callback for each line
 // while also writing to the buffer for final capture.
 // Also emits agent events based on common progress patterns.
-func (b *BaseAdapter) streamStderr(pipe io.ReadCloser, buf *bytes.Buffer, adapterName string) {
+// If activity is non-nil, it receives a signal for each stderr line (used to
+// reset the idle timer so that stderr output counts as liveness).
+func (b *BaseAdapter) streamStderr(pipe io.ReadCloser, buf *bytes.Buffer, adapterName string, activity ...chan<- struct{}) {
+	var actCh chan<- struct{}
+	if len(activity) > 0 {
+		actCh = activity[0]
+	}
+
 	scanner := bufio.NewScanner(pipe)
 	for scanner.Scan() {
 		line := scanner.Text()
 		// Write to buffer for final result
 		buf.WriteString(line)
 		buf.WriteString("\n")
+		// Signal activity for idle timeout tracking.
+		if actCh != nil {
+			select {
+			case actCh <- struct{}{}:
+			default:
+			}
+		}
 		// Call callback for real-time streaming
 		if b.logCallback != nil {
 			b.logCallback(line)
@@ -624,7 +638,7 @@ func (b *BaseAdapter) executeWithJSONStreaming(
 	// Idle timer: kills the process if no stdout JSON activity for idleTimeout.
 	idleTimeout := b.config.IdleTimeout
 	if idleTimeout == 0 {
-		idleTimeout = 5 * time.Minute
+		idleTimeout = 15 * time.Minute
 	}
 	idleTimer := time.NewTimer(idleTimeout)
 	defer idleTimer.Stop()
@@ -649,11 +663,11 @@ func (b *BaseAdapter) executeWithJSONStreaming(
 		b.streamJSONOutputWithSignal(stdoutPipe, &stdout, adapterName, parser, logicalDone, activity)
 	}()
 
-	// Stream stderr (progress messages)
+	// Stream stderr (progress messages) — also counts as liveness for idle timeout
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		b.streamStderr(stderrPipe, &stderr, adapterName)
+		b.streamStderr(stderrPipe, &stderr, adapterName, activity)
 	}()
 
 	// Wait for command in background
@@ -662,6 +676,7 @@ func (b *BaseAdapter) executeWithJSONStreaming(
 	}()
 
 	var waitErr error
+	killedByIdle := false
 	gracePeriod := b.config.GracePeriod
 	if gracePeriod == 0 {
 		gracePeriod = 30 * time.Second
@@ -685,8 +700,9 @@ func (b *BaseAdapter) executeWithJSONStreaming(
 			waitErr = <-waitDone
 		}
 	case <-idleTimer.C:
-		// No stdout activity for idleTimeout — process is likely hung
-		b.logger.Warn("process idle timeout — no stdout activity",
+		// No stdout/stderr activity for idleTimeout — process is likely hung
+		killedByIdle = true
+		b.logger.Warn("process idle timeout — no stdout/stderr activity",
 			"adapter", adapterName, "idle_timeout", idleTimeout)
 		_ = b.GracefulKill(5 * time.Second)
 		waitErr = <-waitDone
@@ -710,6 +726,18 @@ func (b *BaseAdapter) executeWithJSONStreaming(
 		Stdout:   stdout.String(),
 		Stderr:   stderr.String(),
 		Duration: duration,
+	}
+
+	// Idle timeout: return explicit error instead of classifying partial output as an error message
+	if killedByIdle {
+		idleErr := core.ErrExecution("IDLE_TIMEOUT",
+			fmt.Sprintf("no stdout/stderr activity for %v", idleTimeout))
+		b.emitEvent(core.NewAgentEvent(core.AgentEventError, adapterName,
+			fmt.Sprintf("Idle timeout: no activity for %v", idleTimeout),
+		).WithData(map[string]any{
+			"idle_timeout": idleTimeout.String(),
+		}))
+		return result, idleErr
 	}
 
 	// Emit completed or error event

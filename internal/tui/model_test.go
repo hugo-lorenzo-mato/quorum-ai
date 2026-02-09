@@ -9,6 +9,7 @@ import (
 )
 
 func TestModel_PhaseUpdateMsg(t *testing.T) {
+	t.Parallel()
 	model := New()
 
 	updated, _ := model.Update(PhaseUpdateMsg{Phase: core.PhaseAnalyze})
@@ -20,6 +21,7 @@ func TestModel_PhaseUpdateMsg(t *testing.T) {
 }
 
 func TestRenderHeader_ShowsCurrentPhase(t *testing.T) {
+	t.Parallel()
 	model := Model{
 		currentPhase: core.PhaseExecute,
 		workflow:     &core.WorkflowState{WorkflowRun: core.WorkflowRun{Status: core.WorkflowStatusRunning}},
@@ -37,6 +39,7 @@ func TestRenderHeader_ShowsCurrentPhase(t *testing.T) {
 }
 
 func TestRenderHeader_NoWorkflow(t *testing.T) {
+	t.Parallel()
 	model := Model{
 		currentPhase: core.PhaseRefine,
 		workflow:     nil,
@@ -51,6 +54,7 @@ func TestRenderHeader_NoWorkflow(t *testing.T) {
 }
 
 func TestRenderProgress_CountsAllTerminalStates(t *testing.T) {
+	t.Parallel()
 	model := Model{
 		workflow: &core.WorkflowState{},
 		tasks: []*TaskView{
@@ -77,6 +81,7 @@ func TestRenderProgress_CountsAllTerminalStates(t *testing.T) {
 }
 
 func TestRenderProgress_100PercentWithFailures(t *testing.T) {
+	t.Parallel()
 	model := Model{
 		workflow: &core.WorkflowState{},
 		tasks: []*TaskView{
@@ -95,6 +100,7 @@ func TestRenderProgress_100PercentWithFailures(t *testing.T) {
 }
 
 func TestRenderProgress_NoBreakdownForCleanRun(t *testing.T) {
+	t.Parallel()
 	model := Model{
 		workflow: &core.WorkflowState{},
 		tasks: []*TaskView{
@@ -114,6 +120,7 @@ func TestRenderProgress_NoBreakdownForCleanRun(t *testing.T) {
 }
 
 func TestProgressStats_Percentage(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		stats    progressStats
 		expected float64
@@ -133,6 +140,7 @@ func TestProgressStats_Percentage(t *testing.T) {
 }
 
 func TestBuildTaskViews_UsesTaskOrder(t *testing.T) {
+	t.Parallel()
 	state := &core.WorkflowState{
 		WorkflowRun: core.WorkflowRun{
 			Tasks: map[core.TaskID]*core.TaskState{
@@ -161,6 +169,7 @@ func TestBuildTaskViews_UsesTaskOrder(t *testing.T) {
 }
 
 func TestBuildTaskViews_StableAcrossRenders(t *testing.T) {
+	t.Parallel()
 	state := &core.WorkflowState{
 		WorkflowRun: core.WorkflowRun{
 			Tasks: map[core.TaskID]*core.TaskState{
@@ -189,6 +198,7 @@ func TestBuildTaskViews_StableAcrossRenders(t *testing.T) {
 }
 
 func TestBuildTaskViews_HandlesEmptyTaskOrder(t *testing.T) {
+	t.Parallel()
 	// Old state file without TaskOrder
 	state := &core.WorkflowState{
 		WorkflowRun: core.WorkflowRun{
@@ -209,6 +219,7 @@ func TestBuildTaskViews_HandlesEmptyTaskOrder(t *testing.T) {
 }
 
 func TestBuildTaskViews_HandlesMissingTask(t *testing.T) {
+	t.Parallel()
 	// TaskOrder references a task that doesn't exist
 	state := &core.WorkflowState{
 		WorkflowRun: core.WorkflowRun{
@@ -232,6 +243,7 @@ func TestBuildTaskViews_HandlesMissingTask(t *testing.T) {
 }
 
 func TestGetTaskDuration_LiveForRunning(t *testing.T) {
+	t.Parallel()
 	started := time.Now().Add(-5 * time.Second)
 	task := &TaskView{
 		ID:        "task-1",
@@ -248,6 +260,7 @@ func TestGetTaskDuration_LiveForRunning(t *testing.T) {
 }
 
 func TestGetTaskDuration_StaticForCompleted(t *testing.T) {
+	t.Parallel()
 	task := &TaskView{
 		ID:       "task-1",
 		Status:   core.TaskStatusCompleted,
@@ -263,6 +276,7 @@ func TestGetTaskDuration_StaticForCompleted(t *testing.T) {
 }
 
 func TestFormatDuration(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		input    time.Duration
 		expected string

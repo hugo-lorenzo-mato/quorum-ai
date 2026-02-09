@@ -9,6 +9,7 @@ import (
 )
 
 func TestNewSafeExecutor(t *testing.T) {
+	t.Parallel()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	executor := NewSafeExecutor(
@@ -30,6 +31,7 @@ func TestNewSafeExecutor(t *testing.T) {
 }
 
 func TestSafeExecutor_RunPreflight_Disabled(t *testing.T) {
+	t.Parallel()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	executor := NewSafeExecutor(
@@ -49,6 +51,7 @@ func TestSafeExecutor_RunPreflight_Disabled(t *testing.T) {
 }
 
 func TestSafeExecutor_RunPreflight_NoMonitor(t *testing.T) {
+	t.Parallel()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	executor := NewSafeExecutor(
@@ -68,6 +71,7 @@ func TestSafeExecutor_RunPreflight_NoMonitor(t *testing.T) {
 }
 
 func TestSafeExecutor_RunPreflight_WithMonitor(t *testing.T) {
+	t.Parallel()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	monitor := NewResourceMonitor(time.Second, 80, 10000, 4096, 10, logger)
@@ -95,6 +99,7 @@ func TestSafeExecutor_RunPreflight_WithMonitor(t *testing.T) {
 }
 
 func TestSafeExecutor_PrepareCommand(t *testing.T) {
+	t.Parallel()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	monitor := NewResourceMonitor(time.Second, 80, 10000, 4096, 10, logger)
@@ -145,6 +150,7 @@ func TestSafeExecutor_PrepareCommand(t *testing.T) {
 }
 
 func TestSafeExecutor_PrepareCommand_DoubleCleanup(t *testing.T) {
+	t.Parallel()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	monitor := NewResourceMonitor(time.Second, 80, 10000, 4096, 10, logger)
@@ -178,6 +184,7 @@ func TestSafeExecutor_PrepareCommand_DoubleCleanup(t *testing.T) {
 }
 
 func TestSafeExecutor_PrepareStderrOnly(t *testing.T) {
+	t.Parallel()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	monitor := NewResourceMonitor(time.Second, 80, 10000, 4096, 10, logger)
@@ -223,6 +230,7 @@ func TestSafeExecutor_PrepareStderrOnly(t *testing.T) {
 }
 
 func TestSafeExecutor_WrapExecution(t *testing.T) {
+	t.Parallel()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	tempDir := t.TempDir()
@@ -255,6 +263,7 @@ func TestSafeExecutor_WrapExecution(t *testing.T) {
 }
 
 func TestSafeExecutor_WrapExecution_WithPanic(t *testing.T) {
+	t.Parallel()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	tempDir := t.TempDir()
@@ -286,6 +295,7 @@ func TestSafeExecutor_WrapExecution_WithPanic(t *testing.T) {
 }
 
 func TestSafeExecutor_WrapExecution_NoDumpWriter(t *testing.T) {
+	t.Parallel()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	executor := NewSafeExecutor(
@@ -308,6 +318,7 @@ func TestSafeExecutor_WrapExecution_NoDumpWriter(t *testing.T) {
 }
 
 func TestPipeSet_Cleanup(t *testing.T) {
+	t.Parallel()
 	pipeSet := &PipeSet{
 		cleaned: false,
 	}

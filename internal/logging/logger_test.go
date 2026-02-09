@@ -7,6 +7,7 @@ import (
 )
 
 func TestSanitizer_OpenAI(t *testing.T) {
+	t.Parallel()
 	sanitizer := NewSanitizer()
 	input := "Using API key sk-1234567890abcdefghijklmnop"
 	result := sanitizer.Sanitize(input)
@@ -20,6 +21,7 @@ func TestSanitizer_OpenAI(t *testing.T) {
 }
 
 func TestSanitizer_Anthropic(t *testing.T) {
+	t.Parallel()
 	sanitizer := NewSanitizer()
 	input := "Using Anthropic key sk-ant-api03-1234567890abcdefghij1234567890abcdefghij"
 	result := sanitizer.Sanitize(input)
@@ -30,6 +32,7 @@ func TestSanitizer_Anthropic(t *testing.T) {
 }
 
 func TestSanitizer_GitHub(t *testing.T) {
+	t.Parallel()
 	sanitizer := NewSanitizer()
 
 	tests := []struct {
@@ -53,6 +56,7 @@ func TestSanitizer_GitHub(t *testing.T) {
 }
 
 func TestSanitizer_AWS(t *testing.T) {
+	t.Parallel()
 	sanitizer := NewSanitizer()
 	input := "AWS key: AKIAIOSFODNN7EXAMPLE"
 	result := sanitizer.Sanitize(input)
@@ -63,6 +67,7 @@ func TestSanitizer_AWS(t *testing.T) {
 }
 
 func TestSanitizer_GoogleAI(t *testing.T) {
+	t.Parallel()
 	sanitizer := NewSanitizer()
 	input := "Google API key: AIzaSyD00000000000000000000000000000000"
 	result := sanitizer.Sanitize(input)
@@ -73,6 +78,7 @@ func TestSanitizer_GoogleAI(t *testing.T) {
 }
 
 func TestSanitizer_Slack(t *testing.T) {
+	t.Parallel()
 	sanitizer := NewSanitizer()
 	input := "Slack token: xoxb-1234567890-1234567890123-abcdefghij"
 	result := sanitizer.Sanitize(input)
@@ -83,6 +89,7 @@ func TestSanitizer_Slack(t *testing.T) {
 }
 
 func TestSanitizer_Bearer(t *testing.T) {
+	t.Parallel()
 	sanitizer := NewSanitizer()
 	input := "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"
 	result := sanitizer.Sanitize(input)
@@ -93,6 +100,7 @@ func TestSanitizer_Bearer(t *testing.T) {
 }
 
 func TestSanitizer_GenericPatterns(t *testing.T) {
+	t.Parallel()
 	sanitizer := NewSanitizer()
 
 	tests := []struct {
@@ -117,6 +125,7 @@ func TestSanitizer_GenericPatterns(t *testing.T) {
 }
 
 func TestSanitizer_NoFalsePositives(t *testing.T) {
+	t.Parallel()
 	sanitizer := NewSanitizer()
 
 	safeStrings := []string{
@@ -140,6 +149,7 @@ func TestSanitizer_NoFalsePositives(t *testing.T) {
 }
 
 func TestSanitizer_SanitizeMap(t *testing.T) {
+	t.Parallel()
 	sanitizer := NewSanitizer()
 
 	input := map[string]interface{}{
@@ -172,6 +182,7 @@ func TestSanitizer_SanitizeMap(t *testing.T) {
 }
 
 func TestSanitizer_AddPattern(t *testing.T) {
+	t.Parallel()
 	sanitizer := NewSanitizer()
 
 	// Add a custom pattern for a fictional service
@@ -189,6 +200,7 @@ func TestSanitizer_AddPattern(t *testing.T) {
 }
 
 func TestSanitizer_AddPatternInvalid(t *testing.T) {
+	t.Parallel()
 	sanitizer := NewSanitizer()
 	err := sanitizer.AddPattern(`[invalid`)
 	if err == nil {
@@ -197,6 +209,7 @@ func TestSanitizer_AddPatternInvalid(t *testing.T) {
 }
 
 func TestLogger_Creation(t *testing.T) {
+	t.Parallel()
 	logger := New(DefaultConfig())
 	if logger == nil {
 		t.Fatal("expected logger to be created")
@@ -210,6 +223,7 @@ func TestLogger_Creation(t *testing.T) {
 }
 
 func TestLogger_WithContext(t *testing.T) {
+	t.Parallel()
 	logger := New(DefaultConfig())
 	taskLogger := logger.WithTask("task-123")
 	if taskLogger == nil {
@@ -218,6 +232,7 @@ func TestLogger_WithContext(t *testing.T) {
 }
 
 func TestLogger_WithPhase(t *testing.T) {
+	t.Parallel()
 	logger := New(DefaultConfig())
 	phaseLogger := logger.WithPhase("analyze")
 	if phaseLogger == nil {
@@ -226,6 +241,7 @@ func TestLogger_WithPhase(t *testing.T) {
 }
 
 func TestLogger_WithWorkflow(t *testing.T) {
+	t.Parallel()
 	logger := New(DefaultConfig())
 	workflowLogger := logger.WithWorkflow("workflow-456")
 	if workflowLogger == nil {
@@ -234,6 +250,7 @@ func TestLogger_WithWorkflow(t *testing.T) {
 }
 
 func TestLogger_WithAgent(t *testing.T) {
+	t.Parallel()
 	logger := New(DefaultConfig())
 	agentLogger := logger.WithAgent("claude")
 	if agentLogger == nil {
@@ -242,6 +259,7 @@ func TestLogger_WithAgent(t *testing.T) {
 }
 
 func TestLogger_Nop(t *testing.T) {
+	t.Parallel()
 	logger := NewNop()
 	if logger == nil {
 		t.Fatal("expected nop logger to be created")
@@ -251,6 +269,7 @@ func TestLogger_Nop(t *testing.T) {
 }
 
 func TestLogger_Formats(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name   string
 		format string
@@ -278,6 +297,7 @@ func TestLogger_Formats(t *testing.T) {
 }
 
 func TestLogger_Levels(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		level   string
@@ -311,6 +331,7 @@ func TestLogger_Levels(t *testing.T) {
 }
 
 func TestLogger_SanitizesOutput(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	logger := New(Config{
 		Level:  "info",
@@ -330,6 +351,7 @@ func TestLogger_SanitizesOutput(t *testing.T) {
 }
 
 func TestLogger_SanitizeMethod(t *testing.T) {
+	t.Parallel()
 	logger := New(DefaultConfig())
 	input := "API key: sk-1234567890abcdefghijklmnop"
 	result := logger.Sanitize(input)
@@ -340,6 +362,7 @@ func TestLogger_SanitizeMethod(t *testing.T) {
 }
 
 func TestParseLevel(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		input    string
 		expected string
@@ -363,6 +386,7 @@ func TestParseLevel(t *testing.T) {
 }
 
 func TestSanitizingHandler_WithGroup(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	logger := New(Config{
 		Level:  "info",
@@ -380,6 +404,7 @@ func TestSanitizingHandler_WithGroup(t *testing.T) {
 }
 
 func TestPrettyHandler_Levels(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name  string
 		level string

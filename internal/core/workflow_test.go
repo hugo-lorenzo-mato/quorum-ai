@@ -3,6 +3,7 @@ package core
 import "testing"
 
 func TestWorkflow_AddTask(t *testing.T) {
+	t.Parallel()
 	wf := NewWorkflow("w1", "prompt", nil)
 	if err := wf.AddTask(nil); err == nil {
 		t.Fatalf("expected error adding nil task")
@@ -18,6 +19,7 @@ func TestWorkflow_AddTask(t *testing.T) {
 }
 
 func TestWorkflow_TasksByPhase(t *testing.T) {
+	t.Parallel()
 	wf := NewWorkflow("w1", "prompt", nil)
 	_ = wf.AddTask(NewTask("t1", "task", PhaseAnalyze))
 	_ = wf.AddTask(NewTask("t2", "task", PhasePlan))
@@ -30,6 +32,7 @@ func TestWorkflow_TasksByPhase(t *testing.T) {
 }
 
 func TestWorkflow_UpdateMetricsAndProgress(t *testing.T) {
+	t.Parallel()
 	wf := NewWorkflow("w1", "prompt", nil)
 	t1 := NewTask("t1", "task", PhaseAnalyze)
 	t2 := NewTask("t2", "task", PhaseAnalyze)
@@ -56,6 +59,7 @@ func TestWorkflow_UpdateMetricsAndProgress(t *testing.T) {
 }
 
 func TestWorkflow_StateTransitions(t *testing.T) {
+	t.Parallel()
 	wf := NewWorkflow("w1", "prompt", nil)
 
 	if err := wf.Pause(); err == nil {
@@ -92,6 +96,7 @@ func TestWorkflow_StateTransitions(t *testing.T) {
 }
 
 func TestWorkflow_AdvancePhase(t *testing.T) {
+	t.Parallel()
 	wf := NewWorkflow("w1", "prompt", nil)
 	if wf.CurrentPhase != PhaseAnalyze {
 		t.Fatalf("expected initial phase analyze, got %s", wf.CurrentPhase)
@@ -114,6 +119,7 @@ func TestWorkflow_AdvancePhase(t *testing.T) {
 }
 
 func TestWorkflow_Validate(t *testing.T) {
+	t.Parallel()
 	wf := NewWorkflow("w1", "prompt", nil)
 	if err := wf.Validate(); err != nil {
 		t.Fatalf("unexpected error validating workflow: %v", err)
@@ -131,6 +137,7 @@ func TestWorkflow_Validate(t *testing.T) {
 }
 
 func TestWorkflow_GetTask(t *testing.T) {
+	t.Parallel()
 	wf := NewWorkflow("w1", "prompt", nil)
 	task := NewTask("t1", "test task", PhaseAnalyze)
 	_ = wf.AddTask(task)
@@ -152,6 +159,7 @@ func TestWorkflow_GetTask(t *testing.T) {
 }
 
 func TestWorkflow_CompletedTasks(t *testing.T) {
+	t.Parallel()
 	wf := NewWorkflow("w1", "prompt", nil)
 	t1 := NewTask("t1", "task1", PhaseAnalyze)
 	t2 := NewTask("t2", "task2", PhaseAnalyze)
@@ -175,6 +183,7 @@ func TestWorkflow_CompletedTasks(t *testing.T) {
 }
 
 func TestWorkflow_ReadyTasks(t *testing.T) {
+	t.Parallel()
 	wf := NewWorkflow("w1", "prompt", nil)
 	t1 := NewTask("t1", "task1", PhaseAnalyze)
 	t2 := NewTask("t2", "task2", PhaseAnalyze)
@@ -204,6 +213,7 @@ func TestWorkflow_ReadyTasks(t *testing.T) {
 }
 
 func TestWorkflow_FailAndAbort(t *testing.T) {
+	t.Parallel()
 	wf := NewWorkflow("w1", "prompt", nil)
 	_ = wf.Start()
 
@@ -232,6 +242,7 @@ func TestWorkflow_FailAndAbort(t *testing.T) {
 }
 
 func TestWorkflow_Duration(t *testing.T) {
+	t.Parallel()
 	wf := NewWorkflow("w1", "prompt", nil)
 
 	// Duration before start should be 0
@@ -248,6 +259,7 @@ func TestWorkflow_Duration(t *testing.T) {
 }
 
 func TestWorkflow_IsTerminal(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		status   WorkflowStatus
 		terminal bool
@@ -269,6 +281,7 @@ func TestWorkflow_IsTerminal(t *testing.T) {
 }
 
 func TestWorkflow_StartFromPaused(t *testing.T) {
+	t.Parallel()
 	wf := NewWorkflow("w1", "prompt", nil)
 	_ = wf.Start()
 	_ = wf.Pause()
@@ -283,6 +296,7 @@ func TestWorkflow_StartFromPaused(t *testing.T) {
 }
 
 func TestWorkflow_ResumeErrors(t *testing.T) {
+	t.Parallel()
 	wf := NewWorkflow("w1", "prompt", nil)
 
 	// Resume from pending should fail
@@ -298,6 +312,7 @@ func TestWorkflow_ResumeErrors(t *testing.T) {
 }
 
 func TestWorkflow_CompleteErrors(t *testing.T) {
+	t.Parallel()
 	wf := NewWorkflow("w1", "prompt", nil)
 
 	// Complete from pending should fail

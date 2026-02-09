@@ -22,6 +22,7 @@ func newTestGenerator(t *testing.T) (*Generator, string) {
 }
 
 func TestRenderDraftContent(t *testing.T) {
+	t.Parallel()
 	fm := DraftFrontmatter{
 		Title:       "Test Issue",
 		Labels:      []string{"bug", "enhancement"},
@@ -49,6 +50,7 @@ func TestRenderDraftContent(t *testing.T) {
 }
 
 func TestRenderDraftContent_EmptyBody(t *testing.T) {
+	t.Parallel()
 	fm := DraftFrontmatter{
 		Title:  "Title Only",
 		Status: "draft",
@@ -65,6 +67,7 @@ func TestRenderDraftContent_EmptyBody(t *testing.T) {
 }
 
 func TestRenderDraftContent_EmptyLabelsAndAssignees(t *testing.T) {
+	t.Parallel()
 	fm := DraftFrontmatter{
 		Title:     "Minimal Issue",
 		Labels:    nil,
@@ -81,6 +84,7 @@ func TestRenderDraftContent_EmptyLabelsAndAssignees(t *testing.T) {
 }
 
 func TestParseDraftContent_Valid(t *testing.T) {
+	t.Parallel()
 	content := `---
 title: Test Issue
 labels:
@@ -132,6 +136,7 @@ This is the body.`
 }
 
 func TestParseDraftContent_NoFrontmatter(t *testing.T) {
+	t.Parallel()
 	content := "# Title\n\nBody content"
 
 	_, _, err := parseDraftContent(content)
@@ -141,6 +146,7 @@ func TestParseDraftContent_NoFrontmatter(t *testing.T) {
 }
 
 func TestParseDraftContent_InvalidYAML(t *testing.T) {
+	t.Parallel()
 	content := "---\n: invalid: yaml: [\n---\nBody"
 
 	_, _, err := parseDraftContent(content)
@@ -150,6 +156,7 @@ func TestParseDraftContent_InvalidYAML(t *testing.T) {
 }
 
 func TestParseDraftContent_MainIssue(t *testing.T) {
+	t.Parallel()
 	content := `---
 title: Consolidated Analysis
 is_main_issue: true
@@ -175,6 +182,7 @@ Main issue body.`
 }
 
 func TestExtractFrontmatter_Valid(t *testing.T) {
+	t.Parallel()
 	content := "---\ntitle: Test\n---\nBody"
 
 	fm, body, ok := extractFrontmatter(content)
@@ -190,6 +198,7 @@ func TestExtractFrontmatter_Valid(t *testing.T) {
 }
 
 func TestExtractFrontmatter_NoFrontmatter(t *testing.T) {
+	t.Parallel()
 	content := "# Title\n\nBody content without frontmatter"
 
 	_, body, ok := extractFrontmatter(content)
@@ -202,6 +211,7 @@ func TestExtractFrontmatter_NoFrontmatter(t *testing.T) {
 }
 
 func TestExtractFrontmatter_EmptyContent(t *testing.T) {
+	t.Parallel()
 	_, _, ok := extractFrontmatter("")
 	if ok {
 		t.Error("expected no frontmatter for empty content")
@@ -209,6 +219,7 @@ func TestExtractFrontmatter_EmptyContent(t *testing.T) {
 }
 
 func TestExtractFrontmatter_IncompleteDelimiters(t *testing.T) {
+	t.Parallel()
 	content := "---\ntitle: Test\nNo closing delimiter"
 
 	_, _, ok := extractFrontmatter(content)
@@ -218,6 +229,7 @@ func TestExtractFrontmatter_IncompleteDelimiters(t *testing.T) {
 }
 
 func TestWriteDraftFile(t *testing.T) {
+	t.Parallel()
 	gen, tmpDir := newTestGenerator(t)
 	workflowID := "wf-test-123"
 
@@ -260,6 +272,7 @@ func TestWriteDraftFile(t *testing.T) {
 }
 
 func TestWriteDraftFile_PathTraversal(t *testing.T) {
+	t.Parallel()
 	gen, _ := newTestGenerator(t)
 
 	fm := DraftFrontmatter{Title: "Malicious", Status: "draft"}
@@ -270,6 +283,7 @@ func TestWriteDraftFile_PathTraversal(t *testing.T) {
 }
 
 func TestWriteDraftFile_CustomDraftDirectory(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	cfg := config.IssuesConfig{
 		Enabled:        true,
@@ -290,6 +304,7 @@ func TestWriteDraftFile_CustomDraftDirectory(t *testing.T) {
 }
 
 func TestReadDraftFile(t *testing.T) {
+	t.Parallel()
 	gen, _ := newTestGenerator(t)
 	workflowID := "wf-read-test"
 
@@ -328,6 +343,7 @@ func TestReadDraftFile(t *testing.T) {
 }
 
 func TestReadDraftFile_NonExistent(t *testing.T) {
+	t.Parallel()
 	gen, _ := newTestGenerator(t)
 
 	_, _, err := gen.ReadDraftFile("wf-nonexistent", "missing.md")
@@ -337,6 +353,7 @@ func TestReadDraftFile_NonExistent(t *testing.T) {
 }
 
 func TestReadAllDrafts(t *testing.T) {
+	t.Parallel()
 	gen, _ := newTestGenerator(t)
 	workflowID := "wf-all-drafts"
 
@@ -400,6 +417,7 @@ func TestReadAllDrafts(t *testing.T) {
 }
 
 func TestReadAllDrafts_EmptyDirectory(t *testing.T) {
+	t.Parallel()
 	gen, _ := newTestGenerator(t)
 
 	previews, err := gen.ReadAllDrafts("wf-empty")
@@ -412,6 +430,7 @@ func TestReadAllDrafts_EmptyDirectory(t *testing.T) {
 }
 
 func TestReadAllDrafts_DeduplicatesByTaskID(t *testing.T) {
+	t.Parallel()
 	gen, _ := newTestGenerator(t)
 	workflowID := "wf-dedup"
 
@@ -440,6 +459,7 @@ func TestReadAllDrafts_DeduplicatesByTaskID(t *testing.T) {
 }
 
 func TestReadAllDrafts_SkipsNonMarkdownFiles(t *testing.T) {
+	t.Parallel()
 	gen, tmpDir := newTestGenerator(t)
 	workflowID := "wf-nonmd"
 
@@ -470,6 +490,7 @@ func TestReadAllDrafts_SkipsNonMarkdownFiles(t *testing.T) {
 }
 
 func TestReadAllDrafts_FallbackPlainMarkdown(t *testing.T) {
+	t.Parallel()
 	gen, tmpDir := newTestGenerator(t)
 	workflowID := "wf-plain"
 
@@ -502,6 +523,7 @@ func TestReadAllDrafts_FallbackPlainMarkdown(t *testing.T) {
 }
 
 func TestReadIssueMapping_NonExistent(t *testing.T) {
+	t.Parallel()
 	gen, _ := newTestGenerator(t)
 
 	mapping, err := gen.ReadIssueMapping("wf-no-mapping")
@@ -514,6 +536,7 @@ func TestReadIssueMapping_NonExistent(t *testing.T) {
 }
 
 func TestReadIssueMapping_Valid(t *testing.T) {
+	t.Parallel()
 	gen, tmpDir := newTestGenerator(t)
 	workflowID := "wf-mapping"
 
@@ -568,6 +591,7 @@ func TestReadIssueMapping_Valid(t *testing.T) {
 }
 
 func TestReadIssueMapping_InvalidJSON(t *testing.T) {
+	t.Parallel()
 	gen, tmpDir := newTestGenerator(t)
 	workflowID := "wf-badjson"
 
@@ -587,6 +611,7 @@ func TestReadIssueMapping_InvalidJSON(t *testing.T) {
 }
 
 func TestRoundTrip_WriteThenRead(t *testing.T) {
+	t.Parallel()
 	gen, _ := newTestGenerator(t)
 	workflowID := "wf-roundtrip"
 
@@ -643,6 +668,7 @@ func TestRoundTrip_WriteThenRead(t *testing.T) {
 }
 
 func TestDraftFrontmatter_ZeroValue(t *testing.T) {
+	t.Parallel()
 	fm := DraftFrontmatter{}
 	content := renderDraftContent(fm, "")
 

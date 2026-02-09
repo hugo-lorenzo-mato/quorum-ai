@@ -11,6 +11,7 @@ import (
 )
 
 func TestDependenciesAvailable(t *testing.T) {
+	t.Parallel()
 	// This test just verifies imports compile
 	t.Log("All TUI dependencies are available")
 }

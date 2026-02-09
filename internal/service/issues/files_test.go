@@ -13,6 +13,7 @@ import (
 )
 
 func TestWriteIssuesToDisk_Basic(t *testing.T) {
+	t.Parallel()
 	gen, tmpDir := newTestGenerator(t)
 	workflowID := "wf-write-basic"
 
@@ -67,6 +68,7 @@ func TestWriteIssuesToDisk_Basic(t *testing.T) {
 }
 
 func TestWriteIssuesToDisk_EmptyWorkflowID(t *testing.T) {
+	t.Parallel()
 	gen, _ := newTestGenerator(t)
 
 	_, err := gen.WriteIssuesToDisk("", []IssueInput{{Title: "Test"}})
@@ -76,6 +78,7 @@ func TestWriteIssuesToDisk_EmptyWorkflowID(t *testing.T) {
 }
 
 func TestWriteIssuesToDisk_NoInputs(t *testing.T) {
+	t.Parallel()
 	gen, _ := newTestGenerator(t)
 
 	_, err := gen.WriteIssuesToDisk("wf-test", nil)
@@ -85,6 +88,7 @@ func TestWriteIssuesToDisk_NoInputs(t *testing.T) {
 }
 
 func TestWriteIssuesToDisk_EnsuresEpicLabel(t *testing.T) {
+	t.Parallel()
 	gen, tmpDir := newTestGenerator(t)
 	workflowID := "wf-epic"
 
@@ -119,6 +123,7 @@ func TestWriteIssuesToDisk_EnsuresEpicLabel(t *testing.T) {
 }
 
 func TestBuildIssueMarkdown(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name  string
 		title string
@@ -162,6 +167,7 @@ func TestBuildIssueMarkdown(t *testing.T) {
 }
 
 func TestUniqueIssueFilename(t *testing.T) {
+	t.Parallel()
 	used := make(map[string]bool)
 
 	// First use should return as-is
@@ -184,6 +190,7 @@ func TestUniqueIssueFilename(t *testing.T) {
 }
 
 func TestIssueFilenameForTask(t *testing.T) {
+	t.Parallel()
 	task := service.IssueTaskFile{
 		ID:    "task-1",
 		Slug:  "implement-auth",
@@ -207,6 +214,7 @@ func TestIssueFilenameForTask(t *testing.T) {
 }
 
 func TestEnsureEpicLabel(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name   string
 		labels []string
@@ -261,6 +269,7 @@ func TestEnsureEpicLabel(t *testing.T) {
 }
 
 func TestEnsureLabel(t *testing.T) {
+	t.Parallel()
 	labels := []string{"bug", "priority:high"}
 
 	result := ensureLabel(labels, "bug")
@@ -280,6 +289,7 @@ func TestEnsureLabel(t *testing.T) {
 }
 
 func TestResolveIssueFilename(t *testing.T) {
+	t.Parallel()
 	gen, _ := newTestGenerator(t)
 
 	tasksByID := map[string]service.IssueTaskFile{
@@ -327,6 +337,7 @@ func TestResolveIssueFilename(t *testing.T) {
 }
 
 func TestCreateIssuesFromFiles_DryRun(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	cfg := config.IssuesConfig{
 		Enabled: true,
@@ -373,6 +384,7 @@ func TestCreateIssuesFromFiles_DryRun(t *testing.T) {
 }
 
 func TestCreateIssuesFromFiles_EmptyWorkflowID(t *testing.T) {
+	t.Parallel()
 	gen, _ := newTestGenerator(t)
 
 	_, err := gen.CreateIssuesFromFiles(context.Background(), "", nil, false, false, nil, nil)
@@ -382,6 +394,7 @@ func TestCreateIssuesFromFiles_EmptyWorkflowID(t *testing.T) {
 }
 
 func TestCreateIssuesFromFiles_CreateWithMock(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	client := &mockIssueClient{}
 	cfg := config.IssuesConfig{
@@ -445,6 +458,7 @@ func TestCreateIssuesFromFiles_CreateWithMock(t *testing.T) {
 }
 
 func TestCreateIssuesFromFiles_CreateError(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	client := &mockIssueClient{
 		createErr: &testError{msg: "API error"},
@@ -476,6 +490,7 @@ func TestCreateIssuesFromFiles_CreateError(t *testing.T) {
 }
 
 func TestWriteIssueMappingFile(t *testing.T) {
+	t.Parallel()
 	gen, tmpDir := newTestGenerator(t)
 	workflowID := "wf-mapping-write"
 
@@ -509,6 +524,7 @@ func TestWriteIssueMappingFile(t *testing.T) {
 }
 
 func TestResolveDraftDir(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 
 	tests := []struct {
@@ -547,6 +563,7 @@ func TestResolveDraftDir(t *testing.T) {
 }
 
 func TestResolvePublishedDir(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 
 	cfg := config.IssuesConfig{}
@@ -564,6 +581,7 @@ func TestResolvePublishedDir(t *testing.T) {
 }
 
 func TestResolveIssuesBaseDir(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		draftDir string
@@ -594,6 +612,7 @@ func TestResolveIssuesBaseDir(t *testing.T) {
 }
 
 func TestReadIssueFile_WithFrontmatter(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	cfg := config.IssuesConfig{Enabled: true}
 	gen := NewGenerator(nil, cfg, tmpDir, tmpDir, nil)
@@ -624,6 +643,7 @@ func TestReadIssueFile_WithFrontmatter(t *testing.T) {
 }
 
 func TestReadIssueFile_PlainMarkdown(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	cfg := config.IssuesConfig{Enabled: true}
 	gen := NewGenerator(nil, cfg, tmpDir, tmpDir, nil)
@@ -658,6 +678,7 @@ func TestReadIssueFile_PlainMarkdown(t *testing.T) {
 }
 
 func TestReadIssueFile_MissingFilePath(t *testing.T) {
+	t.Parallel()
 	gen, _ := newTestGenerator(t)
 
 	input := IssueInput{TaskID: "task-1"} // No FilePath
@@ -669,6 +690,7 @@ func TestReadIssueFile_MissingFilePath(t *testing.T) {
 }
 
 func TestReadIssueFile_PathTraversal(t *testing.T) {
+	t.Parallel()
 	gen, _ := newTestGenerator(t)
 
 	input := IssueInput{
@@ -683,6 +705,7 @@ func TestReadIssueFile_PathTraversal(t *testing.T) {
 }
 
 func TestParseIssueMarkdown(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name      string
 		content   string
@@ -729,6 +752,7 @@ func TestParseIssueMarkdown(t *testing.T) {
 }
 
 func TestExtractFileNumber(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		want int
@@ -751,6 +775,7 @@ func TestExtractFileNumber(t *testing.T) {
 }
 
 func TestSanitizeFilename_Generator(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		input string
 		want  string
@@ -773,6 +798,7 @@ func TestSanitizeFilename_Generator(t *testing.T) {
 }
 
 func TestIssueMappingEntry_Fields(t *testing.T) {
+	t.Parallel()
 	entry := IssueMappingEntry{
 		TaskID:      "task-1",
 		FilePath:    "01-task.md",
@@ -794,6 +820,7 @@ func TestIssueMappingEntry_Fields(t *testing.T) {
 }
 
 func TestIssueMapping_Fields(t *testing.T) {
+	t.Parallel()
 	mapping := IssueMapping{
 		WorkflowID: "wf-test",
 		Issues: []IssueMappingEntry{
@@ -810,6 +837,7 @@ func TestIssueMapping_Fields(t *testing.T) {
 }
 
 func TestCreateIssuesFromFiles_SubIssueError(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	callCount := 0
 	client := &mockIssueClient{
@@ -859,6 +887,7 @@ func TestCreateIssuesFromFiles_SubIssueError(t *testing.T) {
 }
 
 func TestGetProjectRoot(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 
 	// With explicit project root
@@ -883,6 +912,7 @@ func TestGetProjectRoot(t *testing.T) {
 }
 
 func TestGenerateResult_Fields(t *testing.T) {
+	t.Parallel()
 	result := GenerateResult{
 		IssueSet: &core.IssueSet{
 			MainIssue: &core.Issue{Number: 1},

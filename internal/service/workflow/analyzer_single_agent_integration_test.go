@@ -14,6 +14,7 @@ import (
 // TestIntegration_Analyzer_SingleAgentMode_BypassesConsensus tests that single-agent mode
 // bypasses the multi-agent consensus mechanism.
 func TestIntegration_Analyzer_SingleAgentMode_BypassesConsensus(t *testing.T) {
+	t.Parallel()
 	// Create analyzer with moderator disabled (single-agent mode doesn't need it)
 	config := ModeratorConfig{
 		Enabled: false,
@@ -103,6 +104,7 @@ func TestIntegration_Analyzer_SingleAgentMode_BypassesConsensus(t *testing.T) {
 // TestIntegration_Analyzer_SingleAgentMode_UsesSpecifiedAgent tests that single-agent mode
 // uses the specified agent rather than all enabled agents.
 func TestIntegration_Analyzer_SingleAgentMode_UsesSpecifiedAgent(t *testing.T) {
+	t.Parallel()
 	config := ModeratorConfig{Enabled: false}
 	analyzer, err := NewAnalyzer(config)
 	if err != nil {
@@ -190,6 +192,7 @@ func TestIntegration_Analyzer_SingleAgentMode_UsesSpecifiedAgent(t *testing.T) {
 
 // TestIntegration_Analyzer_SingleAgentMode_ModelOverride tests that model override works.
 func TestIntegration_Analyzer_SingleAgentMode_ModelOverride(t *testing.T) {
+	t.Parallel()
 	config := ModeratorConfig{Enabled: false}
 	analyzer, err := NewAnalyzer(config)
 	if err != nil {
@@ -259,6 +262,7 @@ func TestIntegration_Analyzer_SingleAgentMode_ModelOverride(t *testing.T) {
 
 // TestIntegration_Analyzer_SingleAgentMode_MissingAgent tests error when agent not specified.
 func TestIntegration_Analyzer_SingleAgentMode_MissingAgent(t *testing.T) {
+	t.Parallel()
 	config := ModeratorConfig{Enabled: false}
 	analyzer, err := NewAnalyzer(config)
 	if err != nil {
@@ -313,6 +317,7 @@ func TestIntegration_Analyzer_SingleAgentMode_MissingAgent(t *testing.T) {
 // TestIntegration_Analyzer_MultiAgentMode_UsesModerator tests that multi-agent mode
 // uses the moderator for consensus.
 func TestIntegration_Analyzer_MultiAgentMode_UsesModerator(t *testing.T) {
+	t.Parallel()
 	// Create analyzer with moderator enabled
 	config := ModeratorConfig{
 		Enabled:   true,

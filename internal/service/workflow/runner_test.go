@@ -11,6 +11,7 @@ import (
 )
 
 func TestDefaultRunnerConfig(t *testing.T) {
+	t.Parallel()
 	cfg := DefaultRunnerConfig()
 
 	if cfg == nil {
@@ -36,6 +37,7 @@ func testRunnerConfig() *RunnerConfig {
 }
 
 func TestRunner_validateRunInput(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		prompt  string
@@ -137,6 +139,7 @@ func TestRunner_validateRunInput(t *testing.T) {
 }
 
 func TestRunner_initializeState(t *testing.T) {
+	t.Parallel()
 	runner := &Runner{
 		config: DefaultRunnerConfig(),
 	}
@@ -171,6 +174,7 @@ func TestRunner_initializeState(t *testing.T) {
 }
 
 func TestRunner_createContext(t *testing.T) {
+	t.Parallel()
 	config := &RunnerConfig{
 		DryRun:       true,
 		DenyTools:    []string{"rm", "sudo"},
@@ -207,6 +211,7 @@ func TestRunner_createContext(t *testing.T) {
 }
 
 func TestGenerateWorkflowID(t *testing.T) {
+	t.Parallel()
 	id1 := generateWorkflowID()
 	id2 := generateWorkflowID()
 
@@ -404,6 +409,7 @@ func (a *mockAtomicCtx) IsWorkflowRunning(id core.WorkflowID) (bool, error) {
 }
 
 func TestRunner_SetDryRun(t *testing.T) {
+	t.Parallel()
 	runner := &Runner{
 		config: DefaultRunnerConfig(),
 	}
@@ -424,6 +430,7 @@ func TestRunner_SetDryRun(t *testing.T) {
 }
 
 func TestRunner_GetState(t *testing.T) {
+	t.Parallel()
 	expectedState := &core.WorkflowState{
 		WorkflowDefinition: core.WorkflowDefinition{
 			WorkflowID: "wf-test",
@@ -449,6 +456,7 @@ func TestRunner_GetState(t *testing.T) {
 }
 
 func TestFinalizeMetrics_CalculatesDuration(t *testing.T) {
+	t.Parallel()
 	state := &core.WorkflowState{
 		WorkflowDefinition: core.WorkflowDefinition{
 			CreatedAt: time.Now().Add(-5 * time.Minute),
@@ -468,6 +476,7 @@ func TestFinalizeMetrics_CalculatesDuration(t *testing.T) {
 }
 
 func TestFinalizeMetrics_InitializesNilMetrics(t *testing.T) {
+	t.Parallel()
 	state := &core.WorkflowState{
 		WorkflowDefinition: core.WorkflowDefinition{
 			CreatedAt: time.Now(),

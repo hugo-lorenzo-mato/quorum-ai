@@ -6,6 +6,7 @@ import (
 )
 
 func TestIssueSet_IssueNumbers(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		set      IssueSet
@@ -63,6 +64,7 @@ func TestIssueSet_IssueNumbers(t *testing.T) {
 }
 
 func TestIssueSet_TotalCount(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		set      IssueSet
@@ -103,6 +105,7 @@ func TestIssueSet_TotalCount(t *testing.T) {
 }
 
 func TestIssueProvider_IsValid(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		provider IssueProvider
 		valid    bool
@@ -124,6 +127,7 @@ func TestIssueProvider_IsValid(t *testing.T) {
 }
 
 func TestIssue_Fields(t *testing.T) {
+	t.Parallel()
 	now := time.Now()
 	issue := Issue{
 		ID:          987654,

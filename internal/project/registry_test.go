@@ -55,6 +55,7 @@ func createTestProject(t *testing.T, baseDir, name string) string {
 }
 
 func TestNewFileRegistry(t *testing.T) {
+	t.Parallel()
 	registry, _, cleanup := setupTestRegistry(t)
 	defer cleanup()
 
@@ -73,6 +74,7 @@ func TestNewFileRegistry(t *testing.T) {
 }
 
 func TestAddProject(t *testing.T) {
+	t.Parallel()
 	registry, tmpDir, cleanup := setupTestRegistry(t)
 	defer cleanup()
 
@@ -102,6 +104,7 @@ func TestAddProject(t *testing.T) {
 }
 
 func TestAddProjectWithOptions(t *testing.T) {
+	t.Parallel()
 	registry, tmpDir, cleanup := setupTestRegistry(t)
 	defer cleanup()
 
@@ -127,6 +130,7 @@ func TestAddProjectWithOptions(t *testing.T) {
 }
 
 func TestAddProjectAlreadyExists(t *testing.T) {
+	t.Parallel()
 	registry, tmpDir, cleanup := setupTestRegistry(t)
 	defer cleanup()
 
@@ -145,6 +149,7 @@ func TestAddProjectAlreadyExists(t *testing.T) {
 }
 
 func TestAddProjectNotQuorum(t *testing.T) {
+	t.Parallel()
 	registry, tmpDir, cleanup := setupTestRegistry(t)
 	defer cleanup()
 
@@ -162,6 +167,7 @@ func TestAddProjectNotQuorum(t *testing.T) {
 }
 
 func TestGetProject(t *testing.T) {
+	t.Parallel()
 	registry, tmpDir, cleanup := setupTestRegistry(t)
 	defer cleanup()
 
@@ -181,6 +187,7 @@ func TestGetProject(t *testing.T) {
 }
 
 func TestGetProjectNotFound(t *testing.T) {
+	t.Parallel()
 	registry, _, cleanup := setupTestRegistry(t)
 	defer cleanup()
 
@@ -191,6 +198,7 @@ func TestGetProjectNotFound(t *testing.T) {
 }
 
 func TestGetProjectByPath(t *testing.T) {
+	t.Parallel()
 	registry, tmpDir, cleanup := setupTestRegistry(t)
 	defer cleanup()
 
@@ -210,6 +218,7 @@ func TestGetProjectByPath(t *testing.T) {
 }
 
 func TestRemoveProject(t *testing.T) {
+	t.Parallel()
 	registry, tmpDir, cleanup := setupTestRegistry(t)
 	defer cleanup()
 
@@ -230,6 +239,7 @@ func TestRemoveProject(t *testing.T) {
 }
 
 func TestRemoveProjectNotFound(t *testing.T) {
+	t.Parallel()
 	registry, _, cleanup := setupTestRegistry(t)
 	defer cleanup()
 
@@ -240,6 +250,7 @@ func TestRemoveProjectNotFound(t *testing.T) {
 }
 
 func TestValidateProject(t *testing.T) {
+	t.Parallel()
 	registry, tmpDir, cleanup := setupTestRegistry(t)
 	defer cleanup()
 
@@ -271,6 +282,7 @@ func TestValidateProject(t *testing.T) {
 }
 
 func TestValidateProjectDegraded(t *testing.T) {
+	t.Parallel()
 	registry, tmpDir, cleanup := setupTestRegistry(t)
 	defer cleanup()
 
@@ -295,6 +307,7 @@ func TestValidateProjectDegraded(t *testing.T) {
 }
 
 func TestDefaultProject(t *testing.T) {
+	t.Parallel()
 	registry, tmpDir, cleanup := setupTestRegistry(t)
 	defer cleanup()
 
@@ -335,6 +348,7 @@ func TestDefaultProject(t *testing.T) {
 }
 
 func TestSetDefaultProjectNotFound(t *testing.T) {
+	t.Parallel()
 	registry, _, cleanup := setupTestRegistry(t)
 	defer cleanup()
 
@@ -345,6 +359,7 @@ func TestSetDefaultProjectNotFound(t *testing.T) {
 }
 
 func TestTouchProject(t *testing.T) {
+	t.Parallel()
 	registry, tmpDir, cleanup := setupTestRegistry(t)
 	defer cleanup()
 
@@ -367,6 +382,7 @@ func TestTouchProject(t *testing.T) {
 }
 
 func TestTouchProjectNotFound(t *testing.T) {
+	t.Parallel()
 	registry, _, cleanup := setupTestRegistry(t)
 	defer cleanup()
 
@@ -377,6 +393,7 @@ func TestTouchProjectNotFound(t *testing.T) {
 }
 
 func TestUpdateProject(t *testing.T) {
+	t.Parallel()
 	registry, tmpDir, cleanup := setupTestRegistry(t)
 	defer cleanup()
 
@@ -404,6 +421,7 @@ func TestUpdateProject(t *testing.T) {
 }
 
 func TestUpdateProjectNotFound(t *testing.T) {
+	t.Parallel()
 	registry, _, cleanup := setupTestRegistry(t)
 	defer cleanup()
 
@@ -415,6 +433,7 @@ func TestUpdateProjectNotFound(t *testing.T) {
 }
 
 func TestListProjects(t *testing.T) {
+	t.Parallel()
 	registry, tmpDir, cleanup := setupTestRegistry(t)
 	defer cleanup()
 
@@ -440,6 +459,7 @@ func TestListProjects(t *testing.T) {
 }
 
 func TestPersistence(t *testing.T) {
+	t.Parallel()
 	tmpDir, err := os.MkdirTemp("", "quorum-registry-persist-*")
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
@@ -473,6 +493,7 @@ func TestPersistence(t *testing.T) {
 }
 
 func TestRegistryClose(t *testing.T) {
+	t.Parallel()
 	registry, _, cleanup := setupTestRegistry(t)
 	defer cleanup()
 
@@ -489,6 +510,7 @@ func TestRegistryClose(t *testing.T) {
 }
 
 func TestCount(t *testing.T) {
+	t.Parallel()
 	registry, tmpDir, cleanup := setupTestRegistry(t)
 	defer cleanup()
 
@@ -507,6 +529,7 @@ func TestCount(t *testing.T) {
 }
 
 func TestProjectStatusMethods(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		status   ProjectStatus
 		valid    bool
@@ -530,6 +553,7 @@ func TestProjectStatusMethods(t *testing.T) {
 }
 
 func TestProjectClone(t *testing.T) {
+	t.Parallel()
 	original := &Project{
 		ID:            "test-id",
 		Path:          "/test/path",
@@ -559,6 +583,7 @@ func TestProjectClone(t *testing.T) {
 }
 
 func TestProjectIsHealthy(t *testing.T) {
+	t.Parallel()
 	healthy := &Project{Status: StatusHealthy}
 	degraded := &Project{Status: StatusDegraded}
 	offline := &Project{Status: StatusOffline}
@@ -575,6 +600,7 @@ func TestProjectIsHealthy(t *testing.T) {
 }
 
 func TestProjectIsAccessible(t *testing.T) {
+	t.Parallel()
 	healthy := &Project{Status: StatusHealthy}
 	degraded := &Project{Status: StatusDegraded}
 	offline := &Project{Status: StatusOffline}
@@ -591,6 +617,7 @@ func TestProjectIsAccessible(t *testing.T) {
 }
 
 func TestGenerateProjectID(t *testing.T) {
+	t.Parallel()
 	id1 := generateProjectID()
 	id2 := generateProjectID()
 
@@ -606,6 +633,7 @@ func TestGenerateProjectID(t *testing.T) {
 }
 
 func TestGenerateProjectName(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		path     string
 		expected string
@@ -625,6 +653,7 @@ func TestGenerateProjectName(t *testing.T) {
 }
 
 func TestGenerateProjectColor(t *testing.T) {
+	t.Parallel()
 	color1 := generateProjectColor("proj-abc123")
 	color2 := generateProjectColor("proj-abc123")
 	color3 := generateProjectColor("proj-def456")
@@ -640,6 +669,7 @@ func TestGenerateProjectColor(t *testing.T) {
 }
 
 func TestValidateAll(t *testing.T) {
+	t.Parallel()
 	registry, tmpDir, cleanup := setupTestRegistry(t)
 	defer cleanup()
 

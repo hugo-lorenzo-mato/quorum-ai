@@ -8,6 +8,7 @@ import (
 )
 
 func TestEventBus_Subscribe(t *testing.T) {
+	t.Parallel()
 	bus := New(10)
 	defer bus.Close()
 
@@ -30,6 +31,7 @@ func TestEventBus_Subscribe(t *testing.T) {
 }
 
 func TestEventBus_SubscribeByType(t *testing.T) {
+	t.Parallel()
 	bus := New(10)
 	defer bus.Close()
 
@@ -63,6 +65,7 @@ func TestEventBus_SubscribeByType(t *testing.T) {
 }
 
 func TestEventBus_PriorityNeverDrops(t *testing.T) {
+	t.Parallel()
 	bus := New(5) // Small buffer
 	defer bus.Close()
 
@@ -89,6 +92,7 @@ func TestEventBus_PriorityNeverDrops(t *testing.T) {
 }
 
 func TestEventBus_RingBufferDropsOldest(t *testing.T) {
+	t.Parallel()
 	bus := New(5)
 	defer bus.Close()
 
@@ -122,6 +126,7 @@ done:
 }
 
 func TestEventBus_ConcurrentPublish(t *testing.T) {
+	t.Parallel()
 	bus := New(100)
 	defer bus.Close()
 
@@ -161,6 +166,7 @@ drainLoop:
 }
 
 func TestEventBus_Unsubscribe(t *testing.T) {
+	t.Parallel()
 	bus := New(10)
 	defer bus.Close()
 
@@ -177,6 +183,7 @@ func TestEventBus_Unsubscribe(t *testing.T) {
 // Project filtering tests
 
 func TestEventBus_SubscribeForProject(t *testing.T) {
+	t.Parallel()
 	bus := New(10)
 	defer bus.Close()
 
@@ -242,6 +249,7 @@ func TestEventBus_SubscribeForProject(t *testing.T) {
 }
 
 func TestEventBus_SubscribeForProjectWithTypes(t *testing.T) {
+	t.Parallel()
 	bus := New(10)
 	defer bus.Close()
 
@@ -284,6 +292,7 @@ done:
 }
 
 func TestEventBus_ProjectFilteringConcurrent(t *testing.T) {
+	t.Parallel()
 	bus := New(100)
 	defer bus.Close()
 
@@ -339,6 +348,7 @@ func TestEventBus_ProjectFilteringConcurrent(t *testing.T) {
 }
 
 func TestEventBus_EmptyProjectIDReceivesAll(t *testing.T) {
+	t.Parallel()
 	bus := New(10)
 	defer bus.Close()
 
@@ -369,6 +379,7 @@ done:
 }
 
 func TestEventBus_ProjectIDMethod(t *testing.T) {
+	t.Parallel()
 	be := NewBaseEvent(TypeWorkflowStarted, "wf-1", "proj-test")
 
 	if be.ProjectID() != "proj-test" {
@@ -383,6 +394,7 @@ func TestEventBus_ProjectIDMethod(t *testing.T) {
 }
 
 func TestEventBus_SubscribeForProjectWithPriority(t *testing.T) {
+	t.Parallel()
 	bus := New(10)
 	defer bus.Close()
 
@@ -420,6 +432,7 @@ done:
 }
 
 func TestEventBus_SubscribeOnClosedBus(t *testing.T) {
+	t.Parallel()
 	bus := New(10)
 	bus.Close()
 
@@ -437,6 +450,7 @@ func TestEventBus_SubscribeOnClosedBus(t *testing.T) {
 }
 
 func TestEventBus_BaseEventLegacy(t *testing.T) {
+	t.Parallel()
 	// Test backward compatibility function
 	be := NewBaseEventLegacy(TypeWorkflowStarted, "wf-1")
 

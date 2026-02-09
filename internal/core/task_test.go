@@ -3,6 +3,7 @@ package core
 import "testing"
 
 func TestTask_StateTransitions(t *testing.T) {
+	t.Parallel()
 	task := NewTask("t1", "task", PhaseAnalyze)
 
 	if err := task.MarkCompleted(nil); err == nil {
@@ -35,6 +36,7 @@ func TestTask_StateTransitions(t *testing.T) {
 }
 
 func TestTask_IsReady(t *testing.T) {
+	t.Parallel()
 	task := NewTask("t1", "task", PhaseAnalyze).
 		WithDependencies("t0", "t2")
 
@@ -55,6 +57,7 @@ func TestTask_IsReady(t *testing.T) {
 }
 
 func TestTask_Retry(t *testing.T) {
+	t.Parallel()
 	task := NewTask("t1", "task", PhaseAnalyze)
 	if err := task.MarkRunning(); err != nil {
 		t.Fatalf("unexpected error starting task: %v", err)
@@ -88,6 +91,7 @@ func TestTask_Retry(t *testing.T) {
 }
 
 func TestTask_Validate(t *testing.T) {
+	t.Parallel()
 	valid := NewTask("t1", "task", PhaseAnalyze)
 	if err := valid.Validate(); err != nil {
 		t.Fatalf("unexpected error validating task: %v", err)
@@ -109,6 +113,7 @@ type errTest string
 func (e errTest) Error() string { return string(e) }
 
 func TestTask_Options(t *testing.T) {
+	t.Parallel()
 	task := NewTask("t1", "task", PhaseAnalyze).
 		WithDescription("test description").
 		WithCLI("claude").
@@ -130,6 +135,7 @@ func TestTask_Options(t *testing.T) {
 }
 
 func TestTask_MarkSkipped(t *testing.T) {
+	t.Parallel()
 	task := NewTask("t1", "task", PhaseAnalyze)
 
 	err := task.MarkSkipped("dependency failed")
@@ -148,6 +154,7 @@ func TestTask_MarkSkipped(t *testing.T) {
 }
 
 func TestTask_Duration(t *testing.T) {
+	t.Parallel()
 	task := NewTask("t1", "task", PhaseAnalyze)
 
 	// Duration without started should be 0
@@ -167,6 +174,7 @@ func TestTask_Duration(t *testing.T) {
 }
 
 func TestTask_IsTerminal(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		status   TaskStatus
 		terminal bool
@@ -191,6 +199,7 @@ func TestTask_IsTerminal(t *testing.T) {
 }
 
 func TestTask_IsSuccess(t *testing.T) {
+	t.Parallel()
 	task := NewTask("t1", "task", PhaseAnalyze)
 
 	// Pending is not success
@@ -212,6 +221,7 @@ func TestTask_IsSuccess(t *testing.T) {
 }
 
 func TestTask_MarkFailed_WithError(t *testing.T) {
+	t.Parallel()
 	task := NewTask("t1", "task", PhaseAnalyze)
 	_ = task.MarkRunning()
 

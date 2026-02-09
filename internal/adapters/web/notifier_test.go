@@ -10,6 +10,7 @@ import (
 )
 
 func TestWebOutputNotifier_PhaseStarted(t *testing.T) {
+	t.Parallel()
 	bus := events.New(10)
 	ch := bus.Subscribe()
 
@@ -30,6 +31,7 @@ func TestWebOutputNotifier_PhaseStarted(t *testing.T) {
 }
 
 func TestWebOutputNotifier_TaskStarted(t *testing.T) {
+	t.Parallel()
 	bus := events.New(10)
 	ch := bus.Subscribe()
 
@@ -48,6 +50,7 @@ func TestWebOutputNotifier_TaskStarted(t *testing.T) {
 }
 
 func TestWebOutputNotifier_TaskCompleted(t *testing.T) {
+	t.Parallel()
 	bus := events.New(10)
 	ch := bus.Subscribe()
 
@@ -81,6 +84,7 @@ func TestWebOutputNotifier_TaskCompleted(t *testing.T) {
 }
 
 func TestWebOutputNotifier_TaskCompleted_ZeroMetrics(t *testing.T) {
+	t.Parallel()
 	bus := events.New(10)
 	ch := bus.Subscribe()
 
@@ -103,6 +107,7 @@ func TestWebOutputNotifier_TaskCompleted_ZeroMetrics(t *testing.T) {
 }
 
 func TestWebOutputNotifier_TaskFailed(t *testing.T) {
+	t.Parallel()
 	bus := events.New(10)
 	ch := bus.Subscribe()
 
@@ -121,6 +126,7 @@ func TestWebOutputNotifier_TaskFailed(t *testing.T) {
 }
 
 func TestWebOutputNotifier_TaskSkipped(t *testing.T) {
+	t.Parallel()
 	bus := events.New(10)
 	ch := bus.Subscribe()
 
@@ -139,6 +145,7 @@ func TestWebOutputNotifier_TaskSkipped(t *testing.T) {
 }
 
 func TestWebOutputNotifier_WorkflowStateUpdated(t *testing.T) {
+	t.Parallel()
 	bus := events.New(10)
 	ch := bus.Subscribe()
 
@@ -176,6 +183,7 @@ func TestWebOutputNotifier_WorkflowStateUpdated(t *testing.T) {
 }
 
 func TestWebOutputNotifier_Log(t *testing.T) {
+	t.Parallel()
 	bus := events.New(10)
 	ch := bus.Subscribe()
 
@@ -200,6 +208,7 @@ func TestWebOutputNotifier_Log(t *testing.T) {
 }
 
 func TestWebOutputNotifier_AgentEvent(t *testing.T) {
+	t.Parallel()
 	bus := events.New(10)
 	ch := bus.Subscribe()
 
@@ -228,6 +237,7 @@ func TestWebOutputNotifier_AgentEvent(t *testing.T) {
 }
 
 func TestWebOutputNotifier_WorkflowLifecycle(t *testing.T) {
+	t.Parallel()
 	bus := events.New(10)
 	ch := bus.Subscribe()
 
@@ -256,6 +266,7 @@ func TestWebOutputNotifier_WorkflowLifecycle(t *testing.T) {
 }
 
 func TestWebOutputNotifier_InterfaceImplementation(t *testing.T) {
+	t.Parallel()
 	// This test verifies that WebOutputNotifier properly implements the interface
 	// through the compile-time check in notifier.go
 	bus := events.New(10)

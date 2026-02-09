@@ -15,6 +15,7 @@ import (
 )
 
 func TestCalculateETag(t *testing.T) {
+	t.Parallel()
 	cfg := &config.Config{
 		Log: config.LogConfig{Level: "info", Format: "auto"},
 	}
@@ -37,6 +38,7 @@ func TestCalculateETag(t *testing.T) {
 }
 
 func TestCalculateETagFromFile(t *testing.T) {
+	t.Parallel()
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "config.yaml")
 
@@ -72,6 +74,7 @@ func TestCalculateETagFromFile(t *testing.T) {
 }
 
 func TestAtomicWriteConfig(t *testing.T) {
+	t.Parallel()
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, ".quorum", "config.yaml")
 
@@ -96,6 +99,7 @@ func TestAtomicWriteConfig(t *testing.T) {
 }
 
 func TestAtomicWriteConfig_SnakeCaseKeys(t *testing.T) {
+	t.Parallel()
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, ".quorum", "config.yaml")
 
@@ -123,6 +127,7 @@ func TestAtomicWriteConfig_SnakeCaseKeys(t *testing.T) {
 }
 
 func TestAtomicWriteConfig_CreatesDirectory(t *testing.T) {
+	t.Parallel()
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "nested", "deep", "config.yaml")
 
@@ -139,6 +144,7 @@ func TestAtomicWriteConfig_CreatesDirectory(t *testing.T) {
 }
 
 func TestAtomicWriteConfig_ConcurrentWrites(t *testing.T) {
+	t.Parallel()
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "config.yaml")
 
@@ -179,6 +185,7 @@ func TestAtomicWriteConfig_ConcurrentWrites(t *testing.T) {
 }
 
 func TestAtomicWriteConfig_NoTempFileOnSuccess(t *testing.T) {
+	t.Parallel()
 	tempDir := t.TempDir()
 	configDir := filepath.Join(tempDir, ".quorum")
 	configPath := filepath.Join(configDir, "config.yaml")
@@ -200,6 +207,7 @@ func TestAtomicWriteConfig_NoTempFileOnSuccess(t *testing.T) {
 }
 
 func TestETagMatch(t *testing.T) {
+	t.Parallel()
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "config.yaml")
 
@@ -233,6 +241,7 @@ func TestETagMatch(t *testing.T) {
 }
 
 func TestETagMatch_NonExistentFile(t *testing.T) {
+	t.Parallel()
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "nonexistent.yaml")
 
@@ -249,6 +258,7 @@ func TestETagMatch_NonExistentFile(t *testing.T) {
 }
 
 func TestGetConfigFileMeta(t *testing.T) {
+	t.Parallel()
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "config.yaml")
 

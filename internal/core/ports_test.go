@@ -6,6 +6,7 @@ import (
 )
 
 func TestDefaultExecuteOptions(t *testing.T) {
+	t.Parallel()
 	opts := DefaultExecuteOptions()
 
 	if opts.MaxTokens != 4096 {
@@ -23,6 +24,7 @@ func TestDefaultExecuteOptions(t *testing.T) {
 }
 
 func TestExecuteResult_TotalTokens(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		in, out, total int
 	}{
@@ -40,6 +42,7 @@ func TestExecuteResult_TotalTokens(t *testing.T) {
 }
 
 func TestCheckStatus_IsSuccess(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		status  CheckStatus
@@ -77,6 +80,7 @@ func TestCheckStatus_IsSuccess(t *testing.T) {
 }
 
 func TestCheckStatus_IsPending(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		status  CheckStatus
@@ -109,6 +113,7 @@ func TestCheckStatus_IsPending(t *testing.T) {
 }
 
 func TestNewWorkflowState(t *testing.T) {
+	t.Parallel()
 	bp := &Blueprint{
 		Consensus:  BlueprintConsensus{Threshold: 0.8},
 		MaxRetries: 5,
@@ -151,6 +156,7 @@ func TestNewWorkflowState(t *testing.T) {
 }
 
 func TestOutputFormatConstants(t *testing.T) {
+	t.Parallel()
 	if OutputFormatText != "text" {
 		t.Errorf("expected 'text', got %s", OutputFormatText)
 	}
@@ -163,6 +169,7 @@ func TestOutputFormatConstants(t *testing.T) {
 }
 
 func TestWorktreeStatusConstants(t *testing.T) {
+	t.Parallel()
 	if WorktreeStatusActive != "active" {
 		t.Errorf("expected 'active', got %s", WorktreeStatusActive)
 	}
@@ -175,6 +182,7 @@ func TestWorktreeStatusConstants(t *testing.T) {
 }
 
 func TestCapabilities(t *testing.T) {
+	t.Parallel()
 	caps := Capabilities{
 		SupportsStreaming: true,
 		SupportsTools:     true,
@@ -197,6 +205,7 @@ func TestCapabilities(t *testing.T) {
 }
 
 func TestToolCall(t *testing.T) {
+	t.Parallel()
 	tc := ToolCall{
 		ID:   "call-123",
 		Name: "read_file",

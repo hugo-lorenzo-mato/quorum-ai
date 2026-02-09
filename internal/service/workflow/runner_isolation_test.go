@@ -70,6 +70,7 @@ func (m *mockWorkflowIsolationManager) GetTaskBranch(workflowID string, taskID c
 }
 
 func TestRunner_ensureWorkflowGitIsolation_SetsWorkflowBranch(t *testing.T) {
+	t.Parallel()
 	mgr := &mockWorkflowIsolationManager{}
 	r := &Runner{
 		config: &RunnerConfig{DryRun: false},
@@ -103,6 +104,7 @@ func TestRunner_ensureWorkflowGitIsolation_SetsWorkflowBranch(t *testing.T) {
 }
 
 func TestRunner_createContext_DisablesTaskPRsUnderIsolation(t *testing.T) {
+	t.Parallel()
 	r := &Runner{
 		config: &RunnerConfig{
 			Finalization: FinalizationConfig{

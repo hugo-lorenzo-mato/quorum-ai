@@ -41,6 +41,7 @@ agents:
     path: claude
     model: claude-opus-4-6
     reasoning_effort: high
+    idle_timeout: "15m"
     phases:
       refine: true
       analyze: true
@@ -53,6 +54,7 @@ agents:
     enabled: true
     path: gemini
     model: gemini-3-pro-preview
+    idle_timeout: "15m"
     # Use faster model for execution
     phase_models:
       execute: gemini-3-flash-preview
@@ -65,6 +67,7 @@ agents:
     path: codex
     model: gpt-5.3-codex
     reasoning_effort: high
+    idle_timeout: "15m"
     reasoning_effort_phases:
       refine: xhigh
       analyze: xhigh
@@ -81,6 +84,7 @@ agents:
     enabled: true
     path: copilot
     model: claude-sonnet-4-5
+    idle_timeout: "15m"
     phases:
       moderate: true
 
@@ -91,6 +95,7 @@ agents:
     enabled: false
     path: opencode
     model: qwen2.5-coder
+    idle_timeout: "15m"
     # Phase-specific models: use coder models for execution, architect for analysis/planning
     phase_models:
       refine: llama3.1

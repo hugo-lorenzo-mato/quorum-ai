@@ -30,6 +30,7 @@ func (m *mockModeEnforcer) RecordCost(_ float64) {}
 func (m *mockModeEnforcer) IsDryRun() bool    { return m.dryRun }
 
 func TestExecutor_ModeEnforcerBlocks(t *testing.T) {
+	t.Parallel()
 	// Create context with blocking mode enforcer
 	wctx := &Context{
 		State: &core.WorkflowState{
@@ -57,6 +58,7 @@ func TestExecutor_ModeEnforcerBlocks(t *testing.T) {
 }
 
 func TestExecutor_ModeEnforcerAllows(t *testing.T) {
+	t.Parallel()
 	// Create context with permissive mode enforcer
 	wctx := &Context{
 		State: &core.WorkflowState{
@@ -90,6 +92,7 @@ func TestExecutor_ModeEnforcerAllows(t *testing.T) {
 }
 
 func TestExecutor_NilModeEnforcer(t *testing.T) {
+	t.Parallel()
 	// Create context without mode enforcer (nil)
 	wctx := &Context{
 		State: &core.WorkflowState{
@@ -117,6 +120,7 @@ func TestExecutor_NilModeEnforcer(t *testing.T) {
 }
 
 func TestExecutor_SavesTaskOutput(t *testing.T) {
+	t.Parallel()
 	mockRegistry := &mockAgentRegistry{
 		agents: map[string]core.Agent{
 			"mock": &mockAgent{
@@ -167,6 +171,7 @@ func TestExecutor_SavesTaskOutput(t *testing.T) {
 }
 
 func TestExecutor_TruncatesLargeOutput(t *testing.T) {
+	t.Parallel()
 	largeOutput := strings.Repeat("x", core.MaxInlineOutputSize+1000)
 
 	taskState := &core.TaskState{ID: "task-1"}
@@ -186,6 +191,7 @@ func TestExecutor_TruncatesLargeOutput(t *testing.T) {
 }
 
 func TestGetFullOutput_ReadsFromFile(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	outputPath := filepath.Join(tmpDir, "task-1.txt")
 	fullOutput := "This is the full output content"

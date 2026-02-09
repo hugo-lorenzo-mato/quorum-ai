@@ -33,6 +33,7 @@ func (m *mockOutput) Log(_, _ string)        {}
 func (m *mockOutput) Close() error           { return nil }
 
 func TestWorkflowCompletedEmittedOnce(t *testing.T) {
+	t.Parallel()
 	var completedCount int
 	output := &mockOutput{
 		onWorkflowCompleted: func(_ *core.WorkflowState) {

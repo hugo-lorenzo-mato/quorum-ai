@@ -10,6 +10,7 @@ import (
 )
 
 func TestResolveProjectByValue_ByPath(t *testing.T) {
+	t.Parallel()
 	// Create a temporary directory with .quorum
 	tmpDir := t.TempDir()
 	quorumDir := filepath.Join(tmpDir, ".quorum")
@@ -44,6 +45,7 @@ func TestResolveProjectByValue_ByPath(t *testing.T) {
 }
 
 func TestResolveProjectByValue_ByID(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	quorumDir := filepath.Join(tmpDir, ".quorum")
 	if err := os.MkdirAll(quorumDir, 0755); err != nil {
@@ -75,6 +77,7 @@ func TestResolveProjectByValue_ByID(t *testing.T) {
 }
 
 func TestResolveProjectByValue_ByName(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	quorumDir := filepath.Join(tmpDir, ".quorum")
 	if err := os.MkdirAll(quorumDir, 0755); err != nil {
@@ -116,6 +119,7 @@ func TestResolveProjectByValue_ByName(t *testing.T) {
 }
 
 func TestResolveProjectByValue_NotFound(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	registryPath := filepath.Join(tmpDir, "projects.yaml")
 	registry, err := project.NewFileRegistry(project.WithConfigPath(registryPath))
@@ -133,6 +137,7 @@ func TestResolveProjectByValue_NotFound(t *testing.T) {
 }
 
 func TestProjectCmd_Structure(t *testing.T) {
+	t.Parallel()
 	// Verify project command exists
 	if projectCmd == nil {
 		t.Fatal("projectCmd is nil")
@@ -165,6 +170,7 @@ func TestProjectCmd_Structure(t *testing.T) {
 }
 
 func TestGetProjectID(t *testing.T) {
+	t.Parallel()
 	// Save original value
 	original := projectID
 	defer func() { projectID = original }()

@@ -6,6 +6,7 @@ import (
 )
 
 func TestDomainError_ErrorAndUnwrap(t *testing.T) {
+	t.Parallel()
 	cause := errors.New("root")
 	err := (&DomainError{
 		Category: ErrCatValidation,
@@ -27,6 +28,7 @@ func TestDomainError_ErrorAndUnwrap(t *testing.T) {
 }
 
 func TestDomainError_WithDetail(t *testing.T) {
+	t.Parallel()
 	err := &DomainError{Category: ErrCatExecution, Code: "X", Message: "msg"}
 	err.WithDetail("k", "v")
 	if err.Details == nil || err.Details["k"] != "v" {
@@ -35,6 +37,7 @@ func TestDomainError_WithDetail(t *testing.T) {
 }
 
 func TestErrorFactories(t *testing.T) {
+	t.Parallel()
 	if ErrValidation("C", "m").Retryable {
 		t.Fatalf("validation should not be retryable")
 	}
@@ -59,6 +62,7 @@ func TestErrorFactories(t *testing.T) {
 }
 
 func TestIsRetryable(t *testing.T) {
+	t.Parallel()
 	if !IsRetryable(ErrExecution("X", "m")) {
 		t.Fatalf("expected retryable error")
 	}
@@ -68,6 +72,7 @@ func TestIsRetryable(t *testing.T) {
 }
 
 func TestGetCategory(t *testing.T) {
+	t.Parallel()
 	if GetCategory(ErrRateLimit("m")) != ErrCatRateLimit {
 		t.Fatalf("expected rate_limit category")
 	}
@@ -80,6 +85,7 @@ func TestGetCategory(t *testing.T) {
 }
 
 func TestErrHumanReviewRequired(t *testing.T) {
+	t.Parallel()
 	err := ErrHumanReviewRequired(0.45, 0.50)
 
 	if err == nil {
@@ -103,6 +109,7 @@ func TestErrHumanReviewRequired(t *testing.T) {
 }
 
 func TestErrNotFound(t *testing.T) {
+	t.Parallel()
 	err := ErrNotFound("task", "task-123")
 
 	if err == nil {
@@ -121,6 +128,7 @@ func TestErrNotFound(t *testing.T) {
 }
 
 func TestErrWorkflowBudgetExceeded(t *testing.T) {
+	t.Parallel()
 	err := ErrWorkflowBudgetExceeded(5.50, 5.00)
 
 	if err == nil {
@@ -141,6 +149,7 @@ func TestErrWorkflowBudgetExceeded(t *testing.T) {
 }
 
 func TestErrTaskBudgetExceeded(t *testing.T) {
+	t.Parallel()
 	err := ErrTaskBudgetExceeded("task-1", 1.50, 1.00)
 
 	if err == nil {
@@ -164,6 +173,7 @@ func TestErrTaskBudgetExceeded(t *testing.T) {
 }
 
 func TestDomainError_Error_Full(t *testing.T) {
+	t.Parallel()
 	cause := errors.New("underlying cause")
 	err := &DomainError{
 		Category: ErrCatExecution,

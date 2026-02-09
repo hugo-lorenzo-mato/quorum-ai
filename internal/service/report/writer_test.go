@@ -8,6 +8,7 @@ import (
 )
 
 func TestWorkflowReportWriter_TaskPlanPath(t *testing.T) {
+	t.Parallel()
 	cfg := Config{
 		BaseDir: "/tmp/quorum-test",
 		Enabled: true,
@@ -57,6 +58,7 @@ func TestWorkflowReportWriter_TaskPlanPath(t *testing.T) {
 }
 
 func TestWorkflowReportWriter_EnsureTasksDir(t *testing.T) {
+	t.Parallel()
 	// Create a temp directory for testing
 	tmpDir, err := os.MkdirTemp("", "quorum-test-*")
 	if err != nil {
@@ -94,6 +96,7 @@ func TestWorkflowReportWriter_EnsureTasksDir(t *testing.T) {
 }
 
 func TestWorkflowReportWriter_EnsureTasksDir_Disabled(t *testing.T) {
+	t.Parallel()
 	cfg := Config{
 		BaseDir: "/nonexistent/path",
 		Enabled: false, // Disabled
@@ -108,6 +111,7 @@ func TestWorkflowReportWriter_EnsureTasksDir_Disabled(t *testing.T) {
 }
 
 func TestWorkflowReportWriter_Resume_CreatesMissingDirsOnFirstWrite(t *testing.T) {
+	t.Parallel()
 	tmpDir, err := os.MkdirTemp("", "quorum-test-resume-*")
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
@@ -139,6 +143,7 @@ func TestWorkflowReportWriter_Resume_CreatesMissingDirsOnFirstWrite(t *testing.T
 }
 
 func TestSanitizeFilename(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		input string
 		want  string

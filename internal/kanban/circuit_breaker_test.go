@@ -6,6 +6,7 @@ import (
 )
 
 func TestNewCircuitBreaker(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name              string
 		threshold         int
@@ -33,6 +34,7 @@ func TestNewCircuitBreaker(t *testing.T) {
 }
 
 func TestCircuitBreaker_RecordFailure(t *testing.T) {
+	t.Parallel()
 	cb := NewCircuitBreaker(3)
 
 	// First two failures should not trip
@@ -68,6 +70,7 @@ func TestCircuitBreaker_RecordFailure(t *testing.T) {
 }
 
 func TestCircuitBreaker_RecordSuccess(t *testing.T) {
+	t.Parallel()
 	cb := NewCircuitBreaker(3)
 
 	// Record some failures
@@ -99,6 +102,7 @@ func TestCircuitBreaker_RecordSuccess(t *testing.T) {
 }
 
 func TestCircuitBreaker_Reset(t *testing.T) {
+	t.Parallel()
 	cb := NewCircuitBreaker(2)
 
 	// Trip the breaker
@@ -122,6 +126,7 @@ func TestCircuitBreaker_Reset(t *testing.T) {
 }
 
 func TestCircuitBreaker_Open(t *testing.T) {
+	t.Parallel()
 	cb := NewCircuitBreaker(5)
 
 	cb.Open()
@@ -131,6 +136,7 @@ func TestCircuitBreaker_Open(t *testing.T) {
 }
 
 func TestCircuitBreaker_SetState(t *testing.T) {
+	t.Parallel()
 	cb := NewCircuitBreaker(3)
 	lastFailure := time.Now().Add(-time.Hour)
 
@@ -148,6 +154,7 @@ func TestCircuitBreaker_SetState(t *testing.T) {
 }
 
 func TestCircuitBreaker_GetState(t *testing.T) {
+	t.Parallel()
 	cb := NewCircuitBreaker(2)
 
 	cb.RecordFailure()
@@ -167,6 +174,7 @@ func TestCircuitBreaker_GetState(t *testing.T) {
 }
 
 func TestCircuitBreaker_LastFailureAt(t *testing.T) {
+	t.Parallel()
 	cb := NewCircuitBreaker(5)
 
 	if !cb.LastFailureAt().IsZero() {
@@ -184,6 +192,7 @@ func TestCircuitBreaker_LastFailureAt(t *testing.T) {
 }
 
 func TestCircuitBreaker_Concurrency(t *testing.T) {
+	t.Parallel()
 	cb := NewCircuitBreaker(100)
 	done := make(chan bool)
 

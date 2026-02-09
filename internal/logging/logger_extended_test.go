@@ -9,6 +9,7 @@ import (
 )
 
 func TestDefaultConfig(t *testing.T) {
+	t.Parallel()
 	cfg := DefaultConfig()
 
 	if cfg.Level != "info" {
@@ -26,6 +27,7 @@ func TestDefaultConfig(t *testing.T) {
 }
 
 func TestLogger_NilOutput(t *testing.T) {
+	t.Parallel()
 	cfg := Config{
 		Level:  "info",
 		Format: "text",
@@ -42,6 +44,7 @@ func TestLogger_NilOutput(t *testing.T) {
 }
 
 func TestLogger_WithAddSource(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	cfg := Config{
 		Level:     "info",
@@ -61,6 +64,7 @@ func TestLogger_WithAddSource(t *testing.T) {
 }
 
 func TestLogger_With(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	logger := New(Config{
 		Level:  "info",
@@ -81,6 +85,7 @@ func TestLogger_With(t *testing.T) {
 }
 
 func TestLogger_WithContextExtended(t *testing.T) {
+	t.Parallel()
 	logger := New(DefaultConfig())
 
 	ctx := context.Background()
@@ -97,6 +102,7 @@ func TestLogger_WithContextExtended(t *testing.T) {
 }
 
 func TestLogger_SanitizerAccess(t *testing.T) {
+	t.Parallel()
 	logger := New(DefaultConfig())
 
 	sanitizer := logger.Sanitizer()
@@ -112,6 +118,7 @@ func TestLogger_SanitizerAccess(t *testing.T) {
 }
 
 func TestLogger_ChainedWith(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	logger := New(Config{
 		Level:  "info",
@@ -144,6 +151,7 @@ func TestLogger_ChainedWith(t *testing.T) {
 }
 
 func TestLogger_JSONFormat(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	logger := New(Config{
 		Level:  "info",
@@ -164,6 +172,7 @@ func TestLogger_JSONFormat(t *testing.T) {
 }
 
 func TestLogger_TextFormat(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	logger := New(Config{
 		Level:  "info",
@@ -180,6 +189,7 @@ func TestLogger_TextFormat(t *testing.T) {
 }
 
 func TestParseLevel_AllLevels(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		input string
 		want  string
@@ -207,6 +217,7 @@ func TestParseLevel_AllLevels(t *testing.T) {
 }
 
 func TestSanitizer_MultiplePatterns(t *testing.T) {
+	t.Parallel()
 	sanitizer := NewSanitizer()
 
 	// Input with multiple sensitive values
@@ -227,6 +238,7 @@ func TestSanitizer_MultiplePatterns(t *testing.T) {
 }
 
 func TestSanitizer_EmptyInput(t *testing.T) {
+	t.Parallel()
 	sanitizer := NewSanitizer()
 
 	result := sanitizer.Sanitize("")
@@ -236,6 +248,7 @@ func TestSanitizer_EmptyInput(t *testing.T) {
 }
 
 func TestSanitizer_SanitizeMap_EmptyMap(t *testing.T) {
+	t.Parallel()
 	sanitizer := NewSanitizer()
 
 	result := sanitizer.SanitizeMap(map[string]interface{}{})
@@ -245,6 +258,7 @@ func TestSanitizer_SanitizeMap_EmptyMap(t *testing.T) {
 }
 
 func TestSanitizer_SanitizeMap_NilValue(t *testing.T) {
+	t.Parallel()
 	sanitizer := NewSanitizer()
 
 	input := map[string]interface{}{
@@ -262,6 +276,7 @@ func TestSanitizer_SanitizeMap_NilValue(t *testing.T) {
 }
 
 func TestSanitizer_SanitizeMap_Slice(t *testing.T) {
+	t.Parallel()
 	sanitizer := NewSanitizer()
 
 	input := map[string]interface{}{
@@ -279,6 +294,7 @@ func TestSanitizer_SanitizeMap_Slice(t *testing.T) {
 }
 
 func TestNewNop_Operations(t *testing.T) {
+	t.Parallel()
 	logger := NewNop()
 
 	// All operations should work without panic
@@ -295,6 +311,7 @@ func TestNewNop_Operations(t *testing.T) {
 }
 
 func TestPrettyHandler_AllLevels(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 
 	handler := NewPrettyHandler(&buf, parseLevel("debug"))
@@ -325,6 +342,7 @@ func TestPrettyHandler_AllLevels(t *testing.T) {
 }
 
 func TestIsTerminal_NonFile(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	result := isTerminal(&buf)
 	if result {
@@ -333,6 +351,7 @@ func TestIsTerminal_NonFile(t *testing.T) {
 }
 
 func TestSetRedactedPlaceholder(t *testing.T) {
+	t.Parallel()
 	sanitizer := NewSanitizer()
 
 	// Set custom placeholder
@@ -350,6 +369,7 @@ func TestSetRedactedPlaceholder(t *testing.T) {
 }
 
 func TestSanitizingHandler_WithAttrs(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	baseHandler := slog.NewJSONHandler(&buf, &slog.HandlerOptions{})
 	sanitizer := NewSanitizer()
@@ -374,6 +394,7 @@ func TestSanitizingHandler_WithAttrs(t *testing.T) {
 }
 
 func TestSanitizingHandler_WithGroupDirect(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	baseHandler := slog.NewJSONHandler(&buf, &slog.HandlerOptions{})
 	sanitizer := NewSanitizer()
@@ -392,6 +413,7 @@ func TestSanitizingHandler_WithGroupDirect(t *testing.T) {
 }
 
 func TestSanitizingHandler_SanitizeAttr_Group(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	baseHandler := slog.NewJSONHandler(&buf, &slog.HandlerOptions{})
 	sanitizer := NewSanitizer()
@@ -413,6 +435,7 @@ func TestSanitizingHandler_SanitizeAttr_Group(t *testing.T) {
 }
 
 func TestSanitizingHandler_SanitizeAttr_NonString(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	baseHandler := slog.NewJSONHandler(&buf, &slog.HandlerOptions{})
 	sanitizer := NewSanitizer()
@@ -436,6 +459,7 @@ func TestSanitizingHandler_SanitizeAttr_NonString(t *testing.T) {
 }
 
 func TestPrettyHandler_WithAttrs(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	handler := NewPrettyHandler(&buf, slog.LevelInfo)
 
@@ -466,6 +490,7 @@ func TestPrettyHandler_WithAttrs(t *testing.T) {
 }
 
 func TestPrettyHandler_WithGroup(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	handler := NewPrettyHandler(&buf, slog.LevelInfo)
 
@@ -491,6 +516,7 @@ func TestPrettyHandler_WithGroup(t *testing.T) {
 }
 
 func TestPrettyHandler_FormatAttr_Group(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	handler := NewPrettyHandler(&buf, slog.LevelInfo)
 	logger := slog.New(handler)
@@ -513,6 +539,7 @@ func TestPrettyHandler_FormatAttr_Group(t *testing.T) {
 }
 
 func TestPrettyHandler_FormatLevel_Unknown(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	handler := NewPrettyHandler(&buf, slog.LevelDebug) // Use debug to enable all levels
 

@@ -3,6 +3,7 @@ package tui
 import "testing"
 
 func TestParseLogLine_JSON(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		input         string
 		expectedLevel string
@@ -37,6 +38,7 @@ func TestParseLogLine_JSON(t *testing.T) {
 }
 
 func TestParseLogLine_Pretty(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		input         string
 		expectedLevel string

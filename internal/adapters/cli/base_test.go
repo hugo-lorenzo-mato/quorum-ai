@@ -12,6 +12,7 @@ import (
 )
 
 func TestNewBaseAdapter(t *testing.T) {
+	t.Parallel()
 	cfg := AgentConfig{
 		Name:  "test",
 		Path:  "/usr/bin/test",
@@ -34,6 +35,7 @@ func TestNewBaseAdapter(t *testing.T) {
 }
 
 func TestBaseAdapter_ParseJSON(t *testing.T) {
+	t.Parallel()
 	base := NewBaseAdapter(AgentConfig{}, nil)
 
 	tests := []struct {
@@ -80,6 +82,7 @@ func TestBaseAdapter_ParseJSON(t *testing.T) {
 }
 
 func TestBaseAdapter_ExtractByPattern(t *testing.T) {
+	t.Parallel()
 	base := NewBaseAdapter(AgentConfig{}, nil)
 
 	tests := []struct {
@@ -134,6 +137,7 @@ func TestBaseAdapter_ExtractByPattern(t *testing.T) {
 }
 
 func TestBaseAdapter_ClassifyError(t *testing.T) {
+	t.Parallel()
 	base := NewBaseAdapter(AgentConfig{}, nil)
 
 	tests := []struct {
@@ -202,6 +206,7 @@ func TestBaseAdapter_ClassifyError(t *testing.T) {
 }
 
 func TestBaseAdapter_CheckAvailability_NoPath(t *testing.T) {
+	t.Parallel()
 	base := NewBaseAdapter(AgentConfig{}, nil)
 
 	err := base.CheckAvailability(t.Context())
@@ -211,6 +216,7 @@ func TestBaseAdapter_CheckAvailability_NoPath(t *testing.T) {
 }
 
 func TestBaseAdapter_CheckAvailability_WithPath(t *testing.T) {
+	t.Parallel()
 	// Test with a command that should exist
 	base := NewBaseAdapter(AgentConfig{
 		Path: "echo", // Usually available on all systems
@@ -223,6 +229,7 @@ func TestBaseAdapter_CheckAvailability_WithPath(t *testing.T) {
 }
 
 func TestBaseAdapter_CheckAvailability_MultiWordCommand(t *testing.T) {
+	t.Parallel()
 	// Test with a multi-word command like "gh copilot"
 	base := NewBaseAdapter(AgentConfig{
 		Path: "gh copilot",
@@ -236,6 +243,7 @@ func TestBaseAdapter_CheckAvailability_MultiWordCommand(t *testing.T) {
 }
 
 func TestBaseAdapter_TruncateToTokenLimit_ShortText(t *testing.T) {
+	t.Parallel()
 	base := NewBaseAdapter(AgentConfig{}, nil)
 
 	text := "Short text"
@@ -248,6 +256,7 @@ func TestBaseAdapter_TruncateToTokenLimit_ShortText(t *testing.T) {
 }
 
 func TestBaseAdapter_ExtractJSON_Complex(t *testing.T) {
+	t.Parallel()
 	base := NewBaseAdapter(AgentConfig{}, nil)
 
 	tests := []struct {
@@ -288,6 +297,7 @@ func TestBaseAdapter_ExtractJSON_Complex(t *testing.T) {
 }
 
 func TestCommandResult(t *testing.T) {
+	t.Parallel()
 	result := CommandResult{
 		Stdout:   "output",
 		Stderr:   "error",
@@ -310,6 +320,7 @@ func TestCommandResult(t *testing.T) {
 }
 
 func TestAgentConfig(t *testing.T) {
+	t.Parallel()
 	cfg := AgentConfig{
 		Name:    "test-agent",
 		Path:    "/usr/bin/test",
@@ -336,6 +347,7 @@ func TestAgentConfig(t *testing.T) {
 }
 
 func TestContainsAny(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		s          string
 		substrings []string
@@ -357,6 +369,7 @@ func TestContainsAny(t *testing.T) {
 }
 
 func TestIdleTimeoutKillsHungProcess(t *testing.T) {
+	t.Parallel()
 	// This test verifies that the idle timer kills a process that writes
 	// one JSON line and then hangs (no more stdout output).
 	adapter := NewBaseAdapter(AgentConfig{
@@ -402,6 +415,7 @@ func TestIdleTimeoutKillsHungProcess(t *testing.T) {
 }
 
 func TestIdleTimeoutResetsOnActivity(t *testing.T) {
+	t.Parallel()
 	// Process produces a JSON line every 200ms for 5 iterations, then exits.
 	// IdleTimeout is 400ms — it should never fire because each line resets it.
 	adapter := NewBaseAdapter(AgentConfig{
@@ -441,6 +455,7 @@ func TestIdleTimeoutResetsOnActivity(t *testing.T) {
 }
 
 func TestNormalCompletionBeforeIdleTimeout(t *testing.T) {
+	t.Parallel()
 	// Process exits immediately with JSON output. IdleTimeout should not fire.
 	adapter := NewBaseAdapter(AgentConfig{
 		Name:        "test-normal",
@@ -471,6 +486,7 @@ func TestNormalCompletionBeforeIdleTimeout(t *testing.T) {
 }
 
 func TestParseIdleTimeout(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		input string
 		want  time.Duration
@@ -509,6 +525,7 @@ func (p *testStreamParser) ParseLine(line string) []core.AgentEvent {
 func (p *testStreamParser) AgentName() string { return "test" }
 
 func TestStreamJSONOutputWithSignal_Activity(t *testing.T) {
+	t.Parallel()
 	// Verify that streamJSONOutputWithSignal sends activity signals.
 	adapter := NewBaseAdapter(AgentConfig{Name: "test"}, nil)
 
@@ -538,6 +555,7 @@ func TestStreamJSONOutputWithSignal_Activity(t *testing.T) {
 }
 
 func TestStreamJSONOutputWithSignal_LogicalDone(t *testing.T) {
+	t.Parallel()
 	// Verify that logicalDone is signaled on AgentEventCompleted.
 	adapter := NewBaseAdapter(AgentConfig{Name: "test"}, nil)
 
@@ -566,6 +584,7 @@ func TestStreamJSONOutputWithSignal_LogicalDone(t *testing.T) {
 }
 
 func TestStreamJSONOutputWithSignal_NilActivity(t *testing.T) {
+	t.Parallel()
 	// Verify that nil activity channel doesn't panic.
 	adapter := NewBaseAdapter(AgentConfig{Name: "test"}, nil)
 
@@ -586,6 +605,7 @@ func TestStreamJSONOutputWithSignal_NilActivity(t *testing.T) {
 }
 
 func TestGracefulKill_SIGKILLEscalation(t *testing.T) {
+	t.Parallel()
 	// Verify that GracefulKill escalates to SIGKILL when SIGTERM is ignored.
 	adapter := NewBaseAdapter(AgentConfig{
 		Name: "test-sigkill",
@@ -624,6 +644,7 @@ func TestGracefulKill_SIGKILLEscalation(t *testing.T) {
 }
 
 func TestGracefulKill_ProcessAlreadyExited(t *testing.T) {
+	t.Parallel()
 	// Verify GracefulKill handles an already-exited process gracefully.
 	adapter := NewBaseAdapter(AgentConfig{
 		Name: "test-already-exited",
@@ -648,6 +669,7 @@ func TestGracefulKill_ProcessAlreadyExited(t *testing.T) {
 }
 
 func TestGracefulKill_NilProcess(t *testing.T) {
+	t.Parallel()
 	// GracefulKill with no active process should be a no-op.
 	adapter := NewBaseAdapter(AgentConfig{Name: "test-nil"}, nil)
 	err := adapter.GracefulKill(time.Second)

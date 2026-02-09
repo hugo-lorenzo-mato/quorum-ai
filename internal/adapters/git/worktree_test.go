@@ -15,6 +15,7 @@ import (
 )
 
 func TestWorktreeManager_Create(t *testing.T) {
+	t.Parallel()
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	repo.Commit("Initial commit")
@@ -41,6 +42,7 @@ func TestWorktreeManager_Create(t *testing.T) {
 }
 
 func TestWorktreeManager_Create_EmptyBranch(t *testing.T) {
+	t.Parallel()
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	repo.Commit("Initial commit")
@@ -56,6 +58,7 @@ func TestWorktreeManager_Create_EmptyBranch(t *testing.T) {
 }
 
 func TestWorktreeManager_CreateExisting(t *testing.T) {
+	t.Parallel()
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	repo.Commit("Initial commit")
@@ -76,6 +79,7 @@ func TestWorktreeManager_CreateExisting(t *testing.T) {
 }
 
 func TestWorktreeManager_List(t *testing.T) {
+	t.Parallel()
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	repo.Commit("Initial commit")
@@ -101,6 +105,7 @@ func TestWorktreeManager_List(t *testing.T) {
 }
 
 func TestWorktreeManager_Remove(t *testing.T) {
+	t.Parallel()
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	repo.Commit("Initial commit")
@@ -127,6 +132,7 @@ func TestWorktreeManager_Remove(t *testing.T) {
 }
 
 func TestWorktreeManager_Get(t *testing.T) {
+	t.Parallel()
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	repo.Commit("Initial commit")
@@ -149,6 +155,7 @@ func TestWorktreeManager_Get(t *testing.T) {
 }
 
 func TestWorktreeManager_GetNotFound(t *testing.T) {
+	t.Parallel()
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	repo.Commit("Initial commit")
@@ -164,6 +171,7 @@ func TestWorktreeManager_GetNotFound(t *testing.T) {
 }
 
 func TestWorktreeManager_ListManaged(t *testing.T) {
+	t.Parallel()
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	repo.Commit("Initial commit")
@@ -185,6 +193,7 @@ func TestWorktreeManager_ListManaged(t *testing.T) {
 }
 
 func TestWorktreeManager_CreateFromCommit(t *testing.T) {
+	t.Parallel()
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	commit := repo.Commit("Initial commit")
@@ -202,6 +211,7 @@ func TestWorktreeManager_CreateFromCommit(t *testing.T) {
 }
 
 func TestWorktreeManager_BaseDir(t *testing.T) {
+	t.Parallel()
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	repo.Commit("Initial commit")
@@ -216,6 +226,7 @@ func TestWorktreeManager_BaseDir(t *testing.T) {
 }
 
 func TestWorktreeManager_RemoveInvalidPath(t *testing.T) {
+	t.Parallel()
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	repo.Commit("Initial commit")
@@ -232,6 +243,7 @@ func TestWorktreeManager_RemoveInvalidPath(t *testing.T) {
 }
 
 func TestWorktreeManager_CreateClient(t *testing.T) {
+	t.Parallel()
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	repo.Commit("Initial commit")
@@ -261,6 +273,7 @@ func TestWorktreeManager_CreateClient(t *testing.T) {
 // =============================================================================
 
 func TestTaskWorktreeManager_Create(t *testing.T) {
+	t.Parallel()
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	repo.Commit("Initial commit")
@@ -284,6 +297,7 @@ func TestTaskWorktreeManager_Create(t *testing.T) {
 }
 
 func TestTaskWorktreeManager_Create_MissingName(t *testing.T) {
+	t.Parallel()
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	repo.Commit("Initial commit")
@@ -299,6 +313,7 @@ func TestTaskWorktreeManager_Create_MissingName(t *testing.T) {
 }
 
 func TestTaskWorktreeManager_Create_NonAsciiName(t *testing.T) {
+	t.Parallel()
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	repo.Commit("Initial commit")
@@ -335,6 +350,7 @@ func TestTaskWorktreeManager_Create_NonAsciiName(t *testing.T) {
 }
 
 func TestTaskWorktreeManager_Create_NonAsciiDescription(t *testing.T) {
+	t.Parallel()
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	repo.Commit("Initial commit")
@@ -371,6 +387,7 @@ func TestTaskWorktreeManager_Create_NonAsciiDescription(t *testing.T) {
 }
 
 func TestTaskWorktreeManager_Get(t *testing.T) {
+	t.Parallel()
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	repo.Commit("Initial commit")
@@ -394,6 +411,7 @@ func TestTaskWorktreeManager_Get(t *testing.T) {
 }
 
 func TestTaskWorktreeManager_Remove(t *testing.T) {
+	t.Parallel()
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	repo.Commit("Initial commit")
@@ -418,6 +436,7 @@ func TestTaskWorktreeManager_Remove(t *testing.T) {
 }
 
 func TestTaskWorktreeManager_List(t *testing.T) {
+	t.Parallel()
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	repo.Commit("Initial commit")

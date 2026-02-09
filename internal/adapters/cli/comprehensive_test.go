@@ -11,6 +11,7 @@ import (
 // Test Registry extended functionality
 
 func TestRegistry_GetCapabilities(t *testing.T) {
+	t.Parallel()
 	r := NewRegistry()
 
 	// Register a mock agent with known capabilities
@@ -37,6 +38,7 @@ func TestRegistry_GetCapabilities(t *testing.T) {
 }
 
 func TestRegistry_GetCapabilities_NotFound(t *testing.T) {
+	t.Parallel()
 	r := NewRegistry()
 	_, err := r.GetCapabilities("nonexistent")
 	if err == nil {
@@ -45,6 +47,7 @@ func TestRegistry_GetCapabilities_NotFound(t *testing.T) {
 }
 
 func TestRegistry_Ping_NotFound(t *testing.T) {
+	t.Parallel()
 	r := NewRegistry()
 	err := r.Ping(context.Background(), "nonexistent")
 	if err == nil {
@@ -53,6 +56,7 @@ func TestRegistry_Ping_NotFound(t *testing.T) {
 }
 
 func TestRegistry_Ping_Success(t *testing.T) {
+	t.Parallel()
 	r := NewRegistry()
 	mockAgent := &mockAgentForTest{name: "mock", pingErr: nil}
 	r.Register("mock", mockAgent)
@@ -64,6 +68,7 @@ func TestRegistry_Ping_Success(t *testing.T) {
 }
 
 func TestRegistry_Ping_Failure(t *testing.T) {
+	t.Parallel()
 	r := NewRegistry()
 	mockAgent := &mockAgentForTest{
 		name:    "mock",
@@ -78,6 +83,7 @@ func TestRegistry_Ping_Failure(t *testing.T) {
 }
 
 func TestRegistry_PingAll(t *testing.T) {
+	t.Parallel()
 	r := NewRegistry()
 
 	// Register a successful mock agent
@@ -105,6 +111,7 @@ func TestRegistry_PingAll(t *testing.T) {
 }
 
 func TestRegistry_Available(t *testing.T) {
+	t.Parallel()
 	r := NewRegistry()
 
 	// Register agents with different ping results
@@ -128,6 +135,7 @@ func TestRegistry_Available(t *testing.T) {
 }
 
 func TestRegistry_Clear(t *testing.T) {
+	t.Parallel()
 	r := NewRegistry()
 
 	mockAgent := &mockAgentForTest{name: "mock"}
@@ -157,6 +165,7 @@ func TestRegistry_Clear(t *testing.T) {
 // Test GeminiAdapter specific functions
 
 func TestGeminiAdapter_BuildArgsExtended(t *testing.T) {
+	t.Parallel()
 	adapter, _ := NewGeminiAdapter(AgentConfig{
 		Path:  "gemini",
 		Model: "gemini-2.5-flash",
@@ -203,6 +212,7 @@ func TestGeminiAdapter_BuildArgsExtended(t *testing.T) {
 }
 
 func TestGeminiAdapter_ExtractUsageTokens(t *testing.T) {
+	t.Parallel()
 	adapter, _ := NewGeminiAdapter(AgentConfig{Path: "gemini"})
 	gemini := adapter.(*GeminiAdapter)
 
@@ -256,6 +266,7 @@ func TestGeminiAdapter_ExtractUsageTokens(t *testing.T) {
 // were removed as part of the stream-json migration (JSON parsing no longer needed)
 
 func TestGeminiAdapter_ParseOutputFormats(t *testing.T) {
+	t.Parallel()
 	adapter, _ := NewGeminiAdapter(AgentConfig{Path: "gemini"})
 	gemini := adapter.(*GeminiAdapter)
 
@@ -304,6 +315,7 @@ func TestGeminiAdapter_ParseOutputFormats(t *testing.T) {
 // Test CodexAdapter specific functions
 
 func TestCodexAdapter_BuildArgsExtended(t *testing.T) {
+	t.Parallel()
 	adapter, _ := NewCodexAdapter(AgentConfig{
 		Path:  "codex",
 		Model: "gpt-5.1-codex",
@@ -339,6 +351,7 @@ func TestCodexAdapter_BuildArgsExtended(t *testing.T) {
 }
 
 func TestCodexAdapter_ExtractUsageTokens(t *testing.T) {
+	t.Parallel()
 	adapter, _ := NewCodexAdapter(AgentConfig{Path: "codex"})
 	codex := adapter.(*CodexAdapter)
 
@@ -389,6 +402,7 @@ func TestCodexAdapter_ExtractUsageTokens(t *testing.T) {
 }
 
 func TestCodexAdapter_ParseOutput(t *testing.T) {
+	t.Parallel()
 	adapter, _ := NewCodexAdapter(AgentConfig{Path: "codex"})
 	codex := adapter.(*CodexAdapter)
 
@@ -412,6 +426,7 @@ func TestCodexAdapter_ParseOutput(t *testing.T) {
 // Test ClaudeAdapter specific functions not covered elsewhere
 
 func TestClaudeAdapter_ExtractUsagePatterns(t *testing.T) {
+	t.Parallel()
 	adapter, _ := NewClaudeAdapter(AgentConfig{Path: "claude"})
 	claude := adapter.(*ClaudeAdapter)
 
@@ -464,6 +479,7 @@ func TestClaudeAdapter_ExtractUsagePatterns(t *testing.T) {
 }
 
 func TestClaudeAdapter_ParseOutputFormats(t *testing.T) {
+	t.Parallel()
 	adapter, _ := NewClaudeAdapter(AgentConfig{Path: "claude"})
 	claude := adapter.(*ClaudeAdapter)
 
@@ -520,6 +536,7 @@ func TestClaudeAdapter_ParseOutputFormats(t *testing.T) {
 // Test CopilotAdapter specific functions not covered elsewhere
 
 func TestCopilotAdapter_CleanANSIExtended(t *testing.T) {
+	t.Parallel()
 	adapter, _ := NewCopilotAdapter(AgentConfig{Path: "copilot"})
 	copilot := adapter.(*CopilotAdapter)
 
@@ -556,6 +573,7 @@ func TestCopilotAdapter_CleanANSIExtended(t *testing.T) {
 }
 
 func TestCopilotAdapter_EstimateTokensShort(t *testing.T) {
+	t.Parallel()
 	adapter, _ := NewCopilotAdapter(AgentConfig{Path: "copilot"})
 	copilot := adapter.(*CopilotAdapter)
 
@@ -567,6 +585,7 @@ func TestCopilotAdapter_EstimateTokensShort(t *testing.T) {
 }
 
 func TestCopilotAdapter_BuildArgsYOLO(t *testing.T) {
+	t.Parallel()
 	adapter, _ := NewCopilotAdapter(AgentConfig{Path: "copilot"})
 	copilot := adapter.(*CopilotAdapter)
 
@@ -602,6 +621,7 @@ func TestCopilotAdapter_BuildArgsYOLO(t *testing.T) {
 // Test default config extended
 
 func TestDefaultConfigAllAdapters(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		wantPath    string
@@ -650,6 +670,7 @@ func TestDefaultConfigAllAdapters(t *testing.T) {
 // Test adapter factories with default paths
 
 func TestNewClaudeAdapter_DefaultPath(t *testing.T) {
+	t.Parallel()
 	adapter, err := NewClaudeAdapter(AgentConfig{})
 	if err != nil {
 		t.Fatalf("NewClaudeAdapter() error = %v", err)
@@ -661,6 +682,7 @@ func TestNewClaudeAdapter_DefaultPath(t *testing.T) {
 }
 
 func TestNewGeminiAdapter_Capabilities(t *testing.T) {
+	t.Parallel()
 	adapter, err := NewGeminiAdapter(AgentConfig{Path: "gemini"})
 	if err != nil {
 		t.Fatalf("NewGeminiAdapter() error = %v", err)
@@ -675,6 +697,7 @@ func TestNewGeminiAdapter_Capabilities(t *testing.T) {
 }
 
 func TestNewCopilotAdapter_Capabilities(t *testing.T) {
+	t.Parallel()
 	adapter, err := NewCopilotAdapter(AgentConfig{Path: "copilot"})
 	if err != nil {
 		t.Fatalf("NewCopilotAdapter() error = %v", err)
@@ -695,6 +718,7 @@ func TestNewCopilotAdapter_Capabilities(t *testing.T) {
 }
 
 func TestNewCodexAdapter_Capabilities(t *testing.T) {
+	t.Parallel()
 	adapter, err := NewCodexAdapter(AgentConfig{Path: "codex"})
 	if err != nil {
 		t.Fatalf("NewCodexAdapter() error = %v", err)

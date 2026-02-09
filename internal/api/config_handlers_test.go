@@ -45,6 +45,7 @@ func setupConfigTestServer(t *testing.T) *configTestServer {
 }
 
 func TestHandleGetConfig(t *testing.T) {
+	t.Parallel()
 	srv := setupConfigTestServer(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/config", nil)
@@ -75,6 +76,7 @@ func TestHandleGetConfig(t *testing.T) {
 }
 
 func TestHandleUpdateConfig_ETagConflict(t *testing.T) {
+	t.Parallel()
 	srv := setupConfigTestServer(t)
 
 	req := httptest.NewRequest(http.MethodPatch, "/api/v1/config", bytes.NewBufferString(`{"log": {"level": "debug"}}`))
@@ -99,6 +101,7 @@ func TestHandleUpdateConfig_ETagConflict(t *testing.T) {
 }
 
 func TestHandleGetSchema(t *testing.T) {
+	t.Parallel()
 	srv := setupConfigTestServer(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/config/schema", nil)
@@ -137,6 +140,7 @@ func TestHandleGetSchema(t *testing.T) {
 }
 
 func TestHandleGetEnums(t *testing.T) {
+	t.Parallel()
 	srv := setupConfigTestServer(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/config/enums", nil)
@@ -165,6 +169,7 @@ func TestHandleGetEnums(t *testing.T) {
 }
 
 func TestHandleValidateConfig(t *testing.T) {
+	t.Parallel()
 	srv := setupConfigTestServer(t)
 
 	tests := []struct {
@@ -217,6 +222,7 @@ func containsString(items []string, value string) bool {
 }
 
 func TestHandleGetAgents(t *testing.T) {
+	t.Parallel()
 	srv := setupConfigTestServer(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/config/agents", nil)
@@ -280,6 +286,7 @@ func TestHandleGetAgents(t *testing.T) {
 }
 
 func TestHandleGetConfig_IssuesSection(t *testing.T) {
+	t.Parallel()
 	srv := setupConfigTestServer(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/config", nil)
@@ -320,6 +327,7 @@ func TestHandleGetConfig_IssuesSection(t *testing.T) {
 }
 
 func TestHandleUpdateConfig_IssuesFields(t *testing.T) {
+	t.Parallel()
 	srv := setupConfigTestServer(t)
 
 	// First set up a valid base config (agents, phases) to pass validation
@@ -489,6 +497,7 @@ func TestHandleUpdateConfig_IssuesFields(t *testing.T) {
 }
 
 func TestHandleGetEnums_IssueFields(t *testing.T) {
+	t.Parallel()
 	srv := setupConfigTestServer(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/config/enums", nil)
@@ -527,6 +536,7 @@ func TestHandleGetEnums_IssueFields(t *testing.T) {
 }
 
 func TestHandleResetConfig(t *testing.T) {
+	t.Parallel()
 	srv := setupConfigTestServer(t)
 
 	// First create a config file by updating it with a valid configuration

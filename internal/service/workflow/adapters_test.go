@@ -11,6 +11,7 @@ import (
 )
 
 func TestNewCheckpointAdapter(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	manager := &service.CheckpointManager{}
 	adapter := NewCheckpointAdapter(manager, ctx)
@@ -27,6 +28,7 @@ func TestNewCheckpointAdapter(t *testing.T) {
 }
 
 func TestNewRetryAdapter(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	policy := service.NewRetryPolicy()
 	adapter := NewRetryAdapter(policy, ctx)
@@ -40,6 +42,7 @@ func TestNewRetryAdapter(t *testing.T) {
 }
 
 func TestRetryAdapter_Execute_Success(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	policy := service.NewRetryPolicy(service.WithMaxAttempts(3))
 	adapter := NewRetryAdapter(policy, ctx)
@@ -59,6 +62,7 @@ func TestRetryAdapter_Execute_Success(t *testing.T) {
 }
 
 func TestRetryAdapter_Execute_Retry(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	policy := service.NewRetryPolicy(
 		service.WithMaxAttempts(3),
@@ -87,6 +91,7 @@ func TestRetryAdapter_Execute_Retry(t *testing.T) {
 }
 
 func TestRetryAdapter_ExecuteWithNotify(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	policy := service.NewRetryPolicy(
 		service.WithMaxAttempts(2),
@@ -121,6 +126,7 @@ func TestRetryAdapter_ExecuteWithNotify(t *testing.T) {
 }
 
 func TestNewRateLimiterRegistryAdapter(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	registry := service.NewRateLimiterRegistry()
 	adapter := NewRateLimiterRegistryAdapter(registry, ctx)
@@ -134,6 +140,7 @@ func TestNewRateLimiterRegistryAdapter(t *testing.T) {
 }
 
 func TestRateLimiterRegistryAdapter_Get(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	registry := service.NewRateLimiterRegistry()
 	adapter := NewRateLimiterRegistryAdapter(registry, ctx)
@@ -151,6 +158,7 @@ func TestRateLimiterRegistryAdapter_Get(t *testing.T) {
 }
 
 func TestNewPromptRendererAdapter(t *testing.T) {
+	t.Parallel()
 	renderer, err := service.NewPromptRenderer()
 	if err != nil {
 		t.Fatalf("NewPromptRenderer() error = %v", err)
@@ -166,6 +174,7 @@ func TestNewPromptRendererAdapter(t *testing.T) {
 }
 
 func TestPromptRendererAdapter_RenderAnalyzeV1(t *testing.T) {
+	t.Parallel()
 	renderer, err := service.NewPromptRenderer()
 	if err != nil {
 		t.Fatalf("NewPromptRenderer() error = %v", err)
@@ -187,6 +196,7 @@ func TestPromptRendererAdapter_RenderAnalyzeV1(t *testing.T) {
 }
 
 func TestPromptRendererAdapter_RenderPlanGenerate(t *testing.T) {
+	t.Parallel()
 	renderer, err := service.NewPromptRenderer()
 	if err != nil {
 		t.Fatalf("NewPromptRenderer() error = %v", err)
@@ -209,6 +219,7 @@ func TestPromptRendererAdapter_RenderPlanGenerate(t *testing.T) {
 }
 
 func TestPromptRendererAdapter_RenderTaskExecute(t *testing.T) {
+	t.Parallel()
 	renderer, err := service.NewPromptRenderer()
 	if err != nil {
 		t.Fatalf("NewPromptRenderer() error = %v", err)
@@ -235,6 +246,7 @@ func TestPromptRendererAdapter_RenderTaskExecute(t *testing.T) {
 }
 
 func TestNewResumePointAdapter(t *testing.T) {
+	t.Parallel()
 	manager := &service.CheckpointManager{}
 	adapter := NewResumePointAdapter(manager)
 
@@ -247,6 +259,7 @@ func TestNewResumePointAdapter(t *testing.T) {
 }
 
 func TestNewDAGAdapter(t *testing.T) {
+	t.Parallel()
 	dag := service.NewDAGBuilder()
 	adapter := NewDAGAdapter(dag)
 
@@ -259,6 +272,7 @@ func TestNewDAGAdapter(t *testing.T) {
 }
 
 func TestDAGAdapter_AddTask(t *testing.T) {
+	t.Parallel()
 	dag := service.NewDAGBuilder()
 	adapter := NewDAGAdapter(dag)
 
@@ -274,6 +288,7 @@ func TestDAGAdapter_AddTask(t *testing.T) {
 }
 
 func TestDAGAdapter_AddDependency(t *testing.T) {
+	t.Parallel()
 	dag := service.NewDAGBuilder()
 	adapter := NewDAGAdapter(dag)
 
@@ -290,6 +305,7 @@ func TestDAGAdapter_AddDependency(t *testing.T) {
 }
 
 func TestDAGAdapter_Build(t *testing.T) {
+	t.Parallel()
 	dag := service.NewDAGBuilder()
 	adapter := NewDAGAdapter(dag)
 
@@ -306,6 +322,7 @@ func TestDAGAdapter_Build(t *testing.T) {
 }
 
 func TestDAGAdapter_GetReadyTasks(t *testing.T) {
+	t.Parallel()
 	dag := service.NewDAGBuilder()
 	adapter := NewDAGAdapter(dag)
 
@@ -337,6 +354,7 @@ func TestDAGAdapter_GetReadyTasks(t *testing.T) {
 }
 
 func TestNopOutputNotifier(t *testing.T) {
+	t.Parallel()
 	notifier := NopOutputNotifier{}
 
 	// These should all be no-ops and not panic

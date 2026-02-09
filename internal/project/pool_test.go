@@ -135,6 +135,7 @@ func createPoolTestProject(t *testing.T, baseDir, name string) string {
 }
 
 func TestNewStatePool(t *testing.T) {
+	t.Parallel()
 	registry := newMockRegistry()
 	pool := NewStatePool(registry)
 	defer pool.Close()
@@ -153,6 +154,7 @@ func TestNewStatePool(t *testing.T) {
 }
 
 func TestStatePoolWithOptions(t *testing.T) {
+	t.Parallel()
 	registry := newMockRegistry()
 	pool := NewStatePool(registry,
 		WithMaxActiveContexts(10),
@@ -168,6 +170,7 @@ func TestStatePoolWithOptions(t *testing.T) {
 }
 
 func TestStatePoolGetContext(t *testing.T) {
+	t.Parallel()
 	tmpDir, err := os.MkdirTemp("", "pool-getcontext-*")
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
@@ -219,6 +222,7 @@ func TestStatePoolGetContext(t *testing.T) {
 }
 
 func TestStatePoolLRUEviction(t *testing.T) {
+	t.Parallel()
 	tmpDir, err := os.MkdirTemp("", "pool-eviction-*")
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
@@ -290,6 +294,7 @@ func TestStatePoolLRUEviction(t *testing.T) {
 }
 
 func TestStatePoolConcurrentAccess(t *testing.T) {
+	t.Parallel()
 	tmpDir, err := os.MkdirTemp("", "pool-concurrent-*")
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
@@ -333,6 +338,7 @@ func TestStatePoolConcurrentAccess(t *testing.T) {
 }
 
 func TestStatePoolClose(t *testing.T) {
+	t.Parallel()
 	tmpDir, err := os.MkdirTemp("", "pool-close-*")
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
@@ -373,6 +379,7 @@ func TestStatePoolClose(t *testing.T) {
 }
 
 func TestStatePoolEvictProject(t *testing.T) {
+	t.Parallel()
 	tmpDir, err := os.MkdirTemp("", "pool-evict-manual-*")
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
@@ -408,6 +415,7 @@ func TestStatePoolEvictProject(t *testing.T) {
 }
 
 func TestStatePoolGetContextNotFound(t *testing.T) {
+	t.Parallel()
 	registry := newMockRegistry()
 	pool := NewStatePool(registry)
 	defer pool.Close()
@@ -424,6 +432,7 @@ func TestStatePoolGetContextNotFound(t *testing.T) {
 }
 
 func TestStatePoolGetActiveProjects(t *testing.T) {
+	t.Parallel()
 	tmpDir, err := os.MkdirTemp("", "pool-active-*")
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
@@ -452,6 +461,7 @@ func TestStatePoolGetActiveProjects(t *testing.T) {
 }
 
 func TestStatePoolGetContextInfo(t *testing.T) {
+	t.Parallel()
 	tmpDir, err := os.MkdirTemp("", "pool-info-*")
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
@@ -489,6 +499,7 @@ func TestStatePoolGetContextInfo(t *testing.T) {
 }
 
 func TestStatePoolIsLoaded(t *testing.T) {
+	t.Parallel()
 	tmpDir, err := os.MkdirTemp("", "pool-loaded-*")
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
@@ -516,6 +527,7 @@ func TestStatePoolIsLoaded(t *testing.T) {
 }
 
 func TestStatePoolValidateAll(t *testing.T) {
+	t.Parallel()
 	tmpDir, err := os.MkdirTemp("", "pool-validate-*")
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
@@ -541,6 +553,7 @@ func TestStatePoolValidateAll(t *testing.T) {
 }
 
 func TestStatePoolCleanup(t *testing.T) {
+	t.Parallel()
 	tmpDir, err := os.MkdirTemp("", "pool-cleanup-*")
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
@@ -573,6 +586,7 @@ func TestStatePoolCleanup(t *testing.T) {
 }
 
 func TestStatePoolPreload(t *testing.T) {
+	t.Parallel()
 	tmpDir, err := os.MkdirTemp("", "pool-preload-*")
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
@@ -601,6 +615,7 @@ func TestStatePoolPreload(t *testing.T) {
 }
 
 func TestStatePoolMetricsHitRate(t *testing.T) {
+	t.Parallel()
 	tmpDir, err := os.MkdirTemp("", "pool-hitrate-*")
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)

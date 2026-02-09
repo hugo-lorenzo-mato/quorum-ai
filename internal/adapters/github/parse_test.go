@@ -6,6 +6,7 @@ import (
 )
 
 func TestClient_parseCorePR(t *testing.T) {
+	t.Parallel()
 	client := &Client{
 		repoOwner: "testowner",
 		repoName:  "testrepo",
@@ -112,6 +113,7 @@ func TestClient_parseCorePR(t *testing.T) {
 }
 
 func TestClient_parseCorePR_FieldMapping(t *testing.T) {
+	t.Parallel()
 	client := &Client{
 		repoOwner: "owner",
 		repoName:  "repo",
@@ -180,6 +182,7 @@ func TestClient_parseCorePR_FieldMapping(t *testing.T) {
 }
 
 func TestClient_parseCorePR_MergeableStates(t *testing.T) {
+	t.Parallel()
 	client := &Client{
 		repoOwner: "owner",
 		repoName:  "repo",
@@ -241,6 +244,7 @@ func boolPtr(b bool) *bool {
 }
 
 func TestClient_Repo(t *testing.T) {
+	t.Parallel()
 	client := &Client{
 		repoOwner: "myowner",
 		repoName:  "myrepo",
@@ -252,6 +256,7 @@ func TestClient_Repo(t *testing.T) {
 }
 
 func TestClient_Owner(t *testing.T) {
+	t.Parallel()
 	client := &Client{
 		repoOwner: "testowner",
 		repoName:  "testrepo",
@@ -263,6 +268,7 @@ func TestClient_Owner(t *testing.T) {
 }
 
 func TestClient_Name(t *testing.T) {
+	t.Parallel()
 	client := &Client{
 		repoOwner: "testowner",
 		repoName:  "testrepo",
@@ -274,6 +280,7 @@ func TestClient_Name(t *testing.T) {
 }
 
 func TestClient_WithTimeout(t *testing.T) {
+	t.Parallel()
 	client := &Client{
 		repoOwner: "owner",
 		repoName:  "repo",
@@ -292,6 +299,7 @@ func TestClient_WithTimeout(t *testing.T) {
 }
 
 func TestPullRequestStruct(t *testing.T) {
+	t.Parallel()
 	now := time.Now()
 	pr := PullRequest{
 		Number:    100,

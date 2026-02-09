@@ -6,6 +6,7 @@ import (
 )
 
 func TestFullConfigResponse_Marshaling(t *testing.T) {
+	t.Parallel()
 	response := FullConfigResponse{
 		Workflow: WorkflowConfigResponse{
 			Timeout:    "1h",
@@ -65,6 +66,7 @@ func TestFullConfigResponse_Marshaling(t *testing.T) {
 }
 
 func TestFullConfigUpdate_PointerFields(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name         string
 		jsonBody     string
@@ -150,6 +152,7 @@ func TestFullConfigUpdate_PointerFields(t *testing.T) {
 }
 
 func TestAgentsConfigResponse_IncludesBuiltins(t *testing.T) {
+	t.Parallel()
 	response := AgentsConfigResponse{
 		Default:  "claude",
 		Claude:   FullAgentConfigResponse{Enabled: true},
@@ -177,6 +180,7 @@ func TestAgentsConfigResponse_IncludesBuiltins(t *testing.T) {
 }
 
 func TestValidationErrorResponse_Format(t *testing.T) {
+	t.Parallel()
 	response := ValidationErrorResponse{
 		Message: "Validation failed",
 		Errors: []ValidationFieldError{
@@ -221,6 +225,7 @@ func TestValidationErrorResponse_Format(t *testing.T) {
 }
 
 func TestIssuesConfigResponse_Marshaling(t *testing.T) {
+	t.Parallel()
 	response := IssuesConfigResponse{
 		Enabled:        true,
 		Provider:       "github",
@@ -303,6 +308,7 @@ func TestIssuesConfigResponse_Marshaling(t *testing.T) {
 }
 
 func TestIssuesConfigUpdate_PointerFields(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name       string
 		jsonBody   string
@@ -354,6 +360,7 @@ func TestIssuesConfigUpdate_PointerFields(t *testing.T) {
 }
 
 func TestFullConfigResponse_IssuesSection(t *testing.T) {
+	t.Parallel()
 	response := FullConfigResponse{
 		Issues: IssuesConfigResponse{
 			Enabled:  true,

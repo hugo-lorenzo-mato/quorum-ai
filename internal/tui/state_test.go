@@ -7,6 +7,7 @@ import (
 )
 
 func TestUIStateManager_SaveLoad(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 
 	// Create manager and update state
@@ -37,6 +38,7 @@ func TestUIStateManager_SaveLoad(t *testing.T) {
 }
 
 func TestUIStateManager_NoFileUsesDefaults(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 
 	mgr := NewUIStateManager(tmpDir)
@@ -55,6 +57,7 @@ func TestUIStateManager_NoFileUsesDefaults(t *testing.T) {
 }
 
 func TestUIStateManager_CorruptedFileUsesDefaults(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	statePath := filepath.Join(tmpDir, "ui-state.json")
 
@@ -75,6 +78,7 @@ func TestUIStateManager_CorruptedFileUsesDefaults(t *testing.T) {
 }
 
 func TestUIStateManager_AtomicWrite(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	statePath := filepath.Join(tmpDir, "ui-state.json")
 

@@ -49,6 +49,7 @@ func setupTestProjectDir(t *testing.T) (string, func()) {
 }
 
 func TestNewProjectContext(t *testing.T) {
+	t.Parallel()
 	projectDir, cleanup := setupTestProjectDir(t)
 	defer cleanup()
 
@@ -88,6 +89,7 @@ func TestNewProjectContext(t *testing.T) {
 }
 
 func TestNewProjectContextWithOptions(t *testing.T) {
+	t.Parallel()
 	projectDir, cleanup := setupTestProjectDir(t)
 	defer cleanup()
 
@@ -105,6 +107,7 @@ func TestNewProjectContextWithOptions(t *testing.T) {
 }
 
 func TestNewProjectContextInvalidPath(t *testing.T) {
+	t.Parallel()
 	_, err := NewProjectContext("test-id", "/nonexistent/path")
 	if err == nil {
 		t.Error("expected error for invalid path")
@@ -112,6 +115,7 @@ func TestNewProjectContextInvalidPath(t *testing.T) {
 }
 
 func TestNewProjectContextNotQuorumProject(t *testing.T) {
+	t.Parallel()
 	tmpDir, err := os.MkdirTemp("", "quorum-not-project-*")
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
@@ -126,6 +130,7 @@ func TestNewProjectContextNotQuorumProject(t *testing.T) {
 }
 
 func TestProjectContextClose(t *testing.T) {
+	t.Parallel()
 	projectDir, cleanup := setupTestProjectDir(t)
 	defer cleanup()
 
@@ -152,6 +157,7 @@ func TestProjectContextClose(t *testing.T) {
 }
 
 func TestProjectContextValidate(t *testing.T) {
+	t.Parallel()
 	projectDir, cleanup := setupTestProjectDir(t)
 	defer cleanup()
 
@@ -169,6 +175,7 @@ func TestProjectContextValidate(t *testing.T) {
 }
 
 func TestProjectContextValidateAfterClose(t *testing.T) {
+	t.Parallel()
 	projectDir, cleanup := setupTestProjectDir(t)
 	defer cleanup()
 
@@ -186,6 +193,7 @@ func TestProjectContextValidateAfterClose(t *testing.T) {
 }
 
 func TestProjectContextValidateDeletedDirectory(t *testing.T) {
+	t.Parallel()
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on Windows: open SQLite handle prevents RemoveAll")
 	}
@@ -209,6 +217,7 @@ func TestProjectContextValidateDeletedDirectory(t *testing.T) {
 }
 
 func TestProjectContextTouch(t *testing.T) {
+	t.Parallel()
 	projectDir, cleanup := setupTestProjectDir(t)
 	defer cleanup()
 
@@ -232,6 +241,7 @@ func TestProjectContextTouch(t *testing.T) {
 }
 
 func TestProjectContextGetConfig(t *testing.T) {
+	t.Parallel()
 	projectDir, cleanup := setupTestProjectDir(t)
 	defer cleanup()
 
@@ -252,6 +262,7 @@ func TestProjectContextGetConfig(t *testing.T) {
 }
 
 func TestProjectContextGetConfigAfterClose(t *testing.T) {
+	t.Parallel()
 	projectDir, cleanup := setupTestProjectDir(t)
 	defer cleanup()
 
@@ -269,6 +280,7 @@ func TestProjectContextGetConfigAfterClose(t *testing.T) {
 }
 
 func TestProjectContextHasRunningWorkflows(t *testing.T) {
+	t.Parallel()
 	projectDir, cleanup := setupTestProjectDir(t)
 	defer cleanup()
 
@@ -289,6 +301,7 @@ func TestProjectContextHasRunningWorkflows(t *testing.T) {
 }
 
 func TestProjectContextHasRunningWorkflowsAfterClose(t *testing.T) {
+	t.Parallel()
 	projectDir, cleanup := setupTestProjectDir(t)
 	defer cleanup()
 
@@ -306,6 +319,7 @@ func TestProjectContextHasRunningWorkflowsAfterClose(t *testing.T) {
 }
 
 func TestProjectContextConcurrentAccess(t *testing.T) {
+	t.Parallel()
 	projectDir, cleanup := setupTestProjectDir(t)
 	defer cleanup()
 
@@ -332,6 +346,7 @@ func TestProjectContextConcurrentAccess(t *testing.T) {
 }
 
 func TestProjectContextString(t *testing.T) {
+	t.Parallel()
 	projectDir, cleanup := setupTestProjectDir(t)
 	defer cleanup()
 
@@ -361,6 +376,7 @@ func containsString(s, substr string) bool {
 }
 
 func TestProjectContextRelativePath(t *testing.T) {
+	t.Parallel()
 	projectDir, cleanup := setupTestProjectDir(t)
 	defer cleanup()
 
@@ -392,6 +408,7 @@ func TestProjectContextRelativePath(t *testing.T) {
 }
 
 func TestProjectContextEventBusPublish(t *testing.T) {
+	t.Parallel()
 	projectDir, cleanup := setupTestProjectDir(t)
 	defer cleanup()
 

@@ -7,6 +7,7 @@ import (
 )
 
 func TestBuildRunnerConfigFromConfig_SingleAgentConfig(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name          string
 		cfg           *config.Config
@@ -89,6 +90,7 @@ func TestBuildRunnerConfigFromConfig_SingleAgentConfig(t *testing.T) {
 }
 
 func TestBuildRunnerConfigFromConfig_ModeratorConfig(t *testing.T) {
+	t.Parallel()
 	cfg := &config.Config{
 		Phases: config.PhasesConfig{
 			Analyze: config.AnalyzePhaseConfig{
@@ -119,6 +121,7 @@ func TestBuildRunnerConfigFromConfig_ModeratorConfig(t *testing.T) {
 }
 
 func TestBuildRunnerConfigFromConfig_PhaseTimeouts(t *testing.T) {
+	t.Parallel()
 	cfg := &config.Config{
 		Phases: config.PhasesConfig{
 			Analyze: config.AnalyzePhaseConfig{
@@ -148,6 +151,7 @@ func TestBuildRunnerConfigFromConfig_PhaseTimeouts(t *testing.T) {
 }
 
 func TestBuildRunnerConfigFromConfig_InvalidTimeoutFallsBackToDefault(t *testing.T) {
+	t.Parallel()
 	cfg := &config.Config{
 		Workflow: config.WorkflowConfig{
 			Timeout: "invalid",
@@ -172,6 +176,7 @@ func TestBuildRunnerConfigFromConfig_InvalidTimeoutFallsBackToDefault(t *testing
 }
 
 func TestBuildRunnerConfigFromConfig_WorkflowSettings(t *testing.T) {
+	t.Parallel()
 	cfg := &config.Config{
 		Workflow: config.WorkflowConfig{
 			Timeout:    "6h",
@@ -204,6 +209,7 @@ func TestBuildRunnerConfigFromConfig_WorkflowSettings(t *testing.T) {
 }
 
 func TestBuildAgentPhaseModels(t *testing.T) {
+	t.Parallel()
 	agents := config.AgentsConfig{
 		Claude: config.AgentConfig{
 			Enabled: true,
@@ -250,6 +256,7 @@ func TestBuildAgentPhaseModels(t *testing.T) {
 }
 
 func TestNewRunnerBuilder(t *testing.T) {
+	t.Parallel()
 	b := NewRunnerBuilder()
 
 	if b == nil {
@@ -264,6 +271,7 @@ func TestNewRunnerBuilder(t *testing.T) {
 }
 
 func TestRunnerBuilder_WithConfig(t *testing.T) {
+	t.Parallel()
 	t.Run("valid config", func(t *testing.T) {
 		b := NewRunnerBuilder()
 		cfg := &config.Config{}
@@ -296,6 +304,7 @@ func TestRunnerBuilder_WithConfig(t *testing.T) {
 }
 
 func TestRunnerBuilder_WithDryRun(t *testing.T) {
+	t.Parallel()
 	b := NewRunnerBuilder()
 
 	result := b.WithDryRun(true)
@@ -309,6 +318,7 @@ func TestRunnerBuilder_WithDryRun(t *testing.T) {
 }
 
 func TestRunnerBuilder_WithMaxRetries(t *testing.T) {
+	t.Parallel()
 	b := NewRunnerBuilder()
 
 	result := b.WithMaxRetries(10)
@@ -322,6 +332,7 @@ func TestRunnerBuilder_WithMaxRetries(t *testing.T) {
 }
 
 func TestRunnerBuilder_WithRunnerConfig(t *testing.T) {
+	t.Parallel()
 	t.Run("valid runner config", func(t *testing.T) {
 		b := NewRunnerBuilder()
 		rc := &RunnerConfig{MaxRetries: 5}
@@ -354,6 +365,7 @@ func TestRunnerBuilder_WithRunnerConfig(t *testing.T) {
 }
 
 func TestRunnerBuilder_buildRunnerConfig_Precedence(t *testing.T) {
+	t.Parallel()
 	t.Run("explicit runner config takes precedence", func(t *testing.T) {
 		explicitConfig := &RunnerConfig{
 			MaxRetries: 99,
@@ -403,6 +415,7 @@ func TestRunnerBuilder_buildRunnerConfig_Precedence(t *testing.T) {
 }
 
 func TestRunnerBuilder_buildSingleAgentConfig(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name           string
 		appConfig      *config.Config
@@ -536,6 +549,7 @@ func TestRunnerBuilder_buildSingleAgentConfig(t *testing.T) {
 }
 
 func TestRunnerBuilder_WithWorkflowConfig(t *testing.T) {
+	t.Parallel()
 	b := &RunnerBuilder{}
 	wfConfig := &WorkflowConfigOverride{
 		ExecutionMode:   "single_agent",
@@ -556,6 +570,7 @@ func TestRunnerBuilder_WithWorkflowConfig(t *testing.T) {
 }
 
 func TestRunnerBuilder_WithWorkflowConfig_Nil(t *testing.T) {
+	t.Parallel()
 	b := &RunnerBuilder{}
 
 	result := b.WithWorkflowConfig(nil)
@@ -572,6 +587,7 @@ func TestRunnerBuilder_WithWorkflowConfig_Nil(t *testing.T) {
 }
 
 func TestRunnerBuilder_buildRunnerConfig_Overrides(t *testing.T) {
+	t.Parallel()
 	appConfig := &config.Config{
 		Workflow: config.WorkflowConfig{
 			MaxRetries: 1,
@@ -640,6 +656,7 @@ func TestRunnerBuilder_buildRunnerConfig_Overrides(t *testing.T) {
 }
 
 func TestWorkflowConfigOverride_IsSingleAgentMode(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		config   *WorkflowConfigOverride

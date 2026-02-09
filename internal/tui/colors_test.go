@@ -7,6 +7,7 @@ import (
 )
 
 func TestColorConstants(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name  string
 		color lipgloss.Color
@@ -39,6 +40,7 @@ func TestColorConstants(t *testing.T) {
 }
 
 func TestDarkScheme(t *testing.T) {
+	t.Parallel()
 	if string(DarkScheme.Primary) == "" {
 		t.Error("DarkScheme.Primary is empty")
 	}
@@ -69,6 +71,7 @@ func TestDarkScheme(t *testing.T) {
 }
 
 func TestLightScheme(t *testing.T) {
+	t.Parallel()
 	if string(LightScheme.Primary) == "" {
 		t.Error("LightScheme.Primary is empty")
 	}
@@ -99,6 +102,7 @@ func TestLightScheme(t *testing.T) {
 }
 
 func TestSetColorScheme(t *testing.T) {
+	t.Parallel()
 	// Save original
 	original := CurrentScheme
 
@@ -119,6 +123,7 @@ func TestSetColorScheme(t *testing.T) {
 }
 
 func TestColorScheme_Fields(t *testing.T) {
+	t.Parallel()
 	scheme := ColorScheme{
 		Primary:    lipgloss.Color("#123456"),
 		Secondary:  lipgloss.Color("#234567"),

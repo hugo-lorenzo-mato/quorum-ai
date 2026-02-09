@@ -13,18 +13,10 @@ import (
 var ErrTest = errors.New("test error")
 
 // TempDir creates a temporary directory for tests.
+// Uses Go 1.15+ t.TempDir() for automatic cleanup (industry standard).
 func TempDir(t *testing.T) string {
 	t.Helper()
-	dir, err := os.MkdirTemp("", "quorum-test-*")
-	if err != nil {
-		t.Fatalf("creating temp dir: %v", err)
-	}
-	t.Cleanup(func() {
-		if err := os.RemoveAll(dir); err != nil {
-			t.Logf("cleaning temp dir: %v", err)
-		}
-	})
-	return dir
+	return t.TempDir()
 }
 
 // TempFile creates a temporary file with content.

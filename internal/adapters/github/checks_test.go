@@ -8,6 +8,7 @@ import (
 )
 
 func TestCheckStatus(t *testing.T) {
+	t.Parallel()
 	check := github.CheckStatus{
 		Name:       "build",
 		Status:     "completed",
@@ -21,6 +22,7 @@ func TestCheckStatus(t *testing.T) {
 }
 
 func TestChecksResult_AllPassed(t *testing.T) {
+	t.Parallel()
 	result := &github.ChecksResult{
 		AllPassed:    true,
 		AllCompleted: true,
@@ -38,6 +40,7 @@ func TestChecksResult_AllPassed(t *testing.T) {
 }
 
 func TestChecksResult_HasFailures(t *testing.T) {
+	t.Parallel()
 	result := &github.ChecksResult{
 		AllPassed:    false,
 		AllCompleted: true,
@@ -55,6 +58,7 @@ func TestChecksResult_HasFailures(t *testing.T) {
 }
 
 func TestChecksResult_Pending(t *testing.T) {
+	t.Parallel()
 	result := &github.ChecksResult{
 		AllPassed:    true,
 		AllCompleted: false,
@@ -72,6 +76,7 @@ func TestChecksResult_Pending(t *testing.T) {
 }
 
 func TestDefaultChecksConfig(t *testing.T) {
+	t.Parallel()
 	cfg := github.DefaultChecksConfig()
 
 	if cfg.PollInterval <= 0 {
@@ -83,6 +88,7 @@ func TestDefaultChecksConfig(t *testing.T) {
 }
 
 func TestChecksWaiter_ParseChecksJSON(t *testing.T) {
+	t.Parallel()
 	// Test checks JSON parsing structure
 	json := `[
 		{
@@ -105,6 +111,7 @@ func TestChecksWaiter_ParseChecksJSON(t *testing.T) {
 }
 
 func TestChecksResult_Summary_AllPassed(t *testing.T) {
+	t.Parallel()
 	result := &github.ChecksResult{
 		AllPassed:    true,
 		AllCompleted: true,
@@ -123,6 +130,7 @@ func TestChecksResult_Summary_AllPassed(t *testing.T) {
 }
 
 func TestChecksResult_Summary_Mixed(t *testing.T) {
+	t.Parallel()
 	result := &github.ChecksResult{
 		AllPassed:    false,
 		AllCompleted: true,
