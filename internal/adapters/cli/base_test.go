@@ -1,8 +1,14 @@
 package cli
 
 import (
+	"bytes"
+	"context"
+	"io"
+	"os/exec"
 	"testing"
 	"time"
+
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 )
 
 func TestNewBaseAdapter(t *testing.T) {
@@ -347,5 +353,305 @@ func TestContainsAny(t *testing.T) {
 		if result != tt.want {
 			t.Errorf("containsAny(%q, %v) = %v, want %v", tt.s, tt.substrings, result, tt.want)
 		}
+	}
+}
+
+func TestIdleTimeoutKillsHungProcess(t *testing.T) {
+	// This test verifies that the idle timer kills a process that writes
+	// one JSON line and then hangs (no more stdout output).
+	adapter := NewBaseAdapter(AgentConfig{
+		Name:        "test-idle",
+		Path:        "bash",
+		IdleTimeout: 500 * time.Millisecond,
+		GracePeriod: 200 * time.Millisecond,
+	}, nil)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	start := time.Now()
+
+	// bash -c: print one JSON line, then sleep indefinitely (simulating a hang).
+	// The idle timer should fire after 500ms and kill the process.
+	result, err := adapter.executeWithJSONStreaming(
+		ctx,
+		"test-idle",
+		[]string{"-c", `echo '{"type":"message","text":"hello"}'; sleep 3600`},
+		"",  // stdin
+		"",  // workDir
+		0,   // optTimeout (use default)
+		StreamConfig{}, // no streaming flags needed for bash
+		nil,            // no parser
+	)
+
+	elapsed := time.Since(start)
+
+	// Should complete in ~500ms (idle timeout), not 3600s.
+	if elapsed > 5*time.Second {
+		t.Fatalf("took %v, expected ~500ms — idle timeout did not fire", elapsed)
+	}
+
+	// The result should contain the first line's text (extracted or raw).
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+
+	// err may or may not be nil depending on how the kill is classified.
+	// The key assertion is that we returned quickly.
+	t.Logf("completed in %v, err=%v, stdout=%q", elapsed, err, result.Stdout)
+}
+
+func TestIdleTimeoutResetsOnActivity(t *testing.T) {
+	// Process produces a JSON line every 200ms for 5 iterations, then exits.
+	// IdleTimeout is 400ms — it should never fire because each line resets it.
+	adapter := NewBaseAdapter(AgentConfig{
+		Name:        "test-idle-reset",
+		Path:        "bash",
+		IdleTimeout: 400 * time.Millisecond,
+	}, nil)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	start := time.Now()
+
+	// Each line resets the 400ms idle timer, so it should complete normally.
+	result, err := adapter.executeWithJSONStreaming(
+		ctx,
+		"test-idle-reset",
+		[]string{"-c", `for i in 1 2 3 4 5; do echo "{\"type\":\"text\",\"n\":$i}"; sleep 0.2; done`},
+		"", "", 0,
+		StreamConfig{}, nil,
+	)
+
+	elapsed := time.Since(start)
+
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	// Should finish normally (~1s), not killed by idle timeout.
+	if elapsed > 3*time.Second {
+		t.Fatalf("took %v — idle timer should not have fired", elapsed)
+	}
+	// Normal exit → exit code 0 → no error.
+	if err != nil {
+		t.Errorf("expected no error for normal completion, got: %v", err)
+	}
+	t.Logf("completed in %v, stdout=%q", elapsed, result.Stdout)
+}
+
+func TestNormalCompletionBeforeIdleTimeout(t *testing.T) {
+	// Process exits immediately with JSON output. IdleTimeout should not fire.
+	adapter := NewBaseAdapter(AgentConfig{
+		Name:        "test-normal",
+		Path:        "bash",
+		IdleTimeout: 5 * time.Second,
+	}, nil)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	result, err := adapter.executeWithJSONStreaming(
+		ctx,
+		"test-normal",
+		[]string{"-c", `echo '{"type":"result","subtype":"success","result":"done"}'`},
+		"", "", 0,
+		StreamConfig{}, nil,
+	)
+
+	if err != nil {
+		t.Errorf("expected no error, got: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if result.ExitCode != 0 {
+		t.Errorf("expected exit code 0, got %d", result.ExitCode)
+	}
+}
+
+func TestParseIdleTimeout(t *testing.T) {
+	tests := []struct {
+		input string
+		want  time.Duration
+	}{
+		{"", 0},
+		{"5m", 5 * time.Minute},
+		{"10s", 10 * time.Second},
+		{"500ms", 500 * time.Millisecond},
+		{"invalid", 0},
+		{"0", 0},
+		{"abc123", 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := parseIdleTimeout(tt.input)
+			if got != tt.want {
+				t.Errorf("parseIdleTimeout(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+// testStreamParser is a minimal StreamParser for tests that detects result:success.
+type testStreamParser struct{}
+
+func (p *testStreamParser) ParseLine(line string) []core.AgentEvent {
+	if line == `{"type":"result","subtype":"success"}` {
+		return []core.AgentEvent{
+			core.NewAgentEvent(core.AgentEventCompleted, "test", "done"),
+		}
+	}
+	return nil
+}
+
+func (p *testStreamParser) AgentName() string { return "test" }
+
+func TestStreamJSONOutputWithSignal_Activity(t *testing.T) {
+	// Verify that streamJSONOutputWithSignal sends activity signals.
+	adapter := NewBaseAdapter(AgentConfig{Name: "test"}, nil)
+
+	pr, pw := io.Pipe()
+	var buf bytes.Buffer
+	logicalDone := make(chan struct{}, 1)
+	activity := make(chan struct{}, 10)
+
+	done := make(chan struct{})
+	go func() {
+		adapter.streamJSONOutputWithSignal(pr, &buf, "test", nil, logicalDone, activity)
+		close(done)
+	}()
+
+	// Write 3 JSON lines.
+	for i := 0; i < 3; i++ {
+		_, _ = pw.Write([]byte(`{"type":"text"}` + "\n"))
+	}
+	pw.Close()
+	<-done
+
+	// Should have received 3 activity signals.
+	count := len(activity)
+	if count != 3 {
+		t.Errorf("expected 3 activity signals, got %d", count)
+	}
+}
+
+func TestStreamJSONOutputWithSignal_LogicalDone(t *testing.T) {
+	// Verify that logicalDone is signaled on AgentEventCompleted.
+	adapter := NewBaseAdapter(AgentConfig{Name: "test"}, nil)
+
+	pr, pw := io.Pipe()
+	var buf bytes.Buffer
+	logicalDone := make(chan struct{}, 1)
+	activity := make(chan struct{}, 10)
+	parser := &testStreamParser{}
+
+	done := make(chan struct{})
+	go func() {
+		adapter.streamJSONOutputWithSignal(pr, &buf, "test", parser, logicalDone, activity)
+		close(done)
+	}()
+
+	_, _ = pw.Write([]byte(`{"type":"result","subtype":"success"}` + "\n"))
+	pw.Close()
+	<-done
+
+	select {
+	case <-logicalDone:
+		// Expected
+	default:
+		t.Error("expected logicalDone to be signaled")
+	}
+}
+
+func TestStreamJSONOutputWithSignal_NilActivity(t *testing.T) {
+	// Verify that nil activity channel doesn't panic.
+	adapter := NewBaseAdapter(AgentConfig{Name: "test"}, nil)
+
+	pr, pw := io.Pipe()
+	var buf bytes.Buffer
+	logicalDone := make(chan struct{}, 1)
+
+	done := make(chan struct{})
+	go func() {
+		adapter.streamJSONOutputWithSignal(pr, &buf, "test", nil, logicalDone, nil)
+		close(done)
+	}()
+
+	_, _ = pw.Write([]byte(`{"type":"text"}` + "\n"))
+	pw.Close()
+	<-done
+	// No panic = pass
+}
+
+func TestGracefulKill_SIGKILLEscalation(t *testing.T) {
+	// Verify that GracefulKill escalates to SIGKILL when SIGTERM is ignored.
+	adapter := NewBaseAdapter(AgentConfig{
+		Name: "test-sigkill",
+		Path: "bash",
+	}, nil)
+
+	// Start a process that traps SIGTERM (ignores it).
+	cmd := exec.Command("bash", "-c", `trap '' TERM; sleep 3600`)
+	configureProcAttr(cmd)
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("failed to start process: %v", err)
+	}
+	adapter.setActiveProcess(cmd)
+	defer adapter.clearActiveProcess()
+
+	// Give it time to set up the trap
+	time.Sleep(100 * time.Millisecond)
+
+	start := time.Now()
+	// Grace period is very short — SIGTERM will be ignored, SIGKILL escalation fires.
+	err := adapter.GracefulKill(200 * time.Millisecond)
+	elapsed := time.Since(start)
+
+	if err != nil {
+		t.Errorf("GracefulKill returned error: %v", err)
+	}
+
+	// Should take ~200ms (grace period) then SIGKILL.
+	if elapsed > 3*time.Second {
+		t.Errorf("GracefulKill took %v — SIGKILL escalation may have failed", elapsed)
+	}
+
+	// Process should be dead now; Wait should return.
+	waitErr := cmd.Wait()
+	t.Logf("GracefulKill completed in %v, waitErr=%v", elapsed, waitErr)
+}
+
+func TestGracefulKill_ProcessAlreadyExited(t *testing.T) {
+	// Verify GracefulKill handles an already-exited process gracefully.
+	adapter := NewBaseAdapter(AgentConfig{
+		Name: "test-already-exited",
+		Path: "bash",
+	}, nil)
+
+	cmd := exec.Command("bash", "-c", "true")
+	configureProcAttr(cmd)
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("failed to start: %v", err)
+	}
+	// Wait for normal exit.
+	_ = cmd.Wait()
+
+	adapter.setActiveProcess(cmd)
+	defer adapter.clearActiveProcess()
+
+	// GracefulKill on an already-exited process should not panic or hang.
+	err := adapter.GracefulKill(200 * time.Millisecond)
+	// May return error (getpgid fails on dead process) or nil — both are fine.
+	t.Logf("GracefulKill on dead process: err=%v", err)
+}
+
+func TestGracefulKill_NilProcess(t *testing.T) {
+	// GracefulKill with no active process should be a no-op.
+	adapter := NewBaseAdapter(AgentConfig{Name: "test-nil"}, nil)
+	err := adapter.GracefulKill(time.Second)
+	if err != nil {
+		t.Errorf("expected nil error for nil process, got: %v", err)
 	}
 }

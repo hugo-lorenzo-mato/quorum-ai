@@ -6,6 +6,19 @@ import (
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/config"
 )
 
+// parseIdleTimeout parses a duration string for idle timeout configuration.
+// Returns 0 (meaning "use default") when the string is empty or invalid.
+func parseIdleTimeout(s string) time.Duration {
+	if s == "" {
+		return 0
+	}
+	d, err := time.ParseDuration(s)
+	if err != nil {
+		return 0
+	}
+	return d
+}
+
 // ConfigureRegistryFromConfig configures agents in the registry using unified config.
 // Agents are configured only if their enabled flag is true in the config.
 //
@@ -23,6 +36,7 @@ func ConfigureRegistryFromConfig(registry *Registry, cfg *config.Config) error {
 			ReasoningEffort:           cfg.Agents.Claude.ReasoningEffort,
 			ReasoningEffortPhases:     cfg.Agents.Claude.ReasoningEffortPhases,
 			TokenDiscrepancyThreshold: getTokenDiscrepancyThreshold(cfg.Agents.Claude.TokenDiscrepancyThreshold),
+			IdleTimeout:               parseIdleTimeout(cfg.Agents.Claude.IdleTimeout),
 		})
 	}
 
@@ -37,6 +51,7 @@ func ConfigureRegistryFromConfig(registry *Registry, cfg *config.Config) error {
 			ReasoningEffort:           cfg.Agents.Gemini.ReasoningEffort,
 			ReasoningEffortPhases:     cfg.Agents.Gemini.ReasoningEffortPhases,
 			TokenDiscrepancyThreshold: getTokenDiscrepancyThreshold(cfg.Agents.Gemini.TokenDiscrepancyThreshold),
+			IdleTimeout:               parseIdleTimeout(cfg.Agents.Gemini.IdleTimeout),
 		})
 	}
 
@@ -51,6 +66,7 @@ func ConfigureRegistryFromConfig(registry *Registry, cfg *config.Config) error {
 			ReasoningEffort:           cfg.Agents.Codex.ReasoningEffort,
 			ReasoningEffortPhases:     cfg.Agents.Codex.ReasoningEffortPhases,
 			TokenDiscrepancyThreshold: getTokenDiscrepancyThreshold(cfg.Agents.Codex.TokenDiscrepancyThreshold),
+			IdleTimeout:               parseIdleTimeout(cfg.Agents.Codex.IdleTimeout),
 		})
 	}
 
@@ -65,6 +81,7 @@ func ConfigureRegistryFromConfig(registry *Registry, cfg *config.Config) error {
 			ReasoningEffort:           cfg.Agents.Copilot.ReasoningEffort,
 			ReasoningEffortPhases:     cfg.Agents.Copilot.ReasoningEffortPhases,
 			TokenDiscrepancyThreshold: getTokenDiscrepancyThreshold(cfg.Agents.Copilot.TokenDiscrepancyThreshold),
+			IdleTimeout:               parseIdleTimeout(cfg.Agents.Copilot.IdleTimeout),
 		})
 	}
 
@@ -79,6 +96,7 @@ func ConfigureRegistryFromConfig(registry *Registry, cfg *config.Config) error {
 			ReasoningEffort:           cfg.Agents.OpenCode.ReasoningEffort,
 			ReasoningEffortPhases:     cfg.Agents.OpenCode.ReasoningEffortPhases,
 			TokenDiscrepancyThreshold: getTokenDiscrepancyThreshold(cfg.Agents.OpenCode.TokenDiscrepancyThreshold),
+			IdleTimeout:               parseIdleTimeout(cfg.Agents.OpenCode.IdleTimeout),
 		})
 	}
 

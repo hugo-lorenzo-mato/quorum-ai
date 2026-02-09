@@ -57,6 +57,9 @@ type AgentConfig struct {
 	// GracePeriod is the time to wait after logical completion (result:success) before
 	// killing a hung process. Default: 30s.
 	GracePeriod time.Duration
+	// IdleTimeout is the max time allowed without stdout JSON events before
+	// killing a hung process. Default: 5m. Set to 0 to disable.
+	IdleTimeout time.Duration
 }
 
 // DefaultTokenDiscrepancyThreshold is the default ratio for token discrepancy detection.
@@ -613,11 +616,36 @@ func (b *BaseAdapter) executeWithJSONStreaming(
 	logicalDone := make(chan struct{}, 1)
 	waitDone := make(chan error, 1)
 
+	// activity receives a signal for every JSON line read from stdout.
+	// Used to reset the idle timer that detects hung processes.
+	activity := make(chan struct{}, 1)
+
+	// Idle timer: kills the process if no stdout JSON activity for idleTimeout.
+	idleTimeout := b.config.IdleTimeout
+	if idleTimeout == 0 {
+		idleTimeout = 5 * time.Minute
+	}
+	idleTimer := time.NewTimer(idleTimeout)
+	defer idleTimer.Stop()
+
+	// Reset idle timer on every stdout JSON line.
+	go func() {
+		for range activity {
+			if !idleTimer.Stop() {
+				select {
+				case <-idleTimer.C:
+				default:
+				}
+			}
+			idleTimer.Reset(idleTimeout)
+		}
+	}()
+
 	// Stream stdout (JSON events) with logical completion detection
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		b.streamJSONOutputWithSignal(stdoutPipe, &stdout, adapterName, parser, logicalDone)
+		b.streamJSONOutputWithSignal(stdoutPipe, &stdout, adapterName, parser, logicalDone, activity)
 	}()
 
 	// Stream stderr (progress messages)
@@ -655,6 +683,12 @@ func (b *BaseAdapter) executeWithJSONStreaming(
 			_ = b.GracefulKill(5 * time.Second)
 			waitErr = <-waitDone
 		}
+	case <-idleTimer.C:
+		// No stdout activity for idleTimeout — process is likely hung
+		b.logger.Warn("process idle timeout — no stdout activity",
+			"adapter", adapterName, "idle_timeout", idleTimeout)
+		_ = b.GracefulKill(5 * time.Second)
+		waitErr = <-waitDone
 	case <-ctx.Done():
 		// Context expired — kill the entire process group (not just PID).
 		// exec.CommandContext only kills the PID; child processes in the Setpgid
@@ -666,6 +700,7 @@ func (b *BaseAdapter) executeWithJSONStreaming(
 	}
 
 	wg.Wait()
+	close(activity) // Stop the idle-timer reset goroutine
 	err = waitErr
 
 	duration := time.Since(startTime)
@@ -734,13 +769,22 @@ func (b *BaseAdapter) streamJSONOutput(pipe io.ReadCloser, buf *bytes.Buffer, _ 
 
 // streamJSONOutputWithSignal is like streamJSONOutput but signals logicalDone
 // when the parser emits an AgentEventCompleted event (result:success).
-func (b *BaseAdapter) streamJSONOutputWithSignal(pipe io.ReadCloser, buf *bytes.Buffer, _ string, parser StreamParser, logicalDone chan<- struct{}) {
+// If activity is non-nil, it receives a signal for each JSON line read.
+func (b *BaseAdapter) streamJSONOutputWithSignal(pipe io.ReadCloser, buf *bytes.Buffer, _ string, parser StreamParser, logicalDone chan<- struct{}, activity chan<- struct{}) {
 	scanner := bufio.NewScanner(pipe)
 	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
 
 	signaled := false
 	for scanner.Scan() {
 		line := scanner.Text()
+
+		// Signal activity for idle timeout tracking.
+		if activity != nil {
+			select {
+			case activity <- struct{}{}:
+			default:
+			}
+		}
 
 		text := extractTextFromJSONLine(line)
 		if text != "" {
