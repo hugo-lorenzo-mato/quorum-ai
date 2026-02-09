@@ -44,7 +44,7 @@ func TestWorkflowReportWriter_TaskPlanPath(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got := writer.TaskPlanPath(tt.taskID, tt.taskName)
 
-			if !strings.HasSuffix(got, tt.wantEnd) {
+			if !strings.HasSuffix(got, filepath.FromSlash(tt.wantEnd)) {
 				t.Errorf("TaskPlanPath() = %q, want suffix %q", got, tt.wantEnd)
 			}
 

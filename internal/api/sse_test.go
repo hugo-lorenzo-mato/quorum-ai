@@ -144,3 +144,103 @@ func TestSSEClient_EventsReceivable(t *testing.T) {
 		t.Error("timed out waiting for event")
 	}
 }
+
+func TestSendEventToClient_IssuesGenerationProgress(t *testing.T) {
+	bus := events.New(10)
+	s := newTestServer(bus)
+
+	rec := httptest.NewRecorder()
+	event := events.NewIssuesGenerationProgressEvent(
+		"wf-gen-1", "proj-1", "generating", 3, 10,
+		"Generating issue 3 of 10", "003-fix-auth.md", "Fix auth flow", "task-42", true,
+	)
+
+	s.sendEventToClient(rec, mockFlusher{}, event)
+
+	eventType, payload := parseSSEPayload(t, rec.Body.String())
+	if eventType != "issues_generation_progress" {
+		t.Errorf("expected event type 'issues_generation_progress', got %q", eventType)
+	}
+	if payload["workflow_id"] != "wf-gen-1" {
+		t.Errorf("expected workflow_id 'wf-gen-1', got %v", payload["workflow_id"])
+	}
+	if payload["stage"] != "generating" {
+		t.Errorf("expected stage 'generating', got %v", payload["stage"])
+	}
+	// JSON numbers are decoded as float64
+	if payload["current"] != float64(3) {
+		t.Errorf("expected current 3, got %v", payload["current"])
+	}
+	if payload["total"] != float64(10) {
+		t.Errorf("expected total 10, got %v", payload["total"])
+	}
+	if payload["message"] != "Generating issue 3 of 10" {
+		t.Errorf("expected message 'Generating issue 3 of 10', got %v", payload["message"])
+	}
+	if payload["file_name"] != "003-fix-auth.md" {
+		t.Errorf("expected file_name '003-fix-auth.md', got %v", payload["file_name"])
+	}
+	if payload["title"] != "Fix auth flow" {
+		t.Errorf("expected title 'Fix auth flow', got %v", payload["title"])
+	}
+	if payload["task_id"] != "task-42" {
+		t.Errorf("expected task_id 'task-42', got %v", payload["task_id"])
+	}
+	if payload["is_main_issue"] != true {
+		t.Errorf("expected is_main_issue true, got %v", payload["is_main_issue"])
+	}
+	if payload["timestamp"] == nil {
+		t.Error("expected timestamp to be present")
+	}
+}
+
+func TestSendEventToClient_IssuesPublishingProgress(t *testing.T) {
+	bus := events.New(10)
+	s := newTestServer(bus)
+
+	rec := httptest.NewRecorder()
+	event := events.NewIssuesPublishingProgressEvent(
+		"wf-pub-1", "proj-2", "publishing", 2, 5,
+		"Publishing issue 2 of 5", "Add CI pipeline", "task-99", false, 42, true,
+	)
+
+	s.sendEventToClient(rec, mockFlusher{}, event)
+
+	eventType, payload := parseSSEPayload(t, rec.Body.String())
+	if eventType != "issues_publishing_progress" {
+		t.Errorf("expected event type 'issues_publishing_progress', got %q", eventType)
+	}
+	if payload["workflow_id"] != "wf-pub-1" {
+		t.Errorf("expected workflow_id 'wf-pub-1', got %v", payload["workflow_id"])
+	}
+	if payload["stage"] != "publishing" {
+		t.Errorf("expected stage 'publishing', got %v", payload["stage"])
+	}
+	if payload["current"] != float64(2) {
+		t.Errorf("expected current 2, got %v", payload["current"])
+	}
+	if payload["total"] != float64(5) {
+		t.Errorf("expected total 5, got %v", payload["total"])
+	}
+	if payload["message"] != "Publishing issue 2 of 5" {
+		t.Errorf("expected message 'Publishing issue 2 of 5', got %v", payload["message"])
+	}
+	if payload["title"] != "Add CI pipeline" {
+		t.Errorf("expected title 'Add CI pipeline', got %v", payload["title"])
+	}
+	if payload["task_id"] != "task-99" {
+		t.Errorf("expected task_id 'task-99', got %v", payload["task_id"])
+	}
+	if payload["is_main_issue"] != false {
+		t.Errorf("expected is_main_issue false, got %v", payload["is_main_issue"])
+	}
+	if payload["issue_number"] != float64(42) {
+		t.Errorf("expected issue_number 42, got %v", payload["issue_number"])
+	}
+	if payload["dry_run"] != true {
+		t.Errorf("expected dry_run true, got %v", payload["dry_run"])
+	}
+	if payload["timestamp"] == nil {
+		t.Error("expected timestamp to be present")
+	}
+}

@@ -273,9 +273,9 @@ const useIssuesStore = create(
        */
       setSubmitting: (submitting) => set({
         submitting,
-        publishingProgress: submitting ? 0 : 0,
-        publishingTotal: submitting ? 0 : 0,
-        publishingMessage: submitting ? '' : '',
+        publishingProgress: 0,
+        publishingTotal: 0,
+        publishingMessage: '',
       }),
 
       /**

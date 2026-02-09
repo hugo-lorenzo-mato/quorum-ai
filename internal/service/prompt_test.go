@@ -11,6 +11,9 @@ import (
 func parseConsensusSchemaExample(t *testing.T, content string) map[string]any {
 	t.Helper()
 
+	// Normalize line endings for cross-platform compatibility
+	content = strings.ReplaceAll(content, "\r\n", "\n")
+
 	// Look for an actual code block (newline before ```yaml), not prose text
 	const marker = "\n```yaml\n"
 	start := strings.Index(content, marker)

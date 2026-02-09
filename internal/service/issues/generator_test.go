@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/config"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
@@ -513,5 +514,209 @@ func TestGenerator_formatTitle(t *testing.T) {
 				t.Errorf("formatTitle() = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestDefaultGenerateOptions(t *testing.T) {
+	opts := DefaultGenerateOptions("wf-abc-123")
+	if opts.WorkflowID != "wf-abc-123" {
+		t.Errorf("WorkflowID = %q, want %q", opts.WorkflowID, "wf-abc-123")
+	}
+	if opts.DryRun {
+		t.Error("DryRun should be false by default")
+	}
+	if !opts.CreateMainIssue {
+		t.Error("CreateMainIssue should be true")
+	}
+	if !opts.CreateSubIssues {
+		t.Error("CreateSubIssues should be true")
+	}
+	if !opts.LinkIssues {
+		t.Error("LinkIssues should be true")
+	}
+}
+
+func TestGenerationTracker_MarkGenerated(t *testing.T) {
+	tracker := &GenerationTracker{
+		StartTime:      time.Now(),
+		ExpectedFiles:  make(map[string]string),
+		GeneratedFiles: make(map[string]time.Time),
+	}
+
+	now := time.Now()
+	tracker.MarkGenerated("issue-1.md", now)
+
+	if _, found := tracker.GeneratedFiles["issue-1.md"]; !found {
+		t.Error("MarkGenerated did not record the file")
+	}
+}
+
+func TestGenerationTracker_IsValidFile(t *testing.T) {
+	startTime := time.Now().Add(-1 * time.Minute)
+	tracker := &GenerationTracker{
+		StartTime:      startTime,
+		ExpectedFiles:  map[string]string{"issue-1.md": "task-1"},
+		GeneratedFiles: make(map[string]time.Time),
+	}
+
+	// File modified after start and in expected list
+	if !tracker.IsValidFile("issue-1.md", time.Now()) {
+		t.Error("expected file modified after start should be valid")
+	}
+
+	// File modified before start time
+	if tracker.IsValidFile("issue-1.md", startTime.Add(-10*time.Minute)) {
+		t.Error("file modified before start should not be valid")
+	}
+
+	// Fuzzy match: same number, different prefix padding
+	if !tracker.IsValidFile("01-issue-1.md", time.Now()) {
+		t.Error("fuzzy-matched file should be valid")
+	}
+
+	// No expected files → any .md is valid
+	tracker2 := &GenerationTracker{
+		StartTime:      startTime,
+		ExpectedFiles:  map[string]string{},
+		GeneratedFiles: make(map[string]time.Time),
+	}
+	if !tracker2.IsValidFile("anything.md", time.Now()) {
+		t.Error("with no expected files, any file after start should be valid")
+	}
+}
+
+func TestFuzzyMatchFilename(t *testing.T) {
+	tests := []struct {
+		actual, expected string
+		want             bool
+	}{
+		{"issue-1.md", "issue-1.md", true},
+		{"01-foo.md", "1-foo.md", true},
+		{"completely-different.md", "no-match.md", false},
+		{"issue-1-extra.md", "issue-1.md", true},
+	}
+	for _, tt := range tests {
+		got := fuzzyMatchFilename(tt.actual, tt.expected)
+		if got != tt.want {
+			t.Errorf("fuzzyMatchFilename(%q, %q) = %v, want %v", tt.actual, tt.expected, got, tt.want)
+		}
+	}
+}
+
+func TestExtractLeadingNumber(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"123-foo", "123"},
+		{"01-bar", "01"},
+		{"no-number", ""},
+		{"42", "42"},
+	}
+	for _, tt := range tests {
+		got := extractLeadingNumber(tt.input)
+		if got != tt.want {
+			t.Errorf("extractLeadingNumber(%q) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+}
+
+func TestGenerator_SetProgressReporter(t *testing.T) {
+	gen := NewGenerator(nil, config.IssuesConfig{}, "", t.TempDir(), nil)
+	if gen.progress != nil {
+		t.Error("progress should be nil initially")
+	}
+	gen.SetProgressReporter(nil)
+	gen.emitIssuesGenerationProgress("wf", "stage", 0, 0, nil, "msg")
+	gen.emitIssuesPublishingProgress("wf", "stage", 0, 0, nil, 0, false, "msg")
+}
+
+func TestGenerator_GetIssueSet(t *testing.T) {
+	gen := NewGenerator(nil, config.IssuesConfig{}, "", t.TempDir(), nil)
+	set, err := gen.GetIssueSet(context.Background(), "wf-1")
+	if err != nil {
+		t.Errorf("GetIssueSet() error = %v", err)
+	}
+	if set != nil {
+		t.Error("GetIssueSet() should return nil for now")
+	}
+}
+
+func TestGenerator_ReadGeneratedIssues_InvalidWorkflowID(t *testing.T) {
+	gen := NewGenerator(nil, config.IssuesConfig{}, "", t.TempDir(), nil)
+	_, err := gen.ReadGeneratedIssues("../../../etc")
+	if err == nil {
+		t.Error("ReadGeneratedIssues should reject path traversal in workflowID")
+	}
+}
+
+func TestGenerator_ReadGeneratedIssues_EmptyDrafts(t *testing.T) {
+	tmpDir := t.TempDir()
+	gen := NewGenerator(nil, config.IssuesConfig{}, "", tmpDir, nil)
+	// No draft directory exists, no fallback directory exists
+	previews, err := gen.ReadGeneratedIssues("wf-valid-123")
+	if err != nil {
+		t.Errorf("ReadGeneratedIssues() error = %v", err)
+	}
+	if len(previews) != 0 {
+		t.Errorf("expected 0 previews, got %d", len(previews))
+	}
+}
+
+func TestGenerator_ReadGeneratedIssues_FallbackPath(t *testing.T) {
+	tmpDir := t.TempDir()
+	wfID := "wf-test-fallback"
+
+	// Create the fallback directory with a markdown file
+	issuesDir := filepath.Join(tmpDir, ".quorum", "issues", wfID)
+	if err := os.MkdirAll(issuesDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	content := "# Test Issue\n\nThis is a test body."
+	if err := os.WriteFile(filepath.Join(issuesDir, "01-test.md"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	gen := NewGenerator(nil, config.IssuesConfig{}, tmpDir, tmpDir, nil)
+	previews, err := gen.ReadGeneratedIssues(wfID)
+	if err != nil {
+		t.Fatalf("ReadGeneratedIssues() error = %v", err)
+	}
+	if len(previews) != 1 {
+		t.Fatalf("expected 1 preview, got %d", len(previews))
+	}
+	if previews[0].Title != "Test Issue" {
+		t.Errorf("title = %q, want %q", previews[0].Title, "Test Issue")
+	}
+}
+
+func TestGenerator_CleanIssuesDirectory(t *testing.T) {
+	tmpDir := t.TempDir()
+	wfID := "wf-clean-test"
+
+	// Create draft directory with files
+	draftDir := filepath.Join(tmpDir, ".quorum", "issues", wfID, "draft")
+	if err := os.MkdirAll(draftDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(draftDir, "issue.md"), []byte("test"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	gen := NewGenerator(nil, config.IssuesConfig{}, tmpDir, tmpDir, nil)
+	if err := gen.cleanIssuesDirectory(wfID); err != nil {
+		t.Fatalf("cleanIssuesDirectory() error = %v", err)
+	}
+
+	// Draft dir should be removed
+	if _, err := os.Stat(draftDir); !os.IsNotExist(err) {
+		t.Error("draft directory should have been removed")
+	}
+}
+
+func TestGenerator_CleanIssuesDirectory_NonExistent(t *testing.T) {
+	gen := NewGenerator(nil, config.IssuesConfig{}, t.TempDir(), t.TempDir(), nil)
+	if err := gen.cleanIssuesDirectory("wf-nonexistent"); err != nil {
+		t.Errorf("cleanIssuesDirectory() for non-existent dir should not error: %v", err)
 	}
 }
