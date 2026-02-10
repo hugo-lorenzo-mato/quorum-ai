@@ -139,6 +139,24 @@ describe('EditWorkflowModal', () => {
     expect(onClose).toHaveBeenCalled();
   });
 
+  it('initializes execution mode from blueprint (interactive)', () => {
+    render(
+      <EditWorkflowModal
+        isOpen
+        onClose={vi.fn()}
+        onSave={vi.fn()}
+        workflow={{
+          ...workflow,
+          status: 'pending',
+          blueprint: { execution_mode: 'interactive' },
+        }}
+      />
+    );
+
+    const interactive = screen.getByRole('radio', { name: /Interactive/i });
+    expect(interactive).toBeChecked();
+  });
+
   it('shows validation error for invalid timeout override and does not save', async () => {
     const onSave = vi.fn().mockResolvedValue();
     const onClose = vi.fn();

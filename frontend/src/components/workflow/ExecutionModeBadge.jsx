@@ -2,7 +2,6 @@ import PropTypes from 'prop-types';
 import { Users, User, Zap, Eye } from 'lucide-react';
 
 function capitalizeFirst(str) {
-  if (!str) return '';
   return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
@@ -55,7 +54,7 @@ const MODE_META = {
  */
 export function ExecutionModeBadge({ blueprint, variant = 'badge' }) {
   const modeKey = getModeKey(blueprint);
-  const meta = MODE_META[modeKey] || MODE_META.multi_agent;
+  const meta = MODE_META[modeKey];
   const agentName = blueprint?.single_agent_name;
 
   if (variant === 'detailed') {

@@ -589,5 +589,36 @@ describe('workflowStore', () => {
       expect(state.workflows[0].current_phase).toBe('plan');
       expect(state.activeWorkflow.current_phase).toBe('plan');
     });
+
+    it('phase review handlers keep unrelated workflows unchanged', () => {
+      useWorkflowStore.setState({
+        workflows: [
+          { id: 'wf-1', status: 'running', current_phase: 'plan', updated_at: 't0' },
+          { id: 'wf-2', status: 'paused', current_phase: 'execute', updated_at: 't0' },
+        ],
+        activeWorkflow: { id: 'wf-1', status: 'running', current_phase: 'plan' },
+      });
+
+      useWorkflowStore.getState().handlePhaseAwaitingReview({
+        workflow_id: 'wf-1',
+        phase: 'execute',
+        timestamp: '2026-02-10T00:00:00Z',
+      });
+      expect(useWorkflowStore.getState().workflows.find(w => w.id === 'wf-2').status).toBe('paused');
+
+      useWorkflowStore.getState().handlePhaseReviewApproved({
+        workflow_id: 'wf-1',
+        timestamp: '2026-02-10T00:00:01Z',
+      });
+      expect(useWorkflowStore.getState().workflows.find(w => w.id === 'wf-2').status).toBe('paused');
+
+      useWorkflowStore.getState().handlePhaseReviewRejected({
+        workflow_id: 'wf-1',
+        phase: 'plan',
+        timestamp: '2026-02-10T00:00:02Z',
+      });
+      expect(useWorkflowStore.getState().workflows.find(w => w.id === 'wf-2').status).toBe('paused');
+      expect(useWorkflowStore.getState().workflows.find(w => w.id === 'wf-2').current_phase).toBe('execute');
+    });
   });
 });
