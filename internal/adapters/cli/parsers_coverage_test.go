@@ -164,11 +164,11 @@ func TestEventAggregator_ShouldEmit_AlwaysEmit(t *testing.T) {
 
 func TestGetStreamParser_AllRegistered(t *testing.T) {
 	for _, name := range []string{"claude", "gemini", "codex", "copilot", "opencode"} {
-		if p := GetStreamParser(name); p == nil {
+		if GetStreamParser(name) == nil {
 			t.Errorf("expected parser for %q", name)
 		}
 	}
-	if p := GetStreamParser("unknown"); p != nil {
+	if GetStreamParser("unknown") != nil {
 		t.Error("expected nil for unknown parser")
 	}
 }

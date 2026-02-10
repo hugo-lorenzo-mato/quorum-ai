@@ -136,7 +136,7 @@ func TestFileEnforcement_ValidateBeforeCheckpoint(t *testing.T) {
 	}
 
 	// Missing file fails
-	if err := fe.ValidateBeforeCheckpoint(filepath.Join(dir, "missing.txt")); err == nil {
+	if fe.ValidateBeforeCheckpoint(filepath.Join(dir, "missing.txt")) == nil {
 		t.Error("expected error for missing file")
 	}
 }

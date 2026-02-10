@@ -1854,7 +1854,7 @@ func (m *SQLiteStateManager) deleteReportDirectory(reportPath, workflowID string
 	// Try stored report path first (sanitized)
 	if reportPath != "" {
 		if strings.HasPrefix(filepath.Clean(reportPath), ".quorum"+string(filepath.Separator)) {
-			if err := os.RemoveAll(filepath.Clean(reportPath)); err == nil {
+			if os.RemoveAll(filepath.Clean(reportPath)) == nil {
 				return
 			}
 		}

@@ -102,7 +102,7 @@ func TestWorkflowReportWriter_EnsureWithinExecutionDir_Escape(t *testing.T) {
 	w := NewWorkflowReportWriter(cfg, "wf-test")
 
 	escapePath := filepath.Join(w.ExecutionPath(), "..", "..", "etc", "passwd")
-	if err := w.ensureWithinExecutionDir(escapePath); err == nil {
+	if w.ensureWithinExecutionDir(escapePath) == nil {
 		t.Error("path escaping execution dir should error")
 	}
 }
@@ -545,7 +545,7 @@ func TestWorkflowReportWriter_PromoteModeratorAttempt_MissingSource(t *testing.T
 	cfg := Config{BaseDir: tmpDir, Enabled: true}
 	w := NewWorkflowReportWriter(cfg, "wf-promote-err-test")
 
-	if err := w.PromoteModeratorAttempt(1, 1, "claude"); err == nil {
+	if w.PromoteModeratorAttempt(1, 1, "claude") == nil {
 		t.Error("should error when source file doesn't exist")
 	}
 }
