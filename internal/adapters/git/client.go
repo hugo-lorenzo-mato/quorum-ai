@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -51,9 +52,9 @@ func NewClient(repoPath string) (*Client, error) {
 		return nil, fmt.Errorf("resolving path: %w", err)
 	}
 
-	gitPath, err := exec.LookPath("git")
+	gitPath, err := resolveGitBinaryPath(absPath)
 	if err != nil {
-		return nil, fmt.Errorf("git not found in PATH: %w", err)
+		return nil, err
 	}
 
 	client := &Client{
@@ -84,6 +85,10 @@ func (c *Client) run(ctx context.Context, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
 
+	// Security note: exec.CommandContext does not invoke a shell, so arguments are
+	// not subject to shell interpolation. We still validate the binary location
+	// at construction time and validate user-controlled args in higher-level
+	// methods to prevent option/argument injection into git itself.
 	cmd := exec.CommandContext(ctx, c.gitPath, args...)
 	cmd.Dir = c.repoPath
 
@@ -107,6 +112,7 @@ func (c *Client) runWithOutput(ctx context.Context, args ...string) (stdout, std
 	ctx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
 
+	// See security note in run().
 	cmd := exec.CommandContext(ctx, c.gitPath, args...)
 	cmd.Dir = c.repoPath
 
@@ -253,12 +259,18 @@ func (c *Client) CurrentCommit(ctx context.Context) (string, error) {
 
 // CheckoutBranch switches to a branch (implements core.GitClient).
 func (c *Client) CheckoutBranch(ctx context.Context, name string) error {
+	if err := validateGitBranchName(name); err != nil {
+		return err
+	}
 	_, err := c.run(ctx, "checkout", name)
 	return err
 }
 
 // Checkout switches to a branch or creates it (internal use).
 func (c *Client) Checkout(ctx context.Context, branch string, create bool) error {
+	if err := validateGitBranchName(branch); err != nil {
+		return err
+	}
 	args := []string{"checkout"}
 	if create {
 		args = append(args, "-b")
@@ -271,6 +283,14 @@ func (c *Client) Checkout(ctx context.Context, branch string, create bool) error
 
 // CreateBranch creates a new branch from a base.
 func (c *Client) CreateBranch(ctx context.Context, name, base string) error {
+	if err := validateGitBranchName(name); err != nil {
+		return err
+	}
+	if base != "" {
+		if err := validateGitRev(base); err != nil {
+			return err
+		}
+	}
 	args := []string{"checkout", "-b", name}
 	if base != "" {
 		args = append(args, base)
@@ -281,12 +301,18 @@ func (c *Client) CreateBranch(ctx context.Context, name, base string) error {
 
 // DeleteBranch deletes a branch (implements core.GitClient).
 func (c *Client) DeleteBranch(ctx context.Context, name string) error {
+	if err := validateGitBranchName(name); err != nil {
+		return err
+	}
 	_, err := c.run(ctx, "branch", "-d", name)
 	return err
 }
 
 // DeleteBranchForce forcibly deletes a branch (internal use).
 func (c *Client) DeleteBranchForce(ctx context.Context, name string) error {
+	if err := validateGitBranchName(name); err != nil {
+		return err
+	}
 	_, err := c.run(ctx, "branch", "-D", name)
 	return err
 }
@@ -309,6 +335,9 @@ func (c *Client) ListBranches(ctx context.Context) ([]string, error) {
 
 // BranchExists checks if a branch exists.
 func (c *Client) BranchExists(ctx context.Context, name string) (bool, error) {
+	if err := validateGitBranchName(name); err != nil {
+		return false, err
+	}
 	branches, err := c.ListBranches(ctx)
 	if err != nil {
 		return false, err
@@ -323,6 +352,9 @@ func (c *Client) BranchExists(ctx context.Context, name string) (bool, error) {
 
 // Commit creates a commit with the given message.
 func (c *Client) Commit(ctx context.Context, message string) (string, error) {
+	if err := validateGitMessage(message); err != nil {
+		return "", err
+	}
 	_, err := c.run(ctx, "commit", "-m", message)
 	if err != nil {
 		return "", err
@@ -341,7 +373,13 @@ func (c *Client) CommitAll(ctx context.Context, message string) (string, error) 
 
 // Add stages files.
 func (c *Client) Add(ctx context.Context, paths ...string) error {
-	args := append([]string{"add"}, paths...)
+	for _, p := range paths {
+		if err := validateGitPathArg(p); err != nil {
+			return err
+		}
+	}
+	// Use "--" to prevent option injection if a path starts with "-".
+	args := append([]string{"add", "--"}, paths...)
 	_, err := c.run(ctx, args...)
 	return err
 }
@@ -423,26 +461,192 @@ type Commit struct {
 
 // Fetch fetches from remote.
 func (c *Client) Fetch(ctx context.Context, remote string) error {
+	if err := validateGitRemoteName(remote); err != nil {
+		return err
+	}
 	_, err := c.run(ctx, "fetch", remote)
 	return err
 }
 
 // Push pushes to remote (implements core.GitClient).
 func (c *Client) Push(ctx context.Context, remote, branch string) error {
+	if err := validateGitRemoteName(remote); err != nil {
+		return err
+	}
+	if err := validateGitBranchName(branch); err != nil {
+		return err
+	}
 	_, err := c.run(ctx, "push", remote, branch)
 	return err
 }
 
 // PushForce pushes to remote with force-with-lease (internal use).
 func (c *Client) PushForce(ctx context.Context, remote, branch string) error {
+	if err := validateGitRemoteName(remote); err != nil {
+		return err
+	}
+	if err := validateGitBranchName(branch); err != nil {
+		return err
+	}
 	_, err := c.run(ctx, "push", remote, branch, "--force-with-lease")
 	return err
 }
 
 // Pull pulls from remote.
 func (c *Client) Pull(ctx context.Context, remote, branch string) error {
+	if err := validateGitRemoteName(remote); err != nil {
+		return err
+	}
+	if err := validateGitBranchName(branch); err != nil {
+		return err
+	}
 	_, err := c.run(ctx, "pull", remote, branch)
 	return err
+}
+
+func resolveGitBinaryPath(repoAbs string) (string, error) {
+	p, err := exec.LookPath("git")
+	if err != nil {
+		return "", fmt.Errorf("git not found in PATH: %w", err)
+	}
+	abs, err := filepath.Abs(p)
+	if err != nil {
+		return "", fmt.Errorf("resolving git path: %w", err)
+	}
+
+	real := abs
+	if rr, err := filepath.EvalSymlinks(abs); err == nil {
+		real = rr
+	}
+
+	info, err := os.Stat(real)
+	if err != nil {
+		return "", fmt.Errorf("stat git binary: %w", err)
+	}
+	if !info.Mode().IsRegular() {
+		return "", fmt.Errorf("git binary is not a regular file: %s", real)
+	}
+	if runtime.GOOS != "windows" && info.Mode()&0o111 == 0 {
+		return "", fmt.Errorf("git binary is not executable: %s", real)
+	}
+
+	// Defensive: avoid executing a "git" that lives inside the repository itself.
+	// This reduces risk if PATH is manipulated to include "." or repo directories.
+	if isPathWithinDir(repoAbs, real) {
+		return "", fmt.Errorf("refusing to execute git from within repository: %s", real)
+	}
+
+	return real, nil
+}
+
+func isPathWithinDir(root, path string) bool {
+	rootAbs, err := filepath.Abs(root)
+	if err != nil {
+		return false
+	}
+	pathAbs, err := filepath.Abs(path)
+	if err != nil {
+		return false
+	}
+	rel, err := filepath.Rel(rootAbs, pathAbs)
+	if err != nil {
+		return false
+	}
+	if rel == "." {
+		return true
+	}
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator))
+}
+
+func validateGitRemoteName(remote string) error {
+	if err := validateNoNul("remote", remote); err != nil {
+		return err
+	}
+	if remote == "" {
+		return core.ErrValidation("INVALID_REMOTE", "remote name must not be empty")
+	}
+	if strings.HasPrefix(remote, "-") {
+		return core.ErrValidation("INVALID_REMOTE", "remote name must not start with '-'")
+	}
+	for _, r := range remote {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '.' || r == '_' || r == '-' {
+			continue
+		}
+		return core.ErrValidation("INVALID_REMOTE", fmt.Sprintf("remote name contains invalid character: %q", r))
+	}
+	return nil
+}
+
+func validateGitBranchName(name string) error {
+	if err := validateNoNul("branch", name); err != nil {
+		return err
+	}
+	if name == "" {
+		return core.ErrValidation("INVALID_BRANCH", "branch name must not be empty")
+	}
+	if strings.HasPrefix(name, "-") {
+		return core.ErrValidation("INVALID_BRANCH", "branch name must not start with '-'")
+	}
+	// Conservative refname validation (subset of `git check-ref-format --branch`).
+	if strings.Contains(name, " ") || strings.Contains(name, "\t") || strings.Contains(name, "\n") || strings.Contains(name, "\r") {
+		return core.ErrValidation("INVALID_BRANCH", "branch name must not contain whitespace")
+	}
+	if strings.Contains(name, "..") || strings.Contains(name, "@{") || strings.Contains(name, "//") {
+		return core.ErrValidation("INVALID_BRANCH", "branch name contains forbidden sequence")
+	}
+	if strings.HasPrefix(name, "/") || strings.HasSuffix(name, "/") || strings.HasSuffix(name, ".") || strings.HasSuffix(name, ".lock") {
+		return core.ErrValidation("INVALID_BRANCH", "branch name has forbidden prefix/suffix")
+	}
+	for _, r := range name {
+		switch r {
+		case '~', '^', ':', '?', '*', '[', '\\':
+			return core.ErrValidation("INVALID_BRANCH", fmt.Sprintf("branch name contains forbidden character: %q", r))
+		}
+		if r < 0x20 || r == 0x7f {
+			return core.ErrValidation("INVALID_BRANCH", "branch name contains control character")
+		}
+	}
+	if name == "@" {
+		return core.ErrValidation("INVALID_BRANCH", "branch name '@' is not allowed")
+	}
+	return nil
+}
+
+func validateGitRev(rev string) error {
+	if err := validateNoNul("rev", rev); err != nil {
+		return err
+	}
+	if strings.HasPrefix(rev, "-") {
+		return core.ErrValidation("INVALID_REV", "rev must not start with '-'")
+	}
+	return nil
+}
+
+func validateGitPathArg(p string) error {
+	if err := validateNoNul("path", p); err != nil {
+		return err
+	}
+	if p == "" {
+		return core.ErrValidation("INVALID_PATH", "path must not be empty")
+	}
+	return nil
+}
+
+func validateGitMessage(msg string) error {
+	if err := validateNoNul("message", msg); err != nil {
+		return err
+	}
+	if msg == "" {
+		return core.ErrValidation("INVALID_MESSAGE", "message must not be empty")
+	}
+	return nil
+}
+
+func validateNoNul(field, value string) error {
+	if strings.IndexByte(value, 0) >= 0 {
+		return core.ErrValidation("INVALID_INPUT", fmt.Sprintf("%s contains NUL byte", field))
+	}
+	return nil
 }
 
 // Stash stashes current changes.
