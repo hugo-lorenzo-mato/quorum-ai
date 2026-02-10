@@ -357,7 +357,7 @@ func (w *WorkflowReportWriter) WriteConsensusReport(data ConsensusData, afterPha
 	fm.Set("needs_human_review", data.NeedsHumanReview)
 	fm.Set("agents_count", data.AgentsCount)
 
-	content := renderConsensusTemplate(data, afterPhase)
+	content := renderConsensusReport(data, afterPhase)
 
 	return w.writeFile(path, fm, content)
 }
@@ -420,7 +420,7 @@ func (w *WorkflowReportWriter) WriteModeratorReport(data ModeratorData) error {
 	fm.Set("tokens_out", data.TokensOut)
 	fm.Set("duration_ms", data.DurationMS)
 
-	content := renderModeratorTemplate(data, w.config.IncludeRaw)
+	content := renderModeratorReport(data, w.config.IncludeRaw)
 
 	return w.writeFile(path, fm, content)
 }
@@ -514,7 +514,7 @@ func (w *WorkflowReportWriter) WritePlan(data PlanData) error {
 	fm.Set("tokens_out", data.TokensOut)
 	fm.Set("duration_ms", data.DurationMS)
 
-	content := renderPlanTemplate(data)
+	content := renderPlanReport(data)
 
 	return w.writeFile(path, fm, content)
 }
@@ -614,7 +614,7 @@ func (w *WorkflowReportWriter) WriteTaskPlan(data TaskPlanData) error {
 	fm.Set("timestamp", w.formatTime(time.Now()))
 	fm.Set("workflow_id", w.workflowID)
 
-	content := renderTaskPlanTemplate(data)
+	content := renderTaskPlanReport(data)
 
 	return w.writeFile(path, fm, content)
 }
@@ -690,7 +690,7 @@ func (w *WorkflowReportWriter) WriteExecutionGraph(data ExecutionGraphData) erro
 	fm.Set("total_tasks", data.TotalTasks)
 	fm.Set("total_batches", data.TotalBatches)
 
-	content := renderExecutionGraphTemplate(data)
+	content := renderExecutionGraphReport(data)
 
 	return w.writeFile(path, fm, content)
 }
@@ -738,7 +738,7 @@ func (w *WorkflowReportWriter) WriteTaskResult(data TaskResultData) error {
 	fm.Set("tokens_out", data.TokensOut)
 	fm.Set("duration_ms", data.DurationMS)
 
-	content := renderTaskResultTemplate(data)
+	content := renderTaskResultReport(data)
 
 	return w.writeFile(path, fm, content)
 }
@@ -776,7 +776,7 @@ func (w *WorkflowReportWriter) WriteExecutionSummary(data ExecutionSummaryData) 
 	fm.Set("skipped_tasks", data.SkippedTasks)
 	fm.Set("total_duration_ms", data.TotalDurationMS)
 
-	content := renderExecutionSummaryTemplate(data)
+	content := renderExecutionSummaryReport(data)
 
 	return w.writeFile(path, fm, content)
 }
@@ -816,7 +816,7 @@ func (w *WorkflowReportWriter) WriteMetadata(data WorkflowMetadata) error {
 	fm.Set("status", data.Status)
 	fm.Set("consensus_score", fmt.Sprintf("%.4f", data.ConsensusScore))
 
-	content := renderMetadataTemplate(data)
+	content := renderMetadataReport(data)
 
 	return w.writeFile(path, fm, content)
 }
@@ -837,7 +837,7 @@ func (w *WorkflowReportWriter) WriteWorkflowSummary(data WorkflowMetadata) error
 	fm.Set("workflow_id", data.WorkflowID)
 	fm.Set("timestamp", w.formatTime(time.Now()))
 
-	content := renderWorkflowSummaryTemplate(data)
+	content := renderWorkflowSummaryReport(data)
 
 	return w.writeFile(path, fm, content)
 }

@@ -47,7 +47,7 @@ Research on multilingual LLM performance reveals:
 
 ### Force English Internal Processing
 
-Initially considered forcing English output in prompt templates to optimize LLM performance. Rejected because:
+Initially considered forcing English output in system prompts to optimize LLM performance. Rejected because:
 
 - Users would receive English responses they may not understand
 - Adds unnecessary complexity

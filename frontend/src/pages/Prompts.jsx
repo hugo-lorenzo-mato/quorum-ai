@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { workflowTemplates, templateCategories } from '../data/workflowTemplates';
+import { promptPresets, promptCategories } from '../data/promptPresets';
 import { Badge } from '../components/ui/Badge';
 import { 
   Search, 
@@ -74,12 +74,12 @@ const ICON_MAP = {
   zap: Zap
 };
 
-function TemplateIcon({ name, className = "" }) {
+function PresetIcon({ name, className = "" }) {
   const Icon = ICON_MAP[name] || Sparkles;
   return <Icon className={className} />;
 }
 
-function TemplatePreviewModal({ template, onClose, onUseTemplate }) {
+function PresetPreviewModal({ preset, onClose, onUsePreset }) {
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-fade-in"
@@ -94,16 +94,16 @@ function TemplatePreviewModal({ template, onClose, onUseTemplate }) {
           <div className="absolute top-0 left-6 right-6 h-0.5 rounded-full bg-gradient-to-r from-transparent via-primary to-transparent" />
           <div className="flex items-center gap-5">
             <div className="p-3 rounded-2xl bg-primary/10 border border-primary/20 text-primary">
-              <TemplateIcon name={template.icon} className="w-8 h-8" />
+              <PresetIcon name={preset.icon} className="w-8 h-8" />
             </div>
             <div className="min-w-0">
-              <h2 className="text-xl font-bold text-foreground tracking-tight">{template.name}</h2>
+              <h2 className="text-xl font-bold text-foreground tracking-tight">{preset.name}</h2>
               <div className="flex items-center gap-2 mt-1.5">
                 <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 bg-muted/50 px-2 py-0.5 rounded border border-border/50">
-                  {template.category}
+                  {preset.category}
                 </span>
-                <Badge variant={template.executionStrategy === 'multi-agent-consensus' ? 'default' : 'outline'} className="text-[10px] h-5">
-                  {template.executionStrategy === 'multi-agent-consensus' ? 'Multi-Agent' : 'Single-Agent'}
+                <Badge variant={preset.executionStrategy === 'multi-agent-consensus' ? 'default' : 'outline'} className="text-[10px] h-5">
+                  {preset.executionStrategy === 'multi-agent-consensus' ? 'Multi-Agent' : 'Single-Agent'}
                 </Badge>
               </div>
             </div>
@@ -124,14 +124,14 @@ function TemplatePreviewModal({ template, onClose, onUseTemplate }) {
               Description
             </h3>
             <p className="text-sm text-foreground/90 leading-relaxed bg-muted/20 p-4 rounded-xl border border-border/30">
-              {template.description}
+              {preset.description}
             </p>
           </div>
 
           <div>
             <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3">Tags</h3>
             <div className="flex flex-wrap gap-2">
-              {template.tags.map((tag) => (
+              {preset.tags.map((tag) => (
                 <Badge key={tag} variant="secondary" className="text-xs font-medium px-2.5">
                   {tag}
                 </Badge>
@@ -140,11 +140,11 @@ function TemplatePreviewModal({ template, onClose, onUseTemplate }) {
           </div>
 
           <div>
-            <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3">Prompt Template</h3>
+            <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3">Prompt</h3>
             <div className="relative group">
               <div className="absolute -inset-0.5 bg-gradient-to-r from-primary/10 to-transparent rounded-xl blur opacity-20 group-hover:opacity-40 transition-opacity" />
               <div className="relative bg-muted/30 backdrop-blur-sm rounded-xl p-5 text-sm font-mono whitespace-pre-wrap text-foreground/80 max-h-80 overflow-y-auto border border-border/50 shadow-inner leading-relaxed">
-                {template.prompt}
+                {preset.prompt}
               </div>
             </div>
           </div>
@@ -153,10 +153,10 @@ function TemplatePreviewModal({ template, onClose, onUseTemplate }) {
         {/* Footer */}
         <div className="flex justify-end items-center p-6 border-t border-border/50 bg-muted/5">
           <button
-            onClick={() => onUseTemplate(template)}
+            onClick={() => onUsePreset(preset)}
             className="h-8 px-5 rounded-md text-xs font-bold bg-primary text-primary-foreground hover:bg-primary/90 hover:shadow-md hover:-translate-y-0.5 hover:scale-[1.02] transition-all shadow-sm active:scale-[0.97]"
           >
-            Use This Template
+            Use This Prompt
           </button>
         </div>
       </div>
@@ -164,38 +164,38 @@ function TemplatePreviewModal({ template, onClose, onUseTemplate }) {
   );
 }
 
-export default function Templates() {
+export default function Prompts() {
   const navigate = useNavigate();
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
-  const [previewTemplate, setPreviewTemplate] = useState(null);
+  const [previewPreset, setPreviewPreset] = useState(null);
 
   // Calculate counts per category
   const categoryCounts = useMemo(() => {
-    const counts = { All: workflowTemplates.length };
-    workflowTemplates.forEach(t => {
+    const counts = { All: promptPresets.length };
+    promptPresets.forEach(t => {
       counts[t.category] = (counts[t.category] || 0) + 1;
     });
     return counts;
   }, []);
 
-  const filteredTemplates = workflowTemplates.filter((template) => {
-    const matchesCategory = selectedCategory === 'All' || template.category === selectedCategory;
+  const filteredPresets = promptPresets.filter((preset) => {
+    const matchesCategory = selectedCategory === 'All' || preset.category === selectedCategory;
     const matchesSearch =
       searchQuery === '' ||
-      template.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      template.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      template.tags.some((tag) => tag.toLowerCase().includes(searchQuery.toLowerCase()));
+      preset.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      preset.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      preset.tags.some((tag) => tag.toLowerCase().includes(searchQuery.toLowerCase()));
     return matchesCategory && matchesSearch;
   });
 
-  const handleUseTemplate = (template) => {
+  const handleUsePreset = (preset) => {
     navigate('/workflows/new', {
       state: {
-        template: {
-          prompt: template.prompt,
-          executionStrategy: template.executionStrategy,
-          name: template.name
+        promptPreset: {
+          prompt: preset.prompt,
+          executionStrategy: preset.executionStrategy,
+          name: preset.name
         }
       }
     });
@@ -207,25 +207,36 @@ export default function Templates() {
         <div className="flex flex-col gap-6">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <h1 className="text-2xl font-semibold text-foreground tracking-tight">Workflow Templates</h1>
-              <p className="text-sm text-muted-foreground mt-1">Select a pre-configured workflow to accelerate your tasks</p>
+              <h1 className="text-2xl font-semibold text-foreground tracking-tight">Prompt Presets</h1>
+              <p className="text-sm text-muted-foreground mt-1">Select a pre-configured prompt to accelerate your workflow</p>
             </div>
             
-            <div className="relative w-full sm:w-64">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <input
-                type="text"
-                placeholder="Search templates..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="h-9 w-full pl-9 pr-4 rounded-md border border-border bg-background text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/10 hover:border-border/80 transition-all"
-              />
+            <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
+              <button
+                type="button"
+                onClick={() => navigate('/system-prompts')}
+                className="h-9 px-3 rounded-md border border-border bg-background text-sm font-medium text-foreground hover:bg-accent transition-all flex items-center justify-center gap-2"
+              >
+                <FileCode2 className="w-4 h-4" />
+                System Prompts
+              </button>
+
+              <div className="relative w-full sm:w-64">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <input
+                  type="text"
+                  placeholder="Search prompts..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="h-9 w-full pl-9 pr-4 rounded-md border border-border bg-background text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/10 hover:border-border/80 transition-all"
+                />
+              </div>
             </div>
           </div>
 
           {/* Segmented/Tabs Filters with Counts */}
           <div className="flex items-center gap-1 p-1 rounded-lg bg-muted/30 overflow-x-auto no-scrollbar max-w-full border border-border/50">
-            {templateCategories.map((category) => (
+            {promptCategories.map((category) => (
               <button
                 key={category}
                 onClick={() => setSelectedCategory(category)}
@@ -246,12 +257,12 @@ export default function Templates() {
           </div>
         </div>
 
-        {/* Template Grid */}
+        {/* Preset Grid */}
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-        {filteredTemplates.map((template) => (
+        {filteredPresets.map((preset) => (
           <div
-            key={template.id}
-            onClick={() => setPreviewTemplate(template)}
+            key={preset.id}
+            onClick={() => setPreviewPreset(preset)}
             className="group flex flex-col rounded-xl border border-border bg-card transition-all duration-200 overflow-hidden shadow-sm hover:shadow-md hover:border-foreground/30 cursor-pointer"
           >
             <div className="flex-1 p-4">
@@ -259,15 +270,15 @@ export default function Templates() {
               <div className="flex items-start justify-between gap-3 mb-1.5">
                 <div className="flex items-center gap-2.5 min-w-0 flex-1">
                   <div className="flex-shrink-0 p-1 rounded-lg bg-muted/50 text-muted-foreground border border-transparent group-hover:text-primary group-hover:bg-primary/10 group-hover:border-primary/20 transition-all duration-300">
-                    <TemplateIcon name={template.icon} className="w-4 h-4" />
+                    <PresetIcon name={preset.icon} className="w-4 h-4" />
                   </div>
                   <h3 className="text-sm font-bold text-foreground leading-tight truncate group-hover:text-primary transition-colors">
-                    {template.name}
+                    {preset.name}
                   </h3>
                 </div>
                 
                 <div className="flex gap-1 flex-shrink-0 flex-wrap justify-end max-w-[40%]">
-                  {template.tags.slice(0, 2).map((tag) => (
+                  {preset.tags.slice(0, 2).map((tag) => (
                     <span 
                       key={tag} 
                       className="text-[9px] px-1.5 py-0.5 font-medium lowercase bg-muted/50 text-muted-foreground/80 rounded border border-transparent group-hover:border-primary/20 group-hover:text-primary group-hover:bg-primary/5 transition-all duration-300"
@@ -275,8 +286,8 @@ export default function Templates() {
                       {tag}
                     </span>
                   ))}
-                  {template.tags.length > 2 && (
-                    <span className="text-[9px] text-muted-foreground/40 self-center">+{template.tags.length - 2}</span>
+                  {preset.tags.length > 2 && (
+                    <span className="text-[9px] text-muted-foreground/40 self-center">+{preset.tags.length - 2}</span>
                   )}
                 </div>
               </div>
@@ -284,7 +295,7 @@ export default function Templates() {
               {/* Description */}
               <div className="pl-[34px]">
                 <p className="text-xs text-muted-foreground/80 line-clamp-2 leading-relaxed h-10">
-                  {template.description}
+                  {preset.description}
                 </p>
               </div>
             </div>
@@ -293,26 +304,26 @@ export default function Templates() {
             <div className="flex items-center justify-between px-3 py-2 border-t border-border/40 bg-muted/5 mt-auto h-10">
               <div 
                 className="flex items-center justify-center gap-1.5 text-[10px] text-muted-foreground/60 group-hover:text-primary transition-colors duration-300"
-                title={template.executionStrategy === 'multi-agent-consensus' ? 'Multi-Agent' : 'Single-Agent'}
+                title={preset.executionStrategy === 'multi-agent-consensus' ? 'Multi-Agent' : 'Single-Agent'}
               >
-                {template.executionStrategy === 'multi-agent-consensus' ? (
+                {preset.executionStrategy === 'multi-agent-consensus' ? (
                   <Network className="w-3.5 h-3.5" />
                 ) : (
                   <Zap className="w-3.5 h-3.5" />
                 )}
                 <span className="hidden sm:inline font-medium">
-                  {template.executionStrategy === 'multi-agent-consensus' ? 'Multi-Agent' : 'Single-Agent'}
+                  {preset.executionStrategy === 'multi-agent-consensus' ? 'Multi-Agent' : 'Single-Agent'}
                 </span>
               </div>
 
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  handleUseTemplate(template);
+                  handleUsePreset(preset);
                 }}
                 className="h-6 px-2.5 rounded text-[10px] font-bold bg-background/50 border border-border/60 text-foreground/70 hover:border-primary hover:text-primary hover:bg-primary/5 hover:-translate-y-0.5 transition-all active:scale-[0.97] shadow-sm flex items-center justify-center"
               >
-                Use Template
+                Use Prompt
               </button>
             </div>
           </div>
@@ -320,14 +331,14 @@ export default function Templates() {
       </div>
 
       {/* No Results */}
-      {filteredTemplates.length === 0 && (
+      {filteredPresets.length === 0 && (
         <div className="flex flex-col items-center justify-center py-24 rounded-2xl border border-dashed border-border bg-muted/5 animate-fade-in">
           <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center mb-4">
             <Search className="w-8 h-8 text-muted-foreground/50" />
           </div>
-          <h3 className="text-lg font-semibold text-foreground mb-2">No templates found</h3>
+          <h3 className="text-lg font-semibold text-foreground mb-2">No prompts found</h3>
           <p className="text-sm text-muted-foreground text-center max-w-xs">
-            We couldn&apos;t find any templates matching &quot;{searchQuery}&quot;. Try adjusting your filters or search terms.
+            We couldn&apos;t find any prompts matching &quot;{searchQuery}&quot;. Try adjusting your filters or search terms.
           </p>
           <button 
             onClick={() => { setSearchQuery(''); setSelectedCategory('All'); }}
@@ -339,23 +350,23 @@ export default function Templates() {
       )}
 
       {/* Stats Footer */}
-      {filteredTemplates.length > 0 && (
+      {filteredPresets.length > 0 && (
         <div className="border-t border-border/50 pt-8 mt-4 text-center">
           <p className="text-xs text-muted-foreground font-medium uppercase tracking-widest">
-            Showing <span className="text-foreground">{filteredTemplates.length}</span> of{' '}
-            <span className="text-foreground">{workflowTemplates.length}</span> workflow templates
+            Showing <span className="text-foreground">{filteredPresets.length}</span> of{' '}
+            <span className="text-foreground">{promptPresets.length}</span> prompt presets
           </p>
         </div>
       )}
 
       {/* Preview Modal */}
-      {previewTemplate && (
-        <TemplatePreviewModal
-          template={previewTemplate}
-          onClose={() => setPreviewTemplate(null)}
-          onUseTemplate={(template) => {
-            setPreviewTemplate(null);
-            handleUseTemplate(template);
+      {previewPreset && (
+        <PresetPreviewModal
+          preset={previewPreset}
+          onClose={() => setPreviewPreset(null)}
+          onUsePreset={(preset) => {
+            setPreviewPreset(null);
+            handleUsePreset(preset);
           }}
         />
       )}

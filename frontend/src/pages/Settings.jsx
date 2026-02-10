@@ -73,7 +73,7 @@ const TABS = [
     group: 'Project',
     icon: IssuesIcon,
     component: IssuesTab,
-    keywords: ['github', 'gitlab', 'issue', 'ticket', 'label', 'assignee', 'template']
+    keywords: ['github', 'gitlab', 'issue', 'ticket', 'label', 'assignee', 'prompt']
   },
 ];
 

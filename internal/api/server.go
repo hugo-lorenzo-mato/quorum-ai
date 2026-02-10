@@ -302,6 +302,13 @@ func (s *Server) setupRouter() chi.Router {
 			r.Put("/sessions/{sessionID}/model", s.chatHandler.SetModel)
 		})
 
+		// System prompt catalog endpoints (embedded prompts used by the workflow engine)
+		r.Route("/system-prompts", func(r chi.Router) {
+			r.Use(chimiddleware.Timeout(60 * time.Second))
+			r.Get("/", s.handleListSystemPrompts)
+			r.Get("/{id}", s.handleGetSystemPrompt)
+		})
+
 		// File browser endpoints
 		r.Route("/files", func(r chi.Router) {
 			r.Use(chimiddleware.Timeout(60 * time.Second))

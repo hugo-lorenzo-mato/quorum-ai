@@ -161,7 +161,7 @@ Closes: #87
 2. **Create the PR**
 
    - Use a descriptive title following commit conventions
-   - Fill out the PR template completely
+   - Fill out the PR description completely
    - Link related issues
    - Request review from maintainers
 

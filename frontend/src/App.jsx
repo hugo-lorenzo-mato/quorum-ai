@@ -9,7 +9,8 @@ import { loadEnums } from './lib/agents';
 // Lazy load page components
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Workflows = lazy(() => import('./pages/Workflows'));
-const Templates = lazy(() => import('./pages/Templates'));
+const Prompts = lazy(() => import('./pages/Prompts'));
+const SystemPrompts = lazy(() => import('./pages/SystemPrompts'));
 const IssuesEditor = lazy(() => import('./pages/IssuesEditor'));
 const Chat = lazy(() => import('./pages/Chat'));
 const Settings = lazy(() => import('./pages/Settings'));
@@ -55,7 +56,8 @@ function AppContent() {
           <Route path="/workflows" element={<Workflows />} />
           <Route path="/workflows/:id" element={<Workflows />} />
           <Route path="/workflows/:id/issues" element={<IssuesEditor />} />
-          <Route path="/templates" element={<Templates />} />
+          <Route path="/prompts" element={<Prompts />} />
+          <Route path="/system-prompts" element={<SystemPrompts />} />
           <Route path="/kanban" element={<Kanban />} />
           <Route path="/chat" element={<Chat />} />
           <Route path="/projects" element={<Projects />} />

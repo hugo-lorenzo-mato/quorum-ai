@@ -265,21 +265,21 @@ type IssuesConfigResponse struct {
 	Mode           string                       `json:"mode"`
 	DraftDirectory string                       `json:"draft_directory"`
 	Repository     string                       `json:"repository"`
-	ParentTemplate string                       `json:"parent_template"`
-	Template       IssueTemplateConfigResponse  `json:"template"`
+	ParentPrompt   string                       `json:"parent_prompt"`
+	Prompt         IssuePromptConfigResponse    `json:"prompt"`
 	Labels         []string                     `json:"default_labels"`
 	Assignees      []string                     `json:"default_assignees"`
 	GitLab         GitLabIssueConfigResponse    `json:"gitlab"`
 	Generator      IssueGeneratorConfigResponse `json:"generator"`
 }
 
-// IssueTemplateConfigResponse represents issue template configuration.
-type IssueTemplateConfigResponse struct {
+// IssuePromptConfigResponse represents issue prompt configuration.
+type IssuePromptConfigResponse struct {
 	Language           string `json:"language"`
 	Tone               string `json:"tone"`
 	IncludeDiagrams    bool   `json:"include_diagrams"`
 	TitleFormat        string `json:"title_format"`
-	BodyTemplateFile   string `json:"body_template_file"`
+	BodyPromptFile     string `json:"body_prompt_file"`
 	Convention         string `json:"convention"`
 	CustomInstructions string `json:"custom_instructions"`
 }
@@ -543,21 +543,21 @@ type IssuesConfigUpdate struct {
 	Mode           *string                     `json:"mode,omitempty"`
 	DraftDirectory *string                     `json:"draft_directory,omitempty"`
 	Repository     *string                     `json:"repository,omitempty"`
-	ParentTemplate *string                     `json:"parent_template,omitempty"`
-	Template       *IssueTemplateConfigUpdate  `json:"template,omitempty"`
+	ParentPrompt   *string                     `json:"parent_prompt,omitempty"`
+	Prompt         *IssuePromptConfigUpdate    `json:"prompt,omitempty"`
 	Labels         *[]string                   `json:"default_labels,omitempty"`
 	Assignees      *[]string                   `json:"default_assignees,omitempty"`
 	GitLab         *GitLabIssueConfigUpdate    `json:"gitlab,omitempty"`
 	Generator      *IssueGeneratorConfigUpdate `json:"generator,omitempty"`
 }
 
-// IssueTemplateConfigUpdate represents issue template update.
-type IssueTemplateConfigUpdate struct {
+// IssuePromptConfigUpdate represents issue prompt update.
+type IssuePromptConfigUpdate struct {
 	Language           *string `json:"language,omitempty"`
 	Tone               *string `json:"tone,omitempty"`
 	IncludeDiagrams    *bool   `json:"include_diagrams,omitempty"`
 	TitleFormat        *string `json:"title_format,omitempty"`
-	BodyTemplateFile   *string `json:"body_template_file,omitempty"`
+	BodyPromptFile     *string `json:"body_prompt_file,omitempty"`
 	Convention         *string `json:"convention,omitempty"`
 	CustomInstructions *string `json:"custom_instructions,omitempty"`
 }

@@ -270,16 +270,16 @@ func TestValidator_IssuesInvalidLanguage(t *testing.T) {
 	t.Parallel()
 	cfg := validConfig()
 	cfg.Issues.Enabled = true
-	cfg.Issues.Template.Language = "klingon"
+	cfg.Issues.Prompt.Language = "klingon"
 
 	v := NewValidator()
 	err := v.Validate(cfg)
 	if err == nil {
-		t.Fatal("Validate() error = nil, want error for invalid issues.template.language")
+		t.Fatal("Validate() error = nil, want error for invalid issues.prompt.language")
 	}
 
-	if !strings.Contains(err.Error(), "issues.template.language") {
-		t.Errorf("error = %v, should mention issues.template.language", err)
+	if !strings.Contains(err.Error(), "issues.prompt.language") {
+		t.Errorf("error = %v, should mention issues.prompt.language", err)
 	}
 }
 
@@ -287,16 +287,16 @@ func TestValidator_IssuesInvalidTone(t *testing.T) {
 	t.Parallel()
 	cfg := validConfig()
 	cfg.Issues.Enabled = true
-	cfg.Issues.Template.Tone = "funny"
+	cfg.Issues.Prompt.Tone = "funny"
 
 	v := NewValidator()
 	err := v.Validate(cfg)
 	if err == nil {
-		t.Fatal("Validate() error = nil, want error for invalid issues.template.tone")
+		t.Fatal("Validate() error = nil, want error for invalid issues.prompt.tone")
 	}
 
-	if !strings.Contains(err.Error(), "issues.template.tone") {
-		t.Errorf("error = %v, should mention issues.template.tone", err)
+	if !strings.Contains(err.Error(), "issues.prompt.tone") {
+		t.Errorf("error = %v, should mention issues.prompt.tone", err)
 	}
 }
 

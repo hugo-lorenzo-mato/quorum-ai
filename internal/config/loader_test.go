@@ -296,7 +296,7 @@ git:
   worktree:
     autoclean: true
 issues:
-  template:
+  prompt:
     language: en
 `
 	if err := os.WriteFile(configPath, []byte(configContent), 0o644); err != nil {
@@ -325,8 +325,8 @@ issues:
 	if cfg.Git.Task.AutoCommit != true {
 		t.Errorf("Git.Task.AutoCommit = %v, want %v (legacy auto_commit)", cfg.Git.Task.AutoCommit, true)
 	}
-	if cfg.Issues.Template.Language != "english" {
-		t.Errorf("Issues.Template.Language = %q, want %q (legacy en)", cfg.Issues.Template.Language, "english")
+	if cfg.Issues.Prompt.Language != "english" {
+		t.Errorf("Issues.Prompt.Language = %q, want %q (legacy en)", cfg.Issues.Prompt.Language, "english")
 	}
 }
 

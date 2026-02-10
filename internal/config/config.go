@@ -510,11 +510,11 @@ type IssuesConfig struct {
 	// Repository overrides auto-detected repository (format: "owner/repo").
 	Repository string `mapstructure:"repository" yaml:"repository" json:"repository"`
 
-	// ParentTemplate is the template for parent issues (empty = default template).
-	ParentTemplate string `mapstructure:"parent_template" yaml:"parent_template" json:"parent_template"`
+	// ParentPrompt is the prompt preset for parent issues (empty = default).
+	ParentPrompt string `mapstructure:"parent_prompt" yaml:"parent_prompt" json:"parent_prompt"`
 
-	// Template configures issue content generation.
-	Template IssueTemplateConfig `mapstructure:"template" yaml:"template" json:"template"`
+	// Prompt configures issue content generation.
+	Prompt IssuePromptConfig `mapstructure:"prompt" yaml:"prompt" json:"prompt"`
 
 	// Labels to apply to all generated issues.
 	Labels []string `mapstructure:"labels" yaml:"labels" json:"labels"`
@@ -529,8 +529,8 @@ type IssuesConfig struct {
 	Generator IssueGeneratorConfig `mapstructure:"generator" yaml:"generator" json:"generator"`
 }
 
-// IssueTemplateConfig configures issue content formatting.
-type IssueTemplateConfig struct {
+// IssuePromptConfig configures issue content formatting.
+type IssuePromptConfig struct {
 	// Language for generated content (english, spanish, french, german, portuguese, chinese, japanese).
 	Language string `mapstructure:"language" yaml:"language" json:"language"`
 
@@ -540,12 +540,12 @@ type IssueTemplateConfig struct {
 	// IncludeDiagrams adds ASCII diagrams to issue body when available.
 	IncludeDiagrams bool `mapstructure:"include_diagrams" yaml:"include_diagrams" json:"include_diagrams"`
 
-	// TitleFormat specifies the issue title template.
+	// TitleFormat specifies the issue title pattern.
 	// Supports variables: {workflow_id}, {workflow_title}, {task_id}, {task_name}
 	TitleFormat string `mapstructure:"title_format" yaml:"title_format" json:"title_format"`
 
-	// BodyTemplateFile path to custom body template (relative to config directory).
-	BodyTemplateFile string `mapstructure:"body_template_file" yaml:"body_template_file" json:"body_template_file"`
+	// BodyPromptFile path to custom body prompt (relative to config directory).
+	BodyPromptFile string `mapstructure:"body_prompt_file" yaml:"body_prompt_file" json:"body_prompt_file"`
 
 	// Convention name for style reference (e.g., "conventional-commits", "angular").
 	Convention string `mapstructure:"convention" yaml:"convention" json:"convention"`
@@ -661,8 +661,8 @@ func (c *IssuesConfig) Validate() error {
 	validTones := map[string]bool{
 		"professional": true, "casual": true, "technical": true, "concise": true, "": true,
 	}
-	if !validTones[c.Template.Tone] {
-		return fmt.Errorf("issues.template.tone must be one of: professional, casual, technical, concise")
+	if !validTones[c.Prompt.Tone] {
+		return fmt.Errorf("issues.prompt.tone must be one of: professional, casual, technical, concise")
 	}
 
 	// Validate language (must match core.IssueLanguages)
@@ -670,9 +670,9 @@ func (c *IssuesConfig) Validate() error {
 		"english": true, "spanish": true, "french": true, "german": true,
 		"portuguese": true, "chinese": true, "japanese": true, "": true,
 	}
-	language := normalizeIssueLanguage(c.Template.Language)
+	language := normalizeIssueLanguage(c.Prompt.Language)
 	if !validLanguages[language] {
-		return fmt.Errorf("issues.template.language must be one of: english, spanish, french, german, portuguese, chinese, japanese")
+		return fmt.Errorf("issues.prompt.language must be one of: english, spanish, french, german, portuguese, chinese, japanese")
 	}
 
 	// GitLab requires project_id

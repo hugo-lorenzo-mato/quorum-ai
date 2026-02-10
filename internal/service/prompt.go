@@ -15,27 +15,27 @@ import (
 //go:embed prompts/*.md.tmpl
 var promptsFS embed.FS
 
-// PromptRenderer renders prompts from templates.
+// PromptRenderer renders prompts from embedded prompt sources.
 type PromptRenderer struct {
-	templates map[string]*template.Template
-	mu        sync.RWMutex
+	prompts map[string]*template.Template
+	mu      sync.RWMutex
 }
 
 // NewPromptRenderer creates a new prompt renderer.
 func NewPromptRenderer() (*PromptRenderer, error) {
 	r := &PromptRenderer{
-		templates: make(map[string]*template.Template),
+		prompts: make(map[string]*template.Template),
 	}
 
-	if err := r.loadTemplates(); err != nil {
-		return nil, fmt.Errorf("loading templates: %w", err)
+	if err := r.loadPrompts(); err != nil {
+		return nil, fmt.Errorf("loading prompts: %w", err)
 	}
 
 	return r, nil
 }
 
-// loadTemplates loads all templates from the embedded filesystem.
-func (r *PromptRenderer) loadTemplates() error {
+// loadPrompts loads all prompt sources from the embedded filesystem.
+func (r *PromptRenderer) loadPrompts() error {
 	return fs.WalkDir(promptsFS, "prompts", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -53,18 +53,23 @@ func (r *PromptRenderer) loadTemplates() error {
 		name := strings.TrimPrefix(path, "prompts/")
 		name = strings.TrimSuffix(name, ".md.tmpl")
 
-		tmpl, err := template.New(name).Funcs(templateFuncs()).Parse(string(content))
-		if err != nil {
-			return fmt.Errorf("parsing template %s: %w", name, err)
+		_, body, ok := splitSystemPromptFrontmatter(string(content))
+		if !ok {
+			body = string(content)
 		}
 
-		r.templates[name] = tmpl
+		tmpl, err := template.New(name).Funcs(promptFuncs()).Parse(body)
+		if err != nil {
+			return fmt.Errorf("parsing prompt %s: %w", name, err)
+		}
+
+		r.prompts[name] = tmpl
 		return nil
 	})
 }
 
-// templateFuncs returns custom template functions.
-func templateFuncs() template.FuncMap {
+// promptFuncs returns functions available within prompt rendering.
+func promptFuncs() template.FuncMap {
 	return template.FuncMap{
 		"join":      strings.Join,
 		"indent":    indent,
@@ -90,17 +95,17 @@ func indent(spaces int, s string) string {
 	return strings.Join(lines, "\n")
 }
 
-// RefinePromptParams contains parameters for prompt refinement template.
+// RefinePromptParams contains parameters for the refine prompt.
 type RefinePromptParams struct {
 	OriginalPrompt string
 }
 
-// RenderRefinePrompt renders the prompt refinement template.
+// RenderRefinePrompt renders the refine prompt.
 func (r *PromptRenderer) RenderRefinePrompt(params RefinePromptParams) (string, error) {
 	return r.render("refine-prompt", params)
 }
 
-// AnalyzeV1Params contains parameters for analyze-v1 template.
+// AnalyzeV1Params contains parameters for the analyze-v1 prompt.
 type AnalyzeV1Params struct {
 	Prompt         string
 	ProjectPath    string
@@ -114,7 +119,7 @@ func (r *PromptRenderer) RenderAnalyzeV1(params AnalyzeV1Params) (string, error)
 	return r.render("analyze-v1", params)
 }
 
-// AnalysisOutput represents the output from an analysis agent for templates.
+// AnalysisOutput represents the output from an analysis agent for the system prompts.
 type AnalysisOutput struct {
 	AgentName       string
 	RawOutput       string
@@ -123,7 +128,7 @@ type AnalysisOutput struct {
 	Recommendations []string
 }
 
-// SynthesizeAnalysisParams contains parameters for analysis synthesis template.
+// SynthesizeAnalysisParams contains parameters for the analysis synthesis prompt.
 type SynthesizeAnalysisParams struct {
 	Prompt         string
 	Analyses       []AnalysisOutput
@@ -135,7 +140,7 @@ func (r *PromptRenderer) RenderSynthesizeAnalysis(params SynthesizeAnalysisParam
 	return r.render("synthesize-analysis", params)
 }
 
-// PlanParams contains parameters for plan generation template.
+// PlanParams contains parameters for the plan generation prompt.
 type PlanParams struct {
 	Prompt               string
 	ConsolidatedAnalysis string
@@ -187,7 +192,7 @@ type PlanProposal struct {
 	Content   string
 }
 
-// SynthesizePlansParams contains parameters for plan synthesis template.
+// SynthesizePlansParams contains parameters for the plan synthesis prompt.
 type SynthesizePlansParams struct {
 	Prompt   string
 	Analysis string
@@ -200,7 +205,7 @@ func (r *PromptRenderer) RenderSynthesizePlans(params SynthesizePlansParams) (st
 	return r.render("consolidate-plans", params)
 }
 
-// TaskExecuteParams contains parameters for task execution template.
+// TaskExecuteParams contains parameters for the task execution prompt.
 type TaskExecuteParams struct {
 	Task        *core.Task
 	Context     string
@@ -229,46 +234,46 @@ func (r *PromptRenderer) RenderTaskDetailGenerate(params TaskDetailGenerateParam
 	return r.render("task-detail-generate", params)
 }
 
-// Render renders a template by name with the given data.
+// Render renders a prompt by name with the given data.
 func (r *PromptRenderer) Render(name string, data interface{}) (string, error) {
 	return r.render(name, data)
 }
 
-// render executes a template with the given data.
+// render executes a prompt with the given data.
 func (r *PromptRenderer) render(name string, data interface{}) (string, error) {
 	r.mu.RLock()
-	tmpl, ok := r.templates[name]
+	tmpl, ok := r.prompts[name]
 	r.mu.RUnlock()
 
 	if !ok {
-		return "", fmt.Errorf("template %q not found", name)
+		return "", fmt.Errorf("prompt %q not found", name)
 	}
 
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, data); err != nil {
-		return "", fmt.Errorf("executing template %s: %w", name, err)
+		return "", fmt.Errorf("executing prompt %s: %w", name, err)
 	}
 
 	return buf.String(), nil
 }
 
-// ListTemplates returns available template names.
-func (r *PromptRenderer) ListTemplates() []string {
+// ListPromptIDs returns available prompt IDs.
+func (r *PromptRenderer) ListPromptIDs() []string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	names := make([]string, 0, len(r.templates))
-	for name := range r.templates {
+	names := make([]string, 0, len(r.prompts))
+	for name := range r.prompts {
 		names = append(names, name)
 	}
 	return names
 }
 
-// HasTemplate checks if a template exists.
-func (r *PromptRenderer) HasTemplate(name string) bool {
+// HasPrompt checks if a prompt exists.
+func (r *PromptRenderer) HasPrompt(name string) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	_, ok := r.templates[name]
+	_, ok := r.prompts[name]
 	return ok
 }
 
@@ -278,7 +283,7 @@ type ModeratorAnalysisSummary struct {
 	FilePath  string // Path to the analysis file for the moderator to read
 }
 
-// ModeratorEvaluateParams contains parameters for moderator evaluation template.
+// ModeratorEvaluateParams contains parameters for the moderator evaluation prompt.
 type ModeratorEvaluateParams struct {
 	Prompt         string
 	Round          int
@@ -301,7 +306,7 @@ type VnDivergenceInfo struct {
 	Guidance       string
 }
 
-// VnRefineParams contains parameters for vn-refine template.
+// VnRefineParams contains parameters for the vn-refine prompt.
 type VnRefineParams struct {
 	Prompt               string
 	Context              string
@@ -333,7 +338,7 @@ type IssueTaskFile struct {
 	Index int
 }
 
-// IssueGenerateParams contains parameters for issue generation template.
+// IssueGenerateParams contains parameters for the issue generation prompt.
 // This uses a path-based approach where Claude reads source files and writes issue files directly.
 type IssueGenerateParams struct {
 	ConsolidatedAnalysisPath string          // Path to consolidated analysis file

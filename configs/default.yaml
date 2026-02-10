@@ -365,10 +365,10 @@ issues:
   draft_directory: ""
   # Repository override (empty = auto-detect from CWD, format: "owner/repo")
   repository: ""
-  # Template for parent issues (empty = default template)
-  parent_template: ""
-  # Template settings for issue content
-  template:
+  # Prompt preset for parent issues (empty = default)
+  parent_prompt: ""
+  # Prompt settings for issue content
+  prompt:
     # Language for issue content: english, spanish, french, german, portuguese, chinese, japanese
     language: english
     # Tone: professional, casual, technical, concise
@@ -377,8 +377,8 @@ issues:
     include_diagrams: true
     # Title format pattern. Placeholders: {task_name}, {task_id}, {workflow_id}
     title_format: "[quorum] {task_name}"
-    # Path to custom body template file (optional)
-    body_template_file: ""
+    # Path to custom body prompt file (optional)
+    body_prompt_file: ""
     # Issue convention: conventional-issues, etc. (optional)
     convention: ""
     # Custom instructions for issue generation (optional)

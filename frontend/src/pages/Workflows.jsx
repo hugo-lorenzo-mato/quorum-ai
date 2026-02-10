@@ -1604,19 +1604,19 @@ const AGENT_OPTIONS = [
 
 function NewWorkflowForm({ onSubmit, onCancel, loading }) {
   const location = useLocation();
-  const template = location.state?.template;
+  const promptPreset = location.state?.promptPreset;
   
-  const [title, setTitle] = useState(() => template?.name || '');
-  const [prompt, setPrompt] = useState(() => template?.prompt || '');
+  const [title, setTitle] = useState(() => promptPreset?.name || '');
+  const [prompt, setPrompt] = useState(() => promptPreset?.prompt || '');
   const [files, setFiles] = useState([]);
   const fileInputRef = useRef(null);
 
   // Execution mode state
   const [executionMode, setExecutionMode] = useState(() => {
-    if (template?.executionStrategy === 'single-agent') {
+    if (promptPreset?.executionStrategy === 'single-agent') {
       return 'single_agent';
     }
-    if (template?.executionStrategy === 'multi-agent-consensus') {
+    if (promptPreset?.executionStrategy === 'multi-agent-consensus') {
       return 'multi_agent';
     }
     return 'multi_agent';
@@ -1715,11 +1715,11 @@ function NewWorkflowForm({ onSubmit, onCancel, loading }) {
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-xl font-semibold text-foreground">Create New Workflow</h2>
           <Link
-            to="/templates"
+            to="/prompts"
             className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-primary hover:text-primary/80 bg-primary/10 hover:bg-primary/20 rounded-lg transition-colors"
           >
             <Sparkles className="w-4 h-4" />
-            Browse Templates
+            Browse Prompts
           </Link>
         </div>
       <form onSubmit={handleSubmit} className="space-y-8">

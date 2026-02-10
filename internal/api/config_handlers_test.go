@@ -357,10 +357,10 @@ func TestHandleUpdateConfig_IssuesFields(t *testing.T) {
 			"mode": "agent",
 			"draft_directory": "custom/issues",
 			"repository": "owner/repo",
-			"parent_template": "epic",
+			"parent_prompt": "epic",
 			"default_labels": ["quorum", "automated"],
 			"default_assignees": ["dev1"],
-			"template": {
+			"prompt": {
 				"language": "english",
 				"tone": "technical",
 				"include_diagrams": true,
@@ -419,8 +419,8 @@ func TestHandleUpdateConfig_IssuesFields(t *testing.T) {
 	if issues.Repository != "owner/repo" {
 		t.Errorf("expected issues.repository 'owner/repo', got %q", issues.Repository)
 	}
-	if issues.ParentTemplate != "epic" {
-		t.Errorf("expected issues.parent_template 'epic', got %q", issues.ParentTemplate)
+	if issues.ParentPrompt != "epic" {
+		t.Errorf("expected issues.parent_prompt 'epic', got %q", issues.ParentPrompt)
 	}
 	if len(issues.Labels) != 2 {
 		t.Errorf("expected 2 labels, got %d", len(issues.Labels))
@@ -429,24 +429,24 @@ func TestHandleUpdateConfig_IssuesFields(t *testing.T) {
 		t.Errorf("expected assignees [dev1], got %v", issues.Assignees)
 	}
 
-	// Verify template fields
-	if issues.Template.Language != "english" {
-		t.Errorf("expected template.language 'english', got %q", issues.Template.Language)
+	// Verify prompt fields
+	if issues.Prompt.Language != "english" {
+		t.Errorf("expected prompt.language 'english', got %q", issues.Prompt.Language)
 	}
-	if issues.Template.Tone != "technical" {
-		t.Errorf("expected template.tone 'technical', got %q", issues.Template.Tone)
+	if issues.Prompt.Tone != "technical" {
+		t.Errorf("expected prompt.tone 'technical', got %q", issues.Prompt.Tone)
 	}
-	if !issues.Template.IncludeDiagrams {
-		t.Error("expected template.include_diagrams to be true")
+	if !issues.Prompt.IncludeDiagrams {
+		t.Error("expected prompt.include_diagrams to be true")
 	}
-	if issues.Template.TitleFormat != "[quorum] {task_name}" {
-		t.Errorf("expected template.title_format '[quorum] {task_name}', got %q", issues.Template.TitleFormat)
+	if issues.Prompt.TitleFormat != "[quorum] {task_name}" {
+		t.Errorf("expected prompt.title_format '[quorum] {task_name}', got %q", issues.Prompt.TitleFormat)
 	}
-	if issues.Template.Convention != "conventional-commits" {
-		t.Errorf("expected template.convention 'conventional-commits', got %q", issues.Template.Convention)
+	if issues.Prompt.Convention != "conventional-commits" {
+		t.Errorf("expected prompt.convention 'conventional-commits', got %q", issues.Prompt.Convention)
 	}
-	if issues.Template.CustomInstructions != "Be concise" {
-		t.Errorf("expected template.custom_instructions 'Be concise', got %q", issues.Template.CustomInstructions)
+	if issues.Prompt.CustomInstructions != "Be concise" {
+		t.Errorf("expected prompt.custom_instructions 'Be concise', got %q", issues.Prompt.CustomInstructions)
 	}
 
 	// Verify GitLab fields
@@ -510,12 +510,12 @@ func TestHandleGetEnums_IssueFields(t *testing.T) {
 		t.Error("expected issue_providers to include 'github'")
 	}
 
-	if len(enums.TemplateLanguages) == 0 {
-		t.Error("expected template_languages to be populated")
+	if len(enums.IssuePromptLanguages) == 0 {
+		t.Error("expected issue_prompt_languages to be populated")
 	}
 
-	if len(enums.TemplateTones) == 0 {
-		t.Error("expected template_tones to be populated")
+	if len(enums.IssuePromptTones) == 0 {
+		t.Error("expected issue_prompt_tones to be populated")
 	}
 
 	if len(enums.IssueModes) == 0 {
