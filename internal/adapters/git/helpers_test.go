@@ -703,10 +703,10 @@ func TestValidateGitRemoteName(t *testing.T) {
 	if err := validateGitRemoteName("origin"); err != nil {
 		t.Fatalf("validateGitRemoteName(origin) unexpected error: %v", err)
 	}
-	if err := validateGitRemoteName("bad/remote"); err == nil {
+	if validateGitRemoteName("bad/remote") == nil {
 		t.Fatalf("validateGitRemoteName(bad/remote) expected error")
 	}
-	if err := validateGitRemoteName("-origin"); err == nil {
+	if validateGitRemoteName("-origin") == nil {
 		t.Fatalf("validateGitRemoteName(-origin) expected error")
 	}
 }
@@ -717,10 +717,10 @@ func TestValidateGitBranchName(t *testing.T) {
 	if err := validateGitBranchName("feature/test"); err != nil {
 		t.Fatalf("validateGitBranchName(feature/test) unexpected error: %v", err)
 	}
-	if err := validateGitBranchName("-bad"); err == nil {
+	if validateGitBranchName("-bad") == nil {
 		t.Fatalf("validateGitBranchName(-bad) expected error")
 	}
-	if err := validateGitBranchName("bad..name"); err == nil {
+	if validateGitBranchName("bad..name") == nil {
 		t.Fatalf("validateGitBranchName(bad..name) expected error")
 	}
 }
@@ -728,10 +728,10 @@ func TestValidateGitBranchName(t *testing.T) {
 func TestValidateGitExecArgs(t *testing.T) {
 	t.Parallel()
 
-	if err := validateGitExecArgs(nil); err == nil {
+	if validateGitExecArgs(nil) == nil {
 		t.Fatalf("validateGitExecArgs(nil) expected error")
 	}
-	if err := validateGitExecArgs([]string{"-bad"}); err == nil {
+	if validateGitExecArgs([]string{"-bad"}) == nil {
 		t.Fatalf("validateGitExecArgs(invalid subcommand) expected error")
 	}
 	if err := validateGitExecArgs([]string{"status", "ok"}); err != nil {
@@ -740,7 +740,7 @@ func TestValidateGitExecArgs(t *testing.T) {
 	if err := validateGitExecArgs([]string{"commit", "-m", "line1\nline2"}); err != nil {
 		t.Fatalf("validateGitExecArgs(commit -m multiline) unexpected error: %v", err)
 	}
-	if err := validateGitExecArgs([]string{"status", "line1\nline2"}); err == nil {
+	if validateGitExecArgs([]string{"status", "line1\nline2"}) == nil {
 		t.Fatalf("validateGitExecArgs(status newline) expected error")
 	}
 }
