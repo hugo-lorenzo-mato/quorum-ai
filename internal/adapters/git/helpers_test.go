@@ -683,3 +683,64 @@ func TestParseStatus_MultipleBranchInfo(t *testing.T) {
 		t.Errorf("Ahead should be 0 for malformed line, got %d", status.Ahead)
 	}
 }
+
+func TestResolveGitBinaryPath(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	p, err := resolveGitBinaryPath(repo)
+	if err != nil {
+		t.Fatalf("resolveGitBinaryPath: %v", err)
+	}
+	if p == "" {
+		t.Fatalf("resolveGitBinaryPath returned empty path")
+	}
+}
+
+func TestValidateGitRemoteName(t *testing.T) {
+	t.Parallel()
+
+	if err := validateGitRemoteName("origin"); err != nil {
+		t.Fatalf("validateGitRemoteName(origin) unexpected error: %v", err)
+	}
+	if err := validateGitRemoteName("bad/remote"); err == nil {
+		t.Fatalf("validateGitRemoteName(bad/remote) expected error")
+	}
+	if err := validateGitRemoteName("-origin"); err == nil {
+		t.Fatalf("validateGitRemoteName(-origin) expected error")
+	}
+}
+
+func TestValidateGitBranchName(t *testing.T) {
+	t.Parallel()
+
+	if err := validateGitBranchName("feature/test"); err != nil {
+		t.Fatalf("validateGitBranchName(feature/test) unexpected error: %v", err)
+	}
+	if err := validateGitBranchName("-bad"); err == nil {
+		t.Fatalf("validateGitBranchName(-bad) expected error")
+	}
+	if err := validateGitBranchName("bad..name"); err == nil {
+		t.Fatalf("validateGitBranchName(bad..name) expected error")
+	}
+}
+
+func TestValidateGitExecArgs(t *testing.T) {
+	t.Parallel()
+
+	if err := validateGitExecArgs(nil); err == nil {
+		t.Fatalf("validateGitExecArgs(nil) expected error")
+	}
+	if err := validateGitExecArgs([]string{"-bad"}); err == nil {
+		t.Fatalf("validateGitExecArgs(invalid subcommand) expected error")
+	}
+	if err := validateGitExecArgs([]string{"status", "ok"}); err != nil {
+		t.Fatalf("validateGitExecArgs(status ok) unexpected error: %v", err)
+	}
+	if err := validateGitExecArgs([]string{"commit", "-m", "line1\nline2"}); err != nil {
+		t.Fatalf("validateGitExecArgs(commit -m multiline) unexpected error: %v", err)
+	}
+	if err := validateGitExecArgs([]string{"status", "line1\nline2"}); err == nil {
+		t.Fatalf("validateGitExecArgs(status newline) expected error")
+	}
+}
