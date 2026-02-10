@@ -683,3 +683,183 @@ func TestGracefulKill_NilProcess(t *testing.T) {
 		t.Errorf("expected nil error for nil process, got: %v", err)
 	}
 }
+
+func TestBaseAdapter_SetLogCallback(t *testing.T) {
+	t.Parallel()
+
+	adapter := NewBaseAdapter(AgentConfig{}, nil)
+	if adapter.logCallback != nil {
+		t.Error("logCallback should be nil initially")
+	}
+
+	called := false
+	adapter.SetLogCallback(func(_ string) {
+		called = true
+	})
+	if adapter.logCallback == nil {
+		t.Error("logCallback should be set after SetLogCallback")
+	}
+
+	adapter.SetLogCallback(nil)
+	if adapter.logCallback != nil {
+		t.Error("logCallback should be nil after setting nil")
+	}
+	_ = called
+}
+
+func TestBaseAdapter_SetEventHandler(t *testing.T) {
+	t.Parallel()
+
+	adapter := NewBaseAdapter(AgentConfig{}, nil)
+	if adapter.eventHandler != nil {
+		t.Error("eventHandler should be nil initially")
+	}
+	if adapter.aggregator != nil {
+		t.Error("aggregator should be nil initially")
+	}
+
+	adapter.SetEventHandler(func(_ core.AgentEvent) {})
+	if adapter.eventHandler == nil {
+		t.Error("eventHandler should be set")
+	}
+	if adapter.aggregator == nil {
+		t.Error("aggregator should be created when handler is set")
+	}
+
+	adapter.SetEventHandler(nil)
+	if adapter.eventHandler != nil {
+		t.Error("eventHandler should be nil after setting nil")
+	}
+}
+
+func TestBaseAdapter_EmitEvent_NilHandler(t *testing.T) {
+	t.Parallel()
+
+	adapter := NewBaseAdapter(AgentConfig{}, nil)
+	// Should not panic with nil handler
+	adapter.emitEvent(core.AgentEvent{Type: core.AgentEventChunk, Message: "test"})
+}
+
+func TestBaseAdapter_EmitEvent_WithHandler(t *testing.T) {
+	t.Parallel()
+
+	adapter := NewBaseAdapter(AgentConfig{}, nil)
+	var received []core.AgentEvent
+	adapter.SetEventHandler(func(e core.AgentEvent) {
+		received = append(received, e)
+	})
+
+	adapter.emitEvent(core.AgentEvent{Type: core.AgentEventChunk, Message: "hello"})
+	// The aggregator may or may not emit depending on dedup rules,
+	// but at minimum it should not panic
+}
+
+func TestBaseAdapter_Config_Extended(t *testing.T) {
+	t.Parallel()
+
+	cfg := AgentConfig{
+		Name:  "test-agent",
+		Path:  "/usr/bin/test",
+		Model: "test-model",
+	}
+	adapter := NewBaseAdapter(cfg, nil)
+	got := adapter.Config()
+
+	if got.Name != "test-agent" {
+		t.Errorf("Config().Name = %q, want %q", got.Name, "test-agent")
+	}
+	if got.Path != "/usr/bin/test" {
+		t.Errorf("Config().Path = %q, want %q", got.Path, "/usr/bin/test")
+	}
+	if got.Model != "test-model" {
+		t.Errorf("Config().Model = %q, want %q", got.Model, "test-model")
+	}
+}
+
+func TestBaseAdapter_AddStreamingArgs(t *testing.T) {
+	t.Parallel()
+
+	adapter := NewBaseAdapter(AgentConfig{}, nil)
+
+	t.Run("with format flag and value", func(t *testing.T) {
+		t.Parallel()
+		args := adapter.addStreamingArgs([]string{"run"}, StreamConfig{
+			OutputFormatFlag:  "--output",
+			OutputFormatValue: "json",
+			RequiredFlags:     []string{"--stream"},
+		})
+		want := []string{"run", "--output", "json", "--stream"}
+		if len(args) != len(want) {
+			t.Fatalf("addStreamingArgs() len = %d, want %d: %v", len(args), len(want), args)
+		}
+		for i, w := range want {
+			if args[i] != w {
+				t.Errorf("args[%d] = %q, want %q", i, args[i], w)
+			}
+		}
+	})
+
+	t.Run("with boolean flag", func(t *testing.T) {
+		t.Parallel()
+		args := adapter.addStreamingArgs([]string{"execute"}, StreamConfig{
+			OutputFormatFlag: "--json",
+		})
+		want := []string{"execute", "--json"}
+		if len(args) != len(want) {
+			t.Fatalf("addStreamingArgs() len = %d, want %d: %v", len(args), len(want), args)
+		}
+		for i, w := range want {
+			if args[i] != w {
+				t.Errorf("args[%d] = %q, want %q", i, args[i], w)
+			}
+		}
+	})
+
+	t.Run("no format flag", func(t *testing.T) {
+		t.Parallel()
+		args := adapter.addStreamingArgs([]string{"cmd"}, StreamConfig{
+			RequiredFlags: []string{"-v"},
+		})
+		want := []string{"cmd", "-v"}
+		if len(args) != len(want) {
+			t.Fatalf("addStreamingArgs() len = %d, want %d: %v", len(args), len(want), args)
+		}
+	})
+
+	t.Run("does not modify original slice", func(t *testing.T) {
+		t.Parallel()
+		original := []string{"run"}
+		_ = adapter.addStreamingArgs(original, StreamConfig{
+			OutputFormatFlag: "--json",
+		})
+		if len(original) != 1 {
+			t.Errorf("original slice was modified: %v", original)
+		}
+	})
+}
+
+func TestTruncateForDebug(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		input  string
+		maxLen int
+		want   string
+	}{
+		{"short string", "hello", 10, "hello"},
+		{"exact length", "hello", 5, "hello"},
+		{"truncated", "hello world", 5, "hello...[truncated]"},
+		{"empty", "", 10, ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := truncateForDebug(tt.input, tt.maxLen)
+			if got != tt.want {
+				t.Errorf("truncateForDebug(%q, %d) = %q, want %q", tt.input, tt.maxLen, got, tt.want)
+			}
+		})
+	}
+}
