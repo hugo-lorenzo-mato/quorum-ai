@@ -45,6 +45,12 @@ describe('uiStore', () => {
     expect(document.documentElement.classList.contains('nord')).toBe(false);
   });
 
+  it('setTheme adds the theme class (but not dark) for non-dark themes', () => {
+    useUIStore.getState().setTheme('sepia');
+    expect(document.documentElement.classList.contains('sepia')).toBe(true);
+    expect(document.documentElement.classList.contains('dark')).toBe(false);
+  });
+
   it('setTheme(system) respects prefers-color-scheme', () => {
     globalThis.matchMedia = () => ({ matches: true, addEventListener() {}, removeEventListener() {} });
     useUIStore.getState().setTheme('system');

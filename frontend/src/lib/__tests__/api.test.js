@@ -290,4 +290,76 @@ describe('workflowApi', () => {
       );
     });
   });
+
+  describe('task mutations', () => {
+    it('createTask posts JSON body', async () => {
+      global.fetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ id: 't1' }),
+      });
+
+      await workflowApi.createTask('wf-1', { name: 'x' });
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        '/api/v1/workflows/wf-1/tasks/',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ name: 'x' }),
+        })
+      );
+    });
+
+    it('updateTask patches JSON body', async () => {
+      global.fetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ id: 't1' }),
+      });
+
+      await workflowApi.updateTask('wf-1', 't1', { name: 'y' });
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        '/api/v1/workflows/wf-1/tasks/t1',
+        expect.objectContaining({
+          method: 'PATCH',
+          body: JSON.stringify({ name: 'y' }),
+        })
+      );
+    });
+
+    it('deleteTask sends DELETE without a body', async () => {
+      global.fetch.mockResolvedValue({
+        ok: true,
+        status: 204,
+        json: () => Promise.resolve({}),
+      });
+
+      await workflowApi.deleteTask('wf-1', 't1');
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        '/api/v1/workflows/wf-1/tasks/t1',
+        expect.objectContaining({ method: 'DELETE' })
+      );
+      expect(global.fetch.mock.calls[0][1].body).toBeUndefined();
+    });
+
+    it('reorderTasks puts task_order JSON body', async () => {
+      global.fetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve([{ id: 't2' }, { id: 't1' }]),
+      });
+
+      await workflowApi.reorderTasks('wf-1', ['t2', 't1']);
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        '/api/v1/workflows/wf-1/tasks/reorder',
+        expect.objectContaining({
+          method: 'PUT',
+          body: JSON.stringify({ task_order: ['t2', 't1'] }),
+        })
+      );
+    });
+  });
 });

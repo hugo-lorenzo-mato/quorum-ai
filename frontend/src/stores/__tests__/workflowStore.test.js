@@ -398,6 +398,16 @@ describe('workflowStore', () => {
       expect(useWorkflowStore.getState().loading).toBe(false);
     });
 
+    it('reviewWorkflow stores error and returns null on API failure', async () => {
+      useWorkflowStore.setState({ fetchWorkflow: vi.fn() });
+      workflowApi.review = vi.fn().mockRejectedValue(new Error('review failed'));
+
+      const res = await useWorkflowStore.getState().reviewWorkflow('wf-1', { action: 'approve' });
+      expect(res).toBeNull();
+      expect(useWorkflowStore.getState().error).toBe('review failed');
+      expect(useWorkflowStore.getState().loading).toBe(false);
+    });
+
     it('switchToInteractive calls API and triggers silent refresh', async () => {
       const fetchWorkflowSpy = vi.fn().mockResolvedValue({ id: 'wf-1' });
       useWorkflowStore.setState({ fetchWorkflow: fetchWorkflowSpy });
@@ -406,6 +416,16 @@ describe('workflowStore', () => {
       await useWorkflowStore.getState().switchToInteractive('wf-1');
       expect(workflowApi.switchInteractive).toHaveBeenCalledWith('wf-1');
       expect(fetchWorkflowSpy).toHaveBeenCalledWith('wf-1', { silent: true });
+      expect(useWorkflowStore.getState().loading).toBe(false);
+    });
+
+    it('switchToInteractive stores error and returns null on API failure', async () => {
+      useWorkflowStore.setState({ fetchWorkflow: vi.fn() });
+      workflowApi.switchInteractive = vi.fn().mockRejectedValue(new Error('switch failed'));
+
+      const res = await useWorkflowStore.getState().switchToInteractive('wf-1');
+      expect(res).toBeNull();
+      expect(useWorkflowStore.getState().error).toBe('switch failed');
       expect(useWorkflowStore.getState().loading).toBe(false);
     });
   });
@@ -422,6 +442,15 @@ describe('workflowStore', () => {
       expect(res).toEqual({ id: 't1' });
     });
 
+    it('createTask stores error and returns null on failure', async () => {
+      useWorkflowStore.setState({ fetchTasks: vi.fn() });
+      workflowApi.createTask = vi.fn().mockRejectedValue(new Error('create boom'));
+
+      const res = await useWorkflowStore.getState().createTask('wf-1', { name: 'x' });
+      expect(res).toBeNull();
+      expect(useWorkflowStore.getState().error).toBe('create boom');
+    });
+
     it('updateTask triggers a refresh via fetchTasks', async () => {
       const fetchTasksSpy = vi.fn().mockResolvedValue([{ id: 't1' }]);
       useWorkflowStore.setState({ fetchTasks: fetchTasksSpy });
@@ -431,6 +460,15 @@ describe('workflowStore', () => {
       expect(workflowApi.updateTask).toHaveBeenCalledWith('wf-1', 't1', { name: 'y' });
       expect(fetchTasksSpy).toHaveBeenCalledWith('wf-1');
       expect(res).toEqual({ id: 't1', name: 'y' });
+    });
+
+    it('updateTask stores error and returns null on failure', async () => {
+      useWorkflowStore.setState({ fetchTasks: vi.fn() });
+      workflowApi.updateTask = vi.fn().mockRejectedValue(new Error('update boom'));
+
+      const res = await useWorkflowStore.getState().updateTask('wf-1', 't1', { name: 'y' });
+      expect(res).toBeNull();
+      expect(useWorkflowStore.getState().error).toBe('update boom');
     });
 
     it('deleteTask triggers a refresh via fetchTasks', async () => {
@@ -444,6 +482,15 @@ describe('workflowStore', () => {
       expect(res).toBe(true);
     });
 
+    it('deleteTask stores error and returns false on failure', async () => {
+      useWorkflowStore.setState({ fetchTasks: vi.fn() });
+      workflowApi.deleteTask = vi.fn().mockRejectedValue(new Error('delete boom'));
+
+      const res = await useWorkflowStore.getState().deleteTask('wf-1', 't1');
+      expect(res).toBe(false);
+      expect(useWorkflowStore.getState().error).toBe('delete boom');
+    });
+
     it('reorderTasks stores the returned tasks list in the store', async () => {
       workflowApi.reorderTasks = vi.fn().mockResolvedValue([{ id: 't2' }, { id: 't1' }]);
 
@@ -451,6 +498,14 @@ describe('workflowStore', () => {
       expect(workflowApi.reorderTasks).toHaveBeenCalledWith('wf-1', ['t2', 't1']);
       expect(res).toEqual([{ id: 't2' }, { id: 't1' }]);
       expect(useWorkflowStore.getState().tasks['wf-1']).toEqual([{ id: 't2' }, { id: 't1' }]);
+    });
+
+    it('reorderTasks stores error and returns null on failure', async () => {
+      workflowApi.reorderTasks = vi.fn().mockRejectedValue(new Error('reorder boom'));
+
+      const res = await useWorkflowStore.getState().reorderTasks('wf-1', ['t2', 't1']);
+      expect(res).toBeNull();
+      expect(useWorkflowStore.getState().error).toBe('reorder boom');
     });
   });
 

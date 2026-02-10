@@ -61,6 +61,22 @@ describe('EditWorkflowModal', () => {
     expect(onClose).toHaveBeenCalled();
   });
 
+  it('closes when clicking the overlay', () => {
+    const onClose = vi.fn();
+
+    render(
+      <EditWorkflowModal
+        isOpen
+        onClose={onClose}
+        onSave={vi.fn()}
+        workflow={workflow}
+      />
+    );
+
+    fireEvent.click(screen.getByLabelText('Close modal'));
+    expect(onClose).toHaveBeenCalled();
+  });
+
   it('updates execution mode when pending', async () => {
     const onSave = vi.fn().mockResolvedValue();
     const onClose = vi.fn();
@@ -92,6 +108,34 @@ describe('EditWorkflowModal', () => {
       });
     });
 
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('updates execution mode to interactive when pending', async () => {
+    const onSave = vi.fn().mockResolvedValue();
+    const onClose = vi.fn();
+
+    render(
+      <EditWorkflowModal
+        isOpen
+        onClose={onClose}
+        onSave={onSave}
+        workflow={{
+          ...workflow,
+          status: 'pending',
+          blueprint: { execution_mode: 'multi_agent' },
+        }}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('radio', { name: /Interactive/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
+
+    await waitFor(() => {
+      expect(onSave).toHaveBeenCalledWith({
+        blueprint: { execution_mode: 'interactive' },
+      });
+    });
     expect(onClose).toHaveBeenCalled();
   });
 

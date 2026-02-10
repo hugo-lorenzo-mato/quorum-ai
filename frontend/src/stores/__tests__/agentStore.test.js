@@ -152,4 +152,42 @@ describe('agentStore', () => {
     // 12 bytes => 24 hex chars
     expect(log[0].id).toMatch(/^[0-9a-f]{24}$/);
   });
+
+  it('handleAgentEvent falls back to timestamp+sequence when crypto is unavailable', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-02-10T00:00:00.000Z'));
+    vi.stubGlobal('crypto', undefined);
+
+    useAgentStore.getState().handleAgentEvent({
+      workflow_id: 'wf-1',
+      agent: 'claude',
+      event_kind: 'thinking',
+      message: '1',
+      data: {},
+      timestamp: '2026-02-10T00:00:00.000Z',
+    });
+    useAgentStore.getState().handleAgentEvent({
+      workflow_id: 'wf-1',
+      agent: 'claude',
+      event_kind: 'thinking',
+      message: '2',
+      data: {},
+      timestamp: '2026-02-10T00:00:01.000Z',
+    });
+
+    const log = useAgentStore.getState().getActivityLog('wf-1');
+    expect(log).toHaveLength(2);
+    const nowPrefix = `${Date.now()}-`;
+    expect(log[0].id.startsWith(nowPrefix)).toBe(true);
+    expect(log[1].id.startsWith(nowPrefix)).toBe(true);
+
+    const seq0 = Number(log[0].id.slice(nowPrefix.length));
+    const seq1 = Number(log[1].id.slice(nowPrefix.length));
+    expect(Number.isFinite(seq0)).toBe(true);
+    expect(Number.isFinite(seq1)).toBe(true);
+    // Newest-first log, so seq0 should be seq1+1.
+    expect(seq0).toBe(seq1 + 1);
+
+    vi.useRealTimers();
+  });
 });
