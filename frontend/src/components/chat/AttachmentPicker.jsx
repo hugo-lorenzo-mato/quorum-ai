@@ -37,38 +37,42 @@ function FileTreeNode({ item, selectedPaths, onToggle, level = 0 }) {
   return (
     <div>
       <div
-        onClick={isDirectory ? handleExpand : handleSelect}
         className={`flex items-center gap-2 py-1.5 px-2 rounded-md cursor-pointer transition-colors ${
           isSelected ? 'bg-primary/10 text-primary' : 'hover:bg-accent'
         }`}
         style={{ paddingLeft: `${level * 16 + 8}px` }}
       >
-        {isDirectory ? (
-          <button className="p-0.5" onClick={handleExpand}>
-            {loading ? (
-              <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />
-            ) : isExpanded ? (
-              <ChevronDown className="w-3 h-3 text-muted-foreground" />
-            ) : (
-              <ChevronRight className="w-3 h-3 text-muted-foreground" />
-            )}
-          </button>
-        ) : (
-          <span className="w-4" />
-        )}
-        {isDirectory ? (
-          <Folder className="w-4 h-4 text-muted-foreground" />
-        ) : (
-          <File className={`w-4 h-4 ${isSelected ? 'text-primary' : 'text-muted-foreground'}`} />
-        )}
-        <span className="text-sm truncate flex-1">{item.name}</span>
+        <button
+          type="button"
+          onClick={isDirectory ? handleExpand : handleSelect}
+          className="flex items-center gap-2 flex-1 min-w-0 text-left bg-transparent border-0 p-0 appearance-none"
+        >
+          {isDirectory ? (
+            <span className="p-0.5">
+              {loading ? (
+                <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />
+              ) : isExpanded ? (
+                <ChevronDown className="w-3 h-3 text-muted-foreground" />
+              ) : (
+                <ChevronRight className="w-3 h-3 text-muted-foreground" />
+              )}
+            </span>
+          ) : (
+            <span className="w-4" />
+          )}
+          {isDirectory ? (
+            <Folder className="w-4 h-4 text-muted-foreground" />
+          ) : (
+            <File className={`w-4 h-4 ${isSelected ? 'text-primary' : 'text-muted-foreground'}`} />
+          )}
+          <span className="text-sm truncate flex-1">{item.name}</span>
+        </button>
         {!isDirectory && (
           <input
             type="checkbox"
             checked={isSelected}
             onChange={() => onToggle(item.path)}
             className="w-4 h-4 rounded border-border"
-            onClick={(e) => e.stopPropagation()}
           />
         )}
       </div>

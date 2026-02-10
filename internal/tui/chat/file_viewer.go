@@ -480,35 +480,9 @@ func getSyntaxColor(ext string) lipgloss.Color {
 
 // getFileIcon returns an icon based on filename
 func getFileIcon(name string) string {
-	ext := strings.ToLower(filepath.Ext(name))
-	baseName := strings.ToLower(name)
-
-	switch {
-	case ext == ".go":
-		return ""
-	case ext == ".js" || ext == ".jsx":
-		return ""
-	case ext == ".ts" || ext == ".tsx":
-		return ""
-	case ext == ".py":
-		return ""
-	case ext == ".rs":
-		return ""
-	case ext == ".md":
-		return ""
-	case ext == ".json":
-		return ""
-	case ext == ".yaml" || ext == ".yml" || ext == ".toml":
-		return ""
-	case baseName == "dockerfile" || strings.HasPrefix(baseName, "docker-compose"):
-		return ""
-	case baseName == ".gitignore" || baseName == ".gitconfig":
-		return ""
-	case ext == ".sh" || ext == ".bash":
-		return ""
-	default:
-		return ""
-	}
+	// Icons are intentionally disabled for now (TUI font/width portability).
+	// Keep this as a single return to avoid a dead conditional tree.
+	return ""
 }
 
 // isBinaryContent checks if content appears to be binary

@@ -2,6 +2,21 @@ import { create } from 'zustand';
 
 const MAX_ACTIVITY_ENTRIES = 100;
 
+let activitySeq = 0;
+function newActivityId() {
+  // Activity IDs are used for stable React keys; use CSPRNG when available.
+  if (typeof crypto !== 'undefined') {
+    if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+    if (typeof crypto.getRandomValues === 'function') {
+      const buf = new Uint8Array(12);
+      crypto.getRandomValues(buf);
+      return Array.from(buf, (b) => b.toString(16).padStart(2, '0')).join('');
+    }
+  }
+  activitySeq += 1;
+  return `${Date.now()}-${activitySeq}`;
+}
+
 const useAgentStore = create((set, get) => ({
   // Map of workflowId -> { agentName -> current status }
   currentAgents: {},
@@ -68,7 +83,7 @@ const useAgentStore = create((set, get) => ({
     // Add to activity log
     const workflowActivity = agentActivity[workflowId] || [];
     const newEntry = {
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+      id: newActivityId(),
       agent,
       eventKind,
       message: data.message,
@@ -121,7 +136,7 @@ const useAgentStore = create((set, get) => ({
 
     // Convert persisted events to activity entries (reverse to maintain newest-first order)
     const activityEntries = filteredEvents.map(event => ({
-      id: event.id || `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+      id: event.id || newActivityId(),
       agent: event.agent,
       eventKind: event.event_kind,
       message: event.message,

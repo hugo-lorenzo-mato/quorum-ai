@@ -5,8 +5,7 @@
 
 @import "tailwindcss";
 
-/* Tailwind v4: align `dark:` variant with our `.dark`/`.midnight` theme classes */
-@custom-variant dark (:is(.dark, .midnight, .dracula, .nord, .ocean) &);
+/* Tailwind `dark:` variant is handled by the `.dark` class (see `frontend/src/stores/uiStore.js`). */
 
 /* Tailwind v4 Theme Configuration - Shadcn/Vercel Style */
 @theme {

@@ -104,4 +104,14 @@ describe('ExecutionModeBadge', () => {
 
     expect(screen.getByText(/Openai/i)).toBeInTheDocument();
   });
+
+  it('renders interactive badge variant', () => {
+    render(<ExecutionModeBadge blueprint={{ execution_mode: 'interactive' }} />);
+    expect(screen.getByText(/Interactive/i)).toBeInTheDocument();
+  });
+
+  it('renders interactive detailed variant', () => {
+    render(<ExecutionModeBadge blueprint={{ execution_mode: 'interactive' }} variant="detailed" />);
+    expect(screen.getByText(/Interactive \(Review between phases\)/i)).toBeInTheDocument();
+  });
 });

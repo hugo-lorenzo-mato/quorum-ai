@@ -199,7 +199,7 @@ func (s *Server) setupRouter() chi.Router {
 	// CORS for frontend access
 	corsHandler := cors.New(cors.Options{
 		AllowedOrigins:   []string{"*"},
-		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Content-Type", "X-Requested-With"},
 		AllowCredentials: false,
 		MaxAge:           300,
@@ -222,9 +222,9 @@ func (s *Server) setupRouter() chi.Router {
 		// Workflow endpoints
 		r.Route("/workflows", func(r chi.Router) {
 			// List/create/active endpoints with standard timeout
-			r.With(chimiddleware.Timeout(60 * time.Second)).Get("/", s.handleListWorkflows)
-			r.With(chimiddleware.Timeout(60 * time.Second)).Post("/", s.handleCreateWorkflow)
-			r.With(chimiddleware.Timeout(60 * time.Second)).Get("/active", s.handleGetActiveWorkflow)
+			r.With(chimiddleware.Timeout(60*time.Second)).Get("/", s.handleListWorkflows)
+			r.With(chimiddleware.Timeout(60*time.Second)).Post("/", s.handleCreateWorkflow)
+			r.With(chimiddleware.Timeout(60*time.Second)).Get("/active", s.handleGetActiveWorkflow)
 
 			r.Route("/{workflowID}", func(r chi.Router) {
 				// Standard workflow endpoints with default timeout
@@ -246,11 +246,20 @@ func (s *Server) setupRouter() chi.Router {
 				r.With(chimiddleware.Timeout(60*time.Second)).Post("/replan", s.HandleReplanWorkflow)
 				r.With(chimiddleware.Timeout(60*time.Second)).Post("/execute", s.HandleExecuteWorkflow)
 
+				// Interactive workflow endpoints
+				r.With(chimiddleware.Timeout(60*time.Second)).Post("/review", s.HandleReviewWorkflow)
+				r.With(chimiddleware.Timeout(60*time.Second)).Post("/switch-interactive", s.HandleSwitchInteractive)
+
 				// Task endpoints nested under workflow
 				r.Route("/tasks", func(r chi.Router) {
 					r.Use(chimiddleware.Timeout(60 * time.Second))
+					const taskIDPath = "/{taskID}"
 					r.Get("/", s.handleListTasks)
-					r.Get("/{taskID}", s.handleGetTask)
+					r.Post("/", s.handleCreateTask)
+					r.Put("/reorder", s.handleReorderTasks)
+					r.Get(taskIDPath, s.handleGetTask)
+					r.Patch(taskIDPath, s.handleUpdateTask)
+					r.Delete(taskIDPath, s.handleDeleteTask)
 				})
 
 				// Workflow attachments

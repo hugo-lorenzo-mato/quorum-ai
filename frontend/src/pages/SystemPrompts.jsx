@@ -24,13 +24,15 @@ function SystemPromptModal({ prompt, onClose }) {
   if (!prompt) return null;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-fade-in"
-      onClick={onClose}
-    >
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in">
+      <button
+        type="button"
+        className="absolute inset-0 bg-background/80 backdrop-blur-sm"
+        onClick={onClose}
+        aria-label="Close system prompt"
+      />
       <div
-        className="bg-card border border-border shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col rounded-2xl animate-fade-up"
-        onClick={(e) => e.stopPropagation()}
+        className="relative bg-card border border-border shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col rounded-2xl animate-fade-up"
       >
         <div className="relative flex items-start justify-between p-6 border-b border-border/50 bg-muted/5">
           <div className="absolute top-0 left-6 right-6 h-0.5 rounded-full bg-gradient-to-r from-transparent via-primary to-transparent" />
@@ -316,4 +318,3 @@ export default function SystemPrompts() {
     </div>
   );
 }
-

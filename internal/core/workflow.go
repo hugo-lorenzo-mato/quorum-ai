@@ -12,12 +12,20 @@ type WorkflowID string
 type WorkflowStatus string
 
 const (
-	WorkflowStatusPending   WorkflowStatus = "pending"
-	WorkflowStatusRunning   WorkflowStatus = "running"
-	WorkflowStatusPaused    WorkflowStatus = "paused"
-	WorkflowStatusCompleted WorkflowStatus = "completed"
-	WorkflowStatusFailed    WorkflowStatus = "failed"
-	WorkflowStatusAborted   WorkflowStatus = "aborted"
+	WorkflowStatusPending        WorkflowStatus = "pending"
+	WorkflowStatusRunning        WorkflowStatus = "running"
+	WorkflowStatusPaused         WorkflowStatus = "paused"
+	WorkflowStatusAwaitingReview WorkflowStatus = "awaiting_review"
+	WorkflowStatusCompleted      WorkflowStatus = "completed"
+	WorkflowStatusFailed         WorkflowStatus = "failed"
+	WorkflowStatusAborted        WorkflowStatus = "aborted"
+)
+
+// Execution mode constants for Blueprint.ExecutionMode.
+const (
+	ExecutionModeMultiAgent  = "multi_agent"
+	ExecutionModeSingleAgent = "single_agent"
+	ExecutionModeInteractive = "interactive"
 )
 
 // Workflow represents a complete orchestration run.
@@ -36,6 +44,24 @@ type Workflow struct {
 	StartedAt      *time.Time
 	CompletedAt    *time.Time
 	Error          string
+}
+
+// InteractiveReview holds user feedback and task edits between interactive phases.
+type InteractiveReview struct {
+	AnalysisFeedback string     `json:"analysis_feedback,omitempty"`
+	PlanFeedback     string     `json:"plan_feedback,omitempty"`
+	TaskEdits        []TaskEdit `json:"task_edits,omitempty"`
+	ReviewedAt       time.Time  `json:"reviewed_at,omitempty"`
+	ApprovedPhase    Phase      `json:"approved_phase,omitempty"`
+}
+
+// TaskEdit describes a user edit to a task during interactive review.
+type TaskEdit struct {
+	TaskID      TaskID `json:"task_id"`
+	Action      string `json:"action"` // "update", "delete", "add"
+	Name        string `json:"name,omitempty"`
+	CLI         string `json:"cli,omitempty"`
+	Description string `json:"description,omitempty"`
 }
 
 // Blueprint captures the complete orchestration recipe for a workflow.
@@ -224,12 +250,21 @@ func (w *Workflow) Pause() error {
 	return nil
 }
 
-// Resume transitions workflow from paused to running.
+// Resume transitions workflow from paused or awaiting_review to running.
 func (w *Workflow) Resume() error {
-	if w.Status != WorkflowStatusPaused {
+	if w.Status != WorkflowStatusPaused && w.Status != WorkflowStatusAwaitingReview {
 		return fmt.Errorf("cannot resume workflow in %s state", w.Status)
 	}
 	w.Status = WorkflowStatusRunning
+	return nil
+}
+
+// AwaitReview transitions workflow from running to awaiting_review.
+func (w *Workflow) AwaitReview() error {
+	if w.Status != WorkflowStatusRunning {
+		return fmt.Errorf("cannot await review in %s state", w.Status)
+	}
+	w.Status = WorkflowStatusAwaitingReview
 	return nil
 }
 

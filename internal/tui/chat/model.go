@@ -2804,13 +2804,21 @@ func (m Model) executeShellCommand(cmdStr string) (tea.Model, tea.Cmd) {
 	// Return a command that will execute the shell command asynchronously
 	return m, func() tea.Msg {
 		// Use sh -c to handle pipes, redirects, etc.
-		cmd := exec.Command("sh", "-c", cmdStr)
+		shPath, err := exec.LookPath("sh")
+		if err != nil {
+			return ShellOutputMsg{
+				Command:  cmdStr,
+				Error:    "sh not found in PATH",
+				ExitCode: -1,
+			}
+		}
+		cmd := exec.Command(shPath, "-c", cmdStr)
 
 		var stdout, stderr bytes.Buffer
 		cmd.Stdout = &stdout
 		cmd.Stderr = &stderr
 
-		err := cmd.Run()
+		err = cmd.Run()
 
 		exitCode := 0
 		if err != nil {

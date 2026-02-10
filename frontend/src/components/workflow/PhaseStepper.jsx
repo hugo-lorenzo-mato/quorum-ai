@@ -1,4 +1,4 @@
-import { CheckCircle2, Circle, Loader2 } from 'lucide-react';
+import { CheckCircle2, Circle, Loader2, Eye } from 'lucide-react';
 
 const PHASES = [
   { id: 'analyze', label: 'Analyze' },
@@ -10,6 +10,11 @@ function getPhaseStatus(phaseId, currentPhase, workflowStatus) {
   const phaseOrder = { analyze: 0, plan: 1, execute: 2 };
   const currentOrder = phaseOrder[currentPhase] ?? -1;
   const thisOrder = phaseOrder[phaseId];
+
+  // If workflow is awaiting review and this is the current phase
+  if (workflowStatus === 'awaiting_review' && currentPhase === phaseId) {
+    return 'review';
+  }
 
   // If workflow is running and this is the current phase
   if (workflowStatus === 'running' && currentPhase === phaseId) {
@@ -52,12 +57,14 @@ export default function PhaseStepper({ workflow, compact = false }) {
                   flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium
                   ${phaseStatus === 'completed' ? 'bg-success/10 text-success' : ''}
                   ${phaseStatus === 'running' ? 'bg-info/10 text-info' : ''}
+                  ${phaseStatus === 'review' ? 'bg-warning/10 text-warning' : ''}
                   ${phaseStatus === 'ready' ? 'bg-primary/10 text-primary' : ''}
                   ${phaseStatus === 'pending' ? 'bg-muted text-muted-foreground' : ''}
                 `}
               >
                 {phaseStatus === 'completed' && <CheckCircle2 className="w-3 h-3" />}
                 {phaseStatus === 'running' && <Loader2 className="w-3 h-3 animate-spin" />}
+                {phaseStatus === 'review' && <Eye className="w-3 h-3" />}
                 {phaseStatus === 'ready' && <Circle className="w-3 h-3" />}
                 {phaseStatus === 'pending' && <Circle className="w-3 h-3" />}
                 {phase.label}
@@ -94,12 +101,14 @@ export default function PhaseStepper({ workflow, compact = false }) {
                   w-8 h-8 rounded-full flex items-center justify-center
                   ${phaseStatus === 'completed' ? 'bg-success/20 text-success' : ''}
                   ${phaseStatus === 'running' ? 'bg-info/20 text-info' : ''}
+                  ${phaseStatus === 'review' ? 'bg-warning/20 text-warning' : ''}
                   ${phaseStatus === 'ready' ? 'bg-primary/20 text-primary' : ''}
                   ${phaseStatus === 'pending' ? 'bg-muted text-muted-foreground' : ''}
                 `}
               >
                 {phaseStatus === 'completed' && <CheckCircle2 className="w-4 h-4" />}
                 {phaseStatus === 'running' && <Loader2 className="w-4 h-4 animate-spin" />}
+                {phaseStatus === 'review' && <Eye className="w-4 h-4" />}
                 {phaseStatus === 'ready' && <Circle className="w-4 h-4" />}
                 {phaseStatus === 'pending' && <Circle className="w-4 h-4" />}
               </div>

@@ -317,6 +317,9 @@ type WorkflowRun struct {
 	ResumeCount int        `json:"resume_count,omitempty"` // Number of auto-resumes performed
 	MaxResumes  int        `json:"max_resumes,omitempty"`  // Maximum allowed auto-resumes (default: 3)
 
+	// Interactive review state
+	InteractiveReview *InteractiveReview `json:"interactive_review,omitempty"`
+
 	// Workflow Git isolation
 	WorkflowBranch string `json:"workflow_branch,omitempty"` // Git branch for this workflow (e.g., quorum/wf-xxx)
 

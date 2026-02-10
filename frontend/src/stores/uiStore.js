@@ -29,12 +29,20 @@ const useUIStore = create(
         // Remove all theme classes
         root.classList.remove('dark', 'midnight', 'sepia', 'high-contrast', 'dracula', 'nord', 'ocean');
 
+        // Themes that should behave as "dark" for Tailwind's built-in `dark:` variant.
+        const darkThemes = new Set(['dark', 'midnight', 'dracula', 'nord', 'ocean', 'high-contrast']);
+
         if (theme === 'system') {
           const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
           if (prefersDark) root.classList.add('dark');
         } else if (theme !== 'light') {
-          // For 'dark', 'midnight', 'sepia', 'high-contrast', 'dracula', 'nord', 'ocean', add the class directly
-          root.classList.add(theme);
+          // Add the theme class, and also add `.dark` for dark-like themes so `dark:` works consistently.
+          if (darkThemes.has(theme)) {
+            root.classList.add('dark');
+            if (theme !== 'dark') root.classList.add(theme);
+          } else {
+            root.classList.add(theme);
+          }
         }
       },
 

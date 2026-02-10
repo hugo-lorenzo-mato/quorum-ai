@@ -266,18 +266,19 @@ function SessionItem({ session, isActive, onClick, onDelete, onRename }) {
         <div className="flex items-center gap-3 flex-1 min-w-0">
           <SessionAvatar session={session} />
           <div className="flex-1 min-w-0 relative z-10">
-            {isEditing ? (
-              <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
-                <input
-                  ref={inputRef}
-                  type="text"
-                  value={editValue}
-                  onChange={(e) => setEditValue(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  onBlur={handleSave}
-                  placeholder="Session title"
-                  className="flex-1 min-w-0 text-sm font-medium bg-background border border-primary rounded px-1.5 py-1 -mx-1.5 focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
-                />
+	            {isEditing ? (
+	              <div className="flex items-center gap-1">
+	                <input
+	                  ref={inputRef}
+	                  type="text"
+	                  value={editValue}
+	                  onClick={(e) => e.stopPropagation()}
+	                  onChange={(e) => setEditValue(e.target.value)}
+	                  onKeyDown={handleKeyDown}
+	                  onBlur={handleSave}
+	                  placeholder="Session title"
+	                  className="flex-1 min-w-0 text-sm font-medium bg-background border border-primary rounded px-1.5 py-1 -mx-1.5 focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+	                />
                 <button
                   onClick={handleSave}
                   className="p-1 text-primary hover:bg-primary/10 rounded"
@@ -557,15 +558,17 @@ export default function Chat() {
                       onBlur={handleSaveTitleEdit}
                       className="text-sm font-bold bg-background border border-primary rounded px-1.5 py-0.5 -mx-1.5 focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
                     />
-                  ) : (
-                    <h3
-                      onClick={handleStartTitleEdit}
-                      className="font-bold text-foreground truncate text-sm cursor-text hover:bg-accent/50 rounded px-1 -mx-1 transition-colors"
-                      title="Click to rename"
-                    >
-                      {activeSession.title || `${activeSession.agent || 'Claude'} Chat`}
-                    </h3>
-                  )}
+	                  ) : (
+	                    <button
+	                      type="button"
+	                      onClick={handleStartTitleEdit}
+	                      className="font-bold text-foreground truncate text-sm cursor-text hover:bg-accent/50 rounded px-1 -mx-1 transition-colors text-left"
+	                      title="Click to rename"
+	                      aria-label="Rename chat session"
+	                    >
+	                      {activeSession.title || `${activeSession.agent || 'Claude'} Chat`}
+	                    </button>
+	                  )}
                   <p className="text-[10px] text-muted-foreground hidden sm:block truncate">
                     {activeSession.agent || 'Claude'} · {formatRelativeDate(activeSession.created_at)}
                   </p>

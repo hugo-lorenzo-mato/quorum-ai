@@ -746,6 +746,88 @@ func TestGitClient_HasUncommittedChanges_Modified(t *testing.T) {
 }
 
 // =============================================================================
+// Input Validation / Injection Hardening Tests
+// =============================================================================
+
+func TestGitClient_Add_AllowsLeadingDashPath(t *testing.T) {
+	t.Parallel()
+
+	repo := testutil.NewGitRepo(t)
+	repo.Commit("Initial commit")
+
+	repo.WriteFile("-dash.txt", "content")
+
+	client, err := git.NewClient(repo.Path)
+	testutil.AssertNoError(t, err)
+
+	// This should not be interpreted as an option due to "git add -- <path>".
+	err = client.Add(context.Background(), "-dash.txt")
+	testutil.AssertNoError(t, err)
+}
+
+func TestGitClient_CreateBranch_WithBase_ValidatesRev(t *testing.T) {
+	t.Parallel()
+
+	repo := testutil.NewGitRepo(t)
+	repo.Commit("Initial commit")
+
+	client, err := git.NewClient(repo.Path)
+	testutil.AssertNoError(t, err)
+
+	err = client.CreateBranch(context.Background(), "feature-from-main", "main")
+	testutil.AssertNoError(t, err)
+}
+
+func TestGitClient_RejectsInvalidInputs(t *testing.T) {
+	t.Parallel()
+
+	repo := testutil.NewGitRepo(t)
+	repo.Commit("Initial commit")
+
+	client, err := git.NewClient(repo.Path)
+	testutil.AssertNoError(t, err)
+
+	// Branch validation
+	testutil.AssertError(t, client.CheckoutBranch(context.Background(), "-bad"))
+	testutil.AssertError(t, client.DeleteBranch(context.Background(), "bad..name"))
+	_, err = client.BranchExists(context.Background(), "-bad")
+	testutil.AssertError(t, err)
+
+	// Remote validation
+	testutil.AssertError(t, client.Fetch(context.Background(), "bad/remote"))
+	testutil.AssertError(t, client.Push(context.Background(), "bad/remote", "main"))
+	testutil.AssertError(t, client.Pull(context.Background(), "bad/remote", "main"))
+
+	// NUL-byte input should be rejected before invoking git.
+	testutil.AssertError(t, client.Add(context.Background(), "a\x00b"))
+	_, err = client.Commit(context.Background(), "msg\x00")
+	testutil.AssertError(t, err)
+}
+
+func TestGitClient_PushFetchPull_LocalRemote(t *testing.T) {
+	t.Parallel()
+
+	repo := testutil.NewGitRepo(t)
+	repo.WriteFile("README.md", "# Test")
+	repo.Commit("Initial commit")
+
+	remote := testutil.CreateBareRemote(t)
+	repo.SetRemote("origin", remote)
+
+	client, err := git.NewClient(repo.Path)
+	testutil.AssertNoError(t, err)
+
+	// Push current branch to local bare remote.
+	testutil.AssertNoError(t, client.Push(context.Background(), "origin", "main"))
+
+	// Fetch should succeed against the local bare remote.
+	testutil.AssertNoError(t, client.Fetch(context.Background(), "origin"))
+
+	// Pull with explicit remote+branch should succeed (no changes expected).
+	testutil.AssertNoError(t, client.Pull(context.Background(), "origin", "main"))
+}
+
+// =============================================================================
 // Helper Functions
 // =============================================================================
 

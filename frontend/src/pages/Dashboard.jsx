@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useWorkflowStore } from '../stores';
 import { promptPresets } from '../data/promptPresets';
+import { systemPromptsApi } from '../lib/api';
 import { getStatusColor } from '../lib/theme';
 import FAB from '../components/FAB';
 import Logo from '../components/Logo';
@@ -27,6 +28,7 @@ import {
   ChevronDown,
   ChevronUp,
   FileText,
+  FileCode2,
   FolderKanban,
 } from 'lucide-react';
 
@@ -186,17 +188,20 @@ function MetricRow({ icon: Icon, label, value, subtext, progress, color = 'prima
 // System Resources Card - Complete view with Process, Machine, and Hardware info
 function SystemResources({ data, loading, onRefresh, timeAgo }) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
 
   // Auto-expand on desktop
   useEffect(() => {
-    const checkWidth = () => {
-      if (window.innerWidth >= 768) {
+    const updateLayout = () => {
+      const mobile = window.innerWidth < 768;
+      setIsMobile(mobile);
+      if (!mobile) {
         setIsExpanded(true);
       }
     };
-    checkWidth();
-    window.addEventListener('resize', checkWidth);
-    return () => window.removeEventListener('resize', checkWidth);
+    updateLayout();
+    window.addEventListener('resize', updateLayout);
+    return () => window.removeEventListener('resize', updateLayout);
   }, []);
 
   if (loading && !data) {
@@ -252,11 +257,15 @@ function SystemResources({ data, loading, onRefresh, timeAgo }) {
   return (
     <BentoCard className="md:col-span-2 transition-all duration-300">
       {/* Header */}
-      <div 
-        className="flex items-center justify-between mb-1 md:mb-4 cursor-pointer md:cursor-default py-1 md:py-0"
-        onClick={() => window.innerWidth < 768 && setIsExpanded(!isExpanded)}
-      >
-        <div className="flex items-center gap-2 md:gap-0 flex-1">
+      <div className="flex items-center justify-between mb-1 md:mb-4 py-1 md:py-0">
+        <button
+          type="button"
+          disabled={!isMobile}
+          onClick={() => setIsExpanded((v) => !v)}
+          aria-expanded={isExpanded}
+          aria-label="Toggle system resources"
+          className="flex items-center gap-2 md:gap-0 flex-1 min-w-0 text-left bg-transparent border-0 p-0 appearance-none disabled:cursor-default"
+        >
           <h3 className="text-sm font-medium text-foreground flex items-center gap-2">
             <Server className="w-4 h-4 text-muted-foreground" />
             System Resources
@@ -267,7 +276,7 @@ function SystemResources({ data, loading, onRefresh, timeAgo }) {
               CPU: {system.cpu_percent?.toFixed(0)}% · RAM: {(system.mem_used_mb / 1024)?.toFixed(1)}GB
             </span>
           )}
-        </div>
+        </button>
 
         <div className="flex items-center gap-2">
           {timeAgo && (
@@ -284,9 +293,16 @@ function SystemResources({ data, loading, onRefresh, timeAgo }) {
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
           </button>
           {/* Mobile Chevron */}
-          <div className="md:hidden text-muted-foreground ml-1">
-            {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-          </div>
+          {isMobile && (
+            <button
+              type="button"
+              onClick={() => setIsExpanded((v) => !v)}
+              className="md:hidden text-muted-foreground ml-1 bg-transparent border-0 p-0 appearance-none"
+              aria-label="Toggle system resources"
+            >
+              {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            </button>
+          )}
         </div>
       </div>
 
@@ -572,6 +588,18 @@ function useProjects() {
   return { projects, loading, refresh: fetchProjects };
 }
 
+function useSystemPrompts() {
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    systemPromptsApi.list()
+      .then((data) => setCount(Array.isArray(data) ? data.length : 0))
+      .catch(() => {});
+  }, []);
+
+  return count;
+}
+
 function useSystemResources() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -631,6 +659,7 @@ export default function Dashboard() {
   const { workflows, activeWorkflow, fetchWorkflows, fetchActiveWorkflow, loading } = useWorkflowStore();
   const { data: systemData, loading: systemLoading, refresh: refreshSystem, timeAgo: systemTimeAgo } = useSystemResources();
   const { projects } = useProjects();
+  const systemPromptsCount = useSystemPrompts();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -686,7 +715,7 @@ export default function Dashboard() {
       )}
 
       {/* Stats Grid - Mobile Carousel, Desktop Grid */}
-      <div className="flex overflow-x-auto pb-4 -mx-3 px-3 sm:mx-0 sm:px-0 gap-3 snap-x md:grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 md:gap-4 md:overflow-visible md:pb-0 scrollbar-none md:scrollbar-default">
+      <div className="flex overflow-x-auto pb-4 -mx-3 px-3 sm:mx-0 sm:px-0 gap-3 snap-x md:grid md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 md:gap-4 md:overflow-visible md:pb-0 scrollbar-none md:scrollbar-default">
         <StatCard
           title="Projects"
           value={projects.length}
@@ -699,10 +728,19 @@ export default function Dashboard() {
         <StatCard
           title="Prompts"
           value={promptPresets.length}
-          subtitle="Available"
+          subtitle="Presets"
           icon={FileText}
           color="primary"
           to="/prompts"
+          className="min-w-[160px] md:min-w-0 snap-center h-full"
+        />
+        <StatCard
+          title="System Prompts"
+          value={systemPromptsCount}
+          subtitle="Embedded"
+          icon={FileCode2}
+          color="primary"
+          to="/system-prompts"
           className="min-w-[160px] md:min-w-0 snap-center h-full"
         />
         <StatCard

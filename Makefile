@@ -221,7 +221,7 @@ FRONTEND_DIR := frontend
 
 .PHONY: frontend-deps
 frontend-deps: ## Install frontend dependencies
-	cd $(FRONTEND_DIR) && if [ -n "$$CI" ]; then npm ci; else npm install; fi
+	cd $(FRONTEND_DIR) && if [ -n "$$CI" ]; then npm ci --ignore-scripts; else npm install; fi
 
 .PHONY: frontend-lint
 frontend-lint: ## Run frontend lint

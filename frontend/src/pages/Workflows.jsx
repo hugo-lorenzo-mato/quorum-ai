@@ -198,7 +198,7 @@ function WorkflowCard({ workflow, onClick, onDelete }) {
           {canDelete && (
             <button
               onClick={handleDeleteClick}
-              className="p-1.5 rounded-lg md:opacity-0 md:group-hover:opacity-100 hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-all"
+              className="relative z-20 p-1.5 rounded-lg md:opacity-0 md:group-hover:opacity-100 hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-all"
               title="Delete workflow"
             >
               <Trash2 className="w-4 h-4" />

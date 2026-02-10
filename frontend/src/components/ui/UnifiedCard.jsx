@@ -15,6 +15,7 @@
  */
 
 import { cn } from '../../lib/utils';
+import PropTypes from 'prop-types';
 
 /**
  * Base Card Container
@@ -27,6 +28,7 @@ export function CardBase({
   variant = 'default', // 'default' | 'selected' | 'executing' | 'completed' | 'failed'
   accentColor, // 'primary' | 'blue' | 'emerald' | 'rose' | 'amber' | 'violet'
   hoverable = true,
+  ariaLabel,
   ...props 
 }) {
   const variantStyles = {
@@ -52,7 +54,6 @@ export function CardBase({
 
   return (
     <div
-      onClick={onClick}
       className={cn(
         'relative flex flex-col rounded-xl border transition-all backdrop-blur-sm',
         accentColor && 'border-t-2',
@@ -64,6 +65,14 @@ export function CardBase({
       )}
       {...props}
     >
+      {onClick && (
+        <button
+          type="button"
+          onClick={onClick}
+          aria-label={ariaLabel || 'Open card'}
+          className="absolute inset-0 z-10 rounded-xl bg-transparent border-0 p-0 appearance-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+        />
+      )}
       {children}
     </div>
   );
@@ -302,3 +311,75 @@ export function CardFloatingBadge({ children, className, ...props }) {
     </div>
   );
 }
+
+CardBase.propTypes = {
+  children: PropTypes.node,
+  onClick: PropTypes.func,
+  className: PropTypes.string,
+  variant: PropTypes.oneOf(['default', 'selected', 'executing', 'completed', 'failed']),
+  accentColor: PropTypes.oneOf(['primary', 'blue', 'emerald', 'rose', 'amber', 'violet']),
+  hoverable: PropTypes.bool,
+  ariaLabel: PropTypes.string,
+};
+
+CardHeader.propTypes = {
+  children: PropTypes.node,
+  className: PropTypes.string,
+};
+
+CardTitle.propTypes = {
+  children: PropTypes.node,
+  className: PropTypes.string,
+};
+
+CardDescription.propTypes = {
+  children: PropTypes.node,
+  className: PropTypes.string,
+};
+
+CardContent.propTypes = {
+  children: PropTypes.node,
+  className: PropTypes.string,
+};
+
+CardFooter.propTypes = {
+  children: PropTypes.node,
+  className: PropTypes.string,
+  divided: PropTypes.bool,
+};
+
+CardBadge.propTypes = {
+  children: PropTypes.node,
+  className: PropTypes.string,
+  variant: PropTypes.oneOf(['default', 'primary', 'success', 'warning', 'error', 'info']),
+};
+
+CardMeta.propTypes = {
+  children: PropTypes.node,
+  className: PropTypes.string,
+};
+
+CardMetaItem.propTypes = {
+  children: PropTypes.node,
+  className: PropTypes.string,
+  icon: PropTypes.elementType,
+  interactive: PropTypes.bool,
+};
+
+CardAction.propTypes = {
+  children: PropTypes.node,
+  icon: PropTypes.elementType,
+  className: PropTypes.string,
+  variant: PropTypes.oneOf(['ghost', 'primary', 'destructive']),
+};
+
+CardIcon.propTypes = {
+  icon: PropTypes.elementType.isRequired,
+  className: PropTypes.string,
+  color: PropTypes.oneOf(['default', 'primary', 'blue', 'emerald', 'rose', 'amber', 'violet']),
+};
+
+CardFloatingBadge.propTypes = {
+  children: PropTypes.node,
+  className: PropTypes.string,
+};

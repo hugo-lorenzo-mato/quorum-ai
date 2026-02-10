@@ -9,14 +9,13 @@ on:
     - cron: '0 6 * * 1' # Weekly on Monday at 6am UTC
   workflow_dispatch:
 
-permissions:
-  contents: read
-
 jobs:
   check:
     name: Check (Go + frontend)
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
         with:
@@ -52,6 +51,8 @@ jobs:
     if: github.event_name != 'schedule'
     runs-on: ${{ matrix.os }}
     continue-on-error: ${{ matrix.os == 'windows-latest' }}  # Windows has known path/permission issues
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -83,6 +84,8 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     continue-on-error: true  # TODO: Fix integration tests that require specific server setup
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
@@ -109,6 +112,8 @@ jobs:
     name: Build (${{ matrix.goos }}/${{ matrix.goarch }})
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     strategy:
       matrix:
         include:

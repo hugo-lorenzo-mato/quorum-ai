@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/testutil"
 )
 
 func TestParseStatus_BranchInfo(t *testing.T) {
@@ -682,4 +683,43 @@ func TestParseStatus_MultipleBranchInfo(t *testing.T) {
 	if status.Ahead != 0 {
 		t.Errorf("Ahead should be 0 for malformed line, got %d", status.Ahead)
 	}
+}
+
+func TestResolveGitBinaryPath(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	p, err := resolveGitBinaryPath(repo)
+	if err != nil {
+		t.Fatalf("resolveGitBinaryPath: %v", err)
+	}
+	if p == "" {
+		t.Fatalf("resolveGitBinaryPath returned empty path")
+	}
+}
+
+func TestValidateGitRemoteName(t *testing.T) {
+	t.Parallel()
+
+	testutil.AssertNoError(t, validateGitRemoteName("origin"))
+	testutil.AssertError(t, validateGitRemoteName("bad/remote"))
+	testutil.AssertError(t, validateGitRemoteName("-origin"))
+}
+
+func TestValidateGitBranchName(t *testing.T) {
+	t.Parallel()
+
+	testutil.AssertNoError(t, validateGitBranchName("feature/test"))
+	testutil.AssertError(t, validateGitBranchName("-bad"))
+	testutil.AssertError(t, validateGitBranchName("bad..name"))
+}
+
+func TestValidateGitExecArgs(t *testing.T) {
+	t.Parallel()
+
+	testutil.AssertError(t, validateGitExecArgs(nil))
+	testutil.AssertError(t, validateGitExecArgs([]string{"-bad"}))
+	testutil.AssertNoError(t, validateGitExecArgs([]string{"status", "ok"}))
+	testutil.AssertNoError(t, validateGitExecArgs([]string{"commit", "-m", "line1\nline2"}))
+	testutil.AssertError(t, validateGitExecArgs([]string{"status", "line1\nline2"}))
 }

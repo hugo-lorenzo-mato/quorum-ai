@@ -29,9 +29,12 @@ export default function GenerationOptionsModal({
   return (
     <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
       {/* Backdrop */}
-      <div
+      <button
+        type="button"
         className="absolute inset-0 bg-background/80 backdrop-blur-sm animate-fade-in"
         onClick={() => !loading && onClose()}
+        aria-label="Close modal"
+        disabled={loading}
       />
 
       {/* Modal */}

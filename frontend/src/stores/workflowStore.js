@@ -509,6 +509,128 @@ const useWorkflowStore = create((set, get) => ({
     }
   },
 
+  // Interactive workflow actions
+  reviewWorkflow: async (id, { action, feedback, phase, continueUnattended } = {}) => {
+    set({ loading: true, error: null });
+    try {
+      const result = await workflowApi.review(id, { action, feedback, phase, continueUnattended });
+      // Refresh workflow to get updated state
+      await get().fetchWorkflow(id, { silent: true });
+      set({ loading: false });
+      return result;
+    } catch (error) {
+      set({ error: error.message, loading: false });
+      return null;
+    }
+  },
+
+  switchToInteractive: async (id) => {
+    set({ loading: true, error: null });
+    try {
+      const result = await workflowApi.switchInteractive(id);
+      // Refresh workflow to get updated state
+      await get().fetchWorkflow(id, { silent: true });
+      set({ loading: false });
+      return result;
+    } catch (error) {
+      set({ error: error.message, loading: false });
+      return null;
+    }
+  },
+
+  // Task mutation actions
+  createTask: async (workflowId, data) => {
+    try {
+      const task = await workflowApi.createTask(workflowId, data);
+      // Refresh tasks
+      await get().fetchTasks(workflowId);
+      return task;
+    } catch (error) {
+      set({ error: error.message });
+      return null;
+    }
+  },
+
+  updateTask: async (workflowId, taskId, data) => {
+    try {
+      const task = await workflowApi.updateTask(workflowId, taskId, data);
+      // Refresh tasks
+      await get().fetchTasks(workflowId);
+      return task;
+    } catch (error) {
+      set({ error: error.message });
+      return null;
+    }
+  },
+
+  deleteTask: async (workflowId, taskId) => {
+    try {
+      await workflowApi.deleteTask(workflowId, taskId);
+      // Refresh tasks
+      await get().fetchTasks(workflowId);
+      return true;
+    } catch (error) {
+      set({ error: error.message });
+      return false;
+    }
+  },
+
+  reorderTasks: async (workflowId, taskOrder) => {
+    try {
+      const tasks = await workflowApi.reorderTasks(workflowId, taskOrder);
+      const { tasks: allTasks } = get();
+      set({ tasks: { ...allTasks, [workflowId]: tasks } });
+      return tasks;
+    } catch (error) {
+      set({ error: error.message });
+      return null;
+    }
+  },
+
+  // SSE handler for awaiting_review status
+  handlePhaseAwaitingReview: (data) => {
+    const { workflows, activeWorkflow } = get();
+    const updated = workflows.map(w => {
+      if (w.id === data.workflow_id) {
+        return { ...w, status: 'awaiting_review', current_phase: data.phase, updated_at: data.timestamp };
+      }
+      return w;
+    });
+    set({ workflows: updated });
+    if (activeWorkflow?.id === data.workflow_id) {
+      set({ activeWorkflow: { ...activeWorkflow, status: 'awaiting_review', current_phase: data.phase } });
+    }
+  },
+
+  handlePhaseReviewApproved: (data) => {
+    const { workflows, activeWorkflow } = get();
+    const updated = workflows.map(w => {
+      if (w.id === data.workflow_id) {
+        return { ...w, status: 'running', updated_at: data.timestamp };
+      }
+      return w;
+    });
+    set({ workflows: updated });
+    if (activeWorkflow?.id === data.workflow_id) {
+      set({ activeWorkflow: { ...activeWorkflow, status: 'running' } });
+    }
+  },
+
+  handlePhaseReviewRejected: (data) => {
+    // After rejection, workflow goes back to running (re-executing phase)
+    const { workflows, activeWorkflow } = get();
+    const updated = workflows.map(w => {
+      if (w.id === data.workflow_id) {
+        return { ...w, status: 'running', current_phase: data.phase, updated_at: data.timestamp };
+      }
+      return w;
+    });
+    set({ workflows: updated });
+    if (activeWorkflow?.id === data.workflow_id) {
+      set({ activeWorkflow: { ...activeWorkflow, status: 'running', current_phase: data.phase } });
+    }
+  },
+
   // Phase event handlers
   handlePhaseStarted: (data) => {
     const { workflows, activeWorkflow } = get();

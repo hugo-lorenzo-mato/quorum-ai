@@ -47,16 +47,19 @@ export function ConfirmDialog({
   const styles = variantStyles[variant];
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 animate-fade-in"
-      onClick={(e) => e.target === e.currentTarget && onClose()}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="dialog-title"
-    >
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in">
+      <button
+        type="button"
+        className="absolute inset-0 bg-black/50"
+        onClick={onClose}
+        aria-label="Close dialog"
+      />
       <div
         ref={dialogRef}
-        className="bg-card rounded-xl shadow-xl max-w-md w-full p-6 animate-scale-in"
+        className="relative bg-card rounded-xl shadow-xl max-w-md w-full p-6 animate-scale-in"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="dialog-title"
       >
         <div className="flex items-start gap-4">
           <div className={`p-2 rounded-full bg-muted ${styles.icon}`}>

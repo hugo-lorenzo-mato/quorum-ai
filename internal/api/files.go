@@ -3,11 +3,17 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+)
+
+const (
+	msgInvalidPath = "invalid path"
 )
 
 // FileEntry represents a file or directory in the file browser.
@@ -40,7 +46,7 @@ func (s *Server) handleListFiles(w http.ResponseWriter, r *http.Request) {
 	// Resolve and validate path (project-aware)
 	absPath, err := s.resolvePathCtx(r.Context(), requestedPath)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid path")
+		respondError(w, http.StatusBadRequest, msgInvalidPath)
 		return
 	}
 
@@ -123,21 +129,20 @@ func (s *Server) handleGetFileContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Resolve and validate path (project-aware)
-	absPath, err := s.resolvePathCtx(r.Context(), requestedPath)
+	rootReal, fsys, rel, err := s.resolveProjectFileFSPath(r.Context(), requestedPath)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid path")
+		respondError(w, http.StatusBadRequest, msgInvalidPath)
 		return
 	}
 
 	// Check if path exists and is a file
-	info, err := os.Stat(absPath)
+	info, err := fs.Stat(fsys, rel)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, fs.ErrNotExist) {
 			respondError(w, http.StatusNotFound, "file not found")
 			return
 		}
-		s.logger.Error("failed to stat file", "path", absPath, "error", err)
+		s.logger.Error("failed to stat file", "path", rel, "error", err)
 		respondError(w, http.StatusInternalServerError, "failed to access file")
 		return
 	}
@@ -154,11 +159,18 @@ func (s *Server) handleGetFileContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Best-effort symlink escape protection: ensure the resolved real path stays within rootReal.
+	if realPath, err := filepath.EvalSymlinks(filepath.Join(rootReal, filepath.FromSlash(rel))); err == nil {
+		if !isPathWithinDir(rootReal, realPath) {
+			respondError(w, http.StatusBadRequest, msgInvalidPath)
+			return
+		}
+	}
+
 	// Read file content
-	// #nosec G304 -- absPath is validated to be within the project root
-	content, err := os.ReadFile(absPath)
+	content, err := fs.ReadFile(fsys, rel)
 	if err != nil {
-		s.logger.Error("failed to read file", "path", absPath, "error", err)
+		s.logger.Error("failed to read file", "path", rel, "error", err)
 		respondError(w, http.StatusInternalServerError, "failed to read file")
 		return
 	}
@@ -170,7 +182,7 @@ func (s *Server) handleGetFileContent(w http.ResponseWriter, r *http.Request) {
 		Path:     requestedPath,
 		Size:     info.Size(),
 		Binary:   isBinary,
-		Language: detectLanguage(absPath),
+		Language: detectLanguage(requestedPath),
 	}
 
 	if !isBinary {
@@ -178,6 +190,32 @@ func (s *Server) handleGetFileContent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondJSON(w, http.StatusOK, response)
+}
+
+func (s *Server) resolveProjectFileFSPath(ctx context.Context, requestedPath string) (rootReal string, fsys fs.FS, rel string, err error) {
+	// Resolve and validate path (project-aware), but read via an fs rooted at the
+	// project directory to avoid path traversal and symlink escapes.
+	root, err := s.projectRootForRequest(ctx)
+	if err != nil {
+		return "", nil, "", err
+	}
+
+	_, rootReal, err = canonicalizeRoot(root)
+	if err != nil {
+		return "", nil, "", err
+	}
+
+	cleanPath := filepath.Clean(requestedPath)
+	if validateProjectRelativePath(cleanPath) != nil {
+		return "", nil, "", os.ErrPermission
+	}
+
+	rel = strings.TrimPrefix(filepath.ToSlash(cleanPath), "./")
+	if rel == "" || rel == "." || !fs.ValidPath(rel) {
+		return "", nil, "", os.ErrPermission
+	}
+
+	return rootReal, os.DirFS(rootReal), rel, nil
 }
 
 // handleGetFileTree returns a tree structure of the project.
@@ -267,31 +305,18 @@ func (s *Server) buildFileTree(ctx context.Context, dir, relPath string, depth, 
 // It uses the project root from the request context when available (multi-project),
 // falling back to s.root (server root) or the process working directory.
 func (s *Server) resolvePathCtx(ctx context.Context, requestedPath string) (string, error) {
-	// Prefer project root from context (multi-project support), then server root,
-	// then process working directory.
-	root := s.getProjectRootPath(ctx)
-	if root == "" {
-		var err error
-		root, err = os.Getwd()
-		if err != nil {
-			return "", err
-		}
-	}
-
-	rootAbs, err := filepath.Abs(root)
+	root, err := s.projectRootForRequest(ctx)
 	if err != nil {
 		return "", err
 	}
-	rootReal := rootAbs
-	if rr, err := filepath.EvalSymlinks(rootAbs); err == nil {
-		rootReal = rr
+	rootAbs, rootReal, err := canonicalizeRoot(root)
+	if err != nil {
+		return "", err
 	}
 
 	cleanPath := filepath.Clean(requestedPath)
-
-	// Reject absolute paths (and Windows volume/UNC paths).
-	if filepath.IsAbs(cleanPath) || filepath.VolumeName(cleanPath) != "" {
-		return "", os.ErrPermission
+	if err := validateProjectRelativePath(cleanPath); err != nil {
+		return "", err
 	}
 
 	absPath, err := filepath.Abs(filepath.Join(rootAbs, cleanPath))
@@ -302,10 +327,50 @@ func (s *Server) resolvePathCtx(ctx context.Context, requestedPath string) (stri
 		return "", os.ErrPermission
 	}
 
+	return resolveExistingPathWithinRoot(absPath, rootReal)
+}
+
+func (s *Server) projectRootForRequest(ctx context.Context) (string, error) {
+	root := s.getProjectRootPath(ctx)
+	if root != "" {
+		return root, nil
+	}
+	return os.Getwd()
+}
+
+func canonicalizeRoot(root string) (rootAbs string, rootReal string, err error) {
+	rootAbs, err = filepath.Abs(root)
+	if err != nil {
+		return "", "", err
+	}
+
+	rootReal = rootAbs
+	if rr, err := filepath.EvalSymlinks(rootAbs); err == nil {
+		rootReal = rr
+	}
+	return rootAbs, rootReal, nil
+}
+
+func validateProjectRelativePath(cleanPath string) error {
+	// Prevent accidental exposure of sensitive files if the HTTP server is reachable.
+	// This endpoint is intended for project browsing; secrets should not be readable.
+	if isForbiddenProjectPath(cleanPath) {
+		return os.ErrPermission
+	}
+
+	// Reject absolute paths (and Windows volume/UNC paths).
+	if filepath.IsAbs(cleanPath) || filepath.VolumeName(cleanPath) != "" {
+		return os.ErrPermission
+	}
+	return nil
+}
+
+func resolveExistingPathWithinRoot(absPath, rootReal string) (string, error) {
 	// If the path exists, resolve symlinks to prevent traversal via in-tree symlinks.
 	// For non-existent paths (e.g., browsing a missing directory), preserve legacy
 	// behavior and let the caller decide how to handle os.IsNotExist.
-	if _, err := os.Lstat(absPath); err == nil {
+	_, err := os.Lstat(absPath)
+	if err == nil {
 		realPath, err := filepath.EvalSymlinks(absPath)
 		if err != nil {
 			return "", err
@@ -314,12 +379,73 @@ func (s *Server) resolvePathCtx(ctx context.Context, requestedPath string) (stri
 			return "", os.ErrPermission
 		}
 		return realPath, nil
-	} else if !os.IsNotExist(err) {
-		// Fail closed on unexpected filesystem errors.
-		return "", err
+	}
+	if os.IsNotExist(err) {
+		return absPath, nil
 	}
 
-	return absPath, nil
+	// Fail closed on unexpected filesystem errors.
+	return "", err
+}
+
+func isForbiddenProjectPath(cleanPath string) bool {
+	p := filepath.ToSlash(cleanPath)
+	p = strings.TrimPrefix(p, "./")
+	if p == "" || p == "." {
+		return false
+	}
+	for _, part := range strings.Split(p, "/") {
+		if part == "" || part == "." {
+			continue
+		}
+		if isForbiddenPathSegment(part) {
+			return true
+		}
+	}
+	return false
+}
+
+func isForbiddenPathSegment(part string) bool {
+	if part == ".." {
+		return true
+	}
+	if isForbiddenProjectDir(part) {
+		return true
+	}
+	if isForbiddenEnvFilename(part) {
+		return true
+	}
+	lower := strings.ToLower(part)
+	return isForbiddenPrivateKeyFilename(lower) || isForbiddenKeyMaterialFilename(lower)
+}
+
+func isForbiddenProjectDir(part string) bool {
+	switch part {
+	case ".git", ".quorum", ".ssh":
+		return true
+	default:
+		return false
+	}
+}
+
+func isForbiddenEnvFilename(part string) bool {
+	return part == ".env" || strings.HasPrefix(part, ".env.")
+}
+
+func isForbiddenPrivateKeyFilename(lower string) bool {
+	switch lower {
+	case "id_rsa", "id_dsa", "id_ecdsa", "id_ed25519":
+		return true
+	default:
+		return false
+	}
+}
+
+func isForbiddenKeyMaterialFilename(lower string) bool {
+	return strings.HasSuffix(lower, ".pem") ||
+		strings.HasSuffix(lower, ".key") ||
+		strings.HasSuffix(lower, ".p12") ||
+		strings.HasSuffix(lower, ".pfx")
 }
 
 // resolvePath resolves a relative path using the server root (no request context).

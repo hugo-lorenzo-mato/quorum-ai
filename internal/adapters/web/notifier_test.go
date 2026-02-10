@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
@@ -8,6 +9,19 @@ import (
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/events"
 )
+
+type fakeStateSaver struct {
+	calls int
+	ch    chan *core.WorkflowState
+}
+
+func (f *fakeStateSaver) Save(_ context.Context, state *core.WorkflowState) error {
+	f.calls++
+	if f.ch != nil {
+		f.ch <- state
+	}
+	return nil
+}
 
 func TestWebOutputNotifier_PhaseStarted(t *testing.T) {
 	t.Parallel()
@@ -30,6 +44,31 @@ func TestWebOutputNotifier_PhaseStarted(t *testing.T) {
 	}
 }
 
+func TestWebOutputNotifier_PhaseAwaitingReview(t *testing.T) {
+	t.Parallel()
+	bus := events.New(10)
+	ch := bus.Subscribe()
+
+	notifier := NewWebOutputNotifier(bus, "wf-test-123")
+	notifier.PhaseAwaitingReview("plan")
+
+	select {
+	case event := <-ch:
+		if event.EventType() != events.TypePhaseAwaitingReview {
+			t.Errorf("expected %s, got %s", events.TypePhaseAwaitingReview, event.EventType())
+		}
+		e, ok := event.(events.PhaseAwaitingReviewEvent)
+		if !ok {
+			t.Fatal("event is not PhaseAwaitingReviewEvent")
+		}
+		if e.Phase != "plan" {
+			t.Errorf("expected phase plan, got %s", e.Phase)
+		}
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("timeout waiting for event")
+	}
+}
+
 func TestWebOutputNotifier_TaskStarted(t *testing.T) {
 	t.Parallel()
 	bus := events.New(10)
@@ -46,6 +85,60 @@ func TestWebOutputNotifier_TaskStarted(t *testing.T) {
 		}
 	case <-time.After(100 * time.Millisecond):
 		t.Fatal("timeout waiting for event")
+	}
+}
+
+func TestWebOutputNotifier_Persistence_SkipsChunkAndFlushesNonChunk(t *testing.T) {
+	t.Parallel()
+	bus := events.New(10)
+	notifier := NewWebOutputNotifier(bus, "wf-test-123")
+
+	state := &core.WorkflowState{
+		WorkflowRun: core.WorkflowRun{
+			ExecutionID: 42,
+		},
+	}
+	notifier.SetState(state)
+
+	savedCh := make(chan *core.WorkflowState, 10)
+	saver := &fakeStateSaver{ch: savedCh}
+	notifier.SetStateSaver(saver)
+
+	// Chunk events are high-volume streaming data and must never be persisted.
+	notifier.AgentEvent("chunk", "analyzer", "partial", map[string]interface{}{"k": "v"})
+	if len(state.AgentEvents) != 0 {
+		t.Fatalf("expected no persisted agent events for chunk, got %d", len(state.AgentEvents))
+	}
+	notifier.FlushState()
+	if saver.calls != 0 {
+		t.Fatalf("expected no saves after chunk-only events, got %d", saver.calls)
+	}
+
+	// Force throttle path so AgentEvent schedules a delayed save instead of spawning a goroutine.
+	// This makes the test deterministic: FlushState should perform exactly one synchronous save.
+	notifier.stateMu.Lock()
+	notifier.lastSave = time.Now()
+	notifier.stateMu.Unlock()
+
+	notifier.AgentEvent("tool_use", "analyzer", "reading file", map[string]interface{}{"path": "README.md"})
+	if len(state.AgentEvents) != 1 {
+		t.Fatalf("expected 1 persisted agent event, got %d", len(state.AgentEvents))
+	}
+	if state.AgentEvents[0].ExecutionID != 42 {
+		t.Fatalf("expected execution id 42, got %d", state.AgentEvents[0].ExecutionID)
+	}
+
+	notifier.FlushState()
+	if saver.calls != 1 {
+		t.Fatalf("expected 1 save after FlushState, got %d", saver.calls)
+	}
+	select {
+	case got := <-savedCh:
+		if got != state {
+			t.Fatalf("expected saver to receive same state pointer")
+		}
+	default:
+		t.Fatalf("expected saver to receive a saved state")
 	}
 }
 

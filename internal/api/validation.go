@@ -263,13 +263,14 @@ func ValidateBlueprint(bp *BlueprintDTO, agents config.AgentsConfig) *Validation
 		"":             true, // Empty defaults to multi-agent
 		"multi_agent":  true,
 		"single_agent": true,
+		"interactive":  true,
 	}
 
 	if !validModes[mode] {
 		return &ValidationFieldError{
 			Field:   "execution_mode",
 			Value:   mode,
-			Message: "invalid value: must be 'multi_agent', 'single_agent', or empty",
+			Message: "invalid value: must be 'multi_agent', 'single_agent', 'interactive', or empty",
 			Code:    ErrCodeInvalidEnum,
 		}
 	}

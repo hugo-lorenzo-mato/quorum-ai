@@ -1,8 +1,10 @@
 import { useState } from 'react';
-import { Play, RefreshCw, FastForward, Loader2, AlertCircle, RotateCcw } from 'lucide-react';
+import PropTypes from 'prop-types';
+import { Play, RefreshCw, FastForward, Loader2, AlertCircle, RotateCcw, Eye } from 'lucide-react';
 import useWorkflowStore from '../../stores/workflowStore';
 import ReplanModal from './ReplanModal';
 import PhaseStepper from './PhaseStepper';
+import ReviewGate from './ReviewGate';
 
 export default function PhaseControls({ workflow }) {
   const [isReplanModalOpen, setReplanModalOpen] = useState(false);
@@ -13,6 +15,7 @@ export default function PhaseControls({ workflow }) {
     executeWorkflow,
     startWorkflow,
     resumeWorkflow,
+    switchToInteractive,
     loading,
     error,
   } = useWorkflowStore();
@@ -25,6 +28,7 @@ export default function PhaseControls({ workflow }) {
   const isPaused = status === 'paused';
   const isFailed = status === 'failed';
   const isCompleted = status === 'completed';
+  const isAwaitingReview = status === 'awaiting_review';
   const isFullyCompleted = isCompleted && (!current_phase || current_phase === 'done');
 
   // Phase-specific conditions
@@ -37,6 +41,9 @@ export default function PhaseControls({ workflow }) {
   // Resume/Retry conditions
   const canResume = isPaused;
   const canRetry = isFailed;
+
+  // Check if workflow is already in interactive mode
+  const isInteractive = workflow.blueprint?.execution_mode === 'interactive';
 
   const handleAnalyze = async () => {
     await analyzeWorkflow(id);
@@ -68,10 +75,19 @@ export default function PhaseControls({ workflow }) {
     await startWorkflow(id);
   };
 
+  const handleSwitchToInteractive = async () => {
+    await switchToInteractive(id);
+  };
+
   return (
     <div className="space-y-4">
       {/* Phase Progress Stepper */}
       <PhaseStepper workflow={workflow} />
+
+      {/* Review Gate - shown when awaiting review */}
+      {isAwaitingReview && (
+        <ReviewGate workflow={workflow} />
+      )}
 
       {/* Action Buttons */}
       <div className="flex flex-wrap gap-2">
@@ -159,12 +175,24 @@ export default function PhaseControls({ workflow }) {
           </button>
         )}
 
-        {/* Running indicator */}
+        {/* Running indicator + Switch to Interactive button */}
         {isRunning && (
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-info/10 text-info">
-            <Loader2 className="w-4 h-4 animate-spin" />
-            {current_phase ? `Running ${current_phase}...` : 'Running...'}
-          </div>
+          <>
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-info/10 text-info">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              {current_phase ? `Running ${current_phase}...` : 'Running...'}
+            </div>
+            {!isInteractive && (
+              <button
+                onClick={handleSwitchToInteractive}
+                disabled={loading}
+                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-warning/10 text-warning hover:bg-warning/20 text-sm disabled:opacity-50 transition-all"
+              >
+                <Eye className="w-3.5 h-3.5" />
+                Review after this phase
+              </button>
+            )}
+          </>
         )}
 
         {/* Paused indicator */}
@@ -200,3 +228,14 @@ export default function PhaseControls({ workflow }) {
     </div>
   );
 }
+
+PhaseControls.propTypes = {
+  workflow: PropTypes.shape({
+    id: PropTypes.string.isRequired,
+    status: PropTypes.string.isRequired,
+    current_phase: PropTypes.string,
+    blueprint: PropTypes.shape({
+      execution_mode: PropTypes.oneOf(['multi_agent', 'single_agent', 'interactive', '']),
+    }),
+  }).isRequired,
+};

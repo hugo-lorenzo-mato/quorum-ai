@@ -298,34 +298,16 @@ func runChat(_ *cobra.Command, _ []string) error {
 	return nil
 }
 
-// createWorkflowRunner creates a workflow runner with all dependencies.
-func createWorkflowRunner(
+func createWorkflowRunnerInternal(
 	ctx context.Context,
 	cfg *config.Config,
-	_ *config.Loader,
 	registry *cli.Registry,
 	controlPlane *control.ControlPlane,
-	eventBus *events.EventBus,
 	logger *logging.Logger,
+	outputNotifier workflow.OutputNotifier,
 ) (*workflow.Runner, error) {
 	// Create state manager
-	statePath := cfg.State.Path
-	if statePath == "" {
-		statePath = ".quorum/state/state.db"
-	}
-
-	stateOpts := state.StateManagerOptions{
-		BackupPath: cfg.State.BackupPath,
-	}
-	if cfg.State.LockTTL != "" {
-		if lockTTL, err := time.ParseDuration(cfg.State.LockTTL); err == nil {
-			stateOpts.LockTTL = lockTTL
-		} else {
-			logger.Warn("invalid state.lock_ttl, using default", "value", cfg.State.LockTTL, "error", err)
-		}
-	}
-
-	stateManager, err := state.NewStateManagerWithOptions(statePath, stateOpts)
+	stateManager, err := createStateManager(cfg, logger)
 	if err != nil {
 		return nil, fmt.Errorf("creating state manager: %w", err)
 	}
@@ -336,29 +318,9 @@ func createWorkflowRunner(
 		return nil, fmt.Errorf("creating prompt renderer: %w", err)
 	}
 
-	// Create runner config
-	timeout, err := parseDurationDefault(cfg.Workflow.Timeout, defaultWorkflowTimeout)
+	timeout, analyzeTimeout, planTimeout, executeTimeout, err := parseRunnerTimeouts(cfg)
 	if err != nil {
-		return nil, fmt.Errorf("parsing workflow timeout %q: %w", cfg.Workflow.Timeout, err)
-	}
-
-	// Parse phase timeouts
-	analyzeTimeout, err := parseDurationDefault(cfg.Phases.Analyze.Timeout, defaultPhaseTimeout)
-	if err != nil {
-		return nil, fmt.Errorf("parsing analyze phase timeout %q: %w", cfg.Phases.Analyze.Timeout, err)
-	}
-	planTimeout, err := parseDurationDefault(cfg.Phases.Plan.Timeout, defaultPhaseTimeout)
-	if err != nil {
-		return nil, fmt.Errorf("parsing plan phase timeout %q: %w", cfg.Phases.Plan.Timeout, err)
-	}
-	executeTimeout, err := parseDurationDefault(cfg.Phases.Execute.Timeout, defaultPhaseTimeout)
-	if err != nil {
-		return nil, fmt.Errorf("parsing execute phase timeout %q: %w", cfg.Phases.Execute.Timeout, err)
-	}
-
-	defaultAgent := cfg.Agents.Default
-	if defaultAgent == "" {
-		defaultAgent = "claude"
+		return nil, err
 	}
 
 	runnerConfig := &workflow.RunnerConfig{
@@ -366,7 +328,7 @@ func createWorkflowRunner(
 		MaxRetries:   3,
 		DryRun:       false,
 		DenyTools:    cfg.Workflow.DenyTools,
-		DefaultAgent: defaultAgent,
+		DefaultAgent: defaultAgentName(cfg),
 		AgentPhaseModels: map[string]map[string]string{
 			"claude":   cfg.Agents.Claude.PhaseModels,
 			"gemini":   cfg.Agents.Gemini.PhaseModels,
@@ -417,17 +379,9 @@ func createWorkflowRunner(
 	dagBuilder := service.NewDAGBuilder()
 
 	// Create worktree manager
-	cwd, err := os.Getwd()
+	worktreeManager, err := createWorktreeManager(cfg, logger)
 	if err != nil {
-		return nil, fmt.Errorf("getting working directory: %w", err)
-	}
-	gitClient, err := git.NewClient(cwd)
-	if err != nil {
-		logger.Warn("failed to create git client, worktree isolation disabled", "error", err)
-	}
-	var worktreeManager workflow.WorktreeManager
-	if gitClient != nil {
-		worktreeManager = git.NewTaskWorktreeManager(gitClient, cfg.Git.Worktree.Dir).WithLogger(logger)
+		return nil, err
 	}
 
 	// Create adapters
@@ -440,18 +394,9 @@ func createWorkflowRunner(
 	// core.StateManager satisfies workflow.StateManager interface
 	stateAdapter := stateManager
 
-	// Create output notifier for chat (minimal output)
-	outputNotifier := &chatOutputNotifier{eventBus: eventBus}
-
-	// Connect registry to event bus for real-time streaming events from CLI adapters
-	registry.SetEventHandler(func(event core.AgentEvent) {
-		// Convert core.AgentEvent to chatOutputNotifier event format
-		data := make(map[string]interface{})
-		for k, v := range event.Data {
-			data[k] = v
-		}
-		outputNotifier.AgentEvent(string(event.Type), event.Agent, event.Message, data)
-	})
+	// Connect registry to output notifier for real-time streaming events from CLI adapters.
+	// (OutputNotifier itself is responsible for publishing into the UI/event bus layer.)
+	connectRegistryToOutputNotifier(registry, outputNotifier)
 
 	// Create mode enforcer
 	modeEnforcer := service.NewModeEnforcer(service.ExecutionMode{
@@ -483,6 +428,96 @@ func createWorkflowRunner(
 	}
 
 	return runner, nil
+}
+
+func createStateManager(cfg *config.Config, logger *logging.Logger) (core.StateManager, error) {
+	statePath := cfg.State.Path
+	if statePath == "" {
+		statePath = ".quorum/state/state.db"
+	}
+
+	stateOpts := state.StateManagerOptions{
+		BackupPath: cfg.State.BackupPath,
+	}
+	if cfg.State.LockTTL != "" {
+		lockTTL, err := time.ParseDuration(cfg.State.LockTTL)
+		if err != nil {
+			logger.Warn("invalid state.lock_ttl, using default", "value", cfg.State.LockTTL, "error", err)
+		} else {
+			stateOpts.LockTTL = lockTTL
+		}
+	}
+
+	return state.NewStateManagerWithOptions(statePath, stateOpts)
+}
+
+func parseRunnerTimeouts(cfg *config.Config) (timeout, analyzeTimeout, planTimeout, executeTimeout time.Duration, err error) {
+	timeout, err = parseDurationDefault(cfg.Workflow.Timeout, defaultWorkflowTimeout)
+	if err != nil {
+		return 0, 0, 0, 0, fmt.Errorf("parsing workflow timeout %q: %w", cfg.Workflow.Timeout, err)
+	}
+	analyzeTimeout, err = parseDurationDefault(cfg.Phases.Analyze.Timeout, defaultPhaseTimeout)
+	if err != nil {
+		return 0, 0, 0, 0, fmt.Errorf("parsing analyze phase timeout %q: %w", cfg.Phases.Analyze.Timeout, err)
+	}
+	planTimeout, err = parseDurationDefault(cfg.Phases.Plan.Timeout, defaultPhaseTimeout)
+	if err != nil {
+		return 0, 0, 0, 0, fmt.Errorf("parsing plan phase timeout %q: %w", cfg.Phases.Plan.Timeout, err)
+	}
+	executeTimeout, err = parseDurationDefault(cfg.Phases.Execute.Timeout, defaultPhaseTimeout)
+	if err != nil {
+		return 0, 0, 0, 0, fmt.Errorf("parsing execute phase timeout %q: %w", cfg.Phases.Execute.Timeout, err)
+	}
+	return timeout, analyzeTimeout, planTimeout, executeTimeout, nil
+}
+
+func defaultAgentName(cfg *config.Config) string {
+	if cfg.Agents.Default == "" {
+		return "claude"
+	}
+	return cfg.Agents.Default
+}
+
+func createWorktreeManager(cfg *config.Config, logger *logging.Logger) (workflow.WorktreeManager, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return nil, fmt.Errorf("getting working directory: %w", err)
+	}
+	gitClient, err := git.NewClient(cwd)
+	if err != nil {
+		logger.Warn("failed to create git client, worktree isolation disabled", "error", err)
+		return nil, nil
+	}
+	return git.NewTaskWorktreeManager(gitClient, cfg.Git.Worktree.Dir).WithLogger(logger), nil
+}
+
+func connectRegistryToOutputNotifier(registry *cli.Registry, outputNotifier workflow.OutputNotifier) {
+	if outputNotifier == nil {
+		return
+	}
+	// Connect registry to output notifier for real-time streaming events from CLI adapters.
+	// (OutputNotifier itself is responsible for publishing into the UI/event bus layer.)
+	registry.SetEventHandler(func(event core.AgentEvent) {
+		data := make(map[string]interface{})
+		for k, v := range event.Data {
+			data[k] = v
+		}
+		outputNotifier.AgentEvent(string(event.Type), event.Agent, event.Message, data)
+	})
+}
+
+// createWorkflowRunner creates a workflow runner with all dependencies.
+func createWorkflowRunner(
+	ctx context.Context,
+	cfg *config.Config,
+	_ *config.Loader,
+	registry *cli.Registry,
+	controlPlane *control.ControlPlane,
+	eventBus *events.EventBus,
+	logger *logging.Logger,
+) (*workflow.Runner, error) {
+	outputNotifier := &chatOutputNotifier{eventBus: eventBus}
+	return createWorkflowRunnerInternal(ctx, cfg, registry, controlPlane, logger, outputNotifier)
 }
 
 // chatOutputNotifier publishes workflow events to the event bus.
@@ -648,184 +683,12 @@ func createWorkflowRunnerWithTrace(
 	logger *logging.Logger,
 	traceWriter service.TraceWriter,
 ) (*workflow.Runner, error) {
-	// Create state manager
-	statePath := cfg.State.Path
-	if statePath == "" {
-		statePath = ".quorum/state/state.db"
-	}
-
-	stateOpts := state.StateManagerOptions{
-		BackupPath: cfg.State.BackupPath,
-	}
-	if cfg.State.LockTTL != "" {
-		if lockTTL, err := time.ParseDuration(cfg.State.LockTTL); err == nil {
-			stateOpts.LockTTL = lockTTL
-		} else {
-			logger.Warn("invalid state.lock_ttl, using default", "value", cfg.State.LockTTL, "error", err)
-		}
-	}
-
-	stateManager, err := state.NewStateManagerWithOptions(statePath, stateOpts)
-	if err != nil {
-		return nil, fmt.Errorf("creating state manager: %w", err)
-	}
-
-	// Create prompt renderer
-	promptRenderer, err := service.NewPromptRenderer()
-	if err != nil {
-		return nil, fmt.Errorf("creating prompt renderer: %w", err)
-	}
-
-	// Create runner config
-	timeout, err := parseDurationDefault(cfg.Workflow.Timeout, defaultWorkflowTimeout)
-	if err != nil {
-		return nil, fmt.Errorf("parsing workflow timeout %q: %w", cfg.Workflow.Timeout, err)
-	}
-
-	// Parse phase timeouts
-	analyzeTimeout, err := parseDurationDefault(cfg.Phases.Analyze.Timeout, defaultPhaseTimeout)
-	if err != nil {
-		return nil, fmt.Errorf("parsing analyze phase timeout %q: %w", cfg.Phases.Analyze.Timeout, err)
-	}
-	planTimeout, err := parseDurationDefault(cfg.Phases.Plan.Timeout, defaultPhaseTimeout)
-	if err != nil {
-		return nil, fmt.Errorf("parsing plan phase timeout %q: %w", cfg.Phases.Plan.Timeout, err)
-	}
-	executeTimeout, err := parseDurationDefault(cfg.Phases.Execute.Timeout, defaultPhaseTimeout)
-	if err != nil {
-		return nil, fmt.Errorf("parsing execute phase timeout %q: %w", cfg.Phases.Execute.Timeout, err)
-	}
-
-	defaultAgent := cfg.Agents.Default
-	if defaultAgent == "" {
-		defaultAgent = "claude"
-	}
-
-	runnerConfig := &workflow.RunnerConfig{
-		Timeout:      timeout,
-		MaxRetries:   3,
-		DryRun:       false,
-		DenyTools:    cfg.Workflow.DenyTools,
-		DefaultAgent: defaultAgent,
-		AgentPhaseModels: map[string]map[string]string{
-			"claude":   cfg.Agents.Claude.PhaseModels,
-			"gemini":   cfg.Agents.Gemini.PhaseModels,
-			"codex":    cfg.Agents.Codex.PhaseModels,
-			"copilot":  cfg.Agents.Copilot.PhaseModels,
-			"opencode": cfg.Agents.OpenCode.PhaseModels,
-		},
-		WorktreeAutoClean: cfg.Git.Worktree.AutoClean,
-		WorktreeMode:      cfg.Git.Worktree.Mode,
-		Refiner: workflow.RefinerConfig{
-			Enabled: cfg.Phases.Analyze.Refiner.Enabled,
-			Agent:   cfg.Phases.Analyze.Refiner.Agent,
-		},
-		Synthesizer: workflow.SynthesizerConfig{
-			Agent: cfg.Phases.Analyze.Synthesizer.Agent,
-		},
-		PlanSynthesizer: workflow.PlanSynthesizerConfig{
-			Enabled: cfg.Phases.Plan.Synthesizer.Enabled,
-			Agent:   cfg.Phases.Plan.Synthesizer.Agent,
-		},
-		Report: report.Config{
-			Enabled:    cfg.Report.Enabled,
-			BaseDir:    cfg.Report.BaseDir,
-			UseUTC:     cfg.Report.UseUTC,
-			IncludeRaw: cfg.Report.IncludeRaw,
-		},
-		Moderator: workflow.ModeratorConfig{
-			Enabled:             cfg.Phases.Analyze.Moderator.Enabled,
-			Agent:               cfg.Phases.Analyze.Moderator.Agent,
-			Threshold:           cfg.Phases.Analyze.Moderator.Threshold,
-			MinRounds:           cfg.Phases.Analyze.Moderator.MinRounds,
-			MaxRounds:           cfg.Phases.Analyze.Moderator.MaxRounds,
-			WarningThreshold:    cfg.Phases.Analyze.Moderator.WarningThreshold,
-			StagnationThreshold: cfg.Phases.Analyze.Moderator.StagnationThreshold,
-		},
-		SingleAgent: buildSingleAgentConfig(cfg),
-		PhaseTimeouts: workflow.PhaseTimeouts{
-			Analyze: analyzeTimeout,
-			Plan:    planTimeout,
-			Execute: executeTimeout,
-		},
-	}
-
-	// Create service components
-	checkpointManager := service.NewCheckpointManager(stateManager, logger)
-	retryPolicy := service.NewRetryPolicy(service.WithMaxAttempts(3))
-	rateLimiterRegistry := service.GetGlobalRateLimiter()
-	dagBuilder := service.NewDAGBuilder()
-
-	// Create worktree manager
-	cwd, err := os.Getwd()
-	if err != nil {
-		return nil, fmt.Errorf("getting working directory: %w", err)
-	}
-	gitClient, err := git.NewClient(cwd)
-	if err != nil {
-		logger.Warn("failed to create git client, worktree isolation disabled", "error", err)
-	}
-	var worktreeManager workflow.WorktreeManager
-	if gitClient != nil {
-		worktreeManager = git.NewTaskWorktreeManager(gitClient, cfg.Git.Worktree.Dir).WithLogger(logger)
-	}
-
-	// Create adapters
-	checkpointAdapter := workflow.NewCheckpointAdapter(checkpointManager, ctx)
-	retryAdapter := workflow.NewRetryAdapter(retryPolicy, ctx)
-	rateLimiterAdapter := workflow.NewRateLimiterRegistryAdapter(rateLimiterRegistry, ctx)
-	promptAdapter := workflow.NewPromptRendererAdapter(promptRenderer)
-	resumeAdapter := workflow.NewResumePointAdapter(checkpointManager)
-	dagAdapter := workflow.NewDAGAdapter(dagBuilder)
-	// core.StateManager satisfies workflow.StateManager interface
-	stateAdapter := stateManager
-
-	// Create trace-enabled output notifier
 	traceNotifier := service.NewTraceOutputNotifier(traceWriter)
 	outputNotifier := &tracingChatOutputNotifier{
 		eventBus: eventBus,
 		tracer:   traceNotifier,
 	}
-
-	// Connect registry to event bus for real-time streaming events from CLI adapters
-	registry.SetEventHandler(func(event core.AgentEvent) {
-		data := make(map[string]interface{})
-		for k, v := range event.Data {
-			data[k] = v
-		}
-		outputNotifier.AgentEvent(string(event.Type), event.Agent, event.Message, data)
-	})
-
-	// Create mode enforcer
-	modeEnforcer := service.NewModeEnforcer(service.ExecutionMode{
-		DryRun:      runnerConfig.DryRun,
-		DeniedTools: runnerConfig.DenyTools,
-	})
-	modeEnforcerAdapter := workflow.NewModeEnforcerAdapter(modeEnforcer)
-
-	// Create workflow runner
-	runner, err := workflow.NewRunner(workflow.RunnerDeps{
-		Config:           runnerConfig,
-		State:            stateAdapter,
-		Agents:           registry,
-		DAG:              dagAdapter,
-		Checkpoint:       checkpointAdapter,
-		ResumeProvider:   resumeAdapter,
-		Prompts:          promptAdapter,
-		Retry:            retryAdapter,
-		RateLimits:       rateLimiterAdapter,
-		Worktrees:        worktreeManager,
-		GitClientFactory: git.NewClientFactory(),
-		Logger:           logger,
-		Output:           outputNotifier,
-		ModeEnforcer:     modeEnforcerAdapter,
-		Control:          controlPlane,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return runner, nil
+	return createWorkflowRunnerInternal(ctx, cfg, registry, controlPlane, logger, outputNotifier)
 }
 
 // tracingChatOutputNotifier extends chatOutputNotifier with tracing support.

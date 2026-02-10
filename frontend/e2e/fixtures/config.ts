@@ -103,7 +103,7 @@ export const test = base.extend<{
   configFile: string;
   resetConfig: () => Promise<void>;
 }>({
-  configFile: async ({}, use) => {
+  configFile: async (_args, use) => {
     const configDir = path.join(process.cwd(), '.test-configs');
     fs.mkdirSync(configDir, { recursive: true });
 

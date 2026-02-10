@@ -192,16 +192,21 @@ function entryFromSSE(eventType, data, executionId) {
     };
   }
 
-  if (eventType === 'phase_started' || eventType === 'phase_completed') {
+  if (eventType === 'phase_started' || eventType === 'phase_completed' ||
+      eventType === 'phase_awaiting_review' || eventType === 'phase_review_approved' ||
+      eventType === 'phase_review_rejected') {
     const phase = safeStr(data?.phase) || 'unknown';
-    const title =
-      eventType === 'phase_started'
-        ? `Phase started · ${phase}`
-        : `Phase completed · ${phase}`;
-    const message =
-      eventType === 'phase_completed' && data?.duration
-        ? `Duration: ${safeStr(data.duration)}`
-        : '';
+    const titleMap = {
+      phase_started: `Phase started · ${phase}`,
+      phase_completed: `Phase completed · ${phase}`,
+      phase_awaiting_review: `Awaiting review · ${phase}`,
+      phase_review_approved: `Review approved · ${phase}`,
+      phase_review_rejected: `Review rejected · ${phase}`,
+    };
+    const title = titleMap[eventType] || eventType;
+    let message = '';
+    if (eventType === 'phase_completed' && data?.duration) message = `Duration: ${safeStr(data.duration)}`;
+    if (eventType === 'phase_review_rejected' && data?.feedback) message = safeStr(data.feedback);
     return {
       kind: 'phase',
       event: eventType,
