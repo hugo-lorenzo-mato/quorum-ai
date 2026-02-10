@@ -340,6 +340,26 @@ func (m *SemanticModerator) handleFileEnforcement(wctx *Context, result *core.Ex
 		}
 	}
 
+	// Quality gate: reject outputs that look like conversational narration.
+	// Some tool-capable CLIs write the real evaluation to the output file
+	// while printing conversational text to stdout.
+	if result != nil && strings.TrimSpace(result.Output) != "" && !isValidModeratorOutput(result.Output) {
+		if absOutputPath != "" {
+			if content, readErr := os.ReadFile(absOutputPath); readErr == nil {
+				fileRaw := string(content)
+				if strings.TrimSpace(fileRaw) != "" && isValidModeratorOutput(fileRaw) {
+					wctx.Logger.Warn("moderator stdout rejected; using structured output file content instead",
+						"agent", moderatorAgentName, "round", round,
+						"path", absOutputPath,
+						"stdout_size", len(result.Output),
+						"file_size", len(fileRaw),
+					)
+					result.Output = fileRaw
+				}
+			}
+		}
+	}
+
 	// Ensure output file exists (file enforcement fallback)
 	if absOutputPath != "" && result != nil && result.Output != "" {
 		enforcement := NewFileEnforcement(wctx.Logger)
@@ -930,9 +950,13 @@ func (m *SemanticModerator) validateModeratorOutput(result *ModeratorEvaluationR
 	}
 
 	// Check 3: Output should contain expected sections for a valid evaluation
-	hasContent := strings.Contains(rawOutput, "##") || // Markdown headers
-		strings.Contains(rawOutput, "Agreement") ||
-		strings.Contains(rawOutput, "Divergen")
+	rawLower := strings.ToLower(rawOutput)
+	hasContent := strings.Contains(rawOutput, "##") ||
+		strings.Contains(rawOutput, "**") ||
+		strings.Contains(rawLower, "agreement") ||
+		strings.Contains(rawLower, "divergen") ||
+		strings.Contains(rawLower, "consensus") ||
+		strings.Contains(rawLower, "score rationale")
 
 	if !hasContent {
 		return fmt.Errorf("output lacks expected structure (no content sections found)")

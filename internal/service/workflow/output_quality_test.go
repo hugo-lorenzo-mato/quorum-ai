@@ -172,3 +172,72 @@ func TestIsValidAnalysisOutput(t *testing.T) {
 		})
 	}
 }
+
+func TestIsValidModeratorOutput(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name    string
+		content string
+		want    bool
+	}{
+		{
+			name:    "empty string",
+			content: "",
+			want:    false,
+		},
+		{
+			name:    "conversational stdout",
+			content: "I'll now evaluate the analyses provided by the agents. Let me read each file carefully and compare their findings.",
+			want:    false,
+		},
+		{
+			name: "YAML frontmatter",
+			content: "---\nconsensus_score: 78\nhigh_impact_divergences: 1\n---\n\n## Score Rationale\nGood agreement.",
+			want: true,
+		},
+		{
+			name:    "backup anchor",
+			content: "Some text\n>> FINAL SCORE: 78 <<",
+			want:    true,
+		},
+		{
+			name:    "consensus_score key in text",
+			content: "The consensus_score is 85 based on the analysis.",
+			want:    true,
+		},
+		{
+			name: "markdown headers with evaluation keywords",
+			content: "## Score Rationale\nGood overall agreement.\n\n## Agreements\n- Point one\n\n## Divergences\n- Point two",
+			want: true,
+		},
+		{
+			name:    "bold formatting with agreement keyword",
+			content: "**Agreement Areas**: The agents show strong consensus on architecture.",
+			want:    true,
+		},
+		{
+			name:    "case insensitive keywords",
+			content: "## Analysis\n**DIVERGENCE** in approach detected between agents.",
+			want:    true,
+		},
+		{
+			name: "headers without evaluation keywords",
+			content: "## Introduction\nSome text here.\n## Summary\nMore text.",
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isValidModeratorOutput(tt.content)
+			if got != tt.want {
+				trimmed := tt.content
+				if len(trimmed) > 100 {
+					trimmed = trimmed[:100] + "..."
+				}
+				t.Errorf("isValidModeratorOutput() = %v, want %v\n  content (%d bytes): %q",
+					got, tt.want, len(tt.content), trimmed)
+			}
+		})
+	}
+}

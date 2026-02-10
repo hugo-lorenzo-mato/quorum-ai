@@ -226,23 +226,3 @@ Additionally, as a backup measure in case formatting fails, you MUST end your re
 `>> FINAL SCORE: <integer> <<`
 
 Example: `>> FINAL SCORE: 78 <<`
-{{if .OutputFilePath}}
-
----
-## Output Location
-
-Write your consensus evaluation to the following file:
-
-```
-{{.OutputFilePath}}
-```
-
-**IMPORTANT - File format:**
-- The file MUST start with YAML frontmatter (`---` on first line)
-- Include all required fields: consensus_score, high/medium/low_impact_divergences, agreements_count
-- DO NOT add any text before the opening `---`
-- DO NOT include markers like `# File:` or file comments
-- END the file with `>> FINAL SCORE: XX <<`
-
-Use your file writing tool to create this markdown document.
-{{end}}

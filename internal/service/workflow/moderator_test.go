@@ -1,8 +1,14 @@
 package workflow
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/logging"
 )
 
 func TestNewSemanticModerator_UsesConfigValues(t *testing.T) {
@@ -755,6 +761,173 @@ func TestEffectiveThreshold(t *testing.T) {
 				t.Errorf("EffectiveThreshold(%q) = %v, want %v", tt.prompt, result, tt.wantResult)
 			}
 		})
+	}
+}
+
+func TestValidateModeratorOutput(t *testing.T) {
+	t.Parallel()
+	moderator, err := NewSemanticModerator(ModeratorConfig{
+		Enabled: true,
+		Agent:   "gemini",
+	})
+	if err != nil {
+		t.Fatalf("NewSemanticModerator() error = %v", err)
+	}
+
+	tests := []struct {
+		name      string
+		raw       string
+		score     float64
+		scoreOK   bool
+		wantValid bool
+	}{
+		{
+			name:      "valid with ## headers",
+			raw:       "---\nconsensus_score: 80\n---\n\n## Score Rationale\nGood overall agreement between agents on architecture, implementation, and testing strategies.\n\n## Agreements\n- All agents aligned on approach",
+			score:     0.80,
+			scoreOK:   true,
+			wantValid: true,
+		},
+		{
+			name:      "valid with lowercase agreement",
+			raw:       "---\nconsensus_score: 70\n---\n\nDetailed evaluation text with agreement keyword and divergence details across all agents and their respective analyses.",
+			score:     0.70,
+			scoreOK:   true,
+			wantValid: true,
+		},
+		{
+			name:      "valid with bold formatting",
+			raw:       "---\nconsensus_score: 75\n---\n\n**Agreement Areas**: Strong alignment on architecture. **Divergence Areas**: Minor differences in implementation approach.",
+			score:     0.75,
+			scoreOK:   true,
+			wantValid: true,
+		},
+		{
+			name:      "too short",
+			raw:       "Short",
+			score:     0,
+			scoreOK:   false,
+			wantValid: false,
+		},
+		{
+			name:      "no score found",
+			raw:       strings.Repeat("This is some text without a score. ", 10),
+			score:     0,
+			scoreOK:   false,
+			wantValid: false,
+		},
+		{
+			name:      "no structure with score",
+			raw:       "The overall numeric rating is 80 percent and agents generally agree on the approach taken for the implementation." + strings.Repeat(" More text.", 5),
+			score:     0.80,
+			scoreOK:   true,
+			wantValid: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := &ModeratorEvaluationResult{
+				Score:      tt.score,
+				ScoreFound: tt.scoreOK,
+				RawOutput:  tt.raw,
+			}
+			err := moderator.validateModeratorOutput(result, tt.raw)
+			if tt.wantValid && err != nil {
+				t.Errorf("validateModeratorOutput() unexpected error: %v", err)
+			}
+			if !tt.wantValid && err == nil {
+				t.Error("validateModeratorOutput() expected error, got nil")
+			}
+		})
+	}
+}
+
+func TestIsTransientModeratorError(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{
+			name: "nil error",
+			err:  nil,
+			want: false,
+		},
+		{
+			name: "timeout error",
+			err:  fmt.Errorf("operation timeout"),
+			want: true,
+		},
+		{
+			name: "stream error",
+			err:  fmt.Errorf("Stream completed without data"),
+			want: true,
+		},
+		{
+			name: "connection reset",
+			err:  fmt.Errorf("connection reset by peer"),
+			want: true,
+		},
+		{
+			name: "validation error",
+			err:  fmt.Errorf("moderator output validation: moderator validation failed: no score"),
+			want: true,
+		},
+		{
+			name: "unrelated error",
+			err:  fmt.Errorf("something completely different happened"),
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isTransientModeratorError(tt.err)
+			if got != tt.want {
+				t.Errorf("isTransientModeratorError(%v) = %v, want %v", tt.err, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestHandleFileEnforcement_PrefersFileWhenStdoutConversational(t *testing.T) {
+	t.Parallel()
+
+	// Create a temp directory with a valid moderator output file
+	tmpDir := t.TempDir()
+	outputPath := filepath.Join(tmpDir, "round-1.md")
+
+	validContent := "---\nconsensus_score: 82\nhigh_impact_divergences: 1\nmedium_impact_divergences: 0\nlow_impact_divergences: 2\nagreements_count: 4\n---\n\n## Score Rationale\nGood overall consensus.\n\n## Agreements\n- Architecture aligned\n\n>> FINAL SCORE: 82 <<"
+	if err := os.WriteFile(outputPath, []byte(validContent), 0644); err != nil {
+		t.Fatalf("failed to write temp file: %v", err)
+	}
+
+	moderator, err := NewSemanticModerator(ModeratorConfig{
+		Enabled: true,
+		Agent:   "claude",
+	})
+	if err != nil {
+		t.Fatalf("NewSemanticModerator() error = %v", err)
+	}
+
+	conversationalStdout := "I'll now evaluate the analyses provided by the three agents. Let me read each file carefully."
+	result := &core.ExecuteResult{
+		Output: conversationalStdout,
+		Model:  "test-model",
+	}
+
+	wctx := &Context{
+		Logger: logging.NewNop(),
+	}
+
+	got := moderator.handleFileEnforcement(wctx, result, outputPath, "claude", 1, "test-model")
+
+	if got.Output != validContent {
+		t.Errorf("handleFileEnforcement() did not replace stdout with file content\n  got output (%d bytes): %q\n  want (%d bytes): %q",
+			len(got.Output), got.Output[:min(100, len(got.Output))],
+			len(validContent), validContent[:min(100, len(validContent))])
 	}
 }
 

@@ -474,7 +474,16 @@ func (a *Analyzer) runModeratorLoop(ctx context.Context, wctx *Context, currentO
 	for round <= a.moderator.MaxRounds() {
 		evalResult, err := a.runModeratorRound(ctx, wctx, round, currentOutputs)
 		if err != nil {
-			return nil, round, err
+			if ctx.Err() != nil {
+				return nil, round, err
+			}
+			wctx.Logger.Warn("moderator evaluation failed, proceeding with current outputs",
+				"round", round, "error", err)
+			if wctx.Output != nil {
+				wctx.Output.Log("warn", "analyzer",
+					fmt.Sprintf("Round %d: Moderator evaluation failed (%v), proceeding with current analyses", round, err))
+			}
+			return currentOutputs, round, nil
 		}
 
 		if a.shouldStopForConsensus(wctx, round, evalResult) {
@@ -2177,6 +2186,7 @@ func isTransientModeratorError(err error) bool {
 		strings.Contains(errStr, "Connection") ||
 		strings.Contains(errStr, "EOF") ||
 		strings.Contains(errStr, "reset by peer") ||
+		IsModeratorValidationError(err) ||
 		core.IsRetryable(err)
 }
 
@@ -2195,6 +2205,7 @@ func (a *Analyzer) runModeratorWithRetry(ctx context.Context, wctx *Context, rou
 	}
 
 	// Primary failed — try ONE fallback agent with moderate phase enabled
+	var fallbackErr error
 	fallbackAgent := a.pickModeratorFallback(wctx, primaryAgent)
 	if fallbackAgent != "" {
 		wctx.Logger.Info("primary moderator failed, trying fallback",
@@ -2217,6 +2228,7 @@ func (a *Analyzer) runModeratorWithRetry(ctx context.Context, wctx *Context, rou
 			}
 			return fallbackResult.result, nil
 		}
+		fallbackErr = fallbackResult.err
 	}
 
 	// All attempts exhausted
@@ -2224,6 +2236,9 @@ func (a *Analyzer) runModeratorWithRetry(ctx context.Context, wctx *Context, rou
 	lastAgent := primaryAgent
 	if fallbackAgent != "" {
 		lastAgent = fallbackAgent
+		if fallbackErr != nil {
+			lastErr = fallbackErr
+		}
 	}
 
 	if wctx.Checkpoint != nil {

@@ -68,3 +68,48 @@ func isValidAnalysisOutput(content string) bool {
 
 	return false
 }
+
+// isValidModeratorOutput checks whether content looks like a real moderator
+// evaluation rather than conversational narration (e.g., "I'll now evaluate
+// the analyses…" planning text that leaks into stdout when the agent writes
+// the structured output to a file instead).
+//
+// Any single signal is sufficient — the function is deliberately lenient
+// because downstream parsing (YAML frontmatter, score extraction) handles
+// the heavy validation.
+func isValidModeratorOutput(content string) bool {
+	trimmed := strings.TrimSpace(content)
+	if trimmed == "" {
+		return false
+	}
+
+	lower := strings.ToLower(trimmed)
+
+	// Signal 1: YAML frontmatter (---\n...\n---)
+	if strings.HasPrefix(trimmed, "---") && strings.Count(trimmed, "---") >= 2 {
+		return true
+	}
+
+	// Signal 2: Backup anchor (>> FINAL SCORE: XX <<)
+	if strings.Contains(lower, ">> final score") {
+		return true
+	}
+
+	// Signal 3: consensus_score key (YAML or prose)
+	if strings.Contains(lower, "consensus_score") {
+		return true
+	}
+
+	// Signal 4: Markdown structure + evaluation keywords
+	hasStructure := strings.Contains(trimmed, "##") || strings.Contains(trimmed, "**")
+	hasEvalKeyword := strings.Contains(lower, "agreement") ||
+		strings.Contains(lower, "divergen") ||
+		strings.Contains(lower, "consensus") ||
+		strings.Contains(lower, "score rationale") ||
+		strings.Contains(lower, "quality assessment")
+	if hasStructure && hasEvalKeyword {
+		return true
+	}
+
+	return false
+}
