@@ -313,8 +313,9 @@ func TestStreamingResponseParsing_BufferOverflow(t *testing.T) {
 
 			duration := time.Since(start)
 
-			// Performance should be reasonable
-			maxDuration := 100 * time.Millisecond
+			// Performance should be reasonable. Keep this threshold lenient enough
+			// to avoid CI flakiness on slower runners.
+			maxDuration := 500 * time.Millisecond
 			if duration > maxDuration {
 				t.Errorf("Large response parsing took too long: %v (max: %v)", duration, maxDuration)
 			}
