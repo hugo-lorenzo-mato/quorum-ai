@@ -4,14 +4,14 @@ import useProjectStore from '../../stores/projectStore';
 
 describe('workflowApi', () => {
   beforeEach(() => {
-    global.fetch = vi.fn();
+    globalThis.fetch = vi.fn();
     // Ensure test isolation: api.js will append ?project=... if set.
     useProjectStore.setState({ currentProjectId: null });
   });
 
   describe('create', () => {
     it('sends blueprint in request body', async () => {
-      global.fetch.mockResolvedValue({
+      globalThis.fetch.mockResolvedValue({
         ok: true,
         status: 200,
         json: () => Promise.resolve({ id: 'wf-123' }),
@@ -25,7 +25,7 @@ describe('workflowApi', () => {
         },
       });
 
-      expect(global.fetch).toHaveBeenCalledWith(
+      expect(globalThis.fetch).toHaveBeenCalledWith(
         '/api/v1/workflows/',
         expect.objectContaining({
           method: 'POST',
@@ -45,7 +45,7 @@ describe('workflowApi', () => {
     });
 
     it('omits blueprint when empty object', async () => {
-      global.fetch.mockResolvedValue({
+      globalThis.fetch.mockResolvedValue({
         ok: true,
         status: 200,
         json: () => Promise.resolve({ id: 'wf-123' }),
@@ -53,14 +53,14 @@ describe('workflowApi', () => {
 
       await workflowApi.create('Test prompt', {});
 
-      const callBody = JSON.parse(global.fetch.mock.calls[0][1].body);
+      const callBody = JSON.parse(globalThis.fetch.mock.calls[0][1].body);
       expect(callBody).toEqual({ prompt: 'Test prompt' });
       expect(callBody.blueprint).toBeUndefined();
       expect(callBody.title).toBeUndefined();
     });
 
     it('omits blueprint when not provided', async () => {
-      global.fetch.mockResolvedValue({
+      globalThis.fetch.mockResolvedValue({
         ok: true,
         status: 200,
         json: () => Promise.resolve({ id: 'wf-123' }),
@@ -68,13 +68,13 @@ describe('workflowApi', () => {
 
       await workflowApi.create('Test prompt');
 
-      const callBody = JSON.parse(global.fetch.mock.calls[0][1].body);
+      const callBody = JSON.parse(globalThis.fetch.mock.calls[0][1].body);
       expect(callBody).toEqual({ prompt: 'Test prompt' });
       expect(callBody.blueprint).toBeUndefined();
     });
 
     it('sends title without blueprint', async () => {
-      global.fetch.mockResolvedValue({
+      globalThis.fetch.mockResolvedValue({
         ok: true,
         status: 200,
         json: () => Promise.resolve({ id: 'wf-123' }),
@@ -84,7 +84,7 @@ describe('workflowApi', () => {
         title: 'My Workflow',
       });
 
-      const callBody = JSON.parse(global.fetch.mock.calls[0][1].body);
+      const callBody = JSON.parse(globalThis.fetch.mock.calls[0][1].body);
       expect(callBody).toEqual({
         prompt: 'Test prompt',
         title: 'My Workflow',
@@ -93,7 +93,7 @@ describe('workflowApi', () => {
     });
 
     it('sends files when provided', async () => {
-      global.fetch.mockResolvedValue({
+      globalThis.fetch.mockResolvedValue({
         ok: true,
         status: 200,
         json: () => Promise.resolve({ id: 'wf-123' }),
@@ -103,12 +103,12 @@ describe('workflowApi', () => {
         files: ['file1.txt', 'file2.txt'],
       });
 
-      const callBody = JSON.parse(global.fetch.mock.calls[0][1].body);
+      const callBody = JSON.parse(globalThis.fetch.mock.calls[0][1].body);
       expect(callBody.files).toEqual(['file1.txt', 'file2.txt']);
     });
 
     it('omits files when empty array', async () => {
-      global.fetch.mockResolvedValue({
+      globalThis.fetch.mockResolvedValue({
         ok: true,
         status: 200,
         json: () => Promise.resolve({ id: 'wf-123' }),
@@ -118,12 +118,12 @@ describe('workflowApi', () => {
         files: [],
       });
 
-      const callBody = JSON.parse(global.fetch.mock.calls[0][1].body);
+      const callBody = JSON.parse(globalThis.fetch.mock.calls[0][1].body);
       expect(callBody.files).toBeUndefined();
     });
 
     it('sends all options together', async () => {
-      global.fetch.mockResolvedValue({
+      globalThis.fetch.mockResolvedValue({
         ok: true,
         status: 200,
         json: () => Promise.resolve({ id: 'wf-123' }),
@@ -139,7 +139,7 @@ describe('workflowApi', () => {
         },
       });
 
-      const callBody = JSON.parse(global.fetch.mock.calls[0][1].body);
+      const callBody = JSON.parse(globalThis.fetch.mock.calls[0][1].body);
       expect(callBody).toEqual({
         prompt: 'Test prompt',
         title: 'Complete Workflow',
@@ -153,7 +153,7 @@ describe('workflowApi', () => {
     });
 
     it('throws error on non-ok response', async () => {
-      global.fetch.mockResolvedValue({
+      globalThis.fetch.mockResolvedValue({
         ok: false,
         status: 400,
         statusText: 'Bad Request',
@@ -168,7 +168,7 @@ describe('workflowApi', () => {
     });
 
     it('handles validation error format', async () => {
-      global.fetch.mockResolvedValue({
+      globalThis.fetch.mockResolvedValue({
         ok: false,
         status: 400,
         json: () => Promise.resolve({
@@ -180,7 +180,7 @@ describe('workflowApi', () => {
     });
 
     it('handles network errors gracefully', async () => {
-      global.fetch.mockResolvedValue({
+      globalThis.fetch.mockResolvedValue({
         ok: false,
         status: 500,
         statusText: 'Internal Server Error',
@@ -193,7 +193,7 @@ describe('workflowApi', () => {
 
   describe('replan', () => {
     it('posts without a body when context is empty', async () => {
-      global.fetch.mockResolvedValue({
+      globalThis.fetch.mockResolvedValue({
         ok: true,
         status: 200,
         json: () => Promise.resolve({ ok: true }),
@@ -201,15 +201,15 @@ describe('workflowApi', () => {
 
       await workflowApi.replan('wf-1', '');
 
-      expect(global.fetch).toHaveBeenCalledWith(
+      expect(globalThis.fetch).toHaveBeenCalledWith(
         '/api/v1/workflows/wf-1/replan',
         expect.objectContaining({ method: 'POST' })
       );
-      expect(global.fetch.mock.calls[0][1].body).toBeUndefined();
+      expect(globalThis.fetch.mock.calls[0][1].body).toBeUndefined();
     });
 
     it('includes context in the JSON body when provided', async () => {
-      global.fetch.mockResolvedValue({
+      globalThis.fetch.mockResolvedValue({
         ok: true,
         status: 200,
         json: () => Promise.resolve({ ok: true }),
@@ -217,7 +217,7 @@ describe('workflowApi', () => {
 
       await workflowApi.replan('wf-1', 'more context');
 
-      expect(global.fetch).toHaveBeenCalledWith(
+      expect(globalThis.fetch).toHaveBeenCalledWith(
         '/api/v1/workflows/wf-1/replan',
         expect.objectContaining({
           method: 'POST',
@@ -229,7 +229,7 @@ describe('workflowApi', () => {
 
   describe('review', () => {
     it('maps continueUnattended to continue_unattended in request body', async () => {
-      global.fetch.mockResolvedValue({
+      globalThis.fetch.mockResolvedValue({
         ok: true,
         status: 200,
         json: () => Promise.resolve({ ok: true }),
@@ -242,7 +242,7 @@ describe('workflowApi', () => {
         continueUnattended: true,
       });
 
-      expect(global.fetch).toHaveBeenCalledWith(
+      expect(globalThis.fetch).toHaveBeenCalledWith(
         '/api/v1/workflows/wf-1/review',
         expect.objectContaining({
           method: 'POST',
@@ -259,7 +259,7 @@ describe('workflowApi', () => {
 
   describe('switchInteractive', () => {
     it('posts to /switch-interactive without a body', async () => {
-      global.fetch.mockResolvedValue({
+      globalThis.fetch.mockResolvedValue({
         ok: true,
         status: 200,
         json: () => Promise.resolve({ ok: true }),
@@ -267,17 +267,17 @@ describe('workflowApi', () => {
 
       await workflowApi.switchInteractive('wf-1');
 
-      expect(global.fetch).toHaveBeenCalledWith(
+      expect(globalThis.fetch).toHaveBeenCalledWith(
         '/api/v1/workflows/wf-1/switch-interactive',
         expect.objectContaining({ method: 'POST' })
       );
-      expect(global.fetch.mock.calls[0][1].body).toBeUndefined();
+      expect(globalThis.fetch.mock.calls[0][1].body).toBeUndefined();
     });
 
     it('appends the project query parameter when a project is selected', async () => {
       useProjectStore.setState({ currentProjectId: 'proj 1' });
 
-      global.fetch.mockResolvedValue({
+      globalThis.fetch.mockResolvedValue({
         ok: true,
         status: 200,
         json: () => Promise.resolve({ ok: true }),
@@ -285,7 +285,7 @@ describe('workflowApi', () => {
 
       await workflowApi.switchInteractive('wf-1');
 
-      expect(global.fetch.mock.calls[0][0]).toBe(
+      expect(globalThis.fetch.mock.calls[0][0]).toBe(
         '/api/v1/workflows/wf-1/switch-interactive?project=proj%201'
       );
     });
@@ -293,7 +293,7 @@ describe('workflowApi', () => {
 
   describe('task mutations', () => {
     it('createTask posts JSON body', async () => {
-      global.fetch.mockResolvedValue({
+      globalThis.fetch.mockResolvedValue({
         ok: true,
         status: 200,
         json: () => Promise.resolve({ id: 't1' }),
@@ -301,7 +301,7 @@ describe('workflowApi', () => {
 
       await workflowApi.createTask('wf-1', { name: 'x' });
 
-      expect(global.fetch).toHaveBeenCalledWith(
+      expect(globalThis.fetch).toHaveBeenCalledWith(
         '/api/v1/workflows/wf-1/tasks/',
         expect.objectContaining({
           method: 'POST',
@@ -311,7 +311,7 @@ describe('workflowApi', () => {
     });
 
     it('updateTask patches JSON body', async () => {
-      global.fetch.mockResolvedValue({
+      globalThis.fetch.mockResolvedValue({
         ok: true,
         status: 200,
         json: () => Promise.resolve({ id: 't1' }),
@@ -319,7 +319,7 @@ describe('workflowApi', () => {
 
       await workflowApi.updateTask('wf-1', 't1', { name: 'y' });
 
-      expect(global.fetch).toHaveBeenCalledWith(
+      expect(globalThis.fetch).toHaveBeenCalledWith(
         '/api/v1/workflows/wf-1/tasks/t1',
         expect.objectContaining({
           method: 'PATCH',
@@ -329,7 +329,7 @@ describe('workflowApi', () => {
     });
 
     it('deleteTask sends DELETE without a body', async () => {
-      global.fetch.mockResolvedValue({
+      globalThis.fetch.mockResolvedValue({
         ok: true,
         status: 204,
         json: () => Promise.resolve({}),
@@ -337,15 +337,15 @@ describe('workflowApi', () => {
 
       await workflowApi.deleteTask('wf-1', 't1');
 
-      expect(global.fetch).toHaveBeenCalledWith(
+      expect(globalThis.fetch).toHaveBeenCalledWith(
         '/api/v1/workflows/wf-1/tasks/t1',
         expect.objectContaining({ method: 'DELETE' })
       );
-      expect(global.fetch.mock.calls[0][1].body).toBeUndefined();
+      expect(globalThis.fetch.mock.calls[0][1].body).toBeUndefined();
     });
 
     it('reorderTasks puts task_order JSON body', async () => {
-      global.fetch.mockResolvedValue({
+      globalThis.fetch.mockResolvedValue({
         ok: true,
         status: 200,
         json: () => Promise.resolve([{ id: 't2' }, { id: 't1' }]),
@@ -353,7 +353,7 @@ describe('workflowApi', () => {
 
       await workflowApi.reorderTasks('wf-1', ['t2', 't1']);
 
-      expect(global.fetch).toHaveBeenCalledWith(
+      expect(globalThis.fetch).toHaveBeenCalledWith(
         '/api/v1/workflows/wf-1/tasks/reorder',
         expect.objectContaining({
           method: 'PUT',
