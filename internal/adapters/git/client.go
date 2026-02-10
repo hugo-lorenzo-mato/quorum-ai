@@ -613,28 +613,54 @@ func validateGitBranchName(name string) error {
 		return core.ErrValidation("INVALID_BRANCH", "branch name must not start with '-'")
 	}
 	// Conservative refname validation (subset of `git check-ref-format --branch`).
-	if strings.Contains(name, " ") || strings.Contains(name, "\t") || strings.Contains(name, "\n") || strings.Contains(name, "\r") {
+	if strings.ContainsAny(name, " \t\r\n") {
 		return core.ErrValidation("INVALID_BRANCH", "branch name must not contain whitespace")
 	}
-	if strings.Contains(name, "..") || strings.Contains(name, "@{") || strings.Contains(name, "//") {
+	if hasForbiddenRefSequence(name) {
 		return core.ErrValidation("INVALID_BRANCH", "branch name contains forbidden sequence")
 	}
-	if strings.HasPrefix(name, "/") || strings.HasSuffix(name, "/") || strings.HasSuffix(name, ".") || strings.HasSuffix(name, ".lock") {
+	if hasForbiddenRefEdge(name) {
 		return core.ErrValidation("INVALID_BRANCH", "branch name has forbidden prefix/suffix")
 	}
+	if err := validateBranchRunes(name); err != nil {
+		return err
+	}
+	if name == "@" {
+		return core.ErrValidation("INVALID_BRANCH", "branch name '@' is not allowed")
+	}
+	return nil
+}
+
+func hasForbiddenRefSequence(name string) bool {
+	return strings.Contains(name, "..") || strings.Contains(name, "@{") || strings.Contains(name, "//")
+}
+
+func hasForbiddenRefEdge(name string) bool {
+	return strings.HasPrefix(name, "/") ||
+		strings.HasSuffix(name, "/") ||
+		strings.HasSuffix(name, ".") ||
+		strings.HasSuffix(name, ".lock")
+}
+
+func validateBranchRunes(name string) error {
 	for _, r := range name {
-		switch r {
-		case '~', '^', ':', '?', '*', '[', '\\':
+		if isForbiddenBranchRune(r) {
 			return core.ErrValidation("INVALID_BRANCH", fmt.Sprintf("branch name contains forbidden character: %q", r))
 		}
 		if r < 0x20 || r == 0x7f {
 			return core.ErrValidation("INVALID_BRANCH", "branch name contains control character")
 		}
 	}
-	if name == "@" {
-		return core.ErrValidation("INVALID_BRANCH", "branch name '@' is not allowed")
-	}
 	return nil
+}
+
+func isForbiddenBranchRune(r rune) bool {
+	switch r {
+	case '~', '^', ':', '?', '*', '[', '\\':
+		return true
+	default:
+		return false
+	}
 }
 
 func validateGitRev(rev string) error {
