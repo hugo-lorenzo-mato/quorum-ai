@@ -611,8 +611,7 @@ func TestDisplayTruncated_SingleLine(t *testing.T) {
 // --- runInteractiveWorkflow error paths ---
 
 func TestRunInteractiveWorkflow_NoPrompt(t *testing.T) {
-	t.Parallel()
-	// Save and restore package-level vars
+	// No t.Parallel(): mutates package-level runFile
 	origFile := runFile
 	defer func() { runFile = origFile }()
 	runFile = ""
@@ -624,7 +623,7 @@ func TestRunInteractiveWorkflow_NoPrompt(t *testing.T) {
 }
 
 func TestRunInteractiveWorkflow_EmptyArgsAndNoFile(t *testing.T) {
-	t.Parallel()
+	// No t.Parallel(): mutates package-level runFile
 	origFile := runFile
 	defer func() { runFile = origFile }()
 	runFile = ""
@@ -636,7 +635,7 @@ func TestRunInteractiveWorkflow_EmptyArgsAndNoFile(t *testing.T) {
 }
 
 func TestRunInteractiveWorkflow_NonexistentFile(t *testing.T) {
-	t.Parallel()
+	// No t.Parallel(): mutates package-level runFile
 	origFile := runFile
 	defer func() { runFile = origFile }()
 	runFile = "/nonexistent/path/to/prompt.txt"
@@ -648,7 +647,7 @@ func TestRunInteractiveWorkflow_NonexistentFile(t *testing.T) {
 }
 
 func TestRunInteractiveWorkflow_InitPhaseRunnerError(t *testing.T) {
-	t.Parallel()
+	// No t.Parallel(): reads package-level runFile which other tests mutate
 	// Provide a prompt but use a cancelled context so InitPhaseRunner fails
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately
