@@ -42,6 +42,15 @@ func TestResolvePathCtx_RejectsAbsolutePaths(t *testing.T) {
 	s := &Server{root: root}
 
 	abs := filepath.Join(string(os.PathSeparator), "etc", "passwd")
+	if runtime.GOOS == "windows" {
+		// A rooted path like `\\etc\\passwd` is not considered absolute by Go on Windows.
+		// Use a drive-qualified path instead.
+		vol := filepath.VolumeName(root)
+		if vol == "" {
+			t.Fatalf("expected non-empty volume name for root %q", root)
+		}
+		abs = filepath.Join(vol+string(os.PathSeparator), "not-in-root", "file.txt")
+	}
 	_, err := s.resolvePathCtx(context.Background(), abs)
 	if !errors.Is(err, os.ErrPermission) {
 		t.Fatalf("expected ErrPermission, got %v", err)
