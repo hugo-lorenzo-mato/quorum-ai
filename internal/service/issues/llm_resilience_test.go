@@ -101,19 +101,22 @@ func TestCircuitBreaker_SuccessResetsFailures(t *testing.T) {
 
 func TestCircuitBreaker_HalfOpenState(t *testing.T) {
 	t.Parallel()
-	// Use very short reset timeout for testing
-	cb := NewLLMCircuitBreaker(2, 10*time.Millisecond)
+	// Use a short but stable reset timeout. Very small values are prone to
+	// flakiness on slower/contended CI runners.
+	resetTimeout := 100 * time.Millisecond
+	cb := NewLLMCircuitBreaker(2, resetTimeout)
 
 	// Open the circuit
 	cb.RecordFailure()
 	cb.RecordFailure()
 
-	if !cb.IsOpen() {
+	_, isOpen, _ := cb.GetState()
+	if !isOpen {
 		t.Error("expected circuit to be open")
 	}
 
 	// Wait for reset timeout
-	time.Sleep(20 * time.Millisecond)
+	time.Sleep(resetTimeout + 25*time.Millisecond)
 
 	// Should allow request (transitions to half-open)
 	if !cb.AllowRequest() {
@@ -123,22 +126,25 @@ func TestCircuitBreaker_HalfOpenState(t *testing.T) {
 	// Success in half-open should close circuit
 	cb.RecordSuccess()
 
-	if cb.IsOpen() {
+	_, isOpen, _ = cb.GetState()
+	if isOpen {
 		t.Error("expected circuit to be closed after success in half-open")
 	}
 }
 
 func TestCircuitBreaker_HalfOpenFailure(t *testing.T) {
 	t.Parallel()
-	// Use very short reset timeout for testing
-	cb := NewLLMCircuitBreaker(2, 10*time.Millisecond)
+	// Use a short but stable reset timeout. Very small values are prone to
+	// flakiness on slower/contended CI runners.
+	resetTimeout := 100 * time.Millisecond
+	cb := NewLLMCircuitBreaker(2, resetTimeout)
 
 	// Open the circuit
 	cb.RecordFailure()
 	cb.RecordFailure()
 
 	// Wait for reset timeout
-	time.Sleep(20 * time.Millisecond)
+	time.Sleep(resetTimeout + 25*time.Millisecond)
 
 	// Allow request (transitions to half-open)
 	cb.AllowRequest()
@@ -150,7 +156,8 @@ func TestCircuitBreaker_HalfOpenFailure(t *testing.T) {
 		t.Error("expected RecordFailure to return true when re-opening from half-open")
 	}
 
-	if !cb.IsOpen() {
+	_, isOpen, _ := cb.GetState()
+	if !isOpen {
 		t.Error("expected circuit to be open after failure in half-open")
 	}
 }

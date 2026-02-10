@@ -5,6 +5,7 @@ package state
 import (
 	"os"
 	"path/filepath"
+	"time"
 )
 
 // atomicWriteFile writes data to a file atomically.
@@ -16,26 +17,48 @@ func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
 		return err
 	}
 
-	// Write to temp file in same directory
-	tempFile := path + ".tmp"
-	if err := os.WriteFile(tempFile, data, perm); err != nil {
+	// Write to a unique temp file in the same directory. A fixed ".tmp" name
+	// causes collisions under concurrent writers (common in tests and CI).
+	base := filepath.Base(path)
+	f, err := os.CreateTemp(dir, base+".tmp-*")
+	if err != nil {
 		return err
 	}
+	tempFile := f.Name()
+	defer func() { _ = os.Remove(tempFile) }()
 
-	// Rename temp file to target (atomic on Windows when same volume)
-	if err := os.Rename(tempFile, path); err != nil {
-		// Windows does not allow renaming over an existing file.
+	if _, err := f.Write(data); err != nil {
+		_ = f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	_ = os.Chmod(tempFile, perm)
+
+	// Rename temp file to target. Windows does not allow renaming over an existing
+	// file, and concurrent writers can temporarily lock the destination. Retry
+	// with a small backoff to avoid flakiness.
+	var lastErr error
+	for attempt := 0; attempt < 10; attempt++ {
+		if err := os.Rename(tempFile, path); err == nil {
+			return nil
+		} else {
+			lastErr = err
+		}
+
+		// Best-effort replacement when destination exists.
 		if _, statErr := os.Stat(path); statErr == nil {
 			_ = os.Remove(path)
-			if retryErr := os.Rename(tempFile, path); retryErr == nil {
+			if err := os.Rename(tempFile, path); err == nil {
 				return nil
 			} else {
-				err = retryErr
+				lastErr = err
 			}
 		}
-		os.Remove(tempFile) // Clean up on failure
-		return err
+
+		time.Sleep(time.Duration(attempt+1) * 5 * time.Millisecond)
 	}
 
-	return nil
+	return lastErr
 }
