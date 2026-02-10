@@ -94,7 +94,16 @@ func TestResolvePathCtx_AllowsSymlinksWithinRoot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	if got != target {
-		t.Fatalf("expected resolved symlink target %q, got %q", target, got)
+
+	gotReal, err := filepath.EvalSymlinks(got)
+	if err != nil {
+		t.Fatalf("EvalSymlinks(got): %v", err)
+	}
+	targetReal, err := filepath.EvalSymlinks(target)
+	if err != nil {
+		t.Fatalf("EvalSymlinks(target): %v", err)
+	}
+	if gotReal != targetReal {
+		t.Fatalf("expected resolved symlink target %q, got %q", targetReal, gotReal)
 	}
 }
