@@ -1,19 +1,18 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { CheckCircle, XCircle, Loader2, MessageSquare } from 'lucide-react';
 import useWorkflowStore from '../../stores/workflowStore';
 import TaskEditor from './TaskEditor';
 
 /**
- * ReviewGate displays when a workflow is in 'awaiting_review' status.
- * It allows the user to approve/reject the completed phase with optional feedback,
- * and to edit tasks when the plan phase is complete.
+ * ReviewGateInner contains the stateful form.
+ * Parent ReviewGate uses a key to reset state when workflow/status changes.
  */
-export default function ReviewGate({ workflow }) {
+function ReviewGateInner({ workflow }) {
   const [feedback, setFeedback] = useState('');
   const [continueUnattended, setContinueUnattended] = useState(false);
   const { reviewWorkflow, loading } = useWorkflowStore();
 
-  const { id, status, current_phase } = workflow;
+  const { id, current_phase } = workflow;
 
   // Determine which phase just completed (the one before current_phase)
   const phaseOrder = ['analyze', 'plan', 'execute', 'done'];
@@ -22,14 +21,6 @@ export default function ReviewGate({ workflow }) {
 
   // Show task editor when plan phase completed (current_phase is 'execute')
   const showTaskEditor = current_phase === 'execute';
-
-  // Reset feedback when workflow changes
-  useEffect(() => {
-    setFeedback('');
-    setContinueUnattended(false);
-  }, [id, status]);
-
-  if (status !== 'awaiting_review') return null;
 
   const handleApprove = async () => {
     await reviewWorkflow(id, {
@@ -109,4 +100,13 @@ export default function ReviewGate({ workflow }) {
       </div>
     </div>
   );
+}
+
+/**
+ * ReviewGate displays when a workflow is in 'awaiting_review' status.
+ * Uses a key to reset internal form state when workflow/status changes.
+ */
+export default function ReviewGate({ workflow }) {
+  if (workflow.status !== 'awaiting_review') return null;
+  return <ReviewGateInner key={`${workflow.id}:${workflow.status}`} workflow={workflow} />;
 }
