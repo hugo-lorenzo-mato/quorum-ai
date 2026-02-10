@@ -283,10 +283,12 @@ func (w *fileTraceWriter) appendRecord(record traceRecord) error {
 	if err != nil {
 		return err
 	}
-	defer file.Close()
 
-	_, err = file.Write(data)
-	return err
+	if _, err = file.Write(data); err != nil {
+		_ = file.Close()
+		return err
+	}
+	return file.Close()
 }
 
 func (w *fileTraceWriter) buildFilename(seq int, event TraceEvent) string {

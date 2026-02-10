@@ -3,6 +3,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -235,18 +236,9 @@ func (h *ProjectsHandler) handleUpdateProject(w http.ResponseWriter, r *http.Req
 			return
 		}
 
-		// Check if path exists and is a directory
-		fileInfo, err := os.Stat(absPath)
-		if err != nil {
-			if os.IsNotExist(err) {
-				respondError(w, http.StatusBadRequest, "path does not exist")
-				return
-			}
-			respondError(w, http.StatusBadRequest, "cannot access path")
-			return
-		}
-		if !fileInfo.IsDir() {
-			respondError(w, http.StatusBadRequest, "path is not a directory")
+		// Validate it is an existing directory containing a .quorum project
+		if err := project.ValidateProjectPath(absPath); err != nil {
+			respondError(w, http.StatusBadRequest, fmt.Sprintf("invalid project path: %v", err))
 			return
 		}
 

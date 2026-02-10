@@ -240,13 +240,7 @@ function entryFromSSE(eventType, data, executionId) {
 
     const name = safeStr(data?.name);
     const baseTitle = name ? `${name}` : taskId;
-    let title = `${eventType.replace('task_', 'Task ')} · ${baseTitle}`;
-    title = title.replace('Task created', 'Task created');
-    title = title.replace('Task started', 'Task started');
-    title = title.replace('Task completed', 'Task completed');
-    title = title.replace('Task failed', 'Task failed');
-    title = title.replace('Task skipped', 'Task skipped');
-    title = title.replace('Task retry', 'Task retry');
+    const title = `${eventType.replace('task_', 'Task ')} · ${baseTitle}`;
 
     let message = '';
     if (eventType === 'task_failed') message = safeStr(data?.error);

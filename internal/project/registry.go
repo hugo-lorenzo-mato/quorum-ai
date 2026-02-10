@@ -330,7 +330,7 @@ func (r *FileRegistry) AddProject(_ context.Context, path string, opts *AddProje
 	absPath = filepath.Clean(absPath)
 
 	// Validate the project path
-	if err := validateProjectPath(absPath); err != nil {
+	if err := ValidateProjectPath(absPath); err != nil {
 		return nil, NewRegistryError("add", err)
 	}
 
@@ -724,7 +724,8 @@ func (r *FileRegistry) Count() int {
 }
 
 // validateProjectPath validates that a path is a valid Quorum project
-func validateProjectPath(path string) error {
+// ValidateProjectPath checks that a path is absolute, clean, and contains a .quorum directory.
+func ValidateProjectPath(path string) error {
 	if !filepath.IsAbs(path) {
 		return fmt.Errorf("%w: path must be absolute", ErrInvalidPath)
 	}

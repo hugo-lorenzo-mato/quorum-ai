@@ -1122,13 +1122,19 @@ func (m *SQLiteStateManager) AcquireLock(_ context.Context) error {
 		}
 		return fmt.Errorf("creating lock file: %w", err)
 	}
-	defer f.Close()
 
 	if _, err := f.Write(data); err != nil {
+		_ = f.Close()
 		if rmErr := os.Remove(m.lockPath); rmErr != nil && !os.IsNotExist(rmErr) {
 			return fmt.Errorf("writing lock file: %w (cleanup failed: %v)", err, rmErr)
 		}
 		return fmt.Errorf("writing lock file: %w", err)
+	}
+	if err := f.Close(); err != nil {
+		if rmErr := os.Remove(m.lockPath); rmErr != nil && !os.IsNotExist(rmErr) {
+			return fmt.Errorf("closing lock file: %w (cleanup failed: %v)", err, rmErr)
+		}
+		return fmt.Errorf("closing lock file: %w", err)
 	}
 
 	return nil
@@ -1843,16 +1849,22 @@ func (m *SQLiteStateManager) DeleteWorkflow(ctx context.Context, id core.Workflo
 
 // deleteReportDirectory removes the workflow's report directory.
 // It tries the stored reportPath first, then falls back to default location.
+// Paths are sanitized to prevent traversal outside .quorum/.
 func (m *SQLiteStateManager) deleteReportDirectory(reportPath, workflowID string) {
-	// Try stored report path first
+	// Try stored report path first (sanitized)
 	if reportPath != "" {
-		if err := os.RemoveAll(reportPath); err == nil {
-			return
+		clean := filepath.Clean(reportPath)
+		if strings.HasPrefix(clean, ".quorum"+string(filepath.Separator)) {
+			if err := os.RemoveAll(clean); err == nil {
+				return
+			}
 		}
 	}
 
 	// Fall back to default location: .quorum/runs/{workflow-id}
-	defaultPath := filepath.Join(".quorum", "runs", workflowID)
+	// Use filepath.Base to strip any traversal from the ID
+	safeID := filepath.Base(workflowID)
+	defaultPath := filepath.Join(".quorum", "runs", safeID)
 	_ = os.RemoveAll(defaultPath)
 }
 
