@@ -94,4 +94,54 @@ describe('EditWorkflowModal', () => {
 
     expect(onClose).toHaveBeenCalled();
   });
+
+  it('shows validation error for invalid timeout override and does not save', async () => {
+    const onSave = vi.fn().mockResolvedValue();
+    const onClose = vi.fn();
+
+    render(
+      <EditWorkflowModal
+        isOpen
+        onClose={onClose}
+        onSave={onSave}
+        workflow={{
+          ...workflow,
+          status: 'pending',
+          blueprint: { execution_mode: 'multi_agent', timeout_seconds: 0 },
+        }}
+      />
+    );
+
+    fireEvent.change(screen.getByPlaceholderText(/e\.g\., 16h/i), {
+      target: { value: 'nope' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
+
+    expect(await screen.findByText(/Invalid workflow timeout override/i)).toBeInTheDocument();
+    expect(onSave).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('closes without calling onSave when no changes were made', async () => {
+    const onSave = vi.fn().mockResolvedValue();
+    const onClose = vi.fn();
+
+    render(
+      <EditWorkflowModal
+        isOpen
+        onClose={onClose}
+        onSave={onSave}
+        workflow={{
+          ...workflow,
+          status: 'pending',
+          blueprint: { execution_mode: 'multi_agent', timeout_seconds: 0 },
+        }}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
+
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(onSave).not.toHaveBeenCalled();
+  });
 });

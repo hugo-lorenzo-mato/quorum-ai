@@ -71,4 +71,10 @@ describe('uiStore', () => {
     expect(useUIStore.getState().notifications.find((n) => n.id === id)).toBeTruthy();
     vi.useRealTimers();
   });
+
+  it('setRetrySSEFn stores the retry callback', () => {
+    const fn = () => {};
+    useUIStore.getState().setRetrySSEFn(fn);
+    expect(useUIStore.getState().retrySSEFn).toBe(fn);
+  });
 });

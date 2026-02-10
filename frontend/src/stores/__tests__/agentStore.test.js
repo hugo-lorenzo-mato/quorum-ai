@@ -12,6 +12,7 @@ describe('agentStore', () => {
   beforeEach(() => {
     resetStore();
     vi.useRealTimers();
+    vi.unstubAllGlobals();
   });
 
   it('handleAgentEvent tracks startedAt and completedAt and calculates durationMs', () => {
@@ -110,5 +111,45 @@ describe('agentStore', () => {
     expect(claude.durationMs).toBe(1000);
     expect(useAgentStore.getState().getAgentStatuses('wf-1').codex).toBeUndefined();
   });
-});
 
+  it('handleAgentEvent uses crypto.randomUUID for stable activity ids when available', () => {
+    vi.stubGlobal('crypto', { randomUUID: () => 'uuid-1' });
+
+    useAgentStore.getState().handleAgentEvent({
+      workflow_id: 'wf-1',
+      agent: 'claude',
+      event_kind: 'thinking',
+      message: 'hi',
+      data: {},
+      timestamp: '2026-02-10T00:00:00.000Z',
+    });
+
+    const log = useAgentStore.getState().getActivityLog('wf-1');
+    expect(log).toHaveLength(1);
+    expect(log[0].id).toBe('uuid-1');
+  });
+
+  it('handleAgentEvent falls back to crypto.getRandomValues when randomUUID is unavailable', () => {
+    vi.stubGlobal('crypto', {
+      getRandomValues: (buf) => {
+        // Deterministic bytes for test stability.
+        for (let i = 0; i < buf.length; i += 1) buf[i] = i + 1;
+        return buf;
+      },
+    });
+
+    useAgentStore.getState().handleAgentEvent({
+      workflow_id: 'wf-1',
+      agent: 'claude',
+      event_kind: 'thinking',
+      message: 'hi',
+      data: {},
+      timestamp: '2026-02-10T00:00:00.000Z',
+    });
+
+    const log = useAgentStore.getState().getActivityLog('wf-1');
+    expect(log).toHaveLength(1);
+    // 12 bytes => 24 hex chars
+    expect(log[0].id).toMatch(/^[0-9a-f]{24}$/);
+  });
+});
