@@ -344,7 +344,7 @@ func (v *Validator) validateIssues(cfg *IssuesConfig) {
 		}
 	}
 
-	v.validateIssueTemplate(&cfg.Template)
+	v.validateIssuePrompt(&cfg.Prompt)
 
 	if cfg.Provider == "gitlab" && cfg.GitLab.ProjectID == "" {
 		v.addError("issues.gitlab.project_id", cfg.GitLab.ProjectID,
@@ -355,21 +355,21 @@ func (v *Validator) validateIssues(cfg *IssuesConfig) {
 	v.validateIssueGenerator(&cfg.Generator)
 }
 
-func (v *Validator) validateIssueTemplate(tmpl *IssueTemplateConfig) {
+func (v *Validator) validateIssuePrompt(p *IssuePromptConfig) {
 	validTones := map[string]bool{
 		"professional": true, "casual": true, "technical": true, "concise": true, "": true,
 	}
-	if !validTones[tmpl.Tone] {
-		v.addError("issues.template.tone", tmpl.Tone, "must be one of: professional, casual, technical, concise")
+	if !validTones[p.Tone] {
+		v.addError("issues.prompt.tone", p.Tone, "must be one of: professional, casual, technical, concise")
 	}
 
 	validLanguages := map[string]bool{
 		"english": true, "spanish": true, "french": true, "german": true,
 		"portuguese": true, "chinese": true, "japanese": true, "": true,
 	}
-	language := normalizeIssueLanguage(tmpl.Language)
+	language := normalizeIssueLanguage(p.Language)
 	if !validLanguages[language] {
-		v.addError("issues.template.language", tmpl.Language,
+		v.addError("issues.prompt.language", p.Language,
 			"must be one of: english, spanish, french, german, portuguese, chinese, japanese")
 	}
 }

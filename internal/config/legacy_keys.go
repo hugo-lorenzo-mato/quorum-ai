@@ -55,12 +55,12 @@ func applyLegacyPathMappings(data map[string]interface{}) {
 	if !ok {
 		return
 	}
-	template, ok := issuesMap["template"].(map[string]interface{})
+	prompt, ok := issuesMap["prompt"].(map[string]interface{})
 	if !ok {
 		return
 	}
-	if lang, ok := template["language"].(string); ok {
-		template["language"] = normalizeIssueLanguage(lang)
+	if lang, ok := prompt["language"].(string); ok {
+		prompt["language"] = normalizeIssueLanguage(lang)
 	}
 }
 

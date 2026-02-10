@@ -24,6 +24,9 @@ if (!window.cancelAnimationFrame) {
   window.cancelAnimationFrame = (id) => window.clearTimeout(id);
 }
 
+// JSDOM doesn't implement scrollTo; Layout calls it on route change.
+window.scrollTo = vi.fn();
+
 // Mock ResizeObserver
 if (!globalThis.ResizeObserver) {
   globalThis.ResizeObserver = vi.fn().mockImplementation(() => ({

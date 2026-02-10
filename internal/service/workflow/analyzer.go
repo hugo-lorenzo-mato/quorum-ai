@@ -303,6 +303,26 @@ func (a *Analyzer) runSingleAgentAnalysis(ctx context.Context, wctx *Context) er
 
 	// Quality gate: reject outputs that look like intermediate agent narration
 	// rather than a real analysis.
+	if result != nil && strings.TrimSpace(result.Output) != "" && !isValidAnalysisOutput(result.Output) {
+		// Some tool-capable CLIs can write the real analysis to the output file
+		// while printing intermediate narration/logs to stdout. If stdout fails the
+		// quality gate but the output file contains a valid analysis, prefer the file.
+		if absOutputPath != "" {
+			if content, readErr := os.ReadFile(absOutputPath); readErr == nil {
+				fileRaw := string(content)
+				if strings.TrimSpace(fileRaw) != "" && isValidAnalysisOutput(fileRaw) {
+					wctx.Logger.Warn("single-agent stdout rejected; using structured output file content instead",
+						"agent", agentName,
+						"path", absOutputPath,
+						"stdout_size", len(result.Output),
+						"file_size", len(fileRaw),
+					)
+					result.Output = fileRaw
+				}
+			}
+		}
+	}
+
 	if result != nil && result.Output != "" && !isValidAnalysisOutput(result.Output) {
 		wctx.Logger.Warn("single-agent output rejected: does not look like structured analysis",
 			"agent", agentName,
@@ -812,10 +832,10 @@ func (a *Analyzer) runVnRefinementWithAgent(ctx context.Context, wctx *Context, 
 
 // VnRefinementSetup contains setup data for Vn refinement
 type VnRefinementSetup struct {
-	model         string
+	model          string
 	outputFilePath string
-	absOutputPath string
-	promptHash    string
+	absOutputPath  string
+	promptHash     string
 }
 
 // VnRefinementData contains processed data for refinement
@@ -847,10 +867,10 @@ func (a *Analyzer) setupVnRefinement(wctx *Context, agentName string, round int)
 	promptHash := computePromptHash(wctx.State)
 
 	return &VnRefinementSetup{
-		model:         model,
+		model:          model,
 		outputFilePath: outputFilePath,
-		absOutputPath: absOutputPath,
-		promptHash:    promptHash,
+		absOutputPath:  absOutputPath,
+		promptHash:     promptHash,
 	}, nil
 }
 
@@ -1087,6 +1107,26 @@ func (a *Analyzer) finalizeVnRefinementResult(wctx *Context, agentName string, r
 
 	// Quality gate: reject outputs that look like intermediate agent narration
 	// (e.g., concatenated Codex agent_message planning text) rather than a real analysis.
+	if result != nil && strings.TrimSpace(result.Output) != "" && !isValidAnalysisOutput(result.Output) {
+		// Some tool-capable CLIs can write the real analysis to the output file
+		// while printing intermediate narration/logs to stdout. If stdout fails the
+		// quality gate but the output file contains a valid analysis, prefer the file.
+		if setup.absOutputPath != "" {
+			if content, readErr := os.ReadFile(setup.absOutputPath); readErr == nil {
+				fileRaw := string(content)
+				if strings.TrimSpace(fileRaw) != "" && isValidAnalysisOutput(fileRaw) {
+					wctx.Logger.Warn("Vn stdout rejected; using structured output file content instead",
+						"agent", agentName, "round", round,
+						"path", setup.absOutputPath,
+						"stdout_size", len(result.Output),
+						"file_size", len(fileRaw),
+					)
+					result.Output = fileRaw
+				}
+			}
+		}
+	}
+
 	if result != nil && result.Output != "" && !isValidAnalysisOutput(result.Output) {
 		wctx.Logger.Warn("Vn output rejected: does not look like structured analysis",
 			"agent", agentName, "round", round,
@@ -1418,6 +1458,26 @@ func (a *Analyzer) runAnalysisWithAgent(ctx context.Context, wctx *Context, agen
 
 	// Quality gate: reject outputs that look like intermediate agent narration
 	// rather than a real analysis.
+	if result != nil && strings.TrimSpace(result.Output) != "" && !isValidAnalysisOutput(result.Output) {
+		// Some tool-capable CLIs can write the real analysis to the output file
+		// while printing intermediate narration/logs to stdout. If stdout fails the
+		// quality gate but the output file contains a valid analysis, prefer the file.
+		if absOutputPath != "" {
+			if content, readErr := os.ReadFile(absOutputPath); readErr == nil {
+				fileRaw := string(content)
+				if strings.TrimSpace(fileRaw) != "" && isValidAnalysisOutput(fileRaw) {
+					wctx.Logger.Warn("V1 stdout rejected; using structured output file content instead",
+						"agent", agentName,
+						"path", absOutputPath,
+						"stdout_size", len(result.Output),
+						"file_size", len(fileRaw),
+					)
+					result.Output = fileRaw
+				}
+			}
+		}
+	}
+
 	if result != nil && result.Output != "" && !isValidAnalysisOutput(result.Output) {
 		wctx.Logger.Warn("V1 output rejected: does not look like structured analysis",
 			"agent", agentName,

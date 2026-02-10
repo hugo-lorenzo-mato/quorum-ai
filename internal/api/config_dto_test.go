@@ -234,13 +234,13 @@ func TestIssuesConfigResponse_Marshaling(t *testing.T) {
 		Mode:           "agent",
 		DraftDirectory: "custom/issues",
 		Repository:     "owner/repo",
-		ParentTemplate: "epic",
-		Template: IssueTemplateConfigResponse{
+		ParentPrompt: "epic",
+		Prompt: IssuePromptConfigResponse{
 			Language:           "english",
 			Tone:               "technical",
 			IncludeDiagrams:    true,
 			TitleFormat:        "[quorum] {task_name}",
-			BodyTemplateFile:   "template.md",
+			BodyPromptFile:     "prompt.md",
 			Convention:         "conventional",
 			CustomInstructions: "Be concise",
 		},
@@ -275,8 +275,8 @@ func TestIssuesConfigResponse_Marshaling(t *testing.T) {
 	// Verify key JSON field names
 	for _, key := range []string{
 		"enabled", "provider", "auto_generate", "timeout",
-		"mode", "draft_directory", "repository", "parent_template",
-		"template", "default_labels", "default_assignees",
+		"mode", "draft_directory", "repository", "parent_prompt",
+		"prompt", "default_labels", "default_assignees",
 		"gitlab", "generator",
 	} {
 		if _, ok := result[key]; !ok {
@@ -284,14 +284,14 @@ func TestIssuesConfigResponse_Marshaling(t *testing.T) {
 		}
 	}
 
-	// Verify nested template fields
-	tmpl, ok := result["template"].(map[string]interface{})
+	// Verify nested prompt fields
+	tmpl, ok := result["prompt"].(map[string]interface{})
 	if !ok {
-		t.Fatal("expected template to be an object")
+		t.Fatal("expected prompt to be an object")
 	}
-	for _, key := range []string{"language", "tone", "include_diagrams", "title_format", "convention", "custom_instructions"} {
+	for _, key := range []string{"language", "tone", "include_diagrams", "title_format", "body_prompt_file", "convention", "custom_instructions"} {
 		if _, ok := tmpl[key]; !ok {
-			t.Errorf("expected key %q in template", key)
+			t.Errorf("expected key %q in prompt", key)
 		}
 	}
 
@@ -325,8 +325,8 @@ func TestIssuesConfigUpdate_PointerFields(t *testing.T) {
 			wantIssues: false,
 		},
 		{
-			name:       "issues with template",
-			jsonBody:   `{"issues": {"template": {"language": "spanish"}}}`,
+			name:       "issues with prompt",
+			jsonBody:   `{"issues": {"prompt": {"language": "spanish"}}}`,
 			wantIssues: true,
 		},
 		{

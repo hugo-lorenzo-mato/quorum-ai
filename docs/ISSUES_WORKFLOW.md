@@ -182,8 +182,9 @@ issues:
     model: "claude-sonnet-4.5"
     summarize: true
   
-  # Issue template
-  template:
+  # Issue prompt settings
+  parent_prompt: ""  # Optional prompt preset for parent issues
+  prompt:
     language: "english"
     tone: "professional"
     include_diagrams: true
@@ -283,16 +284,20 @@ WARN duplicate issue file detected file=issue-1-*.md task_id=task-1
 
 ## Advanced Usage
 
-### Custom Issue Templates
+### Custom Issue Prompts
 
-Modify `.quorum/prompts/issue-generate.md.tmpl` to customize AI behavior:
+Use `issues.prompt.custom_instructions` to customize AI behavior:
 
-```markdown
-## Custom Instructions
-- Include performance benchmarks
-- Reference Jira tickets
-- Add time estimates
+```yaml
+issues:
+  prompt:
+    custom_instructions: |
+      - Include performance benchmarks
+      - Reference Jira tickets
+      - Add time estimates
 ```
+
+If you're developing quorum-ai itself, you can also modify the embedded system prompt in `internal/service/prompts/issue-generate.md.tmpl`.
 
 ### Batch Processing
 
@@ -345,7 +350,7 @@ A: Yes. Preview in fast mode, then regenerate with AI if needed.
 A: Set `issues.enabled: false` in config.
 
 **Q: Can I customize issue format?**  
-A: Yes, edit the prompt template in `internal/service/prompts/issue-generate.md.tmpl`.
+A: Yes. Prefer using `issues.prompt.custom_instructions`. If you're developing quorum-ai itself, edit the embedded system prompt in `internal/service/prompts/issue-generate.md.tmpl`.
 
 ## See Also
 

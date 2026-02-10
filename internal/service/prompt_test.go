@@ -46,15 +46,15 @@ func TestPromptRenderer_Load(t *testing.T) {
 		t.Fatalf("NewPromptRenderer() error = %v", err)
 	}
 
-	templates := renderer.ListTemplates()
-	if len(templates) == 0 {
-		t.Error("expected at least one template to be loaded")
+	promptIDs := renderer.ListPromptIDs()
+	if len(promptIDs) == 0 {
+		t.Error("expected at least one prompt to be loaded")
 	}
 
-	t.Logf("Loaded templates: %v", templates)
+	t.Logf("Loaded prompts: %v", promptIDs)
 
-	// Check expected templates exist
-	expectedTemplates := []string{
+	// Check expected prompts exist
+	expectedPrompts := []string{
 		"analyze-v1",
 		"plan-generate",
 		"task-execute",
@@ -64,9 +64,9 @@ func TestPromptRenderer_Load(t *testing.T) {
 		"synthesize-analysis",
 	}
 
-	for _, expected := range expectedTemplates {
-		if !renderer.HasTemplate(expected) {
-			t.Errorf("expected template %q not found", expected)
+	for _, expected := range expectedPrompts {
+		if !renderer.HasPrompt(expected) {
+			t.Errorf("expected prompt %q not found", expected)
 		}
 	}
 }
@@ -232,15 +232,15 @@ func TestPromptRenderer_RenderTaskDetailGenerate_NoDependencies(t *testing.T) {
 	}
 }
 
-func TestPromptRenderer_MissingTemplate(t *testing.T) {
+func TestPromptRenderer_MissingPrompt(t *testing.T) {
 	renderer, err := NewPromptRenderer()
 	if err != nil {
 		t.Fatalf("NewPromptRenderer() error = %v", err)
 	}
 
-	_, err = renderer.Render("nonexistent-template", nil)
+	_, err = renderer.Render("nonexistent-prompt", nil)
 	if err == nil {
-		t.Error("expected error for missing template")
+		t.Error("expected error for missing prompt")
 	}
 	if !strings.Contains(err.Error(), "not found") {
 		t.Errorf("error should mention 'not found', got: %v", err)
@@ -290,18 +290,18 @@ func TestIndent(t *testing.T) {
 	}
 }
 
-func TestPromptRenderer_HasTemplate(t *testing.T) {
+func TestPromptRenderer_HasPrompt(t *testing.T) {
 	renderer, err := NewPromptRenderer()
 	if err != nil {
 		t.Fatalf("NewPromptRenderer() error = %v", err)
 	}
 
-	if !renderer.HasTemplate("analyze-v1") {
-		t.Error("HasTemplate should return true for existing template")
+	if !renderer.HasPrompt("analyze-v1") {
+		t.Error("HasPrompt should return true for existing prompt")
 	}
 
-	if renderer.HasTemplate("nonexistent") {
-		t.Error("HasTemplate should return false for non-existing template")
+	if renderer.HasPrompt("nonexistent") {
+		t.Error("HasPrompt should return false for non-existing prompt")
 	}
 }
 

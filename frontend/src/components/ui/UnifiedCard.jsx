@@ -4,7 +4,6 @@
  * Base card system used across the application:
  * - WorkflowCard
  * - ProjectCard  
- * - TemplateCard
  * - KanbanCard
  * 
  * All cards share:

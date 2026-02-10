@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useWorkflowStore } from '../stores';
-import { workflowTemplates } from '../data/workflowTemplates';
+import { promptPresets } from '../data/promptPresets';
 import { getStatusColor } from '../lib/theme';
 import FAB from '../components/FAB';
 import Logo from '../components/Logo';
@@ -519,11 +519,11 @@ function EmptyState() {
           Start Workflow
         </Link>
         <Link
-          to="/templates"
+          to="/prompts"
           className="w-full sm:w-auto px-5 py-2.5 rounded-xl border border-border text-foreground text-sm font-medium hover:bg-accent transition-all flex items-center justify-center gap-2"
         >
           <FileText className="w-4 h-4" />
-          Browse Templates
+          Browse Prompts
         </Link>
       </div>
     </div>
@@ -697,12 +697,12 @@ export default function Dashboard() {
           className="min-w-[160px] md:min-w-0 snap-center h-full"
         />
         <StatCard
-          title="Templates"
-          value={workflowTemplates.length}
+          title="Prompts"
+          value={promptPresets.length}
           subtitle="Available"
           icon={FileText}
           color="primary"
-          to="/templates"
+          to="/prompts"
           className="min-w-[160px] md:min-w-0 snap-center h-full"
         />
         <StatCard

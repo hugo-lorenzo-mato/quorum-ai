@@ -126,7 +126,7 @@ Another task context.
 		Enabled:  true,
 		Provider: "github",
 		Labels:   []string{"test-label"},
-		Template: config.IssueTemplateConfig{
+		Prompt: config.IssuePromptConfig{
 			TitleFormat: "[test] {task_name}",
 		},
 	}
@@ -489,7 +489,7 @@ func TestGenerator_formatTitle(t *testing.T) {
 	t.Parallel()
 	gen := &Generator{
 		config: config.IssuesConfig{
-			Template: config.IssueTemplateConfig{
+			Prompt: config.IssuePromptConfig{
 				TitleFormat: "[quorum] {task_name}",
 			},
 		},
@@ -1373,7 +1373,7 @@ func TestGenerator_formatTitle_DefaultFormat(t *testing.T) {
 	// Empty title format should use default
 	gen := &Generator{
 		config: config.IssuesConfig{
-			Template: config.IssueTemplateConfig{
+			Prompt: config.IssuePromptConfig{
 				TitleFormat: "",
 			},
 		},
@@ -1389,7 +1389,7 @@ func TestGenerator_formatTitle_WithTaskID(t *testing.T) {
 	t.Parallel()
 	gen := &Generator{
 		config: config.IssuesConfig{
-			Template: config.IssueTemplateConfig{
+			Prompt: config.IssuePromptConfig{
 				TitleFormat: "[{task_id}] {task_name}",
 			},
 		},

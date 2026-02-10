@@ -808,7 +808,7 @@ func (g *Generator) parseTaskFile(num, slug, content string) TaskInfo {
 
 // formatTitle formats an issue title.
 func (g *Generator) formatTitle(id, name string, isMain bool) string {
-	format := g.config.Template.TitleFormat
+	format := g.config.Prompt.TitleFormat
 	if format == "" {
 		format = "[quorum] {task_name}"
 	}
@@ -1110,7 +1110,7 @@ func (g *Generator) GenerateIssueFiles(ctx context.Context, workflowID string) (
 			"deadline", deadline)
 	}
 
-	cfg := g.config.Template
+	cfg := g.config.Prompt
 	batchSize := maxTasksPerBatch
 	missing := expected
 	var batchErrors []error
@@ -1685,7 +1685,7 @@ func extractFileNumber(name string) int {
 //
 //nolint:unused // Reserved for future prompt consolidation.
 func (g *Generator) buildMasterPrompt(consolidated string, tasks []TaskInfo, _, outputDir string) string {
-	cfg := g.config.Template
+	cfg := g.config.Prompt
 
 	var sb strings.Builder
 

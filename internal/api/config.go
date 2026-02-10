@@ -835,15 +835,15 @@ func issuesToResponse(cfg *config.IssuesConfig) IssuesConfigResponse {
 		Mode:           cfg.Mode,
 		DraftDirectory: cfg.DraftDirectory,
 		Repository:     cfg.Repository,
-		ParentTemplate: cfg.ParentTemplate,
-		Template: IssueTemplateConfigResponse{
-			Language:           cfg.Template.Language,
-			Tone:               cfg.Template.Tone,
-			IncludeDiagrams:    cfg.Template.IncludeDiagrams,
-			TitleFormat:        cfg.Template.TitleFormat,
-			BodyTemplateFile:   cfg.Template.BodyTemplateFile,
-			Convention:         cfg.Template.Convention,
-			CustomInstructions: cfg.Template.CustomInstructions,
+		ParentPrompt: cfg.ParentPrompt,
+		Prompt: IssuePromptConfigResponse{
+			Language:           cfg.Prompt.Language,
+			Tone:               cfg.Prompt.Tone,
+			IncludeDiagrams:    cfg.Prompt.IncludeDiagrams,
+			TitleFormat:        cfg.Prompt.TitleFormat,
+			BodyPromptFile:     cfg.Prompt.BodyPromptFile,
+			Convention:         cfg.Prompt.Convention,
+			CustomInstructions: cfg.Prompt.CustomInstructions,
 		},
 		Labels:    labels,
 		Assignees: assignees,
@@ -1312,8 +1312,8 @@ func applyIssuesUpdates(cfg *config.IssuesConfig, update *IssuesConfigUpdate) {
 	if update.Repository != nil {
 		cfg.Repository = *update.Repository
 	}
-	if update.ParentTemplate != nil {
-		cfg.ParentTemplate = *update.ParentTemplate
+	if update.ParentPrompt != nil {
+		cfg.ParentPrompt = *update.ParentPrompt
 	}
 	if update.Labels != nil {
 		cfg.Labels = *update.Labels
@@ -1321,8 +1321,8 @@ func applyIssuesUpdates(cfg *config.IssuesConfig, update *IssuesConfigUpdate) {
 	if update.Assignees != nil {
 		cfg.Assignees = *update.Assignees
 	}
-	if update.Template != nil {
-		applyIssueTemplateUpdates(&cfg.Template, update.Template)
+	if update.Prompt != nil {
+		applyIssuePromptUpdates(&cfg.Prompt, update.Prompt)
 	}
 	if update.GitLab != nil {
 		applyGitLabIssueUpdates(&cfg.GitLab, update.GitLab)
@@ -1332,7 +1332,7 @@ func applyIssuesUpdates(cfg *config.IssuesConfig, update *IssuesConfigUpdate) {
 	}
 }
 
-func applyIssueTemplateUpdates(cfg *config.IssueTemplateConfig, update *IssueTemplateConfigUpdate) {
+func applyIssuePromptUpdates(cfg *config.IssuePromptConfig, update *IssuePromptConfigUpdate) {
 	if update.Language != nil {
 		cfg.Language = *update.Language
 	}
@@ -1345,8 +1345,8 @@ func applyIssueTemplateUpdates(cfg *config.IssueTemplateConfig, update *IssueTem
 	if update.TitleFormat != nil {
 		cfg.TitleFormat = *update.TitleFormat
 	}
-	if update.BodyTemplateFile != nil {
-		cfg.BodyTemplateFile = *update.BodyTemplateFile
+	if update.BodyPromptFile != nil {
+		cfg.BodyPromptFile = *update.BodyPromptFile
 	}
 	if update.Convention != nil {
 		cfg.Convention = *update.Convention

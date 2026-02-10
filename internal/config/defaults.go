@@ -152,13 +152,13 @@ issues:
   mode: direct
   draft_directory: ""
   repository: ""
-  parent_template: ""
-  template:
+  parent_prompt: ""
+  prompt:
     language: english
     tone: professional
     include_diagrams: true
     title_format: "[quorum] {task_name}"
-    body_template_file: ""
+    body_prompt_file: ""
     convention: ""
     custom_instructions: ""
   labels:

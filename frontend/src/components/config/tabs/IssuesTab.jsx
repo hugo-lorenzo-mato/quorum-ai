@@ -14,7 +14,7 @@ export function IssuesTab() {
     <div className="space-y-6">
       <GeneralIssuesSection />
       <GeneratorSection />
-      <TemplateSection />
+      <PromptSection />
       <LabelsSection />
       <GitLabSection />
     </div>
@@ -29,7 +29,7 @@ function GeneralIssuesSection() {
   const timeout = useConfigField('issues.timeout');
   const draftDirectory = useConfigField('issues.draft_directory');
   const repository = useConfigField('issues.repository');
-  const parentTemplate = useConfigField('issues.parent_template');
+  const parentPrompt = useConfigField('issues.parent_prompt');
 
   return (
     <SettingSection
@@ -116,14 +116,14 @@ function GeneralIssuesSection() {
       />
 
       <TextInputSetting
-        label="Parent Template"
-        description="Template file for the main/parent issue"
-        tooltip="Path to a custom markdown template for the parent issue. Leave empty to use the built-in template."
-        placeholder="(use default template)"
-        value={parentTemplate.value || ''}
-        onChange={parentTemplate.onChange}
-        error={parentTemplate.error}
-        disabled={parentTemplate.disabled || !enabled.value}
+        label="Parent Prompt"
+        description="Prompt preset for the main/parent issue"
+        tooltip="Optional name of a parent issue prompt preset. Leave empty to use the default behavior."
+        placeholder="(use default)"
+        value={parentPrompt.value || ''}
+        onChange={parentPrompt.onChange}
+        error={parentPrompt.error}
+        disabled={parentPrompt.disabled || !enabled.value}
       />
     </SettingSection>
   );
@@ -294,21 +294,21 @@ function GeneratorSection() {
   );
 }
 
-function TemplateSection() {
+function PromptSection() {
   const enabled = useConfigField('issues.enabled');
-  const language = useConfigSelect('issues.template.language', 'template_languages');
-  const tone = useConfigSelect('issues.template.tone', 'template_tones');
-  const titleFormat = useConfigField('issues.template.title_format');
-  const bodyTemplateFile = useConfigField('issues.template.body_template_file');
-  const convention = useConfigField('issues.template.convention');
-  const includeDiagrams = useConfigField('issues.template.include_diagrams');
-  const customInstructions = useConfigField('issues.template.custom_instructions');
+  const language = useConfigSelect('issues.prompt.language', 'issue_prompt_languages');
+  const tone = useConfigSelect('issues.prompt.tone', 'issue_prompt_tones');
+  const titleFormat = useConfigField('issues.prompt.title_format');
+  const bodyPromptFile = useConfigField('issues.prompt.body_prompt_file');
+  const convention = useConfigField('issues.prompt.convention');
+  const includeDiagrams = useConfigField('issues.prompt.include_diagrams');
+  const customInstructions = useConfigField('issues.prompt.custom_instructions');
 
   const isDisabled = !enabled.value;
 
   return (
     <SettingSection
-      title="Issue Template"
+      title="Issue Prompt"
       description="Customize how issues are formatted and written"
     >
       <SelectSetting
@@ -348,7 +348,7 @@ function TemplateSection() {
 
       <TextInputSetting
         label="Title Format"
-        description="Template for issue titles"
+        description="Pattern for issue titles"
         tooltip="Use placeholders: {workflow_title}, {task_title}, {task_id}. Example: '[Quorum] {task_title}'"
         placeholder="[Quorum] {task_title}"
         value={titleFormat.value}
@@ -358,14 +358,14 @@ function TemplateSection() {
       />
 
       <TextInputSetting
-        label="Body Template File"
-        description="Path to custom issue body template file"
-        tooltip="Optional path to a markdown template file for issue bodies. Leave empty to use the built-in template."
-        placeholder="(use default template)"
-        value={bodyTemplateFile.value || ''}
-        onChange={bodyTemplateFile.onChange}
-        error={bodyTemplateFile.error}
-        disabled={bodyTemplateFile.disabled || isDisabled}
+        label="Body Prompt File"
+        description="Path to a custom issue body prompt file"
+        tooltip="Optional path to a markdown prompt file for issue bodies. Leave empty to use the built-in behavior."
+        placeholder="(use default)"
+        value={bodyPromptFile.value || ''}
+        onChange={bodyPromptFile.onChange}
+        error={bodyPromptFile.error}
+        disabled={bodyPromptFile.disabled || isDisabled}
       />
 
       <TextInputSetting
@@ -396,7 +396,7 @@ function TemplateSection() {
           </label>
         </div>
         <p className="text-xs text-muted-foreground mb-2">
-          Additional instructions for issue generation (appended to default template)
+          Additional instructions for issue generation (appended to the default rules)
         </p>
         <textarea
           value={customInstructions.value || ''}

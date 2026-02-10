@@ -595,7 +595,7 @@ WORKFLOW START (quorum run / quorum analyze)
 
 ### Nuevos Archivos
 1. `internal/service/report/writer.go` - Servicio de escritura de reportes
-2. `internal/service/report/templates.go` - Templates Markdown
+2. `internal/service/report/renderers.go` - Renderizadores Markdown
 3. `internal/service/report/frontmatter.go` - Generación de YAML frontmatter
 
 ### Archivos a Modificar
@@ -687,7 +687,7 @@ tree .quorum-output/
 
 1. [ ] Aprobar estructura de directorios y naming
 2. [ ] Implementar `WorkflowReportWriter` base (`internal/service/report/writer.go`)
-3. [ ] Implementar templates Markdown (`internal/service/report/templates.go`)
+3. [ ] Implementar renderizadores Markdown (`internal/service/report/renderers.go`)
 4. [ ] Implementar generación de frontmatter YAML (`internal/service/report/frontmatter.go`)
 5. [ ] Integrar en `Runner` para crear writer al inicio del workflow
 6. [ ] Integrar en `Optimizer` para escribir prompt original y optimizado

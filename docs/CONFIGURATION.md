@@ -56,7 +56,7 @@ quorum init
 | `.quorum.yaml` | Legacy project settings |
 | `~/.config/quorum/config.yaml` | User-level defaults |
 | `~/.quorum-registry/global-config.yaml` | WebUI global defaults (applies to projects in `inherit_global` mode) |
-| `configs/default.yaml` | Reference template (do not edit) |
+| `configs/default.yaml` | Reference configuration (do not edit) |
 
 ---
 

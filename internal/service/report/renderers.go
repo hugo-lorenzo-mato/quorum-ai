@@ -58,11 +58,11 @@ func formatDuration(ms int64) string {
 }
 
 // ========================================
-// Template Renderers
+// Report Renderers
 // ========================================
 
-// renderConsensusTemplate renders a consensus report
-func renderConsensusTemplate(data ConsensusData, afterPhase string) string {
+// renderConsensusReport renders a consensus report.
+func renderConsensusReport(data ConsensusData, afterPhase string) string {
 	var sb strings.Builder
 
 	sb.WriteString(fmt.Sprintf("# Reporte de Consenso (después de %s)\n\n", afterPhase))
@@ -105,8 +105,8 @@ func renderConsensusTemplate(data ConsensusData, afterPhase string) string {
 	return sb.String()
 }
 
-// renderModeratorTemplate renders a semantic moderator evaluation report
-func renderModeratorTemplate(data ModeratorData, includeRaw bool) string {
+// renderModeratorReport renders a semantic moderator evaluation report.
+func renderModeratorReport(data ModeratorData, includeRaw bool) string {
 	var sb strings.Builder
 
 	sb.WriteString(fmt.Sprintf("# Evaluación del Moderador Semántico (Ronda %d)\n\n", data.Round))
@@ -152,8 +152,8 @@ func renderModeratorTemplate(data ModeratorData, includeRaw bool) string {
 	return sb.String()
 }
 
-// renderPlanTemplate renders a plan report
-func renderPlanTemplate(data PlanData) string {
+// renderPlanReport renders a plan report.
+func renderPlanReport(data PlanData) string {
 	var sb strings.Builder
 
 	sb.WriteString(fmt.Sprintf("# Plan: %s (%s)\n\n", data.Agent, data.Model))
@@ -171,8 +171,8 @@ func renderPlanTemplate(data PlanData) string {
 	return sb.String()
 }
 
-// renderTaskResultTemplate renders a task result
-func renderTaskResultTemplate(data TaskResultData) string {
+// renderTaskResultReport renders a task result report.
+func renderTaskResultReport(data TaskResultData) string {
 	var sb strings.Builder
 
 	statusEmoji := "✅"
@@ -209,8 +209,8 @@ func renderTaskResultTemplate(data TaskResultData) string {
 	return sb.String()
 }
 
-// renderExecutionSummaryTemplate renders the execution summary
-func renderExecutionSummaryTemplate(data ExecutionSummaryData) string {
+// renderExecutionSummaryReport renders the execution summary report.
+func renderExecutionSummaryReport(data ExecutionSummaryData) string {
 	var sb strings.Builder
 
 	sb.WriteString("# Resumen de Ejecución\n\n")
@@ -249,8 +249,8 @@ func renderExecutionSummaryTemplate(data ExecutionSummaryData) string {
 	return sb.String()
 }
 
-// renderMetadataTemplate renders the workflow metadata
-func renderMetadataTemplate(data WorkflowMetadata) string {
+// renderMetadataReport renders the workflow metadata report.
+func renderMetadataReport(data WorkflowMetadata) string {
 	var sb strings.Builder
 
 	sb.WriteString(fmt.Sprintf("# Workflow Execution: %s\n\n", data.WorkflowID))
@@ -294,8 +294,8 @@ func renderMetadataTemplate(data WorkflowMetadata) string {
 	return sb.String()
 }
 
-// renderWorkflowSummaryTemplate renders the final workflow summary
-func renderWorkflowSummaryTemplate(data WorkflowMetadata) string {
+// renderWorkflowSummaryReport renders the final workflow summary report.
+func renderWorkflowSummaryReport(data WorkflowMetadata) string {
 	var sb strings.Builder
 
 	sb.WriteString("# Resumen del Workflow\n\n")
@@ -351,8 +351,8 @@ func containsPhase(phases []string, target string) bool {
 	return false
 }
 
-// renderTaskPlanTemplate renders a task plan document
-func renderTaskPlanTemplate(data TaskPlanData) string {
+// renderTaskPlanReport renders a task plan document.
+func renderTaskPlanReport(data TaskPlanData) string {
 	var sb strings.Builder
 
 	sb.WriteString(fmt.Sprintf("# Task: %s\n\n", data.Name))
@@ -384,8 +384,8 @@ func renderTaskPlanTemplate(data TaskPlanData) string {
 	return sb.String()
 }
 
-// renderExecutionGraphTemplate renders the execution graph visualization
-func renderExecutionGraphTemplate(data ExecutionGraphData) string {
+// renderExecutionGraphReport renders the execution graph visualization report.
+func renderExecutionGraphReport(data ExecutionGraphData) string {
 	var sb strings.Builder
 
 	sb.WriteString("# Execution Graph\n\n")

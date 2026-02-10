@@ -449,7 +449,7 @@ quorum-ai/
 ├── internal/                 # Private packages
 │   ├── core/                 # Domain layer
 │   ├── service/              # Application layer
-│   │   └── prompts/         # Prompt templates
+│   │   └── prompts/         # Embedded system prompts
 │   ├── adapters/             # Infrastructure
 │   │   ├── cli/
 │   │   ├── state/

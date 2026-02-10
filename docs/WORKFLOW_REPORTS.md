@@ -298,7 +298,7 @@ Los reportes pueden integrarse en pipelines de CI/CD:
 
 Para mejorar el sistema de reportes:
 
-1. Los templates están en `internal/service/report/templates.go`
+1. Los renderizadores están en `internal/service/report/renderers.go`
 2. La lógica de escritura en `internal/service/report/writer.go`
 3. El frontmatter YAML en `internal/service/report/frontmatter.go`
 

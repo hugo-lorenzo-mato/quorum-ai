@@ -1,9 +1,9 @@
 /**
- * Workflow Templates for common software development tasks
- * Each template provides a pre-configured prompt and execution strategy
+ * Prompt presets for common software development tasks
+ * Each preset provides a pre-configured prompt and execution strategy
  */
 
-export const workflowTemplates = [
+export const promptPresets = [
   // ===== CODE ANALYSIS =====
   {
     id: 'technical-debt-analysis',
@@ -828,7 +828,7 @@ For each finding:
   }
 ];
 
-export const templateCategories = [
+export const promptCategories = [
   'All',
   'Code Analysis',
   'Performance Analysis',

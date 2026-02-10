@@ -376,6 +376,13 @@ export const configApi = {
   getIssuesConfig: () => request('/config/issues'),
 };
 
+// System prompts API (embedded prompts used by the workflow engine)
+export const systemPromptsApi = {
+  list: () => request('/system-prompts/'),
+
+  get: (id) => request(`/system-prompts/${encodeURIComponent(id)}`),
+};
+
 // Files API
 export const fileApi = {
   list: (path = '') => request(`/files/?path=${encodeURIComponent(path)}`),
@@ -453,6 +460,7 @@ export default {
   workflow: workflowApi,
   chat: chatApi,
   config: configApi,
+  systemPrompts: systemPromptsApi,
   files: fileApi,
   health: healthApi,
   project: projectApi,
