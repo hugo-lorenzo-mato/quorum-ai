@@ -267,30 +267,56 @@ func (s *Server) buildFileTree(ctx context.Context, dir, relPath string, depth, 
 // It uses the project root from the request context when available (multi-project),
 // falling back to s.root (server root) or the process working directory.
 func (s *Server) resolvePathCtx(ctx context.Context, requestedPath string) (string, error) {
-	// Prefer project root from context (multi-project support)
-	wd := s.getProjectRootPath(ctx)
-	if wd == "" {
-		wd = s.root
-	}
-	if wd == "" {
+	// Prefer project root from context (multi-project support), then server root,
+	// then process working directory.
+	root := s.getProjectRootPath(ctx)
+	if root == "" {
 		var err error
-		wd, err = os.Getwd()
+		root, err = os.Getwd()
 		if err != nil {
 			return "", err
 		}
 	}
 
-	// Clean and resolve the path
-	cleanPath := filepath.Clean(requestedPath)
-	absPath, err := filepath.Abs(filepath.Join(wd, cleanPath))
+	rootAbs, err := filepath.Abs(root)
 	if err != nil {
 		return "", err
 	}
+	rootReal := rootAbs
+	if rr, err := filepath.EvalSymlinks(rootAbs); err == nil {
+		rootReal = rr
+	}
 
-	// Ensure the resolved path is within the working directory
-	rel, err := filepath.Rel(wd, absPath)
-	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+	cleanPath := filepath.Clean(requestedPath)
+
+	// Reject absolute paths (and Windows volume/UNC paths).
+	if filepath.IsAbs(cleanPath) || filepath.VolumeName(cleanPath) != "" {
 		return "", os.ErrPermission
+	}
+
+	absPath, err := filepath.Abs(filepath.Join(rootAbs, cleanPath))
+	if err != nil {
+		return "", err
+	}
+	if !isPathWithinDir(rootAbs, absPath) {
+		return "", os.ErrPermission
+	}
+
+	// If the path exists, resolve symlinks to prevent traversal via in-tree symlinks.
+	// For non-existent paths (e.g., browsing a missing directory), preserve legacy
+	// behavior and let the caller decide how to handle os.IsNotExist.
+	if _, err := os.Lstat(absPath); err == nil {
+		realPath, err := filepath.EvalSymlinks(absPath)
+		if err != nil {
+			return "", err
+		}
+		if !isPathWithinDir(rootReal, realPath) {
+			return "", os.ErrPermission
+		}
+		return realPath, nil
+	} else if !os.IsNotExist(err) {
+		// Fail closed on unexpected filesystem errors.
+		return "", err
 	}
 
 	return absPath, nil
@@ -300,6 +326,14 @@ func (s *Server) resolvePathCtx(ctx context.Context, requestedPath string) (stri
 // Prefer resolvePathCtx when a request context is available.
 func (s *Server) resolvePath(requestedPath string) (string, error) {
 	return s.resolvePathCtx(context.Background(), requestedPath)
+}
+
+func isPathWithinDir(root, path string) bool {
+	rel, err := filepath.Rel(root, path)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+		return false
+	}
+	return true
 }
 
 // isBinaryContent checks if content appears to be binary.
