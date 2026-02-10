@@ -577,12 +577,29 @@ func validateGitRemoteName(remote string) error {
 		return core.ErrValidation("INVALID_REMOTE", "remote name must not start with '-'")
 	}
 	for _, r := range remote {
-		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '.' || r == '_' || r == '-' {
-			continue
+		if !isValidGitRemoteChar(r) {
+			return core.ErrValidation("INVALID_REMOTE", fmt.Sprintf("remote name contains invalid character: %q", r))
 		}
-		return core.ErrValidation("INVALID_REMOTE", fmt.Sprintf("remote name contains invalid character: %q", r))
 	}
 	return nil
+}
+
+func isValidGitRemoteChar(r rune) bool {
+	if r >= 'a' && r <= 'z' {
+		return true
+	}
+	if r >= 'A' && r <= 'Z' {
+		return true
+	}
+	if r >= '0' && r <= '9' {
+		return true
+	}
+	switch r {
+	case '.', '_', '-':
+		return true
+	default:
+		return false
+	}
 }
 
 func validateGitBranchName(name string) error {
