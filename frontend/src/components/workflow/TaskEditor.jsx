@@ -15,6 +15,7 @@ export default function TaskEditor({ workflowId }) {
   const [newTask, setNewTask] = useState({ name: '', cli: '', description: '' });
 
   const taskList = tasks[workflowId] || [];
+  const canAddTask = newTask.name.trim().length > 0 && newTask.cli.trim().length > 0;
 
   useEffect(() => {
     if (!workflowId) return;
@@ -28,12 +29,15 @@ export default function TaskEditor({ workflowId }) {
 
   const handleSaveEdit = async () => {
     if (!editingId) return;
-    if (!editForm.name?.trim() || !editForm.cli?.trim()) return;
-    const updates = {};
-    if (editForm.name) updates.name = editForm.name;
-    if (editForm.cli) updates.cli = editForm.cli;
-    updates.description = editForm.description;
-    await updateTask(workflowId, editingId, updates);
+    const name = editForm.name?.trim();
+    const cli = editForm.cli?.trim();
+    if (!name || !cli) return;
+
+    await updateTask(workflowId, editingId, {
+      name,
+      cli,
+      description: editForm.description?.trim() ?? '',
+    });
     setEditingId(null);
   };
 
@@ -47,8 +51,16 @@ export default function TaskEditor({ workflowId }) {
   };
 
   const handleAdd = async () => {
-    if (!newTask.name || !newTask.cli) return;
-    await createTask(workflowId, newTask);
+    const name = newTask.name.trim();
+    const cli = newTask.cli.trim();
+    if (!name || !cli) return;
+
+    await createTask(workflowId, {
+      ...newTask,
+      name,
+      cli,
+      description: newTask.description?.trim() ?? '',
+    });
     setNewTask({ name: '', cli: '', description: '' });
     setShowAddForm(false);
   };
@@ -215,7 +227,7 @@ export default function TaskEditor({ workflowId }) {
           <div className="flex gap-2">
             <button
               onClick={handleAdd}
-              disabled={!newTask.name || !newTask.cli}
+              disabled={!canAddTask}
               className="px-3 py-1 rounded text-xs bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
             >
               Add

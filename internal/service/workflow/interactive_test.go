@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -18,6 +19,49 @@ func testRunner(sm StateManager) *Runner {
 		output: NopOutputNotifier{},
 		logger: logging.NewNop(),
 	}
+}
+
+type sequenceStateManager struct {
+	states []*core.WorkflowState
+	calls  int
+	saved  *core.WorkflowState
+}
+
+var _ StateManager = (*sequenceStateManager)(nil)
+
+func (m *sequenceStateManager) Save(_ context.Context, state *core.WorkflowState) error {
+	m.saved = state
+	return nil
+}
+
+func (m *sequenceStateManager) Load(_ context.Context) (*core.WorkflowState, error) {
+	return m.saved, nil
+}
+
+func (m *sequenceStateManager) LoadByID(_ context.Context, id core.WorkflowID) (*core.WorkflowState, error) {
+	_ = id
+	idx := m.calls
+	m.calls++
+	if len(m.states) == 0 {
+		return nil, nil
+	}
+	if idx >= len(m.states) {
+		return m.states[len(m.states)-1], nil
+	}
+	return m.states[idx], nil
+}
+
+func (m *sequenceStateManager) AcquireLock(_ context.Context) error  { return nil }
+func (m *sequenceStateManager) ReleaseLock(_ context.Context) error  { return nil }
+func (m *sequenceStateManager) DeactivateWorkflow(_ context.Context) error {
+	return nil
+}
+func (m *sequenceStateManager) ArchiveWorkflows(_ context.Context) (int, error) { return 0, nil }
+func (m *sequenceStateManager) PurgeAllWorkflows(_ context.Context) (int, error) {
+	return 0, nil
+}
+func (m *sequenceStateManager) DeleteWorkflow(_ context.Context, _ core.WorkflowID) error {
+	return nil
 }
 
 // --- interactiveGate ---
@@ -176,6 +220,57 @@ func TestInteractiveGate_ContextCancelled(t *testing.T) {
 	}
 }
 
+func TestInteractiveGate_PhaseRejected_ReturnsSentinel(t *testing.T) {
+	t.Parallel()
+
+	state := &core.WorkflowState{
+		WorkflowDefinition: core.WorkflowDefinition{
+			WorkflowID: "wf-1",
+			Blueprint:  &core.Blueprint{ExecutionMode: core.ExecutionModeInteractive},
+		},
+		WorkflowRun: core.WorkflowRun{
+			Status:       core.WorkflowStatusRunning,
+			CurrentPhase: core.PhasePlan,
+		},
+	}
+
+	dbStateInteractive := &core.WorkflowState{
+		WorkflowDefinition: core.WorkflowDefinition{
+			WorkflowID: "wf-1",
+			Blueprint:  &core.Blueprint{ExecutionMode: core.ExecutionModeInteractive},
+		},
+		WorkflowRun: core.WorkflowRun{
+			Status:       core.WorkflowStatusRunning,
+			CurrentPhase: core.PhasePlan,
+		},
+	}
+	dbStateRejected := &core.WorkflowState{
+		WorkflowDefinition: core.WorkflowDefinition{
+			WorkflowID: "wf-1",
+			Blueprint:  &core.Blueprint{ExecutionMode: core.ExecutionModeInteractive},
+		},
+		WorkflowRun: core.WorkflowRun{
+			Status:       core.WorkflowStatusPending,
+			CurrentPhase: core.PhaseAnalyze,
+		},
+	}
+
+	sm := &sequenceStateManager{states: []*core.WorkflowState{dbStateInteractive, dbStateRejected}}
+	cp := control.New()
+	r := testRunner(sm)
+	r.control = cp
+
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		cp.Resume()
+	}()
+
+	err := r.interactiveGate(context.Background(), state, core.PhaseAnalyze)
+	if !errors.Is(err, errPhaseRejected) {
+		t.Fatalf("expected errPhaseRejected, got %v", err)
+	}
+}
+
 // --- applyInteractiveFeedback ---
 
 func TestApplyInteractiveFeedback_NoReview(t *testing.T) {
@@ -197,6 +292,28 @@ func TestApplyInteractiveFeedback_NoReview(t *testing.T) {
 	}
 	if state.Status != core.WorkflowStatusRunning {
 		t.Errorf("expected status running, got %s", state.Status)
+	}
+}
+
+func TestHandleNoInteractiveReview_Rejected_ReturnsSentinel(t *testing.T) {
+	t.Parallel()
+	state := &core.WorkflowState{
+		WorkflowDefinition: core.WorkflowDefinition{WorkflowID: "wf-1"},
+		WorkflowRun: core.WorkflowRun{
+			Status:       core.WorkflowStatusAwaitingReview,
+			CurrentPhase: core.PhasePlan,
+		},
+	}
+
+	r := testRunner(&mockStateManager{state: state})
+	err := r.handleNoInteractiveReview(context.Background(), state, core.PhaseAnalyze, &core.WorkflowState{
+		WorkflowDefinition: core.WorkflowDefinition{WorkflowID: "wf-1"},
+		WorkflowRun: core.WorkflowRun{
+			Status: core.WorkflowStatusPending,
+		},
+	})
+	if !errors.Is(err, errPhaseRejected) {
+		t.Fatalf("expected errPhaseRejected, got %v", err)
 	}
 }
 

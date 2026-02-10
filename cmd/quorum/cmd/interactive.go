@@ -81,7 +81,11 @@ func promptPlanReview(scanner *bufio.Scanner) (string, string) {
 // editTasksInteractive allows the user to edit tasks interactively.
 func editTasksInteractive(scanner *bufio.Scanner, state *core.WorkflowState) {
 	for {
-		fmt.Printf("\n  Edit task number (1-%d), [a]dd, [d]elete, or [Enter] done: ", len(state.TaskOrder))
+		if len(state.TaskOrder) == 0 {
+			fmt.Print("\n  No tasks. [a]dd a task, or [Enter] done: ")
+		} else {
+			fmt.Printf("\n  Edit task number (1-%d), [a]dd, [d]elete, or [Enter] done: ", len(state.TaskOrder))
+		}
 		if !scanner.Scan() {
 			return
 		}

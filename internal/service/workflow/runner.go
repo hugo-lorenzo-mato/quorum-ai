@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -19,6 +20,8 @@ import (
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/logging"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service/report"
 )
+
+var errPhaseRejected = errors.New("phase rejected during review")
 
 // StateManager manages workflow state persistence and locking.
 type StateManager interface {
@@ -467,6 +470,11 @@ func (r *Runner) RunWithState(ctx context.Context, state *core.WorkflowState) er
 
 	// Interactive gate: pause after analyze for review (no-op for non-interactive)
 	if err := r.interactiveGate(ctx, workflowState, core.PhaseAnalyze); err != nil {
+		if errors.Is(err, errPhaseRejected) {
+			// Reject is handled by the API by changing status and resuming the control plane.
+			// Stop cleanly without overwriting the state as failed.
+			return nil
+		}
 		return r.handleError(ctx, workflowState, err)
 	}
 
@@ -476,6 +484,9 @@ func (r *Runner) RunWithState(ctx context.Context, state *core.WorkflowState) er
 
 	// Interactive gate: pause after plan for review (no-op for non-interactive)
 	if err := r.interactiveGate(ctx, workflowState, core.PhasePlan); err != nil {
+		if errors.Is(err, errPhaseRejected) {
+			return nil
+		}
 		return r.handleError(ctx, workflowState, err)
 	}
 
@@ -2220,7 +2231,7 @@ func (r *Runner) handleNoInteractiveReview(ctx context.Context, state *core.Work
 	if freshState != nil && freshState.Status != core.WorkflowStatusAwaitingReview {
 		r.logger.Info("phase rejected during interactive review",
 			"phase", completedPhase, "new_status", freshState.Status)
-		return fmt.Errorf("phase '%s' rejected during review", completedPhase)
+		return errPhaseRejected
 	}
 
 	// Approved with no feedback; just resume.
