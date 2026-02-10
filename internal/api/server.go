@@ -246,11 +246,19 @@ func (s *Server) setupRouter() chi.Router {
 				r.With(chimiddleware.Timeout(60*time.Second)).Post("/replan", s.HandleReplanWorkflow)
 				r.With(chimiddleware.Timeout(60*time.Second)).Post("/execute", s.HandleExecuteWorkflow)
 
+				// Interactive workflow endpoints
+				r.With(chimiddleware.Timeout(60*time.Second)).Post("/review", s.HandleReviewWorkflow)
+				r.With(chimiddleware.Timeout(60*time.Second)).Post("/switch-interactive", s.HandleSwitchInteractive)
+
 				// Task endpoints nested under workflow
 				r.Route("/tasks", func(r chi.Router) {
 					r.Use(chimiddleware.Timeout(60 * time.Second))
 					r.Get("/", s.handleListTasks)
+					r.Post("/", s.handleCreateTask)
+					r.Put("/reorder", s.handleReorderTasks)
 					r.Get("/{taskID}", s.handleGetTask)
+					r.Patch("/{taskID}", s.handleUpdateTask)
+					r.Delete("/{taskID}", s.handleDeleteTask)
 				})
 
 				// Workflow attachments

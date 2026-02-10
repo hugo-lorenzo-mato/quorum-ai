@@ -99,7 +99,7 @@ func (e *WorkflowExecutor) execute(ctx context.Context, workflowID core.Workflow
 		return fmt.Errorf("workflow is already running")
 	case core.WorkflowStatusCompleted:
 		return fmt.Errorf("workflow is already completed")
-	case core.WorkflowStatusPending, core.WorkflowStatusFailed, core.WorkflowStatusPaused:
+	case core.WorkflowStatusPending, core.WorkflowStatusFailed, core.WorkflowStatusPaused, core.WorkflowStatusAwaitingReview:
 		// OK to execute
 	default:
 		return fmt.Errorf("workflow is in invalid state: %s", state.Status)

@@ -411,8 +411,22 @@ func (r *Runner) RunWithState(ctx context.Context, state *core.WorkflowState) er
 	// Prepare new execution - increment ExecutionID and clear old events
 	r.prepareExecution(workflowState, false)
 
+	// Preserve execution mode from the API-created blueprint before overwriting.
+	// The runner config doesn't know about "interactive" mode, so we must keep it.
+	prevExecutionMode := ""
+	prevInteractiveReview := workflowState.InteractiveReview
+	if workflowState.Blueprint != nil {
+		prevExecutionMode = workflowState.Blueprint.ExecutionMode
+	}
+
 	// Sync blueprint with actual runner config (API-created workflows have minimal blueprint)
 	workflowState.Blueprint = r.buildBlueprint()
+
+	// Restore execution mode if it was set to "interactive" by the API
+	if prevExecutionMode == core.ExecutionModeInteractive {
+		workflowState.Blueprint.ExecutionMode = prevExecutionMode
+	}
+	workflowState.InteractiveReview = prevInteractiveReview
 
 	// Ensure workflow-level Git isolation (API-created state may not have it persisted).
 	if _, err := r.ensureWorkflowGitIsolation(ctx, workflowState); err != nil {
@@ -446,9 +460,21 @@ func (r *Runner) RunWithState(ctx context.Context, state *core.WorkflowState) er
 	if err := r.analyzer.Run(ctx, wctx); err != nil {
 		return r.handleError(ctx, workflowState, err)
 	}
+
+	// Interactive gate: pause after analyze for review (no-op for non-interactive)
+	if err := r.interactiveGate(ctx, workflowState, core.PhaseAnalyze); err != nil {
+		return r.handleError(ctx, workflowState, err)
+	}
+
 	if err := r.planner.Run(ctx, wctx); err != nil {
 		return r.handleError(ctx, workflowState, err)
 	}
+
+	// Interactive gate: pause after plan for review (no-op for non-interactive)
+	if err := r.interactiveGate(ctx, workflowState, core.PhasePlan); err != nil {
+		return r.handleError(ctx, workflowState, err)
+	}
+
 	if err := r.executor.Run(ctx, wctx); err != nil {
 		return r.handleError(ctx, workflowState, err)
 	}
@@ -2124,6 +2150,106 @@ func (r *Runner) finalizeMetrics(state *core.WorkflowState) {
 
 	// Note: ConsensusScore is set by analyzer during analyze phase
 	// See analyzer.go for where this is updated
+}
+
+// interactiveGate pauses the workflow after a phase completes in interactive mode.
+// Returns nil immediately for non-interactive modes (zero overhead).
+// For interactive mode, it re-reads state from DB (to detect dynamic mode switches),
+// sets status to awaiting_review, pauses the ControlPlane, and blocks until resumed.
+func (r *Runner) interactiveGate(ctx context.Context, state *core.WorkflowState, completedPhase core.Phase) error {
+	// Re-read state from DB to detect dynamic mode switch (e.g., "Run All" -> Interactive)
+	freshState, err := r.state.LoadByID(ctx, state.WorkflowID)
+	if err == nil && freshState != nil && freshState.Blueprint != nil {
+		state.Blueprint.ExecutionMode = freshState.Blueprint.ExecutionMode
+		// Also pick up any InteractiveReview set by the API layer
+		state.InteractiveReview = freshState.InteractiveReview
+	}
+
+	if state.Blueprint == nil || state.Blueprint.ExecutionMode != core.ExecutionModeInteractive {
+		return nil // non-interactive: proceed immediately
+	}
+
+	nextPhase := core.NextPhase(completedPhase)
+	if nextPhase == "" {
+		return nil // no next phase to gate before
+	}
+
+	state.Status = core.WorkflowStatusAwaitingReview
+	state.CurrentPhase = nextPhase
+	state.UpdatedAt = time.Now()
+	if err := r.state.Save(ctx, state); err != nil {
+		return fmt.Errorf("saving awaiting_review state: %w", err)
+	}
+
+	r.logger.Info("interactive gate: awaiting review",
+		"workflow_id", state.WorkflowID,
+		"completed_phase", completedPhase,
+		"next_phase", nextPhase,
+	)
+	if r.output != nil {
+		r.output.Log("info", "workflow",
+			fmt.Sprintf("Phase '%s' completed. Awaiting review before '%s'.", completedPhase, nextPhase))
+		// Emit dedicated SSE event if the output supports it (web notifier does)
+		type phaseReviewer interface {
+			PhaseAwaitingReview(phase string)
+		}
+		if pr, ok := r.output.(phaseReviewer); ok {
+			pr.PhaseAwaitingReview(string(nextPhase))
+		}
+	}
+
+	// Pause the ControlPlane and block until user resumes (via API or CLI)
+	if r.control != nil {
+		r.control.Pause()
+		if err := r.control.WaitIfPaused(ctx); err != nil {
+			return err
+		}
+	}
+
+	// After resume: apply any feedback that was set while paused
+	return r.applyInteractiveFeedback(ctx, state, completedPhase)
+}
+
+// applyInteractiveFeedback applies user feedback submitted during the interactive review pause.
+func (r *Runner) applyInteractiveFeedback(ctx context.Context, state *core.WorkflowState, completedPhase core.Phase) error {
+	// Re-read state to get any feedback/edits the API layer stored
+	freshState, err := r.state.LoadByID(ctx, state.WorkflowID)
+	if err == nil && freshState != nil {
+		state.InteractiveReview = freshState.InteractiveReview
+		// Check if mode was switched back to non-interactive (continue_unattended)
+		if freshState.Blueprint != nil {
+			state.Blueprint.ExecutionMode = freshState.Blueprint.ExecutionMode
+		}
+	}
+
+	review := state.InteractiveReview
+	if review == nil {
+		// No feedback; just resume
+		state.Status = core.WorkflowStatusRunning
+		state.UpdatedAt = time.Now()
+		return r.state.Save(ctx, state)
+	}
+
+	switch completedPhase {
+	case core.PhaseAnalyze:
+		if review.AnalysisFeedback != "" {
+			if err := PrependToConsolidatedAnalysis(state, review.AnalysisFeedback); err != nil {
+				r.logger.Warn("failed to apply analysis feedback", "error", err)
+			} else {
+				r.logger.Info("applied analysis feedback", "len", len(review.AnalysisFeedback))
+			}
+		}
+	case core.PhasePlan:
+		if review.PlanFeedback != "" {
+			r.logger.Info("plan feedback recorded", "len", len(review.PlanFeedback))
+		}
+	}
+
+	// Clear the review after applying it
+	state.InteractiveReview = nil
+	state.Status = core.WorkflowStatusRunning
+	state.UpdatedAt = time.Now()
+	return r.state.Save(ctx, state)
 }
 
 // DeactivateWorkflow clears the active workflow without deleting any data.

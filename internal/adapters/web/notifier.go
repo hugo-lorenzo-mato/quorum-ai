@@ -137,6 +137,12 @@ func (n *WebOutputNotifier) PhaseCompleted(phase string, duration time.Duration)
 	n.eventBus.Publish(events.NewPhaseCompletedEvent(n.workflowID, "", phase, duration))
 }
 
+// PhaseAwaitingReview emits a phase_awaiting_review event.
+// NOTE: This is NOT part of the OutputNotifier interface but is needed for interactive mode.
+func (n *WebOutputNotifier) PhaseAwaitingReview(phase string) {
+	n.eventBus.Publish(events.NewPhaseAwaitingReviewEvent(n.workflowID, "", phase))
+}
+
 // TaskStarted is called when a task begins.
 func (n *WebOutputNotifier) TaskStarted(task *core.Task) {
 	n.eventBus.Publish(events.NewTaskStartedEvent(n.workflowID, "", string(task.ID), ""))

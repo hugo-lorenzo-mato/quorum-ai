@@ -56,6 +56,7 @@ var (
 	runDryRun       bool
 	runYolo         bool
 	runResume       bool
+	runInteractive  bool
 	runMaxRetries   int
 	runTrace        string
 	runOutput       string
@@ -76,6 +77,7 @@ func init() {
 	}
 	runCmd.Flags().StringVarP(&runOutput, "output", "o", "", "Output mode (tui, plain, json, quiet)")
 	runCmd.Flags().BoolVar(&runSkipOptimize, "skip-refine", false, "Skip prompt refinement phase")
+	runCmd.Flags().BoolVar(&runInteractive, "interactive", false, "Pause between phases for review and feedback")
 
 	// Single-agent mode flags (using shared variables from common.go)
 	runCmd.Flags().BoolVar(&singleAgent, "single-agent", false,
@@ -117,6 +119,11 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 	// Validate single-agent flags
 	if err := validateSingleAgentFlags(); err != nil {
 		return err
+	}
+
+	// Interactive mode: delegate to interactive workflow runner
+	if runInteractive {
+		return runInteractiveWorkflow(ctx, args)
 	}
 
 	// Detect output mode

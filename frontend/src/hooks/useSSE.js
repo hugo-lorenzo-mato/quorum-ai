@@ -55,6 +55,9 @@ export default function useSSE() {
   const handleWorkflowResumed = useWorkflowStore(state => state.handleWorkflowResumed);
   const handlePhaseStarted = useWorkflowStore(state => state.handlePhaseStarted);
   const handlePhaseCompleted = useWorkflowStore(state => state.handlePhaseCompleted);
+  const handlePhaseAwaitingReview = useWorkflowStore(state => state.handlePhaseAwaitingReview);
+  const handlePhaseReviewApproved = useWorkflowStore(state => state.handlePhaseReviewApproved);
+  const handlePhaseReviewRejected = useWorkflowStore(state => state.handlePhaseReviewRejected);
   const setWorkflows = useWorkflowStore(state => state.setWorkflows);
 
   // Task event handlers
@@ -176,8 +179,11 @@ export default function useSSE() {
     workflow_resumed:       (data) => { handleWorkflowResumed(data); notifyInfo(`Workflow ${data.workflow_id} resumed`); },
 
     // Phase events
-    phase_started:   (data) => handlePhaseStarted(data),
-    phase_completed: (data) => handlePhaseCompleted(data),
+    phase_started:          (data) => handlePhaseStarted(data),
+    phase_completed:        (data) => handlePhaseCompleted(data),
+    phase_awaiting_review:  (data) => handlePhaseAwaitingReview(data),
+    phase_review_approved:  (data) => handlePhaseReviewApproved(data),
+    phase_review_rejected:  (data) => handlePhaseReviewRejected(data),
 
     // Task events
     task_created:   (data) => handleTaskCreated(data),
@@ -218,6 +224,9 @@ export default function useSSE() {
     handleWorkflowResumed,
     handlePhaseStarted,
     handlePhaseCompleted,
+    handlePhaseAwaitingReview,
+    handlePhaseReviewApproved,
+    handlePhaseReviewRejected,
     handleTaskCreated,
     handleTaskStarted,
     handleTaskProgress,
@@ -327,6 +336,9 @@ export default function useSSE() {
       'workflow_resumed',
       'phase_started',
       'phase_completed',
+      'phase_awaiting_review',
+      'phase_review_approved',
+      'phase_review_rejected',
       'task_created',
       'task_started',
       'task_progress',

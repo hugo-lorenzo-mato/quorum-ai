@@ -79,7 +79,8 @@ export default function EditWorkflowModal({ isOpen, onClose, workflow, onSave, c
       setTitle(workflow.title || '');
       setPrompt(workflow.prompt || '');
       setTimeoutOverride(formatBlueprintTimeout(workflow.blueprint?.timeout_seconds));
-      const mode = workflow.blueprint?.execution_mode === 'single_agent' ? 'single_agent' : 'multi_agent';
+      const rawMode = workflow.blueprint?.execution_mode;
+      const mode = rawMode === 'single_agent' ? 'single_agent' : rawMode === 'interactive' ? 'interactive' : 'multi_agent';
       setExecutionMode(mode);
       setSingleAgentName(workflow.blueprint?.single_agent_name || 'claude');
       setSingleAgentModel(workflow.blueprint?.single_agent_model || '');
@@ -125,8 +126,9 @@ export default function EditWorkflowModal({ isOpen, onClose, workflow, onSave, c
 
       // Allow editing blueprint overrides only when workflow is not running.
       if (canEditConfig) {
-        const originalMode = workflow.blueprint?.execution_mode === 'single_agent' ? 'single_agent' : 'multi_agent';
-        const nextMode = executionMode === 'single_agent' ? 'single_agent' : 'multi_agent';
+        const origRaw = workflow.blueprint?.execution_mode;
+        const originalMode = origRaw === 'single_agent' ? 'single_agent' : origRaw === 'interactive' ? 'interactive' : 'multi_agent';
+        const nextMode = executionMode;
 
         const effectiveSingleAgentName = AGENT_OPTIONS.some((a) => a.value === singleAgentName)
           ? singleAgentName
@@ -158,14 +160,16 @@ export default function EditWorkflowModal({ isOpen, onClose, workflow, onSave, c
         })();
 
         if (configChanged) {
-          updates.blueprint = nextMode === 'single_agent'
-            ? {
-                execution_mode: 'single_agent',
-                single_agent_name: effectiveSingleAgentName,
-                single_agent_model: effectiveSingleAgentModel,
-                single_agent_reasoning_effort: effectiveSingleAgentReasoningEffort,
-              }
-            : { execution_mode: 'multi_agent' };
+          if (nextMode === 'single_agent') {
+            updates.blueprint = {
+              execution_mode: 'single_agent',
+              single_agent_name: effectiveSingleAgentName,
+              single_agent_model: effectiveSingleAgentModel,
+              single_agent_reasoning_effort: effectiveSingleAgentReasoningEffort,
+            };
+          } else {
+            updates.blueprint = { execution_mode: nextMode };
+          }
         }
 
         // Workflow-level timeout override (blueprint.timeout_seconds).
@@ -349,7 +353,7 @@ export default function EditWorkflowModal({ isOpen, onClose, workflow, onSave, c
 
               <div className="space-y-2">
                 <label className={`flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-all ${
-                  executionMode !== 'single_agent'
+                  executionMode === 'multi_agent'
                     ? 'border-primary bg-primary/5'
                     : 'border-border hover:bg-muted/50'
                 }`}
@@ -358,7 +362,7 @@ export default function EditWorkflowModal({ isOpen, onClose, workflow, onSave, c
                     type="radio"
                     name="editExecutionMode"
                     value="multi_agent"
-                    checked={executionMode !== 'single_agent'}
+                    checked={executionMode === 'multi_agent'}
                     onChange={() => setExecutionMode('multi_agent')}
                     className="mt-0.5 w-4 h-4 text-primary"
                   />
@@ -366,6 +370,28 @@ export default function EditWorkflowModal({ isOpen, onClose, workflow, onSave, c
                     <div className="font-medium text-foreground text-sm">Multi-Agent Consensus</div>
                     <div className="text-xs text-muted-foreground mt-0.5">
                       Multiple agents analyze and iterate to reach agreement
+                    </div>
+                  </div>
+                </label>
+
+                <label className={`flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-all ${
+                  executionMode === 'interactive'
+                    ? 'border-primary bg-primary/5'
+                    : 'border-border hover:bg-muted/50'
+                }`}
+                >
+                  <input
+                    type="radio"
+                    name="editExecutionMode"
+                    value="interactive"
+                    checked={executionMode === 'interactive'}
+                    onChange={() => setExecutionMode('interactive')}
+                    className="mt-0.5 w-4 h-4 text-primary"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-foreground text-sm">Interactive (Supervised)</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">
+                      Pause between phases for review, feedback, and task editing
                     </div>
                   </div>
                 </label>

@@ -20,6 +20,7 @@ import (
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/attachments"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/config"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/events"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service/workflow"
 )
 
@@ -1121,7 +1122,7 @@ func (s *Server) HandleRunWorkflow(w http.ResponseWriter, r *http.Request) {
 	case core.WorkflowStatusCompleted:
 		respondError(w, http.StatusConflict, "workflow is already completed; create a new workflow to re-run")
 		return
-	case core.WorkflowStatusPending, core.WorkflowStatusFailed, core.WorkflowStatusPaused:
+	case core.WorkflowStatusPending, core.WorkflowStatusFailed, core.WorkflowStatusPaused, core.WorkflowStatusAwaitingReview:
 		// These states allow execution
 	default:
 		respondError(w, http.StatusConflict, "workflow is in invalid state for execution: "+string(state.Status))
@@ -2334,4 +2335,202 @@ func (s *Server) HandleExecuteWorkflow(w http.ResponseWriter, r *http.Request) {
 		Message:      "Execute phase started",
 	}
 	respondJSON(w, http.StatusAccepted, response)
+}
+
+// ReviewRequest is the request body for reviewing an interactive workflow phase.
+type ReviewRequest struct {
+	Action             string `json:"action"`                        // "approve" or "reject"
+	Feedback           string `json:"feedback,omitempty"`            // User feedback
+	Phase              string `json:"phase,omitempty"`               // Phase that was reviewed
+	ContinueUnattended bool   `json:"continue_unattended,omitempty"` // Switch back to non-interactive
+}
+
+// HandleReviewWorkflow handles review/approval for interactive mode.
+// POST /api/v1/workflows/{workflowID}/review
+func (s *Server) HandleReviewWorkflow(w http.ResponseWriter, r *http.Request) {
+	workflowID := chi.URLParam(r, "workflowID")
+	if workflowID == "" {
+		respondError(w, http.StatusBadRequest, "workflow ID is required")
+		return
+	}
+
+	ctx := r.Context()
+	stateManager := s.getProjectStateManager(ctx)
+	if stateManager == nil {
+		respondError(w, http.StatusServiceUnavailable, "workflow management not available")
+		return
+	}
+
+	state, err := stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
+	if err != nil {
+		s.logger.Error("failed to load workflow", "workflow_id", workflowID, "error", err)
+		respondError(w, http.StatusInternalServerError, "failed to load workflow")
+		return
+	}
+	if state == nil {
+		respondError(w, http.StatusNotFound, "workflow not found")
+		return
+	}
+
+	// Only allowed when awaiting_review
+	if state.Status != core.WorkflowStatusAwaitingReview {
+		respondError(w, http.StatusConflict,
+			fmt.Sprintf("workflow is not awaiting review (current status: %s)", state.Status))
+		return
+	}
+
+	var req ReviewRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if req.Action != "approve" && req.Action != "reject" {
+		respondError(w, http.StatusBadRequest, "action must be 'approve' or 'reject'")
+		return
+	}
+
+	if req.Action == "reject" {
+		// For reject: trigger replan or re-analyze depending on phase
+		phase := core.Phase(req.Phase)
+		switch phase {
+		case core.PhaseAnalyze:
+			// Clear analysis and re-run — let the user re-trigger via /analyze
+			state.Status = core.WorkflowStatusPending
+			state.CurrentPhase = core.PhaseAnalyze
+			state.InteractiveReview = nil
+		case core.PhasePlan:
+			// Clear plan data and set up for replan
+			state.Status = core.WorkflowStatusCompleted
+			state.CurrentPhase = core.PhasePlan
+			state.InteractiveReview = nil
+			// Clear tasks for replan
+			state.Tasks = make(map[core.TaskID]*core.TaskState)
+			state.TaskOrder = nil
+		default:
+			respondError(w, http.StatusBadRequest, "phase must be 'analyze' or 'plan' for reject")
+			return
+		}
+
+		state.UpdatedAt = time.Now()
+		if err := stateManager.Save(ctx, state); err != nil {
+			respondError(w, http.StatusInternalServerError, "failed to save workflow state")
+			return
+		}
+
+		// Emit SSE event
+		if s.eventBus != nil {
+			s.eventBus.Publish(events.NewPhaseReviewRejectedEvent(workflowID, "", req.Phase, req.Feedback))
+		}
+
+		respondJSON(w, http.StatusOK, map[string]string{
+			"id":      workflowID,
+			"status":  string(state.Status),
+			"message": fmt.Sprintf("Phase '%s' rejected. Workflow ready for re-execution.", req.Phase),
+		})
+		return
+	}
+
+	// Action: approve
+	// Store feedback for the runner to pick up after resume
+	review := &core.InteractiveReview{
+		ReviewedAt:    time.Now(),
+		ApprovedPhase: core.Phase(req.Phase),
+	}
+	switch core.Phase(req.Phase) {
+	case core.PhaseAnalyze:
+		review.AnalysisFeedback = req.Feedback
+	case core.PhasePlan:
+		review.PlanFeedback = req.Feedback
+	}
+	state.InteractiveReview = review
+
+	// If user wants to continue unattended, switch mode back
+	if req.ContinueUnattended && state.Blueprint != nil {
+		state.Blueprint.ExecutionMode = core.ExecutionModeMultiAgent
+	}
+
+	state.UpdatedAt = time.Now()
+	if err := stateManager.Save(ctx, state); err != nil {
+		respondError(w, http.StatusInternalServerError, "failed to save workflow state")
+		return
+	}
+
+	// Emit SSE event
+	if s.eventBus != nil {
+		s.eventBus.Publish(events.NewPhaseReviewApprovedEvent(workflowID, "", req.Phase))
+	}
+
+	// Resume the ControlPlane so the runner unblocks
+	if s.unifiedTracker != nil {
+		if cp, ok := s.unifiedTracker.GetControlPlane(core.WorkflowID(workflowID)); ok {
+			cp.Resume()
+		}
+	}
+
+	respondJSON(w, http.StatusOK, map[string]string{
+		"id":      workflowID,
+		"status":  "running",
+		"message": fmt.Sprintf("Phase '%s' approved. Continuing workflow.", req.Phase),
+	})
+}
+
+// HandleSwitchInteractive promotes a running workflow to interactive mode.
+// POST /api/v1/workflows/{workflowID}/switch-interactive
+func (s *Server) HandleSwitchInteractive(w http.ResponseWriter, r *http.Request) {
+	workflowID := chi.URLParam(r, "workflowID")
+	if workflowID == "" {
+		respondError(w, http.StatusBadRequest, "workflow ID is required")
+		return
+	}
+
+	ctx := r.Context()
+	stateManager := s.getProjectStateManager(ctx)
+	if stateManager == nil {
+		respondError(w, http.StatusServiceUnavailable, "workflow management not available")
+		return
+	}
+
+	state, err := stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
+	if err != nil {
+		s.logger.Error("failed to load workflow", "workflow_id", workflowID, "error", err)
+		respondError(w, http.StatusInternalServerError, "failed to load workflow")
+		return
+	}
+	if state == nil {
+		respondError(w, http.StatusNotFound, "workflow not found")
+		return
+	}
+
+	if state.Status != core.WorkflowStatusRunning {
+		respondError(w, http.StatusConflict,
+			fmt.Sprintf("can only switch to interactive while running (current status: %s)", state.Status))
+		return
+	}
+
+	if state.Blueprint == nil {
+		state.Blueprint = &core.Blueprint{}
+	}
+
+	if state.Blueprint.ExecutionMode == core.ExecutionModeInteractive {
+		respondJSON(w, http.StatusOK, map[string]string{
+			"id":      workflowID,
+			"status":  "running",
+			"message": "Workflow is already in interactive mode",
+		})
+		return
+	}
+
+	state.Blueprint.ExecutionMode = core.ExecutionModeInteractive
+	state.UpdatedAt = time.Now()
+	if err := stateManager.Save(ctx, state); err != nil {
+		respondError(w, http.StatusInternalServerError, "failed to save workflow state")
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]string{
+		"id":      workflowID,
+		"status":  "running",
+		"message": "Switched to interactive mode. Workflow will pause after current phase for review.",
+	})
 }

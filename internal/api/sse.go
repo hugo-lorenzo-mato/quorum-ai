@@ -330,6 +330,28 @@ func (s *Server) sendEventToClient(w http.ResponseWriter, flusher http.Flusher, 
 			"timestamp":   e.Timestamp(),
 		}
 
+	case events.PhaseAwaitingReviewEvent:
+		payload = map[string]interface{}{
+			"workflow_id": e.WorkflowID(),
+			"phase":       e.Phase,
+			"timestamp":   e.Timestamp(),
+		}
+
+	case events.PhaseReviewApprovedEvent:
+		payload = map[string]interface{}{
+			"workflow_id": e.WorkflowID(),
+			"phase":       e.Phase,
+			"timestamp":   e.Timestamp(),
+		}
+
+	case events.PhaseReviewRejectedEvent:
+		payload = map[string]interface{}{
+			"workflow_id": e.WorkflowID(),
+			"phase":       e.Phase,
+			"feedback":    e.Feedback,
+			"timestamp":   e.Timestamp(),
+		}
+
 	case events.LogEvent:
 		payload = map[string]interface{}{
 			"workflow_id": e.WorkflowID(),

@@ -165,6 +165,41 @@ export const workflowApi = {
 
   delete: (id) => request(`/workflows/${id}/`, { method: 'DELETE' }),
 
+  // Interactive workflow endpoints
+  review: (id, { action, feedback, phase, continueUnattended } = {}) => request(`/workflows/${id}/review`, {
+    method: 'POST',
+    body: JSON.stringify({
+      action,
+      feedback,
+      phase,
+      continue_unattended: continueUnattended,
+    }),
+  }),
+
+  switchInteractive: (id) => request(`/workflows/${id}/switch-interactive`, {
+    method: 'POST',
+  }),
+
+  // Task mutation endpoints
+  createTask: (workflowId, data) => request(`/workflows/${workflowId}/tasks/`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }),
+
+  updateTask: (workflowId, taskId, data) => request(`/workflows/${workflowId}/tasks/${taskId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  }),
+
+  deleteTask: (workflowId, taskId) => request(`/workflows/${workflowId}/tasks/${taskId}`, {
+    method: 'DELETE',
+  }),
+
+  reorderTasks: (workflowId, taskOrder) => request(`/workflows/${workflowId}/tasks/reorder`, {
+    method: 'PUT',
+    body: JSON.stringify({ task_order: taskOrder }),
+  }),
+
   // Issue generation
   /**
    * Generate GitHub/GitLab issues from workflow artifacts.
