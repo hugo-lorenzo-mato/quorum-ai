@@ -44,6 +44,7 @@ import {
   Layers,
   ListTodo,
   X,
+  MessageSquare,
 } from 'lucide-react';
 import { ConfirmDialog } from '../components/config/ConfirmDialog';
 import { ExecutionModeBadge, PhaseStepper, ReplanModal, WorkflowPipelineLive } from '../components/workflow';
@@ -1616,6 +1617,9 @@ function NewWorkflowForm({ onSubmit, onCancel, loading }) {
     if (promptPreset?.executionStrategy === 'single-agent') {
       return 'single_agent';
     }
+    if (promptPreset?.executionStrategy === 'interactive') {
+      return 'interactive';
+    }
     if (promptPreset?.executionStrategy === 'multi-agent-consensus') {
       return 'multi_agent';
     }
@@ -1657,8 +1661,8 @@ function NewWorkflowForm({ onSubmit, onCancel, loading }) {
     e.preventDefault();
     if (!prompt.trim()) return;
 
-    // Build config based on execution mode
-    const workflowConfig = executionMode === 'single_agent'
+    // Build blueprint based on execution mode (omit when multi-agent default is selected).
+    const workflowBlueprint = executionMode === 'single_agent'
       ? {
           execution_mode: 'single_agent',
           single_agent_name: effectiveSingleAgentName,
@@ -1667,11 +1671,13 @@ function NewWorkflowForm({ onSubmit, onCancel, loading }) {
             ? { single_agent_reasoning_effort: effectiveSingleAgentReasoningEffort }
             : {}),
         }
-      : undefined;
+      : (executionMode === 'interactive'
+          ? { execution_mode: 'interactive' }
+          : undefined);
 
     // Clean up blob preview URLs before submitting
     files.forEach((f) => { if (f._previewUrl) URL.revokeObjectURL(f._previewUrl); });
-    onSubmit(prompt, files, title.trim() || undefined, workflowConfig);
+    onSubmit(prompt, files, title.trim() || undefined, workflowBlueprint);
   };
 
   const handleFilesSelected = (e) => {
@@ -1784,7 +1790,7 @@ function NewWorkflowForm({ onSubmit, onCancel, loading }) {
         <div className="space-y-4 pt-4 border-t border-border">
            <h3 className="text-sm font-medium text-foreground">Execution Strategy</h3>
            
-           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {/* Multi-Agent Tile */}
             <button
               type="button"
@@ -1803,6 +1809,26 @@ function NewWorkflowForm({ onSubmit, onCancel, loading }) {
               </div>
               <span className="font-semibold text-foreground text-sm">Multi-Agent Consensus</span>
               <span className="text-xs text-muted-foreground mt-1">Iterative refinement and debate between agents. Best for complex tasks.</span>
+            </button>
+
+            {/* Interactive Tile */}
+            <button
+              type="button"
+              onClick={() => setExecutionMode('interactive')}
+              className={`relative flex flex-col items-start p-4 rounded-xl border-2 transition-all text-left ${
+                executionMode === 'interactive'
+                  ? 'border-primary bg-primary/5 shadow-sm'
+                  : 'border-border bg-background hover:border-muted-foreground/30 hover:bg-accent'
+              }`}
+            >
+              <div className="flex items-center justify-between w-full mb-2">
+                <MessageSquare className={`w-6 h-6 ${executionMode === 'interactive' ? 'text-primary' : 'text-muted-foreground'}`} />
+                {executionMode === 'interactive' && (
+                  <CheckCircle2 className="w-4 h-4 text-primary" />
+                )}
+              </div>
+              <span className="font-semibold text-foreground text-sm">Interactive</span>
+              <span className="text-xs text-muted-foreground mt-1">Pause for your input at key steps. Best for reviews, approvals, and guided execution.</span>
             </button>
 
             {/* Single-Agent Tile */}
@@ -2098,8 +2124,12 @@ export default function Workflows() {
   const selectedWorkflow = workflows.find(w => w.id === id);
   const workflowTasks = id ? getTasksForWorkflow(id) : [];
 
-  const handleCreate = async (prompt, files = [], title, workflowConfig) => {
-    const workflow = await createWorkflow(prompt, { title, config: workflowConfig });
+  const handleCreate = async (prompt, files = [], title, workflowBlueprint) => {
+    const opts = {};
+    if (title) opts.title = title;
+    if (workflowBlueprint) opts.blueprint = workflowBlueprint;
+
+    const workflow = await createWorkflow(prompt, opts);
     if (!workflow) {
       // Get the error from the store and show it
       const storeError = useWorkflowStore.getState().error;

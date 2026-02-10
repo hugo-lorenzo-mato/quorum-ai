@@ -80,7 +80,7 @@ export const workflowApi = {
    * @param {string} [options.title] - Optional workflow title
    * @param {string[]} [options.files] - Optional file paths
    * @param {Object} [options.blueprint] - Optional workflow blueprint
-   * @param {string} [options.blueprint.execution_mode] - 'multi_agent' or 'single_agent'
+   * @param {string} [options.blueprint.execution_mode] - 'multi_agent', 'single_agent', 'interactive', or empty
    * @param {string} [options.blueprint.single_agent_name] - Agent name for single-agent mode
    * @param {string} [options.blueprint.single_agent_model] - Optional model override
    */

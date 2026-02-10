@@ -292,7 +292,7 @@ func (t *GenerationTracker) IsValidFile(filename string, modTime time.Time) bool
 		return false
 	}
 
-	// If we have expected files, check against them
+	// If we have expected files, require a match (direct or fuzzy).
 	if len(t.ExpectedFiles) > 0 {
 		// Direct match
 		if _, ok := t.ExpectedFiles[filename]; ok {
@@ -304,6 +304,7 @@ func (t *GenerationTracker) IsValidFile(filename string, modTime time.Time) bool
 				return true
 			}
 		}
+		return false
 	}
 
 	// If no expected files defined, accept any .md file created after start
