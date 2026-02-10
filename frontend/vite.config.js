@@ -33,5 +33,8 @@ export default defineConfig({
     setupFiles: './src/test/setup.js',
     restoreMocks: true,
     exclude: [...configDefaults.exclude, 'e2e/**'],
+    coverage: {
+      reporter: ['text', 'html', 'lcov'],
+    },
   },
 })
