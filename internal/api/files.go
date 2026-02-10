@@ -12,6 +12,10 @@ import (
 	"strings"
 )
 
+const (
+	msgInvalidPath = "invalid path"
+)
+
 // FileEntry represents a file or directory in the file browser.
 type FileEntry struct {
 	Name        string `json:"name"`
@@ -42,7 +46,7 @@ func (s *Server) handleListFiles(w http.ResponseWriter, r *http.Request) {
 	// Resolve and validate path (project-aware)
 	absPath, err := s.resolvePathCtx(r.Context(), requestedPath)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid path")
+		respondError(w, http.StatusBadRequest, msgInvalidPath)
 		return
 	}
 
@@ -125,37 +129,16 @@ func (s *Server) handleGetFileContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Resolve and validate path (project-aware), but read via an fs rooted at the
-	// project directory to avoid path traversal and symlink escapes.
-	root, err := s.projectRootForRequest(r.Context())
+	rootReal, fsys, rel, err := s.resolveProjectFileFSPath(r.Context(), requestedPath)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid path")
+		respondError(w, http.StatusBadRequest, msgInvalidPath)
 		return
 	}
-	_, rootReal, err := canonicalizeRoot(root)
-	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid path")
-		return
-	}
-
-	cleanPath := filepath.Clean(requestedPath)
-	if err := validateProjectRelativePath(cleanPath); err != nil {
-		respondError(w, http.StatusBadRequest, "invalid path")
-		return
-	}
-
-	rel := strings.TrimPrefix(filepath.ToSlash(cleanPath), "./")
-	if rel == "" || rel == "." || !fs.ValidPath(rel) {
-		respondError(w, http.StatusBadRequest, "invalid path")
-		return
-	}
-
-	fsys := os.DirFS(rootReal)
 
 	// Check if path exists and is a file
 	info, err := fs.Stat(fsys, rel)
 	if err != nil {
-		if os.IsNotExist(err) || errors.Is(err, fs.ErrNotExist) {
+		if errors.Is(err, fs.ErrNotExist) {
 			respondError(w, http.StatusNotFound, "file not found")
 			return
 		}
@@ -179,7 +162,7 @@ func (s *Server) handleGetFileContent(w http.ResponseWriter, r *http.Request) {
 	// Best-effort symlink escape protection: ensure the resolved real path stays within rootReal.
 	if realPath, err := filepath.EvalSymlinks(filepath.Join(rootReal, filepath.FromSlash(rel))); err == nil {
 		if !isPathWithinDir(rootReal, realPath) {
-			respondError(w, http.StatusBadRequest, "invalid path")
+			respondError(w, http.StatusBadRequest, msgInvalidPath)
 			return
 		}
 	}
@@ -207,6 +190,32 @@ func (s *Server) handleGetFileContent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondJSON(w, http.StatusOK, response)
+}
+
+func (s *Server) resolveProjectFileFSPath(ctx context.Context, requestedPath string) (rootReal string, fsys fs.FS, rel string, err error) {
+	// Resolve and validate path (project-aware), but read via an fs rooted at the
+	// project directory to avoid path traversal and symlink escapes.
+	root, err := s.projectRootForRequest(ctx)
+	if err != nil {
+		return "", nil, "", err
+	}
+
+	_, rootReal, err = canonicalizeRoot(root)
+	if err != nil {
+		return "", nil, "", err
+	}
+
+	cleanPath := filepath.Clean(requestedPath)
+	if validateProjectRelativePath(cleanPath) != nil {
+		return "", nil, "", os.ErrPermission
+	}
+
+	rel = strings.TrimPrefix(filepath.ToSlash(cleanPath), "./")
+	if rel == "" || rel == "." || !fs.ValidPath(rel) {
+		return "", nil, "", os.ErrPermission
+	}
+
+	return rootReal, os.DirFS(rootReal), rel, nil
 }
 
 // handleGetFileTree returns a tree structure of the project.

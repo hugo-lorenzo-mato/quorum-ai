@@ -16,7 +16,7 @@ describe('taskStore', () => {
 
   it('setTasks indexes tasks by id under workflow key', () => {
     useTaskStore.getState().setTasks('wf-1', [{ id: 't1', name: 'a' }, { id: 't2', name: 'b' }]);
-    expect(Object.keys(useTaskStore.getState().tasksByWorkflow['wf-1']).sort()).toEqual(['t1', 't2']);
+    expect(Object.keys(useTaskStore.getState().tasksByWorkflow['wf-1']).sort((a, b) => a.localeCompare(b))).toEqual(['t1', 't2']);
   });
 
   it('loadPersistedTasks ignores empty list and maps known fields', () => {
@@ -42,7 +42,8 @@ describe('taskStore', () => {
     useTaskStore.getState().handleTaskStarted({
       workflow_id: 'wf-1',
       task_id: 't1',
-      worktree_path: '/tmp/w',
+      // Avoid publicly writable temp dirs to prevent Sonar hotspot in tests.
+      worktree_path: '/worktrees/w',
       timestamp: '2026-02-10T00:00:01Z',
     });
     expect(useTaskStore.getState().tasksByWorkflow['wf-1'].t1.status).toBe('running');
@@ -129,4 +130,3 @@ describe('taskStore', () => {
     expect(useTaskStore.getState().taskProgress).toEqual({});
   });
 });
-

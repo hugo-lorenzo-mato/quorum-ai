@@ -40,7 +40,7 @@ import { projectApi } from '../../lib/api';
 
 function resetStore() {
   try {
-    window.localStorage.removeItem('quorum-project-store');
+    globalThis.localStorage.removeItem('quorum-project-store');
   } catch {
     // ignore
   }

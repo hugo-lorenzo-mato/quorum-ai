@@ -3,7 +3,7 @@ import useUIStore from '../uiStore';
 
 function resetStore() {
   try {
-    window.localStorage.removeItem('quorum-ui-store');
+    globalThis.localStorage.removeItem('quorum-ui-store');
   } catch {
     // ignore
   }
@@ -26,7 +26,7 @@ describe('uiStore', () => {
     vi.useRealTimers();
 
     // jsdom doesn't implement matchMedia by default.
-    window.matchMedia = window.matchMedia || (() => ({ matches: false, addEventListener() {}, removeEventListener() {} }));
+    globalThis.matchMedia = globalThis.matchMedia || (() => ({ matches: false, addEventListener() {}, removeEventListener() {} }));
   });
 
   it('toggleSidebar flips sidebarOpen', () => {
@@ -46,7 +46,7 @@ describe('uiStore', () => {
   });
 
   it('setTheme(system) respects prefers-color-scheme', () => {
-    window.matchMedia = () => ({ matches: true, addEventListener() {}, removeEventListener() {} });
+    globalThis.matchMedia = () => ({ matches: true, addEventListener() {}, removeEventListener() {} });
     useUIStore.getState().setTheme('system');
     expect(document.documentElement.classList.contains('dark')).toBe(true);
   });
@@ -72,4 +72,3 @@ describe('uiStore', () => {
     vi.useRealTimers();
   });
 });
-

@@ -17,7 +17,7 @@ import { chatApi } from '../../lib/api';
 
 function resetStore() {
   try {
-    window.localStorage.removeItem('quorum-chat-store');
+    globalThis.localStorage.removeItem('quorum-chat-store');
   } catch {
     // ignore
   }
@@ -160,4 +160,3 @@ describe('chatStore', () => {
     expect(useChatStore.getState().error).toBe('No active session');
   });
 });
-

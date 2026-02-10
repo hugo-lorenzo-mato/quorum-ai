@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import PropTypes from 'prop-types';
 
 const configMocks = vi.hoisted(() => {
   const fieldMap = new Map();
@@ -60,18 +61,32 @@ vi.mock('../../../../lib/agents', () => ({
 }));
 
 vi.mock('../../index', () => ({
-  SettingSection: ({ title, children }) => (
+  SettingSection: Object.assign(({ title, children }) => (
     <section>
       <h2>{title}</h2>
       {children}
     </section>
-  ),
-  TextInputSetting: ({ label }) => <div>{label}</div>,
-  SelectSetting: ({ label }) => <div>{label}</div>,
-  ToggleSetting: ({ label }) => <div>{label}</div>,
-  DurationInputSetting: ({ label }) => <div>{label}</div>,
-  NumberInputSetting: ({ label }) => <div>{label}</div>,
-  ArrayInputSetting: ({ label }) => <div>{label}</div>,
+  ), {
+    propTypes: { title: PropTypes.string, children: PropTypes.node },
+  }),
+  TextInputSetting: Object.assign(({ label }) => <div>{label}</div>, {
+    propTypes: { label: PropTypes.string },
+  }),
+  SelectSetting: Object.assign(({ label }) => <div>{label}</div>, {
+    propTypes: { label: PropTypes.string },
+  }),
+  ToggleSetting: Object.assign(({ label }) => <div>{label}</div>, {
+    propTypes: { label: PropTypes.string },
+  }),
+  DurationInputSetting: Object.assign(({ label }) => <div>{label}</div>, {
+    propTypes: { label: PropTypes.string },
+  }),
+  NumberInputSetting: Object.assign(({ label }) => <div>{label}</div>, {
+    propTypes: { label: PropTypes.string },
+  }),
+  ArrayInputSetting: Object.assign(({ label }) => <div>{label}</div>, {
+    propTypes: { label: PropTypes.string },
+  }),
   ConfirmDialog: () => null,
 }));
 
@@ -111,4 +126,3 @@ describe('Config Tabs Smoke', () => {
     expect(screen.getByText('Workflow Phases')).toBeTruthy();
   });
 });
-

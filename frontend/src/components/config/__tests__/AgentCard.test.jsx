@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
+import PropTypes from 'prop-types';
 
 const fieldState = vi.hoisted(() => {
   const values = new Map();
@@ -56,13 +57,23 @@ vi.mock('../../../lib/agents', () => ({
 }));
 
 vi.mock('../index', () => ({
-  TextInputSetting: ({ label }) => <div>{label}</div>,
-  SelectSetting: ({ label }) => <div>{label}</div>,
-  ToggleSetting: ({ label, checked, onChange }) => (
+  TextInputSetting: Object.assign(({ label }) => <div>{label}</div>, {
+    propTypes: { label: PropTypes.string },
+  }),
+  SelectSetting: Object.assign(({ label }) => <div>{label}</div>, {
+    propTypes: { label: PropTypes.string },
+  }),
+  ToggleSetting: Object.assign(({ label, checked, onChange }) => (
     <button type="button" onClick={() => onChange(!checked)}>
       {label}
     </button>
-  ),
+  ), {
+    propTypes: {
+      label: PropTypes.string,
+      checked: PropTypes.bool,
+      onChange: PropTypes.func,
+    },
+  }),
 }));
 
 import { AgentCard } from '../AgentCard';
