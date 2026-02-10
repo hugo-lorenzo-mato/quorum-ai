@@ -13,6 +13,48 @@ import (
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/tui"
 )
 
+type analyzerRunner interface {
+	Run(ctx context.Context, wctx *workflow.Context) error
+}
+
+type resumableRunner interface {
+	ResumeWithState(ctx context.Context, state *core.WorkflowState) error
+}
+
+var newAnalyzerFn = func(moderatorConfig workflow.ModeratorConfig) (analyzerRunner, error) {
+	return workflow.NewAnalyzer(moderatorConfig)
+}
+
+var runPlanPhaseFn = runPlanPhase
+
+var newInteractiveRunnerFn = func(deps *PhaseRunnerDeps, output tui.Output) (resumableRunner, error) {
+	modeEnforcer := service.NewModeEnforcer(service.ExecutionMode{
+		DryRun:      deps.RunnerConfig.DryRun,
+		DeniedTools: deps.RunnerConfig.DenyTools,
+	})
+
+	return workflow.NewRunner(workflow.RunnerDeps{
+		Config:            deps.RunnerConfig,
+		State:             deps.StateAdapter,
+		Agents:            deps.Registry,
+		DAG:               deps.DAGAdapter,
+		Checkpoint:        deps.CheckpointAdapter,
+		ResumeProvider:    deps.ResumeAdapter,
+		Prompts:           deps.PromptAdapter,
+		Retry:             deps.RetryAdapter,
+		RateLimits:        deps.RateLimiterAdapt,
+		Worktrees:         deps.WorktreeManager,
+		WorkflowWorktrees: deps.WorkflowWorktrees,
+		GitIsolation:      deps.GitIsolation,
+		GitClientFactory:  deps.GitClientFactory,
+		Git:               deps.GitClient,
+		GitHub:            deps.GitHubClient,
+		Logger:            deps.Logger,
+		Output:            tui.NewOutputNotifierAdapter(output),
+		ModeEnforcer:      workflow.NewModeEnforcerAdapter(modeEnforcer),
+	})
+}
+
 // runInteractiveWorkflow executes a workflow interactively, pausing between phases
 // for user review and feedback. The CLI controls the loop directly using
 // AnalyzeWithState/PlanWithState and the executor, without using ControlPlane.
@@ -93,7 +135,7 @@ func runInteractiveAnalysisPhase(ctx context.Context, deps *PhaseRunnerDeps, out
 	fmt.Println("\n[1/3] Running analysis...")
 	output.PhaseStarted(core.PhaseAnalyze)
 
-	analyzer, err := workflow.NewAnalyzer(deps.ModeratorConfig)
+	analyzer, err := newAnalyzerFn(deps.ModeratorConfig)
 	if err != nil {
 		return false, fmt.Errorf("creating analyzer: %w", err)
 	}
@@ -156,7 +198,7 @@ func runInteractivePlanningPhase(ctx context.Context, deps *PhaseRunnerDeps, out
 	fmt.Println("\n[2/3] Generating plan...")
 	output.PhaseStarted(core.PhasePlan)
 
-	if err := runPlanPhase(ctx, deps, CreateWorkflowContext(deps, state), state); err != nil {
+	if err := runPlanPhaseFn(ctx, deps, CreateWorkflowContext(deps, state), state); err != nil {
 		return false, fmt.Errorf("planning failed: %w", err)
 	}
 
@@ -197,7 +239,7 @@ func replanInteractive(ctx context.Context, deps *PhaseRunnerDeps, state *core.W
 	state.TaskOrder = nil
 	state.UpdatedAt = time.Now()
 
-	if err := runPlanPhase(ctx, deps, CreateWorkflowContext(deps, state), state); err != nil {
+	if err := runPlanPhaseFn(ctx, deps, CreateWorkflowContext(deps, state), state); err != nil {
 		return fmt.Errorf("replanning failed: %w", err)
 	}
 	return nil
@@ -207,31 +249,7 @@ func runInteractiveExecutionPhase(ctx context.Context, deps *PhaseRunnerDeps, ou
 	fmt.Printf("\n[3/3] Executing %d tasks...\n", len(state.TaskOrder))
 	output.PhaseStarted(core.PhaseExecute)
 
-	modeEnforcer := service.NewModeEnforcer(service.ExecutionMode{
-		DryRun:      deps.RunnerConfig.DryRun,
-		DeniedTools: deps.RunnerConfig.DenyTools,
-	})
-
-	runner, err := workflow.NewRunner(workflow.RunnerDeps{
-		Config:            deps.RunnerConfig,
-		State:             deps.StateAdapter,
-		Agents:            deps.Registry,
-		DAG:               deps.DAGAdapter,
-		Checkpoint:        deps.CheckpointAdapter,
-		ResumeProvider:    deps.ResumeAdapter,
-		Prompts:           deps.PromptAdapter,
-		Retry:             deps.RetryAdapter,
-		RateLimits:        deps.RateLimiterAdapt,
-		Worktrees:         deps.WorktreeManager,
-		WorkflowWorktrees: deps.WorkflowWorktrees,
-		GitIsolation:      deps.GitIsolation,
-		GitClientFactory:  deps.GitClientFactory,
-		Git:               deps.GitClient,
-		GitHub:            deps.GitHubClient,
-		Logger:            deps.Logger,
-		Output:            tui.NewOutputNotifierAdapter(output),
-		ModeEnforcer:      workflow.NewModeEnforcerAdapter(modeEnforcer),
-	})
+	runner, err := newInteractiveRunnerFn(deps, output)
 	if err != nil {
 		return fmt.Errorf("creating runner: %w", err)
 	}

@@ -223,4 +223,48 @@ describe('executionStore', () => {
     // Must still be 1 entry, not 2 (the core deduplication fix)
     expect(state.timelineByWorkflow[key]).toHaveLength(1);
   });
+
+  it('ingests phase_awaiting_review SSE event with expected title', () => {
+    useExecutionStore.getState().ingestSSEEvent('phase_awaiting_review', {
+      workflow_id: 'wf-1',
+      phase: 'plan',
+      timestamp: '2026-02-07T00:00:00Z',
+    }, 'p1');
+
+    const tl = useExecutionStore.getState().timelineByWorkflow['p1:wf-1'];
+    expect(tl).toHaveLength(1);
+    expect(tl[0].kind).toBe('phase');
+    expect(tl[0].event).toBe('phase_awaiting_review');
+    expect(tl[0].title).toBe('Awaiting review · plan');
+  });
+
+  it('ingests phase_review_approved SSE event with expected title', () => {
+    useExecutionStore.getState().ingestSSEEvent('phase_review_approved', {
+      workflow_id: 'wf-1',
+      phase: 'analyze',
+      timestamp: '2026-02-07T00:00:00Z',
+    }, 'p1');
+
+    const tl = useExecutionStore.getState().timelineByWorkflow['p1:wf-1'];
+    expect(tl).toHaveLength(1);
+    expect(tl[0].kind).toBe('phase');
+    expect(tl[0].event).toBe('phase_review_approved');
+    expect(tl[0].title).toBe('Review approved · analyze');
+  });
+
+  it('ingests phase_review_rejected SSE event and displays feedback as message', () => {
+    useExecutionStore.getState().ingestSSEEvent('phase_review_rejected', {
+      workflow_id: 'wf-1',
+      phase: 'execute',
+      feedback: 'Please redo with tighter scope',
+      timestamp: '2026-02-07T00:00:00Z',
+    }, 'p1');
+
+    const tl = useExecutionStore.getState().timelineByWorkflow['p1:wf-1'];
+    expect(tl).toHaveLength(1);
+    expect(tl[0].kind).toBe('phase');
+    expect(tl[0].event).toBe('phase_review_rejected');
+    expect(tl[0].title).toBe('Review rejected · execute');
+    expect(tl[0].message).toBe('Please redo with tighter scope');
+  });
 });

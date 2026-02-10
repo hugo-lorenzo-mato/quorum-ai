@@ -311,6 +311,58 @@ describe('workflowStore', () => {
 
       vi.useRealTimers();
     });
+
+    it('analyzeWorkflow sets current_phase and status from backend response', async () => {
+      useWorkflowStore.setState({
+        workflows: [{ id: 'wf-1', status: 'pending', current_phase: 'plan' }],
+        activeWorkflow: { id: 'wf-1', status: 'pending', current_phase: 'plan' },
+      });
+      workflowApi.analyze.mockResolvedValue({ status: 'running', current_phase: 'plan' });
+
+      const res = await useWorkflowStore.getState().analyzeWorkflow('wf-1');
+      expect(res.status).toBe('running');
+      expect(useWorkflowStore.getState().workflows[0].status).toBe('running');
+      expect(useWorkflowStore.getState().workflows[0].current_phase).toBe('plan');
+      expect(useWorkflowStore.getState().activeWorkflow.status).toBe('running');
+      expect(useWorkflowStore.getState().activeWorkflow.current_phase).toBe('plan');
+    });
+
+    it('planWorkflow sets current_phase and status from backend response', async () => {
+      useWorkflowStore.setState({
+        workflows: [{ id: 'wf-1', status: 'pending', current_phase: 'analyze' }],
+        activeWorkflow: { id: 'wf-1', status: 'pending', current_phase: 'analyze' },
+      });
+      workflowApi.plan.mockResolvedValue({ status: 'running', current_phase: 'execute' });
+
+      await useWorkflowStore.getState().planWorkflow('wf-1');
+      expect(useWorkflowStore.getState().workflows[0].current_phase).toBe('execute');
+      expect(useWorkflowStore.getState().activeWorkflow.current_phase).toBe('execute');
+    });
+
+    it('replanWorkflow posts context and updates current_phase', async () => {
+      useWorkflowStore.setState({
+        workflows: [{ id: 'wf-1', status: 'completed', current_phase: 'plan' }],
+        activeWorkflow: { id: 'wf-1', status: 'completed', current_phase: 'plan' },
+      });
+      workflowApi.replan.mockResolvedValue({ status: 'running', current_phase: 'plan' });
+
+      await useWorkflowStore.getState().replanWorkflow('wf-1', 'more context');
+      expect(workflowApi.replan).toHaveBeenCalledWith('wf-1', 'more context');
+      expect(useWorkflowStore.getState().workflows[0].status).toBe('running');
+      expect(useWorkflowStore.getState().workflows[0].current_phase).toBe('plan');
+    });
+
+    it('executeWorkflow updates current_phase', async () => {
+      useWorkflowStore.setState({
+        workflows: [{ id: 'wf-1', status: 'completed', current_phase: 'execute' }],
+        activeWorkflow: { id: 'wf-1', status: 'completed', current_phase: 'execute' },
+      });
+      workflowApi.execute.mockResolvedValue({ status: 'running', current_phase: 'execute' });
+
+      await useWorkflowStore.getState().executeWorkflow('wf-1');
+      expect(useWorkflowStore.getState().workflows[0].status).toBe('running');
+      expect(useWorkflowStore.getState().activeWorkflow.status).toBe('running');
+    });
   });
 
   describe('fetchTasks', () => {
@@ -319,6 +371,86 @@ describe('workflowStore', () => {
       const tasks = await useWorkflowStore.getState().fetchTasks('wf-1');
       expect(tasks).toHaveLength(1);
       expect(useWorkflowStore.getState().tasks['wf-1']).toHaveLength(1);
+    });
+  });
+
+  describe('interactive actions', () => {
+    it('reviewWorkflow calls API and triggers silent refresh', async () => {
+      const fetchWorkflowSpy = vi.fn().mockResolvedValue({ id: 'wf-1' });
+      useWorkflowStore.setState({ fetchWorkflow: fetchWorkflowSpy });
+      workflowApi.review = vi.fn().mockResolvedValue({ ok: true });
+
+      const res = await useWorkflowStore.getState().reviewWorkflow('wf-1', {
+        action: 'approve',
+        feedback: 'ok',
+        phase: 'analyze',
+        continueUnattended: true,
+      });
+
+      expect(workflowApi.review).toHaveBeenCalledWith('wf-1', {
+        action: 'approve',
+        feedback: 'ok',
+        phase: 'analyze',
+        continueUnattended: true,
+      });
+      expect(fetchWorkflowSpy).toHaveBeenCalledWith('wf-1', { silent: true });
+      expect(res).toEqual({ ok: true });
+      expect(useWorkflowStore.getState().loading).toBe(false);
+    });
+
+    it('switchToInteractive calls API and triggers silent refresh', async () => {
+      const fetchWorkflowSpy = vi.fn().mockResolvedValue({ id: 'wf-1' });
+      useWorkflowStore.setState({ fetchWorkflow: fetchWorkflowSpy });
+      workflowApi.switchInteractive = vi.fn().mockResolvedValue({ ok: true });
+
+      await useWorkflowStore.getState().switchToInteractive('wf-1');
+      expect(workflowApi.switchInteractive).toHaveBeenCalledWith('wf-1');
+      expect(fetchWorkflowSpy).toHaveBeenCalledWith('wf-1', { silent: true });
+      expect(useWorkflowStore.getState().loading).toBe(false);
+    });
+  });
+
+  describe('task mutations', () => {
+    it('createTask triggers a refresh via fetchTasks', async () => {
+      const fetchTasksSpy = vi.fn().mockResolvedValue([{ id: 't1' }]);
+      useWorkflowStore.setState({ fetchTasks: fetchTasksSpy });
+      workflowApi.createTask = vi.fn().mockResolvedValue({ id: 't1' });
+
+      const res = await useWorkflowStore.getState().createTask('wf-1', { name: 'x' });
+      expect(workflowApi.createTask).toHaveBeenCalledWith('wf-1', { name: 'x' });
+      expect(fetchTasksSpy).toHaveBeenCalledWith('wf-1');
+      expect(res).toEqual({ id: 't1' });
+    });
+
+    it('updateTask triggers a refresh via fetchTasks', async () => {
+      const fetchTasksSpy = vi.fn().mockResolvedValue([{ id: 't1' }]);
+      useWorkflowStore.setState({ fetchTasks: fetchTasksSpy });
+      workflowApi.updateTask = vi.fn().mockResolvedValue({ id: 't1', name: 'y' });
+
+      const res = await useWorkflowStore.getState().updateTask('wf-1', 't1', { name: 'y' });
+      expect(workflowApi.updateTask).toHaveBeenCalledWith('wf-1', 't1', { name: 'y' });
+      expect(fetchTasksSpy).toHaveBeenCalledWith('wf-1');
+      expect(res).toEqual({ id: 't1', name: 'y' });
+    });
+
+    it('deleteTask triggers a refresh via fetchTasks', async () => {
+      const fetchTasksSpy = vi.fn().mockResolvedValue([{ id: 't2' }]);
+      useWorkflowStore.setState({ fetchTasks: fetchTasksSpy });
+      workflowApi.deleteTask = vi.fn().mockResolvedValue({ ok: true });
+
+      const res = await useWorkflowStore.getState().deleteTask('wf-1', 't1');
+      expect(workflowApi.deleteTask).toHaveBeenCalledWith('wf-1', 't1');
+      expect(fetchTasksSpy).toHaveBeenCalledWith('wf-1');
+      expect(res).toBe(true);
+    });
+
+    it('reorderTasks stores the returned tasks list in the store', async () => {
+      workflowApi.reorderTasks = vi.fn().mockResolvedValue([{ id: 't2' }, { id: 't1' }]);
+
+      const res = await useWorkflowStore.getState().reorderTasks('wf-1', ['t2', 't1']);
+      expect(workflowApi.reorderTasks).toHaveBeenCalledWith('wf-1', ['t2', 't1']);
+      expect(res).toEqual([{ id: 't2' }, { id: 't1' }]);
+      expect(useWorkflowStore.getState().tasks['wf-1']).toEqual([{ id: 't2' }, { id: 't1' }]);
     });
   });
 
@@ -349,6 +481,58 @@ describe('workflowStore', () => {
       const state = useWorkflowStore.getState();
       expect(state.workflows[0].status).toBe('aborted');
       expect(state.activeWorkflow.status).toBe('aborted');
+    });
+
+    it('handlePhaseAwaitingReview sets awaiting_review status', () => {
+      useWorkflowStore.setState({
+        workflows: [{ id: 'wf-1', status: 'running', current_phase: 'plan' }],
+        activeWorkflow: { id: 'wf-1', status: 'running', current_phase: 'plan' },
+      });
+
+      useWorkflowStore.getState().handlePhaseAwaitingReview({
+        workflow_id: 'wf-1',
+        phase: 'execute',
+        timestamp: '2026-02-10T00:00:00Z',
+      });
+
+      const state = useWorkflowStore.getState();
+      expect(state.workflows[0].status).toBe('awaiting_review');
+      expect(state.workflows[0].current_phase).toBe('execute');
+      expect(state.activeWorkflow.status).toBe('awaiting_review');
+    });
+
+    it('handlePhaseReviewApproved moves workflow back to running', () => {
+      useWorkflowStore.setState({
+        workflows: [{ id: 'wf-1', status: 'awaiting_review' }],
+        activeWorkflow: { id: 'wf-1', status: 'awaiting_review' },
+      });
+
+      useWorkflowStore.getState().handlePhaseReviewApproved({
+        workflow_id: 'wf-1',
+        timestamp: '2026-02-10T00:00:00Z',
+      });
+
+      const state = useWorkflowStore.getState();
+      expect(state.workflows[0].status).toBe('running');
+      expect(state.activeWorkflow.status).toBe('running');
+    });
+
+    it('handlePhaseReviewRejected moves workflow back to running and updates phase', () => {
+      useWorkflowStore.setState({
+        workflows: [{ id: 'wf-1', status: 'awaiting_review', current_phase: 'execute' }],
+        activeWorkflow: { id: 'wf-1', status: 'awaiting_review', current_phase: 'execute' },
+      });
+
+      useWorkflowStore.getState().handlePhaseReviewRejected({
+        workflow_id: 'wf-1',
+        phase: 'plan',
+        timestamp: '2026-02-10T00:00:00Z',
+      });
+
+      const state = useWorkflowStore.getState();
+      expect(state.workflows[0].status).toBe('running');
+      expect(state.workflows[0].current_phase).toBe('plan');
+      expect(state.activeWorkflow.current_phase).toBe('plan');
     });
   });
 });

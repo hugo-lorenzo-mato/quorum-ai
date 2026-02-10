@@ -1,9 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { workflowApi } from '../api';
+import useProjectStore from '../../stores/projectStore';
 
 describe('workflowApi', () => {
   beforeEach(() => {
     global.fetch = vi.fn();
+    // Ensure test isolation: api.js will append ?project=... if set.
+    useProjectStore.setState({ currentProjectId: null });
   });
 
   describe('create', () => {
@@ -185,6 +188,106 @@ describe('workflowApi', () => {
       });
 
       await expect(workflowApi.create('Test')).rejects.toThrow('Internal Server Error');
+    });
+  });
+
+  describe('replan', () => {
+    it('posts without a body when context is empty', async () => {
+      global.fetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ ok: true }),
+      });
+
+      await workflowApi.replan('wf-1', '');
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        '/api/v1/workflows/wf-1/replan',
+        expect.objectContaining({ method: 'POST' })
+      );
+      expect(global.fetch.mock.calls[0][1].body).toBeUndefined();
+    });
+
+    it('includes context in the JSON body when provided', async () => {
+      global.fetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ ok: true }),
+      });
+
+      await workflowApi.replan('wf-1', 'more context');
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        '/api/v1/workflows/wf-1/replan',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ context: 'more context' }),
+        })
+      );
+    });
+  });
+
+  describe('review', () => {
+    it('maps continueUnattended to continue_unattended in request body', async () => {
+      global.fetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ ok: true }),
+      });
+
+      await workflowApi.review('wf-1', {
+        action: 'approve',
+        feedback: 'looks good',
+        phase: 'plan',
+        continueUnattended: true,
+      });
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        '/api/v1/workflows/wf-1/review',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            action: 'approve',
+            feedback: 'looks good',
+            phase: 'plan',
+            continue_unattended: true,
+          }),
+        })
+      );
+    });
+  });
+
+  describe('switchInteractive', () => {
+    it('posts to /switch-interactive without a body', async () => {
+      global.fetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ ok: true }),
+      });
+
+      await workflowApi.switchInteractive('wf-1');
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        '/api/v1/workflows/wf-1/switch-interactive',
+        expect.objectContaining({ method: 'POST' })
+      );
+      expect(global.fetch.mock.calls[0][1].body).toBeUndefined();
+    });
+
+    it('appends the project query parameter when a project is selected', async () => {
+      useProjectStore.setState({ currentProjectId: 'proj 1' });
+
+      global.fetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ ok: true }),
+      });
+
+      await workflowApi.switchInteractive('wf-1');
+
+      expect(global.fetch.mock.calls[0][0]).toBe(
+        '/api/v1/workflows/wf-1/switch-interactive?project=proj%201'
+      );
     });
   });
 });
