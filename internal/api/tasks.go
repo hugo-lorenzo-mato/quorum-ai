@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -138,32 +139,55 @@ func (s *Server) handleGetTask(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, response)
 }
 
-// handleCreateTask creates a new task in a workflow.
-// POST /api/v1/workflows/{workflowID}/tasks
-func (s *Server) handleCreateTask(w http.ResponseWriter, r *http.Request) {
+// loadMutableTaskState loads a workflow state and validates it can accept task mutations.
+// Returns (state, stateManager, ok). If ok is false, an error response was already written.
+func (s *Server) loadMutableTaskState(w http.ResponseWriter, r *http.Request) (*core.WorkflowState, core.StateManager, bool) {
 	ctx := r.Context()
 	workflowID := chi.URLParam(r, "workflowID")
 	stateManager := GetStateManagerFromContext(ctx, s.stateManager)
 
 	if stateManager == nil {
 		respondError(w, http.StatusNotFound, "workflow not found")
-		return
+		return nil, nil, false
 	}
 
 	state, err := stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
 	if err != nil {
 		s.logger.Error("failed to load workflow", "workflow_id", workflowID, "error", err)
 		respondError(w, http.StatusInternalServerError, "failed to load workflow")
-		return
+		return nil, nil, false
 	}
 	if state == nil {
 		respondError(w, http.StatusNotFound, "workflow not found")
-		return
+		return nil, nil, false
 	}
 
-	// Only allow task mutation in awaiting_review or completed states, with plan generated
 	if !canMutateTasks(state) {
 		respondError(w, http.StatusConflict, "tasks can only be modified when workflow is awaiting review or completed, after planning phase")
+		return nil, nil, false
+	}
+
+	return state, stateManager, true
+}
+
+// saveMutatedTaskState saves a workflow state after task mutation and handles errors.
+// Returns true if save succeeded.
+func (s *Server) saveMutatedTaskState(w http.ResponseWriter, ctx context.Context, state *core.WorkflowState, stateManager core.StateManager) bool {
+	state.UpdatedAt = time.Now()
+	if err := stateManager.Save(ctx, state); err != nil {
+		workflowID := string(state.WorkflowID)
+		s.logger.Error("failed to save workflow", "workflow_id", workflowID, "error", err)
+		respondError(w, http.StatusInternalServerError, "failed to save workflow")
+		return false
+	}
+	return true
+}
+
+// handleCreateTask creates a new task in a workflow.
+// POST /api/v1/workflows/{workflowID}/tasks
+func (s *Server) handleCreateTask(w http.ResponseWriter, r *http.Request) {
+	state, stateManager, ok := s.loadMutableTaskState(w, r)
+	if !ok {
 		return
 	}
 
@@ -223,10 +247,7 @@ func (s *Server) handleCreateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	state.UpdatedAt = time.Now()
-	if err := stateManager.Save(ctx, state); err != nil {
-		s.logger.Error("failed to save workflow", "workflow_id", workflowID, "error", err)
-		respondError(w, http.StatusInternalServerError, "failed to save workflow")
+	if !s.saveMutatedTaskState(w, r.Context(), state, stateManager) {
 		return
 	}
 
@@ -236,32 +257,12 @@ func (s *Server) handleCreateTask(w http.ResponseWriter, r *http.Request) {
 // handleUpdateTask updates a task in a workflow.
 // PATCH /api/v1/workflows/{workflowID}/tasks/{taskID}
 func (s *Server) handleUpdateTask(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	workflowID := chi.URLParam(r, "workflowID")
+	state, stateManager, ok := s.loadMutableTaskState(w, r)
+	if !ok {
+		return
+	}
+
 	taskID := chi.URLParam(r, "taskID")
-	stateManager := GetStateManagerFromContext(ctx, s.stateManager)
-
-	if stateManager == nil {
-		respondError(w, http.StatusNotFound, "workflow not found")
-		return
-	}
-
-	state, err := stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
-	if err != nil {
-		s.logger.Error("failed to load workflow", "workflow_id", workflowID, "error", err)
-		respondError(w, http.StatusInternalServerError, "failed to load workflow")
-		return
-	}
-	if state == nil {
-		respondError(w, http.StatusNotFound, "workflow not found")
-		return
-	}
-
-	if !canMutateTasks(state) {
-		respondError(w, http.StatusConflict, "tasks can only be modified when workflow is awaiting review or completed, after planning phase")
-		return
-	}
-
 	task, ok := state.Tasks[core.TaskID(taskID)]
 	if !ok {
 		respondError(w, http.StatusNotFound, "task not found")
@@ -317,10 +318,7 @@ func (s *Server) handleUpdateTask(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	state.UpdatedAt = time.Now()
-	if err := stateManager.Save(ctx, state); err != nil {
-		s.logger.Error("failed to save workflow", "workflow_id", workflowID, "error", err)
-		respondError(w, http.StatusInternalServerError, "failed to save workflow")
+	if !s.saveMutatedTaskState(w, r.Context(), state, stateManager) {
 		return
 	}
 
@@ -330,32 +328,12 @@ func (s *Server) handleUpdateTask(w http.ResponseWriter, r *http.Request) {
 // handleDeleteTask deletes a task from a workflow.
 // DELETE /api/v1/workflows/{workflowID}/tasks/{taskID}
 func (s *Server) handleDeleteTask(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	workflowID := chi.URLParam(r, "workflowID")
+	state, stateManager, ok := s.loadMutableTaskState(w, r)
+	if !ok {
+		return
+	}
+
 	taskID := chi.URLParam(r, "taskID")
-	stateManager := GetStateManagerFromContext(ctx, s.stateManager)
-
-	if stateManager == nil {
-		respondError(w, http.StatusNotFound, "workflow not found")
-		return
-	}
-
-	state, err := stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
-	if err != nil {
-		s.logger.Error("failed to load workflow", "workflow_id", workflowID, "error", err)
-		respondError(w, http.StatusInternalServerError, "failed to load workflow")
-		return
-	}
-	if state == nil {
-		respondError(w, http.StatusNotFound, "workflow not found")
-		return
-	}
-
-	if !canMutateTasks(state) {
-		respondError(w, http.StatusConflict, "tasks can only be modified when workflow is awaiting review or completed, after planning phase")
-		return
-	}
-
 	tid := core.TaskID(taskID)
 	if _, ok := state.Tasks[tid]; !ok {
 		respondError(w, http.StatusNotFound, "task not found")
@@ -388,10 +366,7 @@ func (s *Server) handleDeleteTask(w http.ResponseWriter, r *http.Request) {
 	}
 	state.TaskOrder = newOrder
 
-	state.UpdatedAt = time.Now()
-	if err := stateManager.Save(ctx, state); err != nil {
-		s.logger.Error("failed to save workflow", "workflow_id", workflowID, "error", err)
-		respondError(w, http.StatusInternalServerError, "failed to save workflow")
+	if !s.saveMutatedTaskState(w, r.Context(), state, stateManager) {
 		return
 	}
 
@@ -401,28 +376,8 @@ func (s *Server) handleDeleteTask(w http.ResponseWriter, r *http.Request) {
 // handleReorderTasks reorders tasks in a workflow.
 // PUT /api/v1/workflows/{workflowID}/tasks/reorder
 func (s *Server) handleReorderTasks(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	workflowID := chi.URLParam(r, "workflowID")
-	stateManager := GetStateManagerFromContext(ctx, s.stateManager)
-
-	if stateManager == nil {
-		respondError(w, http.StatusNotFound, "workflow not found")
-		return
-	}
-
-	state, err := stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
-	if err != nil {
-		s.logger.Error("failed to load workflow", "workflow_id", workflowID, "error", err)
-		respondError(w, http.StatusInternalServerError, "failed to load workflow")
-		return
-	}
-	if state == nil {
-		respondError(w, http.StatusNotFound, "workflow not found")
-		return
-	}
-
-	if !canMutateTasks(state) {
-		respondError(w, http.StatusConflict, "tasks can only be modified when workflow is awaiting review or completed, after planning phase")
+	state, stateManager, ok := s.loadMutableTaskState(w, r)
+	if !ok {
 		return
 	}
 
@@ -455,11 +410,8 @@ func (s *Server) handleReorderTasks(w http.ResponseWriter, r *http.Request) {
 	}
 
 	state.TaskOrder = newOrder
-	state.UpdatedAt = time.Now()
 
-	if err := stateManager.Save(ctx, state); err != nil {
-		s.logger.Error("failed to save workflow", "workflow_id", workflowID, "error", err)
-		respondError(w, http.StatusInternalServerError, "failed to save workflow")
+	if !s.saveMutatedTaskState(w, r.Context(), state, stateManager) {
 		return
 	}
 
@@ -484,7 +436,7 @@ func canMutateTasks(state *core.WorkflowState) bool {
 		return false
 	}
 	switch state.Status {
-	case core.WorkflowStatusAwaitingReview, core.WorkflowStatusCompleted, core.WorkflowStatusPaused:
+	case core.WorkflowStatusAwaitingReview, core.WorkflowStatusCompleted:
 		return true
 	default:
 		return false

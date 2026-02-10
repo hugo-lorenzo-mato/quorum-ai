@@ -2224,7 +2224,14 @@ func (r *Runner) applyInteractiveFeedback(ctx context.Context, state *core.Workf
 
 	review := state.InteractiveReview
 	if review == nil {
-		// No feedback; just resume
+		// No review data. Check if the phase was rejected (API handler clears
+		// InteractiveReview and changes status on rejection).
+		if freshState != nil && freshState.Status != core.WorkflowStatusAwaitingReview {
+			r.logger.Info("phase rejected during interactive review",
+				"phase", completedPhase, "new_status", freshState.Status)
+			return fmt.Errorf("phase '%s' rejected during review", completedPhase)
+		}
+		// Approved with no feedback; just resume
 		state.Status = core.WorkflowStatusRunning
 		state.UpdatedAt = time.Now()
 		return r.state.Save(ctx, state)
@@ -2240,8 +2247,12 @@ func (r *Runner) applyInteractiveFeedback(ctx context.Context, state *core.Workf
 			}
 		}
 	case core.PhasePlan:
+		// Plan feedback is recorded for context but not "applied" directly.
+		// Unlike analysis feedback (prepended to consolidated text), plan feedback
+		// is meant to guide the user's task edits during review. The actual plan
+		// changes happen via task CRUD endpoints, not by modifying plan artifacts.
 		if review.PlanFeedback != "" {
-			r.logger.Info("plan feedback recorded", "len", len(review.PlanFeedback))
+			r.logger.Info("plan feedback recorded for context", "len", len(review.PlanFeedback))
 		}
 	}
 

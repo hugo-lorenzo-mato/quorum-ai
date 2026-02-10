@@ -199,7 +199,7 @@ func (s *Server) setupRouter() chi.Router {
 	// CORS for frontend access
 	corsHandler := cors.New(cors.Options{
 		AllowedOrigins:   []string{"*"},
-		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Content-Type", "X-Requested-With"},
 		AllowCredentials: false,
 		MaxAge:           300,

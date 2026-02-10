@@ -16,6 +16,7 @@ export default function TaskEditor({ workflowId }) {
   const taskList = tasks[workflowId] || [];
 
   useEffect(() => {
+    if (!workflowId) return;
     fetchTasks(workflowId);
   }, [workflowId, fetchTasks]);
 
@@ -26,6 +27,7 @@ export default function TaskEditor({ workflowId }) {
 
   const handleSaveEdit = async () => {
     if (!editingId) return;
+    if (!editForm.name?.trim() || !editForm.cli?.trim()) return;
     const updates = {};
     if (editForm.name) updates.name = editForm.name;
     if (editForm.cli) updates.cli = editForm.cli;

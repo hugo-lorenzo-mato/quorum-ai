@@ -2423,6 +2423,14 @@ func (s *Server) HandleReviewWorkflow(w http.ResponseWriter, r *http.Request) {
 			s.eventBus.Publish(events.NewPhaseReviewRejectedEvent(workflowID, "", req.Phase, req.Feedback))
 		}
 
+		// Resume the ControlPlane so the runner goroutine unblocks from interactiveGate.
+		// applyInteractiveFeedback will detect the rejection and return an error.
+		if s.unifiedTracker != nil {
+			if cp, ok := s.unifiedTracker.GetControlPlane(core.WorkflowID(workflowID)); ok {
+				cp.Resume()
+			}
+		}
+
 		respondJSON(w, http.StatusOK, map[string]string{
 			"id":      workflowID,
 			"status":  string(state.Status),
