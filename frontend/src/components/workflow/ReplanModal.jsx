@@ -19,9 +19,11 @@ export default function ReplanModal({ isOpen, onClose, onSubmit, loading }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* Backdrop */}
-      <div
+      <button
+        type="button"
         className="absolute inset-0 bg-black/50"
         onClick={handleClose}
+        aria-label="Close modal"
       />
 
       {/* Modal */}

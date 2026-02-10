@@ -131,7 +131,7 @@ func (s *Server) handleGetTask(w http.ResponseWriter, r *http.Request) {
 
 	task, ok := state.Tasks[core.TaskID(taskID)]
 	if !ok {
-		respondError(w, http.StatusNotFound, "task not found")
+		respondError(w, http.StatusNotFound, msgTaskNotFound)
 		return
 	}
 
@@ -192,8 +192,8 @@ func (s *Server) handleCreateTask(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req CreateTaskRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondError(w, http.StatusBadRequest, "invalid request body")
+	if json.NewDecoder(r.Body).Decode(&req) != nil {
+		respondError(w, http.StatusBadRequest, msgInvalidRequestBody)
 		return
 	}
 
@@ -265,57 +265,19 @@ func (s *Server) handleUpdateTask(w http.ResponseWriter, r *http.Request) {
 	taskID := chi.URLParam(r, "taskID")
 	task, ok := state.Tasks[core.TaskID(taskID)]
 	if !ok {
-		respondError(w, http.StatusNotFound, "task not found")
+		respondError(w, http.StatusNotFound, msgTaskNotFound)
 		return
 	}
 
 	var req UpdateTaskRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondError(w, http.StatusBadRequest, "invalid request body")
+	if json.NewDecoder(r.Body).Decode(&req) != nil {
+		respondError(w, http.StatusBadRequest, msgInvalidRequestBody)
 		return
 	}
 
-	// Apply updates
-	if req.Name != nil {
-		if *req.Name == "" {
-			respondError(w, http.StatusBadRequest, "name cannot be empty")
-			return
-		}
-		task.Name = *req.Name
-	}
-	if req.CLI != nil {
-		if *req.CLI == "" {
-			respondError(w, http.StatusBadRequest, "cli cannot be empty")
-			return
-		}
-		task.CLI = *req.CLI
-	}
-	if req.Description != nil {
-		task.Description = *req.Description
-	}
-	if req.Dependencies != nil {
-		deps := make([]core.TaskID, 0, len(req.Dependencies))
-		for _, d := range req.Dependencies {
-			depID := core.TaskID(d)
-			if _, ok := state.Tasks[depID]; !ok {
-				respondError(w, http.StatusBadRequest, fmt.Sprintf("dependency task not found: %s", d))
-				return
-			}
-			if depID == task.ID {
-				respondError(w, http.StatusBadRequest, "task cannot depend on itself")
-				return
-			}
-			deps = append(deps, depID)
-		}
-		oldDeps := task.Dependencies
-		task.Dependencies = deps
-
-		// Validate DAG
-		if err := validateTaskDAG(state); err != nil {
-			task.Dependencies = oldDeps // Rollback
-			respondError(w, http.StatusBadRequest, err.Error())
-			return
-		}
+	if status, msg, ok := applyUpdateTaskRequest(state, task, req); !ok {
+		respondError(w, status, msg)
+		return
 	}
 
 	if !s.saveMutatedTaskState(w, r.Context(), state, stateManager) {
@@ -336,7 +298,7 @@ func (s *Server) handleDeleteTask(w http.ResponseWriter, r *http.Request) {
 	taskID := chi.URLParam(r, "taskID")
 	tid := core.TaskID(taskID)
 	if _, ok := state.Tasks[tid]; !ok {
-		respondError(w, http.StatusNotFound, "task not found")
+		respondError(w, http.StatusNotFound, msgTaskNotFound)
 		return
 	}
 
@@ -382,8 +344,8 @@ func (s *Server) handleReorderTasks(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req ReorderTasksRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondError(w, http.StatusBadRequest, "invalid request body")
+	if json.NewDecoder(r.Body).Decode(&req) != nil {
+		respondError(w, http.StatusBadRequest, msgInvalidRequestBody)
 		return
 	}
 
@@ -445,13 +407,20 @@ func canMutateTasks(state *core.WorkflowState) bool {
 
 // validateTaskDAG checks that the task dependency graph is acyclic.
 func validateTaskDAG(state *core.WorkflowState) error {
-	// Build adjacency list
-	adj := make(map[core.TaskID][]core.TaskID)
+	adj := buildTaskAdjacency(state)
+	return detectTaskCycle(adj)
+}
+
+func buildTaskAdjacency(state *core.WorkflowState) map[core.TaskID][]core.TaskID {
+	adj := make(map[core.TaskID][]core.TaskID, len(state.Tasks))
 	for _, task := range state.Tasks {
 		adj[task.ID] = task.Dependencies
 	}
+	return adj
+}
 
-	// DFS-based cycle detection
+// detectTaskCycle performs DFS-based cycle detection.
+func detectTaskCycle(adj map[core.TaskID][]core.TaskID) error {
 	const (
 		white = 0 // unvisited
 		gray  = 1 // in progress
@@ -459,31 +428,31 @@ func validateTaskDAG(state *core.WorkflowState) error {
 	)
 	color := make(map[core.TaskID]int)
 
-	var visit func(id core.TaskID) error
-	visit = func(id core.TaskID) error {
-		color[id] = gray
-		for _, dep := range adj[id] {
-			switch color[dep] {
-			case gray:
-				return fmt.Errorf("circular dependency detected involving task %s", dep)
-			case white:
-				if err := visit(dep); err != nil {
-					return err
-				}
-			}
+	for id := range adj {
+		if color[id] != white {
+			continue
 		}
-		color[id] = black
-		return nil
+		if err := visitTaskForCycle(id, adj, color, white, gray, black); err != nil {
+			return err
+		}
 	}
+	return nil
+}
 
-	for id := range state.Tasks {
-		if color[id] == white {
-			if err := visit(id); err != nil {
+func visitTaskForCycle(id core.TaskID, adj map[core.TaskID][]core.TaskID, color map[core.TaskID]int, white, gray, black int) error {
+	color[id] = gray
+	for _, dep := range adj[id] {
+		depColor := color[dep]
+		if depColor == gray {
+			return fmt.Errorf("circular dependency detected involving task %s", dep)
+		}
+		if depColor == white {
+			if err := visitTaskForCycle(dep, adj, color, white, gray, black); err != nil {
 				return err
 			}
 		}
 	}
-
+	color[id] = black
 	return nil
 }
 
@@ -523,4 +492,50 @@ func taskStateToResponse(task *core.TaskState) TaskResponse {
 		Output:       task.Output,
 		OutputFile:   task.OutputFile,
 	}
+}
+
+func applyUpdateTaskRequest(state *core.WorkflowState, task *core.TaskState, req UpdateTaskRequest) (int, string, bool) {
+	if req.Name != nil {
+		if *req.Name == "" {
+			return http.StatusBadRequest, "name cannot be empty", false
+		}
+		task.Name = *req.Name
+	}
+	if req.CLI != nil {
+		if *req.CLI == "" {
+			return http.StatusBadRequest, "cli cannot be empty", false
+		}
+		task.CLI = *req.CLI
+	}
+	if req.Description != nil {
+		task.Description = *req.Description
+	}
+	if req.Dependencies != nil {
+		deps, status, msg, ok := buildDependenciesForUpdate(state, task.ID, req.Dependencies)
+		if !ok {
+			return status, msg, false
+		}
+		oldDeps := task.Dependencies
+		task.Dependencies = deps
+		if err := validateTaskDAG(state); err != nil {
+			task.Dependencies = oldDeps
+			return http.StatusBadRequest, err.Error(), false
+		}
+	}
+	return 0, "", true
+}
+
+func buildDependenciesForUpdate(state *core.WorkflowState, taskID core.TaskID, deps []string) ([]core.TaskID, int, string, bool) {
+	out := make([]core.TaskID, 0, len(deps))
+	for _, d := range deps {
+		depID := core.TaskID(d)
+		if _, ok := state.Tasks[depID]; !ok {
+			return nil, http.StatusBadRequest, fmt.Sprintf("dependency task not found: %s", d), false
+		}
+		if depID == taskID {
+			return nil, http.StatusBadRequest, "task cannot depend on itself", false
+		}
+		out = append(out, depID)
+	}
+	return out, 0, "", true
 }

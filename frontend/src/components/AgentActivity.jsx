@@ -218,9 +218,12 @@ function ActivityEntry({ entry }) {
   }, [entry.timestamp]);
 
   return (
-    <div
-      className={`rounded-lg hover:bg-accent/30 transition-colors animate-fade-in ${hasDetail ? 'cursor-pointer' : ''}`}
+    <button
+      type="button"
+      className={`w-full text-left rounded-lg hover:bg-accent/30 transition-colors animate-fade-in ${hasDetail ? 'cursor-pointer' : 'cursor-default'}`}
       onClick={hasDetail ? () => setExpanded(e => !e) : undefined}
+      disabled={!hasDetail}
+      aria-expanded={hasDetail ? expanded : undefined}
       data-testid="activity-entry"
     >
       <div className="flex items-start gap-3 py-2 px-3">
@@ -320,7 +323,7 @@ function ActivityEntry({ entry }) {
           )}
         </div>
       )}
-    </div>
+    </button>
   );
 }
 

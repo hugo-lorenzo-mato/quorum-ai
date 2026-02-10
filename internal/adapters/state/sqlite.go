@@ -1494,8 +1494,13 @@ func (m *SQLiteStateManager) Backup(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	if err := m.ensureWithinStateDir(m.backupPath); err != nil {
+		return err
+	}
+
 	// Use SQLite's backup API via VACUUM INTO
-	_, err := m.db.ExecContext(ctx, fmt.Sprintf("VACUUM INTO '%s'", m.backupPath))
+	// Prefer parameterized SQL to avoid building SQL with string formatting.
+	_, err := m.db.ExecContext(ctx, "VACUUM INTO ?", m.backupPath)
 	if err != nil {
 		// Fallback to file copy if VACUUM INTO not supported
 		return m.copyFile(m.dbPath, m.backupPath)

@@ -28,9 +28,10 @@ SELECT
     current_phase,
     created_at,
     'Missing report_path' AS issue
-FROM workflows
-WHERE (report_path IS NULL OR report_path = '')
-AND status != 'pending';
+	FROM workflows
+	-- Oracle treats '' as NULL; NULLIF keeps this portable while avoiding direct empty-string NULL comparisons.
+	WHERE NULLIF(report_path, '') IS NULL
+	AND status != 'pending';
 
 -- 3. Failed workflows that are still active (ghost workflows)
 SELECT '=== GHOST WORKFLOWS (failed but active) ===' AS section;

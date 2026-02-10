@@ -27,6 +27,14 @@ const FileTreeNode = ({ node, level = 0, onSelect, selectedKey }) => {
     <div className="select-none">
       <div
         onClick={handleClick}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            handleClick(e);
+          }
+        }}
+        role="button"
+        tabIndex={0}
         className={`flex items-center gap-1.5 py-1.5 px-2 rounded-lg cursor-pointer transition-colors ${
           isSelected
             ? 'bg-primary/10 text-primary font-medium'

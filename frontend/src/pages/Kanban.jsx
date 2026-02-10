@@ -23,9 +23,11 @@ function MobileActionSheet({ isOpen, onClose, workflow, onMoveTo }) {
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center md:hidden">
       {/* Backdrop */}
-      <div 
+      <button
+        type="button"
         className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in"
         onClick={onClose}
+        aria-label="Close"
       />
       
       {/* Sheet Content */}

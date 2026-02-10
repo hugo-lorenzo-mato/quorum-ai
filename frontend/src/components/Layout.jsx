@@ -20,7 +20,6 @@ import {
   RefreshCw,
   KanbanSquare,
   ChevronRight,
-  FileText,
   Droplets,
   Snowflake,
   Ghost,
@@ -31,7 +30,6 @@ import {
 const navItems = [
   { path: '/', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/workflows', label: 'Workflows', icon: GitBranch },
-  { path: '/prompts', label: 'Prompts', icon: FileText },
   { path: '/kanban', label: 'Kanban', icon: KanbanSquare },
   { path: '/chat', label: 'Chat', icon: MessageSquare },
   { path: '/settings', label: 'Settings', icon: Settings },

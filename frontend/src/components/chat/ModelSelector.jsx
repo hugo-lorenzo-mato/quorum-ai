@@ -42,7 +42,6 @@ export default function ModelSelector({ value, onChange, agent, disabled, direct
       {isOpen && (
         <div 
           className={`absolute left-0 z-50 min-w-[200px] rounded-lg border border-border bg-popover shadow-lg animate-fade-in ${dropdownClasses}`}
-          onClick={(e) => e.stopPropagation()}
         >
           <div className="p-1 max-h-64 overflow-y-auto">
             {models.map((model) => (

@@ -53,6 +53,16 @@ export function CardBase({
   return (
     <div
       onClick={onClick}
+      onKeyDown={(e) => {
+        if (!onClick) return;
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onClick(e);
+        }
+      }}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      aria-disabled={onClick ? undefined : undefined}
       className={cn(
         'relative flex flex-col rounded-xl border transition-all backdrop-blur-sm',
         accentColor && 'border-t-2',

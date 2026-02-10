@@ -47,7 +47,6 @@ export default function ReasoningSelector({ value, onChange, agent, model, disab
       {isOpen && (
         <div 
           className={`absolute left-0 z-50 min-w-[180px] rounded-lg border border-border bg-popover shadow-lg animate-fade-in ${dropdownClasses}`}
-          onClick={(e) => e.stopPropagation()}
         >
           <div className="p-1">
             {levels.map((level) => (

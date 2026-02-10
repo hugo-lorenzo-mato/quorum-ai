@@ -237,6 +237,17 @@ func NewRunner(deps RunnerDeps) (*Runner, error) {
 	}, nil
 }
 
+func (r *Runner) acquireStateLock(ctx context.Context) (func(), error) {
+	if err := r.state.AcquireLock(ctx); err != nil {
+		return nil, fmt.Errorf("acquiring lock: %w", err)
+	}
+	return func() {
+		releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		_ = r.state.ReleaseLock(releaseCtx)
+	}, nil
+}
+
 // Run executes a complete workflow from a user prompt.
 func (r *Runner) Run(ctx context.Context, prompt string) error {
 	// Validate input
@@ -253,15 +264,11 @@ func (r *Runner) Run(ctx context.Context, prompt string) error {
 		return err
 	}
 
-	// Acquire lock
-	if err := r.state.AcquireLock(ctx); err != nil {
-		return fmt.Errorf("acquiring lock: %w", err)
+	releaseLock, err := r.acquireStateLock(ctx)
+	if err != nil {
+		return err
 	}
-	defer func() {
-		releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-		defer cancel()
-		_ = r.state.ReleaseLock(releaseCtx)
-	}()
+	defer releaseLock()
 
 	// Initialize state
 	workflowState := r.initializeState(prompt)
@@ -378,14 +385,11 @@ func (r *Runner) RunWithState(ctx context.Context, state *core.WorkflowState) er
 		return markFailed(err)
 	}
 
-	if err := r.state.AcquireLock(ctx); err != nil {
-		return fmt.Errorf("acquiring lock: %w", err)
+	releaseLock, err := r.acquireStateLock(ctx)
+	if err != nil {
+		return err
 	}
-	defer func() {
-		releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-		defer cancel()
-		_ = r.state.ReleaseLock(releaseCtx)
-	}()
+	defer releaseLock()
 
 	// Use provided state - NO initializeState()
 	workflowState := state
@@ -546,14 +550,11 @@ func (r *Runner) AnalyzeWithState(ctx context.Context, state *core.WorkflowState
 		return markFailed(err)
 	}
 
-	if err := r.state.AcquireLock(ctx); err != nil {
-		return fmt.Errorf("acquiring lock: %w", err)
+	releaseLock, err := r.acquireStateLock(ctx)
+	if err != nil {
+		return err
 	}
-	defer func() {
-		releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-		defer cancel()
-		_ = r.state.ReleaseLock(releaseCtx)
-	}()
+	defer releaseLock()
 
 	workflowState := state
 	if workflowState.Status != core.WorkflowStatusRunning {
@@ -637,14 +638,11 @@ func (r *Runner) Resume(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, r.config.Timeout)
 	defer cancel()
 
-	if err := r.state.AcquireLock(ctx); err != nil {
-		return fmt.Errorf("acquiring lock: %w", err)
+	releaseLock, err := r.acquireStateLock(ctx)
+	if err != nil {
+		return err
 	}
-	defer func() {
-		releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-		defer cancel()
-		_ = r.state.ReleaseLock(releaseCtx)
-	}()
+	defer releaseLock()
 
 	// Load existing state
 	workflowState, err := r.state.Load(ctx)
@@ -761,14 +759,11 @@ func (r *Runner) ResumeWithState(ctx context.Context, state *core.WorkflowState)
 	ctx, cancel := context.WithTimeout(ctx, r.config.Timeout)
 	defer cancel()
 
-	if err := r.state.AcquireLock(ctx); err != nil {
-		return fmt.Errorf("acquiring lock: %w", err)
+	releaseLock, err := r.acquireStateLock(ctx)
+	if err != nil {
+		return err
 	}
-	defer func() {
-		releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-		defer cancel()
-		_ = r.state.ReleaseLock(releaseCtx)
-	}()
+	defer releaseLock()
 
 	// Ensure workflow-level Git isolation branch exists when resuming.
 	if changed, err := r.ensureWorkflowGitIsolation(ctx, state); err != nil {
@@ -1401,15 +1396,11 @@ func (r *Runner) Analyze(ctx context.Context, prompt string) error {
 		return err
 	}
 
-	// Acquire lock
-	if err := r.state.AcquireLock(ctx); err != nil {
-		return fmt.Errorf("acquiring lock: %w", err)
+	releaseLock, err := r.acquireStateLock(ctx)
+	if err != nil {
+		return err
 	}
-	defer func() {
-		releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-		defer cancel()
-		_ = r.state.ReleaseLock(releaseCtx)
-	}()
+	defer releaseLock()
 
 	// Initialize state
 	workflowState := r.initializeState(prompt)
@@ -1474,15 +1465,11 @@ func (r *Runner) Plan(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, r.config.Timeout)
 	defer cancel()
 
-	// Acquire lock
-	if err := r.state.AcquireLock(ctx); err != nil {
-		return fmt.Errorf("acquiring lock: %w", err)
+	releaseLock, err := r.acquireStateLock(ctx)
+	if err != nil {
+		return err
 	}
-	defer func() {
-		releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-		defer cancel()
-		_ = r.state.ReleaseLock(releaseCtx)
-	}()
+	defer releaseLock()
 
 	// Load existing state
 	workflowState, err := r.state.Load(ctx)
@@ -1569,15 +1556,11 @@ func (r *Runner) PlanWithState(ctx context.Context, state *core.WorkflowState) e
 	ctx, cancel := context.WithTimeout(ctx, r.config.Timeout)
 	defer cancel()
 
-	// Acquire lock
-	if err := r.state.AcquireLock(ctx); err != nil {
-		return fmt.Errorf("acquiring lock: %w", err)
+	releaseLock, err := r.acquireStateLock(ctx)
+	if err != nil {
+		return err
 	}
-	defer func() {
-		releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-		defer cancel()
-		_ = r.state.ReleaseLock(releaseCtx)
-	}()
+	defer releaseLock()
 
 	workflowState := state
 
@@ -1665,15 +1648,11 @@ func (r *Runner) Replan(ctx context.Context, additionalContext string) error {
 	ctx, cancel := context.WithTimeout(ctx, r.config.Timeout)
 	defer cancel()
 
-	// Acquire lock
-	if err := r.state.AcquireLock(ctx); err != nil {
-		return fmt.Errorf("acquiring lock: %w", err)
+	releaseLock, err := r.acquireStateLock(ctx)
+	if err != nil {
+		return err
 	}
-	defer func() {
-		releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-		defer cancel()
-		_ = r.state.ReleaseLock(releaseCtx)
-	}()
+	defer releaseLock()
 
 	// Load existing state
 	workflowState, err := r.state.Load(ctx)
@@ -1760,15 +1739,11 @@ func (r *Runner) ReplanWithState(ctx context.Context, state *core.WorkflowState,
 	ctx, cancel := context.WithTimeout(ctx, r.config.Timeout)
 	defer cancel()
 
-	// Acquire lock
-	if err := r.state.AcquireLock(ctx); err != nil {
-		return fmt.Errorf("acquiring lock: %w", err)
+	releaseLock, err := r.acquireStateLock(ctx)
+	if err != nil {
+		return err
 	}
-	defer func() {
-		releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-		defer cancel()
-		_ = r.state.ReleaseLock(releaseCtx)
-	}()
+	defer releaseLock()
 
 	workflowState := state
 
@@ -1900,15 +1875,11 @@ func (r *Runner) UsePlan(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, r.config.Timeout)
 	defer cancel()
 
-	// Acquire lock
-	if err := r.state.AcquireLock(ctx); err != nil {
-		return fmt.Errorf("acquiring lock: %w", err)
+	releaseLock, err := r.acquireStateLock(ctx)
+	if err != nil {
+		return err
 	}
-	defer func() {
-		releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-		defer cancel()
-		_ = r.state.ReleaseLock(releaseCtx)
-	}()
+	defer releaseLock()
 
 	// Load existing state
 	workflowState, err := r.state.Load(ctx)
@@ -2213,54 +2184,68 @@ func (r *Runner) interactiveGate(ctx context.Context, state *core.WorkflowState,
 // applyInteractiveFeedback applies user feedback submitted during the interactive review pause.
 func (r *Runner) applyInteractiveFeedback(ctx context.Context, state *core.WorkflowState, completedPhase core.Phase) error {
 	// Re-read state to get any feedback/edits the API layer stored
-	freshState, err := r.state.LoadByID(ctx, state.WorkflowID)
-	if err == nil && freshState != nil {
-		state.InteractiveReview = freshState.InteractiveReview
-		// Check if mode was switched back to non-interactive (continue_unattended)
-		if freshState.Blueprint != nil {
-			state.Blueprint.ExecutionMode = freshState.Blueprint.ExecutionMode
-		}
-	}
+	freshState := r.refreshInteractiveReview(ctx, state)
 
 	review := state.InteractiveReview
 	if review == nil {
-		// No review data. Check if the phase was rejected (API handler clears
-		// InteractiveReview and changes status on rejection).
-		if freshState != nil && freshState.Status != core.WorkflowStatusAwaitingReview {
-			r.logger.Info("phase rejected during interactive review",
-				"phase", completedPhase, "new_status", freshState.Status)
-			return fmt.Errorf("phase '%s' rejected during review", completedPhase)
-		}
-		// Approved with no feedback; just resume
-		state.Status = core.WorkflowStatusRunning
-		state.UpdatedAt = time.Now()
-		return r.state.Save(ctx, state)
+		return r.handleNoInteractiveReview(ctx, state, completedPhase, freshState)
 	}
 
-	switch completedPhase {
-	case core.PhaseAnalyze:
-		if review.AnalysisFeedback != "" {
-			if err := PrependToConsolidatedAnalysis(state, review.AnalysisFeedback); err != nil {
-				r.logger.Warn("failed to apply analysis feedback", "error", err)
-			} else {
-				r.logger.Info("applied analysis feedback", "len", len(review.AnalysisFeedback))
-			}
-		}
-	case core.PhasePlan:
-		// Plan feedback is recorded for context but not "applied" directly.
-		// Unlike analysis feedback (prepended to consolidated text), plan feedback
-		// is meant to guide the user's task edits during review. The actual plan
-		// changes happen via task CRUD endpoints, not by modifying plan artifacts.
-		if review.PlanFeedback != "" {
-			r.logger.Info("plan feedback recorded for context", "len", len(review.PlanFeedback))
-		}
-	}
+	r.applyInteractiveReviewForPhase(state, review, completedPhase)
 
 	// Clear the review after applying it
 	state.InteractiveReview = nil
 	state.Status = core.WorkflowStatusRunning
 	state.UpdatedAt = time.Now()
 	return r.state.Save(ctx, state)
+}
+
+func (r *Runner) refreshInteractiveReview(ctx context.Context, state *core.WorkflowState) *core.WorkflowState {
+	freshState, err := r.state.LoadByID(ctx, state.WorkflowID)
+	if err != nil || freshState == nil {
+		return nil
+	}
+
+	state.InteractiveReview = freshState.InteractiveReview
+	// Check if mode was switched back to non-interactive (continue_unattended).
+	if freshState.Blueprint != nil && state.Blueprint != nil {
+		state.Blueprint.ExecutionMode = freshState.Blueprint.ExecutionMode
+	}
+	return freshState
+}
+
+func (r *Runner) handleNoInteractiveReview(ctx context.Context, state *core.WorkflowState, completedPhase core.Phase, freshState *core.WorkflowState) error {
+	// No review data. Check if the phase was rejected (API handler clears
+	// InteractiveReview and changes status on rejection).
+	if freshState != nil && freshState.Status != core.WorkflowStatusAwaitingReview {
+		r.logger.Info("phase rejected during interactive review",
+			"phase", completedPhase, "new_status", freshState.Status)
+		return fmt.Errorf("phase '%s' rejected during review", completedPhase)
+	}
+
+	// Approved with no feedback; just resume.
+	state.Status = core.WorkflowStatusRunning
+	state.UpdatedAt = time.Now()
+	return r.state.Save(ctx, state)
+}
+
+func (r *Runner) applyInteractiveReviewForPhase(state *core.WorkflowState, review *core.InteractiveReview, completedPhase core.Phase) {
+	switch completedPhase {
+	case core.PhaseAnalyze:
+		if review.AnalysisFeedback == "" {
+			return
+		}
+		if err := PrependToConsolidatedAnalysis(state, review.AnalysisFeedback); err != nil {
+			r.logger.Warn("failed to apply analysis feedback", "error", err)
+			return
+		}
+		r.logger.Info("applied analysis feedback", "len", len(review.AnalysisFeedback))
+	case core.PhasePlan:
+		// Plan feedback is recorded for context but not "applied" directly.
+		if review.PlanFeedback != "" {
+			r.logger.Info("plan feedback recorded for context", "len", len(review.PlanFeedback))
+		}
+	}
 }
 
 // DeactivateWorkflow clears the active workflow without deleting any data.

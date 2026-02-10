@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useId } from 'react';
+import PropTypes from 'prop-types';
 import { CheckCircle, XCircle, Loader2, MessageSquare } from 'lucide-react';
 import useWorkflowStore from '../../stores/workflowStore';
 import TaskEditor from './TaskEditor';
@@ -11,6 +12,7 @@ function ReviewGateInner({ workflow }) {
   const [feedback, setFeedback] = useState('');
   const [continueUnattended, setContinueUnattended] = useState(false);
   const { reviewWorkflow, loading } = useWorkflowStore();
+  const feedbackId = useId();
 
   const { id, current_phase } = workflow;
 
@@ -51,10 +53,11 @@ function ReviewGateInner({ workflow }) {
 
       {/* Feedback textarea */}
       <div>
-        <label className="block text-sm text-muted-foreground mb-1.5">
+        <label htmlFor={feedbackId} className="block text-sm text-muted-foreground mb-1.5">
           Feedback or guidance for the next phase (optional)
         </label>
         <textarea
+          id={feedbackId}
           value={feedback}
           onChange={(e) => setFeedback(e.target.value)}
           placeholder="Add notes, corrections, or additional guidance..."
@@ -76,7 +79,7 @@ function ReviewGateInner({ workflow }) {
           onChange={(e) => setContinueUnattended(e.target.checked)}
           className="w-4 h-4 rounded border-input"
         />
-        Continue without pausing (switch to unattended mode)
+        <span>Continue without pausing (switch to unattended mode)</span>
       </label>
 
       {/* Action buttons */}
@@ -110,3 +113,17 @@ export default function ReviewGate({ workflow }) {
   if (workflow.status !== 'awaiting_review') return null;
   return <ReviewGateInner key={`${workflow.id}:${workflow.status}`} workflow={workflow} />;
 }
+
+const workflowProp = PropTypes.shape({
+  id: PropTypes.string.isRequired,
+  status: PropTypes.string.isRequired,
+  current_phase: PropTypes.string,
+});
+
+ReviewGate.propTypes = {
+  workflow: workflowProp.isRequired,
+};
+
+ReviewGateInner.propTypes = {
+  workflow: workflowProp.isRequired,
+};

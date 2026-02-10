@@ -226,6 +226,13 @@ func deleteTaskInteractive(scanner *bufio.Scanner, state *core.WorkflowState) {
 // displayTaskPlan shows the current task plan.
 func displayTaskPlan(state *core.WorkflowState) {
 	fmt.Printf("\n  === Task Plan (%d tasks) ===\n", len(state.TaskOrder))
+
+	// Precompute 1-based positions to avoid nested scans (reduces cognitive complexity).
+	indexByID := make(map[core.TaskID]int, len(state.TaskOrder))
+	for i, tid := range state.TaskOrder {
+		indexByID[tid] = i + 1
+	}
+
 	for i, taskID := range state.TaskOrder {
 		task, ok := state.Tasks[taskID]
 		if !ok {
@@ -233,20 +240,21 @@ func displayTaskPlan(state *core.WorkflowState) {
 		}
 		deps := ""
 		if len(task.Dependencies) > 0 {
-			depNums := make([]string, 0, len(task.Dependencies))
-			for _, dep := range task.Dependencies {
-				// Find the 1-based index of the dependency
-				for j, tid := range state.TaskOrder {
-					if tid == dep {
-						depNums = append(depNums, strconv.Itoa(j+1))
-						break
-					}
-				}
-			}
+			depNums := dependencyIndices(task.Dependencies, indexByID)
 			deps = fmt.Sprintf(" (depends: %s)", strings.Join(depNums, ", "))
 		}
 		fmt.Printf("  %d. [%s] %s%s\n", i+1, task.CLI, task.Name, deps)
 	}
+}
+
+func dependencyIndices(deps []core.TaskID, indexByID map[core.TaskID]int) []string {
+	out := make([]string, 0, len(deps))
+	for _, dep := range deps {
+		if n, ok := indexByID[dep]; ok {
+			out = append(out, strconv.Itoa(n))
+		}
+	}
+	return out
 }
 
 // displayTruncated displays text, truncated to maxLines.

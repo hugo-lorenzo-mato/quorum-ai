@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import PropTypes from 'prop-types';
 import { Plus, Trash2, ChevronUp, ChevronDown, Pencil, Check, X } from 'lucide-react';
 import useWorkflowStore from '../../stores/workflowStore';
 
@@ -231,3 +232,7 @@ export default function TaskEditor({ workflowId }) {
     </div>
   );
 }
+
+TaskEditor.propTypes = {
+  workflowId: PropTypes.string.isRequired,
+};

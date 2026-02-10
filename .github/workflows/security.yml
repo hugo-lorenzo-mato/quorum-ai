@@ -33,7 +33,7 @@ jobs:
 
       - name: Run gosec
         continue-on-error: true  # TODO: Remove when gosec supports Go 1.25
-        uses: securego/gosec@v2.22.4
+        uses: securego/gosec@724910d57dd1f279c6a333d0bdf0378fac59974a # v2.22.4
         with:
           args: -exclude=G104,G301,G302,G306 -exclude-dir=.git -exclude-dir=frontend ./...
 
@@ -59,7 +59,7 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Run npm audit
         run: npm audit --audit-level=high

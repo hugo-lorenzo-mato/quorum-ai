@@ -68,60 +68,77 @@ func runInteractiveWorkflow(ctx context.Context, args []string) error {
 
 	scanner := bufio.NewScanner(os.Stdin)
 
-	// ── Phase 1: Analysis ──
+	abort, err := runInteractiveAnalysisPhase(ctx, deps, output, scanner, state)
+	if err != nil {
+		return err
+	}
+	if abort {
+		fmt.Println("Workflow aborted.")
+		return nil
+	}
+
+	abort, err = runInteractivePlanningPhase(ctx, deps, output, scanner, state)
+	if err != nil {
+		return err
+	}
+	if abort {
+		fmt.Println("Workflow aborted.")
+		return nil
+	}
+
+	return runInteractiveExecutionPhase(ctx, deps, output, state)
+}
+
+func runInteractiveAnalysisPhase(ctx context.Context, deps *PhaseRunnerDeps, output tui.Output, scanner *bufio.Scanner, state *core.WorkflowState) (bool, error) {
 	fmt.Println("\n[1/3] Running analysis...")
 	output.PhaseStarted(core.PhaseAnalyze)
 
-	wctx := CreateWorkflowContext(deps, state)
 	analyzer, err := workflow.NewAnalyzer(deps.ModeratorConfig)
 	if err != nil {
-		return fmt.Errorf("creating analyzer: %w", err)
+		return false, fmt.Errorf("creating analyzer: %w", err)
 	}
 
-	if err := analyzer.Run(ctx, wctx); err != nil {
+	if err := analyzer.Run(ctx, CreateWorkflowContext(deps, state)); err != nil {
 		state.Status = core.WorkflowStatusFailed
 		state.UpdatedAt = time.Now()
 		_ = deps.StateAdapter.Save(ctx, state)
-		return fmt.Errorf("analysis failed: %w", err)
+		return false, fmt.Errorf("analysis failed: %w", err)
 	}
 
 	state.CurrentPhase = core.PhasePlan
 	state.UpdatedAt = time.Now()
 	_ = deps.StateAdapter.Save(ctx, state)
 
-	// Show analysis summary
 	analysis := workflow.GetConsolidatedAnalysis(state)
 	fmt.Println("\n  Analysis complete.")
 	fmt.Println("\n  === Analysis Summary ===")
 	displayTruncated(analysis, 40)
 
-	// Interactive review gate after analysis
 	action, feedback := promptPhaseReview(scanner, "analysis")
 	switch action {
 	case "abort":
-		fmt.Println("Workflow aborted.")
-		return nil
+		return true, nil
 	case "rerun":
 		fmt.Println("\n  Re-running analysis...")
-		// Reset analysis state
 		state.CurrentPhase = core.PhaseAnalyze
 		state.Checkpoints = nil
 		state.UpdatedAt = time.Now()
-		wctx = CreateWorkflowContext(deps, state)
-		if err := analyzer.Run(ctx, wctx); err != nil {
+
+		if err := analyzer.Run(ctx, CreateWorkflowContext(deps, state)); err != nil {
 			state.Status = core.WorkflowStatusFailed
 			state.UpdatedAt = time.Now()
 			_ = deps.StateAdapter.Save(ctx, state)
-			return fmt.Errorf("analysis re-run failed: %w", err)
+			return false, fmt.Errorf("analysis re-run failed: %w", err)
 		}
+
 		state.CurrentPhase = core.PhasePlan
 		state.UpdatedAt = time.Now()
 		_ = deps.StateAdapter.Save(ctx, state)
+
 		analysis = workflow.GetConsolidatedAnalysis(state)
 		fmt.Println("\n  === Updated Analysis Summary ===")
 		displayTruncated(analysis, 40)
 	case "continue":
-		// Apply feedback if provided
 		if feedback != "" {
 			if err := workflow.PrependToConsolidatedAnalysis(state, feedback); err != nil {
 				deps.Logger.Warn("failed to apply analysis feedback", "error", err)
@@ -132,65 +149,69 @@ func runInteractiveWorkflow(ctx context.Context, args []string) error {
 		}
 	}
 
-	// ── Phase 2: Planning ──
+	return false, nil
+}
+
+func runInteractivePlanningPhase(ctx context.Context, deps *PhaseRunnerDeps, output tui.Output, scanner *bufio.Scanner, state *core.WorkflowState) (bool, error) {
 	fmt.Println("\n[2/3] Generating plan...")
 	output.PhaseStarted(core.PhasePlan)
 
-	wctx = CreateWorkflowContext(deps, state)
-	if err := runPlanPhase(ctx, deps, wctx, state); err != nil {
-		return fmt.Errorf("planning failed: %w", err)
+	if err := runPlanPhase(ctx, deps, CreateWorkflowContext(deps, state), state); err != nil {
+		return false, fmt.Errorf("planning failed: %w", err)
 	}
 
-	// Show task plan
 	displayTaskPlan(state)
 
-	// Interactive review gate after planning
 	for {
-		action, feedback = promptPlanReview(scanner)
+		action, feedback := promptPlanReview(scanner)
 		switch action {
 		case "abort":
-			fmt.Println("Workflow aborted.")
-			return nil
+			return true, nil
 		case "replan":
-			fmt.Println("\n  Regenerating plan...")
-			if feedback != "" {
-				if err := workflow.PrependToConsolidatedAnalysis(state, "User feedback on plan: "+feedback); err != nil {
-					deps.Logger.Warn("failed to apply plan feedback", "error", err)
-				}
-			}
-			// Reset plan state
-			state.CurrentPhase = core.PhasePlan
-			state.Tasks = make(map[core.TaskID]*core.TaskState)
-			state.TaskOrder = nil
-			state.UpdatedAt = time.Now()
-			wctx = CreateWorkflowContext(deps, state)
-			if err := runPlanPhase(ctx, deps, wctx, state); err != nil {
-				return fmt.Errorf("replanning failed: %w", err)
+			if err := replanInteractive(ctx, deps, state, feedback); err != nil {
+				return false, err
 			}
 			displayTaskPlan(state)
-			continue // Loop back for review
+			continue
 		case "edit":
 			editTasksInteractive(scanner, state)
 			_ = deps.StateAdapter.Save(ctx, state)
 			displayTaskPlan(state)
-			continue // Loop back for review
+			continue
 		case "continue":
-			// Continue to execution
+			return false, nil
 		}
-		break
+	}
+}
+
+func replanInteractive(ctx context.Context, deps *PhaseRunnerDeps, state *core.WorkflowState, feedback string) error {
+	fmt.Println("\n  Regenerating plan...")
+	if feedback != "" {
+		if err := workflow.PrependToConsolidatedAnalysis(state, "User feedback on plan: "+feedback); err != nil {
+			deps.Logger.Warn("failed to apply plan feedback", "error", err)
+		}
 	}
 
-	// ── Phase 3: Execution ──
+	state.CurrentPhase = core.PhasePlan
+	state.Tasks = make(map[core.TaskID]*core.TaskState)
+	state.TaskOrder = nil
+	state.UpdatedAt = time.Now()
+
+	if err := runPlanPhase(ctx, deps, CreateWorkflowContext(deps, state), state); err != nil {
+		return fmt.Errorf("replanning failed: %w", err)
+	}
+	return nil
+}
+
+func runInteractiveExecutionPhase(ctx context.Context, deps *PhaseRunnerDeps, output tui.Output, state *core.WorkflowState) error {
 	fmt.Printf("\n[3/3] Executing %d tasks...\n", len(state.TaskOrder))
 	output.PhaseStarted(core.PhaseExecute)
 
-	// Create mode enforcer
 	modeEnforcer := service.NewModeEnforcer(service.ExecutionMode{
 		DryRun:      deps.RunnerConfig.DryRun,
 		DeniedTools: deps.RunnerConfig.DenyTools,
 	})
 
-	// Create a runner for execution
 	runner, err := workflow.NewRunner(workflow.RunnerDeps{
 		Config:            deps.RunnerConfig,
 		State:             deps.StateAdapter,
@@ -215,7 +236,6 @@ func runInteractiveWorkflow(ctx context.Context, args []string) error {
 		return fmt.Errorf("creating runner: %w", err)
 	}
 
-	// Save state before execution
 	state.CurrentPhase = core.PhaseExecute
 	state.Status = core.WorkflowStatusRunning
 	state.UpdatedAt = time.Now()
@@ -230,7 +250,6 @@ func runInteractiveWorkflow(ctx context.Context, args []string) error {
 		_ = deps.StateAdapter.Save(ctx, state)
 		return fmt.Errorf("execution failed: %w", err)
 	}
-
 	duration := time.Since(startTime)
 
 	state.Status = core.WorkflowStatusCompleted

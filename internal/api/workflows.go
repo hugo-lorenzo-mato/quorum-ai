@@ -26,32 +26,32 @@ import (
 
 // WorkflowResponse is the API response for a workflow.
 type WorkflowResponse struct {
-	ID               string            `json:"id"`
-	ExecutionID      int               `json:"execution_id"`
-	Title            string            `json:"title,omitempty"`
-	Status           string            `json:"status"`
-	CurrentPhase     string            `json:"current_phase"`
-	Prompt           string            `json:"prompt"`
-	OptimizedPrompt  string            `json:"optimized_prompt,omitempty"`
-	Attachments      []core.Attachment `json:"attachments,omitempty"`
-	Error            string            `json:"error,omitempty"`
-	Warning          string            `json:"warning,omitempty"` // Warning about potential issues (e.g., duplicates)
-	ReportPath       string            `json:"report_path,omitempty"`
-	CreatedAt        time.Time         `json:"created_at"`
-	UpdatedAt        time.Time         `json:"updated_at"`
-	ExecutionStartedAt *time.Time      `json:"execution_started_at,omitempty"` // When execution actually began (running_workflows.started_at)
-	HeartbeatAt      *time.Time        `json:"heartbeat_at,omitempty"` // Last heartbeat (running_workflows.heartbeat_at when available)
-	IsActive         bool              `json:"is_active"`
-	ActuallyRunning  bool              `json:"actually_running"`  // True if executing in this process (in-memory handle exists)
-	RunningInDB      bool              `json:"running_in_db"`     // True if marked running in the DB (running_workflows contains row)
-	ControlAvailable bool              `json:"control_available"` // True if this server has an in-memory control handle (cancel/pause/resume)
-	LockHolderPID    *int              `json:"lock_holder_pid,omitempty"`
-	LockHolderHost   string            `json:"lock_holder_host,omitempty"`
-	TaskCount        int               `json:"task_count"`
-	Metrics          *Metrics          `json:"metrics,omitempty"`
-	AgentEvents      []core.AgentEvent `json:"agent_events,omitempty"` // Persisted agent activity
-	Tasks            []TaskResponse    `json:"tasks,omitempty"`        // Persisted task state for reload
-	Blueprint        *BlueprintDTO     `json:"blueprint,omitempty"`    // Workflow orchestration blueprint
+	ID                 string            `json:"id"`
+	ExecutionID        int               `json:"execution_id"`
+	Title              string            `json:"title,omitempty"`
+	Status             string            `json:"status"`
+	CurrentPhase       string            `json:"current_phase"`
+	Prompt             string            `json:"prompt"`
+	OptimizedPrompt    string            `json:"optimized_prompt,omitempty"`
+	Attachments        []core.Attachment `json:"attachments,omitempty"`
+	Error              string            `json:"error,omitempty"`
+	Warning            string            `json:"warning,omitempty"` // Warning about potential issues (e.g., duplicates)
+	ReportPath         string            `json:"report_path,omitempty"`
+	CreatedAt          time.Time         `json:"created_at"`
+	UpdatedAt          time.Time         `json:"updated_at"`
+	ExecutionStartedAt *time.Time        `json:"execution_started_at,omitempty"` // When execution actually began (running_workflows.started_at)
+	HeartbeatAt        *time.Time        `json:"heartbeat_at,omitempty"`         // Last heartbeat (running_workflows.heartbeat_at when available)
+	IsActive           bool              `json:"is_active"`
+	ActuallyRunning    bool              `json:"actually_running"`  // True if executing in this process (in-memory handle exists)
+	RunningInDB        bool              `json:"running_in_db"`     // True if marked running in the DB (running_workflows contains row)
+	ControlAvailable   bool              `json:"control_available"` // True if this server has an in-memory control handle (cancel/pause/resume)
+	LockHolderPID      *int              `json:"lock_holder_pid,omitempty"`
+	LockHolderHost     string            `json:"lock_holder_host,omitempty"`
+	TaskCount          int               `json:"task_count"`
+	Metrics            *Metrics          `json:"metrics,omitempty"`
+	AgentEvents        []core.AgentEvent `json:"agent_events,omitempty"` // Persisted agent activity
+	Tasks              []TaskResponse    `json:"tasks,omitempty"`        // Persisted task state for reload
+	Blueprint          *BlueprintDTO     `json:"blueprint,omitempty"`    // Workflow orchestration blueprint
 }
 
 // Metrics represents workflow metrics in API responses.
@@ -395,8 +395,8 @@ func (s *Server) handleCreateWorkflow(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req CreateWorkflowRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondError(w, http.StatusBadRequest, "invalid request body")
+	if json.NewDecoder(r.Body).Decode(&req) != nil {
+		respondError(w, http.StatusBadRequest, msgInvalidRequestBody)
 		return
 	}
 
@@ -2380,8 +2380,8 @@ func (s *Server) HandleReviewWorkflow(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req ReviewRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondError(w, http.StatusBadRequest, "invalid request body")
+	if json.NewDecoder(r.Body).Decode(&req) != nil {
+		respondError(w, http.StatusBadRequest, msgInvalidRequestBody)
 		return
 	}
 
@@ -2391,56 +2391,55 @@ func (s *Server) HandleReviewWorkflow(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.Action == "reject" {
-		// For reject: trigger replan or re-analyze depending on phase
-		phase := core.Phase(req.Phase)
-		switch phase {
-		case core.PhaseAnalyze:
-			// Clear analysis and re-run — let the user re-trigger via /analyze
-			state.Status = core.WorkflowStatusPending
-			state.CurrentPhase = core.PhaseAnalyze
-			state.InteractiveReview = nil
-		case core.PhasePlan:
-			// Clear plan data and set up for replan
-			state.Status = core.WorkflowStatusCompleted
-			state.CurrentPhase = core.PhasePlan
-			state.InteractiveReview = nil
-			// Clear tasks for replan
-			state.Tasks = make(map[core.TaskID]*core.TaskState)
-			state.TaskOrder = nil
-		default:
-			respondError(w, http.StatusBadRequest, "phase must be 'analyze' or 'plan' for reject")
-			return
-		}
-
-		state.UpdatedAt = time.Now()
-		if err := stateManager.Save(ctx, state); err != nil {
-			respondError(w, http.StatusInternalServerError, "failed to save workflow state")
-			return
-		}
-
-		// Emit SSE event
-		if s.eventBus != nil {
-			s.eventBus.Publish(events.NewPhaseReviewRejectedEvent(workflowID, "", req.Phase, req.Feedback))
-		}
-
-		// Resume the ControlPlane so the runner goroutine unblocks from interactiveGate.
-		// applyInteractiveFeedback will detect the rejection and return an error.
-		if s.unifiedTracker != nil {
-			if cp, ok := s.unifiedTracker.GetControlPlane(core.WorkflowID(workflowID)); ok {
-				cp.Resume()
-			}
-		}
-
-		respondJSON(w, http.StatusOK, map[string]string{
-			"id":      workflowID,
-			"status":  string(state.Status),
-			"message": fmt.Sprintf("Phase '%s' rejected. Workflow ready for re-execution.", req.Phase),
-		})
+		s.handleInteractiveReviewReject(w, ctx, stateManager, state, workflowID, req)
 		return
 	}
 
-	// Action: approve
-	// Store feedback for the runner to pick up after resume
+	s.handleInteractiveReviewApprove(w, ctx, stateManager, state, workflowID, req)
+}
+
+func (s *Server) handleInteractiveReviewReject(w http.ResponseWriter, ctx context.Context, stateManager core.StateManager, state *core.WorkflowState, workflowID string, req ReviewRequest) {
+	phase := core.Phase(req.Phase)
+	switch phase {
+	case core.PhaseAnalyze:
+		state.Status = core.WorkflowStatusPending
+		state.CurrentPhase = core.PhaseAnalyze
+		state.InteractiveReview = nil
+	case core.PhasePlan:
+		state.Status = core.WorkflowStatusCompleted
+		state.CurrentPhase = core.PhasePlan
+		state.InteractiveReview = nil
+		state.Tasks = make(map[core.TaskID]*core.TaskState)
+		state.TaskOrder = nil
+	default:
+		respondError(w, http.StatusBadRequest, "phase must be 'analyze' or 'plan' for reject")
+		return
+	}
+
+	state.UpdatedAt = time.Now()
+	if stateManager.Save(ctx, state) != nil {
+		respondError(w, http.StatusInternalServerError, msgFailedToSaveWorkflowState)
+		return
+	}
+
+	if s.eventBus != nil {
+		s.eventBus.Publish(events.NewPhaseReviewRejectedEvent(workflowID, "", req.Phase, req.Feedback))
+	}
+
+	if s.unifiedTracker != nil {
+		if cp, ok := s.unifiedTracker.GetControlPlane(core.WorkflowID(workflowID)); ok {
+			cp.Resume()
+		}
+	}
+
+	respondJSON(w, http.StatusOK, map[string]string{
+		"id":      workflowID,
+		"status":  string(state.Status),
+		"message": fmt.Sprintf("Phase '%s' rejected. Workflow ready for re-execution.", req.Phase),
+	})
+}
+
+func (s *Server) handleInteractiveReviewApprove(w http.ResponseWriter, ctx context.Context, stateManager core.StateManager, state *core.WorkflowState, workflowID string, req ReviewRequest) {
 	review := &core.InteractiveReview{
 		ReviewedAt:    time.Now(),
 		ApprovedPhase: core.Phase(req.Phase),
@@ -2453,23 +2452,20 @@ func (s *Server) HandleReviewWorkflow(w http.ResponseWriter, r *http.Request) {
 	}
 	state.InteractiveReview = review
 
-	// If user wants to continue unattended, switch mode back
 	if req.ContinueUnattended && state.Blueprint != nil {
 		state.Blueprint.ExecutionMode = core.ExecutionModeMultiAgent
 	}
 
 	state.UpdatedAt = time.Now()
-	if err := stateManager.Save(ctx, state); err != nil {
-		respondError(w, http.StatusInternalServerError, "failed to save workflow state")
+	if stateManager.Save(ctx, state) != nil {
+		respondError(w, http.StatusInternalServerError, msgFailedToSaveWorkflowState)
 		return
 	}
 
-	// Emit SSE event
 	if s.eventBus != nil {
 		s.eventBus.Publish(events.NewPhaseReviewApprovedEvent(workflowID, "", req.Phase))
 	}
 
-	// Resume the ControlPlane so the runner unblocks
 	if s.unifiedTracker != nil {
 		if cp, ok := s.unifiedTracker.GetControlPlane(core.WorkflowID(workflowID)); ok {
 			cp.Resume()
@@ -2531,8 +2527,8 @@ func (s *Server) HandleSwitchInteractive(w http.ResponseWriter, r *http.Request)
 
 	state.Blueprint.ExecutionMode = core.ExecutionModeInteractive
 	state.UpdatedAt = time.Now()
-	if err := stateManager.Save(ctx, state); err != nil {
-		respondError(w, http.StatusInternalServerError, "failed to save workflow state")
+	if stateManager.Save(ctx, state) != nil {
+		respondError(w, http.StatusInternalServerError, msgFailedToSaveWorkflowState)
 		return
 	}
 

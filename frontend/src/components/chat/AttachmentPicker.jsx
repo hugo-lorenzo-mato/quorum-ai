@@ -38,13 +38,21 @@ function FileTreeNode({ item, selectedPaths, onToggle, level = 0 }) {
     <div>
       <div
         onClick={isDirectory ? handleExpand : handleSelect}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            (isDirectory ? handleExpand : handleSelect)(e);
+          }
+        }}
+        role="button"
+        tabIndex={0}
         className={`flex items-center gap-2 py-1.5 px-2 rounded-md cursor-pointer transition-colors ${
           isSelected ? 'bg-primary/10 text-primary' : 'hover:bg-accent'
         }`}
         style={{ paddingLeft: `${level * 16 + 8}px` }}
       >
         {isDirectory ? (
-          <button className="p-0.5" onClick={handleExpand}>
+          <button type="button" className="p-0.5" onClick={handleExpand}>
             {loading ? (
               <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />
             ) : isExpanded ? (

@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useWorkflowStore } from '../stores';
 import { promptPresets } from '../data/promptPresets';
+import { systemPromptsApi } from '../lib/api';
 import { getStatusColor } from '../lib/theme';
 import FAB from '../components/FAB';
 import Logo from '../components/Logo';
@@ -27,6 +28,7 @@ import {
   ChevronDown,
   ChevronUp,
   FileText,
+  FileCode2,
   FolderKanban,
 } from 'lucide-react';
 
@@ -255,6 +257,16 @@ function SystemResources({ data, loading, onRefresh, timeAgo }) {
       <div 
         className="flex items-center justify-between mb-1 md:mb-4 cursor-pointer md:cursor-default py-1 md:py-0"
         onClick={() => window.innerWidth < 768 && setIsExpanded(!isExpanded)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            if (window.innerWidth < 768) setIsExpanded(!isExpanded);
+          }
+        }}
+        role="button"
+        tabIndex={0}
+        aria-expanded={isExpanded}
+        aria-label="Toggle system resources"
       >
         <div className="flex items-center gap-2 md:gap-0 flex-1">
           <h3 className="text-sm font-medium text-foreground flex items-center gap-2">
@@ -572,6 +584,18 @@ function useProjects() {
   return { projects, loading, refresh: fetchProjects };
 }
 
+function useSystemPrompts() {
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    systemPromptsApi.list()
+      .then((data) => setCount(Array.isArray(data) ? data.length : 0))
+      .catch(() => {});
+  }, []);
+
+  return count;
+}
+
 function useSystemResources() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -631,6 +655,7 @@ export default function Dashboard() {
   const { workflows, activeWorkflow, fetchWorkflows, fetchActiveWorkflow, loading } = useWorkflowStore();
   const { data: systemData, loading: systemLoading, refresh: refreshSystem, timeAgo: systemTimeAgo } = useSystemResources();
   const { projects } = useProjects();
+  const systemPromptsCount = useSystemPrompts();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -686,7 +711,7 @@ export default function Dashboard() {
       )}
 
       {/* Stats Grid - Mobile Carousel, Desktop Grid */}
-      <div className="flex overflow-x-auto pb-4 -mx-3 px-3 sm:mx-0 sm:px-0 gap-3 snap-x md:grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 md:gap-4 md:overflow-visible md:pb-0 scrollbar-none md:scrollbar-default">
+      <div className="flex overflow-x-auto pb-4 -mx-3 px-3 sm:mx-0 sm:px-0 gap-3 snap-x md:grid md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 md:gap-4 md:overflow-visible md:pb-0 scrollbar-none md:scrollbar-default">
         <StatCard
           title="Projects"
           value={projects.length}
@@ -699,10 +724,19 @@ export default function Dashboard() {
         <StatCard
           title="Prompts"
           value={promptPresets.length}
-          subtitle="Available"
+          subtitle="Presets"
           icon={FileText}
           color="primary"
           to="/prompts"
+          className="min-w-[160px] md:min-w-0 snap-center h-full"
+        />
+        <StatCard
+          title="System Prompts"
+          value={systemPromptsCount}
+          subtitle="Embedded"
+          icon={FileCode2}
+          color="primary"
+          to="/system-prompts"
           className="min-w-[160px] md:min-w-0 snap-center h-full"
         />
         <StatCard

@@ -24,14 +24,19 @@ export function ConflictDialog() {
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 animate-fade-in"
-      onClick={(e) => e.target === e.currentTarget && handleCancel()}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="conflict-dialog-title"
-    >
-      <div className="bg-card border border-border rounded-xl shadow-xl max-w-md w-full p-6 animate-fade-up">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in">
+      <button
+        type="button"
+        className="absolute inset-0 bg-black/50"
+        onClick={handleCancel}
+        aria-label="Close dialog"
+      />
+      <div
+        className="relative bg-card border border-border rounded-xl shadow-xl max-w-md w-full p-6 animate-fade-up"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="conflict-dialog-title"
+      >
         <div className="flex items-start gap-4">
           <div className="p-2 rounded-full bg-warning/10 text-warning">
             <AlertTriangle className="w-6 h-6" />

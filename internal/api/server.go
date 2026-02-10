@@ -222,9 +222,9 @@ func (s *Server) setupRouter() chi.Router {
 		// Workflow endpoints
 		r.Route("/workflows", func(r chi.Router) {
 			// List/create/active endpoints with standard timeout
-			r.With(chimiddleware.Timeout(60 * time.Second)).Get("/", s.handleListWorkflows)
-			r.With(chimiddleware.Timeout(60 * time.Second)).Post("/", s.handleCreateWorkflow)
-			r.With(chimiddleware.Timeout(60 * time.Second)).Get("/active", s.handleGetActiveWorkflow)
+			r.With(chimiddleware.Timeout(60*time.Second)).Get("/", s.handleListWorkflows)
+			r.With(chimiddleware.Timeout(60*time.Second)).Post("/", s.handleCreateWorkflow)
+			r.With(chimiddleware.Timeout(60*time.Second)).Get("/active", s.handleGetActiveWorkflow)
 
 			r.Route("/{workflowID}", func(r chi.Router) {
 				// Standard workflow endpoints with default timeout
@@ -253,12 +253,13 @@ func (s *Server) setupRouter() chi.Router {
 				// Task endpoints nested under workflow
 				r.Route("/tasks", func(r chi.Router) {
 					r.Use(chimiddleware.Timeout(60 * time.Second))
+					const taskIDPath = "/{taskID}"
 					r.Get("/", s.handleListTasks)
 					r.Post("/", s.handleCreateTask)
 					r.Put("/reorder", s.handleReorderTasks)
-					r.Get("/{taskID}", s.handleGetTask)
-					r.Patch("/{taskID}", s.handleUpdateTask)
-					r.Delete("/{taskID}", s.handleDeleteTask)
+					r.Get(taskIDPath, s.handleGetTask)
+					r.Patch(taskIDPath, s.handleUpdateTask)
+					r.Delete(taskIDPath, s.handleDeleteTask)
 				})
 
 				// Workflow attachments

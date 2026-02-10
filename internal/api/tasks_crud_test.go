@@ -123,7 +123,7 @@ func TestValidateTaskDAG_WithCycle(t *testing.T) {
 			},
 		},
 	}
-	if err := validateTaskDAG(state); err == nil {
+	if validateTaskDAG(state) == nil {
 		t.Error("expected cycle error, got nil")
 	}
 }
@@ -137,7 +137,7 @@ func TestValidateTaskDAG_SelfDependency(t *testing.T) {
 			},
 		},
 	}
-	if err := validateTaskDAG(state); err == nil {
+	if validateTaskDAG(state) == nil {
 		t.Error("expected cycle error for self-dependency, got nil")
 	}
 }

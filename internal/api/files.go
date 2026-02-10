@@ -289,6 +289,12 @@ func (s *Server) resolvePathCtx(ctx context.Context, requestedPath string) (stri
 
 	cleanPath := filepath.Clean(requestedPath)
 
+	// Prevent accidental exposure of sensitive files if the HTTP server is reachable.
+	// This endpoint is intended for project browsing; secrets should not be readable.
+	if isForbiddenProjectPath(cleanPath) {
+		return "", os.ErrPermission
+	}
+
 	// Reject absolute paths (and Windows volume/UNC paths).
 	if filepath.IsAbs(cleanPath) || filepath.VolumeName(cleanPath) != "" {
 		return "", os.ErrPermission
@@ -320,6 +326,43 @@ func (s *Server) resolvePathCtx(ctx context.Context, requestedPath string) (stri
 	}
 
 	return absPath, nil
+}
+
+func isForbiddenProjectPath(cleanPath string) bool {
+	p := filepath.ToSlash(cleanPath)
+	p = strings.TrimPrefix(p, "./")
+	if p == "" || p == "." {
+		return false
+	}
+	parts := strings.Split(p, "/")
+	for _, part := range parts {
+		if part == "" || part == "." {
+			continue
+		}
+		if part == ".." {
+			return true
+		}
+
+		// Entire directories to never expose.
+		switch part {
+		case ".git", ".quorum", ".ssh":
+			return true
+		}
+
+		// Common secret-bearing filenames.
+		if part == ".env" || strings.HasPrefix(part, ".env.") {
+			return true
+		}
+
+		lower := strings.ToLower(part)
+		if lower == "id_rsa" || lower == "id_dsa" || lower == "id_ecdsa" || lower == "id_ed25519" {
+			return true
+		}
+		if strings.HasSuffix(lower, ".pem") || strings.HasSuffix(lower, ".key") || strings.HasSuffix(lower, ".p12") || strings.HasSuffix(lower, ".pfx") {
+			return true
+		}
+	}
+	return false
 }
 
 // resolvePath resolves a relative path using the server root (no request context).

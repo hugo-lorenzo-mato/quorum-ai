@@ -40,6 +40,7 @@ var _ core.GitClient = (*Client)(nil)
 type Client struct {
 	repoPath string
 	timeout  time.Duration
+	gitPath  string
 }
 
 // NewClient creates a new git client.
@@ -50,9 +51,15 @@ func NewClient(repoPath string) (*Client, error) {
 		return nil, fmt.Errorf("resolving path: %w", err)
 	}
 
+	gitPath, err := exec.LookPath("git")
+	if err != nil {
+		return nil, fmt.Errorf("git not found in PATH: %w", err)
+	}
+
 	client := &Client{
 		repoPath: absPath,
 		timeout:  30 * time.Second,
+		gitPath:  gitPath,
 	}
 
 	// Verify it's a git repository
@@ -77,7 +84,7 @@ func (c *Client) run(ctx context.Context, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd := exec.CommandContext(ctx, c.gitPath, args...)
 	cmd.Dir = c.repoPath
 
 	var stdout, stderr bytes.Buffer
@@ -100,7 +107,7 @@ func (c *Client) runWithOutput(ctx context.Context, args ...string) (stdout, std
 	ctx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd := exec.CommandContext(ctx, c.gitPath, args...)
 	cmd.Dir = c.repoPath
 
 	var stdoutBuf, stderrBuf bytes.Buffer

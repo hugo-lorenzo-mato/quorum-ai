@@ -1,8 +1,14 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
+import PropTypes from 'prop-types';
 import { X, Pencil } from 'lucide-react';
 import TurndownService from 'turndown';
 import VoiceInputButton from './VoiceInputButton';
 import { getModelsForAgent, getReasoningLevels, supportsReasoning, useEnums } from '../lib/agents';
+
+function normalizeExecutionMode(rawMode) {
+  if (rawMode === 'single_agent' || rawMode === 'interactive') return rawMode;
+  return 'multi_agent';
+}
 
 function formatBlueprintTimeout(seconds) {
   const s = Number(seconds || 0);
@@ -79,9 +85,7 @@ export default function EditWorkflowModal({ isOpen, onClose, workflow, onSave, c
       setTitle(workflow.title || '');
       setPrompt(workflow.prompt || '');
       setTimeoutOverride(formatBlueprintTimeout(workflow.blueprint?.timeout_seconds));
-      const rawMode = workflow.blueprint?.execution_mode;
-      const mode = rawMode === 'single_agent' ? 'single_agent' : rawMode === 'interactive' ? 'interactive' : 'multi_agent';
-      setExecutionMode(mode);
+      setExecutionMode(normalizeExecutionMode(workflow.blueprint?.execution_mode));
       setSingleAgentName(workflow.blueprint?.single_agent_name || 'claude');
       setSingleAgentModel(workflow.blueprint?.single_agent_model || '');
       setSingleAgentReasoningEffort(workflow.blueprint?.single_agent_reasoning_effort || '');
@@ -126,8 +130,7 @@ export default function EditWorkflowModal({ isOpen, onClose, workflow, onSave, c
 
       // Allow editing blueprint overrides only when workflow is not running.
       if (canEditConfig) {
-        const origRaw = workflow.blueprint?.execution_mode;
-        const originalMode = origRaw === 'single_agent' ? 'single_agent' : origRaw === 'interactive' ? 'interactive' : 'multi_agent';
+        const originalMode = normalizeExecutionMode(workflow.blueprint?.execution_mode);
         const nextMode = executionMode;
 
         const effectiveSingleAgentName = AGENT_OPTIONS.some((a) => a.value === singleAgentName)
@@ -258,9 +261,11 @@ export default function EditWorkflowModal({ isOpen, onClose, workflow, onSave, c
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* Backdrop */}
-      <div
+      <button
+        type="button"
         className="absolute inset-0 bg-background/80 backdrop-blur-sm animate-fade-in"
         onClick={onClose}
+        aria-label="Close modal"
       />
 
       {/* Modal */}
@@ -358,6 +363,7 @@ export default function EditWorkflowModal({ isOpen, onClose, workflow, onSave, c
                     : 'border-border hover:bg-muted/50'
                 }`}
                 >
+                  <span className="sr-only">Multi-Agent Consensus</span>
                   <input
                     type="radio"
                     name="editExecutionMode"
@@ -380,6 +386,7 @@ export default function EditWorkflowModal({ isOpen, onClose, workflow, onSave, c
                     : 'border-border hover:bg-muted/50'
                 }`}
                 >
+                  <span className="sr-only">Interactive (Supervised)</span>
                   <input
                     type="radio"
                     name="editExecutionMode"
@@ -402,6 +409,7 @@ export default function EditWorkflowModal({ isOpen, onClose, workflow, onSave, c
                     : 'border-border hover:bg-muted/50'
                 }`}
                 >
+                  <span className="sr-only">Single Agent</span>
                   <input
                     type="radio"
                     name="editExecutionMode"
@@ -518,3 +526,23 @@ export default function EditWorkflowModal({ isOpen, onClose, workflow, onSave, c
     </div>
   );
 }
+
+EditWorkflowModal.propTypes = {
+  isOpen: PropTypes.bool.isRequired,
+  onClose: PropTypes.func.isRequired,
+  onSave: PropTypes.func.isRequired,
+  canEditPrompt: PropTypes.bool,
+  workflow: PropTypes.shape({
+    id: PropTypes.string,
+    title: PropTypes.string,
+    prompt: PropTypes.string,
+    status: PropTypes.string,
+    blueprint: PropTypes.shape({
+      execution_mode: PropTypes.oneOf(['multi_agent', 'single_agent', 'interactive', '']),
+      timeout_seconds: PropTypes.number,
+      single_agent_name: PropTypes.string,
+      single_agent_model: PropTypes.string,
+      single_agent_reasoning_effort: PropTypes.string,
+    }),
+  }),
+};

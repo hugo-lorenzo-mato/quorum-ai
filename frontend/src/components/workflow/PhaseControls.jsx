@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import PropTypes from 'prop-types';
 import { Play, RefreshCw, FastForward, Loader2, AlertCircle, RotateCcw, Eye } from 'lucide-react';
 import useWorkflowStore from '../../stores/workflowStore';
 import ReplanModal from './ReplanModal';
@@ -227,3 +228,14 @@ export default function PhaseControls({ workflow }) {
     </div>
   );
 }
+
+PhaseControls.propTypes = {
+  workflow: PropTypes.shape({
+    id: PropTypes.string.isRequired,
+    status: PropTypes.string.isRequired,
+    current_phase: PropTypes.string,
+    blueprint: PropTypes.shape({
+      execution_mode: PropTypes.oneOf(['multi_agent', 'single_agent', 'interactive', '']),
+    }),
+  }).isRequired,
+};

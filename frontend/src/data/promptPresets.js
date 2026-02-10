@@ -1,17 +1,21 @@
 /**
  * Prompt presets for common software development tasks
  * Each preset provides a pre-configured prompt and execution strategy
+ *
+ * Note: this file is intentionally data-driven to reduce duplication noise in analysis tools.
  */
 
-export const promptPresets = [
-  // ===== CODE ANALYSIS =====
-  {
-    id: 'technical-debt-analysis',
-    category: 'Code Analysis',
-    name: 'Technical Debt Analysis',
-    description: 'Identify technical debt hotspots: code complexity, duplications, antipatterns, and prioritize remediation',
-    icon: 'analysis',
-    prompt: `Analyze the codebase for technical debt:
+const EXECUTION_STRATEGY = 'multi-agent-consensus';
+
+const PRESETS = [
+  // Code Analysis
+  [
+    "technical-debt-analysis",
+    "Code Analysis",
+    "Technical Debt Analysis",
+    "Identify technical debt hotspots: code complexity, duplications, antipatterns, and prioritize remediation",
+    "analysis",
+    `Analyze the codebase for technical debt:
 
 1. **Code Complexity**: Identify functions/classes with high cyclomatic complexity
 2. **Code Duplications**: Find duplicate or similar code blocks that could be refactored
@@ -20,16 +24,15 @@ export const promptPresets = [
 5. **Priority Matrix**: Categorize findings by impact (high/medium/low) and effort (quick wins vs. long-term)
 
 Provide actionable recommendations with specific file locations and suggested refactorings.`,
-    executionStrategy: 'multi-agent-consensus',
-    tags: ['analysis', 'quality', 'refactoring']
-  },
-  {
-    id: 'dead-code-detector',
-    category: 'Code Analysis',
-    name: 'Dead Code Detector',
-    description: 'Find unused code: unreferenced functions, unused imports, orphaned files, and calculate cleanup impact',
-    icon: 'trash',
-    prompt: `Scan the codebase for dead code:
+    ["analysis","quality","refactoring"],
+  ],
+  [
+    "dead-code-detector",
+    "Code Analysis",
+    "Dead Code Detector",
+    "Find unused code: unreferenced functions, unused imports, orphaned files, and calculate cleanup impact",
+    "trash",
+    `Scan the codebase for dead code:
 
 1. **Unreferenced Functions**: Find functions/methods that are never called
 2. **Unused Imports**: Identify imports that are never used
@@ -39,16 +42,15 @@ Provide actionable recommendations with specific file locations and suggested re
 6. **Impact Calculation**: Estimate LOC reduction and bundle size improvement
 
 Provide a prioritized list with safe-to-remove candidates vs. needs-investigation.`,
-    executionStrategy: 'multi-agent-consensus',
-    tags: ['analysis', 'cleanup', 'optimization']
-  },
-  {
-    id: 'complexity-hotspots',
-    category: 'Code Analysis',
-    name: 'Complexity Hotspots',
-    description: 'Analyze cyclomatic complexity, cognitive complexity, nesting depth and highlight functions needing refactoring',
-    icon: 'flame',
-    prompt: `Analyze code complexity metrics:
+    ["analysis","cleanup","optimization"],
+  ],
+  [
+    "complexity-hotspots",
+    "Code Analysis",
+    "Complexity Hotspots",
+    "Analyze cyclomatic complexity, cognitive complexity, nesting depth and highlight functions needing refactoring",
+    "flame",
+    `Analyze code complexity metrics:
 
 1. **Cyclomatic Complexity**: Calculate complexity score for all functions (target: <10)
 2. **Cognitive Complexity**: Measure how difficult code is to understand
@@ -60,16 +62,15 @@ For each hotspot, provide:
 - Specific location and complexity score
 - Refactoring suggestions (extract method, simplify conditions, etc.)
 - Priority based on change frequency and business criticality`,
-    executionStrategy: 'multi-agent-consensus',
-    tags: ['analysis', 'complexity', 'refactoring']
-  },
-  {
-    id: 'dependency-health-check',
-    category: 'Code Analysis',
-    name: 'Dependency Health Check',
-    description: 'Audit dependencies: outdated packages, known CVEs, license issues, bundle size impact',
-    icon: 'package',
-    prompt: `Perform a comprehensive dependency audit:
+    ["analysis","complexity","refactoring"],
+  ],
+  [
+    "dependency-health-check",
+    "Code Analysis",
+    "Dependency Health Check",
+    "Audit dependencies: outdated packages, known CVEs, license issues, bundle size impact",
+    "package",
+    `Perform a comprehensive dependency audit:
 
 1. **Outdated Packages**: List dependencies with available updates (minor, major, breaking)
 2. **Security Vulnerabilities**: Identify known CVEs with severity scores
@@ -79,16 +80,15 @@ For each hotspot, provide:
 6. **Alternative Recommendations**: Suggest lighter or more maintained alternatives
 
 Prioritize by risk level: Critical CVEs > Major version behind > High bundle impact.`,
-    executionStrategy: 'multi-agent-consensus',
-    tags: ['analysis', 'security', 'dependencies']
-  },
-  {
-    id: 'architecture-conformance',
-    category: 'Code Analysis',
-    name: 'Architecture Conformance',
-    description: 'Validate if code follows intended architecture (hexagonal/clean/layered) and identify boundary violations',
-    icon: 'architecture',
-    prompt: `Analyze architectural conformance:
+    ["analysis","security","dependencies"],
+  ],
+  [
+    "architecture-conformance",
+    "Code Analysis",
+    "Architecture Conformance",
+    "Validate if code follows intended architecture (hexagonal/clean/layered) and identify boundary violations",
+    "architecture",
+    `Analyze architectural conformance:
 
 1. **Architecture Detection**: Identify the intended architecture pattern (layered, hexagonal, clean, etc.)
 2. **Layer Violations**: Detect improper dependencies between layers (e.g., UI calling DB directly)
@@ -98,18 +98,16 @@ Prioritize by risk level: Critical CVEs > Major version behind > High bundle imp
 6. **Package Structure**: Validate if package/module structure reflects architecture
 
 For each violation, explain why it's problematic and suggest the correct approach.`,
-    executionStrategy: 'multi-agent-consensus',
-    tags: ['analysis', 'architecture', 'design']
-  },
-
-  // ===== PERFORMANCE ANALYSIS =====
-  {
-    id: 'database-query-analysis',
-    category: 'Performance Analysis',
-    name: 'Database Query Analysis',
-    description: 'Detect N+1 queries, missing indexes, inefficient joins, and suggest optimizations',
-    icon: 'database',
-    prompt: `Analyze database query performance:
+    ["analysis","architecture","design"],
+  ],
+  // Performance Analysis
+  [
+    "database-query-analysis",
+    "Performance Analysis",
+    "Database Query Analysis",
+    "Detect N+1 queries, missing indexes, inefficient joins, and suggest optimizations",
+    "database",
+    `Analyze database query performance:
 
 1. **N+1 Query Detection**: Find loops that trigger individual queries (use batch loading instead)
 2. **Missing Indexes**: Identify frequently queried columns without indexes
@@ -122,16 +120,15 @@ For each finding, provide:
 - Code location and problematic pattern
 - Performance impact estimation
 - Optimized alternative with code example`,
-    executionStrategy: 'multi-agent-consensus',
-    tags: ['performance', 'database', 'optimization']
-  },
-  {
-    id: 'bundle-size-analyzer',
-    category: 'Performance Analysis',
-    name: 'Bundle Size Analyzer',
-    description: 'Analyze JS bundle: heavy dependencies, code splitting opportunities, tree-shaking issues',
-    icon: 'bundle',
-    prompt: `Analyze JavaScript bundle size:
+    ["performance","database","optimization"],
+  ],
+  [
+    "bundle-size-analyzer",
+    "Performance Analysis",
+    "Bundle Size Analyzer",
+    "Analyze JS bundle: heavy dependencies, code splitting opportunities, tree-shaking issues",
+    "bundle",
+    `Analyze JavaScript bundle size:
 
 1. **Heavy Dependencies**: Identify largest dependencies and their impact
 2. **Code Splitting**: Find opportunities to split code by route or feature
@@ -144,16 +141,15 @@ Provide:
 - Current bundle size breakdown
 - Optimization recommendations with expected size reduction
 - Implementation examples for code splitting`,
-    executionStrategy: 'multi-agent-consensus',
-    tags: ['performance', 'frontend', 'optimization']
-  },
-  {
-    id: 'memory-leak-detector',
-    category: 'Performance Analysis',
-    name: 'Memory Leak Detector',
-    description: 'Scan for memory leak patterns: event listeners not cleaned, closures holding references, DOM leaks',
-    icon: 'memory',
-    prompt: `Scan for memory leak patterns:
+    ["performance","frontend","optimization"],
+  ],
+  [
+    "memory-leak-detector",
+    "Performance Analysis",
+    "Memory Leak Detector",
+    "Scan for memory leak patterns: event listeners not cleaned, closures holding references, DOM leaks",
+    "memory",
+    `Scan for memory leak patterns:
 
 1. **Event Listeners**: Find addEventListener without removeEventListener
 2. **Interval/Timeout**: Detect setInterval/setTimeout not cleared in cleanup
@@ -166,16 +162,15 @@ For each potential leak:
 - Code location and pattern
 - Why it causes a leak
 - Fixed code example with proper cleanup`,
-    executionStrategy: 'multi-agent-consensus',
-    tags: ['performance', 'memory', 'bugs']
-  },
-  {
-    id: 'react-performance-audit',
-    category: 'Performance Analysis',
-    name: 'React Performance Audit',
-    description: 'Find unnecessary re-renders, missing memoization, expensive computations in render',
-    icon: 'react',
-    prompt: `Audit React performance:
+    ["performance","memory","bugs"],
+  ],
+  [
+    "react-performance-audit",
+    "Performance Analysis",
+    "React Performance Audit",
+    "Find unnecessary re-renders, missing memoization, expensive computations in render",
+    "react",
+    `Audit React performance:
 
 1. **Unnecessary Re-renders**: Components re-rendering when props haven't changed
 2. **Missing Memoization**: Expensive calculations that should use useMemo
@@ -189,18 +184,16 @@ For each issue:
 - Component location and render frequency
 - Performance impact
 - Optimized code with React.memo, useMemo, or useCallback`,
-    executionStrategy: 'multi-agent-consensus',
-    tags: ['performance', 'react', 'frontend']
-  },
-
-  // ===== SECURITY ANALYSIS =====
-  {
-    id: 'secrets-credentials-scan',
-    category: 'Security Analysis',
-    name: 'Secrets & Credentials Scan',
-    description: 'Find hardcoded secrets, API keys, passwords, tokens, certificates',
-    icon: 'lock',
-    prompt: `Scan for exposed secrets and credentials:
+    ["performance","react","frontend"],
+  ],
+  // Security Analysis
+  [
+    "secrets-credentials-scan",
+    "Security Analysis",
+    "Secrets & Credentials Scan",
+    "Find hardcoded secrets, API keys, passwords, tokens, certificates",
+    "lock",
+    `Scan for exposed secrets and credentials:
 
 1. **Hardcoded Secrets**: API keys, passwords, tokens in code
 2. **Database Credentials**: Connection strings with embedded passwords
@@ -213,16 +206,15 @@ For each finding:
 - File location and type of secret
 - Severity (public repo = critical, private = high)
 - Remediation steps (rotate key, use env vars, vault integration)`,
-    executionStrategy: 'multi-agent-consensus',
-    tags: ['security', 'secrets', 'critical']
-  },
-  {
-    id: 'input-validation-audit',
-    category: 'Security Analysis',
-    name: 'Input Validation Audit',
-    description: 'Identify missing input validation, SQL injection risks, XSS vulnerabilities, command injection',
-    icon: 'shield',
-    prompt: `Audit input validation and injection vulnerabilities:
+    ["security","secrets","critical"],
+  ],
+  [
+    "input-validation-audit",
+    "Security Analysis",
+    "Input Validation Audit",
+    "Identify missing input validation, SQL injection risks, XSS vulnerabilities, command injection",
+    "shield",
+    `Audit input validation and injection vulnerabilities:
 
 1. **SQL Injection**: Find string concatenation in SQL queries (use parameterized queries)
 2. **XSS Vulnerabilities**: Identify unescaped user input rendered as HTML
@@ -235,16 +227,15 @@ For each vulnerability:
 - Attack vector and example exploit
 - Affected endpoints/functions
 - Secure code example with proper validation/sanitization`,
-    executionStrategy: 'multi-agent-consensus',
-    tags: ['security', 'validation', 'critical']
-  },
-  {
-    id: 'auth-authorization-review',
-    category: 'Security Analysis',
-    name: 'Auth & Authorization Review',
-    description: 'Analyze authentication flow, session management, JWT handling, RBAC implementation',
-    icon: 'key',
-    prompt: `Review authentication and authorization:
+    ["security","validation","critical"],
+  ],
+  [
+    "auth-authorization-review",
+    "Security Analysis",
+    "Auth & Authorization Review",
+    "Analyze authentication flow, session management, JWT handling, RBAC implementation",
+    "key",
+    `Review authentication and authorization:
 
 1. **Authentication Flow**: Analyze login/logout implementation, weak points
 2. **Session Management**: Check session timeouts, secure flags, regeneration
@@ -258,16 +249,15 @@ For each issue:
 - Security impact (authentication bypass, privilege escalation, etc.)
 - Specific vulnerable code
 - Secure implementation example`,
-    executionStrategy: 'multi-agent-consensus',
-    tags: ['security', 'authentication', 'critical']
-  },
-  {
-    id: 'api-security-checklist',
-    category: 'Security Analysis',
-    name: 'API Security Checklist',
-    description: 'Review API endpoints: rate limiting, CORS, authentication, input validation, error disclosure',
-    icon: 'globe',
-    prompt: `Audit API security:
+    ["security","authentication","critical"],
+  ],
+  [
+    "api-security-checklist",
+    "Security Analysis",
+    "API Security Checklist",
+    "Review API endpoints: rate limiting, CORS, authentication, input validation, error disclosure",
+    "globe",
+    `Audit API security:
 
 1. **Rate Limiting**: Check if endpoints have rate limiting to prevent abuse
 2. **CORS Configuration**: Verify CORS is not set to * (wildcard)
@@ -282,18 +272,16 @@ For each endpoint, assess:
 - Current security posture
 - Missing protections
 - Recommended fixes with code examples`,
-    executionStrategy: 'multi-agent-consensus',
-    tags: ['security', 'api', 'web']
-  },
-
-  // ===== TESTING ANALYSIS =====
-  {
-    id: 'test-coverage-gap-analysis',
-    category: 'Testing Analysis',
-    name: 'Test Coverage Gap Analysis',
-    description: 'Identify critical paths without tests, edge cases not covered, missing integration tests',
-    icon: 'target',
-    prompt: `Analyze test coverage gaps:
+    ["security","api","web"],
+  ],
+  // Testing Analysis
+  [
+    "test-coverage-gap-analysis",
+    "Testing Analysis",
+    "Test Coverage Gap Analysis",
+    "Identify critical paths without tests, edge cases not covered, missing integration tests",
+    "target",
+    `Analyze test coverage gaps:
 
 1. **Critical Paths**: Identify business-critical code without test coverage
 2. **Edge Cases**: Find edge cases not covered (null, empty, boundary values)
@@ -306,16 +294,15 @@ For each gap:
 - Code location and risk level
 - Missing test scenarios
 - Example test cases to add`,
-    executionStrategy: 'multi-agent-consensus',
-    tags: ['testing', 'quality', 'coverage']
-  },
-  {
-    id: 'flaky-test-detector',
-    category: 'Testing Analysis',
-    name: 'Flaky Test Detector',
-    description: 'Analyze test failures: race conditions, timing issues, shared state, non-deterministic behavior',
-    icon: 'dices',
-    prompt: `Detect flaky test patterns:
+    ["testing","quality","coverage"],
+  ],
+  [
+    "flaky-test-detector",
+    "Testing Analysis",
+    "Flaky Test Detector",
+    "Analyze test failures: race conditions, timing issues, shared state, non-deterministic behavior",
+    "dices",
+    `Detect flaky test patterns:
 
 1. **Race Conditions**: Tests depending on timing or async operations without proper awaits
 2. **Shared State**: Tests that fail when run in parallel due to shared global state
@@ -328,16 +315,15 @@ For each flaky pattern:
 - Test location and failure symptom
 - Root cause explanation
 - Fixed test with proper isolation/mocking`,
-    executionStrategy: 'multi-agent-consensus',
-    tags: ['testing', 'quality', 'reliability']
-  },
-  {
-    id: 'test-quality-assessment',
-    category: 'Testing Analysis',
-    name: 'Test Quality Assessment',
-    description: 'Evaluate test quality: assertions effectiveness, test isolation, mocking patterns, maintainability',
-    icon: 'check',
-    prompt: `Assess test quality:
+    ["testing","quality","reliability"],
+  ],
+  [
+    "test-quality-assessment",
+    "Testing Analysis",
+    "Test Quality Assessment",
+    "Evaluate test quality: assertions effectiveness, test isolation, mocking patterns, maintainability",
+    "check",
+    `Assess test quality:
 
 1. **Assertion Effectiveness**: Check if tests actually verify behavior (no assertions = red flag)
 2. **Test Isolation**: Tests should not depend on each other or external state
@@ -351,18 +337,16 @@ For each quality issue:
 - Test location and problem
 - Why it reduces test effectiveness
 - Improved test example`,
-    executionStrategy: 'multi-agent-consensus',
-    tags: ['testing', 'quality', 'best-practices']
-  },
-
-  // ===== INFRASTRUCTURE ANALYSIS =====
-  {
-    id: 'docker-image-optimizer',
-    category: 'Infrastructure Analysis',
-    name: 'Docker Image Optimizer',
-    description: 'Analyze Dockerfile: multi-stage builds, layer caching, base image size, security scanning',
-    icon: 'container',
-    prompt: `Optimize Docker images:
+    ["testing","quality","best-practices"],
+  ],
+  // Infrastructure Analysis
+  [
+    "docker-image-optimizer",
+    "Infrastructure Analysis",
+    "Docker Image Optimizer",
+    "Analyze Dockerfile: multi-stage builds, layer caching, base image size, security scanning",
+    "container",
+    `Optimize Docker images:
 
 1. **Multi-Stage Builds**: Check if using multi-stage to reduce final image size
 2. **Layer Caching**: Optimize layer order (dependencies before source code)
@@ -376,16 +360,15 @@ Provide:
 - Current image size and build time
 - Optimized Dockerfile with explanations
 - Expected improvements (size reduction, build time)`,
-    executionStrategy: 'multi-agent-consensus',
-    tags: ['infrastructure', 'docker', 'optimization']
-  },
-  {
-    id: 'cicd-pipeline-audit',
-    category: 'Infrastructure Analysis',
-    name: 'CI/CD Pipeline Audit',
-    description: 'Review GitHub Actions/CI: workflow optimization, caching strategies, parallelization, secret management',
-    icon: 'refresh',
-    prompt: `Audit CI/CD pipeline:
+    ["infrastructure","docker","optimization"],
+  ],
+  [
+    "cicd-pipeline-audit",
+    "Infrastructure Analysis",
+    "CI/CD Pipeline Audit",
+    "Review GitHub Actions/CI: workflow optimization, caching strategies, parallelization, secret management",
+    "refresh",
+    `Audit CI/CD pipeline:
 
 1. **Caching Strategies**: Check if dependencies are cached (npm, Maven, Docker layers)
 2. **Parallelization**: Identify jobs that could run in parallel
@@ -399,18 +382,16 @@ For each optimization:
 - Current bottleneck or issue
 - Recommended change with workflow YAML
 - Expected time/cost savings`,
-    executionStrategy: 'multi-agent-consensus',
-    tags: ['infrastructure', 'ci-cd', 'optimization']
-  },
-
-  // ===== OBSERVABILITY ANALYSIS =====
-  {
-    id: 'logging-coverage-analysis',
-    category: 'Observability Analysis',
-    name: 'Logging Coverage Analysis',
-    description: 'Identify missing logs in critical paths, inconsistent log levels, PII in logs, structured logging',
-    icon: 'logging',
-    prompt: `Analyze logging coverage:
+    ["infrastructure","ci-cd","optimization"],
+  ],
+  // Observability Analysis
+  [
+    "logging-coverage-analysis",
+    "Observability Analysis",
+    "Logging Coverage Analysis",
+    "Identify missing logs in critical paths, inconsistent log levels, PII in logs, structured logging",
+    "logging",
+    `Analyze logging coverage:
 
 1. **Missing Logs**: Identify critical operations without logging (errors, business events)
 2. **Log Levels**: Check for incorrect log levels (debug as info, errors as warnings)
@@ -424,16 +405,15 @@ For each finding:
 - Code location and issue
 - Privacy/compliance risk
 - Corrected logging example`,
-    executionStrategy: 'multi-agent-consensus',
-    tags: ['observability', 'logging', 'compliance']
-  },
-  {
-    id: 'error-handling-assessment',
-    category: 'Observability Analysis',
-    name: 'Error Handling Assessment',
-    description: 'Find uncaught exceptions, missing error boundaries, poor error messages, error recovery gaps',
-    icon: 'warning',
-    prompt: `Assess error handling:
+    ["observability","logging","compliance"],
+  ],
+  [
+    "error-handling-assessment",
+    "Observability Analysis",
+    "Error Handling Assessment",
+    "Find uncaught exceptions, missing error boundaries, poor error messages, error recovery gaps",
+    "warning",
+    `Assess error handling:
 
 1. **Uncaught Exceptions**: Find try-catch blocks missing or errors not handled
 2. **Error Boundaries**: React apps should have error boundaries at strategic levels
@@ -447,16 +427,15 @@ For each gap:
 - Code location and risk
 - User/developer impact
 - Proper error handling example`,
-    executionStrategy: 'multi-agent-consensus',
-    tags: ['observability', 'reliability', 'errors']
-  },
-  {
-    id: 'monitoring-gaps-detector',
-    category: 'Observability Analysis',
-    name: 'Monitoring Gaps Detector',
-    description: 'Identify missing metrics, alerting opportunities, SLO/SLI coverage, trace missing in critical flows',
-    icon: 'monitoring',
-    prompt: `Detect monitoring gaps:
+    ["observability","reliability","errors"],
+  ],
+  [
+    "monitoring-gaps-detector",
+    "Observability Analysis",
+    "Monitoring Gaps Detector",
+    "Identify missing metrics, alerting opportunities, SLO/SLI coverage, trace missing in critical flows",
+    "monitoring",
+    `Detect monitoring gaps:
 
 1. **Missing Metrics**: Identify critical operations without metrics (latency, throughput, errors)
 2. **Alerting**: Suggest alerts for SLO violations, error spikes, performance degradation
@@ -470,18 +449,16 @@ For each gap:
 - What should be monitored and why
 - Recommended metrics and thresholds
 - Example implementation (Prometheus, DataDog, etc.)`,
-    executionStrategy: 'multi-agent-consensus',
-    tags: ['observability', 'monitoring', 'sre']
-  },
-
-  // ===== MIGRATION ANALYSIS =====
-  {
-    id: 'framework-migration-planner',
-    category: 'Migration Analysis',
-    name: 'Framework Migration Planner',
-    description: 'Analyze codebase for migration (React, Vue, Angular): breaking changes, deprecations, effort estimation',
-    icon: 'refresh',
-    prompt: `Plan framework migration:
+    ["observability","monitoring","sre"],
+  ],
+  // Migration Analysis
+  [
+    "framework-migration-planner",
+    "Migration Analysis",
+    "Framework Migration Planner",
+    "Analyze codebase for migration (React, Vue, Angular): breaking changes, deprecations, effort estimation",
+    "refresh",
+    `Plan framework migration:
 
 1. **Breaking Changes**: Identify code affected by breaking changes in new version
 2. **Deprecated APIs**: Find usage of deprecated APIs that need replacement
@@ -495,16 +472,15 @@ Provide:
 - Comprehensive migration checklist
 - Code examples for common patterns (before/after)
 - Recommended migration order`,
-    executionStrategy: 'multi-agent-consensus',
-    tags: ['migration', 'planning', 'framework']
-  },
-  {
-    id: 'javascript-to-typescript',
-    category: 'Migration Analysis',
-    name: 'JavaScript to TypeScript',
-    description: 'Analyze JS codebase: type inference suggestions, any type candidates, interface extraction',
-    icon: 'typescript',
-    prompt: `Plan JavaScript to TypeScript migration:
+    ["migration","planning","framework"],
+  ],
+  [
+    "javascript-to-typescript",
+    "Migration Analysis",
+    "JavaScript to TypeScript",
+    "Analyze JS codebase: type inference suggestions, any type candidates, interface extraction",
+    "typescript",
+    `Plan JavaScript to TypeScript migration:
 
 1. **Type Inference**: Suggest explicit types where inference fails
 2. **Any Type Candidates**: Find complex types that might need 'any' initially
@@ -518,16 +494,15 @@ Provide:
 - Priority order for migrating files (leaf nodes first)
 - Type definitions for core data structures
 - tsconfig.json with appropriate strictness`,
-    executionStrategy: 'multi-agent-consensus',
-    tags: ['migration', 'typescript', 'types']
-  },
-  {
-    id: 'change-impact-analysis',
-    category: 'Migration Analysis',
-    name: 'Change Impact Analysis',
-    description: 'Analyze proposed change impact: affected modules, breaking changes, required updates, rollback strategy',
-    icon: 'target',
-    prompt: `Analyze impact of proposed change:
+    ["migration","typescript","types"],
+  ],
+  [
+    "change-impact-analysis",
+    "Migration Analysis",
+    "Change Impact Analysis",
+    "Analyze proposed change impact: affected modules, breaking changes, required updates, rollback strategy",
+    "target",
+    `Analyze impact of proposed change:
 
 1. **Affected Modules**: Identify all modules that depend on changed code
 2. **Breaking Changes**: Detect if change breaks existing contracts/APIs
@@ -541,18 +516,16 @@ Provide:
 - Blast radius (how many files/modules affected)
 - Risk level (low/medium/high)
 - Recommended rollout strategy (feature flag, canary, etc.)`,
-    executionStrategy: 'multi-agent-consensus',
-    tags: ['analysis', 'impact', 'planning']
-  },
-
-  // ===== UX/ACCESSIBILITY ANALYSIS =====
-  {
-    id: 'accessibility-audit-wcag',
-    category: 'UX/Accessibility Analysis',
-    name: 'Accessibility Audit (WCAG)',
-    description: 'Review for WCAG 2.1 AA: ARIA labels, keyboard navigation, color contrast, screen reader support',
-    icon: 'accessibility',
-    prompt: `Audit accessibility compliance (WCAG 2.1 AA):
+    ["analysis","impact","planning"],
+  ],
+  // UX/Accessibility Analysis
+  [
+    "accessibility-audit-wcag",
+    "UX/Accessibility Analysis",
+    "Accessibility Audit (WCAG)",
+    "Review for WCAG 2.1 AA: ARIA labels, keyboard navigation, color contrast, screen reader support",
+    "accessibility",
+    `Audit accessibility compliance (WCAG 2.1 AA):
 
 1. **ARIA Labels**: Check interactive elements have proper labels
 2. **Keyboard Navigation**: Verify all functionality accessible via keyboard
@@ -566,16 +539,15 @@ For each violation:
 - WCAG criterion (e.g., 1.1.1, 2.1.1)
 - User impact (blind, low vision, keyboard-only users)
 - Remediation with code example`,
-    executionStrategy: 'multi-agent-consensus',
-    tags: ['accessibility', 'ux', 'compliance']
-  },
-  {
-    id: 'mobile-responsiveness-check',
-    category: 'UX/Accessibility Analysis',
-    name: 'Mobile Responsiveness Check',
-    description: 'Analyze responsive design: breakpoint coverage, touch targets, viewport config, mobile-specific UX',
-    icon: 'mobile',
-    prompt: `Audit mobile responsiveness:
+    ["accessibility","ux","compliance"],
+  ],
+  [
+    "mobile-responsiveness-check",
+    "UX/Accessibility Analysis",
+    "Mobile Responsiveness Check",
+    "Analyze responsive design: breakpoint coverage, touch targets, viewport config, mobile-specific UX",
+    "mobile",
+    `Audit mobile responsiveness:
 
 1. **Breakpoint Coverage**: Check layout works at common breakpoints (320px, 375px, 768px, 1024px)
 2. **Touch Targets**: Verify buttons/links are at least 44×44px
@@ -589,16 +561,15 @@ For each issue:
 - Breakpoint and specific problem
 - User experience impact
 - Responsive CSS fix`,
-    executionStrategy: 'multi-agent-consensus',
-    tags: ['mobile', 'responsive', 'ux']
-  },
-  {
-    id: 'user-journey-analysis',
-    category: 'UX/Accessibility Analysis',
-    name: 'User Journey Analysis',
-    description: 'Map user flows, identify friction points, dead ends, confusing navigation, conversion blockers',
-    icon: 'map',
-    prompt: `Analyze user journeys:
+    ["mobile","responsive","ux"],
+  ],
+  [
+    "user-journey-analysis",
+    "UX/Accessibility Analysis",
+    "User Journey Analysis",
+    "Map user flows, identify friction points, dead ends, confusing navigation, conversion blockers",
+    "map",
+    `Analyze user journeys:
 
 1. **Flow Mapping**: Map out key user journeys (sign-up, purchase, onboarding)
 2. **Friction Points**: Identify steps that cause user confusion or drop-off
@@ -612,18 +583,16 @@ For each journey:
 - Current flow diagram
 - Identified friction points with severity
 - Recommended improvements`,
-    executionStrategy: 'multi-agent-consensus',
-    tags: ['ux', 'conversion', 'user-flow']
-  },
-
-  // ===== CONSISTENCY ANALYSIS =====
-  {
-    id: 'api-design-consistency',
-    category: 'Consistency Analysis',
-    name: 'API Design Consistency',
-    description: 'Review REST/GraphQL consistency: naming conventions, HTTP verbs, response structures, error formats',
-    icon: 'link',
-    prompt: `Audit API design consistency:
+    ["ux","conversion","user-flow"],
+  ],
+  // Consistency Analysis
+  [
+    "api-design-consistency",
+    "Consistency Analysis",
+    "API Design Consistency",
+    "Review REST/GraphQL consistency: naming conventions, HTTP verbs, response structures, error formats",
+    "link",
+    `Audit API design consistency:
 
 1. **Naming Conventions**: Check consistent resource naming (plural/singular, camelCase/snake_case)
 2. **HTTP Verbs**: Verify proper use of GET/POST/PUT/PATCH/DELETE
@@ -637,16 +606,15 @@ For each inconsistency:
 - Endpoints affected
 - Current vs. recommended pattern
 - Migration guide if breaking change needed`,
-    executionStrategy: 'multi-agent-consensus',
-    tags: ['api', 'consistency', 'design']
-  },
-  {
-    id: 'code-style-inconsistencies',
-    category: 'Consistency Analysis',
-    name: 'Code Style Inconsistencies',
-    description: 'Find pattern violations: naming conventions, file structure, import order, component patterns',
-    icon: 'palette',
-    prompt: `Detect code style inconsistencies:
+    ["api","consistency","design"],
+  ],
+  [
+    "code-style-inconsistencies",
+    "Consistency Analysis",
+    "Code Style Inconsistencies",
+    "Find pattern violations: naming conventions, file structure, import order, component patterns",
+    "palette",
+    `Detect code style inconsistencies:
 
 1. **Naming Conventions**: Find violations (camelCase, PascalCase, SCREAMING_SNAKE_CASE)
 2. **File Structure**: Check if files are organized consistently
@@ -660,18 +628,16 @@ For each inconsistency:
 - File location and pattern
 - Correct pattern based on project conventions
 - Autofix suggestions (eslint, prettier rules)`,
-    executionStrategy: 'multi-agent-consensus',
-    tags: ['consistency', 'style', 'quality']
-  },
-
-  // ===== JAVA/SPRING BOOT SPECIFIC =====
-  {
-    id: 'spring-boot-best-practices',
-    category: 'Java/Spring Boot',
-    name: 'Spring Boot Best Practices',
-    description: 'Audit Spring Boot app: proper annotations, dependency injection, configuration, exception handling',
-    icon: 'leaf',
-    prompt: `Audit Spring Boot best practices:
+    ["consistency","style","quality"],
+  ],
+  // Java/Spring Boot
+  [
+    "spring-boot-best-practices",
+    "Java/Spring Boot",
+    "Spring Boot Best Practices",
+    "Audit Spring Boot app: proper annotations, dependency injection, configuration, exception handling",
+    "leaf",
+    `Audit Spring Boot best practices:
 
 1. **Annotation Usage**: Check proper use of @Service, @Repository, @Component, @Controller
 2. **Dependency Injection**: Prefer constructor injection over field injection
@@ -685,16 +651,15 @@ For each issue:
 - Anti-pattern detected
 - Why it's problematic (testability, maintainability, performance)
 - Best practice implementation`,
-    executionStrategy: 'multi-agent-consensus',
-    tags: ['java', 'spring-boot', 'best-practices']
-  },
-  {
-    id: 'jpa-hibernate-optimization',
-    category: 'Java/Spring Boot',
-    name: 'JPA/Hibernate Optimization',
-    description: 'Analyze JPA usage: N+1 queries, lazy loading, fetch strategies, entity relationships, caching',
-    icon: 'save',
-    prompt: `Optimize JPA/Hibernate usage:
+    ["java","spring-boot","best-practices"],
+  ],
+  [
+    "jpa-hibernate-optimization",
+    "Java/Spring Boot",
+    "JPA/Hibernate Optimization",
+    "Analyze JPA usage: N+1 queries, lazy loading, fetch strategies, entity relationships, caching",
+    "save",
+    `Optimize JPA/Hibernate usage:
 
 1. **N+1 Query Detection**: Find @OneToMany/@ManyToOne causing N+1 queries (use JOIN FETCH)
 2. **Lazy Loading Issues**: Check LazyInitializationException risks (use @Transactional correctly)
@@ -708,16 +673,15 @@ For each issue:
 - Entity/repository location
 - Performance impact (query count, load time)
 - Optimized code with @EntityGraph, @Query, or DTO projection`,
-    executionStrategy: 'multi-agent-consensus',
-    tags: ['java', 'jpa', 'hibernate', 'performance']
-  },
-  {
-    id: 'java-concurrency-review',
-    category: 'Java/Spring Boot',
-    name: 'Java Concurrency Review',
-    description: 'Audit thread safety: shared mutable state, synchronization issues, race conditions, deadlocks',
-    icon: 'shuffle',
-    prompt: `Review Java concurrency and thread safety:
+    ["java","jpa","hibernate","performance"],
+  ],
+  [
+    "java-concurrency-review",
+    "Java/Spring Boot",
+    "Java Concurrency Review",
+    "Audit thread safety: shared mutable state, synchronization issues, race conditions, deadlocks",
+    "shuffle",
+    `Review Java concurrency and thread safety:
 
 1. **Shared Mutable State**: Find fields accessed by multiple threads without synchronization
 2. **Synchronization Issues**: Check improper use of synchronized blocks/methods
@@ -731,16 +695,15 @@ For each issue:
 - Thread safety violation type
 - Potential consequences (data corruption, deadlock, etc.)
 - Thread-safe alternative (synchronized, locks, atomic classes, concurrent collections)`,
-    executionStrategy: 'multi-agent-consensus',
-    tags: ['java', 'concurrency', 'thread-safety']
-  },
-  {
-    id: 'java-exception-handling',
-    category: 'Java/Spring Boot',
-    name: 'Java Exception Handling',
-    description: 'Review exception handling: checked vs unchecked, exception swallowing, resource cleanup, custom exceptions',
-    icon: 'zap',
-    prompt: `Audit Java exception handling:
+    ["java","concurrency","thread-safety"],
+  ],
+  [
+    "java-exception-handling",
+    "Java/Spring Boot",
+    "Java Exception Handling",
+    "Review exception handling: checked vs unchecked, exception swallowing, resource cleanup, custom exceptions",
+    "zap",
+    `Audit Java exception handling:
 
 1. **Exception Swallowing**: Find empty catch blocks or catching Exception/Throwable
 2. **Checked Exception Overuse**: Suggest converting to unchecked for runtime errors
@@ -754,16 +717,15 @@ For each issue:
 - Code location and problem
 - Impact (lost information, resource leaks, unclear errors)
 - Improved exception handling example`,
-    executionStrategy: 'multi-agent-consensus',
-    tags: ['java', 'exceptions', 'error-handling']
-  },
-  {
-    id: 'spring-security-audit',
-    category: 'Java/Spring Boot',
-    name: 'Spring Security Audit',
-    description: 'Review Spring Security config: authentication, authorization, CSRF, CORS, session management, JWT',
-    icon: 'lock',
-    prompt: `Audit Spring Security configuration:
+    ["java","exceptions","error-handling"],
+  ],
+  [
+    "spring-security-audit",
+    "Java/Spring Boot",
+    "Spring Security Audit",
+    "Review Spring Security config: authentication, authorization, CSRF, CORS, session management, JWT",
+    "lock",
+    `Audit Spring Security configuration:
 
 1. **Authentication**: Review UserDetailsService, password encoding (BCrypt), authentication providers
 2. **Authorization**: Check @PreAuthorize/@Secured usage, role hierarchy, method security
@@ -777,16 +739,15 @@ For each security issue:
 - Vulnerability type (auth bypass, CSRF, etc.)
 - Exploitation scenario
 - Secure configuration example`,
-    executionStrategy: 'multi-agent-consensus',
-    tags: ['java', 'spring-security', 'security', 'critical']
-  },
-  {
-    id: 'java-stream-api-best-practices',
-    category: 'Java/Spring Boot',
-    name: 'Java Stream API Best Practices',
-    description: 'Review Stream usage: performance pitfalls, proper collectors, parallel streams, primitive streams',
-    icon: 'activity',
-    prompt: `Audit Java Stream API usage:
+    ["java","spring-security","security","critical"],
+  ],
+  [
+    "java-stream-api-best-practices",
+    "Java/Spring Boot",
+    "Java Stream API Best Practices",
+    "Review Stream usage: performance pitfalls, proper collectors, parallel streams, primitive streams",
+    "activity",
+    `Audit Java Stream API usage:
 
 1. **Performance Pitfalls**: Find boxed streams where primitive streams should be used (IntStream)
 2. **Collector Usage**: Check proper use of Collectors (toList, groupingBy, partitioningBy)
@@ -800,16 +761,15 @@ For each issue:
 - Stream location and problem
 - Performance or correctness impact
 - Optimized stream code`,
-    executionStrategy: 'multi-agent-consensus',
-    tags: ['java', 'streams', 'performance']
-  },
-  {
-    id: 'spring-boot-actuator-setup',
-    category: 'Java/Spring Boot',
-    name: 'Spring Boot Actuator Setup',
-    description: 'Review Actuator config: enabled endpoints, security, health indicators, custom metrics, monitoring integration',
-    icon: 'analysis',
-    prompt: `Audit Spring Boot Actuator configuration:
+    ["java","streams","performance"],
+  ],
+  [
+    "spring-boot-actuator-setup",
+    "Java/Spring Boot",
+    "Spring Boot Actuator Setup",
+    "Review Actuator config: enabled endpoints, security, health indicators, custom metrics, monitoring integration",
+    "analysis",
+    `Audit Spring Boot Actuator configuration:
 
 1. **Enabled Endpoints**: Check which endpoints are exposed (health, metrics, info) via management.endpoints
 2. **Security**: Verify sensitive endpoints (env, beans, heapdump) are secured
@@ -823,21 +783,19 @@ For each finding:
 - Configuration issue or missing metric
 - Security or observability impact
 - Proper configuration example`,
-    executionStrategy: 'multi-agent-consensus',
-    tags: ['java', 'spring-boot', 'actuator', 'monitoring']
-  }
+    ["java","spring-boot","actuator","monitoring"],
+  ],
 ];
 
-export const promptCategories = [
-  'All',
-  'Code Analysis',
-  'Performance Analysis',
-  'Security Analysis',
-  'Testing Analysis',
-  'Infrastructure Analysis',
-  'Observability Analysis',
-  'Migration Analysis',
-  'UX/Accessibility Analysis',
-  'Consistency Analysis',
-  'Java/Spring Boot'
-];
+export const promptCategories = Array.from(new Set(PRESETS.map(([, category]) => category))).sort();
+
+export const promptPresets = PRESETS.map(([id, category, name, description, icon, prompt, tags]) => ({
+  id,
+  category,
+  name,
+  description,
+  icon,
+  prompt,
+  executionStrategy: EXECUTION_STRATEGY,
+  tags,
+}));
