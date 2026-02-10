@@ -111,6 +111,8 @@ func TestCreateStateManager(t *testing.T) {
 	cfg.State.LockTTL = "nope"
 	if sm2, err := createStateManager(cfg, logger); err != nil || sm2 == nil {
 		t.Fatalf("createStateManager with invalid lock ttl got (%v, %v), want (non-nil, nil)", sm2, err)
+	} else {
+		t.Cleanup(func() { _ = state.CloseStateManager(sm2) })
 	}
 }
 

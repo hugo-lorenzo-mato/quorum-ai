@@ -2,7 +2,6 @@ package attachments
 
 import (
 	"bytes"
-	"io"
 	"os"
 	"strings"
 	"testing"
@@ -41,7 +40,9 @@ func TestStore_SaveListResolveDelete_RoundTrip(t *testing.T) {
 	if gotMeta.ID != meta.ID {
 		t.Fatalf("resolved meta mismatch: %q != %q", gotMeta.ID, meta.ID)
 	}
-	b, err := io.ReadAll(mustOpen(t, abs))
+	// Use os.ReadFile so the handle is closed before Delete; Windows can't delete
+	// files that are still opened by the current process.
+	b, err := os.ReadFile(abs)
 	if err != nil {
 		t.Fatalf("read resolved file: %v", err)
 	}
@@ -73,12 +74,4 @@ func TestStore_Save_RejectsTooLarge(t *testing.T) {
 	}
 }
 
-func mustOpen(t *testing.T, path string) io.ReadCloser {
-	t.Helper()
-	f, err := os.Open(path)
-	if err != nil {
-		t.Fatalf("open %q: %v", path, err)
-	}
-	t.Cleanup(func() { _ = f.Close() })
-	return f
-}
+// (no helper needed; use os.ReadFile in tests to avoid Windows file locking)
