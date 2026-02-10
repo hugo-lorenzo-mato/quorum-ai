@@ -25,7 +25,7 @@ WORKDIR /build
 COPY go.mod go.sum ./
 RUN go mod download && go mod verify
 
-# Copy source code
+# Copy source code (validated by .dockerignore to exclude sensitive files)
 COPY . .
 
 # Build the binary

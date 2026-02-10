@@ -22,11 +22,21 @@ docs/
 *.md
 !README.md
 
-# Development
+# Development & sensitive files
 .env*
 *.log
 .quorum/
 .worktrees/
+# Security: explicitly exclude sensitive file patterns
+*.key
+*.pem
+*.crt
+*secret*
+*token*
+*password*
+credentials*
+secrets/
+.ssh/
 
 # Tests
 *_test.go

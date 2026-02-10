@@ -26,6 +26,15 @@ func TestIsForbiddenProjectPath(t *testing.T) {
 		{in: "keys/server.pem", want: true},
 		{in: "keys/server.key", want: true},
 		{in: "certs/bundle.p12", want: true},
+		// .quorum internals stay blocked
+		{in: ".quorum", want: true},
+		{in: ".quorum/quorum.db", want: true},
+		{in: ".quorum/config", want: true},
+		// .quorum/runs/ is allowed (workflow report artifacts)
+		{in: ".quorum/runs", want: false},
+		{in: ".quorum/runs/wf-123/analyze-phase/v1/claude.md", want: false},
+		{in: ".quorum/runs/wf-123/plan-phase/final-plan.md", want: false},
+		{in: ".quorum/runs/wf-123/execute-phase/tasks/task-1.md", want: false},
 	}
 
 	for _, tc := range cases {

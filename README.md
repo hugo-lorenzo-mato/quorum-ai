@@ -59,7 +59,7 @@ Download a prebuilt binary from [GitHub Releases](https://github.com/hugo-lorenz
 VERSION=0.1.0
 ARCH=amd64  # or arm64
 
-curl -LO "https://github.com/hugo-lorenzo-mato/quorum-ai/releases/download/v${VERSION}/quorum-ai_${VERSION}_linux_${ARCH}.tar.gz"
+curl -LO --proto '=https' --proto-redir '=https' --tlsv1.2 "https://github.com/hugo-lorenzo-mato/quorum-ai/releases/download/v${VERSION}/quorum-ai_${VERSION}_linux_${ARCH}.tar.gz"
 tar -xzf quorum-ai_${VERSION}_linux_${ARCH}.tar.gz
 sudo mv quorum /usr/local/bin/
 ```
@@ -74,7 +74,7 @@ sudo mv quorum /usr/local/bin/
 VERSION=0.1.0
 ARCH=arm64  # or amd64 for Intel Macs
 
-curl -LO "https://github.com/hugo-lorenzo-mato/quorum-ai/releases/download/v${VERSION}/quorum-ai_${VERSION}_darwin_${ARCH}.tar.gz"
+curl -LO --proto '=https' --proto-redir '=https' --tlsv1.2 "https://github.com/hugo-lorenzo-mato/quorum-ai/releases/download/v${VERSION}/quorum-ai_${VERSION}_darwin_${ARCH}.tar.gz"
 tar -xzf quorum-ai_${VERSION}_darwin_${ARCH}.tar.gz
 sudo mv quorum /usr/local/bin/
 ```

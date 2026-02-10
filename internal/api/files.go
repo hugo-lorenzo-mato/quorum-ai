@@ -394,11 +394,17 @@ func isForbiddenProjectPath(cleanPath string) bool {
 	if p == "" || p == "." {
 		return false
 	}
-	for _, part := range strings.Split(p, "/") {
+	parts := strings.Split(p, "/")
+	for i, part := range parts {
 		if part == "" || part == "." {
 			continue
 		}
 		if isForbiddenPathSegment(part) {
+			// Allow .quorum/runs/ (workflow report artifacts are user-facing documents).
+			// Everything else inside .quorum/ (db, config, etc.) stays blocked.
+			if part == ".quorum" && i+1 < len(parts) && parts[i+1] == "runs" {
+				continue
+			}
 			return true
 		}
 	}

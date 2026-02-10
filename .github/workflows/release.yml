@@ -81,5 +81,9 @@ jobs:
       - name: Download and test binary
         run: |
           TAG=${GITHUB_REF#refs/tags/}
-          curl -sL "https://github.com/${{ github.repository }}/releases/download/${TAG}/quorum_${TAG#v}_linux_amd64.tar.gz" | tar xz
+          curl -sL \
+            --proto '=https' \
+            --proto-redir '=https' \
+            --tlsv1.2 \
+            "https://github.com/${{ github.repository }}/releases/download/${TAG}/quorum_${TAG#v}_linux_amd64.tar.gz" | tar xz
           ./quorum version
