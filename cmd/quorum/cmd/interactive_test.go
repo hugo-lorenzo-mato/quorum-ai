@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bufio"
+	"context"
 	"strings"
 	"testing"
 
@@ -605,4 +606,55 @@ func TestDisplayTruncated_Empty(t *testing.T) {
 func TestDisplayTruncated_SingleLine(t *testing.T) {
 	t.Parallel()
 	displayTruncated("hello world", 5)
+}
+
+// --- runInteractiveWorkflow error paths ---
+
+func TestRunInteractiveWorkflow_NoPrompt(t *testing.T) {
+	t.Parallel()
+	// Save and restore package-level vars
+	origFile := runFile
+	defer func() { runFile = origFile }()
+	runFile = ""
+
+	err := runInteractiveWorkflow(context.Background(), nil)
+	if err == nil {
+		t.Error("expected error for missing prompt")
+	}
+}
+
+func TestRunInteractiveWorkflow_EmptyArgsAndNoFile(t *testing.T) {
+	t.Parallel()
+	origFile := runFile
+	defer func() { runFile = origFile }()
+	runFile = ""
+
+	err := runInteractiveWorkflow(context.Background(), []string{})
+	if err == nil {
+		t.Error("expected error for empty args and no file")
+	}
+}
+
+func TestRunInteractiveWorkflow_NonexistentFile(t *testing.T) {
+	t.Parallel()
+	origFile := runFile
+	defer func() { runFile = origFile }()
+	runFile = "/nonexistent/path/to/prompt.txt"
+
+	err := runInteractiveWorkflow(context.Background(), nil)
+	if err == nil {
+		t.Error("expected error for nonexistent file")
+	}
+}
+
+func TestRunInteractiveWorkflow_InitPhaseRunnerError(t *testing.T) {
+	t.Parallel()
+	// Provide a prompt but use a cancelled context so InitPhaseRunner fails
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Cancel immediately
+
+	err := runInteractiveWorkflow(ctx, []string{"test prompt"})
+	if err == nil {
+		t.Error("expected error from InitPhaseRunner or downstream")
+	}
 }
