@@ -643,3 +643,357 @@ func TestLoadMutableTaskState_LoadError(t *testing.T) {
 		t.Errorf("expected 500 on load error, got %d: %s", w.Code, w.Body.String())
 	}
 }
+
+// --- handleGetTask ---
+
+func TestHandleGetTask_Success(t *testing.T) {
+	t.Parallel()
+	state := newMutableWorkflowState("wf-1")
+	srv, _ := newTestServerWithState(t, "wf-1", state)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/workflows/wf-1/tasks/task-1", nil)
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp TaskResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode error: %v", err)
+	}
+	if resp.Name != "Task 1" {
+		t.Errorf("expected name 'Task 1', got %q", resp.Name)
+	}
+	if resp.CLI != "claude" {
+		t.Errorf("expected cli 'claude', got %q", resp.CLI)
+	}
+	if resp.ID != "task-1" {
+		t.Errorf("expected id 'task-1', got %q", resp.ID)
+	}
+}
+
+func TestHandleGetTask_NotFound(t *testing.T) {
+	t.Parallel()
+	state := newMutableWorkflowState("wf-1")
+	srv, _ := newTestServerWithState(t, "wf-1", state)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/workflows/wf-1/tasks/nonexistent", nil)
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected 404, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestHandleGetTask_WorkflowNotFound(t *testing.T) {
+	t.Parallel()
+	sm := newMockStateManager()
+	eb := events.New(100)
+	t.Cleanup(func() { eb.Close() })
+	srv := NewServer(sm, eb, WithLogger(slog.Default()))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/workflows/nonexistent/tasks/task-1", nil)
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected 404, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// --- handleCreateTask additional tests ---
+
+func TestHandleCreateTask_MissingCLI(t *testing.T) {
+	t.Parallel()
+	state := newMutableWorkflowState("wf-1")
+	srv, _ := newTestServerWithState(t, "wf-1", state)
+
+	body := `{"name":"New Task"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/workflows/wf-1/tasks", bytes.NewBufferString(body))
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for missing CLI, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestHandleCreateTask_InvalidBody(t *testing.T) {
+	t.Parallel()
+	state := newMutableWorkflowState("wf-1")
+	srv, _ := newTestServerWithState(t, "wf-1", state)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/workflows/wf-1/tasks", bytes.NewBufferString("{bad json"))
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for invalid body, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestHandleCreateTask_NilTasks(t *testing.T) {
+	t.Parallel()
+	sm := newMockStateManager()
+	sm.workflows[core.WorkflowID("wf-1")] = &core.WorkflowState{
+		WorkflowDefinition: core.WorkflowDefinition{WorkflowID: "wf-1"},
+		WorkflowRun: core.WorkflowRun{
+			Status:       core.WorkflowStatusAwaitingReview,
+			CurrentPhase: core.PhaseExecute,
+			Tasks:        nil,
+			TaskOrder:    nil,
+		},
+	}
+	eb := events.New(100)
+	t.Cleanup(func() { eb.Close() })
+	srv := NewServer(sm, eb, WithLogger(slog.Default()))
+
+	body := `{"name":"First","cli":"claude"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/workflows/wf-1/tasks", bytes.NewBufferString(body))
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// --- handleUpdateTask additional tests ---
+
+func TestHandleUpdateTask_InvalidBody(t *testing.T) {
+	t.Parallel()
+	state := newMutableWorkflowState("wf-1")
+	srv, _ := newTestServerWithState(t, "wf-1", state)
+
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/workflows/wf-1/tasks/task-1", bytes.NewBufferString("{bad"))
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestHandleUpdateTask_UpdateDependencies(t *testing.T) {
+	t.Parallel()
+	state := newMutableWorkflowState("wf-1")
+	srv, _ := newTestServerWithState(t, "wf-1", state)
+
+	// Update task-2 to depend on nothing (remove dependency on task-1)
+	body := `{"dependencies":[]}`
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/workflows/wf-1/tasks/task-2", bytes.NewBufferString(body))
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp TaskResponse
+	json.NewDecoder(w.Body).Decode(&resp)
+	if len(resp.Dependencies) != 0 {
+		t.Errorf("expected 0 dependencies, got %v", resp.Dependencies)
+	}
+}
+
+func TestHandleUpdateTask_DependencyNotFound(t *testing.T) {
+	t.Parallel()
+	state := newMutableWorkflowState("wf-1")
+	srv, _ := newTestServerWithState(t, "wf-1", state)
+
+	body := `{"dependencies":["nonexistent"]}`
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/workflows/wf-1/tasks/task-1", bytes.NewBufferString(body))
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestHandleUpdateTask_CyclicDependency(t *testing.T) {
+	t.Parallel()
+	sm := newMockStateManager()
+	sm.workflows[core.WorkflowID("wf-1")] = &core.WorkflowState{
+		WorkflowDefinition: core.WorkflowDefinition{WorkflowID: "wf-1"},
+		WorkflowRun: core.WorkflowRun{
+			Status:       core.WorkflowStatusAwaitingReview,
+			CurrentPhase: core.PhaseExecute,
+			Tasks: map[core.TaskID]*core.TaskState{
+				"a": {ID: "a", Phase: core.PhaseExecute, Name: "A", CLI: "claude", Dependencies: []core.TaskID{"b"}},
+				"b": {ID: "b", Phase: core.PhaseExecute, Name: "B", CLI: "claude"},
+			},
+			TaskOrder: []core.TaskID{"a", "b"},
+		},
+	}
+	eb := events.New(100)
+	t.Cleanup(func() { eb.Close() })
+	srv := NewServer(sm, eb, WithLogger(slog.Default()))
+
+	// Update b to depend on a → creates cycle a→b→a
+	body := `{"dependencies":["a"]}`
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/workflows/wf-1/tasks/b", bytes.NewBufferString(body))
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for cycle, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestHandleUpdateTask_ChangeDescription(t *testing.T) {
+	t.Parallel()
+	state := newMutableWorkflowState("wf-1")
+	srv, _ := newTestServerWithState(t, "wf-1", state)
+
+	desc := "Updated description"
+	reqBody := UpdateTaskRequest{Description: &desc}
+	body, _ := json.Marshal(reqBody)
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/workflows/wf-1/tasks/task-1", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp TaskResponse
+	json.NewDecoder(w.Body).Decode(&resp)
+	if resp.Description != "Updated description" {
+		t.Errorf("expected description 'Updated description', got %q", resp.Description)
+	}
+}
+
+// --- handleReorderTasks additional tests ---
+
+func TestHandleReorderTasks_InvalidBody(t *testing.T) {
+	t.Parallel()
+	state := newMutableWorkflowState("wf-1")
+	srv, _ := newTestServerWithState(t, "wf-1", state)
+
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/workflows/wf-1/tasks/reorder", bytes.NewBufferString("{bad"))
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// --- HandleReviewWorkflow additional tests ---
+
+func TestHandleReviewWorkflow_SaveError(t *testing.T) {
+	t.Parallel()
+	state := newReviewableWorkflowState("wf-1", core.PhasePlan)
+	sm := newMockStateManager()
+	sm.workflows[core.WorkflowID("wf-1")] = state
+	sm.saveErr = json.Unmarshal([]byte("bad"), nil)
+	eb := events.New(100)
+	t.Cleanup(func() { eb.Close() })
+	srv := NewServer(sm, eb, WithLogger(slog.Default()))
+
+	body := `{"action":"approve","phase":"analyze"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/workflows/wf-1/review", bytes.NewBufferString(body))
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestHandleReviewWorkflow_RejectSaveError(t *testing.T) {
+	t.Parallel()
+	state := newReviewableWorkflowState("wf-1", core.PhasePlan)
+	sm := newMockStateManager()
+	sm.workflows[core.WorkflowID("wf-1")] = state
+	sm.saveErr = json.Unmarshal([]byte("bad"), nil)
+	eb := events.New(100)
+	t.Cleanup(func() { eb.Close() })
+	srv := NewServer(sm, eb, WithLogger(slog.Default()))
+
+	body := `{"action":"reject","phase":"analyze"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/workflows/wf-1/review", bytes.NewBufferString(body))
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestHandleReviewWorkflow_ApproveNoFeedback(t *testing.T) {
+	t.Parallel()
+	state := newReviewableWorkflowState("wf-1", core.PhasePlan)
+	sm := newMockStateManager()
+	sm.workflows[core.WorkflowID("wf-1")] = state
+	eb := events.New(100)
+	t.Cleanup(func() { eb.Close() })
+	srv := NewServer(sm, eb, WithLogger(slog.Default()))
+
+	body := `{"action":"approve","phase":"analyze"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/workflows/wf-1/review", bytes.NewBufferString(body))
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	saved := sm.workflows[core.WorkflowID("wf-1")]
+	if saved.InteractiveReview == nil {
+		t.Fatal("expected InteractiveReview")
+	}
+	if saved.InteractiveReview.AnalysisFeedback != "" {
+		t.Errorf("expected empty feedback, got %q", saved.InteractiveReview.AnalysisFeedback)
+	}
+}
+
+// --- HandleSwitchInteractive additional tests ---
+
+func TestHandleSwitchInteractive_SaveError(t *testing.T) {
+	t.Parallel()
+	sm := newMockStateManager()
+	sm.workflows[core.WorkflowID("wf-1")] = &core.WorkflowState{
+		WorkflowDefinition: core.WorkflowDefinition{
+			WorkflowID: "wf-1",
+			Blueprint:  &core.Blueprint{ExecutionMode: core.ExecutionModeMultiAgent},
+		},
+		WorkflowRun: core.WorkflowRun{
+			Status:       core.WorkflowStatusRunning,
+			CurrentPhase: core.PhaseAnalyze,
+			Tasks:        map[core.TaskID]*core.TaskState{},
+		},
+	}
+	sm.saveErr = json.Unmarshal([]byte("bad"), nil)
+	eb := events.New(100)
+	t.Cleanup(func() { eb.Close() })
+	srv := NewServer(sm, eb, WithLogger(slog.Default()))
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/workflows/wf-1/switch-interactive", nil)
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestHandleSwitchInteractive_LoadError(t *testing.T) {
+	t.Parallel()
+	sm := newMockStateManager()
+	sm.loadErr = json.Unmarshal([]byte("bad"), nil)
+	eb := events.New(100)
+	t.Cleanup(func() { eb.Close() })
+	srv := NewServer(sm, eb, WithLogger(slog.Default()))
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/workflows/wf-1/switch-interactive", nil)
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500, got %d: %s", w.Code, w.Body.String())
+	}
+}
