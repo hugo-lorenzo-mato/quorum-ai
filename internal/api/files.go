@@ -3,6 +3,8 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -123,21 +125,41 @@ func (s *Server) handleGetFileContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Resolve and validate path (project-aware)
-	absPath, err := s.resolvePathCtx(r.Context(), requestedPath)
+	// Resolve and validate path (project-aware), but read via an fs rooted at the
+	// project directory to avoid path traversal and symlink escapes.
+	root, err := s.projectRootForRequest(r.Context())
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid path")
+		return
+	}
+	_, rootReal, err := canonicalizeRoot(root)
 	if err != nil {
 		respondError(w, http.StatusBadRequest, "invalid path")
 		return
 	}
 
+	cleanPath := filepath.Clean(requestedPath)
+	if err := validateProjectRelativePath(cleanPath); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid path")
+		return
+	}
+
+	rel := strings.TrimPrefix(filepath.ToSlash(cleanPath), "./")
+	if rel == "" || rel == "." || !fs.ValidPath(rel) {
+		respondError(w, http.StatusBadRequest, "invalid path")
+		return
+	}
+
+	fsys := os.DirFS(rootReal)
+
 	// Check if path exists and is a file
-	info, err := os.Stat(absPath)
+	info, err := fs.Stat(fsys, rel)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if os.IsNotExist(err) || errors.Is(err, fs.ErrNotExist) {
 			respondError(w, http.StatusNotFound, "file not found")
 			return
 		}
-		s.logger.Error("failed to stat file", "path", absPath, "error", err)
+		s.logger.Error("failed to stat file", "path", rel, "error", err)
 		respondError(w, http.StatusInternalServerError, "failed to access file")
 		return
 	}
@@ -154,11 +176,18 @@ func (s *Server) handleGetFileContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Best-effort symlink escape protection: ensure the resolved real path stays within rootReal.
+	if realPath, err := filepath.EvalSymlinks(filepath.Join(rootReal, filepath.FromSlash(rel))); err == nil {
+		if !isPathWithinDir(rootReal, realPath) {
+			respondError(w, http.StatusBadRequest, "invalid path")
+			return
+		}
+	}
+
 	// Read file content
-	// #nosec G304 -- absPath is validated to be within the project root
-	content, err := os.ReadFile(absPath)
+	content, err := fs.ReadFile(fsys, rel)
 	if err != nil {
-		s.logger.Error("failed to read file", "path", absPath, "error", err)
+		s.logger.Error("failed to read file", "path", rel, "error", err)
 		respondError(w, http.StatusInternalServerError, "failed to read file")
 		return
 	}
@@ -170,7 +199,7 @@ func (s *Server) handleGetFileContent(w http.ResponseWriter, r *http.Request) {
 		Path:     requestedPath,
 		Size:     info.Size(),
 		Binary:   isBinary,
-		Language: detectLanguage(absPath),
+		Language: detectLanguage(requestedPath),
 	}
 
 	if !isBinary {

@@ -1,0 +1,114 @@
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import useAgentStore from '../agentStore';
+
+function resetStore() {
+  useAgentStore.setState({
+    currentAgents: {},
+    agentActivity: {},
+  });
+}
+
+describe('agentStore', () => {
+  beforeEach(() => {
+    resetStore();
+    vi.useRealTimers();
+  });
+
+  it('handleAgentEvent tracks startedAt and completedAt and calculates durationMs', () => {
+    useAgentStore.getState().handleAgentEvent({
+      workflow_id: 'wf-1',
+      agent: 'claude',
+      event_kind: 'started',
+      message: 'start',
+      data: {},
+      timestamp: '2026-02-10T00:00:00.000Z',
+    });
+
+    useAgentStore.getState().handleAgentEvent({
+      workflow_id: 'wf-1',
+      agent: 'claude',
+      event_kind: 'completed',
+      message: 'done',
+      data: {},
+      timestamp: '2026-02-10T00:00:02.000Z',
+    });
+
+    const agent = useAgentStore.getState().currentAgents['wf-1'].claude;
+    expect(agent.startedAt).toBe('2026-02-10T00:00:00.000Z');
+    expect(agent.completedAt).toBe('2026-02-10T00:00:02.000Z');
+    expect(agent.durationMs).toBe(2000);
+  });
+
+  it('handleAgentEvent prefers duration_ms from event data', () => {
+    useAgentStore.getState().handleAgentEvent({
+      workflow_id: 'wf-1',
+      agent: 'gemini',
+      event_kind: 'started',
+      message: 'start',
+      data: {},
+      timestamp: '2026-02-10T00:00:00.000Z',
+    });
+
+    useAgentStore.getState().handleAgentEvent({
+      workflow_id: 'wf-1',
+      agent: 'gemini',
+      event_kind: 'completed',
+      message: 'done',
+      data: { duration_ms: 123 },
+      timestamp: '2026-02-10T00:00:10.000Z',
+    });
+
+    const agent = useAgentStore.getState().currentAgents['wf-1'].gemini;
+    expect(agent.durationMs).toBe(123);
+  });
+
+  it('getActiveAgents returns only agents with active statuses', () => {
+    useAgentStore.setState({
+      currentAgents: {
+        'wf-1': {
+          a: { status: 'thinking' },
+          b: { status: 'completed' },
+          c: { status: 'progress' },
+        },
+      },
+    });
+
+    const active = useAgentStore.getState().getActiveAgents('wf-1');
+    expect(active.map((x) => x.name).sort()).toEqual(['a', 'c']);
+  });
+
+  it('clearActivity removes activity and status for workflow', () => {
+    useAgentStore.setState({
+      currentAgents: { 'wf-1': { claude: { status: 'thinking' } } },
+      agentActivity: { 'wf-1': [{ id: 'x' }] },
+    });
+
+    useAgentStore.getState().clearActivity('wf-1');
+    expect(useAgentStore.getState().currentAgents['wf-1']).toBeUndefined();
+    expect(useAgentStore.getState().agentActivity['wf-1']).toBeUndefined();
+  });
+
+  it('loadPersistedEvents filters by execution_id and rebuilds newest-first activity', () => {
+    useAgentStore.getState().loadPersistedEvents(
+      'wf-1',
+      [
+        { id: '1', agent: 'claude', event_kind: 'started', message: 's', timestamp: '2026-02-10T00:00:00Z', data: {}, execution_id: 1 },
+        { id: '2', agent: 'claude', event_kind: 'completed', message: 'c', timestamp: '2026-02-10T00:00:01Z', data: {}, execution_id: 1 },
+        { id: '3', agent: 'codex', event_kind: 'started', message: 's2', timestamp: '2026-02-10T00:00:02Z', data: {}, execution_id: 2 },
+      ],
+      1
+    );
+
+    const log = useAgentStore.getState().getActivityLog('wf-1');
+    expect(log).toHaveLength(2);
+    // persisted events are reversed so newest comes first
+    expect(log[0].id).toBe('2');
+    expect(log[1].id).toBe('1');
+
+    const claude = useAgentStore.getState().getAgentStatuses('wf-1').claude;
+    expect(claude.status).toBe('completed');
+    expect(claude.durationMs).toBe(1000);
+    expect(useAgentStore.getState().getAgentStatuses('wf-1').codex).toBeUndefined();
+  });
+});
+
