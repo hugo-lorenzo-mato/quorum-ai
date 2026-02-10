@@ -258,8 +258,15 @@ func (m *SemanticModerator) executeModerator(ctx context.Context, wctx *Context,
 			if info, statErr := os.Stat(absOutputPath); statErr == nil && info.Size() > 1024 {
 				content, readErr := os.ReadFile(absOutputPath)
 				if readErr == nil && len(strings.TrimSpace(string(content))) > 100 {
-					wctx.Logger.Info("recovered moderator output from file written by previous attempt",
-						"agent", moderatorAgentName, "round", round, "path", absOutputPath, "size", len(content))
+					fileAge := time.Since(info.ModTime()).Truncate(time.Second)
+					wctx.Logger.Warn("reusing moderator output from previous attempt",
+						"agent", moderatorAgentName, "round", round, "path", absOutputPath,
+						"size", len(content), "file_age", fileAge)
+					if wctx.Output != nil {
+						wctx.Output.Log("warn", "analyzer",
+							fmt.Sprintf("Moderator %s: reusing evaluation from previous attempt (age: %s, %d bytes)",
+								moderatorAgentName, fileAge, len(content)))
+					}
 					result = &core.ExecuteResult{Output: string(content), Model: model}
 					return nil
 				}

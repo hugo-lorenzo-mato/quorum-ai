@@ -477,13 +477,27 @@ func (a *Analyzer) runModeratorLoop(ctx context.Context, wctx *Context, currentO
 			if ctx.Err() != nil {
 				return nil, round, err
 			}
-			wctx.Logger.Warn("moderator evaluation failed, proceeding with current outputs",
-				"round", round, "error", err)
+			wctx.Logger.Warn("moderator evaluation failed",
+				"round", round, "max_rounds", a.moderator.MaxRounds(), "error", err)
+			if round >= a.moderator.MaxRounds() {
+				if wctx.Output != nil {
+					wctx.Output.Log("warn", "analyzer",
+						fmt.Sprintf("Round %d: Moderator failed at max rounds (%v), proceeding with current analyses", round, err))
+				}
+				return currentOutputs, round, nil
+			}
+			// Still have rounds left — advance to next refinement without moderator feedback
+			round++
 			if wctx.Output != nil {
 				wctx.Output.Log("warn", "analyzer",
-					fmt.Sprintf("Round %d: Moderator evaluation failed (%v), proceeding with current analyses", round, err))
+					fmt.Sprintf("Round %d: Moderator failed, running V%d refinement without feedback (%v)", round-1, round, err))
 			}
-			return currentOutputs, round, nil
+			refinedOutputs, refErr := a.runVnRefinement(ctx, wctx, round, currentOutputs, nil, nil)
+			if refErr != nil {
+				return nil, round, fmt.Errorf("V%d refinement (post-moderator-failure): %w", round, refErr)
+			}
+			currentOutputs = refinedOutputs
+			continue
 		}
 
 		if a.shouldStopForConsensus(wctx, round, evalResult) {
@@ -2058,7 +2072,30 @@ func (a *Analyzer) continueFromCheckpoint(ctx context.Context, wctx *Context, sa
 		// Run moderator evaluation with retry support
 		evalResult, evalErr := a.runModeratorWithRetry(ctx, wctx, round, currentOutputs)
 		if evalErr != nil {
-			return fmt.Errorf("moderator evaluation round %d: %w", round, evalErr)
+			if ctx.Err() != nil {
+				return fmt.Errorf("moderator evaluation round %d: %w", round, evalErr)
+			}
+			wctx.Logger.Warn("moderator evaluation failed (resumed)",
+				"round", round, "max_rounds", a.moderator.MaxRounds(), "error", evalErr)
+			if round >= a.moderator.MaxRounds() {
+				if wctx.Output != nil {
+					wctx.Output.Log("warn", "analyzer",
+						fmt.Sprintf("Round %d: Moderator failed at max rounds (%v), consolidating with current analyses", round, evalErr))
+				}
+				goto consolidation
+			}
+			// Still have rounds left — advance to next refinement without moderator feedback
+			round++
+			if wctx.Output != nil {
+				wctx.Output.Log("warn", "analyzer",
+					fmt.Sprintf("Round %d: Moderator failed, running V%d refinement without feedback (%v)", round-1, round, evalErr))
+			}
+			refinedOutputs, err := a.runVnRefinement(ctx, wctx, round, currentOutputs, nil, nil)
+			if err != nil {
+				return fmt.Errorf("V%d refinement (post-moderator-failure): %w", round, err)
+			}
+			currentOutputs = refinedOutputs
+			continue
 		}
 
 		// Update consensus score in metrics
