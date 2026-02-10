@@ -10,6 +10,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // TestAPI_WorkflowLifecycle tests complete workflow lifecycle through API.
@@ -614,7 +616,9 @@ func (h *MockAPIHandler) createWorkflow(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	workflowID := fmt.Sprintf("wf_%d", time.Now().UnixNano())
+	// time.Now().UnixNano() can collide under high concurrency on some platforms
+	// (notably Windows). Use a UUID to guarantee uniqueness.
+	workflowID := fmt.Sprintf("wf_%s", uuid.NewString())
 	workflow := &WorkflowInfo{
 		ID:      workflowID,
 		Status:  "running",

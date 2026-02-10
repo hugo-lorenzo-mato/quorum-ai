@@ -28,7 +28,7 @@ func TestDetector_NoColor(t *testing.T) {
 }
 
 func TestDetector_Detect_CIEnvironment(t *testing.T) {
-	t.Parallel()
+	// This test mutates process environment variables; keep it serialized.
 	// Save current env
 	originalCI := os.Getenv("CI")
 	originalGH := os.Getenv("GITHUB_ACTIONS")
@@ -60,7 +60,7 @@ func TestDetector_Detect_CIEnvironment(t *testing.T) {
 }
 
 func TestDetector_Detect_QuorumOutput(t *testing.T) {
-	t.Parallel()
+	// This test mutates process environment variables; keep it serialized.
 	// Save current env
 	originalCI := os.Getenv("CI")
 	originalGH := os.Getenv("GITHUB_ACTIONS")
@@ -85,7 +85,7 @@ func TestDetector_Detect_QuorumOutput(t *testing.T) {
 }
 
 func TestDetector_Detect_QuorumQuiet(t *testing.T) {
-	t.Parallel()
+	// This test mutates process environment variables; keep it serialized.
 	// Save current env
 	originalCI := os.Getenv("CI")
 	originalGH := os.Getenv("GITHUB_ACTIONS")
@@ -122,7 +122,7 @@ func TestDetector_ShouldUseColor_NoColor(t *testing.T) {
 }
 
 func TestDetector_ShouldUseColor_EnvNoColor(t *testing.T) {
-	t.Parallel()
+	// This test mutates process environment variables; keep it serialized.
 	// Save current env
 	originalNoColor := os.Getenv("NO_COLOR")
 	defer os.Setenv("NO_COLOR", originalNoColor)
@@ -136,7 +136,7 @@ func TestDetector_ShouldUseColor_EnvNoColor(t *testing.T) {
 }
 
 func TestDetector_ShouldUseColor_DumbTerminal(t *testing.T) {
-	t.Parallel()
+	// This test mutates process environment variables; keep it serialized.
 	// Save current env
 	originalNoColor := os.Getenv("NO_COLOR")
 	originalTerm := os.Getenv("TERM")

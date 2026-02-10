@@ -10,7 +10,6 @@ import (
 )
 
 func TestGetPrompt_FromArgs(t *testing.T) {
-	t.Parallel()
 	prompt, err := getPrompt([]string{"test prompt"}, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -21,7 +20,6 @@ func TestGetPrompt_FromArgs(t *testing.T) {
 }
 
 func TestGetPrompt_FromFile(t *testing.T) {
-	t.Parallel()
 	// Create temp file with prompt
 	tmpDir := t.TempDir()
 	promptFile := filepath.Join(tmpDir, "prompt.txt")
@@ -39,7 +37,6 @@ func TestGetPrompt_FromFile(t *testing.T) {
 }
 
 func TestGetPrompt_FileNotFound(t *testing.T) {
-	t.Parallel()
 	_, err := getPrompt([]string{}, "/nonexistent/file.txt")
 	if err == nil {
 		t.Error("expected error for non-existent file")
@@ -47,7 +44,6 @@ func TestGetPrompt_FileNotFound(t *testing.T) {
 }
 
 func TestGetPrompt_NoPrompt(t *testing.T) {
-	t.Parallel()
 	_, err := getPrompt([]string{}, "")
 	if err == nil {
 		t.Error("expected error when no prompt provided")
@@ -55,7 +51,6 @@ func TestGetPrompt_NoPrompt(t *testing.T) {
 }
 
 func TestRootCmd_Structure(t *testing.T) {
-	t.Parallel()
 	// Test that root command is properly configured
 	if rootCmd.Use != "quorum" {
 		t.Errorf("expected 'quorum', got '%s'", rootCmd.Use)
@@ -66,7 +61,6 @@ func TestRootCmd_Structure(t *testing.T) {
 }
 
 func TestVersionCmd_Structure(t *testing.T) {
-	t.Parallel()
 	// Test that version command is registered
 	found := false
 	for _, cmd := range rootCmd.Commands() {
@@ -81,7 +75,6 @@ func TestVersionCmd_Structure(t *testing.T) {
 }
 
 func TestDoctorCmd_Structure(t *testing.T) {
-	t.Parallel()
 	// Test that doctor command is registered
 	found := false
 	for _, cmd := range rootCmd.Commands() {
@@ -96,7 +89,6 @@ func TestDoctorCmd_Structure(t *testing.T) {
 }
 
 func TestInitCmd_Structure(t *testing.T) {
-	t.Parallel()
 	// Test that init command is registered
 	found := false
 	for _, cmd := range rootCmd.Commands() {
@@ -111,7 +103,6 @@ func TestInitCmd_Structure(t *testing.T) {
 }
 
 func TestRunCmd_Structure(t *testing.T) {
-	t.Parallel()
 	// Test that run command is registered
 	found := false
 	for _, cmd := range rootCmd.Commands() {
@@ -126,7 +117,6 @@ func TestRunCmd_Structure(t *testing.T) {
 }
 
 func TestStatusCmd_Structure(t *testing.T) {
-	t.Parallel()
 	// Test that status command is registered
 	found := false
 	for _, cmd := range rootCmd.Commands() {
@@ -141,7 +131,6 @@ func TestStatusCmd_Structure(t *testing.T) {
 }
 
 func TestSetVersion(t *testing.T) {
-	t.Parallel()
 	SetVersion("1.0.0", "abc123", "2024-01-01")
 	if appVersion != "1.0.0" {
 		t.Errorf("expected version '1.0.0', got '%s'", appVersion)
@@ -155,7 +144,6 @@ func TestSetVersion(t *testing.T) {
 }
 
 func TestCheckCommand(t *testing.T) {
-	t.Parallel()
 	// Test checkCommand with a known command
 	if !checkCommand("ls", []string{}) {
 		t.Error("expected 'ls' to be available")
@@ -163,7 +151,6 @@ func TestCheckCommand(t *testing.T) {
 }
 
 func TestCheckCommand_NotFound(t *testing.T) {
-	t.Parallel()
 	// Test checkCommand with unknown command
 	if checkCommand("nonexistent_command_xyz", []string{}) {
 		t.Error("expected 'nonexistent_command_xyz' to not be available")
@@ -171,7 +158,6 @@ func TestCheckCommand_NotFound(t *testing.T) {
 }
 
 func TestAnalyzeCmd_Structure(t *testing.T) {
-	t.Parallel()
 	// Test that analyze command is registered
 	found := false
 	for _, cmd := range rootCmd.Commands() {
@@ -192,7 +178,6 @@ func TestAnalyzeCmd_Structure(t *testing.T) {
 }
 
 func TestPlanCmd_Structure(t *testing.T) {
-	t.Parallel()
 	// Test that plan command is registered
 	found := false
 	for _, cmd := range rootCmd.Commands() {
@@ -213,7 +198,6 @@ func TestPlanCmd_Structure(t *testing.T) {
 }
 
 func TestExecuteCmd_Structure(t *testing.T) {
-	t.Parallel()
 	// Test that execute command is registered
 	found := false
 	for _, cmd := range rootCmd.Commands() {
@@ -234,7 +218,6 @@ func TestExecuteCmd_Structure(t *testing.T) {
 }
 
 func TestAnalyzeCmd_Flags(t *testing.T) {
-	t.Parallel()
 	// Find analyze command
 	var analyzeCmd *cobra.Command
 	for _, cmd := range rootCmd.Commands() {
@@ -257,7 +240,6 @@ func TestAnalyzeCmd_Flags(t *testing.T) {
 }
 
 func TestPlanCmd_Flags(t *testing.T) {
-	t.Parallel()
 	// Find plan command
 	var planCmd *cobra.Command
 	for _, cmd := range rootCmd.Commands() {
@@ -280,7 +262,6 @@ func TestPlanCmd_Flags(t *testing.T) {
 }
 
 func TestExecuteCmd_Flags(t *testing.T) {
-	t.Parallel()
 	// Find execute command
 	var executeCmd *cobra.Command
 	for _, cmd := range rootCmd.Commands() {
@@ -303,7 +284,6 @@ func TestExecuteCmd_Flags(t *testing.T) {
 }
 
 func TestCountCompletedTasks(t *testing.T) {
-	t.Parallel()
 	state := &core.WorkflowState{
 		WorkflowRun: core.WorkflowRun{
 			Tasks: map[core.TaskID]*core.TaskState{
@@ -322,7 +302,6 @@ func TestCountCompletedTasks(t *testing.T) {
 }
 
 func TestCountCompletedTasks_Empty(t *testing.T) {
-	t.Parallel()
 	state := &core.WorkflowState{
 		WorkflowRun: core.WorkflowRun{
 			Tasks: map[core.TaskID]*core.TaskState{},
@@ -336,7 +315,6 @@ func TestCountCompletedTasks_Empty(t *testing.T) {
 }
 
 func TestInitializeWorkflowState(t *testing.T) {
-	t.Parallel()
 	prompt := "test prompt"
 	bp := &core.Blueprint{
 		ExecutionMode: "single_agent",
@@ -365,7 +343,6 @@ func TestInitializeWorkflowState(t *testing.T) {
 }
 
 func TestGenerateCmdWorkflowID(t *testing.T) {
-	t.Parallel()
 	id1 := generateCmdWorkflowID()
 	id2 := generateCmdWorkflowID()
 

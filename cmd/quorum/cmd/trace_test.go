@@ -23,7 +23,6 @@ func writeTraceManifest(t *testing.T, dir string, manifest traceManifestView) {
 }
 
 func TestListTraceEntriesOrdersByStartedAt(t *testing.T) {
-	t.Parallel()
 	base := t.TempDir()
 	older := time.Now().Add(-2 * time.Hour).UTC()
 	newer := time.Now().Add(-1 * time.Hour).UTC()
@@ -52,7 +51,6 @@ func TestListTraceEntriesOrdersByStartedAt(t *testing.T) {
 }
 
 func TestResolveTraceManifestUsesLatest(t *testing.T) {
-	t.Parallel()
 	base := t.TempDir()
 	older := time.Now().Add(-2 * time.Hour).UTC()
 	newer := time.Now().Add(-1 * time.Hour).UTC()
@@ -81,7 +79,6 @@ func TestResolveTraceManifestUsesLatest(t *testing.T) {
 }
 
 func TestResolveTraceManifestByID(t *testing.T) {
-	t.Parallel()
 	base := t.TempDir()
 	writeTraceManifest(t, filepath.Join(base, "run-1"), traceManifestView{
 		RunID:     "run-1",

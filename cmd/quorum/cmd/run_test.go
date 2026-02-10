@@ -9,7 +9,6 @@ import (
 )
 
 func TestParseTraceConfig_DefaultsToOff(t *testing.T) {
-	t.Parallel()
 	cfg := &config.Config{}
 
 	trace, err := parseTraceConfig(cfg, "")
@@ -22,7 +21,6 @@ func TestParseTraceConfig_DefaultsToOff(t *testing.T) {
 }
 
 func TestParseTraceConfig_Override(t *testing.T) {
-	t.Parallel()
 	cfg := &config.Config{
 		Trace: config.TraceConfig{Mode: "off"},
 	}
@@ -37,7 +35,6 @@ func TestParseTraceConfig_Override(t *testing.T) {
 }
 
 func TestParseTraceConfig_InvalidMode(t *testing.T) {
-	t.Parallel()
 	cfg := &config.Config{
 		Trace: config.TraceConfig{Mode: "off"},
 	}
@@ -48,7 +45,6 @@ func TestParseTraceConfig_InvalidMode(t *testing.T) {
 }
 
 func TestValidateSingleAgentFlags(t *testing.T) {
-	t.Parallel()
 	tests := []struct {
 		name          string
 		singleAgent   bool
@@ -135,7 +131,6 @@ func TestValidateSingleAgentFlags(t *testing.T) {
 }
 
 func TestBuildSingleAgentConfig(t *testing.T) {
-	t.Parallel()
 	tests := []struct {
 		name        string
 		singleAgent bool
