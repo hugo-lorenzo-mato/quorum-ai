@@ -25,17 +25,10 @@ const FileTreeNode = ({ node, level = 0, onSelect, selectedKey }) => {
 
   return (
     <div className="select-none">
-      <div
+      <button
+        type="button"
         onClick={handleClick}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            handleClick(e);
-          }
-        }}
-        role="button"
-        tabIndex={0}
-        className={`flex items-center gap-1.5 py-1.5 px-2 rounded-lg cursor-pointer transition-colors ${
+        className={`w-full text-left flex items-center gap-1.5 py-1.5 px-2 rounded-lg cursor-pointer transition-colors bg-transparent border-0 appearance-none ${
           isSelected
             ? 'bg-primary/10 text-primary font-medium'
             : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
@@ -50,7 +43,7 @@ const FileTreeNode = ({ node, level = 0, onSelect, selectedKey }) => {
           )}
         </span>
         <span className="truncate text-sm">{node.name}</span>
-      </div>
+      </button>
       {isFolder && expanded && node.children && (
         <div>
           {node.children.map((child) => (

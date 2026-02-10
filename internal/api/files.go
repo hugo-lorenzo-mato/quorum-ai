@@ -267,37 +267,18 @@ func (s *Server) buildFileTree(ctx context.Context, dir, relPath string, depth, 
 // It uses the project root from the request context when available (multi-project),
 // falling back to s.root (server root) or the process working directory.
 func (s *Server) resolvePathCtx(ctx context.Context, requestedPath string) (string, error) {
-	// Prefer project root from context (multi-project support), then server root,
-	// then process working directory.
-	root := s.getProjectRootPath(ctx)
-	if root == "" {
-		var err error
-		root, err = os.Getwd()
-		if err != nil {
-			return "", err
-		}
-	}
-
-	rootAbs, err := filepath.Abs(root)
+	root, err := s.projectRootForRequest(ctx)
 	if err != nil {
 		return "", err
 	}
-	rootReal := rootAbs
-	if rr, err := filepath.EvalSymlinks(rootAbs); err == nil {
-		rootReal = rr
+	rootAbs, rootReal, err := canonicalizeRoot(root)
+	if err != nil {
+		return "", err
 	}
 
 	cleanPath := filepath.Clean(requestedPath)
-
-	// Prevent accidental exposure of sensitive files if the HTTP server is reachable.
-	// This endpoint is intended for project browsing; secrets should not be readable.
-	if isForbiddenProjectPath(cleanPath) {
-		return "", os.ErrPermission
-	}
-
-	// Reject absolute paths (and Windows volume/UNC paths).
-	if filepath.IsAbs(cleanPath) || filepath.VolumeName(cleanPath) != "" {
-		return "", os.ErrPermission
+	if err := validateProjectRelativePath(cleanPath); err != nil {
+		return "", err
 	}
 
 	absPath, err := filepath.Abs(filepath.Join(rootAbs, cleanPath))
@@ -308,10 +289,50 @@ func (s *Server) resolvePathCtx(ctx context.Context, requestedPath string) (stri
 		return "", os.ErrPermission
 	}
 
+	return resolveExistingPathWithinRoot(absPath, rootReal)
+}
+
+func (s *Server) projectRootForRequest(ctx context.Context) (string, error) {
+	root := s.getProjectRootPath(ctx)
+	if root != "" {
+		return root, nil
+	}
+	return os.Getwd()
+}
+
+func canonicalizeRoot(root string) (rootAbs string, rootReal string, err error) {
+	rootAbs, err = filepath.Abs(root)
+	if err != nil {
+		return "", "", err
+	}
+
+	rootReal = rootAbs
+	if rr, err := filepath.EvalSymlinks(rootAbs); err == nil {
+		rootReal = rr
+	}
+	return rootAbs, rootReal, nil
+}
+
+func validateProjectRelativePath(cleanPath string) error {
+	// Prevent accidental exposure of sensitive files if the HTTP server is reachable.
+	// This endpoint is intended for project browsing; secrets should not be readable.
+	if isForbiddenProjectPath(cleanPath) {
+		return os.ErrPermission
+	}
+
+	// Reject absolute paths (and Windows volume/UNC paths).
+	if filepath.IsAbs(cleanPath) || filepath.VolumeName(cleanPath) != "" {
+		return os.ErrPermission
+	}
+	return nil
+}
+
+func resolveExistingPathWithinRoot(absPath, rootReal string) (string, error) {
 	// If the path exists, resolve symlinks to prevent traversal via in-tree symlinks.
 	// For non-existent paths (e.g., browsing a missing directory), preserve legacy
 	// behavior and let the caller decide how to handle os.IsNotExist.
-	if _, err := os.Lstat(absPath); err == nil {
+	_, err := os.Lstat(absPath)
+	if err == nil {
 		realPath, err := filepath.EvalSymlinks(absPath)
 		if err != nil {
 			return "", err
@@ -320,12 +341,13 @@ func (s *Server) resolvePathCtx(ctx context.Context, requestedPath string) (stri
 			return "", os.ErrPermission
 		}
 		return realPath, nil
-	} else if !os.IsNotExist(err) {
-		// Fail closed on unexpected filesystem errors.
-		return "", err
+	}
+	if os.IsNotExist(err) {
+		return absPath, nil
 	}
 
-	return absPath, nil
+	// Fail closed on unexpected filesystem errors.
+	return "", err
 }
 
 func isForbiddenProjectPath(cleanPath string) bool {
@@ -334,35 +356,58 @@ func isForbiddenProjectPath(cleanPath string) bool {
 	if p == "" || p == "." {
 		return false
 	}
-	parts := strings.Split(p, "/")
-	for _, part := range parts {
+	for _, part := range strings.Split(p, "/") {
 		if part == "" || part == "." {
 			continue
 		}
-		if part == ".." {
-			return true
-		}
-
-		// Entire directories to never expose.
-		switch part {
-		case ".git", ".quorum", ".ssh":
-			return true
-		}
-
-		// Common secret-bearing filenames.
-		if part == ".env" || strings.HasPrefix(part, ".env.") {
-			return true
-		}
-
-		lower := strings.ToLower(part)
-		if lower == "id_rsa" || lower == "id_dsa" || lower == "id_ecdsa" || lower == "id_ed25519" {
-			return true
-		}
-		if strings.HasSuffix(lower, ".pem") || strings.HasSuffix(lower, ".key") || strings.HasSuffix(lower, ".p12") || strings.HasSuffix(lower, ".pfx") {
+		if isForbiddenPathSegment(part) {
 			return true
 		}
 	}
 	return false
+}
+
+func isForbiddenPathSegment(part string) bool {
+	if part == ".." {
+		return true
+	}
+	if isForbiddenProjectDir(part) {
+		return true
+	}
+	if isForbiddenEnvFilename(part) {
+		return true
+	}
+	lower := strings.ToLower(part)
+	return isForbiddenPrivateKeyFilename(lower) || isForbiddenKeyMaterialFilename(lower)
+}
+
+func isForbiddenProjectDir(part string) bool {
+	switch part {
+	case ".git", ".quorum", ".ssh":
+		return true
+	default:
+		return false
+	}
+}
+
+func isForbiddenEnvFilename(part string) bool {
+	return part == ".env" || strings.HasPrefix(part, ".env.")
+}
+
+func isForbiddenPrivateKeyFilename(lower string) bool {
+	switch lower {
+	case "id_rsa", "id_dsa", "id_ecdsa", "id_ed25519":
+		return true
+	default:
+		return false
+	}
+}
+
+func isForbiddenKeyMaterialFilename(lower string) bool {
+	return strings.HasSuffix(lower, ".pem") ||
+		strings.HasSuffix(lower, ".key") ||
+		strings.HasSuffix(lower, ".p12") ||
+		strings.HasSuffix(lower, ".pfx")
 }
 
 // resolvePath resolves a relative path using the server root (no request context).

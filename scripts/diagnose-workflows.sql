@@ -22,16 +22,16 @@ LEFT JOIN workflows w ON aw.workflow_id = w.id;
 
 -- 2. Workflows without report_path
 SELECT '=== WORKFLOWS WITHOUT REPORT_PATH ===' AS section;
-SELECT
-    id,
-    status,
-    current_phase,
-    created_at,
-    'Missing report_path' AS issue
-	FROM workflows
-	-- Oracle treats '' as NULL; NULLIF keeps this portable while avoiding direct empty-string NULL comparisons.
-	WHERE NULLIF(report_path, '') IS NULL
-	AND status != 'pending';
+	SELECT
+	    id,
+	    status,
+	    current_phase,
+	    created_at,
+	    'Missing report_path' AS issue
+		FROM workflows
+		-- Portability note: treat empty report_path as missing; NULLIF keeps this consistent across engines.
+		WHERE NULLIF(report_path, '') IS NULL
+		AND status != 'pending';
 
 -- 3. Failed workflows that are still active (ghost workflows)
 SELECT '=== GHOST WORKFLOWS (failed but active) ===' AS section;

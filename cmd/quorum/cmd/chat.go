@@ -307,23 +307,7 @@ func createWorkflowRunnerInternal(
 	outputNotifier workflow.OutputNotifier,
 ) (*workflow.Runner, error) {
 	// Create state manager
-	statePath := cfg.State.Path
-	if statePath == "" {
-		statePath = ".quorum/state/state.db"
-	}
-
-	stateOpts := state.StateManagerOptions{
-		BackupPath: cfg.State.BackupPath,
-	}
-	if cfg.State.LockTTL != "" {
-		if lockTTL, err := time.ParseDuration(cfg.State.LockTTL); err == nil {
-			stateOpts.LockTTL = lockTTL
-		} else {
-			logger.Warn("invalid state.lock_ttl, using default", "value", cfg.State.LockTTL, "error", err)
-		}
-	}
-
-	stateManager, err := state.NewStateManagerWithOptions(statePath, stateOpts)
+	stateManager, err := createStateManager(cfg, logger)
 	if err != nil {
 		return nil, fmt.Errorf("creating state manager: %w", err)
 	}
@@ -334,29 +318,9 @@ func createWorkflowRunnerInternal(
 		return nil, fmt.Errorf("creating prompt renderer: %w", err)
 	}
 
-	// Create runner config
-	timeout, err := parseDurationDefault(cfg.Workflow.Timeout, defaultWorkflowTimeout)
+	timeout, analyzeTimeout, planTimeout, executeTimeout, err := parseRunnerTimeouts(cfg)
 	if err != nil {
-		return nil, fmt.Errorf("parsing workflow timeout %q: %w", cfg.Workflow.Timeout, err)
-	}
-
-	// Parse phase timeouts
-	analyzeTimeout, err := parseDurationDefault(cfg.Phases.Analyze.Timeout, defaultPhaseTimeout)
-	if err != nil {
-		return nil, fmt.Errorf("parsing analyze phase timeout %q: %w", cfg.Phases.Analyze.Timeout, err)
-	}
-	planTimeout, err := parseDurationDefault(cfg.Phases.Plan.Timeout, defaultPhaseTimeout)
-	if err != nil {
-		return nil, fmt.Errorf("parsing plan phase timeout %q: %w", cfg.Phases.Plan.Timeout, err)
-	}
-	executeTimeout, err := parseDurationDefault(cfg.Phases.Execute.Timeout, defaultPhaseTimeout)
-	if err != nil {
-		return nil, fmt.Errorf("parsing execute phase timeout %q: %w", cfg.Phases.Execute.Timeout, err)
-	}
-
-	defaultAgent := cfg.Agents.Default
-	if defaultAgent == "" {
-		defaultAgent = "claude"
+		return nil, err
 	}
 
 	runnerConfig := &workflow.RunnerConfig{
@@ -364,7 +328,7 @@ func createWorkflowRunnerInternal(
 		MaxRetries:   3,
 		DryRun:       false,
 		DenyTools:    cfg.Workflow.DenyTools,
-		DefaultAgent: defaultAgent,
+		DefaultAgent: defaultAgentName(cfg),
 		AgentPhaseModels: map[string]map[string]string{
 			"claude":   cfg.Agents.Claude.PhaseModels,
 			"gemini":   cfg.Agents.Gemini.PhaseModels,
@@ -415,17 +379,9 @@ func createWorkflowRunnerInternal(
 	dagBuilder := service.NewDAGBuilder()
 
 	// Create worktree manager
-	cwd, err := os.Getwd()
+	worktreeManager, err := createWorktreeManager(cfg, logger)
 	if err != nil {
-		return nil, fmt.Errorf("getting working directory: %w", err)
-	}
-	gitClient, err := git.NewClient(cwd)
-	if err != nil {
-		logger.Warn("failed to create git client, worktree isolation disabled", "error", err)
-	}
-	var worktreeManager workflow.WorktreeManager
-	if gitClient != nil {
-		worktreeManager = git.NewTaskWorktreeManager(gitClient, cfg.Git.Worktree.Dir).WithLogger(logger)
+		return nil, err
 	}
 
 	// Create adapters
@@ -440,15 +396,7 @@ func createWorkflowRunnerInternal(
 
 	// Connect registry to output notifier for real-time streaming events from CLI adapters.
 	// (OutputNotifier itself is responsible for publishing into the UI/event bus layer.)
-	if outputNotifier != nil {
-		registry.SetEventHandler(func(event core.AgentEvent) {
-			data := make(map[string]interface{})
-			for k, v := range event.Data {
-				data[k] = v
-			}
-			outputNotifier.AgentEvent(string(event.Type), event.Agent, event.Message, data)
-		})
-	}
+	connectRegistryToOutputNotifier(registry, outputNotifier)
 
 	// Create mode enforcer
 	modeEnforcer := service.NewModeEnforcer(service.ExecutionMode{
@@ -480,6 +428,82 @@ func createWorkflowRunnerInternal(
 	}
 
 	return runner, nil
+}
+
+func createStateManager(cfg *config.Config, logger *logging.Logger) (core.StateManager, error) {
+	statePath := cfg.State.Path
+	if statePath == "" {
+		statePath = ".quorum/state/state.db"
+	}
+
+	stateOpts := state.StateManagerOptions{
+		BackupPath: cfg.State.BackupPath,
+	}
+	if cfg.State.LockTTL != "" {
+		lockTTL, err := time.ParseDuration(cfg.State.LockTTL)
+		if err != nil {
+			logger.Warn("invalid state.lock_ttl, using default", "value", cfg.State.LockTTL, "error", err)
+		} else {
+			stateOpts.LockTTL = lockTTL
+		}
+	}
+
+	return state.NewStateManagerWithOptions(statePath, stateOpts)
+}
+
+func parseRunnerTimeouts(cfg *config.Config) (timeout, analyzeTimeout, planTimeout, executeTimeout time.Duration, err error) {
+	timeout, err = parseDurationDefault(cfg.Workflow.Timeout, defaultWorkflowTimeout)
+	if err != nil {
+		return 0, 0, 0, 0, fmt.Errorf("parsing workflow timeout %q: %w", cfg.Workflow.Timeout, err)
+	}
+	analyzeTimeout, err = parseDurationDefault(cfg.Phases.Analyze.Timeout, defaultPhaseTimeout)
+	if err != nil {
+		return 0, 0, 0, 0, fmt.Errorf("parsing analyze phase timeout %q: %w", cfg.Phases.Analyze.Timeout, err)
+	}
+	planTimeout, err = parseDurationDefault(cfg.Phases.Plan.Timeout, defaultPhaseTimeout)
+	if err != nil {
+		return 0, 0, 0, 0, fmt.Errorf("parsing plan phase timeout %q: %w", cfg.Phases.Plan.Timeout, err)
+	}
+	executeTimeout, err = parseDurationDefault(cfg.Phases.Execute.Timeout, defaultPhaseTimeout)
+	if err != nil {
+		return 0, 0, 0, 0, fmt.Errorf("parsing execute phase timeout %q: %w", cfg.Phases.Execute.Timeout, err)
+	}
+	return timeout, analyzeTimeout, planTimeout, executeTimeout, nil
+}
+
+func defaultAgentName(cfg *config.Config) string {
+	if cfg.Agents.Default == "" {
+		return "claude"
+	}
+	return cfg.Agents.Default
+}
+
+func createWorktreeManager(cfg *config.Config, logger *logging.Logger) (workflow.WorktreeManager, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return nil, fmt.Errorf("getting working directory: %w", err)
+	}
+	gitClient, err := git.NewClient(cwd)
+	if err != nil {
+		logger.Warn("failed to create git client, worktree isolation disabled", "error", err)
+		return nil, nil
+	}
+	return git.NewTaskWorktreeManager(gitClient, cfg.Git.Worktree.Dir).WithLogger(logger), nil
+}
+
+func connectRegistryToOutputNotifier(registry *cli.Registry, outputNotifier workflow.OutputNotifier) {
+	if outputNotifier == nil {
+		return
+	}
+	// Connect registry to output notifier for real-time streaming events from CLI adapters.
+	// (OutputNotifier itself is responsible for publishing into the UI/event bus layer.)
+	registry.SetEventHandler(func(event core.AgentEvent) {
+		data := make(map[string]interface{})
+		for k, v := range event.Data {
+			data[k] = v
+		}
+		outputNotifier.AgentEvent(string(event.Type), event.Agent, event.Message, data)
+	})
 }
 
 // createWorkflowRunner creates a workflow runner with all dependencies.

@@ -27,6 +27,7 @@ export function CardBase({
   variant = 'default', // 'default' | 'selected' | 'executing' | 'completed' | 'failed'
   accentColor, // 'primary' | 'blue' | 'emerald' | 'rose' | 'amber' | 'violet'
   hoverable = true,
+  ariaLabel,
   ...props 
 }) {
   const variantStyles = {
@@ -52,17 +53,6 @@ export function CardBase({
 
   return (
     <div
-      onClick={onClick}
-      onKeyDown={(e) => {
-        if (!onClick) return;
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          onClick(e);
-        }
-      }}
-      role={onClick ? 'button' : undefined}
-      tabIndex={onClick ? 0 : undefined}
-      aria-disabled={onClick ? undefined : undefined}
       className={cn(
         'relative flex flex-col rounded-xl border transition-all backdrop-blur-sm',
         accentColor && 'border-t-2',
@@ -74,6 +64,14 @@ export function CardBase({
       )}
       {...props}
     >
+      {onClick && (
+        <button
+          type="button"
+          onClick={onClick}
+          aria-label={ariaLabel || 'Open card'}
+          className="absolute inset-0 z-10 rounded-xl bg-transparent border-0 p-0 appearance-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+        />
+      )}
       {children}
     </div>
   );
