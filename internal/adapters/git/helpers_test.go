@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/testutil"
 )
 
 func TestParseStatus_BranchInfo(t *testing.T) {
@@ -700,47 +701,25 @@ func TestResolveGitBinaryPath(t *testing.T) {
 func TestValidateGitRemoteName(t *testing.T) {
 	t.Parallel()
 
-	if err := validateGitRemoteName("origin"); err != nil {
-		t.Fatalf("validateGitRemoteName(origin) unexpected error: %v", err)
-	}
-	if validateGitRemoteName("bad/remote") == nil {
-		t.Fatalf("validateGitRemoteName(bad/remote) expected error")
-	}
-	if validateGitRemoteName("-origin") == nil {
-		t.Fatalf("validateGitRemoteName(-origin) expected error")
-	}
+	testutil.AssertNoError(t, validateGitRemoteName("origin"))
+	testutil.AssertError(t, validateGitRemoteName("bad/remote"))
+	testutil.AssertError(t, validateGitRemoteName("-origin"))
 }
 
 func TestValidateGitBranchName(t *testing.T) {
 	t.Parallel()
 
-	if err := validateGitBranchName("feature/test"); err != nil {
-		t.Fatalf("validateGitBranchName(feature/test) unexpected error: %v", err)
-	}
-	if validateGitBranchName("-bad") == nil {
-		t.Fatalf("validateGitBranchName(-bad) expected error")
-	}
-	if validateGitBranchName("bad..name") == nil {
-		t.Fatalf("validateGitBranchName(bad..name) expected error")
-	}
+	testutil.AssertNoError(t, validateGitBranchName("feature/test"))
+	testutil.AssertError(t, validateGitBranchName("-bad"))
+	testutil.AssertError(t, validateGitBranchName("bad..name"))
 }
 
 func TestValidateGitExecArgs(t *testing.T) {
 	t.Parallel()
 
-	if validateGitExecArgs(nil) == nil {
-		t.Fatalf("validateGitExecArgs(nil) expected error")
-	}
-	if validateGitExecArgs([]string{"-bad"}) == nil {
-		t.Fatalf("validateGitExecArgs(invalid subcommand) expected error")
-	}
-	if err := validateGitExecArgs([]string{"status", "ok"}); err != nil {
-		t.Fatalf("validateGitExecArgs(status ok) unexpected error: %v", err)
-	}
-	if err := validateGitExecArgs([]string{"commit", "-m", "line1\nline2"}); err != nil {
-		t.Fatalf("validateGitExecArgs(commit -m multiline) unexpected error: %v", err)
-	}
-	if validateGitExecArgs([]string{"status", "line1\nline2"}) == nil {
-		t.Fatalf("validateGitExecArgs(status newline) expected error")
-	}
+	testutil.AssertError(t, validateGitExecArgs(nil))
+	testutil.AssertError(t, validateGitExecArgs([]string{"-bad"}))
+	testutil.AssertNoError(t, validateGitExecArgs([]string{"status", "ok"}))
+	testutil.AssertNoError(t, validateGitExecArgs([]string{"commit", "-m", "line1\nline2"}))
+	testutil.AssertError(t, validateGitExecArgs([]string{"status", "line1\nline2"}))
 }
