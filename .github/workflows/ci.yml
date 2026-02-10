@@ -252,7 +252,8 @@ jobs:
 
       - name: SonarCloud Scan
         if: env.SONAR_TOKEN != ''
-        uses: SonarSource/sonarqube-scan-action@v7.0.0
+        # Pin to a full commit SHA for supply-chain safety (Sonar hotspot rule).
+        uses: SonarSource/sonarqube-scan-action@a31c9398be7ace6bbfaf30c0bd5d415f843d45e9 # v7.0.0
         with:
           args: >
             -Dsonar.projectVersion=${{ steps.sonar_version.outputs.version }}
