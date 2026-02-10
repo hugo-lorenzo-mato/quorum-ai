@@ -85,6 +85,10 @@ func (c *Client) run(ctx context.Context, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
 
+	if err := validateGitExecArgs(args); err != nil {
+		return "", err
+	}
+
 	// Security note: exec.CommandContext does not invoke a shell, so arguments are
 	// not subject to shell interpolation. We still validate the binary location
 	// at construction time and validate user-controlled args in higher-level
@@ -111,6 +115,10 @@ func (c *Client) run(ctx context.Context, args ...string) (string, error) {
 func (c *Client) runWithOutput(ctx context.Context, args ...string) (stdout, stderr string, err error) {
 	ctx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
+
+	if err := validateGitExecArgs(args); err != nil {
+		return "", "", err
+	}
 
 	// See security note in run().
 	cmd := exec.CommandContext(ctx, c.gitPath, args...)
@@ -646,6 +654,47 @@ func validateNoNul(field, value string) error {
 	if strings.IndexByte(value, 0) >= 0 {
 		return core.ErrValidation("INVALID_INPUT", fmt.Sprintf("%s contains NUL byte", field))
 	}
+	return nil
+}
+
+func validateGitExecArgs(args []string) error {
+	// Validate everything passed to exec.CommandContext. This is defensive:
+	// - exec.CommandContext does not invoke a shell (no shell injection), but
+	// - git itself parses options; malformed/unexpected args can cause surprising behavior.
+	if len(args) == 0 {
+		return core.ErrValidation("INVALID_GIT_ARGS", "missing git subcommand")
+	}
+
+	// Subcommand is always internal in this adapter; keep it conservative anyway.
+	sub := args[0]
+	if err := validateNoNul("subcommand", sub); err != nil {
+		return err
+	}
+	if sub == "" || strings.HasPrefix(sub, "-") || strings.ContainsAny(sub, " \t\r\n") {
+		return core.ErrValidation("INVALID_GIT_ARGS", "invalid git subcommand")
+	}
+
+	// Disallow newline characters in args by default to keep logging predictable.
+	// Allow newlines only for arguments that follow "-m" (commit/stash messages).
+	allowNewlineAt := make(map[int]struct{})
+	for i := 0; i < len(args)-1; i++ {
+		if args[i] == "-m" {
+			allowNewlineAt[i+1] = struct{}{}
+		}
+	}
+
+	for i, a := range args[1:] {
+		if err := validateNoNul("arg", a); err != nil {
+			return err
+		}
+		if _, ok := allowNewlineAt[i+1]; ok {
+			continue
+		}
+		if strings.ContainsAny(a, "\r\n") {
+			return core.ErrValidation("INVALID_GIT_ARGS", "argument contains newline")
+		}
+	}
+
 	return nil
 }
 
