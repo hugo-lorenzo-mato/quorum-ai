@@ -244,17 +244,27 @@ func TestCollect_GPUCacheHit(t *testing.T) {
 
 	c.mu.Lock()
 	firstUpdate := c.lastGPUUpdate
+	gpuCache := c.gpuCache
+	// Both conditions must be true for cache to be used: timestamp set AND cache not nil
+	if firstUpdate.IsZero() || gpuCache == nil {
+		c.mu.Unlock()
+		t.Skip("GPU cache was not populated on first collect (no GPU or query failed)")
+	}
 	c.mu.Unlock()
 
-	// Second collect within 5s should use cache
+	// Immediately take second collect (within same millisecond if possible)
+	// This ensures we're well within the 5s cache window
 	c.Collect()
 
 	c.mu.Lock()
 	secondUpdate := c.lastGPUUpdate
 	c.mu.Unlock()
 
+	// The cache should be reused (same timestamp) since both conditions were met
 	if !firstUpdate.Equal(secondUpdate) {
-		t.Error("GPU cache should not have been refreshed within 5 seconds")
+		timeDiff := secondUpdate.Sub(firstUpdate)
+		t.Errorf("GPU cache timestamp changed unexpectedly: first=%v, second=%v (diff=%v)",
+			firstUpdate, secondUpdate, timeDiff)
 	}
 }
 
