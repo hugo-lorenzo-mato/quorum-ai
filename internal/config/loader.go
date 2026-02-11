@@ -230,7 +230,13 @@ func (l *Loader) resolveAbsolutePaths(cfg *Config, baseDir string) {
 //
 //	→ "/home/user/project/.quorum/state.db"
 func resolvePathRelativeTo(path, baseDir string) string {
+	// Check for absolute paths (including Unix-style paths on Windows)
 	if filepath.IsAbs(path) {
+		return path
+	}
+	// On Windows, filepath.IsAbs("/unix/path") returns false
+	// But such paths should be treated as absolute
+	if len(path) > 0 && (path[0] == '/' || path[0] == '\\') {
 		return path
 	}
 	return filepath.Join(baseDir, path)
