@@ -609,7 +609,7 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
       if (analyzeFiles.has('consolidated.md')) {
         docs.analyses.push({
           key: 'analysis:consolidated',
-          title: 'Análisis condensado',
+          title: 'Análisis consolidado',
           path: `${analyzePath}/consolidated.md`,
         });
       }
