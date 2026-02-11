@@ -440,7 +440,7 @@ func TestCrashDumpWriter_RecoverAndDump_NilLogger(t *testing.T) {
 	writer := NewCrashDumpWriter(tempDir, 10, true, false, nil, nil)
 
 	defer func() {
-		if r := recover(); r == nil {
+		if recover() == nil {
 			t.Fatal("expected panic to be re-thrown")
 		}
 
@@ -475,7 +475,7 @@ func TestCrashDumpWriter_RecoverAndDump_WriteFails(t *testing.T) {
 	writer := NewCrashDumpWriter("/dev/null/impossible/path", 10, true, false, nil, nil)
 
 	defer func() {
-		if r := recover(); r == nil {
+		if recover() == nil {
 			t.Fatal("expected panic to be re-thrown")
 		}
 	}()
@@ -496,7 +496,7 @@ func TestCrashDumpWriter_RecoverAndDump_WriteFailsWithLogger(t *testing.T) {
 	writer := NewCrashDumpWriter("/dev/null/impossible/path", 10, true, false, logger, nil)
 
 	defer func() {
-		if r := recover(); r == nil {
+		if recover() == nil {
 			t.Fatal("expected panic to be re-thrown")
 		}
 	}()
@@ -849,7 +849,7 @@ func TestWrapExecution_PanicWithNilDumpWriter(t *testing.T) {
 
 	// Without a dump writer, a panic should not be caught
 	defer func() {
-		if r := recover(); r == nil {
+		if recover() == nil {
 			t.Fatal("expected panic when no dump writer is present")
 		}
 	}()
