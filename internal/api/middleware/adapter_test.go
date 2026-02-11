@@ -8,27 +8,27 @@ import (
 
 // --- Mock project.Registry for adapter tests ---
 
-type mockProjectForAdapter struct {
+type _mockProjectForAdapter struct {
 	id   string
 	path string
 }
 
-type mockProjectRegistryForAdapter struct {
-	projects       map[string]*mockProjectForAdapter
-	defaultProject *mockProjectForAdapter
+type _mockProjectRegistryForAdapter struct {
+	projects       map[string]*_mockProjectForAdapter
+	defaultProject *_mockProjectForAdapter
 	defaultErr     error
 	getErr         error
 }
 
-func (m *mockProjectRegistryForAdapter) ListProjects(_ context.Context) ([]*mockProjectForAdapter, error) {
-	var result []*mockProjectForAdapter
+func (m *_mockProjectRegistryForAdapter) _listProjects(_ context.Context) ([]*_mockProjectForAdapter, error) {
+	var result []*_mockProjectForAdapter
 	for _, p := range m.projects {
 		result = append(result, p)
 	}
 	return result, nil
 }
 
-func (m *mockProjectRegistryForAdapter) GetProject(_ context.Context, id string) (*mockProjectForAdapter, error) {
+func (m *_mockProjectRegistryForAdapter) _getProject(_ context.Context, id string) (*_mockProjectForAdapter, error) {
 	if m.getErr != nil {
 		return nil, m.getErr
 	}
@@ -38,7 +38,7 @@ func (m *mockProjectRegistryForAdapter) GetProject(_ context.Context, id string)
 	return nil, errors.New("project not found")
 }
 
-func (m *mockProjectRegistryForAdapter) GetDefaultProject(_ context.Context) (*mockProjectForAdapter, error) {
+func (m *_mockProjectRegistryForAdapter) _getDefaultProject(_ context.Context) (*_mockProjectForAdapter, error) {
 	if m.defaultErr != nil {
 		return nil, m.defaultErr
 	}

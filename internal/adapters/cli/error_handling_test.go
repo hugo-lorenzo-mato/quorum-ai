@@ -12,10 +12,10 @@ func TestErrorHandling_NetworkFailures(t *testing.T) {
 	t.Parallel()
 
 	testCases := []struct {
-		name          string
-		error         error
-		expectRetry   bool
-		description   string
+		name        string
+		error       error
+		expectRetry bool
+		description string
 	}{
 		{
 			name:        "connection_timeout",
@@ -24,7 +24,7 @@ func TestErrorHandling_NetworkFailures(t *testing.T) {
 			description: "Network connection timeout should trigger retry",
 		},
 		{
-			name:        "connection_refused", 
+			name:        "connection_refused",
 			error:       &net.OpError{Op: "dial", Net: "tcp", Err: syscall.ECONNREFUSED},
 			expectRetry: true,
 			description: "Connection refused should trigger retry",
@@ -64,11 +64,11 @@ func TestErrorHandling_RateLimitResponses(t *testing.T) {
 	t.Parallel()
 
 	testCases := []struct {
-		name           string
-		statusCode     int
-		retryAfter     string
-		expectedDelay  time.Duration
-		expectRetry    bool
+		name          string
+		statusCode    int
+		retryAfter    string
+		expectedDelay time.Duration
+		expectRetry   bool
 	}{
 		{
 			name:          "rate_limit_429",
@@ -124,11 +124,11 @@ func TestErrorHandling_ExponentialBackoff(t *testing.T) {
 	t.Parallel()
 
 	testCases := []struct {
-		name           string
-		attempt        int
-		baseDelay      time.Duration
-		expectedMin    time.Duration
-		expectedMax    time.Duration
+		name        string
+		attempt     int
+		baseDelay   time.Duration
+		expectedMin time.Duration
+		expectedMax time.Duration
 	}{
 		{
 			name:        "first_retry",
@@ -138,7 +138,7 @@ func TestErrorHandling_ExponentialBackoff(t *testing.T) {
 			expectedMax: 2 * time.Second,
 		},
 		{
-			name:        "second_retry", 
+			name:        "second_retry",
 			attempt:     2,
 			baseDelay:   1 * time.Second,
 			expectedMin: 2 * time.Second,
@@ -282,12 +282,12 @@ func calculateExponentialBackoff(baseDelay time.Duration, attempt int) time.Dura
 	for i := 1; i < attempt; i++ {
 		delay *= 2
 	}
-	
+
 	// Cap at reasonable maximum
 	maxDelay := 300 * time.Second
 	if delay > maxDelay {
 		delay = maxDelay
 	}
-	
+
 	return delay
 }

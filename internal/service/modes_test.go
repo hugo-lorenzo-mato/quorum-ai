@@ -150,4 +150,3 @@ func TestErrDryRunBlocked_Error(t *testing.T) {
 	expected := "operation write-file blocked by dry-run mode"
 	testutil.AssertEqual(t, err.Error(), expected)
 }
-

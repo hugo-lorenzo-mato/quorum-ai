@@ -17,17 +17,18 @@ import (
 
 type nopOutput struct{}
 
-func (n nopOutput) WorkflowStarted(string)                         {}
-func (n nopOutput) PhaseStarted(core.Phase)                        {}
-func (n nopOutput) TaskStarted(*core.Task)                         {}
-func (n nopOutput) TaskCompleted(*core.Task, time.Duration)        {}
-func (n nopOutput) TaskFailed(*core.Task, error)                   {}
-func (n nopOutput) TaskSkipped(*core.Task, string)                 {}
-func (n nopOutput) WorkflowStateUpdated(*core.WorkflowState)       {}
-func (n nopOutput) WorkflowCompleted(*core.WorkflowState)          {}
-func (n nopOutput) WorkflowFailed(error)                           {}
-func (n nopOutput) Log(string, string)                             {}
-func (n nopOutput) Close() error                                   { return nil }
+func (n nopOutput) WorkflowStarted(string)                   {}
+func (n nopOutput) PhaseStarted(core.Phase)                  {}
+func (n nopOutput) TaskStarted(*core.Task)                   {}
+func (n nopOutput) TaskCompleted(*core.Task, time.Duration)  {}
+func (n nopOutput) TaskFailed(*core.Task, error)             {}
+func (n nopOutput) TaskSkipped(*core.Task, string)           {}
+func (n nopOutput) WorkflowStateUpdated(*core.WorkflowState) {}
+func (n nopOutput) WorkflowCompleted(*core.WorkflowState)    {}
+func (n nopOutput) WorkflowFailed(error)                     {}
+func (n nopOutput) Log(string, string)                       {}
+func (n nopOutput) Close() error                             { return nil }
+
 var _ tui.Output = (*nopOutput)(nil)
 
 type fakeStateAdapter struct {
@@ -40,7 +41,9 @@ func (f *fakeStateAdapter) Save(_ context.Context, state *core.WorkflowState) er
 	f.last = state
 	return nil
 }
-func (f *fakeStateAdapter) Load(context.Context) (*core.WorkflowState, error) { return nil, errors.New("not implemented") }
+func (f *fakeStateAdapter) Load(context.Context) (*core.WorkflowState, error) {
+	return nil, errors.New("not implemented")
+}
 func (f *fakeStateAdapter) LoadByID(context.Context, core.WorkflowID) (*core.WorkflowState, error) {
 	return nil, errors.New("not implemented")
 }
@@ -88,12 +91,12 @@ func newTestState() *core.WorkflowState {
 			CreatedAt:  time.Now(),
 		},
 		WorkflowRun: core.WorkflowRun{
-			Status:      core.WorkflowStatusRunning,
+			Status:       core.WorkflowStatusRunning,
 			CurrentPhase: core.PhaseAnalyze,
-			Tasks:       make(map[core.TaskID]*core.TaskState),
-			TaskOrder:   nil,
-			Checkpoints: make([]core.Checkpoint, 0),
-			UpdatedAt:   time.Now(),
+			Tasks:        make(map[core.TaskID]*core.TaskState),
+			TaskOrder:    nil,
+			Checkpoints:  make([]core.Checkpoint, 0),
+			UpdatedAt:    time.Now(),
 		},
 	}
 }

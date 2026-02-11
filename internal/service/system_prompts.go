@@ -212,4 +212,3 @@ func GetSystemPrompt(id string) (*SystemPrompt, error) {
 		Content: body,
 	}, nil
 }
-

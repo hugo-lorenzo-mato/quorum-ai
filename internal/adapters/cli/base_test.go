@@ -396,9 +396,9 @@ func TestIdleTimeoutKillsHungProcess(t *testing.T) {
 		ctx,
 		"test-idle",
 		[]string{"-c", `echo '{"type":"message","text":"hello"}'; sleep 3600`},
-		"",  // stdin
-		"",  // workDir
-		0,   // optTimeout (use default)
+		"",             // stdin
+		"",             // workDir
+		0,              // optTimeout (use default)
 		StreamConfig{}, // no streaming flags needed for bash
 		nil,            // no parser
 	)

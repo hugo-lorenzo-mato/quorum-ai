@@ -13,11 +13,11 @@ func TestTokenCounting_Accuracy(t *testing.T) {
 
 	// Known token examples for different types of content
 	testCases := []struct {
-		name         string
-		content      string
-		expectedMin  int // Minimum expected tokens
-		expectedMax  int // Maximum expected tokens  
-		description  string
+		name        string
+		content     string
+		expectedMin int // Minimum expected tokens
+		expectedMax int // Maximum expected tokens
+		description string
 	}{
 		{
 			name:        "simple_english",

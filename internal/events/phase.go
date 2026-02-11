@@ -4,11 +4,11 @@ import "time"
 
 // Event type constants for phase events.
 const (
-	TypePhaseStarted         = "phase_started"
-	TypePhaseCompleted       = "phase_completed"
-	TypePhaseAwaitingReview  = "phase_awaiting_review"
-	TypePhaseReviewApproved  = "phase_review_approved"
-	TypePhaseReviewRejected  = "phase_review_rejected"
+	TypePhaseStarted        = "phase_started"
+	TypePhaseCompleted      = "phase_completed"
+	TypePhaseAwaitingReview = "phase_awaiting_review"
+	TypePhaseReviewApproved = "phase_review_approved"
+	TypePhaseReviewRejected = "phase_review_rejected"
 )
 
 // PhaseStartedEvent is emitted when a phase begins.

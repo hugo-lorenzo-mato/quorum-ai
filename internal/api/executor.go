@@ -209,7 +209,7 @@ func (e *WorkflowExecutor) executeAsync(
 
 			// Emit workflow failed event (sub-recover to avoid double-panic)
 			func() {
-				defer func() { 
+				defer func() {
 					if r := recover(); r != nil {
 						e.logger.Warn("failed to emit workflow failed event during panic recovery", "error", r)
 					}
@@ -220,7 +220,7 @@ func (e *WorkflowExecutor) executeAsync(
 
 			// Safety-net: ensure FinishExecution runs even if the defer above panicked
 			func() {
-				defer func() { 
+				defer func() {
 					if r := recover(); r != nil {
 						e.logger.Warn("failed to finish execution during panic recovery", "error", r)
 					}
@@ -234,7 +234,7 @@ func (e *WorkflowExecutor) executeAsync(
 
 			// Publish SSE failure event
 			func() {
-				defer func() { 
+				defer func() {
 					if r := recover(); r != nil {
 						e.logger.Warn("failed to publish SSE failure event during panic recovery", "error", r)
 					}
@@ -248,7 +248,7 @@ func (e *WorkflowExecutor) executeAsync(
 
 			// Cancel the execution context
 			func() {
-				defer func() { 
+				defer func() {
 					if r := recover(); r != nil {
 						e.logger.Warn("failed to cancel context during panic recovery", "error", r)
 					}

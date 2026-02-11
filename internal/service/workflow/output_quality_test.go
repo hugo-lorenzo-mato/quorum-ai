@@ -112,14 +112,14 @@ func TestIsValidAnalysisOutput(t *testing.T) {
 			want:    true,
 		},
 		{
-			name: "short text just under 1KB",
+			name:    "short text just under 1KB",
 			content: strings.Repeat("x", 1023),
-			want: true,
+			want:    true,
 		},
 		{
-			name: "minimal valid markdown analysis at 1KB boundary",
+			name:    "minimal valid markdown analysis at 1KB boundary",
 			content: "# Analysis\n\n" + strings.Repeat("Content here. ", 70),
-			want: true,
+			want:    true,
 		},
 		{
 			name: "full structured markdown analysis",
@@ -147,14 +147,14 @@ func TestIsValidAnalysisOutput(t *testing.T) {
 			want: true,
 		},
 		{
-			name: "header at start of content (no preceding newline needed)",
+			name:    "header at start of content (no preceding newline needed)",
 			content: "# Summary\n" + strings.Repeat("Content paragraph. ", 60),
-			want: true,
+			want:    true,
 		},
 		{
-			name: "header after newline",
+			name:    "header after newline",
 			content: "Preamble text\n# Main Analysis\n" + strings.Repeat("Content paragraph. ", 60),
-			want: true,
+			want:    true,
 		},
 	}
 
@@ -191,9 +191,9 @@ func TestIsValidModeratorOutput(t *testing.T) {
 			want:    false,
 		},
 		{
-			name: "YAML frontmatter",
+			name:    "YAML frontmatter",
 			content: "---\nconsensus_score: 78\nhigh_impact_divergences: 1\n---\n\n## Score Rationale\nGood agreement.",
-			want: true,
+			want:    true,
 		},
 		{
 			name:    "backup anchor",
@@ -206,9 +206,9 @@ func TestIsValidModeratorOutput(t *testing.T) {
 			want:    true,
 		},
 		{
-			name: "markdown headers with evaluation keywords",
+			name:    "markdown headers with evaluation keywords",
 			content: "## Score Rationale\nGood overall agreement.\n\n## Agreements\n- Point one\n\n## Divergences\n- Point two",
-			want: true,
+			want:    true,
 		},
 		{
 			name:    "bold formatting with agreement keyword",
@@ -221,9 +221,9 @@ func TestIsValidModeratorOutput(t *testing.T) {
 			want:    true,
 		},
 		{
-			name: "headers without evaluation keywords",
+			name:    "headers without evaluation keywords",
 			content: "## Introduction\nSome text here.\n## Summary\nMore text.",
-			want: false,
+			want:    false,
 		},
 	}
 

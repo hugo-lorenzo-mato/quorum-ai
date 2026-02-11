@@ -49,7 +49,7 @@ export function AgentCard({ agentKey }) {
   const hasReasoningEffort = supportsReasoning(agentKey);
   const reasoningEffortOptions = useMemo(() => {
     return getReasoningLevels(agentKey).map((l) => ({ value: l.value, label: l.label }));
-  }, [agentKey, _enumsReady]);
+  }, [agentKey]);
 
   const rawPhases = useMemo(
     () => (phases.value && typeof phases.value === 'object' ? phases.value : {}),

@@ -30,27 +30,27 @@ func TestStreamingResponseParsing_FragmentedChunks(t *testing.T) {
 		expected  int // Expected number of events
 	}{
 		{
-			name: "single_char_fragments",
+			name:      "single_char_fragments",
 			fragments: splitEveryNChars(completeResponse, 1),
 			expected:  7,
 		},
 		{
-			name: "small_fragments",
+			name:      "small_fragments",
 			fragments: splitEveryNChars(completeResponse, 10),
 			expected:  7,
 		},
 		{
-			name: "line_boundary_fragments",
+			name:      "line_boundary_fragments",
 			fragments: strings.Split(completeResponse, "\n"),
 			expected:  7,
 		},
 		{
-			name: "json_boundary_fragments",
+			name:      "json_boundary_fragments",
 			fragments: fragmentAtJSONBoundaries(completeResponse),
 			expected:  7,
 		},
 		{
-			name: "random_size_fragments",
+			name:      "random_size_fragments",
 			fragments: fragmentRandomly(completeResponse, 5, 30),
 			expected:  7,
 		},
@@ -62,13 +62,13 @@ func TestStreamingResponseParsing_FragmentedChunks(t *testing.T) {
 
 			var events []core.AgentEvent
 			handler := testEventHandlerFunc(&events)
-			
+
 			base := NewBaseAdapter(AgentConfig{}, nil)
 			base.SetEventHandler(handler)
 
 			// Simulate fragmented streaming
 			parser := &MockStreamParser{}
-			
+
 			for _, fragment := range tc.fragments {
 				if fragment != "" {
 					parsedEvents := parser.ParseChunk([]byte(fragment))
@@ -172,11 +172,11 @@ func TestStreamingResponseParsing_PartialToolCalls(t *testing.T) {
 				allEvents = append(allEvents, events...)
 			}
 
-			// Check error expectation 
+			// Check error expectation
 			// For malformed/incomplete cases, we expect fewer events than complete JSON lines
 			hasIncompleteData := parser.buffer != ""
 			actuallyIncomplete := len(allEvents) < len(tc.chunks) // Less events than expected complete lines
-			
+
 			if tc.expectError {
 				if !hasIncompleteData && !actuallyIncomplete {
 					t.Errorf("Expected incomplete/error condition but parsing completed successfully")
@@ -239,19 +239,19 @@ func TestStreamingResponseParsing_TimeoutHandling(t *testing.T) {
 			defer cancel()
 
 			completed := make(chan bool, 1)
-			
+
 			// Simulate streaming processing
 			go func() {
 				defer func() {
 					completed <- true
 				}()
-				
+
 				if tc.simulateHang {
 					// Simulate hanging operation
 					time.Sleep(tc.timeout + 50*time.Millisecond)
 					return
 				}
-				
+
 				// Simulate normal processing
 				parser := &MockStreamParser{}
 				testResponse := `{"type":"content","data":"test response"}`
@@ -297,7 +297,7 @@ func TestStreamingResponseParsing_BufferOverflow(t *testing.T) {
 			parser := &MockStreamParser{}
 
 			start := time.Now()
-			
+
 			// Parse large response in chunks
 			chunkSize := 1024
 			for i := 0; i < len(largeResponse); i += chunkSize {
@@ -305,7 +305,7 @@ func TestStreamingResponseParsing_BufferOverflow(t *testing.T) {
 				if end > len(largeResponse) {
 					end = len(largeResponse)
 				}
-				
+
 				chunk := largeResponse[i:end]
 				parsedEvents := parser.ParseChunk([]byte(chunk))
 				events = append(events, parsedEvents...)
@@ -347,17 +347,17 @@ func testEventHandlerFunc(events *[]core.AgentEvent) core.AgentEventHandler {
 	}
 }
 
-type MockStreamParser struct{
-	buffer string // Accumulate incomplete JSON across chunks
-	eventCount int // For deterministic timestamps
+type MockStreamParser struct {
+	buffer     string // Accumulate incomplete JSON across chunks
+	eventCount int    // For deterministic timestamps
 }
 
 func (p *MockStreamParser) ParseChunk(chunk []byte) []core.AgentEvent {
 	// Add chunk to buffer
 	p.buffer += string(chunk)
-	
+
 	var events []core.AgentEvent
-	
+
 	// Process complete lines from buffer
 	for {
 		newlineIndex := strings.Index(p.buffer, "\n")
@@ -378,15 +378,15 @@ func (p *MockStreamParser) ParseChunk(chunk []byte) []core.AgentEvent {
 			}
 			break
 		}
-		
+
 		// Extract complete line
 		line := p.buffer[:newlineIndex]
 		p.buffer = p.buffer[newlineIndex+1:]
-		
+
 		if len(strings.TrimSpace(line)) == 0 {
 			continue
 		}
-		
+
 		// Parse the complete JSON line
 		event := p.parseJSONLine(line)
 		if event.Type != "" {
@@ -396,7 +396,7 @@ func (p *MockStreamParser) ParseChunk(chunk []byte) []core.AgentEvent {
 			events = append(events, event)
 		}
 	}
-	
+
 	return events
 }
 
@@ -405,21 +405,21 @@ func (p *MockStreamParser) isCompleteJSON(text string) bool {
 	if len(text) == 0 {
 		return false
 	}
-	
+
 	var jsonData map[string]interface{}
 	return json.Unmarshal([]byte(text), &jsonData) == nil
 }
 
 func (p *MockStreamParser) parseJSONLine(line string) core.AgentEvent {
 	line = strings.TrimSpace(line)
-	
+
 	// For testing purposes, try to parse as JSON first to detect malformed JSON
 	var jsonData map[string]interface{}
 	if err := json.Unmarshal([]byte(line), &jsonData); err != nil {
 		// Return empty event for malformed JSON
 		return core.AgentEvent{}
 	}
-	
+
 	// Deterministic parsing of known test patterns
 	if strings.Contains(line, `"type":"agent_start"`) {
 		return core.AgentEvent{
@@ -458,7 +458,7 @@ func (p *MockStreamParser) parseJSONLine(line string) core.AgentEvent {
 			Message: "result",
 		}
 	}
-	
+
 	return core.AgentEvent{} // Empty event for unrecognized patterns
 }
 
@@ -478,7 +478,7 @@ func fragmentAtJSONBoundaries(s string) []string {
 	// Split at } and { boundaries
 	fragments := []string{}
 	current := ""
-	
+
 	for i, char := range s {
 		current += string(char)
 		if char == '}' && i < len(s)-1 {
@@ -486,18 +486,18 @@ func fragmentAtJSONBoundaries(s string) []string {
 			current = ""
 		}
 	}
-	
+
 	if current != "" {
 		fragments = append(fragments, current)
 	}
-	
+
 	return fragments
 }
 
 func fragmentRandomly(s string, minSize, maxSize int) []string {
 	var fragments []string
 	i := 0
-	
+
 	for i < len(s) {
 		size := minSize + (i % (maxSize - minSize + 1))
 		end := i + size
@@ -507,7 +507,7 @@ func fragmentRandomly(s string, minSize, maxSize int) []string {
 		fragments = append(fragments, s[i:end])
 		i = end
 	}
-	
+
 	return fragments
 }
 

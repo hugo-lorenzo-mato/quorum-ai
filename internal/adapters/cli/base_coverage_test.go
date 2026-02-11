@@ -188,4 +188,3 @@ func TestAgentConfig_GetReasoningEffort_Empty(t *testing.T) {
 		t.Errorf("got %q, want empty", got)
 	}
 }
-

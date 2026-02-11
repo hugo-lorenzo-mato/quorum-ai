@@ -33,7 +33,7 @@ func TestAPI_WorkflowLifecycle(t *testing.T) {
 	}
 
 	createBody, _ := json.Marshal(createReq)
-	resp, err := client.Post(server.URL+"/api/v1/workflows", "application/json", 
+	resp, err := client.Post(server.URL+"/api/v1/workflows", "application/json",
 		strings.NewReader(string(createBody)))
 	if err != nil {
 		t.Fatalf("Failed to create workflow: %v", err)
@@ -386,9 +386,9 @@ func TestAPI_ConcurrentRequests(t *testing.T) {
 			}
 
 			body, _ := json.Marshal(createReq)
-			resp, err := client.Post(server.URL+"/api/v1/workflows", "application/json", 
+			resp, err := client.Post(server.URL+"/api/v1/workflows", "application/json",
 				strings.NewReader(string(body)))
-			
+
 			if err != nil {
 				results <- fmt.Errorf("request %d failed: %v", id, err)
 				return
@@ -449,11 +449,11 @@ type MockAPIHandler struct {
 }
 
 type WorkflowInfo struct {
-	ID       string    `json:"id"`
-	Status   string    `json:"status"`
-	Prompt   string    `json:"prompt"`
-	Created  time.Time `json:"created"`
-	Updated  time.Time `json:"updated"`
+	ID      string    `json:"id"`
+	Status  string    `json:"status"`
+	Prompt  string    `json:"prompt"`
+	Created time.Time `json:"created"`
+	Updated time.Time `json:"updated"`
 }
 
 type RateLimiter struct {
@@ -523,7 +523,7 @@ func (h *MockAPIHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.mu.RLock()
 	rateLimitEnabled := h.rateLimit != nil && h.rateLimit.enabled
 	h.mu.RUnlock()
-	
+
 	if rateLimitEnabled && !h.checkRateLimit(w, r) {
 		return
 	}
@@ -546,7 +546,7 @@ func (h *MockAPIHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (h *MockAPIHandler) isAuthenticated(r *http.Request) bool {
 	auth := r.Header.Get("Authorization")
 	apiKey := r.Header.Get("X-API-Key")
-	
+
 	return auth == "Bearer valid-test-token" || apiKey == "valid-api-key"
 }
 
@@ -554,23 +554,23 @@ func (h *MockAPIHandler) checkRateLimit(w http.ResponseWriter, r *http.Request) 
 	if !h.rateLimit.enabled {
 		return true
 	}
-	
+
 	// Extract just the IP part, ignoring port
 	clientIP := r.RemoteAddr
 	if idx := strings.LastIndex(clientIP, ":"); idx != -1 {
 		clientIP = clientIP[:idx]
 	}
-	
+
 	now := time.Now()
-	
+
 	h.rateLimit.mu.Lock()
 	defer h.rateLimit.mu.Unlock()
-	
+
 	// Initialize if not exists
 	if _, exists := h.rateLimit.requests[clientIP]; !exists {
 		h.rateLimit.requests[clientIP] = make([]time.Time, 0)
 	}
-	
+
 	// Clean old requests
 	var validRequests []time.Time
 	for _, reqTime := range h.rateLimit.requests[clientIP] {
@@ -579,23 +579,23 @@ func (h *MockAPIHandler) checkRateLimit(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 	h.rateLimit.requests[clientIP] = validRequests
-	
+
 	// Check limit
 	currentRequests := len(h.rateLimit.requests[clientIP])
-	
+
 	if currentRequests >= h.rateLimit.limit {
 		w.Header().Set("X-RateLimit-Limit", fmt.Sprintf("%d", h.rateLimit.limit))
 		w.Header().Set("X-RateLimit-Remaining", "0")
 		h.writeError(w, http.StatusTooManyRequests, "rate limit exceeded")
 		return false
 	}
-	
+
 	// Record request
 	h.rateLimit.requests[clientIP] = append(h.rateLimit.requests[clientIP], now)
-	
+
 	w.Header().Set("X-RateLimit-Limit", fmt.Sprintf("%d", h.rateLimit.limit))
 	w.Header().Set("X-RateLimit-Remaining", fmt.Sprintf("%d", h.rateLimit.limit-currentRequests-1))
-	
+
 	return true
 }
 
@@ -648,11 +648,11 @@ func (h *MockAPIHandler) listWorkflows(w http.ResponseWriter, r *http.Request) {
 
 func (h *MockAPIHandler) getWorkflow(w http.ResponseWriter, r *http.Request) {
 	workflowID := strings.TrimPrefix(r.URL.Path, "/api/v1/workflows/")
-	
+
 	h.mu.RLock()
 	workflow, exists := h.workflows[workflowID]
 	h.mu.RUnlock()
-	
+
 	if !exists {
 		h.writeError(w, http.StatusNotFound, "workflow not found")
 		return
@@ -671,7 +671,7 @@ func (h *MockAPIHandler) getWorkflow(w http.ResponseWriter, r *http.Request) {
 
 func (h *MockAPIHandler) cancelWorkflow(w http.ResponseWriter, r *http.Request) {
 	workflowID := strings.TrimPrefix(r.URL.Path, "/api/v1/workflows/")
-	
+
 	h.mu.Lock()
 	workflow, exists := h.workflows[workflowID]
 	if !exists {

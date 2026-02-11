@@ -157,15 +157,6 @@ func TestRunnerFactory_CreateRunner_NilLogger(t *testing.T) {
 	}
 }
 
-// mockAgentRegistryWithAvailable extends mockAgentRegistry with AvailableForPhaseWithConfig.
-type mockAgentRegistryWithAvailable struct {
-	mockAgentRegistry
-}
-
-func (m *mockAgentRegistryWithAvailable) AvailableForPhaseWithConfig(_ context.Context, _ string, _ map[string][]string) []string {
-	return nil
-}
-
 func TestRunnerFactory_CreateRunner_NilStateManagerInFactory(t *testing.T) {
 	t.Parallel()
 	eb := events.New(10)

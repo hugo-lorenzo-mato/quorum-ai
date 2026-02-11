@@ -7,8 +7,8 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/hugo-lorenzo-mato/quorum-ai/internal/tui/components"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/tui/components"
 )
 
 // ---------------------------------------------------------------------------

@@ -453,7 +453,7 @@ func (s *Server) handleUpdateGlobalConfig(w http.ResponseWriter, r *http.Request
 }
 
 // handleResetGlobalConfig resets the global configuration to defaults.
-func (s *Server) handleResetGlobalConfig(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleResetGlobalConfig(w http.ResponseWriter, _ *http.Request) {
 	// Use write lock to prevent concurrent modifications
 	s.configMu.Lock()
 	defer s.configMu.Unlock()
@@ -835,7 +835,7 @@ func issuesToResponse(cfg *config.IssuesConfig) IssuesConfigResponse {
 		Mode:           cfg.Mode,
 		DraftDirectory: cfg.DraftDirectory,
 		Repository:     cfg.Repository,
-		ParentPrompt: cfg.ParentPrompt,
+		ParentPrompt:   cfg.ParentPrompt,
 		Prompt: IssuePromptConfigResponse{
 			Language:           cfg.Prompt.Language,
 			Tone:               cfg.Prompt.Tone,

@@ -9,7 +9,6 @@ import {
   MessageSquare,
   Sparkles,
   Bot,
-  User,
   Loader2,
   Pencil,
   Check,

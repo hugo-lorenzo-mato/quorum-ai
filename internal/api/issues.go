@@ -615,14 +615,14 @@ func (s *Server) handlePreviewIssues(w http.ResponseWriter, r *http.Request) {
 					issuesCfg.Generator.Agent = enabled[0]
 				}
 			}
-			}
-			if strings.TrimSpace(issuesCfg.Generator.Agent) == "" {
-				respondError(w, http.StatusBadRequest, "issues.generator.agent is required for AI generation")
-				return
-			}
+		}
+		if strings.TrimSpace(issuesCfg.Generator.Agent) == "" {
+			respondError(w, http.StatusBadRequest, "issues.generator.agent is required for AI generation")
+			return
+		}
 
-			generator := issues.NewGenerator(nil, issuesCfg, projectRoot, fullReportDir, s.agentRegistry)
-			generator.SetProgressReporter(newIssuesSSEProgressReporter(s.getProjectEventBus(ctx), getProjectID(ctx)))
+		generator := issues.NewGenerator(nil, issuesCfg, projectRoot, fullReportDir, s.agentRegistry)
+		generator.SetProgressReporter(newIssuesSSEProgressReporter(s.getProjectEventBus(ctx), getProjectID(ctx)))
 
 		// Generate the issue files
 		files, err := generator.GenerateIssueFiles(ctx, workflowID)
@@ -894,11 +894,11 @@ type PublishedRecord struct {
 
 // IssuesStatusResponse is the response for issue generation status.
 type IssuesStatusResponse struct {
-	WorkflowID    string `json:"workflow_id"`
-	HasDrafts     bool   `json:"has_drafts"`
-	DraftCount    int    `json:"draft_count"`
-	HasPublished  bool   `json:"has_published"`
-	PublishedCount int   `json:"published_count"`
+	WorkflowID     string `json:"workflow_id"`
+	HasDrafts      bool   `json:"has_drafts"`
+	DraftCount     int    `json:"draft_count"`
+	HasPublished   bool   `json:"has_published"`
+	PublishedCount int    `json:"published_count"`
 }
 
 // createIssueClient creates an IssueClient based on provider config, using

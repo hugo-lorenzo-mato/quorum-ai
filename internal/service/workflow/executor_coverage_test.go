@@ -80,20 +80,20 @@ func (m *mockGitClient) Fetch(_ context.Context, _ string) error { return nil }
 func (m *mockGitClient) Merge(_ context.Context, _ string, _ core.MergeOptions) error {
 	return nil
 }
-func (m *mockGitClient) AbortMerge(_ context.Context) error             { return nil }
-func (m *mockGitClient) HasMergeConflicts(_ context.Context) (bool, error) { return false, nil }
-func (m *mockGitClient) GetConflictFiles(_ context.Context) ([]string, error) { return nil, nil }
-func (m *mockGitClient) Rebase(_ context.Context, _ string) error       { return nil }
-func (m *mockGitClient) AbortRebase(_ context.Context) error            { return nil }
-func (m *mockGitClient) ContinueRebase(_ context.Context) error         { return nil }
-func (m *mockGitClient) HasRebaseInProgress(_ context.Context) (bool, error) { return false, nil }
-func (m *mockGitClient) ResetHard(_ context.Context, _ string) error    { return nil }
-func (m *mockGitClient) ResetSoft(_ context.Context, _ string) error    { return nil }
-func (m *mockGitClient) CherryPick(_ context.Context, _ string) error   { return nil }
-func (m *mockGitClient) AbortCherryPick(_ context.Context) error        { return nil }
-func (m *mockGitClient) RevParse(_ context.Context, _ string) (string, error) { return "", nil }
+func (m *mockGitClient) AbortMerge(_ context.Context) error                      { return nil }
+func (m *mockGitClient) HasMergeConflicts(_ context.Context) (bool, error)       { return false, nil }
+func (m *mockGitClient) GetConflictFiles(_ context.Context) ([]string, error)    { return nil, nil }
+func (m *mockGitClient) Rebase(_ context.Context, _ string) error                { return nil }
+func (m *mockGitClient) AbortRebase(_ context.Context) error                     { return nil }
+func (m *mockGitClient) ContinueRebase(_ context.Context) error                  { return nil }
+func (m *mockGitClient) HasRebaseInProgress(_ context.Context) (bool, error)     { return false, nil }
+func (m *mockGitClient) ResetHard(_ context.Context, _ string) error             { return nil }
+func (m *mockGitClient) ResetSoft(_ context.Context, _ string) error             { return nil }
+func (m *mockGitClient) CherryPick(_ context.Context, _ string) error            { return nil }
+func (m *mockGitClient) AbortCherryPick(_ context.Context) error                 { return nil }
+func (m *mockGitClient) RevParse(_ context.Context, _ string) (string, error)    { return "", nil }
 func (m *mockGitClient) IsAncestor(_ context.Context, _, _ string) (bool, error) { return false, nil }
-func (m *mockGitClient) HasUncommittedChanges(_ context.Context) (bool, error) { return false, nil }
+func (m *mockGitClient) HasUncommittedChanges(_ context.Context) (bool, error)   { return false, nil }
 
 // mockGitClientFactory implements GitClientFactory for testing.
 type mockGitClientFactory struct {
@@ -1184,10 +1184,10 @@ func TestExecutor_notifyAgentStarted_NilOutput(t *testing.T) {
 // =============================================================================
 
 type mockWorktreeManagerWithList struct {
-	listResult  []*core.WorktreeInfo
-	listErr     error
+	listResult   []*core.WorktreeInfo
+	listErr      error
 	removeCalled int
-	removeErr   error
+	removeErr    error
 }
 
 func (m *mockWorktreeManagerWithList) Create(_ context.Context, _ *core.Task, _ string) (*core.WorktreeInfo, error) {
@@ -1207,4 +1207,3 @@ func (m *mockWorktreeManagerWithList) CleanupStale(_ context.Context) error { re
 func (m *mockWorktreeManagerWithList) List(_ context.Context) ([]*core.WorktreeInfo, error) {
 	return m.listResult, m.listErr
 }
-

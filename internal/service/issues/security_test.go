@@ -114,8 +114,8 @@ func TestValidateOutputPath_EmptyFilename(t *testing.T) {
 func TestSanitizeFilename_DangerousCharacters(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		input    string
-		expected string
+		input       string
+		expected    string
 		winExpected string // different expected value on Windows, empty means same
 	}{
 		// Path traversal - filepath.Base extracts just the basename

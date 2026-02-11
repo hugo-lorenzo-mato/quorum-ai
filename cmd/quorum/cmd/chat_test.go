@@ -21,13 +21,13 @@ type recordingNotifier struct {
 	lastData    map[string]interface{}
 }
 
-func (n *recordingNotifier) PhaseStarted(_ core.Phase)                           {}
-func (n *recordingNotifier) TaskStarted(_ *core.Task)                            {}
-func (n *recordingNotifier) TaskCompleted(_ *core.Task, _ time.Duration)         {}
-func (n *recordingNotifier) TaskFailed(_ *core.Task, _ error)                    {}
-func (n *recordingNotifier) TaskSkipped(_ *core.Task, _ string)                  {}
-func (n *recordingNotifier) WorkflowStateUpdated(_ *core.WorkflowState)          {}
-func (n *recordingNotifier) Log(_, _, _ string)                                  {}
+func (n *recordingNotifier) PhaseStarted(_ core.Phase)                   {}
+func (n *recordingNotifier) TaskStarted(_ *core.Task)                    {}
+func (n *recordingNotifier) TaskCompleted(_ *core.Task, _ time.Duration) {}
+func (n *recordingNotifier) TaskFailed(_ *core.Task, _ error)            {}
+func (n *recordingNotifier) TaskSkipped(_ *core.Task, _ string)          {}
+func (n *recordingNotifier) WorkflowStateUpdated(_ *core.WorkflowState)  {}
+func (n *recordingNotifier) Log(_, _, _ string)                          {}
 func (n *recordingNotifier) AgentEvent(kind, agent, message string, data map[string]interface{}) {
 	n.lastKind = kind
 	n.lastAgent = agent

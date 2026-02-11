@@ -369,11 +369,11 @@ func TestNormalizeLevel(t *testing.T) {
 		{"DBG", "debug"},
 		{"DEBUG", "debug"},
 		{"debug", "debug"},
-		{"UNKNOWN", "info"},      // default
-		{"", "info"},             // empty
-		{"  INFO  ", "info"},     // whitespace
-		{"  WRN  ", "warn"},      // whitespace
-		{"something", "info"},    // arbitrary
+		{"UNKNOWN", "info"},   // default
+		{"", "info"},          // empty
+		{"  INFO  ", "info"},  // whitespace
+		{"  WRN  ", "warn"},   // whitespace
+		{"something", "info"}, // arbitrary
 	}
 
 	for _, tc := range tests {

@@ -290,9 +290,9 @@ func TestCopilotAdapter_EstimateTokens_Various(t *testing.T) {
 		want int
 	}{
 		{"", 0},
-		{"a", 0},         // 1/4 = 0
-		{"abcd", 1},      // 4/4 = 1
-		{"abcdefgh", 2},  // 8/4 = 2
+		{"a", 0},        // 1/4 = 0
+		{"abcd", 1},     // 4/4 = 1
+		{"abcdefgh", 2}, // 8/4 = 2
 		{strings.Repeat("x", 400), 100},
 		{strings.Repeat("x", 4000), 1000},
 	}

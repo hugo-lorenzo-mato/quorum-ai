@@ -1268,7 +1268,7 @@ func (m *mockIssueClient) CreateIssue(_ context.Context, opts core.CreateIssueOp
 }
 
 func (m *mockIssueClient) UpdateIssue(_ context.Context, _ int, _, _ string) error { return nil }
-func (m *mockIssueClient) CloseIssue(_ context.Context, _ int) error              { return nil }
+func (m *mockIssueClient) CloseIssue(_ context.Context, _ int) error               { return nil }
 func (m *mockIssueClient) AddIssueComment(_ context.Context, _ int, _ string) error {
 	return nil
 }
@@ -1298,7 +1298,7 @@ type testProjectContext struct {
 	root string
 }
 
-func (t *testProjectContext) ProjectID() string  { return t.id }
+func (t *testProjectContext) ProjectID() string   { return t.id }
 func (t *testProjectContext) ProjectRoot() string { return t.root }
 func (t *testProjectContext) IsClosed() bool      { return false }
 func (t *testProjectContext) Touch()              {}

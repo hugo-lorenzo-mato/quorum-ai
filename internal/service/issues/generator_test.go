@@ -749,8 +749,8 @@ func TestGenerator_CleanIssuesDirectory_NonExistent(t *testing.T) {
 
 // mockProgressReporter captures progress events for verification.
 type mockProgressReporter struct {
-	generationEvents  []progressEvent
-	publishingEvents  []progressEvent
+	generationEvents []progressEvent
+	publishingEvents []progressEvent
 }
 
 type progressEvent struct {
@@ -942,8 +942,8 @@ func TestGenerator_Generate_DryRun_CustomLabelsAndAssignees(t *testing.T) {
 
 	client := &mockIssueClient{}
 	cfg := config.IssuesConfig{
-		Enabled:  true,
-		Labels:   []string{"default-label"},
+		Enabled:   true,
+		Labels:    []string{"default-label"},
 		Assignees: []string{"default-user"},
 	}
 
@@ -1535,7 +1535,7 @@ func TestGenerator_splitIntoBatches(t *testing.T) {
 		batchSize int
 		wantCount int
 	}{
-		{"empty", 0, 5, 1},          // Empty returns single empty batch
+		{"empty", 0, 5, 1}, // Empty returns single empty batch
 		{"single batch", 3, 5, 1},
 		{"exact fit", 5, 5, 1},
 		{"multiple batches", 10, 3, 4},

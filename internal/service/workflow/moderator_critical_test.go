@@ -69,7 +69,7 @@ func TestSemanticModerator_ConsensusEdgeCases(t *testing.T) {
 				Agent:     "test",
 				Threshold: tc.threshold,
 			}
-			
+
 			moderator, err := NewSemanticModerator(config)
 			if err != nil {
 				t.Fatalf("NewSemanticModerator() error = %v", err)
@@ -83,7 +83,7 @@ func TestSemanticModerator_ConsensusEdgeCases(t *testing.T) {
 
 			passed := result.Score >= moderator.Threshold()
 			if passed != tc.wantPass {
-				t.Errorf("consensus check = %v, want %v (score: %.2f, threshold: %.2f)", 
+				t.Errorf("consensus check = %v, want %v (score: %.2f, threshold: %.2f)",
 					passed, tc.wantPass, tc.score, tc.threshold)
 			}
 		})
@@ -99,7 +99,7 @@ func TestSemanticModerator_StagnationDetection(t *testing.T) {
 		Agent:               "test",
 		StagnationThreshold: 0.05, // 5% improvement required
 	}
-	
+
 	moderator, err := NewSemanticModerator(config)
 	if err != nil {
 		t.Fatalf("NewSemanticModerator() error = %v", err)
@@ -116,7 +116,7 @@ func TestSemanticModerator_StagnationDetection(t *testing.T) {
 			wantStagnant: false,
 		},
 		{
-			name:         "stagnant_scores", 
+			name:         "stagnant_scores",
 			scores:       []float64{0.60, 0.61, 0.62, 0.63},
 			wantStagnant: true,
 		},
@@ -176,7 +176,7 @@ func TestSemanticModerator_LargeResponseHandling(t *testing.T) {
 			TokensOut: 25000,
 		},
 		{
-			AgentName: "agent2", 
+			AgentName: "agent2",
 			RawOutput: veryLargeOutput,
 			TokensIn:  2500,
 			TokensOut: 125000,
@@ -194,7 +194,7 @@ func TestSemanticModerator_LargeResponseHandling(t *testing.T) {
 		Agent:     "test",
 		Threshold: 0.75,
 	}
-	
+
 	moderator, err := NewSemanticModerator(config)
 	if err != nil {
 		t.Fatalf("NewSemanticModerator() error = %v", err)
@@ -202,14 +202,14 @@ func TestSemanticModerator_LargeResponseHandling(t *testing.T) {
 
 	// Test that large outputs don't crash the moderator creation and validation
 	start := time.Now()
-	
+
 	// Verify outputs are preserved correctly
 	totalInputTokens := 0
 	totalOutputTokens := 0
 	for _, output := range outputs {
 		totalInputTokens += output.TokensIn
 		totalOutputTokens += output.TokensOut
-		
+
 		if len(output.RawOutput) == 0 {
 			t.Error("Output RawOutput should not be empty")
 		}
@@ -221,13 +221,13 @@ func TestSemanticModerator_LargeResponseHandling(t *testing.T) {
 	if totalInputTokens != expectedInputTokens {
 		t.Errorf("Total input tokens = %d, want %d", totalInputTokens, expectedInputTokens)
 	}
-	
+
 	if totalOutputTokens != expectedOutputTokens {
 		t.Errorf("Total output tokens = %d, want %d", totalOutputTokens, expectedOutputTokens)
 	}
 
 	duration := time.Since(start)
-	
+
 	// Should process reasonably quickly
 	if duration > 1*time.Second {
 		t.Errorf("Large response processing took too long: %v", duration)
@@ -256,7 +256,7 @@ func TestSemanticModerator_RoundLimits(t *testing.T) {
 		MinRounds: 3,
 		MaxRounds: 6,
 	}
-	
+
 	moderator, err := NewSemanticModerator(config)
 	if err != nil {
 		t.Fatalf("NewSemanticModerator() error = %v", err)
@@ -383,11 +383,11 @@ func TestSemanticModerator_ConfigValidation(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 
 			moderator, err := NewSemanticModerator(tc.config)
-			
+
 			if tc.wantError && err == nil {
 				t.Error("Expected error but got none")
 			}
-			
+
 			if !tc.wantError && err != nil {
 				t.Errorf("Unexpected error: %v", err)
 			}
@@ -395,7 +395,7 @@ func TestSemanticModerator_ConfigValidation(t *testing.T) {
 			// Verify auto-correction behavior
 			if !tc.wantError && moderator != nil && tc.config.MinRounds > tc.config.MaxRounds && tc.config.MaxRounds > 0 {
 				if moderator.MinRounds() != moderator.MaxRounds() {
-					t.Errorf("MinRounds should be auto-corrected to MaxRounds: got %d, want %d", 
+					t.Errorf("MinRounds should be auto-corrected to MaxRounds: got %d, want %d",
 						moderator.MinRounds(), moderator.MaxRounds())
 				}
 			}

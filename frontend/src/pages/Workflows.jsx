@@ -12,7 +12,6 @@ import VoiceInputButton from '../components/VoiceInputButton';
 import FAB from '../components/FAB';
 import {
   GitBranch,
-  Plus,
   Play,
   Pause,
   StopCircle,
@@ -47,7 +46,7 @@ import {
   MessageSquare,
 } from 'lucide-react';
 import { ConfirmDialog } from '../components/config/ConfirmDialog';
-import { ExecutionModeBadge, PhaseStepper, ReplanModal, WorkflowPipelineLive } from '../components/workflow';
+import { ExecutionModeBadge, ReplanModal, WorkflowPipelineLive } from '../components/workflow';
 import TaskSelectionModal from '../components/workflow/TaskSelectionModal';
 import ReviewGate from '../components/workflow/ReviewGate';
 import PipelineExpandedPanel from '../components/workflow/pipeline/PipelineExpandedPanel';
@@ -62,15 +61,10 @@ import {
   CardBase,
   CardHeader,
   CardTitle,
-  CardDescription,
   CardContent,
-  CardFooter,
   CardMeta,
   CardMetaItem,
   CardBadge,
-  CardAction,
-  CardIcon,
-  CardFloatingBadge,
 } from '../components/ui/UnifiedCard';
 
 function normalizeWhitespace(s) {

@@ -55,7 +55,7 @@ var StreamConfigs = map[string]StreamConfig{
 		OutputFormatValue: "stream-json",
 		// Include partial messages so long generations still produce events and
 		// appear alive in the UI. Helps reduce perceived "stalls".
-		RequiredFlags:     []string{"--verbose", "--include-partial-messages"},
+		RequiredFlags: []string{"--verbose", "--include-partial-messages"},
 	},
 	"gemini": {
 		Method:            StreamMethodJSONStdout,

@@ -243,8 +243,8 @@ func TestCrashDumpWriter_RedactEnvironment_AllPatterns(t *testing.T) {
 	writer := NewCrashDumpWriter("", 10, false, true, logger, nil)
 
 	testCases := []struct {
-		envKey    string
-		envValue  string
+		envKey       string
+		envValue     string
 		shouldRedact bool
 	}{
 		{"MY_API_TOKEN", "secret", true},
@@ -384,16 +384,16 @@ func TestResourceMonitor_GetTrend_WithGrowth(t *testing.T) {
 	baseTime := time.Now().Add(-15 * time.Minute)
 	monitor.history = []ResourceSnapshot{
 		{
-			Timestamp:    baseTime,
-			OpenFDs:      100,
-			Goroutines:   50,
-			HeapAllocMB:  100.0,
+			Timestamp:   baseTime,
+			OpenFDs:     100,
+			Goroutines:  50,
+			HeapAllocMB: 100.0,
 		},
 		{
-			Timestamp:    baseTime.Add(15 * time.Minute),
-			OpenFDs:      200, // +100 FDs in 15 min = 400/hour
-			Goroutines:   150, // +100 goroutines in 15 min = 400/hour
-			HeapAllocMB:  200.0, // +100 MB in 15 min = 400/hour
+			Timestamp:   baseTime.Add(15 * time.Minute),
+			OpenFDs:     200,   // +100 FDs in 15 min = 400/hour
+			Goroutines:  150,   // +100 goroutines in 15 min = 400/hour
+			HeapAllocMB: 200.0, // +100 MB in 15 min = 400/hour
 		},
 	}
 	monitor.mu.Unlock()

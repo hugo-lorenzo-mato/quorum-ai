@@ -26,8 +26,10 @@ func (s *stubChatStore) SaveSession(_ context.Context, _ *core.ChatSessionState)
 func (s *stubChatStore) LoadSession(_ context.Context, _ string) (*core.ChatSessionState, error) {
 	return nil, nil
 }
-func (s *stubChatStore) ListSessions(_ context.Context) ([]*core.ChatSessionState, error) { return nil, nil }
-func (s *stubChatStore) DeleteSession(_ context.Context, _ string) error { return nil }
+func (s *stubChatStore) ListSessions(_ context.Context) ([]*core.ChatSessionState, error) {
+	return nil, nil
+}
+func (s *stubChatStore) DeleteSession(_ context.Context, _ string) error               { return nil }
 func (s *stubChatStore) SaveMessage(_ context.Context, _ *core.ChatMessageState) error { return nil }
 func (s *stubChatStore) LoadMessages(_ context.Context, _ string) ([]*core.ChatMessageState, error) {
 	return nil, nil

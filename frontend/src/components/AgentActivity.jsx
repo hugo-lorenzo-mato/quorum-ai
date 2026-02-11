@@ -90,7 +90,7 @@ function formatTokens(count) {
 }
 
 // Summarize tool args: prioritize common keys, truncate to maxLen
-function summarizeToolArgs(args) {
+function _summarizeToolArgs(args) {
   if (!args || typeof args !== 'object') return '';
   const priorityKeys = ['command', 'path', 'file_path', 'pattern', 'query', 'url'];
   for (const key of priorityKeys) {

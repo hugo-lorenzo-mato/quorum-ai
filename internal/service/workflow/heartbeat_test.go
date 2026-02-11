@@ -34,8 +34,10 @@ func (m *heartbeatMockStateManager) FindZombieWorkflows(_ context.Context, _ tim
 }
 
 // Stub all other StateManager methods (not used by heartbeat).
-func (m *heartbeatMockStateManager) Save(context.Context, *core.WorkflowState) error     { return nil }
-func (m *heartbeatMockStateManager) Load(context.Context) (*core.WorkflowState, error)    { return nil, nil }
+func (m *heartbeatMockStateManager) Save(context.Context, *core.WorkflowState) error { return nil }
+func (m *heartbeatMockStateManager) Load(context.Context) (*core.WorkflowState, error) {
+	return nil, nil
+}
 func (m *heartbeatMockStateManager) LoadByID(context.Context, core.WorkflowID) (*core.WorkflowState, error) {
 	return nil, nil
 }
@@ -48,12 +50,20 @@ func (m *heartbeatMockStateManager) GetActiveWorkflowID(context.Context) (core.W
 func (m *heartbeatMockStateManager) SetActiveWorkflowID(context.Context, core.WorkflowID) error {
 	return nil
 }
-func (m *heartbeatMockStateManager) AcquireLock(context.Context) error                   { return nil }
-func (m *heartbeatMockStateManager) ReleaseLock(context.Context) error                   { return nil }
-func (m *heartbeatMockStateManager) AcquireWorkflowLock(context.Context, core.WorkflowID) error { return nil }
-func (m *heartbeatMockStateManager) ReleaseWorkflowLock(context.Context, core.WorkflowID) error { return nil }
-func (m *heartbeatMockStateManager) RefreshWorkflowLock(context.Context, core.WorkflowID) error { return nil }
-func (m *heartbeatMockStateManager) SetWorkflowRunning(context.Context, core.WorkflowID) error  { return nil }
+func (m *heartbeatMockStateManager) AcquireLock(context.Context) error { return nil }
+func (m *heartbeatMockStateManager) ReleaseLock(context.Context) error { return nil }
+func (m *heartbeatMockStateManager) AcquireWorkflowLock(context.Context, core.WorkflowID) error {
+	return nil
+}
+func (m *heartbeatMockStateManager) ReleaseWorkflowLock(context.Context, core.WorkflowID) error {
+	return nil
+}
+func (m *heartbeatMockStateManager) RefreshWorkflowLock(context.Context, core.WorkflowID) error {
+	return nil
+}
+func (m *heartbeatMockStateManager) SetWorkflowRunning(context.Context, core.WorkflowID) error {
+	return nil
+}
 func (m *heartbeatMockStateManager) ClearWorkflowRunning(context.Context, core.WorkflowID) error {
 	return nil
 }
@@ -66,13 +76,17 @@ func (m *heartbeatMockStateManager) IsWorkflowRunning(context.Context, core.Work
 func (m *heartbeatMockStateManager) UpdateWorkflowHeartbeat(context.Context, core.WorkflowID) error {
 	return nil
 }
-func (m *heartbeatMockStateManager) Exists() bool                                   { return true }
-func (m *heartbeatMockStateManager) Backup(context.Context) error                   { return nil }
-func (m *heartbeatMockStateManager) Restore(context.Context) (*core.WorkflowState, error) { return nil, nil }
-func (m *heartbeatMockStateManager) DeactivateWorkflow(context.Context) error              { return nil }
-func (m *heartbeatMockStateManager) ArchiveWorkflows(context.Context) (int, error)         { return 0, nil }
-func (m *heartbeatMockStateManager) PurgeAllWorkflows(context.Context) (int, error)        { return 0, nil }
-func (m *heartbeatMockStateManager) DeleteWorkflow(context.Context, core.WorkflowID) error { return nil }
+func (m *heartbeatMockStateManager) Exists() bool                 { return true }
+func (m *heartbeatMockStateManager) Backup(context.Context) error { return nil }
+func (m *heartbeatMockStateManager) Restore(context.Context) (*core.WorkflowState, error) {
+	return nil, nil
+}
+func (m *heartbeatMockStateManager) DeactivateWorkflow(context.Context) error       { return nil }
+func (m *heartbeatMockStateManager) ArchiveWorkflows(context.Context) (int, error)  { return 0, nil }
+func (m *heartbeatMockStateManager) PurgeAllWorkflows(context.Context) (int, error) { return 0, nil }
+func (m *heartbeatMockStateManager) DeleteWorkflow(context.Context, core.WorkflowID) error {
+	return nil
+}
 func (m *heartbeatMockStateManager) FindWorkflowsByPrompt(context.Context, string) ([]core.DuplicateWorkflowInfo, error) {
 	return nil, nil
 }
@@ -118,7 +132,7 @@ func TestHeartbeatManager_IsHealthy_TrackedButStale(t *testing.T) {
 
 	// Manually set a stale lastWriteSuccess
 	hm.mu.Lock()
-	hm.active[wfID] = func() {} // dummy cancel
+	hm.active[wfID] = func() {}                              // dummy cancel
 	hm.lastWriteSuccess[wfID] = time.Now().Add(-time.Second) // older than 500ms threshold
 	hm.mu.Unlock()
 
@@ -168,7 +182,7 @@ func TestHeartbeatManager_WriteHeartbeat_UpdatesLastSuccess(t *testing.T) {
 
 	// Initialize tracking so lastWriteSuccess exists
 	hm.mu.Lock()
-	hm.active[wfID] = func() {} // mark as active
+	hm.active[wfID] = func() {}                              // mark as active
 	hm.lastWriteSuccess[wfID] = time.Now().Add(-time.Minute) // start old
 	hm.mu.Unlock()
 

@@ -620,9 +620,9 @@ func TestApplyFullConfigUpdates_AllSections(t *testing.T) {
 		},
 		Phases: &PhasesConfigUpdate{
 			Analyze: &AnalyzePhaseConfigUpdate{
-				Timeout:   strPtr("20m"),
-				Refiner:   &RefinerConfigUpdate{Enabled: boolPtr(true), Agent: strPtr("claude")},
-				Moderator: &ModeratorConfigUpdate{Enabled: boolPtr(true), Agent: strPtr("gemini"), Threshold: float64Ptr(0.9), MinSuccessfulAgents: intPtr(2), MinRounds: intPtr(1), MaxRounds: intPtr(5), WarningThreshold: float64Ptr(0.7), StagnationThreshold: float64Ptr(0.1)},
+				Timeout:     strPtr("20m"),
+				Refiner:     &RefinerConfigUpdate{Enabled: boolPtr(true), Agent: strPtr("claude")},
+				Moderator:   &ModeratorConfigUpdate{Enabled: boolPtr(true), Agent: strPtr("gemini"), Threshold: float64Ptr(0.9), MinSuccessfulAgents: intPtr(2), MinRounds: intPtr(1), MaxRounds: intPtr(5), WarningThreshold: float64Ptr(0.7), StagnationThreshold: float64Ptr(0.1)},
 				Synthesizer: &SynthesizerConfigUpdate{Agent: strPtr("claude")},
 				SingleAgent: &SingleAgentConfigUpdate{Enabled: boolPtr(true), Agent: strPtr("claude"), Model: strPtr("opus")},
 			},

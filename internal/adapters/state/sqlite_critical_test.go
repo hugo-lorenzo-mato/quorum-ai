@@ -71,7 +71,7 @@ func TestAtomicWriteFile_Concurrent(t *testing.T) {
 	t.Parallel()
 
 	targetPath := filepath.Join(t.TempDir(), "atomic_test.txt")
-	
+
 	const numWriters = 10
 	const writesPerWorker = 3
 
@@ -86,12 +86,12 @@ func TestAtomicWriteFile_Concurrent(t *testing.T) {
 
 			for j := 0; j < writesPerWorker; j++ {
 				content := fmt.Sprintf("Worker %d - Write %d - %d", workerID, j, time.Now().UnixNano())
-				
+
 				err := atomicWriteFile(targetPath, []byte(content), 0644)
 				if err != nil {
 					errors <- fmt.Errorf("worker %d write %d: %w", workerID, j, err)
 				}
-				
+
 				time.Sleep(1 * time.Millisecond)
 			}
 		}(i)
@@ -136,7 +136,7 @@ func TestAtomicWriteFile_PlatformSpecific(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to read after first write: %v", err)
 	}
-	
+
 	if string(readContent) != "First write" {
 		t.Errorf("Content mismatch: got %q, want %q", string(readContent), "First write")
 	}
@@ -152,7 +152,7 @@ func TestAtomicWriteFile_PlatformSpecific(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to read after second write: %v", err)
 	}
-	
+
 	if string(readContent2) != "Second write" {
 		t.Errorf("Overwrite failed: got %q, want %q", string(readContent2), "Second write")
 	}
@@ -171,7 +171,7 @@ func TestSQLiteStateManager_CorruptionRecovery(t *testing.T) {
 	t.Parallel()
 
 	dbPath := filepath.Join(t.TempDir(), "corruption_test.db")
-	
+
 	// First, create a healthy database
 	manager1 := newTestSQLiteStateManagerForCritical(t, dbPath)
 	state1 := newTestWorkflowStateForCritical(core.WorkflowID("test-workflow"))
@@ -203,13 +203,13 @@ func newTestSQLiteStateManagerForCritical(t *testing.T, dbPath string) *SQLiteSt
 	if err != nil {
 		t.Fatalf("Failed to create SQLite state manager: %v", err)
 	}
-	
+
 	t.Cleanup(func() {
 		if err := manager.Close(); err != nil {
 			t.Logf("Failed to close state manager: %v", err)
 		}
 	})
-	
+
 	return manager
 }
 

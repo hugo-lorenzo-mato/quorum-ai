@@ -73,10 +73,10 @@ func TestParseFloatField(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name    string
-		input   string
-		want    float64
-		wantOK  bool
+		name   string
+		input  string
+		want   float64
+		wantOK bool
 	}{
 		{"integer", "42", 42.0, true},
 		{"float", "3.14", 3.14, true},
@@ -104,11 +104,11 @@ func TestParseSizeToMB(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name    string
-		value   string
-		unit    string
-		want    float64
-		wantOK  bool
+		name   string
+		value  string
+		unit   string
+		want   float64
+		wantOK bool
 	}{
 		{"GB to MB", "2", "GB", 2048, true},
 		{"MB stays", "512", "MB", 512, true},

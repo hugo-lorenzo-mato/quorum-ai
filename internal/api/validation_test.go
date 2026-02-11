@@ -3,10 +3,10 @@ package api
 import (
 	"bytes"
 	"encoding/json"
-	"path/filepath"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/config"

@@ -147,6 +147,19 @@ func (m *mockKanbanStateManager) SetNextWorkflow(wf *core.WorkflowState) {
 	m.nextWorkflow = wf
 }
 
+// GetWorkflow returns a copy of a workflow state by ID (thread-safe).
+func (m *mockKanbanStateManager) GetWorkflow(workflowID string) *core.WorkflowState {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	wf, ok := m.workflows[workflowID]
+	if !ok {
+		return nil
+	}
+	// Return a copy to avoid race conditions
+	copy := *wf
+	return &copy
+}
+
 func (m *mockKanbanStateManager) MoveCallCount() int {
 	m.mu.Lock()
 	defer m.mu.Unlock()

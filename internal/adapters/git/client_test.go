@@ -12,7 +12,7 @@ import (
 
 func TestGitClient_NewClient(t *testing.T) {
 	t.Parallel()
-	
+
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	repo.Commit("Initial commit")
@@ -27,7 +27,7 @@ func TestGitClient_NewClient(t *testing.T) {
 
 func TestGitClient_NewClient_NotARepo(t *testing.T) {
 	t.Parallel()
-	
+
 	dir := testutil.TempDir(t)
 
 	_, err := git.NewClient(dir)
@@ -36,7 +36,7 @@ func TestGitClient_NewClient_NotARepo(t *testing.T) {
 
 func TestGitClient_Status(t *testing.T) {
 	t.Parallel()
-	
+
 	repo := testutil.NewGitRepo(t)
 	repo.WriteFile("README.md", "# Test")
 	repo.Commit("Initial commit")

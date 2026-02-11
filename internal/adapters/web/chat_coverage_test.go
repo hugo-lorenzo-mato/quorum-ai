@@ -282,10 +282,10 @@ func TestUpdateSession_UpdatesTitle(t *testing.T) {
 
 	now := time.Now()
 	h.sessions["session-1"] = &chatSessionState{
-		session:   ChatSession{ID: "session-1", Agent: "claude", CreatedAt: now, UpdatedAt: now},
-		messages:  make([]ChatMessage, 0),
-		agent:     "claude",
-		title:     "",
+		session:     ChatSession{ID: "session-1", Agent: "claude", CreatedAt: now, UpdatedAt: now},
+		messages:    make([]ChatMessage, 0),
+		agent:       "claude",
+		title:       "",
 		projectRoot: "/test",
 	}
 

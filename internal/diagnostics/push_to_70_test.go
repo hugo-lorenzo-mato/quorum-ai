@@ -82,16 +82,16 @@ func TestResourceMonitor_GetTrend_AllThresholdsExceeded(t *testing.T) {
 	baseTime := time.Now().Add(-15 * time.Minute)
 	monitor.history = []ResourceSnapshot{
 		{
-			Timestamp:    baseTime,
-			OpenFDs:      100,
-			Goroutines:   50,
-			HeapAllocMB:  100.0,
+			Timestamp:   baseTime,
+			OpenFDs:     100,
+			Goroutines:  50,
+			HeapAllocMB: 100.0,
 		},
 		{
-			Timestamp:    baseTime.Add(15 * time.Minute),
-			OpenFDs:      300, // +200 in 15min = 800/hour (exceeds threshold of 50/hour)
-			Goroutines:   400, // +350 in 15min = 1400/hour (exceeds threshold of 500/hour)
-			HeapAllocMB:  400.0, // +300 in 15min = 1200/hour (exceeds threshold of 250/hour)
+			Timestamp:   baseTime.Add(15 * time.Minute),
+			OpenFDs:     300,   // +200 in 15min = 800/hour (exceeds threshold of 50/hour)
+			Goroutines:  400,   // +350 in 15min = 1400/hour (exceeds threshold of 500/hour)
+			HeapAllocMB: 400.0, // +300 in 15min = 1200/hour (exceeds threshold of 250/hour)
 		},
 	}
 	monitor.mu.Unlock()
@@ -137,16 +137,16 @@ func TestResourceMonitor_GetTrend_OnlyFDExceeded(t *testing.T) {
 	baseTime := time.Now().Add(-15 * time.Minute)
 	monitor.history = []ResourceSnapshot{
 		{
-			Timestamp:    baseTime,
-			OpenFDs:      100,
-			Goroutines:   50,
-			HeapAllocMB:  100.0,
+			Timestamp:   baseTime,
+			OpenFDs:     100,
+			Goroutines:  50,
+			HeapAllocMB: 100.0,
 		},
 		{
-			Timestamp:    baseTime.Add(15 * time.Minute),
-			OpenFDs:      300, // +200 in 15min = 800/hour (exceeds 50/hour)
-			Goroutines:   55, // +5 in 15min = 20/hour (OK)
-			HeapAllocMB:  110.0, // +10 in 15min = 40/hour (OK)
+			Timestamp:   baseTime.Add(15 * time.Minute),
+			OpenFDs:     300,   // +200 in 15min = 800/hour (exceeds 50/hour)
+			Goroutines:  55,    // +5 in 15min = 20/hour (OK)
+			HeapAllocMB: 110.0, // +10 in 15min = 40/hour (OK)
 		},
 	}
 	monitor.mu.Unlock()

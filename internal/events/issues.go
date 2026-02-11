@@ -96,4 +96,3 @@ func NewIssuesPublishingProgressEvent(p IssuesPublishingProgressParams) IssuesPu
 		DryRun:      p.DryRun,
 	}
 }
-

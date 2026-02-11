@@ -16,13 +16,13 @@ import (
 // ---------------------------------------------------------------------------
 
 type mockAgent struct {
-	name      string
-	execFunc  func(ctx context.Context, opts core.ExecuteOptions) (*core.ExecuteResult, error)
+	name     string
+	execFunc func(ctx context.Context, opts core.ExecuteOptions) (*core.ExecuteResult, error)
 }
 
-func (a *mockAgent) Name() string                                    { return a.name }
-func (a *mockAgent) Capabilities() core.Capabilities                 { return core.Capabilities{} }
-func (a *mockAgent) Ping(_ context.Context) error                    { return nil }
+func (a *mockAgent) Name() string                    { return a.name }
+func (a *mockAgent) Capabilities() core.Capabilities { return core.Capabilities{} }
+func (a *mockAgent) Ping(_ context.Context) error    { return nil }
 func (a *mockAgent) Execute(ctx context.Context, opts core.ExecuteOptions) (*core.ExecuteResult, error) {
 	if a.execFunc != nil {
 		return a.execFunc(ctx, opts)
@@ -55,10 +55,10 @@ func (r *mockRegistry) List() []string {
 	return names
 }
 
-func (r *mockRegistry) ListEnabled() []string { return r.List() }
-func (r *mockRegistry) Available(_ context.Context) []string { return r.List() }
+func (r *mockRegistry) ListEnabled() []string                                  { return r.List() }
+func (r *mockRegistry) Available(_ context.Context) []string                   { return r.List() }
 func (r *mockRegistry) AvailableForPhase(_ context.Context, _ string) []string { return r.List() }
-func (r *mockRegistry) ListEnabledForPhase(_ string) []string { return r.List() }
+func (r *mockRegistry) ListEnabledForPhase(_ string) []string                  { return r.List() }
 func (r *mockRegistry) AvailableForPhaseWithConfig(_ context.Context, _ string, _ map[string][]string) []string {
 	return r.List()
 }

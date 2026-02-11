@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useReducer, useRef, useState } from 'react';
 import PropTypes from 'prop-types';
 import { CheckCircle, XCircle, Loader2, MessageSquare } from 'lucide-react';
 import useWorkflowStore from '../../stores/workflowStore';
@@ -26,46 +26,69 @@ function ReviewGateInner({ workflow }) {
 
   // Show task editor when plan phase completed (current_phase is 'execute')
   const showTaskEditor = current_phase === 'execute';
-  const taskList = tasks[id] || [];
+  const taskList = useMemo(() => tasks[id] || [], [tasks, id]);
 
-  const [selectedTaskIds, setSelectedTaskIds] = useState([]);
+  // Use reducer to manage task selection state based on task list changes
+  const [selectedTaskIds, dispatchSelection] = useReducer(
+    (state, action) => {
+      if (action.type === 'SYNC_TASKS') {
+        const { currentIds, prevIds } = action.payload;
+
+        // First time tasks load: select all.
+        if (state.length === 0 && prevIds.size === 0 && currentIds.size > 0) {
+          return Array.from(currentIds);
+        }
+
+        const added = [];
+        const removed = [];
+
+        for (const cid of currentIds) {
+          if (!prevIds.has(cid)) added.push(cid);
+        }
+        for (const pid of prevIds) {
+          if (!currentIds.has(pid)) removed.push(pid);
+        }
+
+        if (added.length === 0 && removed.length === 0) return state;
+
+        const next = new Set(state.filter(Boolean));
+        // Remove deleted tasks.
+        for (const rid of removed) next.delete(rid);
+        // Auto-select newly added tasks.
+        for (const aid of added) next.add(aid);
+
+        return Array.from(next);
+      }
+      if (action.type === 'SET_SELECTION') {
+        return action.payload;
+      }
+      if (action.type === 'RESET') {
+        return [];
+      }
+      return state;
+    },
+    []
+  );
 
   useEffect(() => {
     if (!showTaskEditor) return;
     fetchTasks(id);
   }, [fetchTasks, id, showTaskEditor]);
 
-  // Default to "all selected" and keep selection in sync as tasks are added/removed during review.
+  // Sync task selection when task list changes
   useEffect(() => {
-    if (!showTaskEditor) return;
+    if (!showTaskEditor) {
+      dispatchSelection({ type: 'RESET' });
+      prevTaskIdsRef.current = new Set();
+      return;
+    }
+
     const currentIds = new Set(taskList.map(t => t.id).filter(Boolean));
     const prevIds = prevTaskIdsRef.current || new Set();
 
-    const added = [];
-    const removed = [];
-
-    for (const cid of currentIds) {
-      if (!prevIds.has(cid)) added.push(cid);
-    }
-    for (const pid of prevIds) {
-      if (!currentIds.has(pid)) removed.push(pid);
-    }
-
-    setSelectedTaskIds((prev) => {
-      // First time tasks load: select all.
-      if (!prev || prev.length === 0 && prevIds.size === 0 && currentIds.size > 0) {
-        return Array.from(currentIds);
-      }
-
-      const next = new Set((prev || []).filter(Boolean));
-
-      // Remove deleted tasks.
-      for (const rid of removed) next.delete(rid);
-
-      // Auto-select newly added tasks.
-      for (const aid of added) next.add(aid);
-
-      return Array.from(next);
+    dispatchSelection({
+      type: 'SYNC_TASKS',
+      payload: { currentIds, prevIds }
     });
 
     prevTaskIdsRef.current = currentIds;
@@ -125,7 +148,7 @@ function ReviewGateInner({ workflow }) {
           <TaskSelectionPanel
             tasks={taskList}
             selectedTaskIds={selectedTaskIds}
-            onChangeSelectedTaskIds={setSelectedTaskIds}
+            onChangeSelectedTaskIds={(ids) => dispatchSelection({ type: 'SET_SELECTION', payload: ids })}
             disabled={loading}
             title="Execute Selection"
           />

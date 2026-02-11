@@ -58,7 +58,7 @@ function RoundsTable({ rounds, threshold }) {
 
 export default function PhaseDetailAnalyze({ analyze }) {
   const {
-    threshold, minRounds, maxRounds, stagnationThreshold, warningThreshold,
+    threshold, minRounds, maxRounds, stagnationThreshold,
     consensusEnabled, moderatorAgent, rounds, currentRound, synthesisStatus,
   } = analyze;
 

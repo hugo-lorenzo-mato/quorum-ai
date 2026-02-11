@@ -14,4 +14,3 @@ type ProgressReporter interface {
 	OnIssuesGenerationProgress(workflowID, stage string, current, total int, issue *ProgressIssue, message string)
 	OnIssuesPublishingProgress(p PublishingProgressParams)
 }
-

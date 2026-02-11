@@ -25,8 +25,8 @@ func newTestManager(t *testing.T) *SQLiteStateManager {
 	return m
 }
 
-// newTestManagerWithPath creates a manager for a given path.
-func newTestManagerWithPath(t *testing.T, dbPath string) *SQLiteStateManager {
+// _newTestManagerWithPath creates a manager for a given path (unused but kept for reference).
+func _newTestManagerWithPath(t *testing.T, dbPath string) *SQLiteStateManager {
 	t.Helper()
 	m, err := NewSQLiteStateManager(dbPath)
 	if err != nil {
@@ -1988,4 +1988,3 @@ func TestConcurrentReadWrite(t *testing.T) {
 		t.Errorf("concurrent operation failed: %v", err)
 	}
 }
-

@@ -146,13 +146,13 @@ func (m *SemanticModerator) setupModeratorAgent(wctx *Context, agentName string)
 	if moderatorAgentName == "" {
 		moderatorAgentName = m.config.Agent
 	}
-	
+
 	agent, err := wctx.Agents.Get(moderatorAgentName)
 	if err != nil {
 		return nil, "", fmt.Errorf("moderator agent '%s' not available: %w. "+
 			"Ensure this agent is configured and responding (run 'quorum doctor' to verify). See: %s#agents", moderatorAgentName, err, DocsConfigURL)
 	}
-	
+
 	return agent, moderatorAgentName, nil
 }
 

@@ -18,16 +18,16 @@ type EnumsResponse struct {
 	Phases           []string `json:"phases"`
 	PhaseModelKeys   []string `json:"phase_model_keys"`
 	// Model configuration (centralized source of truth)
-	AgentModels                 map[string][]string            `json:"agent_models"`
-	AgentDefaultModels          map[string]string              `json:"agent_default_models"`
-	AgentsWithReasoning         []string                       `json:"agents_with_reasoning"`
-	AgentReasoningEfforts       map[string][]string            `json:"agent_reasoning_efforts"`
-	AgentModelReasoningEfforts  map[string]map[string][]string `json:"agent_model_reasoning_efforts"`
+	AgentModels                map[string][]string            `json:"agent_models"`
+	AgentDefaultModels         map[string]string              `json:"agent_default_models"`
+	AgentsWithReasoning        []string                       `json:"agents_with_reasoning"`
+	AgentReasoningEfforts      map[string][]string            `json:"agent_reasoning_efforts"`
+	AgentModelReasoningEfforts map[string]map[string][]string `json:"agent_model_reasoning_efforts"`
 	// Issue configuration enums
-	IssueProviders      []string `json:"issue_providers"`
+	IssueProviders       []string `json:"issue_providers"`
 	IssuePromptLanguages []string `json:"issue_prompt_languages"`
 	IssuePromptTones     []string `json:"issue_prompt_tones"`
-	IssueModes          []string `json:"issue_modes"`
+	IssueModes           []string `json:"issue_modes"`
 }
 
 // handleGetEnums returns all enum values for UI dropdowns.
@@ -51,10 +51,10 @@ func (s *Server) handleGetEnums(w http.ResponseWriter, _ *http.Request) {
 			"codex":  core.CodexReasoningEfforts,
 		},
 		AgentModelReasoningEfforts: core.AgentModelReasoningEfforts,
-		IssueProviders:      core.IssueProviders,
-		IssuePromptLanguages: core.IssueLanguages,
-		IssuePromptTones:     core.IssueTones,
-		IssueModes:          core.IssueModes,
+		IssueProviders:             core.IssueProviders,
+		IssuePromptLanguages:       core.IssueLanguages,
+		IssuePromptTones:           core.IssueTones,
+		IssueModes:                 core.IssueModes,
 	}
 
 	respondJSON(w, http.StatusOK, enums)

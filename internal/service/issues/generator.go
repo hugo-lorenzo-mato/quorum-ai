@@ -39,7 +39,7 @@ type IssueInput struct {
 type Generator struct {
 	client      core.IssueClient
 	config      config.IssuesConfig
-	projectRoot string                  // Project root directory (replaces os.Getwd)
+	projectRoot string // Project root directory (replaces os.Getwd)
 	reportDir   string
 	agents      core.AgentRegistry      // Optional: for LLM-based generation
 	prompts     *service.PromptRenderer // Lazy-initialized prompt renderer

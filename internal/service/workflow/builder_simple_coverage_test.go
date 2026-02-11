@@ -262,9 +262,9 @@ func TestRunnerBuilder_Build_MissingRequiredDeps_Coverage(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name        string
+		name         string
 		setupBuilder func() *RunnerBuilder
-		expectError string
+		expectError  string
 	}{
 		{
 			name: "missing config",

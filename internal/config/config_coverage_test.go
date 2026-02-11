@@ -139,10 +139,10 @@ func TestAgentConfig_IsEnabledForPhase(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name    string
-		cfg     AgentConfig
-		phase   string
-		want    bool
+		name  string
+		cfg   AgentConfig
+		phase string
+		want  bool
 	}{
 		{
 			"enabled and phase present",

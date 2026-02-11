@@ -10,7 +10,7 @@ import (
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service"
 )
 
-func (s *Server) handleListSystemPrompts(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleListSystemPrompts(w http.ResponseWriter, _ *http.Request) {
 	prompts, err := service.ListSystemPrompts()
 	if err != nil {
 		s.logger.Error("failed to list system prompts", "error", err)
@@ -34,4 +34,3 @@ func (s *Server) handleGetSystemPrompt(w http.ResponseWriter, r *http.Request) {
 	}
 	respondJSON(w, http.StatusOK, prompt)
 }
-

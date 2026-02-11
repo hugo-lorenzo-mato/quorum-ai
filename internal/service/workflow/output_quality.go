@@ -15,6 +15,7 @@ import "strings"
 //     concatenated blobs) AND at least one markdown header (# …).  All
 //     analysis prompts request structured markdown output with headers, so
 //     the absence of any header is a reliable signal of garbage output.
+//
 // isLikelySkeleton returns true when content looks like a headings-only outline
 // (e.g. "# Section\n## Subsection\n...") with no substantive prose.
 // A line is "substantive" if it is non-empty, not a markdown header, not an

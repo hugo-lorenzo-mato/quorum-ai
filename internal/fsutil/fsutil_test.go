@@ -29,4 +29,3 @@ func TestReadFileScoped_RejectsInvalidPath(t *testing.T) {
 		}
 	}
 }
-

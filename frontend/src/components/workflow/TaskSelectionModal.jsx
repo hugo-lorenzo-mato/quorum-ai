@@ -1,33 +1,21 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import PropTypes from 'prop-types';
 import { X, Play, Loader2 } from 'lucide-react';
 import TaskSelectionPanel from './TaskSelectionPanel';
 import { computeSelectionDetails } from './taskSelection';
 
-export default function TaskSelectionModal({ isOpen, onClose, onConfirm, tasks, loading }) {
-  const taskList = Array.isArray(tasks) ? tasks : [];
-  const [selectedTaskIds, setSelectedTaskIds] = useState([]);
-  const [initialized, setInitialized] = useState(false);
-
-  useEffect(() => {
-    if (!isOpen) {
-      setInitialized(false);
-      setSelectedTaskIds([]);
-      return;
-    }
-    if (!initialized && taskList.length > 0) {
-      setSelectedTaskIds(taskList.map(t => t.id).filter(Boolean));
-      setInitialized(true);
-    }
-  }, [isOpen, initialized, taskList]);
+function TaskSelectionModalInner({ onClose, onConfirm, tasks, loading }) {
+  const taskList = useMemo(() => (Array.isArray(tasks) ? tasks : []), [tasks]);
+  // Initialize with all tasks selected on mount
+  const [selectedTaskIds, setSelectedTaskIds] = useState(() =>
+    taskList.map(t => t.id).filter(Boolean)
+  );
 
   const { effective } = useMemo(
     () => computeSelectionDetails(taskList, selectedTaskIds),
     [taskList, selectedTaskIds],
   );
   const canConfirm = effective.size > 0 && !loading;
-
-  if (!isOpen) return null;
 
   const handleConfirm = async () => {
     if (!canConfirm) return;
@@ -88,6 +76,36 @@ export default function TaskSelectionModal({ isOpen, onClose, onConfirm, tasks, 
     </div>
   );
 }
+
+// Wrapper component that uses key to reset state when modal opens/closes
+export default function TaskSelectionModal({ isOpen, onClose, onConfirm, tasks, loading }) {
+  if (!isOpen) return null;
+
+  // Key prop ensures component remounts (resets state) each time modal opens
+  return (
+    <TaskSelectionModalInner
+      key={isOpen ? 'open' : 'closed'}
+      onClose={onClose}
+      onConfirm={onConfirm}
+      tasks={tasks}
+      loading={loading}
+    />
+  );
+}
+
+TaskSelectionModalInner.propTypes = {
+  onClose: PropTypes.func.isRequired,
+  onConfirm: PropTypes.func.isRequired,
+  tasks: PropTypes.arrayOf(PropTypes.shape({
+    id: PropTypes.string.isRequired,
+    name: PropTypes.string,
+    description: PropTypes.string,
+    status: PropTypes.string,
+    cli: PropTypes.string,
+    dependencies: PropTypes.arrayOf(PropTypes.string),
+  })).isRequired,
+  loading: PropTypes.bool,
+};
 
 TaskSelectionModal.propTypes = {
   isOpen: PropTypes.bool.isRequired,

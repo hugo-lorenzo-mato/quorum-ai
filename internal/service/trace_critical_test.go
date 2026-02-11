@@ -17,26 +17,26 @@ func TestMetricsCollector_Basic(t *testing.T) {
 	// Test workflow start/end
 	collector.StartWorkflow()
 	time.Sleep(10 * time.Millisecond) // Small delay
-	
+
 	// Test task start/end
 	testTask := &core.Task{
 		ID:   core.TaskID("test-task"),
 		Name: "test",
 	}
-	
+
 	collector.StartTask(testTask, "claude")
 	time.Sleep(5 * time.Millisecond)
-	
+
 	result := &core.ExecuteResult{
 		Output: "test output",
 	}
 	collector.EndTask(core.TaskID("test-task"), result, nil)
-	
+
 	collector.EndWorkflow()
 
 	// Get metrics
 	metrics := collector.GetWorkflowMetrics()
-	
+
 	// Verify basic fields
 	if metrics.TasksTotal != 1 {
 		t.Errorf("Expected 1 task total, got %d", metrics.TasksTotal)
@@ -61,10 +61,10 @@ func TestMetricsCollector_MultipleAgents(t *testing.T) {
 			ID:   core.TaskID(fmt.Sprintf("task-%d", i)),
 			Name: fmt.Sprintf("task%d", i),
 		}
-		
+
 		collector.StartTask(task, agent)
 		time.Sleep(time.Duration(i+1) * time.Millisecond) // Variable timing
-		
+
 		result := &core.ExecuteResult{
 			Output: fmt.Sprintf("output for task %d", i),
 		}
@@ -101,7 +101,7 @@ func TestMetricsCollector_TaskFailures(t *testing.T) {
 		Name: "success",
 	}
 	collector.StartTask(successTask, "claude")
-	
+
 	successResult := &core.ExecuteResult{
 		Output: "success",
 	}
@@ -113,7 +113,7 @@ func TestMetricsCollector_TaskFailures(t *testing.T) {
 		Name: "fail",
 	}
 	collector.StartTask(failTask, "claude")
-	
+
 	failResult := &core.ExecuteResult{
 		Output: "failed",
 	}
@@ -143,7 +143,7 @@ func TestMetricsCollector_Retries(t *testing.T) {
 	collector.StartWorkflow()
 
 	taskID := core.TaskID("retry-task")
-	
+
 	// Record several retries
 	collector.RecordRetry(taskID)
 	collector.RecordRetry(taskID)
@@ -154,7 +154,7 @@ func TestMetricsCollector_Retries(t *testing.T) {
 		Name: "retry-task",
 	}
 	collector.StartTask(task, "claude")
-	
+
 	result := &core.ExecuteResult{
 		Output: "success after retries",
 	}
@@ -186,15 +186,15 @@ func TestMetricsCollector_Concurrency(t *testing.T) {
 	for i := 0; i < numTasks; i++ {
 		go func(taskNum int) {
 			defer func() { done <- true }()
-			
+
 			task := &core.Task{
 				ID:   core.TaskID(fmt.Sprintf("concurrent-task-%d", taskNum)),
 				Name: fmt.Sprintf("task%d", taskNum),
 			}
-			
+
 			collector.StartTask(task, "claude")
 			time.Sleep(time.Duration(taskNum%5+1) * time.Millisecond) // Variable timing
-			
+
 			result := &core.ExecuteResult{
 				Output: fmt.Sprintf("output %d", taskNum),
 			}

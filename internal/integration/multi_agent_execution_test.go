@@ -20,31 +20,31 @@ func TestMultiAgentExecution_ParallelTasks(t *testing.T) {
 	// Define test scenario with parallel tasks
 	tasks := []TaskDefinition{
 		{
-			ID:           core.TaskID("parallel-task-1"),
-			Name:         "File Analysis",
-			Agent:        "claude",
-			Dependencies: []core.TaskID{}, // No dependencies - can run immediately
+			ID:                core.TaskID("parallel-task-1"),
+			Name:              "File Analysis",
+			Agent:             "claude",
+			Dependencies:      []core.TaskID{}, // No dependencies - can run immediately
 			EstimatedDuration: 2 * time.Second,
 		},
 		{
-			ID:           core.TaskID("parallel-task-2"),
-			Name:         "Code Review",
-			Agent:        "gemini",
-			Dependencies: []core.TaskID{}, // No dependencies - can run in parallel
+			ID:                core.TaskID("parallel-task-2"),
+			Name:              "Code Review",
+			Agent:             "gemini",
+			Dependencies:      []core.TaskID{}, // No dependencies - can run in parallel
 			EstimatedDuration: 3 * time.Second,
 		},
 		{
-			ID:           core.TaskID("parallel-task-3"),
-			Name:         "Documentation Check",
-			Agent:        "gpt",
-			Dependencies: []core.TaskID{}, // No dependencies - can run in parallel
+			ID:                core.TaskID("parallel-task-3"),
+			Name:              "Documentation Check",
+			Agent:             "gpt",
+			Dependencies:      []core.TaskID{}, // No dependencies - can run in parallel
 			EstimatedDuration: 1 * time.Second,
 		},
 		{
-			ID:           core.TaskID("sequential-task-4"),
-			Name:         "Integration",
-			Agent:        "claude",
-			Dependencies: []core.TaskID{"parallel-task-1", "parallel-task-2", "parallel-task-3"}, // Depends on all parallel tasks
+			ID:                core.TaskID("sequential-task-4"),
+			Name:              "Integration",
+			Agent:             "claude",
+			Dependencies:      []core.TaskID{"parallel-task-1", "parallel-task-2", "parallel-task-3"}, // Depends on all parallel tasks
 			EstimatedDuration: 1 * time.Second,
 		},
 	}
@@ -76,7 +76,7 @@ func TestMultiAgentExecution_ParallelTasks(t *testing.T) {
 	// Verify parallel execution efficiency
 	// Parallel tasks should run concurrently, so total time should be less than sum of individual durations
 	sequentialTime := 2*time.Second + 3*time.Second + 1*time.Second + 1*time.Second // 7 seconds
-	parallelTime := 3*time.Second + 1*time.Second // max(2,3,1) + 1 = 4 seconds expected
+	parallelTime := 3*time.Second + 1*time.Second                                   // max(2,3,1) + 1 = 4 seconds expected
 
 	if totalDuration > parallelTime+2*time.Second { // Allow 2 second buffer for overhead
 		t.Errorf("Execution took too long: %v (expected around %v for parallel execution)", totalDuration, parallelTime)
@@ -86,7 +86,7 @@ func TestMultiAgentExecution_ParallelTasks(t *testing.T) {
 		t.Errorf("Execution did not demonstrate parallelism: %v (sequential would be %v)", totalDuration, sequentialTime)
 	}
 
-	t.Logf("Multi-agent parallel execution completed in %v (parallel advantage: %v)", 
+	t.Logf("Multi-agent parallel execution completed in %v (parallel advantage: %v)",
 		totalDuration, sequentialTime-totalDuration)
 }
 
@@ -152,7 +152,7 @@ func TestMultiAgentExecution_DependencyResolution(t *testing.T) {
 			}
 
 			if taskOrder <= depOrder {
-				t.Errorf("Task %s (order %d) should execute after dependency %s (order %d)", 
+				t.Errorf("Task %s (order %d) should execute after dependency %s (order %d)",
 					test.task, taskOrder, dependency, depOrder)
 			}
 		}
@@ -244,7 +244,7 @@ func TestMultiAgentExecution_ErrorPropagation(t *testing.T) {
 		t.Errorf("Task dependent on success should complete, got status: %s", result.Status)
 	}
 
-	t.Logf("Error propagation test: %d successful, %d failed", 
+	t.Logf("Error propagation test: %d successful, %d failed",
 		successfulTasks, failedTasks)
 }
 
@@ -254,9 +254,9 @@ func TestMultiAgentExecution_AgentResourceLimits(t *testing.T) {
 
 	// Create orchestrator with resource limits
 	orchestrator := NewMockOrchestrator()
-	orchestrator.SetAgentLimit("claude", 2)   // Max 2 concurrent tasks
-	orchestrator.SetAgentLimit("gemini", 1)   // Max 1 concurrent task
-	orchestrator.SetAgentLimit("gpt", 3)      // Max 3 concurrent tasks
+	orchestrator.SetAgentLimit("claude", 2) // Max 2 concurrent tasks
+	orchestrator.SetAgentLimit("gemini", 1) // Max 1 concurrent task
+	orchestrator.SetAgentLimit("gpt", 3)    // Max 3 concurrent tasks
 
 	// Create many tasks for limited agents
 	tasks := make([]TaskDefinition, 10)
@@ -297,7 +297,7 @@ func TestMultiAgentExecution_AgentResourceLimits(t *testing.T) {
 	// With limits, execution should take longer than unlimited parallelism
 	minimumDuration := 3 * time.Second // Limited by gemini agent (1 concurrent * 4 tasks * 1s each)
 	if totalDuration < minimumDuration {
-		t.Errorf("Execution too fast: %v (expected at least %v due to resource limits)", 
+		t.Errorf("Execution too fast: %v (expected at least %v due to resource limits)",
 			totalDuration, minimumDuration)
 	}
 
@@ -321,12 +321,12 @@ type TaskDefinition struct {
 }
 
 type TaskResult struct {
-	TaskID      core.TaskID
-	Status      core.TaskStatus
-	Error       string
-	StartTime   time.Time
-	EndTime     time.Time
-	AgentUsed   string
+	TaskID    core.TaskID
+	Status    core.TaskStatus
+	Error     string
+	StartTime time.Time
+	EndTime   time.Time
+	AgentUsed string
 }
 
 type MockOrchestrator struct {
@@ -357,7 +357,7 @@ func (o *MockOrchestrator) ExecuteWorkflow(ctx context.Context, tasks []TaskDefi
 	results := make([]*TaskResult, 0, len(tasks))
 	completed := make(map[core.TaskID]bool)
 	failed := make(map[core.TaskID]bool)
-	
+
 	// Agent semaphores for resource limits
 	agentSems := make(map[string]chan struct{})
 	for agent, limit := range o.agentLimits {
@@ -369,7 +369,7 @@ func (o *MockOrchestrator) ExecuteWorkflow(ctx context.Context, tasks []TaskDefi
 	// Execute tasks respecting dependencies and resource limits
 	var wg sync.WaitGroup
 	resultChan := make(chan *TaskResult, len(tasks))
-	
+
 	// Track running tasks to avoid duplicates
 	running := make(map[core.TaskID]bool)
 	var runMutex sync.RWMutex
@@ -377,7 +377,7 @@ func (o *MockOrchestrator) ExecuteWorkflow(ctx context.Context, tasks []TaskDefi
 	// Execute a single task
 	executeTask := func(taskDef *TaskDefinition) {
 		defer wg.Done()
-		
+
 		// Acquire agent resource if limited
 		if sem, exists := agentSems[taskDef.Agent]; exists {
 			select {
@@ -422,12 +422,12 @@ func (o *MockOrchestrator) ExecuteWorkflow(ctx context.Context, tasks []TaskDefi
 	scheduleReady := func() {
 		runMutex.Lock()
 		defer runMutex.Unlock()
-		
+
 		for taskID, taskDef := range taskMap {
 			if running[taskID] || completed[taskID] || failed[taskID] {
 				continue
 			}
-			
+
 			// Check if all dependencies are satisfied
 			allDepsComplete := true
 			for _, dep := range taskDef.Dependencies {
@@ -436,7 +436,7 @@ func (o *MockOrchestrator) ExecuteWorkflow(ctx context.Context, tasks []TaskDefi
 					break
 				}
 			}
-			
+
 			if allDepsComplete {
 				running[taskID] = true
 				wg.Add(1)
@@ -454,7 +454,7 @@ func (o *MockOrchestrator) ExecuteWorkflow(ctx context.Context, tasks []TaskDefi
 		select {
 		case result := <-resultChan:
 			results = append(results, result)
-			
+
 			runMutex.Lock()
 			if result.Status == core.TaskStatusCompleted {
 				completed[result.TaskID] = true
@@ -463,7 +463,7 @@ func (o *MockOrchestrator) ExecuteWorkflow(ctx context.Context, tasks []TaskDefi
 				if resultErr == nil {
 					resultErr = fmt.Errorf("task %s failed: %s", result.TaskID, result.Error)
 				}
-				
+
 				// Mark dependent tasks as failed too (cascading failure)
 				var markDependentsFailed func(core.TaskID)
 				markDependentsFailed = func(failedTaskID core.TaskID) {
@@ -471,15 +471,15 @@ func (o *MockOrchestrator) ExecuteWorkflow(ctx context.Context, tasks []TaskDefi
 						if completed[taskID] || failed[taskID] || running[taskID] {
 							continue
 						}
-						
+
 						// Check if this task depends on the failed task
 						for _, dep := range taskDef.Dependencies {
 							if dep == failedTaskID {
 								failed[taskID] = true
 								results = append(results, &TaskResult{
-									TaskID: taskID,
-									Status: core.TaskStatusFailed,
-									Error:  fmt.Sprintf("dependency %s failed", failedTaskID),
+									TaskID:    taskID,
+									Status:    core.TaskStatusFailed,
+									Error:     fmt.Sprintf("dependency %s failed", failedTaskID),
 									AgentUsed: taskDef.Agent,
 									StartTime: time.Now(),
 									EndTime:   time.Now(),
@@ -494,16 +494,16 @@ func (o *MockOrchestrator) ExecuteWorkflow(ctx context.Context, tasks []TaskDefi
 			}
 			running[result.TaskID] = false
 			runMutex.Unlock()
-			
+
 			// Schedule any newly ready tasks
 			scheduleReady()
-			
+
 		case <-ctx.Done():
 			resultErr = fmt.Errorf("workflow execution timed out")
 			break
 		}
 	}
-	
+
 	wg.Wait()
 	close(resultChan)
 

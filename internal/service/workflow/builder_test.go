@@ -632,8 +632,8 @@ func TestRunnerBuilder_buildRunnerConfig_Overrides(t *testing.T) {
 		{
 			name: "override dry run",
 			workflowConfig: &WorkflowConfigOverride{
-				DryRun:     false,
-				HasDryRun:  true,
+				DryRun:    false,
+				HasDryRun: true,
 			},
 			expected: func(t *testing.T, rc *RunnerConfig) {
 				if rc.DryRun != false {

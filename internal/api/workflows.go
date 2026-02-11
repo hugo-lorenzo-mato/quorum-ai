@@ -245,7 +245,7 @@ func execTimeoutForPlan(cfg *config.Config, bp *core.Blueprint) time.Duration {
 
 // isWorkflowRunning checks if a workflow is running in-memory in this server process.
 // This should only reflect local control availability, not persisted DB state.
-func (s *Server) isWorkflowRunning(ctx context.Context, workflowID string) bool {
+func (s *Server) isWorkflowRunning(_ context.Context, workflowID string) bool {
 	if s.unifiedTracker != nil {
 		return s.unifiedTracker.IsRunningInMemory(core.WorkflowID(workflowID))
 	}

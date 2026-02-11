@@ -148,4 +148,3 @@ func TestHandleGetFileContent_OK_Text(t *testing.T) {
 		t.Fatalf("Content=%q want=%q", resp.Content, "hello")
 	}
 }
-

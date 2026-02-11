@@ -21,31 +21,33 @@ type mockFinalizerGit struct {
 	pushErr    error
 }
 
-func (m *mockFinalizerGit) IsClean(_ context.Context) (bool, error)   { return m.isClean, m.isCleanErr }
-func (m *mockFinalizerGit) Add(_ context.Context, _ ...string) error  { return m.addErr }
+func (m *mockFinalizerGit) IsClean(_ context.Context) (bool, error)  { return m.isClean, m.isCleanErr }
+func (m *mockFinalizerGit) Add(_ context.Context, _ ...string) error { return m.addErr }
 func (m *mockFinalizerGit) Commit(_ context.Context, _ string) (string, error) {
 	return m.commitSHA, m.commitErr
 }
 func (m *mockFinalizerGit) Push(_ context.Context, _, _ string) error { return m.pushErr }
 
 // Stubs for unused interface methods
-func (m *mockFinalizerGit) RepoRoot(_ context.Context) (string, error)            { return "", nil }
-func (m *mockFinalizerGit) CurrentBranch(_ context.Context) (string, error)       { return "", nil }
-func (m *mockFinalizerGit) DefaultBranch(_ context.Context) (string, error)       { return "", nil }
-func (m *mockFinalizerGit) RemoteURL(_ context.Context) (string, error)           { return "", nil }
-func (m *mockFinalizerGit) BranchExists(_ context.Context, _ string) (bool, error) { return false, nil }
-func (m *mockFinalizerGit) CreateBranch(_ context.Context, _, _ string) error     { return nil }
-func (m *mockFinalizerGit) DeleteBranch(_ context.Context, _ string) error        { return nil }
-func (m *mockFinalizerGit) CheckoutBranch(_ context.Context, _ string) error      { return nil }
-func (m *mockFinalizerGit) CreateWorktree(_ context.Context, _, _ string) error   { return nil }
-func (m *mockFinalizerGit) RemoveWorktree(_ context.Context, _ string) error      { return nil }
+func (m *mockFinalizerGit) RepoRoot(_ context.Context) (string, error)               { return "", nil }
+func (m *mockFinalizerGit) CurrentBranch(_ context.Context) (string, error)          { return "", nil }
+func (m *mockFinalizerGit) DefaultBranch(_ context.Context) (string, error)          { return "", nil }
+func (m *mockFinalizerGit) RemoteURL(_ context.Context) (string, error)              { return "", nil }
+func (m *mockFinalizerGit) BranchExists(_ context.Context, _ string) (bool, error)   { return false, nil }
+func (m *mockFinalizerGit) CreateBranch(_ context.Context, _, _ string) error        { return nil }
+func (m *mockFinalizerGit) DeleteBranch(_ context.Context, _ string) error           { return nil }
+func (m *mockFinalizerGit) CheckoutBranch(_ context.Context, _ string) error         { return nil }
+func (m *mockFinalizerGit) CreateWorktree(_ context.Context, _, _ string) error      { return nil }
+func (m *mockFinalizerGit) RemoveWorktree(_ context.Context, _ string) error         { return nil }
 func (m *mockFinalizerGit) ListWorktrees(_ context.Context) ([]core.Worktree, error) { return nil, nil }
-func (m *mockFinalizerGit) Status(_ context.Context) (*core.GitStatus, error)     { return nil, nil }
-func (m *mockFinalizerGit) Diff(_ context.Context, _, _ string) (string, error)   { return "", nil }
-func (m *mockFinalizerGit) DiffFiles(_ context.Context, _, _ string) ([]string, error) { return nil, nil }
-func (m *mockFinalizerGit) Fetch(_ context.Context, _ string) error               { return nil }
+func (m *mockFinalizerGit) Status(_ context.Context) (*core.GitStatus, error)        { return nil, nil }
+func (m *mockFinalizerGit) Diff(_ context.Context, _, _ string) (string, error)      { return "", nil }
+func (m *mockFinalizerGit) DiffFiles(_ context.Context, _, _ string) ([]string, error) {
+	return nil, nil
+}
+func (m *mockFinalizerGit) Fetch(_ context.Context, _ string) error                      { return nil }
 func (m *mockFinalizerGit) Merge(_ context.Context, _ string, _ core.MergeOptions) error { return nil }
-func (m *mockFinalizerGit) AbortMerge(_ context.Context) error                          { return nil }
+func (m *mockFinalizerGit) AbortMerge(_ context.Context) error                           { return nil }
 func (m *mockFinalizerGit) HasMergeConflicts(_ context.Context) (bool, error)            { return false, nil }
 func (m *mockFinalizerGit) GetConflictFiles(_ context.Context) ([]string, error)         { return nil, nil }
 func (m *mockFinalizerGit) Rebase(_ context.Context, _ string) error                     { return nil }
@@ -57,8 +59,10 @@ func (m *mockFinalizerGit) ResetSoft(_ context.Context, _ string) error         
 func (m *mockFinalizerGit) CherryPick(_ context.Context, _ string) error                 { return nil }
 func (m *mockFinalizerGit) AbortCherryPick(_ context.Context) error                      { return nil }
 func (m *mockFinalizerGit) RevParse(_ context.Context, _ string) (string, error)         { return "", nil }
-func (m *mockFinalizerGit) IsAncestor(_ context.Context, _, _ string) (bool, error)      { return false, nil }
-func (m *mockFinalizerGit) HasUncommittedChanges(_ context.Context) (bool, error)        { return false, nil }
+func (m *mockFinalizerGit) IsAncestor(_ context.Context, _, _ string) (bool, error) {
+	return false, nil
+}
+func (m *mockFinalizerGit) HasUncommittedChanges(_ context.Context) (bool, error) { return false, nil }
 
 type mockFinalizerGitHub struct {
 	defaultBranch    string
@@ -79,15 +83,19 @@ func (m *mockFinalizerGitHub) MergePR(_ context.Context, _ int, _ core.MergePROp
 }
 
 // Stubs for unused interface methods
-func (m *mockFinalizerGitHub) GetRepo(_ context.Context) (*core.RepoInfo, error)    { return nil, nil }
-func (m *mockFinalizerGitHub) GetPR(_ context.Context, _ int) (*core.PullRequest, error) { return nil, nil }
+func (m *mockFinalizerGitHub) GetRepo(_ context.Context) (*core.RepoInfo, error) { return nil, nil }
+func (m *mockFinalizerGitHub) GetPR(_ context.Context, _ int) (*core.PullRequest, error) {
+	return nil, nil
+}
 func (m *mockFinalizerGitHub) ListPRs(_ context.Context, _ core.ListPROptions) ([]*core.PullRequest, error) {
 	return nil, nil
 }
-func (m *mockFinalizerGitHub) UpdatePR(_ context.Context, _ int, _ core.UpdatePROptions) error { return nil }
-func (m *mockFinalizerGitHub) ClosePR(_ context.Context, _ int) error                         { return nil }
-func (m *mockFinalizerGitHub) RequestReview(_ context.Context, _ int, _ []string) error        { return nil }
-func (m *mockFinalizerGitHub) AddComment(_ context.Context, _ int, _ string) error             { return nil }
+func (m *mockFinalizerGitHub) UpdatePR(_ context.Context, _ int, _ core.UpdatePROptions) error {
+	return nil
+}
+func (m *mockFinalizerGitHub) ClosePR(_ context.Context, _ int) error                   { return nil }
+func (m *mockFinalizerGitHub) RequestReview(_ context.Context, _ int, _ []string) error { return nil }
+func (m *mockFinalizerGitHub) AddComment(_ context.Context, _ int, _ string) error      { return nil }
 func (m *mockFinalizerGitHub) GetCheckStatus(_ context.Context, _ string) (*core.CheckStatus, error) {
 	return nil, nil
 }

@@ -234,7 +234,7 @@ func TestIssuesConfigResponse_Marshaling(t *testing.T) {
 		Mode:           "agent",
 		DraftDirectory: "custom/issues",
 		Repository:     "owner/repo",
-		ParentPrompt: "epic",
+		ParentPrompt:   "epic",
 		Prompt: IssuePromptConfigResponse{
 			Language:           "english",
 			Tone:               "technical",
@@ -363,9 +363,9 @@ func TestFullConfigResponse_IssuesSection(t *testing.T) {
 	t.Parallel()
 	response := FullConfigResponse{
 		Issues: IssuesConfigResponse{
-			Enabled:  true,
-			Provider: "github",
-			Labels:   []string{"quorum"},
+			Enabled:   true,
+			Provider:  "github",
+			Labels:    []string{"quorum"},
 			Assignees: []string{},
 		},
 	}

@@ -90,4 +90,3 @@ func TestNewChatStore_AppendsDBExtension(t *testing.T) {
 	}
 	_ = CloseChatStore(store)
 }
-

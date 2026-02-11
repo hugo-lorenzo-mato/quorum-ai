@@ -434,13 +434,13 @@ func NewWorkflowState(w *Workflow) *WorkflowState {
 			Status:       w.Status,
 			CurrentPhase: w.CurrentPhase,
 			Tasks:        make(map[TaskID]*TaskState),
-				TaskOrder:    w.TaskOrder,
-				Metrics: &StateMetrics{
-					TotalTokensIn:  w.TotalTokensIn,
-					TotalTokensOut: w.TotalTokensOut,
-					ConsensusScore: w.ConsensusScore,
-				},
-				Checkpoints: make([]Checkpoint, 0),
+			TaskOrder:    w.TaskOrder,
+			Metrics: &StateMetrics{
+				TotalTokensIn:  w.TotalTokensIn,
+				TotalTokensOut: w.TotalTokensOut,
+				ConsensusScore: w.ConsensusScore,
+			},
+			Checkpoints: make([]Checkpoint, 0),
 			UpdatedAt:   time.Now(),
 		},
 	}
@@ -453,14 +453,14 @@ func NewWorkflowState(w *Workflow) *WorkflowState {
 			Status:       task.Status,
 			CLI:          task.CLI,
 			Model:        task.Model,
-				Dependencies: task.Dependencies,
-				TokensIn:     task.TokensIn,
-				TokensOut:    task.TokensOut,
-				Retries:      task.Retries,
-				Error:        task.Error,
-				StartedAt:    task.StartedAt,
-				CompletedAt:  task.CompletedAt,
-			}
+			Dependencies: task.Dependencies,
+			TokensIn:     task.TokensIn,
+			TokensOut:    task.TokensOut,
+			Retries:      task.Retries,
+			Error:        task.Error,
+			StartedAt:    task.StartedAt,
+			CompletedAt:  task.CompletedAt,
+		}
 	}
 
 	return state

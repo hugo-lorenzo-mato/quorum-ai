@@ -709,7 +709,7 @@ func (r *mockRegistryForKanban) GetProjectByPath(_ context.Context, _ string) (*
 func (r *mockRegistryForKanban) AddProject(_ context.Context, _ string, _ *project.AddProjectOptions) (*project.Project, error) {
 	return nil, nil
 }
-func (r *mockRegistryForKanban) RemoveProject(_ context.Context, _ string) error  { return nil }
+func (r *mockRegistryForKanban) RemoveProject(_ context.Context, _ string) error { return nil }
 func (r *mockRegistryForKanban) UpdateProject(_ context.Context, _ *project.Project) error {
 	return nil
 }

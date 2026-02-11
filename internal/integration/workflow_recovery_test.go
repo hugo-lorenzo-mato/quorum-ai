@@ -34,15 +34,15 @@ func TestWorkflowRecovery_CrashDuringAnalysis(t *testing.T) {
 	// Create workflow state
 	workflowID := "test-recovery-analysis"
 	stateDB := createTestStateDB(t, tmpDir)
-	
+
 	// Save initial workflow state
 	initialState := &WorkflowState{
-		ID:         workflowID,
-		Phase:      core.PhaseAnalyze,
-		Status:     core.WorkflowStatusRunning,
-		StartTime:  time.Now(),
-		GitCommit:  "abc123",
-		GitBranch:  "main",
+		ID:          workflowID,
+		Phase:       core.PhaseAnalyze,
+		Status:      core.WorkflowStatusRunning,
+		StartTime:   time.Now(),
+		GitCommit:   "abc123",
+		GitBranch:   "main",
 		WorktreeDir: gitRepo.Path,
 		Tasks: []core.TaskState{
 			{
@@ -136,12 +136,12 @@ func TestWorkflowRecovery_CrashDuringExecution(t *testing.T) {
 
 	// Create initial workflow state with multiple tasks
 	initialState := &WorkflowState{
-		ID:        workflowID,
-		Phase:     core.PhaseExecute,
-		Status:    core.WorkflowStatusRunning,
-		StartTime: time.Now(),
-		GitCommit: "def456",
-		GitBranch: "feature/test",
+		ID:          workflowID,
+		Phase:       core.PhaseExecute,
+		Status:      core.WorkflowStatusRunning,
+		StartTime:   time.Now(),
+		GitCommit:   "def456",
+		GitBranch:   "feature/test",
 		WorktreeDir: gitRepo.Path,
 		Tasks: []core.TaskState{
 			{
@@ -365,16 +365,16 @@ func TestWorkflowRecovery_StateCorruption(t *testing.T) {
 // Mock implementations for testing
 
 type WorkflowState struct {
-	ID          string            `json:"id"`
-	Phase       core.Phase        `json:"phase"`
+	ID          string              `json:"id"`
+	Phase       core.Phase          `json:"phase"`
 	Status      core.WorkflowStatus `json:"status"`
-	StartTime   time.Time         `json:"start_time"`
-	EndTime     time.Time         `json:"end_time,omitempty"`
-	UpdatedAt   time.Time         `json:"updated_at"`
-	GitCommit   string            `json:"git_commit"`
-	GitBranch   string            `json:"git_branch"`
-	WorktreeDir string            `json:"worktree_dir"`
-	Tasks       []core.TaskState  `json:"tasks"`
+	StartTime   time.Time           `json:"start_time"`
+	EndTime     time.Time           `json:"end_time,omitempty"`
+	UpdatedAt   time.Time           `json:"updated_at"`
+	GitCommit   string              `json:"git_commit"`
+	GitBranch   string              `json:"git_branch"`
+	WorktreeDir string              `json:"worktree_dir"`
+	Tasks       []core.TaskState    `json:"tasks"`
 }
 
 type TestStateDB struct {
@@ -394,31 +394,31 @@ func createTestStateDB(t *testing.T, baseDir string) *TestStateDB {
 
 func (db *TestStateDB) Save(workflowID string, state *WorkflowState) error {
 	stateFile := filepath.Join(db.baseDir, "workflows", workflowID+".json")
-	
+
 	// Update timestamp
 	state.UpdatedAt = time.Now()
-	
+
 	data, err := json.Marshal(state)
 	if err != nil {
 		return fmt.Errorf("failed to marshal workflow state: %w", err)
 	}
-	
+
 	return os.WriteFile(stateFile, data, 0644)
 }
 
 func (db *TestStateDB) Load(workflowID string) (*WorkflowState, error) {
 	stateFile := filepath.Join(db.baseDir, "workflows", workflowID+".json")
-	
+
 	data, err := os.ReadFile(stateFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read workflow state: %w", err)
 	}
-	
+
 	var state WorkflowState
 	err = json.Unmarshal(data, &state)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal workflow state: %w", err)
 	}
-	
+
 	return &state, nil
 }

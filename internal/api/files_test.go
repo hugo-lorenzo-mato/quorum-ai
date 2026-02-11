@@ -105,4 +105,3 @@ func TestResolvePathCtx_BlocksSymlinkEscape(t *testing.T) {
 		t.Fatalf("error = %v, want os.ErrPermission", err)
 	}
 }
-

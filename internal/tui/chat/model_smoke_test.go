@@ -17,15 +17,19 @@ type mockWorkflowRunner struct {
 	state     *core.WorkflowState
 }
 
-func (m *mockWorkflowRunner) Run(_ context.Context, _ string) error                        { return nil }
-func (m *mockWorkflowRunner) Analyze(_ context.Context, _ string) error                     { return nil }
-func (m *mockWorkflowRunner) Plan(_ context.Context) error                                  { return nil }
-func (m *mockWorkflowRunner) Replan(_ context.Context, _ string) error                      { return nil }
-func (m *mockWorkflowRunner) UsePlan(_ context.Context) error                               { return nil }
-func (m *mockWorkflowRunner) Resume(_ context.Context) error                                { return nil }
-func (m *mockWorkflowRunner) GetState(_ context.Context) (*core.WorkflowState, error)       { return m.state, nil }
-func (m *mockWorkflowRunner) SaveState(_ context.Context, _ *core.WorkflowState) error      { return nil }
-func (m *mockWorkflowRunner) ListWorkflows(_ context.Context) ([]core.WorkflowSummary, error) { return m.workflows, nil }
+func (m *mockWorkflowRunner) Run(_ context.Context, _ string) error     { return nil }
+func (m *mockWorkflowRunner) Analyze(_ context.Context, _ string) error { return nil }
+func (m *mockWorkflowRunner) Plan(_ context.Context) error              { return nil }
+func (m *mockWorkflowRunner) Replan(_ context.Context, _ string) error  { return nil }
+func (m *mockWorkflowRunner) UsePlan(_ context.Context) error           { return nil }
+func (m *mockWorkflowRunner) Resume(_ context.Context) error            { return nil }
+func (m *mockWorkflowRunner) GetState(_ context.Context) (*core.WorkflowState, error) {
+	return m.state, nil
+}
+func (m *mockWorkflowRunner) SaveState(_ context.Context, _ *core.WorkflowState) error { return nil }
+func (m *mockWorkflowRunner) ListWorkflows(_ context.Context) ([]core.WorkflowSummary, error) {
+	return m.workflows, nil
+}
 func (m *mockWorkflowRunner) LoadWorkflow(_ context.Context, workflowID string) (*core.WorkflowState, error) {
 	if m.state != nil && string(m.state.WorkflowID) == workflowID {
 		return m.state, nil
@@ -287,11 +291,11 @@ func TestModel_HandleCommand_WithRunnerPaths(t *testing.T) {
 	// Commands that traverse runner-backed paths.
 	inputs := []string{
 		"/workflows",
-		"/load",       // list workflows
-		"/load wf-1",  // load workflow state
-		"/new",        // deactivate
-		"/new -a",     // archive
-		"/new -p",     // purge
+		"/load",      // list workflows
+		"/load wf-1", // load workflow state
+		"/new",       // deactivate
+		"/new -a",    // archive
+		"/new -p",    // purge
 		"/delete wf-1",
 	}
 	for _, in := range inputs {

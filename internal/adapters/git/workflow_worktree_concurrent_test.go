@@ -40,7 +40,7 @@ func TestWorkflowWorktreeManager_ConcurrentCreation(t *testing.T) {
 			defer wg.Done()
 
 			workflowID := fmt.Sprintf("wf-concurrent-%d-%d", workerID, time.Now().UnixNano())
-			
+
 			info, err := mgr.InitializeWorkflow(context.Background(), workflowID, "main")
 			if err != nil {
 				errors <- fmt.Errorf("worker %d: %w", workerID, err)
@@ -119,7 +119,7 @@ func TestWorkflowWorktreeManager_ConcurrentTaskCreation(t *testing.T) {
 				ID:          core.TaskID(fmt.Sprintf("task-%d", taskID)),
 				Description: fmt.Sprintf("Task %d", taskID),
 			}
-			
+
 			taskInfo, err := mgr.CreateTaskWorktree(context.Background(), workflowID, task)
 			if err != nil {
 				errors <- fmt.Errorf("task %d: %w", taskID, err)
@@ -179,7 +179,7 @@ func TestWorkflowWorktreeManager_ConcurrentCleanup(t *testing.T) {
 	for i := 0; i < numWorkflows; i++ {
 		workflowID := fmt.Sprintf("wf-cleanup-%d-%d", i, time.Now().UnixNano())
 		workflowIDs[i] = workflowID
-		
+
 		_, err := mgr.InitializeWorkflow(context.Background(), workflowID, "main")
 		testutil.AssertNoError(t, err)
 
@@ -259,17 +259,17 @@ func TestWorkflowWorktreeManager_RaceConditionStressTest(t *testing.T) {
 		wg.Add(1)
 		go func(workerID int) {
 			defer wg.Done()
-			
+
 			for j := 0; ctx.Err() == nil && j < 3; j++ {
 				workflowID := fmt.Sprintf("stress-wf-%d-%d-%d", workerID, j, time.Now().UnixNano())
-				
+
 				if _, err := mgr.InitializeWorkflow(ctx, workflowID, "main"); err != nil {
 					if ctx.Err() == nil {
 						errors <- fmt.Errorf("creator %d: %w", workerID, err)
 					}
 					return
 				}
-				
+
 				// Add tasks to this workflow
 				for k := 0; k < 2; k++ {
 					task := &core.Task{
@@ -282,13 +282,13 @@ func TestWorkflowWorktreeManager_RaceConditionStressTest(t *testing.T) {
 						}
 					}
 				}
-				
+
 				// Clean up some workflows
 				if j > 0 {
 					oldWorkflowID := fmt.Sprintf("stress-wf-%d-%d-%d", workerID, j-1, time.Now().UnixNano())
 					_ = mgr.CleanupWorkflow(ctx, oldWorkflowID, false) // Ignore not found errors
 				}
-				
+
 				time.Sleep(10 * time.Millisecond)
 			}
 		}(i)
@@ -297,7 +297,7 @@ func TestWorkflowWorktreeManager_RaceConditionStressTest(t *testing.T) {
 		wg.Add(1)
 		go func(workerID int) {
 			defer wg.Done()
-			
+
 			for ctx.Err() == nil {
 				if _, err := mgr.ListActiveWorkflows(ctx); err != nil {
 					if ctx.Err() == nil {
@@ -362,7 +362,7 @@ func TestWorkflowWorktreeManager_ResourceLeakDetection(t *testing.T) {
 
 	for i := 0; i < cycles; i++ {
 		workflowID := fmt.Sprintf("leak-test-%d", i)
-		
+
 		// Create workflow
 		_, err := mgr.InitializeWorkflow(context.Background(), workflowID, "main")
 		testutil.AssertNoError(t, err)

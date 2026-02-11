@@ -17,15 +17,15 @@ import (
 
 // mockProjectStateProvider implements ProjectStateProvider for testing.
 type mockProjectStateProvider struct {
-	activeProjects   []ProjectInfo
-	loadedProjects   []ProjectInfo
-	stateManagers    map[string]KanbanStateManager
-	eventBuses       map[string]EventPublisher
-	execContextErr   error
-	listActiveErr    error
-	listLoadedErr    error
-	getStateErr      error
-	getExecCtxError  map[string]error // per-project exec context errors
+	activeProjects  []ProjectInfo
+	loadedProjects  []ProjectInfo
+	stateManagers   map[string]KanbanStateManager
+	eventBuses      map[string]EventPublisher
+	execContextErr  error
+	listActiveErr   error
+	listLoadedErr   error
+	getStateErr     error
+	getExecCtxError map[string]error // per-project exec context errors
 }
 
 func newMockProjectStateProvider() *mockProjectStateProvider {
@@ -153,7 +153,7 @@ func TestHandleWorkflowEvent_CompletedEvent(t *testing.T) {
 	engine.handleWorkflowEvent(ctx, evt)
 
 	// Workflow should be moved to to_verify
-	storedWf := stateMgr.workflows["wf-done"]
+	storedWf := stateMgr.GetWorkflow("wf-done")
 	if storedWf.KanbanColumn != "to_verify" {
 		t.Errorf("expected to_verify, got %s", storedWf.KanbanColumn)
 	}
@@ -193,7 +193,7 @@ func TestHandleWorkflowEvent_FailedEvent(t *testing.T) {
 	evt := events.NewWorkflowFailedEvent("wf-err", "default", "execution", fmt.Errorf("boom"))
 	engine.handleWorkflowEvent(ctx, evt)
 
-	storedWf := stateMgr.workflows["wf-err"]
+	storedWf := stateMgr.GetWorkflow("wf-err")
 	if storedWf.KanbanColumn != "refinement" {
 		t.Errorf("expected refinement, got %s", storedWf.KanbanColumn)
 	}
@@ -233,7 +233,7 @@ func TestHandleWorkflowEvent_FailedEventEmptyError(t *testing.T) {
 	evt := events.NewWorkflowFailedEvent("wf-empty-err", "default", "execution", nil)
 	engine.handleWorkflowEvent(ctx, evt)
 
-	storedWf := stateMgr.workflows["wf-empty-err"]
+	storedWf := stateMgr.GetWorkflow("wf-empty-err")
 	if storedWf.KanbanColumn != "refinement" {
 		t.Errorf("expected refinement, got %s", storedWf.KanbanColumn)
 	}
@@ -647,7 +647,7 @@ func TestStartExecutionForProject_ExecutorError(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Should have moved to refinement after failure
-	storedWf := stateMgr.workflows["wf-exec-err"]
+	storedWf := stateMgr.GetWorkflow("wf-exec-err")
 	if storedWf.KanbanColumn != "refinement" {
 		t.Errorf("expected refinement after exec error, got %s", storedWf.KanbanColumn)
 	}
@@ -694,7 +694,7 @@ func TestStartExecutionForProject_ExecContextError(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Should have handled failure due to context creation error
-	storedWf := projStateMgr.workflows["wf-ctx-err"]
+	storedWf := projStateMgr.GetWorkflow("wf-ctx-err")
 	if storedWf.KanbanColumn != "refinement" {
 		t.Errorf("expected refinement after context error, got %s", storedWf.KanbanColumn)
 	}
@@ -1098,7 +1098,7 @@ func TestHandleWorkflowCompletedForProject_WithPRInfo(t *testing.T) {
 	ctx := context.Background()
 	engine.handleWorkflowCompletedForProject(ctx, "wf-with-pr", "default")
 
-	storedWf := stateMgr.workflows["wf-with-pr"]
+	storedWf := stateMgr.GetWorkflow("wf-with-pr")
 	if storedWf.PRURL != "https://github.com/org/repo/pull/42" {
 		t.Errorf("expected PR URL to be preserved, got %s", storedWf.PRURL)
 	}
@@ -1138,7 +1138,7 @@ func TestHandleWorkflowCompletedForProject_WithBranchNoPR(t *testing.T) {
 	ctx := context.Background()
 	engine.handleWorkflowCompletedForProject(ctx, "wf-branch", "default")
 
-	storedWf := stateMgr.workflows["wf-branch"]
+	storedWf := stateMgr.GetWorkflow("wf-branch")
 	if storedWf.KanbanColumn != "to_verify" {
 		t.Errorf("expected to_verify, got %s", storedWf.KanbanColumn)
 	}
@@ -1554,7 +1554,7 @@ func TestRecoverInterrupted_RunningWorkflow(t *testing.T) {
 		t.Errorf("unexpected error: %v", err)
 	}
 
-	storedWf := stateMgr.workflows[wfID]
+	storedWf := stateMgr.GetWorkflow(wfID)
 	if storedWf.KanbanColumn != "refinement" {
 		t.Errorf("expected refinement for interrupted running workflow, got %s", storedWf.KanbanColumn)
 	}
@@ -1828,7 +1828,7 @@ func TestRecoverInterrupted_FailedWithCustomError(t *testing.T) {
 		t.Errorf("unexpected error: %v", err)
 	}
 
-	storedWf := stateMgr.workflows[wfID]
+	storedWf := stateMgr.GetWorkflow(wfID)
 	if storedWf.KanbanLastError != "custom error message" {
 		t.Errorf("expected custom error, got %q", storedWf.KanbanLastError)
 	}
@@ -1862,7 +1862,7 @@ func TestRecoverInterrupted_FailedWithEmptyError(t *testing.T) {
 		t.Errorf("unexpected error: %v", err)
 	}
 
-	storedWf := stateMgr.workflows[wfID]
+	storedWf := stateMgr.GetWorkflow(wfID)
 	if storedWf.KanbanLastError != "interrupted during execution" {
 		t.Errorf("expected default error, got %q", storedWf.KanbanLastError)
 	}

@@ -989,4 +989,3 @@ func TestParseModeratorResponse_YAMLWrappedInCodeBlock(t *testing.T) {
 		t.Errorf("expected score 0.92, got %f", result.Score)
 	}
 }
-
