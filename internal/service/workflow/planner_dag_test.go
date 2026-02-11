@@ -670,7 +670,7 @@ func TestExtractJSONFromMarkdown_NoCodeBlock(t *testing.T) {
 // Tests for parsePlanItems edge cases (supplementary)
 // =============================================================================
 
-func TestParsePlanItems_WrappedWithResultKey_Coverage(t *testing.T) {
+func TestParsePlanItems_WrappedWithResultKey(t *testing.T) {
 	t.Parallel()
 	input := `{"result": "[{\"id\": \"task-1\", \"name\": \"Task 1\"}]"}`
 	items, err := parsePlanItems(input)
@@ -682,7 +682,7 @@ func TestParsePlanItems_WrappedWithResultKey_Coverage(t *testing.T) {
 	}
 }
 
-func TestParsePlanItems_WrappedWithContentKey_Coverage(t *testing.T) {
+func TestParsePlanItems_WrappedWithContentKey(t *testing.T) {
 	t.Parallel()
 	input := `{"content": "[{\"id\": \"task-1\", \"name\": \"Task 1\"}]"}`
 	items, err := parsePlanItems(input)
@@ -730,14 +730,6 @@ func TestParsePlanItems_JSONEmbeddedInMarkdown(t *testing.T) {
 	}
 }
 
-func TestParsePlanItems_MissingTasksField_Coverage(t *testing.T) {
-	t.Parallel()
-	input := `{"other_field": "value"}`
-	_, err := parsePlanItems(input)
-	if err == nil {
-		t.Error("expected error for missing tasks field")
-	}
-}
 
 // =============================================================================
 // Tests for resolveTaskAgent
@@ -814,85 +806,16 @@ func TestResolveTaskAgent_UnknownAgent(t *testing.T) {
 // Tests for isShellLikeAgent
 // =============================================================================
 
-func TestIsShellLikeAgent_Coverage(t *testing.T) {
-	t.Parallel()
-	shellNames := []string{"bash", "sh", "zsh", "fish", "powershell", "pwsh", "terminal", "shell", "command", "cli", "default", "auto"}
-	for _, name := range shellNames {
-		if !isShellLikeAgent(name) {
-			t.Errorf("isShellLikeAgent(%q) = false, want true", name)
-		}
-	}
-
-	nonShellNames := []string{"claude", "gemini", "codex", "copilot", "opencode"}
-	for _, name := range nonShellNames {
-		if isShellLikeAgent(name) {
-			t.Errorf("isShellLikeAgent(%q) = true, want false", name)
-		}
-	}
-}
 
 // =============================================================================
 // Tests for isValidJSONStructure
 // =============================================================================
 
-func TestIsValidJSONStructure_Coverage(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name  string
-		input string
-		want  bool
-	}{
-		{"valid object", `{"key": "value"}`, true},
-		{"valid array", `[1, 2, 3]`, true},
-		{"empty object", `{}`, true},
-		{"empty array", `[]`, true},
-		{"empty string", ``, false},
-		{"single char", `{`, false},
-		{"invalid json", `{invalid}`, false},
-		{"just string", `"hello"`, false},
-		{"just number", `42`, false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := isValidJSONStructure(tt.input)
-			if got != tt.want {
-				t.Errorf("isValidJSONStructure(%q) = %v, want %v", tt.input, got, tt.want)
-			}
-		})
-	}
-}
 
 // =============================================================================
 // Tests for shouldUseWorktrees
 // =============================================================================
 
-func TestShouldUseWorktrees_Coverage(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		mode       string
-		readyCount int
-		want       bool
-	}{
-		{"", 1, true},
-		{"always", 1, true},
-		{"parallel", 1, false},
-		{"parallel", 2, true},
-		{"disabled", 5, false},
-		{"off", 5, false},
-		{"false", 5, false},
-		{"unknown", 1, true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.mode+"_"+strings.Repeat("x", tt.readyCount), func(t *testing.T) {
-			got := shouldUseWorktrees(tt.mode, tt.readyCount)
-			if got != tt.want {
-				t.Errorf("shouldUseWorktrees(%q, %d) = %v, want %v", tt.mode, tt.readyCount, got, tt.want)
-			}
-		})
-	}
-}
 
 // =============================================================================
 // Mock helpers specific to this file

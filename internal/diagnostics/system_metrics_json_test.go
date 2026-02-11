@@ -220,6 +220,7 @@ func TestCollect_GPUCacheExpiry(t *testing.T) {
 	// Force an expired cache by setting lastGPUUpdate to 10 seconds ago
 	c.mu.Lock()
 	c.lastGPUUpdate = time.Now().Add(-10 * time.Second)
+	expiredTime := c.lastGPUUpdate
 	c.mu.Unlock()
 
 	// This should refresh the GPU cache
@@ -227,8 +228,10 @@ func TestCollect_GPUCacheExpiry(t *testing.T) {
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	// After refresh, lastGPUUpdate should be recent (within last second)
-	if time.Since(c.lastGPUUpdate) > time.Second {
+	// After refresh, lastGPUUpdate should be more recent than the expired time we set.
+	// We use a generous window because queryGPUInfo() can take several seconds
+	// when probing for GPU tools (nvidia-smi, amd-smi, etc.) on systems without GPUs.
+	if !c.lastGPUUpdate.After(expiredTime) {
 		t.Error("GPU cache was not refreshed after expiry")
 	}
 }

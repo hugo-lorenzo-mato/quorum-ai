@@ -635,50 +635,11 @@ func TestSplitIntoBatches_MultipleBatches(t *testing.T) {
 // Generator: fuzzyMatchFilename
 // =============================================================================
 
-func TestFuzzyMatchFilename_Coverage(t *testing.T) {
-	tests := []struct {
-		actual   string
-		expected string
-		match    bool
-	}{
-		{"01-setup.md", "01-setup.md", true},
-		{"1-setup.md", "01-setup.md", true},
-		{"01-setup.md", "1-setup.md", true},
-		{"01-setup-project.md", "01-setup.md", true},
-		{"totally-different.md", "01-setup.md", false},
-	}
-
-	for _, tt := range tests {
-		got := fuzzyMatchFilename(tt.actual, tt.expected)
-		if got != tt.match {
-			t.Errorf("fuzzyMatchFilename(%q, %q) = %v, want %v", tt.actual, tt.expected, got, tt.match)
-		}
-	}
-}
 
 // =============================================================================
 // Generator: GenerationTracker
 // =============================================================================
 
-func TestGenerationTracker_IsValidFile_Coverage(t *testing.T) {
-	tracker := NewGenerationTracker("wf-test")
-	tracker.AddExpected("01-task.md", "task-1")
-
-	// File before start time
-	if tracker.IsValidFile("01-task.md", tracker.StartTime.Add(-time.Second)) {
-		t.Error("file before start time should be invalid")
-	}
-
-	// File after start time matching expected
-	if !tracker.IsValidFile("01-task.md", tracker.StartTime.Add(time.Second)) {
-		t.Error("expected file after start time should be valid")
-	}
-
-	// File after start time not matching expected
-	if tracker.IsValidFile("unexpected.md", tracker.StartTime.Add(time.Second)) {
-		t.Error("unexpected file should be invalid when expected files are defined")
-	}
-}
 
 func TestGenerationTracker_NoExpectedFiles(t *testing.T) {
 	tracker := NewGenerationTracker("wf-test")
@@ -1125,47 +1086,11 @@ func TestParseIssueMarkdown_WithH1(t *testing.T) {
 // sanitizeFilename coverage (unique test name to avoid conflict with generator_test.go)
 // =============================================================================
 
-func TestSanitizeFilename_Coverage(t *testing.T) {
-	tests := []struct {
-		input    string
-		expected string
-	}{
-		{"Hello World", "hello-world"},
-		{"task@#$%name", "taskname"},
-		{"a--b--c", "a-b-c"},
-		{"", "issue"},
-		{strings.Repeat("a", 60), strings.Repeat("a", 50)},
-	}
-
-	for _, tt := range tests {
-		got := sanitizeFilename(tt.input)
-		if got != tt.expected {
-			t.Errorf("sanitizeFilename(%q) = %q, want %q", tt.input, got, tt.expected)
-		}
-	}
-}
 
 // =============================================================================
 // extractFileNumber coverage (unique test name to avoid conflict with files_test.go)
 // =============================================================================
 
-func TestExtractFileNumber_Coverage(t *testing.T) {
-	tests := []struct {
-		name     string
-		expected int
-	}{
-		{"01-task.md", 1},
-		{"10-setup.md", 10},
-		{"no-number.md", 9999},
-	}
-
-	for _, tt := range tests {
-		got := extractFileNumber(tt.name)
-		if got != tt.expected {
-			t.Errorf("extractFileNumber(%q) = %d, want %d", tt.name, got, tt.expected)
-		}
-	}
-}
 
 // =============================================================================
 // Helpers

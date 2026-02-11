@@ -14,7 +14,7 @@ import (
 
 // Test builder method coverage
 
-func TestRunnerBuilder_WithStateManager_Coverage(t *testing.T) {
+func TestRunnerBuilder_WithStateManager(t *testing.T) {
 	t.Parallel()
 
 	t.Run("nil state manager adds error", func(t *testing.T) {
@@ -30,7 +30,7 @@ func TestRunnerBuilder_WithStateManager_Coverage(t *testing.T) {
 	})
 }
 
-func TestRunnerBuilder_WithAgentRegistry_Coverage(t *testing.T) {
+func TestRunnerBuilder_WithAgentRegistry(t *testing.T) {
 	t.Parallel()
 
 	t.Run("nil agent registry adds error", func(t *testing.T) {
@@ -46,7 +46,7 @@ func TestRunnerBuilder_WithAgentRegistry_Coverage(t *testing.T) {
 	})
 }
 
-func TestRunnerBuilder_WithSharedRateLimiter_Coverage(t *testing.T) {
+func TestRunnerBuilder_WithSharedRateLimiter(t *testing.T) {
 	t.Parallel()
 
 	b := NewRunnerBuilder()
@@ -62,7 +62,7 @@ func TestRunnerBuilder_WithSharedRateLimiter_Coverage(t *testing.T) {
 	}
 }
 
-func TestRunnerBuilder_WithOutputNotifier_Coverage(t *testing.T) {
+func TestRunnerBuilder_WithOutputNotifier(t *testing.T) {
 	t.Parallel()
 
 	b := NewRunnerBuilder()
@@ -78,7 +78,7 @@ func TestRunnerBuilder_WithOutputNotifier_Coverage(t *testing.T) {
 	}
 }
 
-func TestRunnerBuilder_WithControlPlane_Coverage(t *testing.T) {
+func TestRunnerBuilder_WithControlPlane(t *testing.T) {
 	t.Parallel()
 
 	b := NewRunnerBuilder()
@@ -92,7 +92,7 @@ func TestRunnerBuilder_WithControlPlane_Coverage(t *testing.T) {
 	}
 }
 
-func TestRunnerBuilder_WithHeartbeat_Coverage(t *testing.T) {
+func TestRunnerBuilder_WithHeartbeat(t *testing.T) {
 	t.Parallel()
 
 	b := NewRunnerBuilder()
@@ -108,7 +108,7 @@ func TestRunnerBuilder_WithHeartbeat_Coverage(t *testing.T) {
 	}
 }
 
-func TestRunnerBuilder_WithLogger_Coverage(t *testing.T) {
+func TestRunnerBuilder_WithLogger(t *testing.T) {
 	t.Parallel()
 
 	b := NewRunnerBuilder()
@@ -124,7 +124,7 @@ func TestRunnerBuilder_WithLogger_Coverage(t *testing.T) {
 	}
 }
 
-func TestRunnerBuilder_WithSlogLogger_Coverage(t *testing.T) {
+func TestRunnerBuilder_WithSlogLogger(t *testing.T) {
 	t.Parallel()
 
 	b := NewRunnerBuilder()
@@ -140,7 +140,7 @@ func TestRunnerBuilder_WithSlogLogger_Coverage(t *testing.T) {
 	}
 }
 
-func TestRunnerBuilder_WithGitIsolation_Coverage(t *testing.T) {
+func TestRunnerBuilder_WithGitIsolation(t *testing.T) {
 	t.Parallel()
 
 	b := NewRunnerBuilder()
@@ -159,7 +159,7 @@ func TestRunnerBuilder_WithGitIsolation_Coverage(t *testing.T) {
 	}
 }
 
-func TestRunnerBuilder_WithPhase_Coverage(t *testing.T) {
+func TestRunnerBuilder_WithPhase(t *testing.T) {
 	t.Parallel()
 
 	b := NewRunnerBuilder()
@@ -175,7 +175,7 @@ func TestRunnerBuilder_WithPhase_Coverage(t *testing.T) {
 	}
 }
 
-func TestRunnerBuilder_WithModeEnforcer_Coverage(t *testing.T) {
+func TestRunnerBuilder_WithModeEnforcer(t *testing.T) {
 	t.Parallel()
 
 	b := NewRunnerBuilder()
@@ -191,7 +191,7 @@ func TestRunnerBuilder_WithModeEnforcer_Coverage(t *testing.T) {
 	}
 }
 
-func TestRunnerBuilder_WithGitClient_Coverage(t *testing.T) {
+func TestRunnerBuilder_WithGitClient(t *testing.T) {
 	t.Parallel()
 
 	b := NewRunnerBuilder()
@@ -206,7 +206,7 @@ func TestRunnerBuilder_WithGitClient_Coverage(t *testing.T) {
 	}
 }
 
-func TestRunnerBuilder_WithGitHubClient_Coverage(t *testing.T) {
+func TestRunnerBuilder_WithGitHubClient(t *testing.T) {
 	t.Parallel()
 
 	b := NewRunnerBuilder()
@@ -217,7 +217,7 @@ func TestRunnerBuilder_WithGitHubClient_Coverage(t *testing.T) {
 	}
 }
 
-func TestRunnerBuilder_WithGitClientFactory_Coverage(t *testing.T) {
+func TestRunnerBuilder_WithGitClientFactory(t *testing.T) {
 	t.Parallel()
 
 	b := NewRunnerBuilder()
@@ -228,7 +228,7 @@ func TestRunnerBuilder_WithGitClientFactory_Coverage(t *testing.T) {
 	}
 }
 
-func TestRunnerBuilder_WithWorktreeManager_Coverage(t *testing.T) {
+func TestRunnerBuilder_WithWorktreeManager(t *testing.T) {
 	t.Parallel()
 
 	b := NewRunnerBuilder()
@@ -242,7 +242,7 @@ func TestRunnerBuilder_WithWorktreeManager_Coverage(t *testing.T) {
 	}
 }
 
-func TestRunnerBuilder_WithProjectRoot_Coverage(t *testing.T) {
+func TestRunnerBuilder_WithProjectRoot(t *testing.T) {
 	t.Parallel()
 
 	b := NewRunnerBuilder()
@@ -258,7 +258,7 @@ func TestRunnerBuilder_WithProjectRoot_Coverage(t *testing.T) {
 	}
 }
 
-func TestRunnerBuilder_Build_MissingRequiredDeps_Coverage(t *testing.T) {
+func TestRunnerBuilder_Build_MissingRequiredDeps(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -296,7 +296,7 @@ func TestRunnerBuilder_Build_MissingRequiredDeps_Coverage(t *testing.T) {
 	}
 }
 
-func TestDefaultGitIsolationConfig_Coverage(t *testing.T) {
+func TestDefaultGitIsolationConfig(t *testing.T) {
 	t.Parallel()
 
 	cfg := DefaultGitIsolationConfig()
@@ -315,7 +315,7 @@ func TestDefaultGitIsolationConfig_Coverage(t *testing.T) {
 	}
 }
 
-func TestRunnerBuilder_createGitComponents_Coverage(t *testing.T) {
+func TestRunnerBuilder_createGitComponents(t *testing.T) {
 	// Cannot run in parallel due to global factory mutation
 	// Save original factories
 	origCreateGitClient := createGitClient
@@ -368,7 +368,7 @@ func TestRunnerBuilder_createGitComponents_Coverage(t *testing.T) {
 	_ = gcf
 }
 
-func TestRunnerBuilder_createGitComponents_WithProjectRoot_Coverage(t *testing.T) {
+func TestRunnerBuilder_createGitComponents_WithProjectRoot(t *testing.T) {
 	// Cannot run in parallel due to global factory mutation
 	// Save original factories
 	origCreateGitClient := createGitClient

@@ -241,7 +241,7 @@ func TestNextPhase(t *testing.T) {
 	}
 }
 
-func TestPhaseCheckpoint_SaveError_Coverage(t *testing.T) {
+func TestPhaseCheckpoint_SaveError(t *testing.T) {
 	mock := &mockStateManager{
 		state:     newTestWorkflowState(),
 		saveError: errForTest("save failed"),
@@ -254,7 +254,7 @@ func TestPhaseCheckpoint_SaveError_Coverage(t *testing.T) {
 	}
 }
 
-func TestTaskCheckpoint_SaveError_Coverage(t *testing.T) {
+func TestTaskCheckpoint_SaveError(t *testing.T) {
 	mock := &mockStateManager{
 		state:     newTestWorkflowState(),
 		saveError: errForTest("save failed"),
