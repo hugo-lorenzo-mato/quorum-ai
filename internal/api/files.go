@@ -479,36 +479,9 @@ func isPathWithinDir(root, path string) bool {
 		absPath = path
 	}
 
-	// Try to resolve symlinks if paths exist
-	// This handles macOS symlinks like /tmp -> /private/tmp and /var -> /private/var
-	normalizedRoot := absRoot
-	normalizedPath := absPath
-
-	// Only try to resolve symlinks if the paths actually exist
-	if _, err := os.Stat(absRoot); err == nil {
-		if resolved, err := filepath.EvalSymlinks(absRoot); err == nil {
-			normalizedRoot = resolved
-		}
-	}
-
-	if _, err := os.Stat(absPath); err == nil {
-		if resolved, err := filepath.EvalSymlinks(absPath); err == nil {
-			normalizedPath = resolved
-		}
-	} else {
-		// Path doesn't exist - try to resolve the existing parent directory
-		parent := filepath.Dir(absPath)
-		if _, err := os.Stat(parent); err == nil {
-			if resolvedParent, err := filepath.EvalSymlinks(parent); err == nil {
-				// Reconstruct path with resolved parent
-				normalizedPath = filepath.Join(resolvedParent, filepath.Base(absPath))
-			}
-		}
-	}
-
-	// Clean both paths
-	normalizedRoot = filepath.Clean(normalizedRoot)
-	normalizedPath = filepath.Clean(normalizedPath)
+	// Normalize by resolving symlinks (handles macOS /tmp -> /private/tmp, /var -> /private/var)
+	normalizedRoot := resolveSymlinksOrClean(absRoot)
+	normalizedPath := resolveSymlinksOrClean(absPath)
 
 	// Check if path is within root
 	rel, err := filepath.Rel(normalizedRoot, normalizedPath)
@@ -516,6 +489,48 @@ func isPathWithinDir(root, path string) bool {
 		return false
 	}
 	return true
+}
+
+// resolveSymlinksOrClean resolves symlinks if path exists, otherwise resolves parent and reconstructs
+func resolveSymlinksOrClean(path string) string {
+	// Try to resolve the full path if it exists
+	if _, err := os.Stat(path); err == nil {
+		if resolved, err := filepath.EvalSymlinks(path); err == nil {
+			return resolved
+		}
+	}
+
+	// Path doesn't exist - find the first existing ancestor and resolve it
+	current := path
+	var nonExisting []string
+
+	for {
+		parent := filepath.Dir(current)
+		if parent == current {
+			// Reached filesystem root
+			break
+		}
+
+		if _, err := os.Stat(parent); err == nil {
+			// Found existing ancestor - resolve symlinks
+			if resolved, err := filepath.EvalSymlinks(parent); err == nil {
+				// Reconstruct full path with resolved parent
+				result := resolved
+				for i := len(nonExisting) - 1; i >= 0; i-- {
+					result = filepath.Join(result, nonExisting[i])
+				}
+				return filepath.Clean(result)
+			}
+			break
+		}
+
+		// Parent doesn't exist either - keep going up
+		nonExisting = append(nonExisting, filepath.Base(current))
+		current = parent
+	}
+
+	// Fallback: return cleaned path (all ancestors were non-existent)
+	return filepath.Clean(path)
 }
 
 // isBinaryContent checks if content appears to be binary.
