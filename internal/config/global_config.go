@@ -15,18 +15,28 @@ func GlobalConfigPath() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("cannot determine home directory: %w", err)
 	}
+	return globalConfigPathInDir(homeDir), nil
+}
 
+// globalConfigPathInDir returns the global config path within a specific directory
+func globalConfigPathInDir(homeDir string) string {
 	registryDir := filepath.Join(homeDir, ".quorum-registry")
-	return filepath.Join(registryDir, "global-config.yaml"), nil
+	return filepath.Join(registryDir, "global-config.yaml")
 }
 
 // EnsureGlobalConfigFile ensures the global configuration file exists on disk.
 // If it does not exist, it is created using DefaultConfigYAML.
 func EnsureGlobalConfigFile() (string, error) {
-	path, err := GlobalConfigPath()
+	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("cannot determine home directory: %w", err)
 	}
+	return ensureGlobalConfigFileInDir(homeDir)
+}
+
+// ensureGlobalConfigFileInDir ensures the global config exists in a specific directory (for testing)
+func ensureGlobalConfigFileInDir(homeDir string) (string, error) {
+	path := globalConfigPathInDir(homeDir)
 
 	if _, statErr := os.Stat(path); statErr == nil {
 		return path, nil

@@ -2,6 +2,7 @@ package clip
 
 import (
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -58,14 +59,20 @@ func TestWriteAll_AllFail_TempFileFails(t *testing.T) {
 	nativeWriteAll = func(_ string) error { return errFake("native down") }
 	osc52WriteAll = func(_ string) error { return errFake("osc52 down") }
 
-	// Make TMPDIR point to a non-existent directory so os.CreateTemp fails
-	origTmpdir := os.Getenv("TMPDIR")
-	os.Setenv("TMPDIR", "/nonexistent-temp-dir-for-test")
+	// Make temp dir point to a non-existent directory so os.CreateTemp fails
+	// Use platform-appropriate environment variable
+	tmpEnvVar := "TMPDIR"
+	if runtime.GOOS == "windows" {
+		tmpEnvVar = "TMP"
+	}
+
+	origTmpdir := os.Getenv(tmpEnvVar)
+	os.Setenv(tmpEnvVar, "/nonexistent-temp-dir-for-test")
 	t.Cleanup(func() {
 		if origTmpdir == "" {
-			os.Unsetenv("TMPDIR")
+			os.Unsetenv(tmpEnvVar)
 		} else {
-			os.Setenv("TMPDIR", origTmpdir)
+			os.Setenv(tmpEnvVar, origTmpdir)
 		}
 	})
 
@@ -80,19 +87,25 @@ func TestWriteAll_AllFail_TempFileFails(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestWriteTempFile_CreateTempFails(t *testing.T) {
-	origTmpdir := os.Getenv("TMPDIR")
-	os.Setenv("TMPDIR", "/nonexistent-temp-dir-for-test")
+	// Use platform-appropriate environment variable
+	tmpEnvVar := "TMPDIR"
+	if runtime.GOOS == "windows" {
+		tmpEnvVar = "TMP"
+	}
+
+	origTmpdir := os.Getenv(tmpEnvVar)
+	os.Setenv(tmpEnvVar, "/nonexistent-temp-dir-for-test")
 	t.Cleanup(func() {
 		if origTmpdir == "" {
-			os.Unsetenv("TMPDIR")
+			os.Unsetenv(tmpEnvVar)
 		} else {
-			os.Setenv("TMPDIR", origTmpdir)
+			os.Setenv(tmpEnvVar, origTmpdir)
 		}
 	})
 
 	_, err := writeTempFile("should fail")
 	if err == nil {
-		t.Error("expected error when TMPDIR is invalid")
+		t.Error("expected error when temp directory is invalid")
 	}
 }
 

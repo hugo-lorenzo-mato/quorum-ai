@@ -5,6 +5,7 @@ import (
 	"context"
 	"io"
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -93,6 +94,13 @@ func TestExecuteCommand_WithLongStdin(t *testing.T) {
 func TestExecuteCommand_WorkDir(t *testing.T) {
 	t.Parallel()
 	tmpDir := t.TempDir()
+
+	// Skip on Windows - pwd command not available natively
+	// and Git Bash outputs Unix-style paths that don't match Windows tmpDir
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping pwd test on Windows - command output format incompatible")
+	}
+
 	adapter := NewBaseAdapter(AgentConfig{
 		Name: "test-pwd",
 		Path: "pwd",
@@ -109,6 +117,12 @@ func TestExecuteCommand_WorkDir(t *testing.T) {
 func TestExecuteCommand_ConfigWorkDir(t *testing.T) {
 	t.Parallel()
 	tmpDir := t.TempDir()
+
+	// Skip on Windows - pwd command not available natively
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping pwd test on Windows - command output format incompatible")
+	}
+
 	adapter := NewBaseAdapter(AgentConfig{
 		Name:    "test-pwd",
 		Path:    "pwd",

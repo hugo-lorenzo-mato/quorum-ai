@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -54,17 +55,15 @@ func TestGlobalConfigPath_ContainsHomeDir(t *testing.T) {
 }
 
 func TestEnsureGlobalConfigFile_CreatesNewFile(t *testing.T) {
-	// Cannot use t.Parallel() with t.Setenv()
 	tmpDir := t.TempDir()
-	t.Setenv("HOME", tmpDir)
 
-	path, err := EnsureGlobalConfigFile()
+	path, err := ensureGlobalConfigFileInDir(tmpDir)
 	if err != nil {
-		t.Fatalf("EnsureGlobalConfigFile() error = %v", err)
+		t.Fatalf("ensureGlobalConfigFileInDir() error = %v", err)
 	}
 
 	if path == "" {
-		t.Fatal("EnsureGlobalConfigFile() returned empty path")
+		t.Fatal("ensureGlobalConfigFileInDir() returned empty path")
 	}
 
 	// File should exist
@@ -78,10 +77,12 @@ func TestEnsureGlobalConfigFile_CreatesNewFile(t *testing.T) {
 		t.Error("global config file should not be empty")
 	}
 
-	// File should have restrictive permissions
-	perm := info.Mode().Perm()
-	if perm != 0o600 {
-		t.Errorf("file permissions = %o, want 0600", perm)
+	// File should have restrictive permissions (skip on Windows - permissions work differently)
+	if runtime.GOOS != "windows" {
+		perm := info.Mode().Perm()
+		if perm != 0o600 {
+			t.Errorf("file permissions = %o, want 0600", perm)
+		}
 	}
 
 	// File content should match DefaultConfigYAML
@@ -95,9 +96,7 @@ func TestEnsureGlobalConfigFile_CreatesNewFile(t *testing.T) {
 }
 
 func TestEnsureGlobalConfigFile_ExistingFile(t *testing.T) {
-	// Cannot use t.Parallel() with t.Setenv()
 	tmpDir := t.TempDir()
-	t.Setenv("HOME", tmpDir)
 
 	// Create the file first
 	registryDir := filepath.Join(tmpDir, ".quorum-registry")
@@ -111,14 +110,14 @@ func TestEnsureGlobalConfigFile_ExistingFile(t *testing.T) {
 		t.Fatalf("WriteFile error = %v", err)
 	}
 
-	// EnsureGlobalConfigFile should return the existing file without overwriting
-	path, err := EnsureGlobalConfigFile()
+	// ensureGlobalConfigFileInDir should return the existing file without overwriting
+	path, err := ensureGlobalConfigFileInDir(tmpDir)
 	if err != nil {
-		t.Fatalf("EnsureGlobalConfigFile() error = %v", err)
+		t.Fatalf("ensureGlobalConfigFileInDir() error = %v", err)
 	}
 
 	if path != configPath {
-		t.Errorf("EnsureGlobalConfigFile() = %q, want %q", path, configPath)
+		t.Errorf("ensureGlobalConfigFileInDir() = %q, want %q", path, configPath)
 	}
 
 	// Content should still be the custom content

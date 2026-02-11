@@ -221,12 +221,35 @@ func (s *Store) validateOwner(ownerType OwnerType, ownerID string) error {
 }
 
 func sanitizeFilename(name string) string {
-	base := filepath.Base(strings.TrimSpace(name))
+	name = strings.TrimSpace(name)
+
+	// First, replace backslashes with underscores if they're not path separators
+	// On Windows, backslashes are path separators and filepath.Base handles them
+	// But if the input comes from a Unix system, backslashes might be literal characters
+	// We normalize by replacing backslashes before extracting base
+	if strings.Contains(name, "\\") {
+		// Replace backslashes with underscores
+		name = strings.ReplaceAll(name, "\\", "_")
+		// Don't call filepath.Base since we already handled the path structure
+		base := name
+		base = strings.ReplaceAll(base, "\x00", "")
+		base = strings.ReplaceAll(base, "/", "_")
+		if base == "" || base == "." || base == ".." {
+			base = "attachment"
+		}
+		const maxLen = 200
+		if len(base) > maxLen {
+			base = base[:maxLen]
+		}
+		return base
+	}
+
+	// No backslashes - use normal filepath.Base to extract filename from Unix paths
+	base := filepath.Base(name)
 	base = strings.TrimSpace(base)
 	base = strings.ReplaceAll(base, "\x00", "")
 	base = strings.ReplaceAll(base, string(os.PathSeparator), "_")
 	base = strings.ReplaceAll(base, "/", "_")
-	base = strings.ReplaceAll(base, "\\", "_")
 	if base == "" || base == "." || base == ".." {
 		base = "attachment"
 	}
