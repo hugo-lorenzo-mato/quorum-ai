@@ -1,0 +1,118 @@
+---
+id: refine-prompt-v2
+title: Refine Prompt V2
+workflow_phase: refine
+step: refine_prompt
+status: active
+used_by:
+  - workflow
+---
+
+# Prompt Refinement Request
+
+## Original User Prompt
+{{.OriginalPrompt}}
+
+## Your Task
+
+Your goal is to CLARIFY and OPTIMIZE the above prompt to ensure successful execution by AI coding assistants, while **STRICTLY PRESERVING** the user's original intent and scope.
+
+## Core Principles (CRITICAL)
+
+### 1. **Preserve User Intent** (HIGHEST PRIORITY)
+- The user's goal is SACRED - never expand it
+- If user asks for X, the refined prompt is ONLY about X
+- DO NOT add features, considerations, or scope beyond what was requested
+- Think: "What did the user ACTUALLY ask for?" not "What COULD they want?"
+
+### 2. **Clarify, Don't Expand**
+- Remove ambiguities that could lead to misinterpretation
+- Make implicit requirements explicit ONLY when necessary for execution
+- Add technical precision ONLY where the original was vague
+
+### 3. **Actionable Over Comprehensive**
+- Focus on making the request executable, not exhaustive
+- Prefer specific, directed instructions over broad exploration
+- Quality > Quantity of analysis
+
+## Refinement Guidelines
+
+### ✅ DO:
+1. **Disambiguate vague terms**
+   - Example: "improve performance" → "analyze and improve response time of slow API endpoints"
+   - Example: "fix the bug" → keep focus on bug fixing, not feature additions
+
+2. **Add execution context ONLY when missing**
+   - If needed: specify file paths, components, or technologies mentioned in the codebase
+   - If needed: clarify expected output format (code, report, list of changes)
+
+3. **Preserve user constraints**
+   - If user says "simple fix" → don't ask for architectural refactoring
+   - If user specifies scope (e.g., "only the login module") → don't expand it
+
+4. **Structure for clarity**
+   - Break complex requests into clear, numbered steps IF it helps execution
+   - Use bullet points for multiple related items
+   - Maintain logical flow
+
+5. **Add critical attitude requirements**
+   - Instruct AI to verify claims with code evidence (file:line citations)
+   - Require specific, actionable recommendations (not vague suggestions)
+   - Demand precision over speculation
+
+### ❌ DO NOT:
+1. **Add requirements not in the original**
+   - Bad: User asks "add login" → Don't add "with OAuth, 2FA, password reset, audit logs"
+   - Good: User asks "add login" → Clarify "Implement login with username/password authentication"
+
+2. **Expand scope "for completeness"**
+   - Bad: User asks about component X → Don't analyze Y, Z just because they're related
+   - Good: User asks about component X → Focus ONLY on X
+
+3. **Add technical considerations not relevant to the task**
+   - Bad: Simple bug fix → Don't add performance analysis, security audit, testing strategy
+   - Good: Simple bug fix → "Fix the bug in file.go:123 where variable X is undefined"
+
+4. **Change the type of request**
+   - Bad: Don't turn "implement X" into "design architecture and implement X"
+   - Bad: Don't turn "fix bug" into "investigate root cause, refactor, and add tests"
+   - Good: Keep the request type exactly as specified
+
+5. **Add meta-instructions about exhaustiveness**
+   - Bad: No "analyze comprehensively", "consider all edge cases", "with maximum thoroughness"
+   - Good: Only add thoroughness instructions if the user explicitly requested them
+
+## Quality Checks
+
+Before finalizing, verify:
+- [ ] Can the refined prompt be traced directly back to the user's original request?
+- [ ] Would the user recognize their request in the refined version?
+- [ ] Have I added ONLY clarifications necessary for execution (not "nice to haves")?
+- [ ] Is the scope identical or narrower (NEVER broader)?
+- [ ] Would this refined prompt lead to exactly the outcome the user expects?
+- [ ] Have I removed any scope expansions I initially added?
+
+## Critical Attitude Instructions (Add These to Refined Prompt)
+
+The refined prompt should instruct the executing AI to:
+1. **Ground all claims in code** - Require `file:line` references for all findings
+2. **Be specific and actionable** - No vague recommendations like "improve architecture"
+3. **Distinguish facts from speculation** - Clearly mark assumptions with "Assumption:" prefix
+4. **Provide concrete next steps** - Not just analysis, but specific actions to take
+
+Example phrases to include in refined prompt:
+- "Cite specific file and line numbers for all findings"
+- "Provide actionable recommendations with concrete steps"
+- "Avoid speculation; base conclusions on actual code evidence"
+
+## Response Format
+
+Output ONLY the refined prompt.
+- NO headers like "## Refined Prompt" or "## Enhanced Version"
+- NO explanations of what you changed
+- NO meta-commentary about the refinement process
+- Just the improved prompt text directly
+
+Preserve the user's language (if Spanish input, respond in Spanish).
+
+**IMPORTANT:** If the original prompt is already clear, specific, and actionable, you may return it with minimal or no changes. Refinement is NOT mandatory if the original is already good.

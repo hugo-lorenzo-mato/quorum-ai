@@ -461,17 +461,25 @@ func (s *Server) resolvePath(requestedPath string) (string, error) {
 }
 
 func isPathWithinDir(root, path string) bool {
-	// Normalize both paths by resolving symlinks (important for macOS where /var -> /private/var)
+	// Normalize root by resolving symlinks (must exist)
 	normalizedRoot, err := filepath.EvalSymlinks(root)
 	if err != nil {
-		// If we can't resolve the root, use the original path
-		normalizedRoot = root
+		// If we can't resolve the root, fallback to abs path
+		normalizedRoot, _ = filepath.Abs(root)
 	}
 
+	// For path, try to resolve symlinks
 	normalizedPath, err := filepath.EvalSymlinks(path)
 	if err != nil {
-		// If we can't resolve the path, use the original path
-		normalizedPath = path
+		// Path might not exist yet - normalize what we can
+		// Convert to absolute path and clean it
+		normalizedPath, _ = filepath.Abs(path)
+		// Try to resolve parent directory if path doesn't exist
+		dir := filepath.Dir(normalizedPath)
+		if resolvedDir, err := filepath.EvalSymlinks(dir); err == nil {
+			// Reconstruct path with resolved parent
+			normalizedPath = filepath.Join(resolvedDir, filepath.Base(normalizedPath))
+		}
 	}
 
 	rel, err := filepath.Rel(normalizedRoot, normalizedPath)
