@@ -1531,6 +1531,7 @@ func TestNewChatHandler_NilStore(t *testing.T) {
 	h := NewChatHandler(nil, nil, nil, nil)
 	if h == nil {
 		t.Error("handler should not be nil")
+		return
 	}
 	if len(h.sessions) != 0 {
 		t.Errorf("expected 0 sessions, got %d", len(h.sessions))

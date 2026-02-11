@@ -199,8 +199,9 @@ func TestHandleGetBoard_WithEngine(t *testing.T) {
 	}
 
 	// Engine state should be present.
+	// Engine is disabled by default, so we expect Enabled to be false
 	if resp.Engine.Enabled {
-		// Engine is disabled by default.
+		t.Error("expected engine to be disabled by default")
 	}
 }
 

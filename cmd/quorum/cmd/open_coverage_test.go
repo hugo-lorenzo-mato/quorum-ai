@@ -191,7 +191,7 @@ func TestInitializeProject(t *testing.T) {
 		assert.True(t, stat.IsDir())
 
 		configPath := filepath.Join(quorumDir, "config.yaml")
-		stat, err = os.Stat(configPath)
+		_, err = os.Stat(configPath)
 		assert.NoError(t, err)
 
 		subdirs := []string{"state", "logs", "runs"}

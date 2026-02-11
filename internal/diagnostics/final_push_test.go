@@ -422,9 +422,7 @@ func TestResourceMonitor_TakeSnapshot_AllFields(t *testing.T) {
 	if snapshot.Goroutines <= 0 {
 		t.Error("Goroutines should be positive")
 	}
-	if snapshot.NumGC < 0 {
-		t.Error("NumGC should be non-negative")
-	}
+	// NumGC is uint32, so it's always non-negative - check removed
 	if snapshot.ProcessUptime < 0 {
 		t.Error("ProcessUptime should be non-negative")
 	}

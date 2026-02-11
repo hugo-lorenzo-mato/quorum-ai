@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"log/slog"
 	"testing"
 	"time"
@@ -108,7 +109,7 @@ func TestWorkflowExecutor_Run_NilTracker(t *testing.T) {
 	t.Parallel()
 
 	executor := NewWorkflowExecutor(nil, nil, nil, slog.Default(), nil)
-	err := executor.Run(nil, "wf-123")
+	err := executor.Run(context.TODO(), "wf-123")
 	if err == nil {
 		t.Error("Run should return error when tracker is nil")
 	}
@@ -118,7 +119,7 @@ func TestWorkflowExecutor_Resume_NilTracker(t *testing.T) {
 	t.Parallel()
 
 	executor := NewWorkflowExecutor(nil, nil, nil, slog.Default(), nil)
-	err := executor.Resume(nil, "wf-123")
+	err := executor.Resume(context.TODO(), "wf-123")
 	if err == nil {
 		t.Error("Resume should return error when tracker is nil")
 	}

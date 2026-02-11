@@ -135,7 +135,7 @@ func TestInitializeAgentConfigs(t *testing.T) {
 
 		// Verify settings.json was created
 		configPath := filepath.Join(geminiDir, "settings.json")
-		stat, err = os.Stat(configPath)
+		_, err = os.Stat(configPath)
 		assert.NoError(t, err)
 
 		// Verify config content

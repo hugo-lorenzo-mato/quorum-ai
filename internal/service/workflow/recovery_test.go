@@ -1,6 +1,7 @@
 package workflow
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -63,7 +64,7 @@ func TestResetRunningTasks(t *testing.T) {
 	}
 
 	result := &RecoveryResult{}
-	err := rm.resetRunningTasks(nil, state, result)
+	err := rm.resetRunningTasks(context.TODO(), state, result)
 	if err != nil {
 		t.Fatalf("resetRunningTasks() error = %v", err)
 	}
@@ -118,7 +119,7 @@ func TestResetRunningTasks_NoRunningTasks(t *testing.T) {
 	}
 
 	result := &RecoveryResult{}
-	err := rm.resetRunningTasks(nil, state, result)
+	err := rm.resetRunningTasks(context.TODO(), state, result)
 	if err != nil {
 		t.Fatalf("resetRunningTasks() error = %v", err)
 	}

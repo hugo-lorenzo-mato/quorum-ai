@@ -448,13 +448,8 @@ func TestUpdate_SpinnerTickMsg(t *testing.T) {
 func TestUpdate_BubblesSpinnerTickMsg(t *testing.T) {
 	t.Parallel()
 	m := New()
-	// Get the bubbles spinner tick command
-	cmd := m.spinner.bubblesSpinner.Tick
-	if cmd == nil {
-		t.Skip("cannot produce bubbles tick in test")
-	}
-	// Execute the command to get the tick message
-	msg := cmd()
+	// Get the bubbles spinner tick command and execute it to get the tick message
+	msg := m.spinner.bubblesSpinner.Tick()
 	if msg == nil {
 		t.Skip("bubbles tick returned nil msg")
 	}

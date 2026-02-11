@@ -139,9 +139,9 @@ func TestInteractiveGate_Interactive_PausesAndResumes(t *testing.T) {
 	}
 
 	// Verify state was saved as awaiting_review
+	// After resume, applyInteractiveFeedback sets it to Running (no review => just resumes)
 	if sm.state.Status != core.WorkflowStatusRunning {
-		// After resume, applyInteractiveFeedback sets it to Running
-		// (no review => just resumes)
+		t.Errorf("expected status Running after resume, got %v", sm.state.Status)
 	}
 }
 
