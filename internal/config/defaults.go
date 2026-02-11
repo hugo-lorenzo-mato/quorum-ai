@@ -149,7 +149,7 @@ issues:
   enabled: true
   provider: github
   auto_generate: false
-  timeout: 5m
+  timeout: 30m
   mode: direct
   draft_directory: ""
   repository: ""

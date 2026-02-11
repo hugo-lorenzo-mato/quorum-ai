@@ -624,8 +624,22 @@ func (s *Server) handlePreviewIssues(w http.ResponseWriter, r *http.Request) {
 		generator := issues.NewGenerator(nil, issuesCfg, projectRoot, fullReportDir, s.agentRegistry)
 		generator.SetProgressReporter(newIssuesSSEProgressReporter(s.getProjectEventBus(ctx), getProjectID(ctx)))
 
+		// Apply timeout from config (same as handleGenerateIssues)
+		genCtx := ctx
+		if issuesCfg.Timeout != "" {
+			timeout, parseErr := time.ParseDuration(issuesCfg.Timeout)
+			if parseErr != nil {
+				slog.Warn("invalid issues.timeout in config, using request context",
+					"timeout", issuesCfg.Timeout, "error", parseErr)
+			} else {
+				var cancel context.CancelFunc
+				genCtx, cancel = context.WithTimeout(ctx, timeout)
+				defer cancel()
+			}
+		}
+
 		// Generate the issue files
-		files, err := generator.GenerateIssueFiles(ctx, workflowID)
+		files, err := generator.GenerateIssueFiles(genCtx, workflowID)
 		if err != nil {
 			respondError(w, http.StatusInternalServerError, fmt.Sprintf("AI generation failed: %v", err))
 			return

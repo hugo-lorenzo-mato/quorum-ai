@@ -271,9 +271,9 @@ func (s *Server) setupRouter() chi.Router {
 					r.Delete("/{attachmentID}", s.handleDeleteWorkflowAttachment)
 				})
 
-				// Issue generation endpoints — longer timeout for AI generation
+				// Issue generation endpoints — longer timeout for AI generation (up to 30m for large batches)
 				r.Route("/issues", func(r chi.Router) {
-					r.Use(chimiddleware.Timeout(300 * time.Second))
+					r.Use(chimiddleware.Timeout(35 * time.Minute))
 					r.Post("/", s.handleGenerateIssues)
 					r.Get("/preview", s.handlePreviewIssues)
 					r.Post("/files", s.handleSaveIssuesFiles)
@@ -477,7 +477,7 @@ func (s *Server) ListenAndServe(ctx context.Context, addr string) error {
 		Handler:           s.router,
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       120 * time.Second, // Allow long reads for file uploads
-		WriteTimeout:      120 * time.Second, // Allow long writes for LLM-based responses (issues preview)
+		WriteTimeout:      0, // Disabled: per-route chi middleware timeouts handle this
 		IdleTimeout:       120 * time.Second,
 	}
 

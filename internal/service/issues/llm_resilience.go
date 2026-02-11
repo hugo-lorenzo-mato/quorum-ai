@@ -285,7 +285,14 @@ func (r *ResilientLLMExecutor) Execute(ctx context.Context, opts core.ExecuteOpt
 	// Handle result
 	if err != nil {
 		r.metrics.FailedCalls.Add(1)
-		r.circuitBreaker.RecordFailure()
+		opened := r.circuitBreaker.RecordFailure()
+
+		slog.Error("LLM execution failed",
+			"error", err,
+			"last_error", lastErr,
+			"latency_ms", latencyMs,
+			"retries", r.metrics.RetryCount.Load(),
+			"circuit_opened", opened)
 
 		// Unwrap non-retryable error
 		var nre *nonRetryableError

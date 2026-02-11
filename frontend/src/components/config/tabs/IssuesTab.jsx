@@ -134,7 +134,6 @@ function GeneratorSection() {
   useEnums();
 
   const issuesEnabled = useConfigField('issues.enabled');
-  const enabled = useConfigField('issues.generator.enabled');
   const agent = useConfigSelect('issues.generator.agent', 'agents');
   const model = useConfigField('issues.generator.model');
   const summarize = useConfigField('issues.generator.summarize');
@@ -155,18 +154,8 @@ function GeneratorSection() {
   return (
     <SettingSection
       title="AI Generator"
-      description="Use an AI agent to generate intelligent issue titles and descriptions"
+      description="Configure AI agent settings for intelligent issue generation"
     >
-      <ToggleSetting
-        label="Enable AI Generation"
-        description="Generate issue content using an AI agent instead of copying artifacts"
-        tooltip="When enabled, an LLM will create concise, well-formatted issues. When disabled, issues are created by copying workflow artifacts directly."
-        checked={enabled.value}
-        onChange={enabled.onChange}
-        error={enabled.error}
-        disabled={enabled.disabled || isDisabled}
-      />
-
       <SelectSetting
         label="Agent"
         description="Which agent to use for generation"
@@ -236,7 +225,7 @@ function GeneratorSection() {
       <div className="py-3">
         <label>
           <div className="flex items-center gap-2 mb-2">
-            <span className={`text-sm font-medium ${isDisabled || !enabled.value ? 'text-muted-foreground' : 'text-foreground'}`}>
+            <span className={`text-sm font-medium ${isDisabled ? 'text-muted-foreground' : 'text-foreground'}`}>
               Body Instructions
             </span>
           </div>
@@ -265,7 +254,7 @@ function GeneratorSection() {
       <div className="py-3">
         <label>
           <div className="flex items-center gap-2 mb-2">
-            <span className={`text-sm font-medium ${isDisabled || !enabled.value ? 'text-muted-foreground' : 'text-foreground'}`}>
+            <span className={`text-sm font-medium ${isDisabled ? 'text-muted-foreground' : 'text-foreground'}`}>
               Title Instructions
             </span>
           </div>

@@ -359,8 +359,8 @@ issues:
   provider: github
   # Automatically generate issues when workflow completes analyze phase
   auto_generate: false
-  # Timeout for issue generation operations (e.g., "3m" for 3 minutes)
-  timeout: 5m
+  # Timeout for issue generation operations (e.g., "30m" for 30 minutes)
+  timeout: 30m
   # Issue creation mode: "direct" (gh CLI) or "agent" (LLM-based)
   mode: direct
   # Directory for draft issue files (empty = default .quorum/issues/)

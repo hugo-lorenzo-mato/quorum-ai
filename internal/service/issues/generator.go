@@ -1224,10 +1224,22 @@ func (g *Generator) GenerateIssueFiles(ctx context.Context, workflowID string) (
 			})
 			if err != nil {
 				batchErrors = append(batchErrors, fmt.Errorf("batch %d/%d attempt %d: %w", batchNum+1, totalBatches, attempt, err))
+				slog.Error("issue generation batch failed",
+					"attempt", attempt,
+					"batch", batchNum+1,
+					"total_batches", totalBatches,
+					"tasks_in_batch", len(batch),
+					"agent", g.config.Generator.Agent,
+					"model", g.config.Generator.Model,
+					"error", err)
 				if logger != nil {
 					logger.Error("batch failed",
 						"attempt", attempt,
 						"batch", batchNum+1,
+						"total_batches", totalBatches,
+						"tasks_in_batch", len(batch),
+						"agent", g.config.Generator.Agent,
+						"model", g.config.Generator.Model,
 						"error", err)
 				}
 				cur := len(emitted)
@@ -1235,7 +1247,7 @@ func (g *Generator) GenerateIssueFiles(ctx context.Context, workflowID string) (
 					cur = estimatedProgress
 				}
 				g.emitIssuesGenerationProgress(workflowID, "batch_failed", cur, totalExpected, nil,
-					fmt.Sprintf("batch %d/%d failed (attempt %d)", batchNum+1, totalBatches, attempt))
+					fmt.Sprintf("batch %d/%d failed (attempt %d): %v", batchNum+1, totalBatches, attempt, err))
 				continue
 			}
 
@@ -1303,6 +1315,15 @@ func (g *Generator) GenerateIssueFiles(ctx context.Context, workflowID string) (
 
 	if missingNames := tracker.GetMissingFiles(); len(missingNames) > 0 {
 		sort.Strings(missingNames)
+		slog.Warn("expected files not found in generation output",
+			"missing", missingNames,
+			"workflow_id", workflowID,
+			"batch_errors_count", len(batchErrors))
+		for i, bErr := range batchErrors {
+			slog.Error("batch error detail",
+				"index", i+1,
+				"error", bErr)
+		}
 		errMsg := fmt.Sprintf("issue generation incomplete: missing %d file(s): %s", len(missingNames), strings.Join(missingNames, ", "))
 		if len(batchErrors) > 0 {
 			errMsg = fmt.Sprintf("%s; batch errors: %v", errMsg, batchErrors)
