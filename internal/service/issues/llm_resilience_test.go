@@ -3,6 +3,7 @@ package issues
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -511,5 +512,164 @@ func TestNonRetryableError(t *testing.T) {
 
 	if nre.Unwrap() != originalErr {
 		t.Error("expected Unwrap to return original error")
+	}
+}
+
+func TestResilientLLMExecutor_FailureRecordsMetrics(t *testing.T) {
+	t.Parallel()
+	agent := &mockAgent{
+		executeFunc: func(ctx context.Context, opts core.ExecuteOptions) (*core.ExecuteResult, error) {
+			return nil, errors.New("service unavailable")
+		},
+	}
+
+	cfg := DefaultLLMResilienceConfig()
+	cfg.FailureThreshold = 2
+	cfg.MaxRetries = 1 // 1 total attempt per Execute call (no retries)
+	executor := NewResilientLLMExecutor(agent, cfg)
+
+	// First failure
+	_, err := executor.Execute(context.Background(), core.ExecuteOptions{})
+	if err == nil {
+		t.Fatal("expected error on first call")
+	}
+
+	if executor.metrics.FailedCalls.Load() != 1 {
+		t.Errorf("expected FailedCalls=1, got %d", executor.metrics.FailedCalls.Load())
+	}
+	if executor.metrics.TotalCalls.Load() != 1 {
+		t.Errorf("expected TotalCalls=1, got %d", executor.metrics.TotalCalls.Load())
+	}
+
+	// Second failure opens circuit
+	_, err = executor.Execute(context.Background(), core.ExecuteOptions{})
+	if err == nil {
+		t.Fatal("expected error on second call")
+	}
+
+	if executor.metrics.FailedCalls.Load() != 2 {
+		t.Errorf("expected FailedCalls=2, got %d", executor.metrics.FailedCalls.Load())
+	}
+	if !executor.IsCircuitOpen() {
+		t.Error("expected circuit to be open after 2 failures (threshold=2)")
+	}
+
+	// Third call is blocked by circuit breaker — no agent call
+	_, err = executor.Execute(context.Background(), core.ExecuteOptions{})
+	if !errors.Is(err, ErrCircuitOpen) {
+		t.Errorf("expected ErrCircuitOpen, got: %v", err)
+	}
+	if agent.callCount != 2 {
+		t.Errorf("expected agent called 2 times (not on circuit open), got %d", agent.callCount)
+	}
+}
+
+func TestResilientLLMExecutor_RetryableErrorRetriesAndFails(t *testing.T) {
+	t.Parallel()
+	// Use a retryable DomainError so both isTransientError and core.IsRetryable agree.
+	retryableErr := &core.DomainError{
+		Category:  core.ErrCatExecution,
+		Code:      "TIMEOUT",
+		Message:   "connection refused",
+		Retryable: true,
+	}
+	agent := &mockAgent{
+		executeFunc: func(ctx context.Context, opts core.ExecuteOptions) (*core.ExecuteResult, error) {
+			return nil, retryableErr
+		},
+	}
+
+	cfg := DefaultLLMResilienceConfig()
+	cfg.MaxRetries = 3 // 3 total attempts (MaxAttempts)
+	cfg.InitialBackoff = time.Millisecond
+	cfg.MaxBackoff = 5 * time.Millisecond
+	cfg.FailureThreshold = 10 // High so circuit doesn't open
+	executor := NewResilientLLMExecutor(agent, cfg)
+
+	_, err := executor.Execute(context.Background(), core.ExecuteOptions{})
+	if err == nil {
+		t.Fatal("expected error after retries exhausted")
+	}
+
+	if !errors.Is(err, ErrRetryExhausted) {
+		t.Errorf("expected ErrRetryExhausted, got: %v", err)
+	}
+
+	// MaxRetries=3 means 3 total attempts
+	if agent.callCount != 3 {
+		t.Errorf("expected 3 total attempts, got %d", agent.callCount)
+	}
+
+	if executor.metrics.FailedCalls.Load() != 1 {
+		t.Errorf("expected FailedCalls=1 (one Execute call), got %d", executor.metrics.FailedCalls.Load())
+	}
+	if executor.metrics.RetryCount.Load() < 1 {
+		t.Errorf("expected RetryCount >= 1, got %d", executor.metrics.RetryCount.Load())
+	}
+}
+
+func TestResilientLLMExecutor_NonTransientErrorNoRetry(t *testing.T) {
+	t.Parallel()
+	agent := &mockAgent{
+		executeFunc: func(ctx context.Context, opts core.ExecuteOptions) (*core.ExecuteResult, error) {
+			return nil, errors.New("invalid api key")
+		},
+	}
+
+	cfg := DefaultLLMResilienceConfig()
+	cfg.MaxRetries = 3 // 3 total attempts, but non-transient stops after 1
+	cfg.InitialBackoff = time.Millisecond
+	cfg.FailureThreshold = 10
+	executor := NewResilientLLMExecutor(agent, cfg)
+
+	_, err := executor.Execute(context.Background(), core.ExecuteOptions{})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+
+	// Non-transient error should not be retried
+	if agent.callCount != 1 {
+		t.Errorf("expected 1 call (no retries for non-transient), got %d", agent.callCount)
+	}
+
+	if !strings.Contains(err.Error(), "invalid api key") {
+		t.Errorf("expected error to contain 'invalid api key', got: %v", err)
+	}
+
+	if executor.metrics.FailedCalls.Load() != 1 {
+		t.Errorf("expected FailedCalls=1, got %d", executor.metrics.FailedCalls.Load())
+	}
+	if executor.metrics.RetryCount.Load() != 0 {
+		t.Errorf("expected RetryCount=0 for non-transient error, got %d", executor.metrics.RetryCount.Load())
+	}
+}
+
+func TestResilientLLMExecutor_SuccessRecordsMetrics(t *testing.T) {
+	t.Parallel()
+	agent := &mockAgent{
+		executeFunc: func(ctx context.Context, opts core.ExecuteOptions) (*core.ExecuteResult, error) {
+			return &core.ExecuteResult{Output: "done"}, nil
+		},
+	}
+
+	cfg := DefaultLLMResilienceConfig()
+	executor := NewResilientLLMExecutor(agent, cfg)
+
+	result, err := executor.Execute(context.Background(), core.ExecuteOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Output != "done" {
+		t.Errorf("expected output 'done', got '%s'", result.Output)
+	}
+
+	if executor.metrics.SuccessfulCalls.Load() != 1 {
+		t.Errorf("expected SuccessfulCalls=1, got %d", executor.metrics.SuccessfulCalls.Load())
+	}
+	if executor.metrics.FailedCalls.Load() != 0 {
+		t.Errorf("expected FailedCalls=0, got %d", executor.metrics.FailedCalls.Load())
+	}
+	if executor.metrics.TotalLatencyMs.Load() < 0 {
+		t.Error("expected TotalLatencyMs >= 0")
 	}
 }

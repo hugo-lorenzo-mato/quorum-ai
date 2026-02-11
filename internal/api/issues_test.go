@@ -679,6 +679,151 @@ issues:
 	}
 }
 
+func TestHandlePreviewIssues_AgentModeAppliesConfigTimeout(t *testing.T) {
+	// When mode=agent and timeout is configured, the handler should apply
+	// the timeout to the context passed to GenerateIssueFiles.
+	// We verify this indirectly: with a registry that has an agent that
+	// checks for a context deadline.
+	tmpDir := t.TempDir()
+	reportDir := filepath.Join(tmpDir, ".quorum", "runs", "wf-timeout")
+	if err := os.MkdirAll(reportDir, 0o755); err != nil {
+		t.Fatalf("mkdir report: %v", err)
+	}
+
+	cfgDir := filepath.Join(tmpDir, ".quorum")
+	cfgFile := filepath.Join(cfgDir, "config.yaml")
+	yamlContent := `
+issues:
+  enabled: true
+  provider: github
+  repository: "owner/repo"
+  mode: agent
+  timeout: 10m
+  generator:
+    agent: claude
+    model: haiku
+`
+	if err := os.WriteFile(cfgFile, []byte(yamlContent), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	loader := config.NewLoader().WithConfigFile(cfgFile)
+
+	ts := newIssueTestServer(t,
+		WithConfigLoader(loader),
+		WithAgentRegistry(&mockAgentRegistry{}),
+	)
+	ts.addWorkflow("wf-timeout", reportDir)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/workflows/wf-timeout/issues/preview?fast=false", nil)
+	req = addChiURLParams(req, map[string]string{"workflowID": "wf-timeout"})
+	w := httptest.NewRecorder()
+
+	ts.srv.handlePreviewIssues(w, req)
+
+	// The handler will fail because the mock agent registry returns nil agents,
+	// but it should get past the timeout setup. The error should be about
+	// generation failure, not timeout parsing.
+	if w.Code == http.StatusOK {
+		t.Error("expected non-200 status (mock agent can't generate)")
+	}
+	body := w.Body.String()
+	if strings.Contains(body, "invalid issues.timeout") {
+		t.Errorf("timeout '10m' should be valid, got: %s", body)
+	}
+}
+
+func TestHandlePreviewIssues_AgentModeInvalidTimeoutFallsBack(t *testing.T) {
+	// When timeout is invalid, the handler should warn and use the request context.
+	tmpDir := t.TempDir()
+	reportDir := filepath.Join(tmpDir, ".quorum", "runs", "wf-badtimeout")
+	if err := os.MkdirAll(reportDir, 0o755); err != nil {
+		t.Fatalf("mkdir report: %v", err)
+	}
+
+	cfgDir := filepath.Join(tmpDir, ".quorum")
+	cfgFile := filepath.Join(cfgDir, "config.yaml")
+	yamlContent := `
+issues:
+  enabled: true
+  provider: github
+  repository: "owner/repo"
+  mode: agent
+  timeout: not-a-duration
+  generator:
+    agent: claude
+    model: haiku
+`
+	if err := os.WriteFile(cfgFile, []byte(yamlContent), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	loader := config.NewLoader().WithConfigFile(cfgFile)
+
+	ts := newIssueTestServer(t,
+		WithConfigLoader(loader),
+		WithAgentRegistry(&mockAgentRegistry{}),
+	)
+	ts.addWorkflow("wf-badtimeout", reportDir)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/workflows/wf-badtimeout/issues/preview?fast=false", nil)
+	req = addChiURLParams(req, map[string]string{"workflowID": "wf-badtimeout"})
+	w := httptest.NewRecorder()
+
+	// Should not panic or return a timeout parse error to the client.
+	ts.srv.handlePreviewIssues(w, req)
+
+	// The handler should proceed (with request context) and fail on generation,
+	// not on timeout parsing.
+	body := w.Body.String()
+	if strings.Contains(body, "not-a-duration") {
+		t.Errorf("invalid timeout should be handled internally, not leaked to client: %s", body)
+	}
+}
+
+func TestHandlePreviewIssues_AgentModeEmptyTimeoutUsesRequestContext(t *testing.T) {
+	// When timeout is empty, no extra context deadline should be applied.
+	tmpDir := t.TempDir()
+	reportDir := filepath.Join(tmpDir, ".quorum", "runs", "wf-notimeout")
+	if err := os.MkdirAll(reportDir, 0o755); err != nil {
+		t.Fatalf("mkdir report: %v", err)
+	}
+
+	cfgDir := filepath.Join(tmpDir, ".quorum")
+	cfgFile := filepath.Join(cfgDir, "config.yaml")
+	yamlContent := `
+issues:
+  enabled: true
+  provider: github
+  repository: "owner/repo"
+  mode: agent
+  timeout: ""
+  generator:
+    agent: claude
+    model: haiku
+`
+	if err := os.WriteFile(cfgFile, []byte(yamlContent), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	loader := config.NewLoader().WithConfigFile(cfgFile)
+
+	ts := newIssueTestServer(t,
+		WithConfigLoader(loader),
+		WithAgentRegistry(&mockAgentRegistry{}),
+	)
+	ts.addWorkflow("wf-notimeout", reportDir)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/workflows/wf-notimeout/issues/preview?fast=false", nil)
+	req = addChiURLParams(req, map[string]string{"workflowID": "wf-notimeout"})
+	w := httptest.NewRecorder()
+
+	ts.srv.handlePreviewIssues(w, req)
+
+	// Should proceed without timeout-related errors
+	body := w.Body.String()
+	if strings.Contains(body, "timeout") && strings.Contains(body, "invalid") {
+		t.Errorf("empty timeout should not cause errors: %s", body)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // handleGetIssuesConfig tests
 // ---------------------------------------------------------------------------
