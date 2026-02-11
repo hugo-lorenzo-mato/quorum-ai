@@ -33,6 +33,14 @@ export const STATUS_COLORS = {
     dot: 'bg-status-error',
     tint: 'bg-status-error-bg/50',
   },
+  skipped: {
+    text: 'text-muted-foreground/70',
+    bg: 'bg-muted/60',
+    border: 'border-border/60',
+    borderStrip: 'border-muted-foreground/60',
+    dot: 'bg-muted-foreground/60',
+    tint: 'bg-muted/40',
+  },
   paused: {
     text: 'text-status-paused',
     bg: 'bg-status-paused-bg',

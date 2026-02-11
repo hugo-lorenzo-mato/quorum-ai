@@ -159,20 +159,31 @@ export const workflowApi = {
    * Run only the execute phase of a workflow.
    * Requires completed plan phase with tasks defined.
    * @param {string} id - Workflow ID
+   * @param {Object} [options] - Optional execute options
+   * @param {string[]} [options.selectedTaskIds] - Optional explicit task IDs to run (dependencies are auto-included backend-side)
    * @returns {Promise<Object>} - PhaseResponse with id, status, current_phase, message
    */
-  execute: (id) => request(`/workflows/${id}/execute`, { method: 'POST' }),
+  execute: (id, { selectedTaskIds } = {}) => {
+    const options = { method: 'POST' };
+    if (Array.isArray(selectedTaskIds)) {
+      options.body = JSON.stringify({ selected_task_ids: selectedTaskIds });
+    }
+    return request(`/workflows/${id}/execute`, options);
+  },
 
   delete: (id) => request(`/workflows/${id}/`, { method: 'DELETE' }),
 
   // Interactive workflow endpoints
-  review: (id, { action, feedback, phase, continueUnattended } = {}) => request(`/workflows/${id}/review`, {
+  review: (id, { action, feedback, phase, continueUnattended, executeOptions } = {}) => request(`/workflows/${id}/review`, {
     method: 'POST',
     body: JSON.stringify({
       action,
       feedback,
       phase,
       continue_unattended: continueUnattended,
+      execute_options: executeOptions && Array.isArray(executeOptions.selectedTaskIds)
+        ? { selected_task_ids: executeOptions.selectedTaskIds }
+        : undefined,
     }),
   }),
 

@@ -198,7 +198,7 @@ export const workflowResponseSchema = {
   required: ['id', 'status', 'prompt', 'created_at'],
   properties: {
     id: { type: 'string' },
-    status: { type: 'string', enum: ['pending', 'running', 'paused', 'completed', 'failed', 'cancelled'] },
+    status: { type: 'string', enum: ['pending', 'running', 'paused', 'awaiting_review', 'completed', 'failed', 'cancelling', 'aborted', 'cancelled'] },
     prompt: { type: 'string' },
     title: { type: 'string' },
     current_phase: { type: 'string' },

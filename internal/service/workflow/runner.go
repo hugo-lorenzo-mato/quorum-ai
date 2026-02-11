@@ -490,6 +490,24 @@ func (r *Runner) RunWithState(ctx context.Context, state *core.WorkflowState) er
 		return r.handleError(ctx, workflowState, err)
 	}
 
+	// After plan completion (and especially after interactive review), tasks may have been edited
+	// in the persisted state (web UI task editor, selection, reordering). Refresh tasks/task_order
+	// and rebuild the DAG so execution uses the latest plan.
+	if freshState, err := r.state.LoadByID(ctx, workflowState.WorkflowID); err != nil {
+		r.logger.Warn("failed to reload state before execute; proceeding with in-memory state",
+			"workflow_id", workflowState.WorkflowID,
+			"error", err,
+		)
+	} else if freshState != nil {
+		workflowState.Tasks = freshState.Tasks
+		workflowState.TaskOrder = freshState.TaskOrder
+	}
+	if len(workflowState.Tasks) > 0 {
+		if err := r.planner.RebuildDAGFromState(workflowState); err != nil {
+			return r.handleError(ctx, workflowState, fmt.Errorf("rebuilding DAG: %w", err))
+		}
+	}
+
 	if err := r.executor.Run(ctx, wctx); err != nil {
 		return r.handleError(ctx, workflowState, err)
 	}
@@ -2216,6 +2234,12 @@ func (r *Runner) refreshInteractiveReview(ctx context.Context, state *core.Workf
 	if err != nil || freshState == nil {
 		return nil
 	}
+
+	// Keep any task edits performed during the interactive pause (web UI task editor, selection, etc.).
+	// The SQLite state manager persists tasks by delete+reinsert on Save(), so if we don't refresh
+	// these fields before saving again, the runner can clobber user edits with stale in-memory data.
+	state.Tasks = freshState.Tasks
+	state.TaskOrder = freshState.TaskOrder
 
 	state.InteractiveReview = freshState.InteractiveReview
 	// Check if mode was switched back to non-interactive (continue_unattended).

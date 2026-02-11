@@ -129,7 +129,7 @@ func (e *Executor) Run(ctx context.Context, wctx *Context) error {
 
 	// Find already completed tasks
 	for id, task := range wctx.State.Tasks {
-		if task.Status == core.TaskStatusCompleted {
+		if task.Status == core.TaskStatusCompleted || task.Status == core.TaskStatusSkipped {
 			completed[id] = true
 		}
 	}
@@ -212,7 +212,7 @@ func (e *Executor) Run(ctx context.Context, wctx *Context) error {
 
 		// Update completed set
 		for _, task := range ready {
-			if wctx.State.Tasks[task.ID].Status == core.TaskStatusCompleted {
+			if wctx.State.Tasks[task.ID].Status == core.TaskStatusCompleted || wctx.State.Tasks[task.ID].Status == core.TaskStatusSkipped {
 				completed[task.ID] = true
 			}
 		}

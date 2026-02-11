@@ -94,6 +94,86 @@ func TestHandleReviewWorkflow_ApprovePlan(t *testing.T) {
 	}
 }
 
+func TestHandleReviewWorkflow_ApprovePlan_WithExecuteOptionsSelection(t *testing.T) {
+	t.Parallel()
+	state := newReviewableWorkflowState("wf-1", core.PhaseExecute)
+	// Planned tasks (all pending) with deps: t2 depends on t1.
+	state.Tasks = map[core.TaskID]*core.TaskState{
+		"t1": {ID: "t1", Name: "t1", Status: core.TaskStatusPending},
+		"t2": {ID: "t2", Name: "t2", Status: core.TaskStatusPending, Dependencies: []core.TaskID{"t1"}},
+		"t3": {ID: "t3", Name: "t3", Status: core.TaskStatusPending},
+	}
+	state.TaskOrder = []core.TaskID{"t1", "t2", "t3"}
+
+	sm := newMockStateManager()
+	sm.workflows[core.WorkflowID("wf-1")] = state
+	eb := events.New(100)
+	t.Cleanup(func() { eb.Close() })
+	srv := NewServer(sm, eb, WithLogger(slog.Default()))
+
+	body := `{"action":"approve","phase":"plan","execute_options":{"selected_task_ids":["t2"]}}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/workflows/wf-1/review", bytes.NewBufferString(body))
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	saved := sm.workflows[core.WorkflowID("wf-1")]
+	if saved.Tasks["t3"].Status != core.TaskStatusSkipped {
+		t.Fatalf("expected t3 skipped, got %s", saved.Tasks["t3"].Status)
+	}
+	if saved.Tasks["t1"].Status != core.TaskStatusPending {
+		t.Fatalf("expected t1 pending (dependency of selected), got %s", saved.Tasks["t1"].Status)
+	}
+	if saved.Tasks["t2"].Status != core.TaskStatusPending {
+		t.Fatalf("expected t2 pending (selected), got %s", saved.Tasks["t2"].Status)
+	}
+}
+
+func TestHandleReviewWorkflow_ApprovePlan_WithExecuteOptionsEmptySelectionRejected(t *testing.T) {
+	t.Parallel()
+	state := newReviewableWorkflowState("wf-1", core.PhaseExecute)
+	state.Tasks = map[core.TaskID]*core.TaskState{
+		"t1": {ID: "t1", Name: "t1", Status: core.TaskStatusPending},
+	}
+	state.TaskOrder = []core.TaskID{"t1"}
+	sm := newMockStateManager()
+	sm.workflows[core.WorkflowID("wf-1")] = state
+	eb := events.New(100)
+	t.Cleanup(func() { eb.Close() })
+	srv := NewServer(sm, eb, WithLogger(slog.Default()))
+
+	body := `{"action":"approve","phase":"plan","execute_options":{"selected_task_ids":[]}}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/workflows/wf-1/review", bytes.NewBufferString(body))
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestHandleReviewWorkflow_ApproveAnalyze_WithExecuteOptionsRejected(t *testing.T) {
+	t.Parallel()
+	state := newReviewableWorkflowState("wf-1", core.PhasePlan)
+	sm := newMockStateManager()
+	sm.workflows[core.WorkflowID("wf-1")] = state
+	eb := events.New(100)
+	t.Cleanup(func() { eb.Close() })
+	srv := NewServer(sm, eb, WithLogger(slog.Default()))
+
+	body := `{"action":"approve","phase":"analyze","execute_options":{"selected_task_ids":["t1"]}}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/workflows/wf-1/review", bytes.NewBufferString(body))
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
 func TestHandleReviewWorkflow_ApproveWithContinueUnattended(t *testing.T) {
 	t.Parallel()
 	state := newReviewableWorkflowState("wf-1", core.PhasePlan)

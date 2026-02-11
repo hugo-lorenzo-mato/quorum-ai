@@ -161,12 +161,34 @@ type ReplanRequest struct {
 	Context string `json:"context,omitempty"` // Additional context to prepend to analysis
 }
 
+// SelectionResponse describes the task selection applied for execute.
+type SelectionResponse struct {
+	SelectedTaskIDs          []string `json:"selected_task_ids"`
+	EffectiveSelectedTaskIDs []string `json:"effective_selected_task_ids"`
+	SkippedTaskIDs           []string `json:"skipped_task_ids"`
+}
+
 // PhaseResponse is the response for phase-specific execution endpoints.
 type PhaseResponse struct {
-	ID           string `json:"id"`
-	Status       string `json:"status"`
-	CurrentPhase string `json:"current_phase"`
-	Message      string `json:"message"`
+	ID           string             `json:"id"`
+	Status       string             `json:"status"`
+	CurrentPhase string             `json:"current_phase"`
+	Message      string             `json:"message"`
+	Selection    *SelectionResponse `json:"selection,omitempty"`
+}
+
+// ExecuteRequest is the request body for executing the execute phase with optional task selection.
+// If selected_task_ids is omitted, the backend runs all planned tasks.
+type ExecuteRequest struct {
+	SelectedTaskIDs []string `json:"selected_task_ids,omitempty"`
+}
+
+func taskIDsToStrings(ids []core.TaskID) []string {
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		out = append(out, string(id))
+	}
+	return out
 }
 
 const (
@@ -2182,6 +2204,25 @@ func (s *Server) HandleExecuteWorkflow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Optional selection payload (by default run all planned tasks).
+	var req ExecuteRequest
+	decodeErr := json.NewDecoder(r.Body).Decode(&req)
+	if decodeErr != nil && decodeErr != io.EOF {
+		respondError(w, http.StatusBadRequest, msgInvalidRequestBody)
+		return
+	}
+	var selectedTaskIDs []core.TaskID // nil => run all
+	if req.SelectedTaskIDs != nil {
+		if len(req.SelectedTaskIDs) == 0 {
+			respondError(w, http.StatusBadRequest, "selected_task_ids cannot be empty")
+			return
+		}
+		selectedTaskIDs = make([]core.TaskID, 0, len(req.SelectedTaskIDs))
+		for _, id := range req.SelectedTaskIDs {
+			selectedTaskIDs = append(selectedTaskIDs, core.TaskID(id))
+		}
+	}
+
 	ctx := r.Context()
 	stateManager := s.getProjectStateManager(ctx)
 
@@ -2261,6 +2302,37 @@ func (s *Server) HandleExecuteWorkflow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var selectionResp *SelectionResponse
+	if selectedTaskIDs != nil {
+		now := time.Now()
+		result, selErr := core.ApplyTaskSelection(state, selectedTaskIDs, now)
+		if selErr != nil {
+			_ = s.unifiedTracker.RollbackExecution(ctx, core.WorkflowID(workflowID), "invalid task selection: "+selErr.Error())
+			respondError(w, http.StatusBadRequest, selErr.Error())
+			return
+		}
+		state.UpdatedAt = now
+		if err := stateManager.Save(ctx, state); err != nil {
+			_ = s.unifiedTracker.RollbackExecution(ctx, core.WorkflowID(workflowID), "failed to save selection: "+err.Error())
+			respondError(w, http.StatusInternalServerError, msgFailedToSaveWorkflowState)
+			return
+		}
+
+		// Publish task_skipped SSE events so the UI updates immediately.
+		if eb := s.getProjectEventBus(ctx); eb != nil {
+			projectID := getProjectID(ctx)
+			for _, id := range result.SkippedTaskIDs {
+				eb.Publish(events.NewTaskSkippedEvent(workflowID, projectID, string(id), core.SkipReasonNotSelected))
+			}
+		}
+
+		selectionResp = &SelectionResponse{
+			SelectedTaskIDs:          taskIDsToStrings(result.SelectedTaskIDs),
+			EffectiveSelectedTaskIDs: taskIDsToStrings(result.EffectiveSelectedTaskIDs),
+			SkippedTaskIDs:           taskIDsToStrings(result.SkippedTaskIDs),
+		}
+	}
+
 	// Resolve the effective execution config so the execution timeout matches Settings.
 	effCfg, cfgErr := ResolveEffectiveExecutionConfig(ctx)
 	if cfgErr != nil {
@@ -2333,16 +2405,18 @@ func (s *Server) HandleExecuteWorkflow(w http.ResponseWriter, r *http.Request) {
 		Status:       string(core.WorkflowStatusRunning),
 		CurrentPhase: string(core.PhaseExecute),
 		Message:      "Execute phase started",
+		Selection:    selectionResp,
 	}
 	respondJSON(w, http.StatusAccepted, response)
 }
 
 // ReviewRequest is the request body for reviewing an interactive workflow phase.
 type ReviewRequest struct {
-	Action             string `json:"action"`                        // "approve" or "reject"
-	Feedback           string `json:"feedback,omitempty"`            // User feedback
-	Phase              string `json:"phase,omitempty"`               // Phase that was reviewed
-	ContinueUnattended bool   `json:"continue_unattended,omitempty"` // Switch back to non-interactive
+	Action             string          `json:"action"`                        // "approve" or "reject"
+	Feedback           string          `json:"feedback,omitempty"`            // User feedback
+	Phase              string          `json:"phase,omitempty"`               // Phase that was reviewed
+	ContinueUnattended bool            `json:"continue_unattended,omitempty"` // Switch back to non-interactive
+	ExecuteOptions     *ExecuteRequest `json:"execute_options,omitempty"`     // Optional selection for upcoming execute (plan review only)
 }
 
 // HandleReviewWorkflow handles review/approval for interactive mode.
@@ -2440,8 +2514,10 @@ func (s *Server) handleInteractiveReviewReject(w http.ResponseWriter, ctx contex
 }
 
 func (s *Server) handleInteractiveReviewApprove(w http.ResponseWriter, ctx context.Context, stateManager core.StateManager, state *core.WorkflowState, workflowID string, req ReviewRequest) {
+	now := time.Now()
+
 	review := &core.InteractiveReview{
-		ReviewedAt:    time.Now(),
+		ReviewedAt:    now,
 		ApprovedPhase: core.Phase(req.Phase),
 	}
 	switch core.Phase(req.Phase) {
@@ -2452,14 +2528,56 @@ func (s *Server) handleInteractiveReviewApprove(w http.ResponseWriter, ctx conte
 	}
 	state.InteractiveReview = review
 
+	var selectionResp *SelectionResponse
+	if req.ExecuteOptions != nil && req.ExecuteOptions.SelectedTaskIDs != nil {
+		// Only allowed when approving the plan phase (right before execute).
+		if core.Phase(req.Phase) != core.PhasePlan {
+			respondError(w, http.StatusBadRequest, "execute_options is only allowed when approving the plan phase")
+			return
+		}
+		if state.CurrentPhase != core.PhaseExecute {
+			respondError(w, http.StatusConflict, "execute_options requires workflow to be awaiting review before execute")
+			return
+		}
+		if len(req.ExecuteOptions.SelectedTaskIDs) == 0 {
+			respondError(w, http.StatusBadRequest, "selected_task_ids cannot be empty")
+			return
+		}
+
+		selectedTaskIDs := make([]core.TaskID, 0, len(req.ExecuteOptions.SelectedTaskIDs))
+		for _, id := range req.ExecuteOptions.SelectedTaskIDs {
+			selectedTaskIDs = append(selectedTaskIDs, core.TaskID(id))
+		}
+		result, selErr := core.ApplyTaskSelection(state, selectedTaskIDs, now)
+		if selErr != nil {
+			respondError(w, http.StatusBadRequest, selErr.Error())
+			return
+		}
+		selectionResp = &SelectionResponse{
+			SelectedTaskIDs:          taskIDsToStrings(result.SelectedTaskIDs),
+			EffectiveSelectedTaskIDs: taskIDsToStrings(result.EffectiveSelectedTaskIDs),
+			SkippedTaskIDs:           taskIDsToStrings(result.SkippedTaskIDs),
+		}
+	}
+
 	if req.ContinueUnattended && state.Blueprint != nil {
 		state.Blueprint.ExecutionMode = core.ExecutionModeMultiAgent
 	}
 
-	state.UpdatedAt = time.Now()
+	state.UpdatedAt = now
 	if stateManager.Save(ctx, state) != nil {
 		respondError(w, http.StatusInternalServerError, msgFailedToSaveWorkflowState)
 		return
+	}
+
+	// Publish task_skipped SSE events so the UI updates immediately.
+	if selectionResp != nil {
+		if eb := s.getProjectEventBus(ctx); eb != nil {
+			projectID := getProjectID(ctx)
+			for _, id := range selectionResp.SkippedTaskIDs {
+				eb.Publish(events.NewTaskSkippedEvent(workflowID, projectID, id, core.SkipReasonNotSelected))
+			}
+		}
 	}
 
 	if s.eventBus != nil {
@@ -2472,10 +2590,17 @@ func (s *Server) handleInteractiveReviewApprove(w http.ResponseWriter, ctx conte
 		}
 	}
 
-	respondJSON(w, http.StatusOK, map[string]string{
-		"id":      workflowID,
-		"status":  "running",
-		"message": fmt.Sprintf("Phase '%s' approved. Continuing workflow.", req.Phase),
+	type reviewResponse struct {
+		ID        string             `json:"id"`
+		Status    string             `json:"status"`
+		Message   string             `json:"message"`
+		Selection *SelectionResponse `json:"selection,omitempty"`
+	}
+	respondJSON(w, http.StatusOK, reviewResponse{
+		ID:        workflowID,
+		Status:    "running",
+		Message:   fmt.Sprintf("Phase '%s' approved. Continuing workflow.", req.Phase),
+		Selection: selectionResp,
 	})
 }
 

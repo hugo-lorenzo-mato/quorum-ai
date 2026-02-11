@@ -1,8 +1,10 @@
-import { useState, useId } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import PropTypes from 'prop-types';
 import { CheckCircle, XCircle, Loader2, MessageSquare } from 'lucide-react';
 import useWorkflowStore from '../../stores/workflowStore';
 import TaskEditor from './TaskEditor';
+import TaskSelectionPanel from './TaskSelectionPanel';
+import { computeSelectionDetails } from './taskSelection';
 
 /**
  * ReviewGateInner contains the stateful form.
@@ -11,8 +13,9 @@ import TaskEditor from './TaskEditor';
 function ReviewGateInner({ workflow }) {
   const [feedback, setFeedback] = useState('');
   const [continueUnattended, setContinueUnattended] = useState(false);
-  const { reviewWorkflow, loading } = useWorkflowStore();
+  const { reviewWorkflow, loading, tasks, fetchTasks } = useWorkflowStore();
   const feedbackId = useId();
+  const prevTaskIdsRef = useRef(new Set());
 
   const { id, current_phase } = workflow;
 
@@ -23,6 +26,55 @@ function ReviewGateInner({ workflow }) {
 
   // Show task editor when plan phase completed (current_phase is 'execute')
   const showTaskEditor = current_phase === 'execute';
+  const taskList = tasks[id] || [];
+
+  const [selectedTaskIds, setSelectedTaskIds] = useState([]);
+
+  useEffect(() => {
+    if (!showTaskEditor) return;
+    fetchTasks(id);
+  }, [fetchTasks, id, showTaskEditor]);
+
+  // Default to "all selected" and keep selection in sync as tasks are added/removed during review.
+  useEffect(() => {
+    if (!showTaskEditor) return;
+    const currentIds = new Set(taskList.map(t => t.id).filter(Boolean));
+    const prevIds = prevTaskIdsRef.current || new Set();
+
+    const added = [];
+    const removed = [];
+
+    for (const cid of currentIds) {
+      if (!prevIds.has(cid)) added.push(cid);
+    }
+    for (const pid of prevIds) {
+      if (!currentIds.has(pid)) removed.push(pid);
+    }
+
+    setSelectedTaskIds((prev) => {
+      // First time tasks load: select all.
+      if (!prev || prev.length === 0 && prevIds.size === 0 && currentIds.size > 0) {
+        return Array.from(currentIds);
+      }
+
+      const next = new Set((prev || []).filter(Boolean));
+
+      // Remove deleted tasks.
+      for (const rid of removed) next.delete(rid);
+
+      // Auto-select newly added tasks.
+      for (const aid of added) next.add(aid);
+
+      return Array.from(next);
+    });
+
+    prevTaskIdsRef.current = currentIds;
+  }, [showTaskEditor, taskList]);
+
+  const { effective } = useMemo(
+    () => computeSelectionDetails(taskList, selectedTaskIds),
+    [taskList, selectedTaskIds],
+  );
 
   const handleApprove = async () => {
     await reviewWorkflow(id, {
@@ -30,6 +82,7 @@ function ReviewGateInner({ workflow }) {
       feedback: feedback.trim() || undefined,
       phase: completedPhase,
       continueUnattended,
+      executeOptions: showTaskEditor ? { selectedTaskIds } : undefined,
     });
   };
 
@@ -68,7 +121,16 @@ function ReviewGateInner({ workflow }) {
 
       {/* Task Editor - shown after plan phase */}
       {showTaskEditor && (
-        <TaskEditor workflowId={id} />
+        <div className="space-y-4">
+          <TaskSelectionPanel
+            tasks={taskList}
+            selectedTaskIds={selectedTaskIds}
+            onChangeSelectedTaskIds={setSelectedTaskIds}
+            disabled={loading}
+            title="Execute Selection"
+          />
+          <TaskEditor workflowId={id} />
+        </div>
       )}
 
       {/* Continue unattended option */}
@@ -86,7 +148,7 @@ function ReviewGateInner({ workflow }) {
       <div className="flex gap-2">
         <button
           onClick={handleApprove}
-          disabled={loading}
+          disabled={loading || (showTaskEditor && effective.size === 0)}
           className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-success/10 text-success hover:bg-success/20 disabled:opacity-50 transition-all font-medium"
         >
           {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}

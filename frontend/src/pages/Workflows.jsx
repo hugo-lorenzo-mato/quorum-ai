@@ -48,6 +48,8 @@ import {
 } from 'lucide-react';
 import { ConfirmDialog } from '../components/config/ConfirmDialog';
 import { ExecutionModeBadge, PhaseStepper, ReplanModal, WorkflowPipelineLive } from '../components/workflow';
+import TaskSelectionModal from '../components/workflow/TaskSelectionModal';
+import ReviewGate from '../components/workflow/ReviewGate';
 import PipelineExpandedPanel from '../components/workflow/pipeline/PipelineExpandedPanel';
 import usePipelineState from '../components/workflow/hooks/usePipelineState';
 import { GenerationOptionsModal } from '../components/issues';
@@ -290,6 +292,8 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
   const [editModalOpen, setEditModalOpen] = useState(false);
   // Replan modal state
   const [isReplanModalOpen, setReplanModalOpen] = useState(false);
+  // Task selection modal state (for execute-by-phases)
+  const [isTaskSelectionModalOpen, setTaskSelectionModalOpen] = useState(false);
 
   // Delete confirmation state
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -1007,7 +1011,7 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
             {/* Execute button - after plan completes */}
             {workflow.status === 'completed' && workflow.current_phase === 'execute' && (
               <button
-                onClick={() => executeWorkflow(workflow.id)}
+                onClick={() => setTaskSelectionModalOpen(true)}
                 disabled={loading}
                 className="flex-1 md:flex-none inline-flex justify-center items-center gap-2 px-3 py-2 rounded-lg bg-success/10 text-success text-sm font-medium hover:bg-success/20 disabled:opacity-50 transition-all"
               >
@@ -1163,6 +1167,9 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
           </div>
         </div>
       </div>
+
+      {/* Interactive Review Gate (shows only when workflow is awaiting_review) */}
+      <ReviewGate workflow={workflow} />
 
       {/* Pipeline Detail Panel */}
       <PipelineExpandedPanel
@@ -1583,6 +1590,18 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
           setReplanModalOpen(false);
         }}
         loading={loading}
+      />
+
+      {/* Execute Selection Modal */}
+      <TaskSelectionModal
+        isOpen={isTaskSelectionModalOpen}
+        onClose={() => setTaskSelectionModalOpen(false)}
+        tasks={tasks || []}
+        loading={loading}
+        onConfirm={async (selectedTaskIds) => {
+          await executeWorkflow(workflow.id, { selectedTaskIds });
+          setTaskSelectionModalOpen(false);
+        }}
       />
 
       {/* Issues Generation Modal */}

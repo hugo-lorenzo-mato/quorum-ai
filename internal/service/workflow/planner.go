@@ -63,6 +63,7 @@ func (p *Planner) RebuildDAGFromState(state *core.WorkflowState) error {
 			ID:           taskState.ID,
 			Phase:        taskState.Phase,
 			Name:         taskState.Name,
+			Description:  taskState.Description,
 			Status:       taskState.Status,
 			CLI:          taskState.CLI,
 			Model:        taskState.Model,

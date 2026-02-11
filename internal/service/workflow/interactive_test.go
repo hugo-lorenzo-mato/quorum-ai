@@ -51,8 +51,8 @@ func (m *sequenceStateManager) LoadByID(_ context.Context, id core.WorkflowID) (
 	return m.states[idx], nil
 }
 
-func (m *sequenceStateManager) AcquireLock(_ context.Context) error  { return nil }
-func (m *sequenceStateManager) ReleaseLock(_ context.Context) error  { return nil }
+func (m *sequenceStateManager) AcquireLock(_ context.Context) error { return nil }
+func (m *sequenceStateManager) ReleaseLock(_ context.Context) error { return nil }
 func (m *sequenceStateManager) DeactivateWorkflow(_ context.Context) error {
 	return nil
 }
@@ -367,6 +367,54 @@ func TestApplyInteractiveFeedback_WithPlanFeedback(t *testing.T) {
 	}
 	if state.Status != core.WorkflowStatusRunning {
 		t.Errorf("expected status running, got %s", state.Status)
+	}
+}
+
+func TestApplyInteractiveFeedback_RefreshesTasksFromDB(t *testing.T) {
+	t.Parallel()
+	// In-memory state has a stale task list.
+	inMemState := &core.WorkflowState{
+		WorkflowDefinition: core.WorkflowDefinition{WorkflowID: "wf-1"},
+		WorkflowRun: core.WorkflowRun{
+			Status:            core.WorkflowStatusAwaitingReview,
+			CurrentPhase:      core.PhaseExecute,
+			InteractiveReview: nil,
+			Tasks: map[core.TaskID]*core.TaskState{
+				"t1": {ID: "t1", Name: "old", Status: core.TaskStatusPending},
+			},
+			TaskOrder: []core.TaskID{"t1"},
+		},
+	}
+	// DB state has updated tasks (e.g., edited in UI during pause).
+	dbState := &core.WorkflowState{
+		WorkflowDefinition: core.WorkflowDefinition{WorkflowID: "wf-1"},
+		WorkflowRun: core.WorkflowRun{
+			Status:            core.WorkflowStatusAwaitingReview,
+			CurrentPhase:      core.PhaseExecute,
+			InteractiveReview: nil,
+			Tasks: map[core.TaskID]*core.TaskState{
+				"t1": {ID: "t1", Name: "new", Status: core.TaskStatusPending},
+				"t2": {ID: "t2", Name: "added", Status: core.TaskStatusPending, Dependencies: []core.TaskID{"t1"}},
+			},
+			TaskOrder: []core.TaskID{"t1", "t2"},
+		},
+	}
+	sm := &sequenceStateManager{states: []*core.WorkflowState{dbState}}
+	r := testRunner(sm)
+
+	err := r.applyInteractiveFeedback(context.Background(), inMemState, core.PhasePlan)
+	if err != nil {
+		t.Fatalf("expected nil, got %v", err)
+	}
+
+	if inMemState.Tasks["t1"].Name != "new" {
+		t.Fatalf("expected task t1 refreshed from DB, got %q", inMemState.Tasks["t1"].Name)
+	}
+	if _, ok := inMemState.Tasks["t2"]; !ok {
+		t.Fatalf("expected new task t2 to be present after refresh")
+	}
+	if len(inMemState.TaskOrder) != 2 || inMemState.TaskOrder[0] != "t1" || inMemState.TaskOrder[1] != "t2" {
+		t.Fatalf("expected TaskOrder refreshed, got %#v", inMemState.TaskOrder)
 	}
 }
 

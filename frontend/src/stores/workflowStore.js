@@ -351,10 +351,12 @@ const useWorkflowStore = create((set, get) => ({
    * Run only the execute phase of a workflow.
    * @param {string} id - Workflow ID
    */
-  executeWorkflow: async (id) => {
+  executeWorkflow: async (id, { selectedTaskIds } = {}) => {
     set({ loading: true, error: null });
     try {
-      const result = await workflowApi.execute(id);
+      const result = Array.isArray(selectedTaskIds)
+        ? await workflowApi.execute(id, { selectedTaskIds })
+        : await workflowApi.execute(id);
       const { workflows, activeWorkflow } = get();
       const updated = workflows.map(w =>
         w.id === id ? { ...w, status: result.status || 'running', current_phase: result.current_phase || 'execute' } : w
@@ -510,10 +512,14 @@ const useWorkflowStore = create((set, get) => ({
   },
 
   // Interactive workflow actions
-  reviewWorkflow: async (id, { action, feedback, phase, continueUnattended } = {}) => {
+  reviewWorkflow: async (id, { action, feedback, phase, continueUnattended, executeOptions } = {}) => {
     set({ loading: true, error: null });
     try {
-      const result = await workflowApi.review(id, { action, feedback, phase, continueUnattended });
+      const payload = { action, feedback, phase, continueUnattended };
+      if (executeOptions && Array.isArray(executeOptions.selectedTaskIds)) {
+        payload.executeOptions = executeOptions;
+      }
+      const result = await workflowApi.review(id, payload);
       // Refresh workflow to get updated state
       await get().fetchWorkflow(id, { silent: true });
       set({ loading: false });
