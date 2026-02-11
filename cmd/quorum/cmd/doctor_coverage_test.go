@@ -10,16 +10,13 @@ import (
 // --- checkAgentConfigs ---
 
 func TestCheckAgentConfigs_NoGeminiConfig(t *testing.T) {
-	// checkAgentConfigs checks for ~/.gemini/settings.json
-	// If it doesn't exist, there should be no issues reported for Gemini
-	issues := checkAgentConfigs()
-	// We can't guarantee the absence of ~/.gemini/settings.json in CI,
-	// so just check it doesn't panic and returns a list
-	if issues == nil {
-		// issues can be nil if no configs are found, that's fine
-		issues = []string{}
+	// Test with empty directory (no .gemini)
+	tmpDir := t.TempDir()
+	issues := checkAgentConfigsInDir(tmpDir)
+	// No .gemini directory means no issues
+	if len(issues) != 0 {
+		t.Errorf("expected no issues when .gemini doesn't exist, got: %v", issues)
 	}
-	_ = issues // Just verify no panic
 }
 
 func TestCheckAgentConfigs_WithDisabledGeminiConfig(t *testing.T) {
@@ -46,7 +43,7 @@ func TestCheckAgentConfigs_WithDisabledGeminiConfig(t *testing.T) {
 		t.Fatalf("write: %v", err)
 	}
 
-	issues := checkAgentConfigs()
+	issues := checkAgentConfigsInDir(tmpDir)
 	found := false
 	for _, issue := range issues {
 		if issue == "Gemini config contains 'disabled: true' which causes 'NO_AGENTS' error" {
@@ -83,7 +80,7 @@ func TestCheckAgentConfigs_WithValidGeminiConfig(t *testing.T) {
 		t.Fatalf("write: %v", err)
 	}
 
-	issues := checkAgentConfigs()
+	issues := checkAgentConfigsInDir(tmpDir)
 	if len(issues) != 0 {
 		t.Errorf("expected no issues, got: %v", issues)
 	}
@@ -107,7 +104,7 @@ func TestCheckAgentConfigs_WithInvalidJSON(t *testing.T) {
 		t.Fatalf("write: %v", err)
 	}
 
-	issues := checkAgentConfigs()
+	issues := checkAgentConfigsInDir(tmpDir)
 	found := false
 	for _, issue := range issues {
 		if issue == "Gemini config contains invalid JSON" {
@@ -121,16 +118,11 @@ func TestCheckAgentConfigs_WithInvalidJSON(t *testing.T) {
 }
 
 func TestCheckAgentConfigs_NoHomeDir(t *testing.T) {
-	// Set HOME to empty or non-existent path
+	// Empty directory without .gemini
 	tmpDir := t.TempDir()
-	origHome := os.Getenv("HOME")
-	t.Setenv("HOME", tmpDir)
-	defer func() {
-		_ = os.Setenv("HOME", origHome)
-	}()
 
 	// No .gemini directory
-	issues := checkAgentConfigs()
+	issues := checkAgentConfigsInDir(tmpDir)
 	if len(issues) != 0 {
 		t.Errorf("expected no issues when .gemini doesn't exist, got: %v", issues)
 	}

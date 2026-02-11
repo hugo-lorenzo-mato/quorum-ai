@@ -46,7 +46,7 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 	defer eventBus.Unsubscribe(eventCh)
 
 	projectID := getProjectID(ctx)
-	s.logger.Info("SSE client connected", "remote_addr", r.RemoteAddr, "project_id", projectID)
+	s.logger.Debug("SSE client connected", "remote_addr", r.RemoteAddr, "project_id", projectID)
 
 	// Send initial connection event
 	s.sendSSEEvent(w, flusher, "connected", map[string]string{
@@ -57,13 +57,13 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 	for {
 		select {
 		case <-ctx.Done():
-			s.logger.Info("SSE client disconnected", "remote_addr", r.RemoteAddr)
+			s.logger.Debug("SSE client disconnected", "remote_addr", r.RemoteAddr)
 			return
 
 		case event, ok := <-eventCh:
 			if !ok {
 				// EventBus closed
-				s.logger.Info("EventBus closed, ending SSE stream")
+				s.logger.Debug("EventBus closed, ending SSE stream")
 				return
 			}
 

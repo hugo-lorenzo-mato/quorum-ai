@@ -365,10 +365,15 @@ func (s *Server) loggingMiddleware(next http.Handler) http.Handler {
 		ww := chimiddleware.NewWrapResponseWriter(w, r.ProtoMajor)
 
 		defer func() {
-			s.logger.Info("http request",
+			status := ww.Status()
+			if status == 0 {
+				status = http.StatusOK
+			}
+
+			s.logger.Log(r.Context(), requestLogLevel(status), "http request",
 				"method", r.Method,
 				"path", r.URL.Path,
-				"status", ww.Status(),
+				"status", status,
 				"duration", time.Since(start),
 				"bytes", ww.BytesWritten(),
 			)
@@ -376,6 +381,17 @@ func (s *Server) loggingMiddleware(next http.Handler) http.Handler {
 
 		next.ServeHTTP(ww, r)
 	})
+}
+
+func requestLogLevel(status int) slog.Level {
+	switch {
+	case status >= http.StatusInternalServerError:
+		return slog.LevelError
+	case status >= http.StatusBadRequest:
+		return slog.LevelWarn
+	default:
+		return slog.LevelDebug
+	}
 }
 
 // respondJSON sends a JSON response.

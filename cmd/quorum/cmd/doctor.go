@@ -153,13 +153,17 @@ func validateQuorumConfig() []string {
 
 // checkAgentConfigs validates agent configurations and returns a list of issues
 func checkAgentConfigs() []string {
-	var issues []string
-
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		issues = append(issues, "Cannot access home directory")
-		return issues
+		return []string{"Cannot access home directory"}
 	}
+	return checkAgentConfigsInDir(homeDir)
+}
+
+// checkAgentConfigsInDir validates agent configurations in a specific directory
+// This is separated for testing purposes
+func checkAgentConfigsInDir(homeDir string) []string {
+	var issues []string
 
 	// Check Gemini configuration
 	geminiConfigPath := filepath.Join(homeDir, ".gemini", "settings.json")

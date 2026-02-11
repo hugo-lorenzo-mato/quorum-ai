@@ -289,10 +289,15 @@ func (s *Server) loggingMiddleware(next http.Handler) http.Handler {
 		ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
 
 		defer func() {
-			s.logger.Info("http request",
+			status := ww.Status()
+			if status == 0 {
+				status = http.StatusOK
+			}
+
+			s.logger.Log(r.Context(), requestLogLevel(status), "http request",
 				slog.String("method", r.Method),
 				slog.String("path", r.URL.Path),
-				slog.Int("status", ww.Status()),
+				slog.Int("status", status),
 				slog.Int("bytes", ww.BytesWritten()),
 				slog.Duration("duration", time.Since(start)),
 				slog.String("request_id", middleware.GetReqID(r.Context())),
@@ -302,6 +307,17 @@ func (s *Server) loggingMiddleware(next http.Handler) http.Handler {
 
 		next.ServeHTTP(ww, r)
 	})
+}
+
+func requestLogLevel(status int) slog.Level {
+	switch {
+	case status >= http.StatusInternalServerError:
+		return slog.LevelError
+	case status >= http.StatusBadRequest:
+		return slog.LevelWarn
+	default:
+		return slog.LevelDebug
+	}
 }
 
 // handleHealth returns a simple health check response.

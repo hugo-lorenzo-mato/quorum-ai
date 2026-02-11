@@ -51,6 +51,9 @@ func TestRunInit(t *testing.T) {
 
 	t.Run("config already exists without force", func(t *testing.T) {
 		tmpDir2 := t.TempDir()
+		oldDir2, _ := os.Getwd()
+		defer os.Chdir(oldDir2) // Return to original dir before cleanup
+
 		err := os.Chdir(tmpDir2)
 		require.NoError(t, err)
 
@@ -73,6 +76,9 @@ func TestRunInit(t *testing.T) {
 
 	t.Run("config exists with force flag", func(t *testing.T) {
 		tmpDir3 := t.TempDir()
+		oldDir3, _ := os.Getwd()
+		defer os.Chdir(oldDir3) // Return to original dir before cleanup
+
 		err := os.Chdir(tmpDir3)
 		require.NoError(t, err)
 
@@ -100,6 +106,9 @@ func TestRunInit(t *testing.T) {
 
 	t.Run("legacy config warning", func(t *testing.T) {
 		tmpDir4 := t.TempDir()
+		oldDir4, _ := os.Getwd()
+		defer os.Chdir(oldDir4) // Return to original dir before cleanup
+
 		err := os.Chdir(tmpDir4)
 		require.NoError(t, err)
 
@@ -117,14 +126,9 @@ func TestRunInit(t *testing.T) {
 }
 
 func TestInitializeAgentConfigs(t *testing.T) {
-	// Create temporary home directory
-	tmpHome := t.TempDir()
-	oldHome := os.Getenv("HOME")
-	os.Setenv("HOME", tmpHome)
-	defer os.Setenv("HOME", oldHome)
-
 	t.Run("creates gemini config when missing", func(t *testing.T) {
-		err := initializeAgentConfigs()
+		tmpHome := t.TempDir()
+		err := initializeAgentConfigsInDir(tmpHome)
 		assert.NoError(t, err)
 
 		// Verify .gemini directory was created
@@ -152,7 +156,6 @@ func TestInitializeAgentConfigs(t *testing.T) {
 
 	t.Run("removes disabled flag from existing config", func(t *testing.T) {
 		tmpHome2 := t.TempDir()
-		os.Setenv("HOME", tmpHome2)
 
 		// Create gemini config with "disabled": true
 		geminiDir := filepath.Join(tmpHome2, ".gemini")
@@ -172,8 +175,8 @@ func TestInitializeAgentConfigs(t *testing.T) {
 		err = os.WriteFile(configPath, data, 0600)
 		require.NoError(t, err)
 
-		// Run initializeAgentConfigs
-		err = initializeAgentConfigs()
+		// Run initializeAgentConfigsInDir
+		err = initializeAgentConfigsInDir(tmpHome2)
 		assert.NoError(t, err)
 
 		// Verify "disabled" was removed
@@ -190,7 +193,6 @@ func TestInitializeAgentConfigs(t *testing.T) {
 
 	t.Run("preserves existing valid config", func(t *testing.T) {
 		tmpHome3 := t.TempDir()
-		os.Setenv("HOME", tmpHome3)
 
 		// Create valid gemini config
 		geminiDir := filepath.Join(tmpHome3, ".gemini")
@@ -212,8 +214,8 @@ func TestInitializeAgentConfigs(t *testing.T) {
 		err = os.WriteFile(configPath, data, 0600)
 		require.NoError(t, err)
 
-		// Run initializeAgentConfigs
-		err = initializeAgentConfigs()
+		// Run initializeAgentConfigsInDir
+		err = initializeAgentConfigsInDir(tmpHome3)
 		assert.NoError(t, err)
 
 		// Verify config was not changed
@@ -228,7 +230,6 @@ func TestInitializeAgentConfigs(t *testing.T) {
 
 	t.Run("handles invalid json in existing config", func(t *testing.T) {
 		tmpHome4 := t.TempDir()
-		os.Setenv("HOME", tmpHome4)
 
 		// Create invalid gemini config
 		geminiDir := filepath.Join(tmpHome4, ".gemini")
@@ -240,7 +241,7 @@ func TestInitializeAgentConfigs(t *testing.T) {
 		require.NoError(t, err)
 
 		// Should return error
-		err = initializeAgentConfigs()
+		err = initializeAgentConfigsInDir(tmpHome4)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "parsing existing gemini config")
 	})

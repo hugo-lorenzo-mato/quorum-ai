@@ -901,6 +901,9 @@ func parseWorktreesToCore(output, mainRepoPath string) []core.Worktree {
 	worktrees := make([]core.Worktree, 0)
 	var current *core.Worktree
 
+	// Normalize main repo path by resolving symlinks (important for macOS where /tmp -> /private/tmp)
+	normalizedMainPath := normalizePath(mainRepoPath)
+
 	for _, line := range strings.Split(output, "\n") {
 		line = strings.TrimSpace(line)
 
@@ -910,9 +913,11 @@ func parseWorktreesToCore(output, mainRepoPath string) []core.Worktree {
 				worktrees = append(worktrees, *current)
 			}
 			path := strings.TrimPrefix(line, "worktree ")
+			// Normalize path for comparison
+			normalizedPath := normalizePath(path)
 			current = &core.Worktree{
 				Path:   path,
-				IsMain: path == mainRepoPath,
+				IsMain: normalizedPath == normalizedMainPath,
 			}
 		case current != nil:
 			switch {
@@ -931,6 +936,20 @@ func parseWorktreesToCore(output, mainRepoPath string) []core.Worktree {
 	}
 
 	return worktrees
+}
+
+// normalizePath resolves symlinks and returns the canonical path
+func normalizePath(path string) string {
+	if path == "" {
+		return path
+	}
+	// filepath.EvalSymlinks resolves all symlinks in the path
+	normalized, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		// If we can't resolve, return the original path
+		return path
+	}
+	return normalized
 }
 
 // =============================================================================

@@ -90,7 +90,12 @@ func initializeAgentConfigs() error {
 	if err != nil {
 		return fmt.Errorf("getting home directory: %w", err)
 	}
+	return initializeAgentConfigsInDir(homeDir)
+}
 
+// initializeAgentConfigsInDir initializes agent configs in a specific directory
+// This is separated for testing purposes
+func initializeAgentConfigsInDir(homeDir string) error {
 	// Initialize Gemini configuration
 	geminiConfigDir := filepath.Join(homeDir, ".gemini")
 	geminiConfigPath := filepath.Join(geminiConfigDir, "settings.json")

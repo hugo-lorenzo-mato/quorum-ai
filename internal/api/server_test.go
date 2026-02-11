@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -254,6 +255,32 @@ func (a *mockAtomicStateContext) IsWorkflowRunning(id core.WorkflowID) (bool, er
 		return wf.Status == core.WorkflowStatusRunning, nil
 	}
 	return false, nil
+}
+
+func TestRequestLogLevel(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name   string
+		status int
+		want   slog.Level
+	}{
+		{name: "2xx is debug", status: http.StatusOK, want: slog.LevelDebug},
+		{name: "3xx is debug", status: http.StatusNotModified, want: slog.LevelDebug},
+		{name: "4xx is warn", status: http.StatusNotFound, want: slog.LevelWarn},
+		{name: "5xx is error", status: http.StatusInternalServerError, want: slog.LevelError},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := requestLogLevel(tc.status)
+			if got != tc.want {
+				t.Errorf("requestLogLevel(%d) = %v, want %v", tc.status, got, tc.want)
+			}
+		})
+	}
 }
 
 func TestHealthEndpoint(t *testing.T) {
