@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -595,7 +596,10 @@ func TestResolvePathRelativeTo(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			got := resolvePathRelativeTo(tt.path, tt.baseDir)
-			if got != tt.want {
+			// Normalize path separators for cross-platform comparison
+			gotNormalized := filepath.ToSlash(got)
+			wantNormalized := filepath.ToSlash(tt.want)
+			if gotNormalized != wantNormalized {
 				t.Errorf("resolvePathRelativeTo(%q, %q) = %q, want %q", tt.path, tt.baseDir, got, tt.want)
 			}
 		})
@@ -2232,13 +2236,15 @@ func TestAtomicWrite_NewFileInExistingDir(t *testing.T) {
 		t.Errorf("content = %q, want %q", string(read), "test data content")
 	}
 
-	// New file should get default 0600 permissions
-	info, err := os.Stat(path)
-	if err != nil {
-		t.Fatalf("Stat error = %v", err)
-	}
-	if info.Mode().Perm() != 0o600 {
-		t.Errorf("permissions = %o, want 0600", info.Mode().Perm())
+	// New file should get default 0600 permissions (skip on Windows)
+	if runtime.GOOS != "windows" {
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatalf("Stat error = %v", err)
+		}
+		if info.Mode().Perm() != 0o600 {
+			t.Errorf("permissions = %o, want 0600", info.Mode().Perm())
+		}
 	}
 }
 
@@ -2263,6 +2269,11 @@ func TestAtomicWrite_CreatesNestedDirs(t *testing.T) {
 }
 
 func TestAtomicWrite_ExistingFilePreservesPermissions(t *testing.T) {
+	// Skip on Windows - file permissions work differently
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping permission test on Windows")
+	}
+
 	t.Parallel()
 
 	tmpDir := t.TempDir()

@@ -444,8 +444,9 @@ func TestChecksWaiter_Wait_CompletedImmediately(t *testing.T) {
 	if !result.AllCompleted {
 		t.Error("AllCompleted should be true")
 	}
-	if result.Duration == 0 {
-		t.Error("Duration should be non-zero")
+	// Duration may be 0 on Windows if checks complete immediately before first poll
+	if result.Duration < 0 {
+		t.Error("Duration should not be negative")
 	}
 }
 

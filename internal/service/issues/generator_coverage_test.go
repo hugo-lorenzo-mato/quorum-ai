@@ -55,7 +55,9 @@ func TestResolveDraftDir_CustomDraftDirectory(t *testing.T) {
 		t.Fatalf("resolveDraftDir() error = %v", err)
 	}
 
-	if !strings.Contains(dir, "custom/issues") {
+	// Normalize path for cross-platform comparison
+	normalizedDir := filepath.ToSlash(dir)
+	if !strings.Contains(normalizedDir, "custom/issues") {
 		t.Errorf("expected custom directory in path, got %q", dir)
 	}
 	if !strings.HasSuffix(dir, filepath.Join("wf-abc", "draft")) {
@@ -75,7 +77,9 @@ func TestResolvePublishedDir_CustomDraftDirectory(t *testing.T) {
 		t.Fatalf("resolvePublishedDir() error = %v", err)
 	}
 
-	if !strings.Contains(dir, "custom/issues") {
+	// Normalize path for cross-platform comparison
+	normalizedDir := filepath.ToSlash(dir)
+	if !strings.Contains(normalizedDir, "custom/issues") {
 		t.Errorf("expected custom directory in path, got %q", dir)
 	}
 	if !strings.HasSuffix(dir, filepath.Join("wf-abc", "published")) {

@@ -637,9 +637,15 @@ func TestExecutor_saveTaskOutput_FallbackDir(t *testing.T) {
 func TestExecutor_saveTaskOutput_MkdirFails(t *testing.T) {
 	t.Parallel()
 	executor := &Executor{}
+
+	// Use a path that cannot be created on any platform
+	// On Windows, paths with invalid characters or reserved names fail
+	// On Unix, paths under non-existent roots fail
+	invalidRoot := filepath.Join(string(filepath.Separator), "nonexistent", "impossible", "path\x00invalid")
+
 	wctx := &Context{
 		Report:      nil,
-		ProjectRoot: "/nonexistent/impossible/path/root",
+		ProjectRoot: invalidRoot,
 	}
 
 	path := executor.saveTaskOutput(wctx, "task-1", "output")

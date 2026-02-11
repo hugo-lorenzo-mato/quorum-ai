@@ -1,6 +1,8 @@
 package workflow
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -94,8 +96,15 @@ func TestBuildAttachmentsContext_WithWorkDir(t *testing.T) {
 			},
 		},
 	}
-	// Pass a workDir to get relative path output
-	result := BuildAttachmentsContext(state, "/tmp/worktree")
+	// Use current working directory to ensure paths are compatible
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get working directory: %v", err)
+	}
+	// Create a subdirectory path that's compatible with the cwd
+	workDir := filepath.Join(cwd, "subdir")
+
+	result := BuildAttachmentsContext(state, workDir)
 	if !strings.Contains(result, "Absolute path") {
 		t.Error("missing absolute path")
 	}

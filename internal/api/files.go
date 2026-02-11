@@ -365,7 +365,8 @@ func validateProjectRelativePath(cleanPath string) error {
 
 	// Also reject Unix-style absolute paths on Windows (e.g., /etc/passwd)
 	// These are not considered absolute by filepath.IsAbs on Windows but are clearly external paths
-	if len(cleanPath) > 0 && cleanPath[0] == '/' {
+	// Note: filepath.Clean() on Windows converts / to \, so check both
+	if len(cleanPath) > 0 && (cleanPath[0] == '/' || cleanPath[0] == '\\') {
 		return os.ErrPermission
 	}
 

@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
@@ -77,7 +78,10 @@ func TestContext_ResolveFilePath_Coverage(t *testing.T) {
 				ctx := (*Context)(nil)
 				result = ctx.ResolveFilePath(tt.path)
 			}
-			if result != tt.expectedSub {
+			// Normalize paths for cross-platform comparison
+			normalizedResult := filepath.ToSlash(result)
+			normalizedExpected := filepath.ToSlash(tt.expectedSub)
+			if normalizedResult != normalizedExpected {
 				t.Errorf("ResolveFilePath() = %q, want %q", result, tt.expectedSub)
 			}
 		})
