@@ -437,6 +437,55 @@ func TestPromptRenderer_RenderVnRefine_V2_NoArbiter(t *testing.T) {
 	}
 }
 
+func TestPromptRenderer_RenderRefinePrompt_TemplateSelection(t *testing.T) {
+	t.Parallel()
+	renderer, err := NewPromptRenderer()
+	if err != nil {
+		t.Fatalf("NewPromptRenderer() error = %v", err)
+	}
+
+	tests := []struct {
+		name     string
+		template string
+		wantV2   bool // true = v2 (CLARIFY), false = v1 (ENHANCE)
+	}{
+		{"default uses v2", "", true},
+		{"explicit v2", "refine-prompt-v2", true},
+		{"v1 expansion", "refine-prompt", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			result, err := renderer.RenderRefinePrompt(RefinePromptParams{
+				OriginalPrompt: "Add a caching layer",
+				Template:       tt.template,
+			})
+			if err != nil {
+				t.Fatalf("RenderRefinePrompt() error = %v", err)
+			}
+			if !strings.Contains(result, "caching layer") {
+				t.Error("result should contain the original prompt")
+			}
+			if tt.wantV2 {
+				if !strings.Contains(result, "CLARIFY") {
+					t.Error("v2 template should contain CLARIFY")
+				}
+				if !strings.Contains(result, "Preserve User Intent") {
+					t.Error("v2 template should contain 'Preserve User Intent'")
+				}
+			} else {
+				if !strings.Contains(result, "ENHANCE") {
+					t.Error("v1 template should contain ENHANCE")
+				}
+				if !strings.Contains(result, "Expand Context") {
+					t.Error("v1 template should contain 'Expand Context'")
+				}
+			}
+		})
+	}
+}
+
 func TestPromptRenderer_NoConstraints(t *testing.T) {
 	renderer, err := NewPromptRenderer()
 	if err != nil {

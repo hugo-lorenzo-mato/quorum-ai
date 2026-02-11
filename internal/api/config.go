@@ -714,8 +714,9 @@ func configToFullResponse(cfg *config.Config) FullConfigResponse {
 			Analyze: AnalyzePhaseConfigResponse{
 				Timeout: cfg.Phases.Analyze.Timeout,
 				Refiner: RefinerConfigResponse{
-					Enabled: cfg.Phases.Analyze.Refiner.Enabled,
-					Agent:   cfg.Phases.Analyze.Refiner.Agent,
+					Enabled:  cfg.Phases.Analyze.Refiner.Enabled,
+					Agent:    cfg.Phases.Analyze.Refiner.Agent,
+					Template: cfg.Phases.Analyze.Refiner.Template,
 				},
 				Moderator: ModeratorConfigResponse{
 					Enabled:             cfg.Phases.Analyze.Moderator.Enabled,
@@ -1032,6 +1033,9 @@ func applyAnalyzePhaseUpdates(cfg *config.AnalyzePhaseConfig, update *AnalyzePha
 		}
 		if update.Refiner.Agent != nil {
 			cfg.Refiner.Agent = *update.Refiner.Agent
+		}
+		if update.Refiner.Template != nil {
+			cfg.Refiner.Template = *update.Refiner.Template
 		}
 	}
 	if update.Moderator != nil {

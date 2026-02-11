@@ -520,6 +520,13 @@ func (v *Validator) validatePhaseTimeout(field, value string) {
 }
 
 func (v *Validator) validateRefiner(cfg *RefinerConfig, agents *AgentsConfig) {
+	// Validate template regardless of enabled state (config can be pre-set)
+	validTemplates := map[string]bool{"refine-prompt": true, "refine-prompt-v2": true}
+	if cfg.Template != "" && !validTemplates[cfg.Template] {
+		v.addError("phases.analyze.refiner.template", cfg.Template,
+			"unknown template; valid values: refine-prompt, refine-prompt-v2")
+	}
+
 	if !cfg.Enabled {
 		return
 	}

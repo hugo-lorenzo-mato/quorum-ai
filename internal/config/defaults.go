@@ -14,6 +14,7 @@ phases:
     refiner:
       enabled: true
       agent: claude
+      template: refine-prompt-v2
     # Analysis synthesizer - consolidates multi-agent analyses
     synthesizer:
       agent: claude

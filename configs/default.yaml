@@ -69,6 +69,8 @@ phases:
       enabled: true
       # Agent to use for refinement (model from agent's phase_models.refine)
       agent: claude
+      # Template: refine-prompt-v2 (preserves scope) or refine-prompt (expands with context)
+      template: refine-prompt-v2
     # Analysis synthesizer - consolidates multi-agent analyses
     synthesizer:
       # Agent to use for synthesis (model from agent's phase_models.analyze)

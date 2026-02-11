@@ -562,8 +562,9 @@ func BuildRunnerConfigFromConfig(cfg *config.Config) *RunnerConfig {
 		WorktreeAutoClean: cfg.Git.Worktree.AutoClean,
 		WorktreeMode:      cfg.Git.Worktree.Mode,
 		Refiner: RefinerConfig{
-			Enabled: cfg.Phases.Analyze.Refiner.Enabled,
-			Agent:   cfg.Phases.Analyze.Refiner.Agent,
+			Enabled:  cfg.Phases.Analyze.Refiner.Enabled,
+			Agent:    cfg.Phases.Analyze.Refiner.Agent,
+			Template: cfg.Phases.Analyze.Refiner.Template,
 		},
 		Synthesizer: SynthesizerConfig{
 			Agent: cfg.Phases.Analyze.Synthesizer.Agent,

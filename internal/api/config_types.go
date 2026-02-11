@@ -102,8 +102,9 @@ type AnalyzePhaseConfigResponse struct {
 
 // RefinerConfigResponse represents refiner configuration.
 type RefinerConfigResponse struct {
-	Enabled bool   `json:"enabled"`
-	Agent   string `json:"agent"`
+	Enabled  bool   `json:"enabled"`
+	Agent    string `json:"agent"`
+	Template string `json:"template"`
 }
 
 // ModeratorConfigResponse represents moderator configuration.
@@ -380,8 +381,9 @@ type AnalyzePhaseConfigUpdate struct {
 
 // RefinerConfigUpdate represents refiner update.
 type RefinerConfigUpdate struct {
-	Enabled *bool   `json:"enabled,omitempty"`
-	Agent   *string `json:"agent,omitempty"`
+	Enabled  *bool   `json:"enabled,omitempty"`
+	Agent    *string `json:"agent,omitempty"`
+	Template *string `json:"template,omitempty"`
 }
 
 // ModeratorConfigUpdate represents moderator update.

@@ -238,6 +238,7 @@ type SynthesizeAnalysisParams struct {
 // RefinePromptParams holds parameters for prompt refinement.
 type RefinePromptParams struct {
 	OriginalPrompt string
+	Template       string
 }
 
 // AnalyzeV1Params holds parameters for V1 analysis prompt.

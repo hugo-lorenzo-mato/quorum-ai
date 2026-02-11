@@ -610,6 +610,9 @@ func TestHandleResetConfig(t *testing.T) {
 	if !response.Config.Phases.Analyze.Refiner.Enabled {
 		t.Error("expected phases.analyze.refiner.enabled to be true")
 	}
+	if response.Config.Phases.Analyze.Refiner.Template != "refine-prompt-v2" {
+		t.Errorf("expected phases.analyze.refiner.template 'refine-prompt-v2', got %q", response.Config.Phases.Analyze.Refiner.Template)
+	}
 	if response.Config.Phases.Analyze.Moderator.Threshold != 0.80 {
 		t.Errorf("expected phases.analyze.moderator.threshold 0.80, got %v", response.Config.Phases.Analyze.Moderator.Threshold)
 	}

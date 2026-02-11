@@ -293,8 +293,9 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 		WorktreeAutoClean: cfg.Git.Worktree.AutoClean,
 		WorktreeMode:      cfg.Git.Worktree.Mode,
 		Refiner: workflow.RefinerConfig{
-			Enabled: refinerEnabled,
-			Agent:   cfg.Phases.Analyze.Refiner.Agent,
+			Enabled:  refinerEnabled,
+			Agent:    cfg.Phases.Analyze.Refiner.Agent,
+			Template: cfg.Phases.Analyze.Refiner.Template,
 		},
 		Synthesizer: workflow.SynthesizerConfig{
 			Agent: cfg.Phases.Analyze.Synthesizer.Agent,

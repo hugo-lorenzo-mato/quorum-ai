@@ -168,6 +168,9 @@ type RefinerConfig struct {
 	// Agent specifies which agent to use for refinement.
 	// Model is resolved from agents.<agent>.phase_models.refine or agents.<agent>.model.
 	Agent string `mapstructure:"agent" yaml:"agent"`
+	// Template selects the refinement prompt template.
+	// "refine-prompt-v2" preserves user intent; "refine-prompt" expands with context.
+	Template string `mapstructure:"template" yaml:"template"`
 }
 
 // ModeratorConfig configures consensus moderation between agents.

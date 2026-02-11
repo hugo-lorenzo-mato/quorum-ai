@@ -365,6 +365,7 @@ func TestPromptRenderer_RenderRefinePrompt(t *testing.T) {
 
 	params := RefinePromptParams{
 		OriginalPrompt: "Add a caching layer",
+		Template:       "refine-prompt-v2",
 	}
 
 	result, err := renderer.RenderRefinePrompt(params)

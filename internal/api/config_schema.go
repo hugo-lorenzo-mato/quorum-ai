@@ -332,6 +332,17 @@ func buildPhasesAnalyzeSection() SchemaSection {
 				DependsOn:   &FieldDependency{Field: "phases.analyze.refiner.enabled", Value: true},
 				Category:    "advanced",
 			},
+			{
+				Path:        "phases.analyze.refiner.template",
+				Type:        "string",
+				Title:       "Refinement Strategy",
+				Description: "Template for prompt refinement",
+				Tooltip:     "refine-prompt-v2 preserves user intent; refine-prompt expands with technical context.",
+				Default:     "refine-prompt-v2",
+				ValidValues: []string{"refine-prompt-v2", "refine-prompt"},
+				DependsOn:   &FieldDependency{Field: "phases.analyze.refiner.enabled", Value: true},
+				Category:    "advanced",
+			},
 			// Moderator
 			{
 				Path:        "phases.analyze.moderator.enabled",

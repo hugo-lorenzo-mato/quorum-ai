@@ -117,6 +117,7 @@ func NewPromptRendererAdapter(renderer *service.PromptRenderer) *PromptRendererA
 func (a *PromptRendererAdapter) RenderRefinePrompt(params RefinePromptParams) (string, error) {
 	return a.renderer.RenderRefinePrompt(service.RefinePromptParams{
 		OriginalPrompt: params.OriginalPrompt,
+		Template:       params.Template,
 	})
 }
 

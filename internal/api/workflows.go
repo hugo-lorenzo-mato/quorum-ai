@@ -109,8 +109,9 @@ type ConsensusDTO struct {
 
 // RefinerDTO exposes prompt refinement configuration.
 type RefinerDTO struct {
-	Enabled bool   `json:"enabled,omitempty"`
-	Agent   string `json:"agent,omitempty"`
+	Enabled  bool   `json:"enabled,omitempty"`
+	Agent    string `json:"agent,omitempty"`
+	Template string `json:"template,omitempty"`
 }
 
 // SynthesizerDTO exposes analysis synthesis configuration.
@@ -931,8 +932,9 @@ func (s *Server) stateToWorkflowResponse(ctx context.Context, state *core.Workfl
 				StagnationThreshold: state.Blueprint.Consensus.StagnationThreshold,
 			},
 			Refiner: &RefinerDTO{
-				Enabled: state.Blueprint.Refiner.Enabled,
-				Agent:   state.Blueprint.Refiner.Agent,
+				Enabled:  state.Blueprint.Refiner.Enabled,
+				Agent:    state.Blueprint.Refiner.Agent,
+				Template: state.Blueprint.Refiner.Template,
 			},
 			Synthesizer: &SynthesizerDTO{
 				Agent: state.Blueprint.Synthesizer.Agent,

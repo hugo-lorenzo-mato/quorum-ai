@@ -98,11 +98,16 @@ func indent(spaces int, s string) string {
 // RefinePromptParams contains parameters for the refine prompt.
 type RefinePromptParams struct {
 	OriginalPrompt string
+	Template       string
 }
 
 // RenderRefinePrompt renders the refine prompt.
 func (r *PromptRenderer) RenderRefinePrompt(params RefinePromptParams) (string, error) {
-	return r.render("refine-prompt", params)
+	tmpl := params.Template
+	if tmpl == "" {
+		tmpl = "refine-prompt-v2"
+	}
+	return r.render(tmpl, params)
 }
 
 // AnalyzeV1Params contains parameters for the analyze-v1 prompt.

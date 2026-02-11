@@ -758,6 +758,44 @@ func TestValidator_IssuesGeneratorInvalidAgent(t *testing.T) {
 	}
 }
 
+func TestValidator_RefinerTemplate(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		template string
+		wantErr  bool
+	}{
+		{"valid v2", "refine-prompt-v2", false},
+		{"valid v1", "refine-prompt", false},
+		{"empty uses default", "", false},
+		{"invalid template", "nonexistent-template", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			cfg := validConfig()
+			cfg.Phases.Analyze.Refiner.Template = tt.template
+
+			v := NewValidator()
+			err := v.Validate(cfg)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("Validate() error = nil, want error for invalid template")
+				}
+				if !strings.Contains(err.Error(), "phases.analyze.refiner.template") {
+					t.Errorf("error = %v, should mention phases.analyze.refiner.template", err)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Validate() error = %v, want nil", err)
+				}
+			}
+		})
+	}
+}
+
 func TestValidator_IssuesGeneratorNegativeMaxBodyLength(t *testing.T) {
 	t.Parallel()
 	cfg := validConfig()

@@ -186,8 +186,9 @@ func InitPhaseRunner(ctx context.Context, phase core.Phase, maxRetries int, dryR
 		// Refiner disabled by default for independent phase runners
 		// (only enabled when running full workflow via `run` command)
 		Refiner: workflow.RefinerConfig{
-			Enabled: false,
-			Agent:   cfg.Phases.Analyze.Refiner.Agent,
+			Enabled:  false,
+			Agent:    cfg.Phases.Analyze.Refiner.Agent,
+			Template: cfg.Phases.Analyze.Refiner.Template,
 		},
 		Synthesizer: workflow.SynthesizerConfig{
 			Agent: cfg.Phases.Analyze.Synthesizer.Agent,
@@ -433,8 +434,9 @@ func buildBlueprint(runnerCfg *workflow.RunnerConfig) *core.Blueprint {
 			StagnationThreshold: runnerCfg.Moderator.StagnationThreshold,
 		},
 		Refiner: core.BlueprintRefiner{
-			Enabled: runnerCfg.Refiner.Enabled,
-			Agent:   runnerCfg.Refiner.Agent,
+			Enabled:  runnerCfg.Refiner.Enabled,
+			Agent:    runnerCfg.Refiner.Agent,
+			Template: runnerCfg.Refiner.Template,
 		},
 		Synthesizer: core.BlueprintSynthesizer{
 			Agent: runnerCfg.Synthesizer.Agent,

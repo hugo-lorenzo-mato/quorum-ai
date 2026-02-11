@@ -297,6 +297,7 @@ func (l *Loader) setDefaults() {
 	l.v.SetDefault("phases.analyze.timeout", "8h")
 	l.v.SetDefault("phases.analyze.refiner.enabled", true)
 	l.v.SetDefault("phases.analyze.refiner.agent", "")
+	l.v.SetDefault("phases.analyze.refiner.template", "refine-prompt-v2")
 	l.v.SetDefault("phases.analyze.moderator.enabled", true)
 	l.v.SetDefault("phases.analyze.moderator.agent", "")
 	l.v.SetDefault("phases.analyze.moderator.threshold", 0.80)

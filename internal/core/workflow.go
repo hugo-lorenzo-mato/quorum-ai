@@ -112,8 +112,9 @@ type BlueprintConsensus struct {
 
 // BlueprintRefiner configures the prompt refinement phase.
 type BlueprintRefiner struct {
-	Enabled bool   `json:"enabled"`
-	Agent   string `json:"agent"`
+	Enabled  bool   `json:"enabled"`
+	Agent    string `json:"agent"`
+	Template string `json:"template,omitempty"`
 }
 
 // BlueprintSynthesizer configures the analysis synthesis phase.

@@ -935,8 +935,9 @@ func (r *Runner) buildBlueprint() *core.Blueprint {
 			StagnationThreshold: r.config.Moderator.StagnationThreshold,
 		},
 		Refiner: core.BlueprintRefiner{
-			Enabled: r.config.Refiner.Enabled,
-			Agent:   r.config.Refiner.Agent,
+			Enabled:  r.config.Refiner.Enabled,
+			Agent:    r.config.Refiner.Agent,
+			Template: r.config.Refiner.Template,
 		},
 		Synthesizer: core.BlueprintSynthesizer{
 			Agent: r.config.Synthesizer.Agent,

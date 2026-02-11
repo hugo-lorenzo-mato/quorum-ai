@@ -13,8 +13,9 @@ import (
 
 // RefinerConfig configures the refiner (prompt refinement) phase.
 type RefinerConfig struct {
-	Enabled bool
-	Agent   string
+	Enabled  bool
+	Agent    string
+	Template string
 	// Model is resolved from AgentPhaseModels[Agent][optimize] at runtime.
 }
 
@@ -89,6 +90,7 @@ func (r *Refiner) Run(ctx context.Context, wctx *Context) error {
 	// Render refinement prompt
 	prompt, err := wctx.Prompts.RenderRefinePrompt(RefinePromptParams{
 		OriginalPrompt: wctx.State.Prompt,
+		Template:       r.config.Template,
 	})
 	if err != nil {
 		return fmt.Errorf("rendering refine prompt: %w", err)

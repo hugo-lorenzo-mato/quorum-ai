@@ -154,13 +154,25 @@ export function AnalyzePhaseCard() {
           onChange={(val) => setField('phases.analyze.refiner.enabled', val)}
         />
         {analyzeConfig.refiner?.enabled && (
-          <SelectSetting
-            label="Refiner Agent"
-            tooltip="Agent used to refine prompts"
-            value={analyzeConfig.refiner?.agent || 'claude'}
-            onChange={(val) => setField('phases.analyze.refiner.agent', val)}
-            options={AGENT_OPTIONS}
-          />
+          <>
+            <SelectSetting
+              label="Refiner Agent"
+              tooltip="Agent used to refine prompts"
+              value={analyzeConfig.refiner?.agent || 'claude'}
+              onChange={(val) => setField('phases.analyze.refiner.agent', val)}
+              options={AGENT_OPTIONS}
+            />
+            <SelectSetting
+              label="Refinement Strategy"
+              tooltip="refine-prompt-v2 preserves user intent; refine-prompt expands with technical context"
+              value={analyzeConfig.refiner?.template || 'refine-prompt-v2'}
+              onChange={(val) => setField('phases.analyze.refiner.template', val)}
+              options={[
+                { value: 'refine-prompt-v2', label: 'Focused (preserves scope)' },
+                { value: 'refine-prompt', label: 'Expansive (adds context)' },
+              ]}
+            />
+          </>
         )}
       </SettingSection>
 
