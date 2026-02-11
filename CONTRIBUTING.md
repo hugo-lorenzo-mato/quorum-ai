@@ -153,10 +153,15 @@ Closes: #87
 
 1. **Before submitting**
 
-   - Ensure all tests pass: `make test`
-   - Ensure linting passes: `make lint`
+   - Run full validation: `./scripts/validate-ci.sh` (catches 90% of CI issues)
+   - Alternatively, run individual checks:
+     - Format: `gofmt -w internal/ cmd/`
+     - Lint: `make lint` or `golangci-lint run --timeout=10m`
+     - Tests: `go test -race ./...`
+     - Frontend: `cd frontend && npm run lint && npm run test:coverage`
    - Update documentation if needed
    - Add tests for new functionality
+   - For test changes, see [TESTING.md](TESTING.md) for cross-platform guidelines
 
 2. **Create the PR**
 
