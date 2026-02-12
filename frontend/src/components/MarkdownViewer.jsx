@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { Children, isValidElement, useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import SyntaxHighlighter from '../lib/syntax';
@@ -25,6 +25,12 @@ function splitFrontmatter(markdown) {
     frontmatter: frontmatterLines.join('\n').trim(),
     body: bodyLines.join('\n').trimStart(),
   };
+}
+
+function getComparisonGridTemplate(children) {
+  const cellCount = Children.toArray(children).filter((child) => isValidElement(child)).length;
+  if (cellCount <= 1) return 'minmax(0, 1fr)';
+  return `minmax(14rem, 1.3fr) repeat(${cellCount - 1}, minmax(10rem, 1fr))`;
 }
 
 function CopyButton({ text }) {
@@ -239,24 +245,38 @@ export default function MarkdownViewer({ markdown }) {
               </div>
             ),
             table: ({ children, ...props }) => (
-              <div className="my-4 overflow-x-auto border border-border rounded-lg">
-                <table className="w-full text-sm" {...props}>
+              <div className="my-4 overflow-x-auto rounded-xl border border-border/70 bg-card/80">
+                <table className="w-full min-w-[40rem] text-sm border-separate border-spacing-0" {...props}>
                   {children}
                 </table>
               </div>
             ),
             thead: ({ children, ...props }) => (
-              <thead className="bg-muted/60" {...props}>
+              <thead className="bg-muted/45" {...props}>
                 {children}
               </thead>
             ),
+            tbody: ({ children, ...props }) => (
+              <tbody className="bg-card" {...props}>
+                {children}
+              </tbody>
+            ),
+            tr: ({ children, ...props }) => (
+              <tr
+                className="grid items-start gap-x-3 md:gap-x-4"
+                style={{ gridTemplateColumns: getComparisonGridTemplate(children) }}
+                {...props}
+              >
+                {children}
+              </tr>
+            ),
             th: ({ children, ...props }) => (
-              <th className="px-3 py-2 text-left font-medium text-foreground whitespace-nowrap" {...props}>
+              <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground border-b border-border/60 whitespace-nowrap" {...props}>
                 {children}
               </th>
             ),
             td: ({ children, ...props }) => (
-              <td className="px-3 py-2 text-foreground/90 align-top" {...props}>
+              <td className="px-4 py-3 text-foreground/90 align-top border-b border-border/50 first:font-medium first:text-foreground" {...props}>
                 {children}
               </td>
             ),

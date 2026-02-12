@@ -3,7 +3,7 @@ import remarkGfm from 'remark-gfm';
 import SyntaxHighlighter from '../lib/syntax';
 import { oneDark, oneLight, dracula, nord } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { useUIStore } from '../stores';
-import { useState, useMemo } from 'react';
+import { Children, isValidElement, useState, useMemo } from 'react';
 import { Copy, CheckCircle2 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -34,6 +34,12 @@ function CodeCopyButton({ text }) {
       )}
     </button>
   );
+}
+
+function getComparisonGridTemplate(children) {
+  const cellCount = Children.toArray(children).filter((child) => isValidElement(child)).length;
+  if (cellCount <= 1) return 'minmax(0, 1fr)';
+  return `minmax(14rem, 1.3fr) repeat(${cellCount - 1}, minmax(10rem, 1fr))`;
 }
 
 export default function ChatMarkdown({ content, isUser }) {
@@ -120,6 +126,59 @@ export default function ChatMarkdown({ content, isUser }) {
         ul: ({ children }) => <ul className="list-disc pl-4 mb-2 space-y-1">{children}</ul>,
         ol: ({ children }) => <ol className="list-decimal pl-4 mb-2 space-y-1">{children}</ol>,
         li: ({ children }) => <li>{children}</li>,
+        table: ({ children, ...props }) => (
+          <div
+            className={cn(
+              'my-3 overflow-x-auto rounded-xl border',
+              isUser ? 'border-primary-foreground/25 bg-black/10' : 'border-border/70 bg-card/80'
+            )}
+          >
+            <table className="w-full min-w-[40rem] text-sm border-separate border-spacing-0" {...props}>
+              {children}
+            </table>
+          </div>
+        ),
+        thead: ({ children, ...props }) => (
+          <thead className={cn(isUser ? 'bg-black/15' : 'bg-muted/45')} {...props}>
+            {children}
+          </thead>
+        ),
+        tbody: ({ children, ...props }) => (
+          <tbody className={cn(isUser ? 'bg-black/5' : 'bg-card')} {...props}>
+            {children}
+          </tbody>
+        ),
+        tr: ({ children, ...props }) => (
+          <tr
+            className="grid items-start gap-x-3 md:gap-x-4"
+            style={{ gridTemplateColumns: getComparisonGridTemplate(children) }}
+            {...props}
+          >
+            {children}
+          </tr>
+        ),
+        th: ({ children, ...props }) => (
+          <th
+            className={cn(
+              'px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.08em] whitespace-nowrap border-b',
+              isUser ? 'text-primary-foreground/85 border-primary-foreground/20' : 'text-muted-foreground border-border/60'
+            )}
+            {...props}
+          >
+            {children}
+          </th>
+        ),
+        td: ({ children, ...props }) => (
+          <td
+            className={cn(
+              'px-4 py-3 align-top border-b first:font-medium',
+              isUser ? 'text-primary-foreground/95 border-primary-foreground/15 first:text-primary-foreground' : 'text-foreground/90 border-border/50 first:text-foreground'
+            )}
+            {...props}
+          >
+            {children}
+          </td>
+        ),
       }}
     >
       {content}
