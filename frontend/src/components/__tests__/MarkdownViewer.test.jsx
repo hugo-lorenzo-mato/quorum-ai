@@ -69,4 +69,23 @@ describe('MarkdownViewer', () => {
       expect(screen.getByRole('button', { name: 'Copied!' })).toBeInTheDocument();
     });
   });
+
+  it('renders markdown tables with css grid rows for comparison layouts', () => {
+    const markdown = [
+      '| Feature | Claude | Codex |',
+      '| --- | --- | --- |',
+      '| Context handling | Strong | Strong |',
+      '| Tool execution | Limited | Strong |',
+    ].join('\n');
+
+    render(<MarkdownViewer markdown={markdown} />);
+
+    const table = screen.getByRole('table');
+    const rows = table.querySelectorAll('tr');
+    expect(rows.length).toBe(3);
+    expect(rows[0]).toHaveClass('grid');
+    expect(rows[1].style.gridTemplateColumns).toContain('repeat(2');
+    expect(screen.getByText('Context handling')).toBeInTheDocument();
+    expect(screen.getByText('Tool execution')).toBeInTheDocument();
+  });
 });
