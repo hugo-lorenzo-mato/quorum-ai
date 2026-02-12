@@ -205,14 +205,14 @@ func (w *WorkflowReportWriter) PromoteModeratorAttempt(round, attempt int, agent
 	}
 
 	// Open source file
-	srcFile, err := os.Open(src)
+	srcFile, err := os.Open(src) // #nosec G304 -- path constructed from internal report directory
 	if err != nil {
 		return fmt.Errorf("opening attempt file %s: %w", src, err)
 	}
 	defer srcFile.Close()
 
 	// Create destination file
-	dstFile, err := os.Create(dst)
+	dstFile, err := os.Create(dst) // #nosec G304 -- path constructed from internal report directory
 	if err != nil {
 		return fmt.Errorf("creating promoted file %s: %w", dst, err)
 	}

@@ -28,7 +28,7 @@ type EffectiveExecutionConfig struct {
 	ProjectRoot string
 }
 
-func resolveConfigMode(projectRoot string, explicitMode string) (string, error) {
+func resolveConfigMode(projectRoot, explicitMode string) (string, error) {
 	mode := strings.TrimSpace(explicitMode)
 	if mode == project.ConfigModeInheritGlobal || mode == project.ConfigModeCustom {
 		return mode, nil
@@ -91,7 +91,7 @@ func ResolveEffectiveExecutionConfig(ctx context.Context) (*EffectiveExecutionCo
 		return nil, fmt.Errorf("checking effective config file: %w", statErr)
 	}
 
-	raw, err := os.ReadFile(configPath)
+	raw, err := os.ReadFile(configPath) // #nosec G304 -- path from trusted config source
 	if err != nil {
 		return nil, fmt.Errorf("reading effective config file: %w", err)
 	}

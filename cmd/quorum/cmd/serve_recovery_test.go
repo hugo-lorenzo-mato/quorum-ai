@@ -22,11 +22,11 @@ import (
 // Only the methods used by recoverZombieWorkflows and migrateWorkflowsToKanban
 // are implemented with real logic; the rest are stubs.
 type mockServeSM struct {
-	listWorkflowsFn      func(ctx context.Context) ([]core.WorkflowSummary, error)
-	loadByIDFn           func(ctx context.Context, id core.WorkflowID) (*core.WorkflowState, error)
-	saveFn               func(ctx context.Context, state *core.WorkflowState) error
-	clearWorkflowRunFn   func(ctx context.Context, id core.WorkflowID) error
-	savedStates          []*core.WorkflowState
+	listWorkflowsFn       func(ctx context.Context) ([]core.WorkflowSummary, error)
+	loadByIDFn            func(ctx context.Context, id core.WorkflowID) (*core.WorkflowState, error)
+	saveFn                func(ctx context.Context, state *core.WorkflowState) error
+	clearWorkflowRunFn    func(ctx context.Context, id core.WorkflowID) error
+	savedStates           []*core.WorkflowState
 	clearedWorkflowRunIDs []core.WorkflowID
 }
 
@@ -37,7 +37,7 @@ func (m *mockServeSM) Save(ctx context.Context, state *core.WorkflowState) error
 	}
 	return nil
 }
-func (m *mockServeSM) Load(context.Context) (*core.WorkflowState, error)   { return nil, nil }
+func (m *mockServeSM) Load(context.Context) (*core.WorkflowState, error) { return nil, nil }
 func (m *mockServeSM) LoadByID(ctx context.Context, id core.WorkflowID) (*core.WorkflowState, error) {
 	if m.loadByIDFn != nil {
 		return m.loadByIDFn(ctx, id)
@@ -72,14 +72,14 @@ func (m *mockServeSM) IsWorkflowRunning(context.Context, core.WorkflowID) (bool,
 	return false, nil
 }
 func (m *mockServeSM) UpdateWorkflowHeartbeat(context.Context, core.WorkflowID) error { return nil }
-func (m *mockServeSM) Exists() bool                                                  { return true }
-func (m *mockServeSM) Backup(context.Context) error                                  { return nil }
-func (m *mockServeSM) Restore(context.Context) (*core.WorkflowState, error)          { return nil, nil }
-func (m *mockServeSM) DeactivateWorkflow(context.Context) error                      { return nil }
-func (m *mockServeSM) ArchiveWorkflows(context.Context) (int, error)                 { return 0, nil }
-func (m *mockServeSM) PurgeAllWorkflows(context.Context) (int, error)                { return 0, nil }
-func (m *mockServeSM) DeleteWorkflow(context.Context, core.WorkflowID) error         { return nil }
-func (m *mockServeSM) UpdateHeartbeat(context.Context, core.WorkflowID) error        { return nil }
+func (m *mockServeSM) Exists() bool                                                   { return true }
+func (m *mockServeSM) Backup(context.Context) error                                   { return nil }
+func (m *mockServeSM) Restore(context.Context) (*core.WorkflowState, error)           { return nil, nil }
+func (m *mockServeSM) DeactivateWorkflow(context.Context) error                       { return nil }
+func (m *mockServeSM) ArchiveWorkflows(context.Context) (int, error)                  { return 0, nil }
+func (m *mockServeSM) PurgeAllWorkflows(context.Context) (int, error)                 { return 0, nil }
+func (m *mockServeSM) DeleteWorkflow(context.Context, core.WorkflowID) error          { return nil }
+func (m *mockServeSM) UpdateHeartbeat(context.Context, core.WorkflowID) error         { return nil }
 func (m *mockServeSM) FindZombieWorkflows(context.Context, time.Duration) ([]*core.WorkflowState, error) {
 	return nil, nil
 }

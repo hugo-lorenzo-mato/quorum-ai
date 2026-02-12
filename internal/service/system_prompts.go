@@ -35,7 +35,7 @@ type systemPromptFrontmatter struct {
 	UsedBy        []string `yaml:"used_by"`
 }
 
-func splitSystemPromptFrontmatter(raw string) (frontmatter string, body string, ok bool) {
+func splitSystemPromptFrontmatter(raw string) (frontmatter, body string, ok bool) {
 	// Normalize Windows line endings for consistent parsing/hashing.
 	s := strings.ReplaceAll(raw, "\r\n", "\n")
 	if !strings.HasPrefix(s, "---\n") {

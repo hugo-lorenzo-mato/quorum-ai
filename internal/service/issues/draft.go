@@ -31,7 +31,7 @@ func (g *Generator) WriteDraftFile(workflowID, fileName string, fm DraftFrontmat
 		return "", fmt.Errorf(errResolvingDraftDir, err)
 	}
 
-	if err := os.MkdirAll(draftDir, 0o755); err != nil {
+	if err := os.MkdirAll(draftDir, 0o750); err != nil {
 		return "", fmt.Errorf("creating draft directory: %w", err)
 	}
 
@@ -59,7 +59,7 @@ func (g *Generator) ReadDraftFile(workflowID, fileName string) (*DraftFrontmatte
 	if err != nil {
 		return nil, "", fmt.Errorf("validating draft file path %q: %w", fileName, err)
 	}
-	content, err := os.ReadFile(filePath)
+	content, err := os.ReadFile(filePath) // #nosec G304 -- path constructed from internal project/report directory
 	if err != nil {
 		return nil, "", fmt.Errorf("reading draft file %s: %w", filePath, err)
 	}
@@ -119,7 +119,7 @@ func (g *Generator) ReadAllDrafts(workflowID string) ([]IssuePreview, error) {
 // It returns skip=true if the file should be skipped (read error or duplicate task ID).
 func (g *Generator) parseDraftEntry(draftDir, draftRelDir string, entry os.DirEntry, seen map[string]bool) (IssuePreview, bool) {
 	filePath := filepath.Join(draftDir, entry.Name())
-	content, err := os.ReadFile(filePath)
+	content, err := os.ReadFile(filePath) // #nosec G304 -- path constructed from internal project/report directory
 	if err != nil {
 		return IssuePreview{}, true
 	}
@@ -165,7 +165,7 @@ func (g *Generator) ReadIssueMapping(workflowID string) (*IssueMapping, error) {
 	}
 
 	mappingPath := filepath.Join(publishedDir, "mapping.json")
-	data, err := os.ReadFile(mappingPath)
+	data, err := os.ReadFile(mappingPath) // #nosec G304 -- path constructed from internal project/report directory
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil

@@ -246,7 +246,7 @@ func (r *RecoveryManager) abortIncompleteOpsInPath(ctx context.Context, path str
 
 	// If .git is a file, read the actual gitdir path
 	if !info.IsDir() {
-		content, err := os.ReadFile(gitDir)
+		content, err := os.ReadFile(gitDir) // #nosec G304 -- path from internal git discovery
 		if err != nil {
 			return fmt.Errorf("read git dir pointer: %w", err)
 		}

@@ -21,14 +21,6 @@ func newTestModel() Model {
 	return updated.(Model)
 }
 
-// newTestModelWithRunner creates a model with a mock workflow runner.
-func newTestModelWithRunner(r *mockWorkflowRunner) Model {
-	m := NewModel(nil, nil, "claude", "default").WithChatConfig(0, 0)
-	m.runner = r
-	updated, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
-	return updated.(Model)
-}
-
 // cleanupModel closes the explorer panel to prevent goroutine leaks.
 // Uses recover to handle the case where Close() was already called (e.g. by Ctrl+C).
 func cleanupModel(t *testing.T, m *Model) {
@@ -39,21 +31,6 @@ func cleanupModel(t *testing.T, m *Model) {
 			m.explorerPanel.Close()
 		}
 	})
-}
-
-// submitInput sets the textarea value and calls handleSubmit, returning the updated model.
-func submitInput(m Model, input string) Model {
-	m.textarea.SetValue(input)
-	updated, cmd := m.handleSubmit()
-	m = updated.(Model)
-	if cmd != nil {
-		msg := cmd()
-		if msg != nil {
-			updated, _ = m.Update(msg)
-			m = updated.(Model)
-		}
-	}
-	return m
 }
 
 // ---------------------------------------------------------------------------

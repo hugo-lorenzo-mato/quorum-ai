@@ -658,69 +658,8 @@ func (s *Server) handleUpdateWorkflow(w http.ResponseWriter, r *http.Request) {
 		state.Prompt = req.Prompt
 	}
 	if req.Blueprint != nil {
-		if state.Blueprint == nil {
-			state.Blueprint = &core.Blueprint{
-				// Keep defaults "unset" so global config can apply unless explicitly overridden.
-			}
-		}
-
-		merged := &BlueprintDTO{
-			ConsensusThreshold:         state.Blueprint.Consensus.Threshold,
-			MaxRetries:                 state.Blueprint.MaxRetries,
-			TimeoutSeconds:             int(state.Blueprint.Timeout.Seconds()),
-			DryRun:                     state.Blueprint.DryRun,
-			ExecutionMode:              state.Blueprint.ExecutionMode,
-			SingleAgentName:            state.Blueprint.SingleAgent.Agent,
-			SingleAgentModel:           state.Blueprint.SingleAgent.Model,
-			SingleAgentReasoningEffort: state.Blueprint.SingleAgent.ReasoningEffort,
-		}
-		if req.Blueprint.ConsensusThreshold != nil {
-			merged.ConsensusThreshold = *req.Blueprint.ConsensusThreshold
-		}
-		if req.Blueprint.MaxRetries != nil {
-			merged.MaxRetries = *req.Blueprint.MaxRetries
-		}
-		if req.Blueprint.TimeoutSeconds != nil {
-			merged.TimeoutSeconds = *req.Blueprint.TimeoutSeconds
-		}
-		if req.Blueprint.ExecutionMode != nil {
-			merged.ExecutionMode = *req.Blueprint.ExecutionMode
-		}
-		if req.Blueprint.SingleAgentName != nil {
-			merged.SingleAgentName = *req.Blueprint.SingleAgentName
-		}
-		if req.Blueprint.SingleAgentModel != nil {
-			merged.SingleAgentModel = *req.Blueprint.SingleAgentModel
-		}
-		if req.Blueprint.SingleAgentReasoningEffort != nil {
-			merged.SingleAgentReasoningEffort = *req.Blueprint.SingleAgentReasoningEffort
-		}
-
-		cfg, err := s.loadConfigForContext(ctx)
-		if err != nil {
-			s.logger.Error("failed to load config for validation", "error", err)
-			respondError(w, http.StatusInternalServerError, "failed to load configuration")
-			return
-		}
-		if validationErr := ValidateBlueprint(merged, cfg.Agents); validationErr != nil {
-			respondJSON(w, http.StatusBadRequest, ValidationErrorResponse{
-				Message: "Workflow configuration validation failed",
-				Errors:  []ValidationFieldError{*validationErr},
-			})
-			return
-		}
-
-		state.Blueprint.ExecutionMode = merged.ExecutionMode
-		state.Blueprint.SingleAgent.Agent = merged.SingleAgentName
-		state.Blueprint.SingleAgent.Model = merged.SingleAgentModel
-		state.Blueprint.SingleAgent.ReasoningEffort = merged.SingleAgentReasoningEffort
-		state.Blueprint.Consensus.Threshold = merged.ConsensusThreshold
-		state.Blueprint.MaxRetries = merged.MaxRetries
-		if merged.TimeoutSeconds > 0 {
-			state.Blueprint.Timeout = time.Duration(merged.TimeoutSeconds) * time.Second
-		} else {
-			// 0 clears any workflow-level timeout override so global config can apply.
-			state.Blueprint.Timeout = 0
+		if err := s.applyBlueprintPatch(ctx, w, state, req.Blueprint); err != nil {
+			return // response already sent by applyBlueprintPatch
 		}
 	}
 	if req.Status != "" {
@@ -740,6 +679,79 @@ func (s *Server) handleUpdateWorkflow(w http.ResponseWriter, r *http.Request) {
 	activeID, _ := stateManager.GetActiveWorkflowID(ctx)
 	response := s.stateToWorkflowResponse(ctx, state, activeID)
 	respondJSON(w, http.StatusOK, response)
+}
+
+// applyBlueprintPatch merges a blueprint patch into the workflow state.
+// Returns a non-nil error (already responded to the client) if validation fails.
+func (s *Server) applyBlueprintPatch(ctx context.Context, w http.ResponseWriter, state *core.WorkflowState, patch *blueprintPatch) error {
+	if state.Blueprint == nil {
+		state.Blueprint = &core.Blueprint{}
+	}
+
+	merged := mergeBlueprintPatch(state.Blueprint, patch)
+
+	cfg, err := s.loadConfigForContext(ctx)
+	if err != nil {
+		s.logger.Error("failed to load config for validation", "error", err)
+		respondError(w, http.StatusInternalServerError, "failed to load configuration")
+		return err
+	}
+	if validationErr := ValidateBlueprint(merged, cfg.Agents); validationErr != nil {
+		respondJSON(w, http.StatusBadRequest, ValidationErrorResponse{
+			Message: "Workflow configuration validation failed",
+			Errors:  []ValidationFieldError{*validationErr},
+		})
+		return fmt.Errorf("blueprint validation failed: %s", validationErr.Message)
+	}
+
+	state.Blueprint.ExecutionMode = merged.ExecutionMode
+	state.Blueprint.SingleAgent.Agent = merged.SingleAgentName
+	state.Blueprint.SingleAgent.Model = merged.SingleAgentModel
+	state.Blueprint.SingleAgent.ReasoningEffort = merged.SingleAgentReasoningEffort
+	state.Blueprint.Consensus.Threshold = merged.ConsensusThreshold
+	state.Blueprint.MaxRetries = merged.MaxRetries
+	if merged.TimeoutSeconds > 0 {
+		state.Blueprint.Timeout = time.Duration(merged.TimeoutSeconds) * time.Second
+	} else {
+		state.Blueprint.Timeout = 0
+	}
+	return nil
+}
+
+// mergeBlueprintPatch creates a merged BlueprintDTO from the current blueprint and a patch.
+func mergeBlueprintPatch(bp *core.Blueprint, patch *blueprintPatch) *BlueprintDTO {
+	merged := &BlueprintDTO{
+		ConsensusThreshold:         bp.Consensus.Threshold,
+		MaxRetries:                 bp.MaxRetries,
+		TimeoutSeconds:             int(bp.Timeout.Seconds()),
+		DryRun:                     bp.DryRun,
+		ExecutionMode:              bp.ExecutionMode,
+		SingleAgentName:            bp.SingleAgent.Agent,
+		SingleAgentModel:           bp.SingleAgent.Model,
+		SingleAgentReasoningEffort: bp.SingleAgent.ReasoningEffort,
+	}
+	if patch.ConsensusThreshold != nil {
+		merged.ConsensusThreshold = *patch.ConsensusThreshold
+	}
+	if patch.MaxRetries != nil {
+		merged.MaxRetries = *patch.MaxRetries
+	}
+	if patch.TimeoutSeconds != nil {
+		merged.TimeoutSeconds = *patch.TimeoutSeconds
+	}
+	if patch.ExecutionMode != nil {
+		merged.ExecutionMode = *patch.ExecutionMode
+	}
+	if patch.SingleAgentName != nil {
+		merged.SingleAgentName = *patch.SingleAgentName
+	}
+	if patch.SingleAgentModel != nil {
+		merged.SingleAgentModel = *patch.SingleAgentModel
+	}
+	if patch.SingleAgentReasoningEffort != nil {
+		merged.SingleAgentReasoningEffort = *patch.SingleAgentReasoningEffort
+	}
+	return merged
 }
 
 // handleDeleteWorkflow deletes a workflow.
@@ -1029,7 +1041,7 @@ func (s *Server) handleDownloadWorkflow(w http.ResponseWriter, r *http.Request) 
 			return err
 		}
 
-		fsFile, err := os.Open(path)
+		fsFile, err := os.Open(path) // #nosec G304 -- path constructed from internal report directory
 		if err != nil {
 			return err
 		}
@@ -1090,50 +1102,7 @@ func (s *Server) HandleRunWorkflow(w http.ResponseWriter, r *http.Request) {
 
 	// Use WorkflowExecutor if available (preferred path with heartbeat support)
 	if s.executor != nil {
-		var execErr error
-		if isResume {
-			execErr = s.executor.Resume(ctx, core.WorkflowID(workflowID))
-		} else {
-			execErr = s.executor.Run(ctx, core.WorkflowID(workflowID))
-		}
-
-		if execErr != nil {
-			// Prefer structured domain errors for correct HTTP status codes.
-			if status, ok := httpStatusForDomainError(execErr); ok {
-				respondError(w, status, execErr.Error())
-				return
-			}
-
-			// Map errors to HTTP status codes
-			errMsg := execErr.Error()
-			switch {
-			case errMsg == "workflow is already running" || errMsg == "workflow execution already in progress":
-				respondError(w, http.StatusConflict, errMsg)
-			case errMsg == "workflow is already completed":
-				respondError(w, http.StatusConflict, errMsg+"; create a new workflow to re-run")
-			case strings.Contains(errMsg, "workflow not found"):
-				respondError(w, http.StatusNotFound, "workflow not found")
-			case strings.Contains(errMsg, "missing configuration"):
-				respondError(w, http.StatusServiceUnavailable, errMsg)
-			default:
-				respondError(w, http.StatusInternalServerError, errMsg)
-			}
-			return
-		}
-
-		// Return 202 Accepted - executor started the workflow
-		response := RunWorkflowResponse{
-			ID:           workflowID,
-			Status:       string(core.WorkflowStatusRunning),
-			CurrentPhase: string(state.CurrentPhase),
-			Prompt:       state.Prompt,
-			Message:      "Workflow execution starting",
-		}
-		if isResume {
-			response.Message = "Workflow execution resuming"
-			response.CurrentPhase = string(core.PhaseExecute)
-		}
-		respondJSON(w, http.StatusAccepted, response)
+		s.runViaExecutor(w, ctx, workflowID, state, isResume)
 		return
 	}
 
@@ -1278,6 +1247,56 @@ func (s *Server) HandleRunWorkflow(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondJSON(w, http.StatusAccepted, response)
+}
+
+// runViaExecutor delegates workflow execution to the WorkflowExecutor (preferred path).
+func (s *Server) runViaExecutor(w http.ResponseWriter, ctx context.Context, workflowID string, state *core.WorkflowState, isResume bool) {
+	var execErr error
+	if isResume {
+		execErr = s.executor.Resume(ctx, core.WorkflowID(workflowID))
+	} else {
+		execErr = s.executor.Run(ctx, core.WorkflowID(workflowID))
+	}
+
+	if execErr != nil {
+		respondWorkflowExecError(w, execErr)
+		return
+	}
+
+	response := RunWorkflowResponse{
+		ID:           workflowID,
+		Status:       string(core.WorkflowStatusRunning),
+		CurrentPhase: string(state.CurrentPhase),
+		Prompt:       state.Prompt,
+		Message:      "Workflow execution starting",
+	}
+	if isResume {
+		response.Message = "Workflow execution resuming"
+		response.CurrentPhase = string(core.PhaseExecute)
+	}
+	respondJSON(w, http.StatusAccepted, response)
+}
+
+// respondWorkflowExecError maps workflow executor errors to HTTP responses.
+func respondWorkflowExecError(w http.ResponseWriter, execErr error) {
+	if status, ok := httpStatusForDomainError(execErr); ok {
+		respondError(w, status, execErr.Error())
+		return
+	}
+
+	errMsg := execErr.Error()
+	switch {
+	case errMsg == "workflow is already running" || errMsg == "workflow execution already in progress":
+		respondError(w, http.StatusConflict, errMsg)
+	case errMsg == "workflow is already completed":
+		respondError(w, http.StatusConflict, errMsg+"; create a new workflow to re-run")
+	case strings.Contains(errMsg, "workflow not found"):
+		respondError(w, http.StatusNotFound, "workflow not found")
+	case strings.Contains(errMsg, "missing configuration"):
+		respondError(w, http.StatusServiceUnavailable, errMsg)
+	default:
+		respondError(w, http.StatusInternalServerError, errMsg)
+	}
 }
 
 // executeWorkflowAsync runs the workflow in a background goroutine.
@@ -2244,34 +2263,8 @@ func (s *Server) HandleExecuteWorkflow(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate state for execute phase
-	switch state.Status {
-	case core.WorkflowStatusRunning:
-		respondError(w, http.StatusConflict, "workflow is already running")
-		return
-	case core.WorkflowStatusCompleted:
-		// Check if there are tasks to execute
-		if state.CurrentPhase != core.PhaseExecute {
-			if state.CurrentPhase == core.PhaseDone {
-				respondError(w, http.StatusConflict, "workflow already fully completed")
-				return
-			}
-			respondError(w, http.StatusConflict, "plan phase must be completed first; use /plan")
-			return
-		}
-		if len(state.Tasks) == 0 {
-			respondError(w, http.StatusConflict, "no tasks to execute; run /plan first")
-			return
-		}
-	case core.WorkflowStatusPaused:
-		// Allow resume from paused state
-	case core.WorkflowStatusFailed:
-		// Allow retry if plan was completed
-		if state.CurrentPhase != core.PhaseExecute && len(state.Tasks) == 0 {
-			respondError(w, http.StatusConflict, "plan phase not completed; use /plan first")
-			return
-		}
-	default:
-		respondError(w, http.StatusConflict, "workflow must complete plan phase first")
+	if err := validateExecutePhaseState(state); err != "" {
+		respondError(w, http.StatusConflict, err)
 		return
 	}
 
@@ -2410,6 +2403,34 @@ func (s *Server) HandleExecuteWorkflow(w http.ResponseWriter, r *http.Request) {
 		Selection:    selectionResp,
 	}
 	respondJSON(w, http.StatusAccepted, response)
+}
+
+// validateExecutePhaseState checks whether a workflow state is valid for execute phase.
+// Returns an empty string if valid, or an error message if not.
+func validateExecutePhaseState(state *core.WorkflowState) string {
+	switch state.Status {
+	case core.WorkflowStatusRunning:
+		return "workflow is already running"
+	case core.WorkflowStatusCompleted:
+		if state.CurrentPhase != core.PhaseExecute {
+			if state.CurrentPhase == core.PhaseDone {
+				return "workflow already fully completed"
+			}
+			return "plan phase must be completed first; use /plan"
+		}
+		if len(state.Tasks) == 0 {
+			return "no tasks to execute; run /plan first"
+		}
+	case core.WorkflowStatusPaused:
+		// Allow resume from paused state
+	case core.WorkflowStatusFailed:
+		if state.CurrentPhase != core.PhaseExecute && len(state.Tasks) == 0 {
+			return "plan phase not completed; use /plan first"
+		}
+	default:
+		return "workflow must complete plan phase first"
+	}
+	return ""
 }
 
 // ReviewRequest is the request body for reviewing an interactive workflow phase.

@@ -209,11 +209,30 @@ func isSQLiteBusy(err error) bool {
 		strings.Contains(errStr, "SQLITE_LOCKED")
 }
 
+// schemaMigration describes a single database migration step.
+type schemaMigration struct {
+	version      int
+	sql          string
+	ignoreErrors []string // Error substrings to ignore (e.g., "duplicate column")
+}
+
+// schemaMigrations is the ordered list of all database migrations.
+var schemaMigrations = []schemaMigration{
+	{1, migrationV1, nil},
+	{2, migrationV2, nil},
+	{3, migrationV3, []string{"duplicate column"}},
+	{4, migrationV4, []string{"duplicate column"}},
+	{5, migrationV5, []string{"already exists"}},
+	{6, migrationV6, []string{"already exists", "duplicate column"}},
+	{7, migrationV7, []string{"already exists", "duplicate column"}},
+	{8, migrationV8, []string{"already exists", "duplicate column"}},
+	{9, migrationV9, []string{"already exists", "duplicate column"}},
+	{10, migrationV10, []string{"already exists", "duplicate column"}},
+	{11, migrationV11, []string{"already exists", "no such column"}},
+}
+
 // migrate runs pending migrations.
-//
-//nolint:gocyclo // Migration stepper is intentionally verbose for clarity.
 func (m *SQLiteStateManager) migrate() error {
-	// Check current schema version
 	var version int
 	err := m.db.QueryRow("SELECT COALESCE(MAX(version), 0) FROM schema_migrations").Scan(&version)
 	if err != nil {
@@ -221,92 +240,32 @@ func (m *SQLiteStateManager) migrate() error {
 		version = 0
 	}
 
-	// Run migrations based on current version
-	if version < 1 {
-		if _, err := m.db.Exec(migrationV1); err != nil {
-			return fmt.Errorf("applying migration v1: %w", err)
+	for _, mig := range schemaMigrations {
+		if version >= mig.version {
+			continue
 		}
-	}
-
-	if version < 2 {
-		if _, err := m.db.Exec(migrationV2); err != nil {
-			return fmt.Errorf("applying migration v2: %w", err)
-		}
-	}
-
-	if version < 3 {
-		// Migration V3 adds title column - ignore error if column already exists
-		_, err := m.db.Exec(migrationV3)
-		if err != nil && !strings.Contains(err.Error(), "duplicate column") {
-			return fmt.Errorf("applying migration v3: %w", err)
-		}
-	}
-
-	if version < 4 {
-		// Migration V4 adds heartbeat columns - ignore error if columns already exist
-		_, err := m.db.Exec(migrationV4)
-		if err != nil && !strings.Contains(err.Error(), "duplicate column") {
-			return fmt.Errorf("applying migration v4: %w", err)
-		}
-	}
-
-	if version < 5 {
-		// Migration V5 adds agent_events column for UI reload recovery
-		_, err := m.db.Exec(migrationV5)
-		if err != nil && !strings.Contains(err.Error(), "already exists") {
-			return fmt.Errorf("applying migration v5: %w", err)
-		}
-	}
-
-	if version < 6 {
-		// Migration V6 adds workflow isolation tables
-		_, err := m.db.Exec(migrationV6)
-		if err != nil && !strings.Contains(err.Error(), "already exists") && !strings.Contains(err.Error(), "duplicate column") {
-			return fmt.Errorf("applying migration v6: %w", err)
-		}
-	}
-
-	if version < 7 {
-		// Migration V7 adds merge tracking fields to tasks table
-		_, err := m.db.Exec(migrationV7)
-		if err != nil && !strings.Contains(err.Error(), "already exists") && !strings.Contains(err.Error(), "duplicate column") {
-			return fmt.Errorf("applying migration v7: %w", err)
-		}
-	}
-
-	if version < 8 {
-		// Migration V8 adds Kanban board support
-		_, err := m.db.Exec(migrationV8)
-		if err != nil && !strings.Contains(err.Error(), "already exists") && !strings.Contains(err.Error(), "duplicate column") {
-			return fmt.Errorf("applying migration v8: %w", err)
-		}
-	}
-
-	if version < 9 {
-		// Migration V9 adds prompt_hash for duplicate detection
-		_, err := m.db.Exec(migrationV9)
-		if err != nil && !strings.Contains(err.Error(), "already exists") && !strings.Contains(err.Error(), "duplicate column") {
-			return fmt.Errorf("applying migration v9: %w", err)
-		}
-	}
-
-	if version < 10 {
-		// Migration V10 adds description column to tasks table
-		_, err := m.db.Exec(migrationV10)
-		if err != nil && !strings.Contains(err.Error(), "already exists") && !strings.Contains(err.Error(), "duplicate column") {
-			return fmt.Errorf("applying migration v10: %w", err)
-		}
-	}
-
-	if version < 11 {
-		// Migration V11 renames config column to blueprint
-		_, err := m.db.Exec(migrationV11)
-		if err != nil && !strings.Contains(err.Error(), "already exists") && !strings.Contains(err.Error(), "no such column") {
-			return fmt.Errorf("applying migration v11: %w", err)
+		if _, err := m.db.Exec(mig.sql); err != nil {
+			if !isIgnorableMigrationError(err, mig.ignoreErrors) {
+				return fmt.Errorf("applying migration v%d: %w", mig.version, err)
+			}
 		}
 	}
 
 	return nil
+}
+
+// isIgnorableMigrationError checks if an error matches any of the ignorable patterns.
+func isIgnorableMigrationError(err error, patterns []string) bool {
+	if len(patterns) == 0 {
+		return false
+	}
+	errStr := err.Error()
+	for _, pattern := range patterns {
+		if strings.Contains(errStr, pattern) {
+			return true
+		}
+	}
+	return false
 }
 
 type saveOptions struct {
@@ -592,148 +551,166 @@ func (m *SQLiteStateManager) LoadByID(ctx context.Context, id core.WorkflowID) (
 	return m.loadWorkflowByID(ctx, id)
 }
 
-//nolint:gocyclo // Multi-table load keeps logic centralized for consistency.
-func (m *SQLiteStateManager) loadWorkflowByID(ctx context.Context, id core.WorkflowID) (*core.WorkflowState, error) {
-	// Load workflow using read connection
-	var state core.WorkflowState
-	var taskOrderJSON, blueprintJSON, metricsJSON sql.NullString
-	var optimizedPrompt sql.NullString
-	var checksum sql.NullString
-	var reportPath sql.NullString
-	var title sql.NullString
-	var agentEventsJSON sql.NullString
-	var workflowBranch sql.NullString
-	// Kanban fields
-	var kanbanColumn, prURL, kanbanLastError sql.NullString
-	var kanbanPosition, prNumber, kanbanExecutionCount sql.NullInt64
-	var kanbanStartedAt, kanbanCompletedAt sql.NullTime
+// workflowSelectQuery is the shared SELECT used by both loadWorkflowByID and atomic LoadByID.
+const workflowSelectQuery = `
+	SELECT id, version, title, status, current_phase, prompt, optimized_prompt,
+	       task_order, blueprint, metrics, checksum, created_at, updated_at, report_path,
+	       agent_events, workflow_branch,
+	       kanban_column, kanban_position, pr_url, pr_number,
+	       kanban_started_at, kanban_completed_at, kanban_execution_count, kanban_last_error
+	FROM workflows WHERE id = ?
+`
 
-	err := m.readDB.QueryRowContext(ctx, `
-		SELECT id, version, title, status, current_phase, prompt, optimized_prompt,
-		       task_order, blueprint, metrics, checksum, created_at, updated_at, report_path,
-		       agent_events, workflow_branch,
-		       kanban_column, kanban_position, pr_url, pr_number,
-		       kanban_started_at, kanban_completed_at, kanban_execution_count, kanban_last_error
-		FROM workflows WHERE id = ?
-	`, id).Scan(
-		&state.WorkflowID, &state.Version, &title, &state.Status, &state.CurrentPhase,
-		&state.Prompt, &optimizedPrompt, &taskOrderJSON, &blueprintJSON, &metricsJSON,
-		&checksum, &state.CreatedAt, &state.UpdatedAt, &reportPath, &agentEventsJSON, &workflowBranch,
-		&kanbanColumn, &kanbanPosition, &prURL, &prNumber,
-		&kanbanStartedAt, &kanbanCompletedAt, &kanbanExecutionCount, &kanbanLastError,
-	)
-	if err == sql.ErrNoRows {
-		return nil, nil // Workflow doesn't exist
-	}
-	if err != nil {
-		return nil, fmt.Errorf("loading workflow: %w", err)
-	}
+// workflowNullableFields holds all nullable columns scanned from the workflows table.
+type workflowNullableFields struct {
+	title, optimizedPrompt, checksum, reportPath, workflowBranch sql.NullString
+	kanbanColumn, prURL, kanbanLastError                         sql.NullString
+	kanbanPosition, prNumber, kanbanExecutionCount               sql.NullInt64
+	kanbanStartedAt, kanbanCompletedAt                           sql.NullTime
+	taskOrderJSON, blueprintJSON, metricsJSON, agentEventsJSON   sql.NullString
+}
 
-	if title.Valid {
-		state.Title = title.String
+// applyNullableWorkflowFields maps nullable DB columns and JSON fields onto a WorkflowState.
+func applyNullableWorkflowFields(state *core.WorkflowState, f *workflowNullableFields) error {
+	if f.title.Valid {
+		state.Title = f.title.String
 	}
-	if optimizedPrompt.Valid {
-		state.OptimizedPrompt = optimizedPrompt.String
+	if f.optimizedPrompt.Valid {
+		state.OptimizedPrompt = f.optimizedPrompt.String
 	}
-	if checksum.Valid {
-		state.Checksum = checksum.String
+	if f.checksum.Valid {
+		state.Checksum = f.checksum.String
 	}
-	if reportPath.Valid {
-		state.ReportPath = reportPath.String
+	if f.reportPath.Valid {
+		state.ReportPath = f.reportPath.String
 	}
-	if workflowBranch.Valid {
-		state.WorkflowBranch = workflowBranch.String
+	if f.workflowBranch.Valid {
+		state.WorkflowBranch = f.workflowBranch.String
 	}
-	// Kanban fields
-	if kanbanColumn.Valid {
-		state.KanbanColumn = kanbanColumn.String
+	if f.kanbanColumn.Valid {
+		state.KanbanColumn = f.kanbanColumn.String
 	}
-	state.KanbanPosition = int(kanbanPosition.Int64)
-	if prURL.Valid {
-		state.PRURL = prURL.String
+	state.KanbanPosition = int(f.kanbanPosition.Int64)
+	if f.prURL.Valid {
+		state.PRURL = f.prURL.String
 	}
-	state.PRNumber = int(prNumber.Int64)
-	if kanbanStartedAt.Valid {
-		state.KanbanStartedAt = &kanbanStartedAt.Time
+	state.PRNumber = int(f.prNumber.Int64)
+	if f.kanbanStartedAt.Valid {
+		state.KanbanStartedAt = &f.kanbanStartedAt.Time
 	}
-	if kanbanCompletedAt.Valid {
-		state.KanbanCompletedAt = &kanbanCompletedAt.Time
+	if f.kanbanCompletedAt.Valid {
+		state.KanbanCompletedAt = &f.kanbanCompletedAt.Time
 	}
-	state.KanbanExecutionCount = int(kanbanExecutionCount.Int64)
-	if kanbanLastError.Valid {
-		state.KanbanLastError = kanbanLastError.String
+	state.KanbanExecutionCount = int(f.kanbanExecutionCount.Int64)
+	if f.kanbanLastError.Valid {
+		state.KanbanLastError = f.kanbanLastError.String
 	}
 
 	// Parse JSON fields
-	if taskOrderJSON.Valid {
-		if err := json.Unmarshal([]byte(taskOrderJSON.String), &state.TaskOrder); err != nil {
-			return nil, fmt.Errorf("unmarshaling task order: %w", err)
+	if f.taskOrderJSON.Valid {
+		if err := json.Unmarshal([]byte(f.taskOrderJSON.String), &state.TaskOrder); err != nil {
+			return fmt.Errorf("unmarshaling task order: %w", err)
 		}
 	}
-	if blueprintJSON.Valid && blueprintJSON.String != "" {
+	if f.blueprintJSON.Valid && f.blueprintJSON.String != "" {
 		state.Blueprint = &core.Blueprint{}
-		if err := json.Unmarshal([]byte(blueprintJSON.String), state.Blueprint); err != nil {
-			return nil, fmt.Errorf("unmarshaling blueprint: %w", err)
+		if err := json.Unmarshal([]byte(f.blueprintJSON.String), state.Blueprint); err != nil {
+			return fmt.Errorf("unmarshaling blueprint: %w", err)
 		}
 	}
-	if metricsJSON.Valid && metricsJSON.String != "" {
+	if f.metricsJSON.Valid && f.metricsJSON.String != "" {
 		state.Metrics = &core.StateMetrics{}
-		if err := json.Unmarshal([]byte(metricsJSON.String), state.Metrics); err != nil {
-			return nil, fmt.Errorf("unmarshaling metrics: %w", err)
+		if err := json.Unmarshal([]byte(f.metricsJSON.String), state.Metrics); err != nil {
+			return fmt.Errorf("unmarshaling metrics: %w", err)
 		}
 	}
-	if agentEventsJSON.Valid && agentEventsJSON.String != "" {
-		if err := json.Unmarshal([]byte(agentEventsJSON.String), &state.AgentEvents); err != nil {
-			return nil, fmt.Errorf("unmarshaling agent events: %w", err)
+	if f.agentEventsJSON.Valid && f.agentEventsJSON.String != "" {
+		if err := json.Unmarshal([]byte(f.agentEventsJSON.String), &state.AgentEvents); err != nil {
+			return fmt.Errorf("unmarshaling agent events: %w", err)
 		}
 	}
+	return nil
+}
 
-	// Load tasks using read connection
+// queryer is implemented by both *sql.DB and *sql.Tx for shared query helpers.
+type queryer interface {
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+}
+
+// loadTasksAndCheckpoints loads tasks and checkpoints for a workflow from the given queryer.
+func (m *SQLiteStateManager) loadTasksAndCheckpoints(ctx context.Context, q queryer, id core.WorkflowID, state *core.WorkflowState) error {
 	state.Tasks = make(map[core.TaskID]*core.TaskState)
-	rows, err := m.readDB.QueryContext(ctx, `
-			SELECT id, phase, name, description, status, cli, model, dependencies,
-			       tokens_in, tokens_out, retries, error,
-			       worktree_path, started_at, completed_at, output,
-			       output_file, model_used, finish_reason, tool_calls,
-			       last_commit, files_modified, branch, resumable, resume_hint,
-			       merge_pending, merge_commit
-			FROM tasks WHERE workflow_id = ?
+	rows, err := q.QueryContext(ctx, `
+		SELECT id, phase, name, description, status, cli, model, dependencies,
+		       tokens_in, tokens_out, retries, error,
+		       worktree_path, started_at, completed_at, output,
+		       output_file, model_used, finish_reason, tool_calls,
+		       last_commit, files_modified, branch, resumable, resume_hint,
+		       merge_pending, merge_commit
+		FROM tasks WHERE workflow_id = ?
 	`, id)
 	if err != nil {
-		return nil, fmt.Errorf("loading tasks: %w", err)
+		return fmt.Errorf("loading tasks: %w", err)
 	}
 	defer rows.Close()
 
 	for rows.Next() {
 		task, err := m.scanTask(rows)
 		if err != nil {
-			return nil, fmt.Errorf("scanning task: %w", err)
+			return fmt.Errorf("scanning task: %w", err)
 		}
 		state.Tasks[task.ID] = task
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterating tasks: %w", err)
+		return fmt.Errorf("iterating tasks: %w", err)
 	}
 
-	// Load checkpoints using read connection
-	cpRows, err := m.readDB.QueryContext(ctx, `
+	cpRows, err := q.QueryContext(ctx, `
 		SELECT id, type, phase, task_id, timestamp, message, data
 		FROM checkpoints WHERE workflow_id = ?
 	`, id)
 	if err != nil {
-		return nil, fmt.Errorf("loading checkpoints: %w", err)
+		return fmt.Errorf("loading checkpoints: %w", err)
 	}
 	defer cpRows.Close()
 
 	for cpRows.Next() {
 		cp, err := m.scanCheckpoint(cpRows)
 		if err != nil {
-			return nil, fmt.Errorf("scanning checkpoint: %w", err)
+			return fmt.Errorf("scanning checkpoint: %w", err)
 		}
 		state.Checkpoints = append(state.Checkpoints, *cp)
 	}
 	if err := cpRows.Err(); err != nil {
-		return nil, fmt.Errorf("iterating checkpoints: %w", err)
+		return fmt.Errorf("iterating checkpoints: %w", err)
+	}
+
+	return nil
+}
+
+func (m *SQLiteStateManager) loadWorkflowByID(ctx context.Context, id core.WorkflowID) (*core.WorkflowState, error) {
+	var state core.WorkflowState
+	var nf workflowNullableFields
+
+	err := m.readDB.QueryRowContext(ctx, workflowSelectQuery, id).Scan(
+		&state.WorkflowID, &state.Version, &nf.title, &state.Status, &state.CurrentPhase,
+		&state.Prompt, &nf.optimizedPrompt, &nf.taskOrderJSON, &nf.blueprintJSON, &nf.metricsJSON,
+		&nf.checksum, &state.CreatedAt, &state.UpdatedAt, &nf.reportPath, &nf.agentEventsJSON, &nf.workflowBranch,
+		&nf.kanbanColumn, &nf.kanbanPosition, &nf.prURL, &nf.prNumber,
+		&nf.kanbanStartedAt, &nf.kanbanCompletedAt, &nf.kanbanExecutionCount, &nf.kanbanLastError,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("loading workflow: %w", err)
+	}
+
+	if err := applyNullableWorkflowFields(&state, &nf); err != nil {
+		return nil, err
+	}
+	if err := m.loadTasksAndCheckpoints(ctx, m.readDB, id, &state); err != nil {
+		return nil, err
 	}
 
 	return &state, nil
@@ -2217,34 +2194,16 @@ func (m *SQLiteStateManager) ExecuteAtomically(ctx context.Context, fn func(core
 }
 
 // LoadByID retrieves a workflow state within the transaction.
-//
-//nolint:gocyclo // Complex aggregation mirrors database schema.
 func (a *sqliteAtomicContext) LoadByID(id core.WorkflowID) (*core.WorkflowState, error) {
 	var state core.WorkflowState
-	var taskOrderJSON, blueprintJSON, metricsJSON sql.NullString
-	var optimizedPrompt sql.NullString
-	var checksum sql.NullString
-	var reportPath sql.NullString
-	var title sql.NullString
-	var agentEventsJSON sql.NullString
-	var workflowBranch sql.NullString
-	var kanbanColumn, prURL, kanbanLastError sql.NullString
-	var kanbanPosition, prNumber, kanbanExecutionCount sql.NullInt64
-	var kanbanStartedAt, kanbanCompletedAt sql.NullTime
+	var nf workflowNullableFields
 
-	err := a.tx.QueryRowContext(a.ctx, `
-		SELECT id, version, title, status, current_phase, prompt, optimized_prompt,
-		       task_order, blueprint, metrics, checksum, created_at, updated_at, report_path,
-		       agent_events, workflow_branch,
-		       kanban_column, kanban_position, pr_url, pr_number,
-		       kanban_started_at, kanban_completed_at, kanban_execution_count, kanban_last_error
-		FROM workflows WHERE id = ?
-	`, id).Scan(
-		&state.WorkflowID, &state.Version, &title, &state.Status, &state.CurrentPhase,
-		&state.Prompt, &optimizedPrompt, &taskOrderJSON, &blueprintJSON, &metricsJSON,
-		&checksum, &state.CreatedAt, &state.UpdatedAt, &reportPath, &agentEventsJSON, &workflowBranch,
-		&kanbanColumn, &kanbanPosition, &prURL, &prNumber,
-		&kanbanStartedAt, &kanbanCompletedAt, &kanbanExecutionCount, &kanbanLastError,
+	err := a.tx.QueryRowContext(a.ctx, workflowSelectQuery, id).Scan(
+		&state.WorkflowID, &state.Version, &nf.title, &state.Status, &state.CurrentPhase,
+		&state.Prompt, &nf.optimizedPrompt, &nf.taskOrderJSON, &nf.blueprintJSON, &nf.metricsJSON,
+		&nf.checksum, &state.CreatedAt, &state.UpdatedAt, &nf.reportPath, &nf.agentEventsJSON, &nf.workflowBranch,
+		&nf.kanbanColumn, &nf.kanbanPosition, &nf.prURL, &nf.prNumber,
+		&nf.kanbanStartedAt, &nf.kanbanCompletedAt, &nf.kanbanExecutionCount, &nf.kanbanLastError,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -2253,109 +2212,11 @@ func (a *sqliteAtomicContext) LoadByID(id core.WorkflowID) (*core.WorkflowState,
 		return nil, fmt.Errorf("loading workflow: %w", err)
 	}
 
-	if title.Valid {
-		state.Title = title.String
+	if err := applyNullableWorkflowFields(&state, &nf); err != nil {
+		return nil, err
 	}
-	if optimizedPrompt.Valid {
-		state.OptimizedPrompt = optimizedPrompt.String
-	}
-	if checksum.Valid {
-		state.Checksum = checksum.String
-	}
-	if reportPath.Valid {
-		state.ReportPath = reportPath.String
-	}
-	if workflowBranch.Valid {
-		state.WorkflowBranch = workflowBranch.String
-	}
-	if kanbanColumn.Valid {
-		state.KanbanColumn = kanbanColumn.String
-	}
-	state.KanbanPosition = int(kanbanPosition.Int64)
-	if prURL.Valid {
-		state.PRURL = prURL.String
-	}
-	state.PRNumber = int(prNumber.Int64)
-	if kanbanStartedAt.Valid {
-		state.KanbanStartedAt = &kanbanStartedAt.Time
-	}
-	if kanbanCompletedAt.Valid {
-		state.KanbanCompletedAt = &kanbanCompletedAt.Time
-	}
-	state.KanbanExecutionCount = int(kanbanExecutionCount.Int64)
-	if kanbanLastError.Valid {
-		state.KanbanLastError = kanbanLastError.String
-	}
-
-	if taskOrderJSON.Valid {
-		if err := json.Unmarshal([]byte(taskOrderJSON.String), &state.TaskOrder); err != nil {
-			return nil, fmt.Errorf("unmarshaling task order: %w", err)
-		}
-	}
-	if blueprintJSON.Valid && blueprintJSON.String != "" {
-		state.Blueprint = &core.Blueprint{}
-		if err := json.Unmarshal([]byte(blueprintJSON.String), state.Blueprint); err != nil {
-			return nil, fmt.Errorf("unmarshaling blueprint: %w", err)
-		}
-	}
-	if metricsJSON.Valid && metricsJSON.String != "" {
-		state.Metrics = &core.StateMetrics{}
-		if err := json.Unmarshal([]byte(metricsJSON.String), state.Metrics); err != nil {
-			return nil, fmt.Errorf("unmarshaling metrics: %w", err)
-		}
-	}
-	if agentEventsJSON.Valid && agentEventsJSON.String != "" {
-		if err := json.Unmarshal([]byte(agentEventsJSON.String), &state.AgentEvents); err != nil {
-			return nil, fmt.Errorf("unmarshaling agent events: %w", err)
-		}
-	}
-
-	// Load tasks within transaction
-	state.Tasks = make(map[core.TaskID]*core.TaskState)
-	rows, err := a.tx.QueryContext(a.ctx, `
-			SELECT id, phase, name, description, status, cli, model, dependencies,
-			       tokens_in, tokens_out, retries, error,
-			       worktree_path, started_at, completed_at, output,
-			       output_file, model_used, finish_reason, tool_calls,
-			       last_commit, files_modified, branch, resumable, resume_hint,
-			       merge_pending, merge_commit
-			FROM tasks WHERE workflow_id = ?
-	`, id)
-	if err != nil {
-		return nil, fmt.Errorf("loading tasks: %w", err)
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		task, err := a.m.scanTask(rows)
-		if err != nil {
-			return nil, fmt.Errorf("scanning task: %w", err)
-		}
-		state.Tasks[task.ID] = task
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterating tasks: %w", err)
-	}
-
-	// Load checkpoints within transaction
-	cpRows, err := a.tx.QueryContext(a.ctx, `
-		SELECT id, type, phase, task_id, timestamp, message, data
-		FROM checkpoints WHERE workflow_id = ?
-	`, id)
-	if err != nil {
-		return nil, fmt.Errorf("loading checkpoints: %w", err)
-	}
-	defer cpRows.Close()
-
-	for cpRows.Next() {
-		cp, err := a.m.scanCheckpoint(cpRows)
-		if err != nil {
-			return nil, fmt.Errorf("scanning checkpoint: %w", err)
-		}
-		state.Checkpoints = append(state.Checkpoints, *cp)
-	}
-	if err := cpRows.Err(); err != nil {
-		return nil, fmt.Errorf("iterating checkpoints: %w", err)
+	if err := a.m.loadTasksAndCheckpoints(a.ctx, a.tx, id, &state); err != nil {
+		return nil, err
 	}
 
 	return &state, nil

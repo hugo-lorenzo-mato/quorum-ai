@@ -666,13 +666,13 @@ func TestStatsPanel_WithData(t *testing.T) {
 	})
 
 	p.SetMachineStats(diagnostics.SystemMetrics{
-		CPUPercent: 55.0,
-		CPUModel:   "Intel i7",
-		CPUCores:   8,
-		CPUThreads: 16,
-		MemTotalMB: 16384,
-		MemUsedMB:  8192,
-		MemPercent: 50.0,
+		CPUPercent:  55.0,
+		CPUModel:    "Intel i7",
+		CPUCores:    8,
+		CPUThreads:  16,
+		MemTotalMB:  16384,
+		MemUsedMB:   8192,
+		MemPercent:  50.0,
 		DiskTotalGB: 500,
 		DiskUsedGB:  250,
 		DiskPercent: 50.0,
@@ -1557,4 +1557,3 @@ func newTestTextInput() textinput.Model {
 	ti.Width = 40
 	return ti
 }
-

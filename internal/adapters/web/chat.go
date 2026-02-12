@@ -414,11 +414,9 @@ func (h *ChatHandler) loadPersistedSessionsFromStore(ctx context.Context, store 
 		existing, exists := h.sessions[sess.ID]
 		if !exists {
 			h.sessions[sess.ID] = loaded
-		} else {
+		} else if len(existing.messages) < len(loaded.messages) || existing.session.UpdatedAt.Before(loaded.session.UpdatedAt) {
 			// Prefer the version with more messages (covers "restart + restore" and multi-process cases).
-			if len(existing.messages) < len(loaded.messages) || existing.session.UpdatedAt.Before(loaded.session.UpdatedAt) {
-				h.sessions[sess.ID] = loaded
-			}
+			h.sessions[sess.ID] = loaded
 		}
 		h.mu.Unlock()
 	}
@@ -944,6 +942,7 @@ Respond helpfully and concisely.`, contextBuilder, fileContext, lastContent)
 		Format:          core.OutputFormatText,
 		Phase:           core.PhaseExecute,
 		ReasoningEffort: opts.reasoningEffort,
+		WorkDir:         opts.projectRoot,
 	}
 
 	result, err := agent.Execute(ctx, execOpts)

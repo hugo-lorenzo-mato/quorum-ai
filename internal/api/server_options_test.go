@@ -942,19 +942,19 @@ func TestBuildConfigSchema_AllSections(t *testing.T) {
 
 	// Verify all expected section IDs are present.
 	expectedIDs := map[string]bool{
-		"log":             false,
-		"chat":            false,
-		"report":          false,
-		"workflow":        false,
-		"state":           false,
-		"agents":          false,
-		"phases.analyze":  false,
-		"phases.plan":     false,
-		"phases.execute":  false,
-		"git":             false,
-		"github":          false,
-		"trace":           false,
-		"diagnostics":     false,
+		"log":            false,
+		"chat":           false,
+		"report":         false,
+		"workflow":       false,
+		"state":          false,
+		"agents":         false,
+		"phases.analyze": false,
+		"phases.plan":    false,
+		"phases.execute": false,
+		"git":            false,
+		"github":         false,
+		"trace":          false,
+		"diagnostics":    false,
 	}
 
 	for _, section := range schema.Sections {

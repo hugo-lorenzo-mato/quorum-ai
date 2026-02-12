@@ -494,7 +494,7 @@ func taskStateToResponse(task *core.TaskState) TaskResponse {
 	}
 }
 
-func applyUpdateTaskRequest(state *core.WorkflowState, task *core.TaskState, req UpdateTaskRequest) (int, string, bool) {
+func applyUpdateTaskRequest(state *core.WorkflowState, task *core.TaskState, req UpdateTaskRequest) (status int, msg string, ok bool) {
 	if req.Name != nil {
 		if *req.Name == "" {
 			return http.StatusBadRequest, "name cannot be empty", false
@@ -525,7 +525,7 @@ func applyUpdateTaskRequest(state *core.WorkflowState, task *core.TaskState, req
 	return 0, "", true
 }
 
-func buildDependenciesForUpdate(state *core.WorkflowState, taskID core.TaskID, deps []string) ([]core.TaskID, int, string, bool) {
+func buildDependenciesForUpdate(state *core.WorkflowState, taskID core.TaskID, deps []string) (result []core.TaskID, status int, msg string, ok bool) {
 	out := make([]core.TaskID, 0, len(deps))
 	for _, d := range deps {
 		depID := core.TaskID(d)

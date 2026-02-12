@@ -231,7 +231,7 @@ func listProjectFiles(projectPath string, includeWorktrees bool) ([]string, erro
 	return files, nil
 }
 
-func tryReadGlobalConfig(path string) ([]byte, int64, bool, error) {
+func tryReadGlobalConfig(path string) (data []byte, mode int64, found bool, err error) {
 	if strings.TrimSpace(path) == "" {
 		return nil, 0, false, nil
 	}
@@ -245,15 +245,15 @@ func tryReadGlobalConfig(path string) ([]byte, int64, bool, error) {
 	if info.IsDir() {
 		return nil, 0, false, fmt.Errorf("global config path is a directory: %s", path)
 	}
-	data, err := os.ReadFile(path) // #nosec G304 -- path resolved by caller
+	data, err = os.ReadFile(path) // #nosec G304 -- path resolved by caller
 	if err != nil {
 		return nil, 0, false, err
 	}
 	return data, int64(info.Mode().Perm()), true, nil
 }
 
-func readFileWithMode(path string) ([]byte, int64, error) {
-	data, err := os.ReadFile(path) // #nosec G304 -- path is discovered from project roots
+func readFileWithMode(path string) (data []byte, mode int64, err error) {
+	data, err = os.ReadFile(path) // #nosec G304 -- path is discovered from project roots
 	if err != nil {
 		return nil, 0, err
 	}

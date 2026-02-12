@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -26,7 +25,6 @@ import (
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/diagnostics"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/events"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/logging"
-	"github.com/hugo-lorenzo-mato/quorum-ai/internal/tui"
 )
 
 // Color palette - modern dark theme (default)
@@ -844,7 +842,6 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 	if msg.Type == tea.KeyEsc && m.showSuggestions {
 		m.showSuggestions = false
 		m.suggestionIndex = 0
-		// Also clear the "/" prefix if that's all there is
 		if m.textarea.Value() == "/" {
 			m.textarea.Reset()
 		}
@@ -853,133 +850,10 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 
 	// Panel navigation mode (tmux-style: Ctrl+z then arrow keys)
 	if m.panelNavMode {
-		refreshPanelNav := func() tea.Cmd {
-			m.panelNavSeq++
-			m.panelNavTill = time.Now().Add(panelNavWindow)
-			return panelNavTimeoutCmd(m.panelNavSeq)
-		}
-
-		focusInput := func() {
-			m.explorerFocus = false
-			m.logsFocus = false
-			m.statsFocus = false
-			m.tokensFocus = false
-			m.inputFocused = true
-			m.textarea.Focus()
-			m.explorerPanel.SetFocused(false)
-		}
-
-		focusLeft := func(prefer string) {
-			if !m.showExplorer && !m.showTokens {
-				return
-			}
-			if !(m.explorerFocus || m.tokensFocus) && prefer == "" {
-				prefer = "explorer"
-			}
-			if prefer == "explorer" && m.showExplorer {
-				m.explorerFocus = true
-				m.tokensFocus = false
-			} else if prefer == "tokens" && m.showTokens {
-				m.tokensFocus = true
-				m.explorerFocus = false
-			} else if m.showExplorer {
-				m.explorerFocus = true
-				m.tokensFocus = false
-			} else {
-				m.tokensFocus = true
-				m.explorerFocus = false
-			}
-			if m.explorerFocus || m.tokensFocus {
-				m.logsFocus = false
-				m.statsFocus = false
-				m.inputFocused = false
-				m.textarea.Blur()
-				m.explorerPanel.SetFocused(m.explorerFocus)
-			}
-		}
-
-		focusRight := func(prefer string) {
-			if !m.showLogs && !m.showStats {
-				return
-			}
-			if !(m.logsFocus || m.statsFocus) && prefer == "" {
-				prefer = "logs"
-			}
-			if prefer == "logs" && m.showLogs {
-				m.logsFocus = true
-				m.statsFocus = false
-			} else if prefer == "stats" && m.showStats {
-				m.statsFocus = true
-				m.logsFocus = false
-			} else if m.showLogs {
-				m.logsFocus = true
-				m.statsFocus = false
-			} else {
-				m.statsFocus = true
-				m.logsFocus = false
-			}
-			if m.logsFocus || m.statsFocus {
-				m.explorerFocus = false
-				m.tokensFocus = false
-				m.inputFocused = false
-				m.textarea.Blur()
-				m.explorerPanel.SetFocused(false)
-			}
-		}
-
-		switch msg.Type {
-		case tea.KeyEsc, tea.KeyEnter, tea.KeySpace:
-			// Exit nav mode and return focus to chat
-			m.panelNavMode = false
-			m.panelNavSeq++
-			focusInput()
-			return m, nil, true
-		case tea.KeyLeft:
-			// Move to left sidebar (keep focus if already there)
-			if !(m.explorerFocus || m.tokensFocus) {
-				focusLeft("")
-			}
-			return m, refreshPanelNav(), true
-		case tea.KeyRight:
-			// Move to right sidebar (keep focus if already there)
-			if !(m.logsFocus || m.statsFocus) {
-				focusRight("")
-			}
-			return m, refreshPanelNav(), true
-		case tea.KeyUp:
-			// Move to top panel in the current stack
-			if m.logsFocus || m.statsFocus {
-				focusRight("logs")
-			} else if m.explorerFocus || m.tokensFocus {
-				focusLeft("explorer")
-			} else if m.showLogs || m.showStats {
-				focusRight("logs")
-			} else {
-				focusLeft("explorer")
-			}
-			return m, refreshPanelNav(), true
-		case tea.KeyDown:
-			// Move to bottom panel in the current stack
-			if m.logsFocus || m.statsFocus {
-				focusRight("stats")
-			} else if m.explorerFocus || m.tokensFocus {
-				focusLeft("tokens")
-			} else if m.showLogs || m.showStats {
-				focusRight("stats")
-			} else {
-				focusLeft("tokens")
-			}
-			return m, refreshPanelNav(), true
-		default:
-			// Any other key cancels panel nav mode and returns focus to input
-			m.panelNavMode = false
-			m.panelNavSeq++
-			focusInput()
-			return m, nil, true
-		}
+		return m.handlePanelNavKeys(msg)
 	}
 
-	// Ctrl+z enters panel navigation mode (tmux-style)
+	// Ctrl+z enters panel navigation mode
 	if msg.Type == tea.KeyCtrlZ {
 		m.panelNavMode = true
 		m.panelNavSeq++
@@ -987,668 +861,73 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		return m, panelNavTimeoutCmd(m.panelNavSeq), true
 	}
 
+	// Core input handling
 	switch msg.Type {
 	case tea.KeyCtrlC:
 		m.quitting = true
-		m.explorerPanel.Close() // Stop file watcher
+		m.explorerPanel.Close()
 		return m, tea.Quit, true
 
 	case tea.KeyEnter:
-		// If dropdown is visible, handle based on suggestion type
 		if m.showSuggestions && len(m.suggestions) > 0 {
-			selected := m.suggestions[m.suggestionIndex]
-
-			switch m.suggestionType {
-			case "agent":
-				// Complete and execute /agent command
-				m.textarea.SetValue("/agent " + selected)
-				m.showSuggestions = false
-				m.suggestionIndex = 0
-				m.suggestionType = ""
-				model, teaCmd := m.handleSubmit()
-				return model, teaCmd, true
-
-			case "model":
-				// Complete and execute /model command
-				m.textarea.SetValue("/model " + selected)
-				m.showSuggestions = false
-				m.suggestionIndex = 0
-				m.suggestionType = ""
-				model, teaCmd := m.handleSubmit()
-				return model, teaCmd, true
-
-			case "workflow":
-				// Complete and execute /load command
-				m.textarea.SetValue("/load " + selected)
-				m.showSuggestions = false
-				m.suggestionIndex = 0
-				m.suggestionType = ""
-				m.workflowCache = nil // Clear cache to refresh on next use
-				model, teaCmd := m.handleSubmit()
-				return model, teaCmd, true
-
-			case "theme":
-				// Complete and execute /theme command
-				m.textarea.SetValue("/theme " + selected)
-				m.showSuggestions = false
-				m.suggestionIndex = 0
-				m.suggestionType = ""
-				model, teaCmd := m.handleSubmit()
-				return model, teaCmd, true
-
-			default:
-				// Command suggestion
-				selectedCmd := m.commands.Get(selected)
-
-				// If command requires arguments, autocomplete like Tab (let user add args)
-				if selectedCmd != nil && selectedCmd.RequiresArg() {
-					m.textarea.SetValue("/" + selected + " ")
-					m.textarea.CursorEnd()
-					m.showSuggestions = false
-					m.suggestionIndex = 0
-					m.suggestionType = ""
-					return m, nil, true
-				}
-
-				// Command doesn't require args - execute immediately
-				m.textarea.SetValue("/" + selected)
-				m.showSuggestions = false
-				m.suggestionIndex = 0
-				m.suggestionType = ""
-				model, teaCmd := m.handleSubmit()
-				return model, teaCmd, true
-			}
+			return m.handleEnterWithSuggestions(msg)
 		}
-		// Otherwise, normal submit
 		if m.textarea.Value() != "" {
 			model, teaCmd := m.handleSubmit()
 			return model, teaCmd, true
 		}
 
 	case tea.KeyTab:
-		// Tab/Ctrl+I always toggles issues panel, closing other overlays if needed
-		if m.showSuggestions && len(m.suggestions) > 0 {
-			// Complete with selected suggestion based on type
-			switch m.suggestionType {
-			case "agent":
-				m.textarea.SetValue("/agent " + m.suggestions[m.suggestionIndex])
-			case "model":
-				m.textarea.SetValue("/model " + m.suggestions[m.suggestionIndex])
-			case "workflow":
-				m.textarea.SetValue("/load " + m.suggestions[m.suggestionIndex])
-			case "theme":
-				m.textarea.SetValue("/theme " + m.suggestions[m.suggestionIndex])
-			default:
-				m.textarea.SetValue("/" + m.suggestions[m.suggestionIndex] + " ")
-			}
-			m.textarea.CursorEnd()
-			m.showSuggestions = false
-			m.suggestionIndex = 0
-			m.suggestionType = ""
-			return m, nil, true
-		}
-		// Close other overlays/focus states before toggling issues panel
-		if m.explorerFocus {
-			m.explorerFocus = false
-			m.explorerPanel.SetFocused(false)
-		}
-		if m.logsFocus {
-			m.logsFocus = false
-		}
-		if m.tokensFocus {
-			m.tokensFocus = false
-		}
-		if m.diffView.IsVisible() {
-			m.diffView.Hide()
-		}
-		if m.historySearch.IsVisible() {
-			m.historySearch.Hide()
-		}
-		m.inputFocused = true
-		m.textarea.Focus()
-		m.tasksPanel.Toggle()
-		return m, nil, true
+		return m.handleTabKey(msg)
 
 	case tea.KeyUp:
-		if m.showSuggestions && len(m.suggestions) > 0 {
-			m.suggestionIndex--
-			if m.suggestionIndex < 0 {
-				m.suggestionIndex = len(m.suggestions) - 1
-			}
-			return m, nil, true
+		if newModel, cmd, handled := m.handleSuggestionNav(msg); handled {
+			return newModel, cmd, handled
 		}
 
 	case tea.KeyDown:
-		if m.showSuggestions && len(m.suggestions) > 0 {
-			m.suggestionIndex++
-			if m.suggestionIndex >= len(m.suggestions) {
-				m.suggestionIndex = 0
-			}
-			return m, nil, true
+		if newModel, cmd, handled := m.handleSuggestionNav(msg); handled {
+			return newModel, cmd, handled
 		}
 
 	case tea.KeyEsc:
-		// Note: showSuggestions is handled at the top of this function
-		if m.explorerFocus && m.showExplorer {
-			// Close explorer or return focus to input
-			m.explorerFocus = false
-			m.inputFocused = true
-			m.textarea.Focus()
-			m.explorerPanel.SetFocused(false)
-			return m, nil, true
-		} else if m.logsFocus && m.showLogs {
-			// Return focus from logs to input
-			m.logsFocus = false
-			m.inputFocused = true
-			m.textarea.Focus()
-			return m, nil, true
-		} else if m.pendingInputRequest != nil {
-			if m.controlPlane != nil {
-				_ = m.controlPlane.CancelUserInput(m.pendingInputRequest.ID)
-			}
-			m.pendingInputRequest = nil
-			m.history.Add(NewSystemMessage("Input cancelled"))
-			m.updateViewport()
-			return m, nil, true
-		} else if m.inputFocused && m.textarea.Value() != "" {
-			// Clear input text with Escape when nothing else is active
-			m.textarea.Reset()
-			m.showSuggestions = false
-			m.recalculateLayout() // Recalculate since input height changed
-			return m, nil, true
+		if newModel, cmd, handled := m.handleEscapeInContext(msg); handled {
+			return newModel, cmd, handled
 		}
 
-	case tea.KeyCtrlAt: // Ctrl+Space sends NUL (Ctrl+@) in most terminals
-		// Ctrl+Space or Ctrl+@ to force show autocomplete (not during streaming)
-		if m.streaming || m.workflowRunning {
-			return m, nil, true
-		}
-		val := m.textarea.Value()
-		if val == "" {
-			m.textarea.SetValue("/")
-			val = "/"
-		}
-		if strings.HasPrefix(val, "/") {
-			m.suggestions = m.commands.Suggest(val)
-			m.showSuggestions = len(m.suggestions) > 0
-			m.suggestionIndex = 0
-			return m, nil, true
-		}
+	case tea.KeyCtrlAt:
+		return m.handleCtrlSpaceKey(msg)
 
 	case tea.KeyCtrlY:
-		// Copy last agent response to clipboard
 		return m.copyLastResponse()
 
-	case tea.KeyCtrlL:
-		// Toggle logs panel
-		m.showLogs = !m.showLogs
-		if m.showLogs {
-			m.logsFocus = true
-			m.explorerFocus = false
-			m.tokensFocus = false
-			m.inputFocused = false
-			m.textarea.Blur()
-		} else {
-			m.logsFocus = false
-			m.inputFocused = true
-			m.textarea.Focus()
+	case tea.KeyCtrlL, tea.KeyCtrlE, tea.KeyCtrlR, tea.KeyCtrlT,
+		tea.KeyCtrlX, tea.KeyCtrlQ, tea.KeyCtrlK, tea.KeyCtrlD, tea.KeyCtrlH:
+		if newModel, cmd, handled := m.handlePanelToggleKeys(msg); handled {
+			return newModel, cmd, handled
 		}
-		// Recalculate layout
-		if m.width > 0 && m.height > 0 {
-			m.recalculateLayout()
-		}
-		return m, nil, true
-
-	case tea.KeyCtrlE:
-		// Toggle explorer panel
-		m.showExplorer = !m.showExplorer
-		if m.showExplorer {
-			m.explorerFocus = true
-			m.tokensFocus = false
-			m.inputFocused = false
-			m.textarea.Blur()
-			m.explorerPanel.SetFocused(true)
-		} else {
-			m.explorerFocus = false
-			m.inputFocused = true
-			m.textarea.Focus()
-			m.explorerPanel.SetFocused(false)
-		}
-		// Recalculate layout
-		if m.width > 0 && m.height > 0 {
-			m.recalculateLayout()
-		}
-		return m, nil, true
-
-	case tea.KeyCtrlR:
-		// Toggle stats panel (resources)
-		m.showStats = !m.showStats
-		if m.showStats {
-			m.statsFocus = true
-			m.logsFocus = false
-			m.tokensFocus = false
-			m.explorerFocus = false
-			m.inputFocused = false
-			m.textarea.Blur()
-			m.explorerPanel.SetFocused(false)
-		} else {
-			m.statsFocus = false
-			m.inputFocused = true
-			m.textarea.Focus()
-		}
-		// Recalculate layout
-		if m.width > 0 && m.height > 0 {
-			m.recalculateLayout()
-		}
-		return m, nil, true
-
-	case tea.KeyCtrlT:
-		// Toggle tokens panel (left sidebar)
-		m.showTokens = !m.showTokens
-		if m.showTokens {
-			m.tokensFocus = true
-			m.explorerFocus = false
-			m.logsFocus = false
-			m.statsFocus = false
-			m.inputFocused = false
-			m.textarea.Blur()
-			m.explorerPanel.SetFocused(false)
-		} else {
-			m.tokensFocus = false
-			m.inputFocused = true
-			m.textarea.Focus()
-		}
-		// Recalculate layout
-		if m.width > 0 && m.height > 0 {
-			m.recalculateLayout()
-		}
-		return m, nil, true
-
-	case tea.KeyCtrlX:
-		// Cancel current operation (streaming or workflow)
-		if m.streaming || m.workflowRunning {
-			if m.cancelFunc != nil {
-				m.cancelFunc()
-				m.cancelFunc = nil
-			}
-			if m.controlPlane != nil && m.workflowRunning {
-				m.controlPlane.Cancel()
-			}
-			wasStreaming := m.streaming
-			wasWorkflow := m.workflowRunning
-			m.streaming = false
-			m.workflowRunning = false
-
-			if wasWorkflow {
-				m.workflowPhase = "idle"
-				// Reset agent states
-				for _, a := range m.agentInfos {
-					if a.Status == AgentStatusRunning {
-						a.Status = AgentStatusIdle
-					}
-				}
-				m.logsPanel.AddWarn("system", "Workflow interrupted by user (Ctrl+X)")
-				m.history.Add(NewSystemMessage("Workflow interrupted"))
-			} else if wasStreaming {
-				m.logsPanel.AddWarn("system", "Request interrupted by user (Ctrl+X)")
-				m.history.Add(NewSystemMessage("Request interrupted"))
-			}
-			m.updateViewport()
-			return m, nil, true
-		}
-
-	case tea.KeyCtrlQ, tea.KeyCtrlK:
-		// Toggle quorum panel
-		m.consensusPanel.Toggle()
-		return m, nil, true
-
-	// Note: tea.KeyTab is handled earlier in this switch (line ~913) for suggestions
-	// Additional Tab handling for issues panel moved there.
-
-	case tea.KeyCtrlD:
-		// Toggle diff view
-		if m.diffView.HasContent() {
-			m.diffView.Toggle()
-		}
-		return m, nil, true
-
-	case tea.KeyCtrlH:
-		// Toggle history search
-		m.historySearch.Toggle()
-		if m.historySearch.IsVisible() {
-			m.inputFocused = false
-			m.textarea.Blur()
-		} else {
-			m.inputFocused = true
-			m.textarea.Focus()
-		}
-		return m, nil, true
 	}
 
-	// Handle ? for shortcuts overlay (only when input is empty)
-	if msg.String() == "?" && m.textarea.Value() == "" {
-		m.shortcutsOverlay.Toggle()
-		return m, nil, true
+	// Overlay navigation (?, F1, Escape-close-overlays, history search, diff view)
+	if newModel, cmd, handled := m.handleOverlayNavKeys(msg); handled {
+		return newModel, cmd, handled
 	}
 
-	// Handle F1 for shortcuts overlay (always works)
-	if msg.Type == tea.KeyF1 {
-		m.shortcutsOverlay.Toggle()
-		return m, nil, true
-	}
-
-	// F2/F3 previously used for cost/stats overlays - now integrated into logs footer
-
-	// Close any visible overlays on Escape
-	if msg.Type == tea.KeyEsc {
-		if m.shortcutsOverlay.IsVisible() {
-			m.shortcutsOverlay.Hide()
-			return m, nil, true
-		}
-		if m.historySearch.IsVisible() {
-			m.historySearch.Hide()
-			m.inputFocused = true
-			m.textarea.Focus()
-			return m, nil, true
-		}
-		if m.diffView.IsVisible() {
-			m.diffView.Hide()
-			return m, nil, true
-		}
-		if m.consensusPanel.IsVisible() {
-			m.consensusPanel.Toggle()
-			return m, nil, true
-		}
-		if m.tasksPanel.IsVisible() {
-			m.tasksPanel.Hide()
-			return m, nil, true
-		}
-		// Note: fileViewer uses 'q' to close, not Escape
-	}
-
-	// Handle file viewer navigation when visible
+	// File viewer (exclusive when visible)
 	if m.fileViewer.IsVisible() {
-		switch msg.Type {
-		case tea.KeyUp:
-			m.fileViewer.ScrollUp()
-			return m, nil, true
-		case tea.KeyDown:
-			m.fileViewer.ScrollDown()
-			return m, nil, true
-		case tea.KeyLeft:
-			m.fileViewer.ScrollLeft()
-			return m, nil, true
-		case tea.KeyRight:
-			m.fileViewer.ScrollRight()
-			return m, nil, true
-		case tea.KeyPgUp:
-			m.fileViewer.PageUp()
-			return m, nil, true
-		case tea.KeyPgDown:
-			m.fileViewer.PageDown()
-			return m, nil, true
-		}
-		switch msg.String() {
-		case "q":
-			m.fileViewer.Hide()
-			return m, nil, true
-		case "e":
-			// Open file in editor (config > $EDITOR > $VISUAL > vi)
-			filePath := m.fileViewer.GetFilePath()
-			if filePath != "" {
-				editor := m.editorCmd
-				if editor == "" {
-					editor = os.Getenv("EDITOR")
-				}
-				if editor == "" {
-					editor = os.Getenv("VISUAL")
-				}
-				if editor == "" {
-					editor = "vi" // fallback
-				}
-				editorPath, err := exec.LookPath(editor)
-				if err != nil {
-					m.logsPanel.AddError("editor", fmt.Sprintf("Editor not found: %s", editor))
-					return m, nil, true
-				}
-				m.fileViewer.Hide()
-				// #nosec G204 -- editor is user-configured and resolved via LookPath
-				cmd := exec.Command(editorPath, filePath)
-				return m, tea.ExecProcess(cmd, func(err error) tea.Msg {
-					return editorFinishedMsg{filePath: filePath, err: err}
-				}), true
-			}
-			return m, nil, true
-		case "h":
-			m.fileViewer.ScrollLeft()
-			return m, nil, true
-		case "l":
-			m.fileViewer.ScrollRight()
-			return m, nil, true
-		case "0":
-			m.fileViewer.ScrollHome()
-			return m, nil, true
-		case "$":
-			m.fileViewer.ScrollEnd()
-			return m, nil, true
-		case "g":
-			m.fileViewer.ScrollTop()
-			return m, nil, true
-		case "G":
-			m.fileViewer.ScrollBottom()
-			return m, nil, true
-		}
-		// Block other keys when file viewer is open
-		return m, nil, true
+		return m.handleFileViewerKeys(msg)
 	}
 
-	// Handle history search navigation when visible
-	if m.historySearch.IsVisible() {
-		switch msg.Type {
-		case tea.KeyUp:
-			m.historySearch.MoveUp()
-			return m, nil, true
-		case tea.KeyDown:
-			m.historySearch.MoveDown()
-			return m, nil, true
-		case tea.KeyEnter:
-			// Select command and insert into textarea
-			selected := m.historySearch.GetSelected()
-			if selected != "" {
-				m.textarea.SetValue(selected)
-				m.textarea.CursorEnd()
-			}
-			m.historySearch.Hide()
-			m.inputFocused = true
-			m.textarea.Focus()
-			return m, nil, true
-		default:
-			// Pass to history search input
-			m.historySearch.UpdateInput(msg)
-			return m, nil, true
-		}
-	}
-
-	// Handle diff view navigation when visible
-	if m.diffView.IsVisible() {
-		switch msg.Type {
-		case tea.KeyUp:
-			m.diffView.ScrollUp()
-			return m, nil, true
-		case tea.KeyDown:
-			m.diffView.ScrollDown()
-			return m, nil, true
-		case tea.KeyTab:
-			m.diffView.NextPair()
-			return m, nil, true
-		case tea.KeyLeft, tea.KeyRight:
-			// Switch agent pair
-			if msg.Type == tea.KeyLeft {
-				m.diffView.PrevPair()
-			} else {
-				m.diffView.NextPair()
-			}
-			return m, nil, true
-		}
-	}
-
-	// Handle explorer navigation when it has focus
+	// Explorer navigation (when focused)
 	if m.explorerFocus && m.showExplorer {
-		switch msg.Type {
-		case tea.KeyUp:
-			m.explorerPanel.MoveUp()
-			return m, nil, true
-		case tea.KeyDown:
-			m.explorerPanel.MoveDown()
-			return m, nil, true
-		case tea.KeyLeft:
-			// Collapse directory or go up
-			entry := m.explorerPanel.GetSelectedEntry()
-			if entry != nil && entry.Type == FileTypeDir && entry.Expanded {
-				m.explorerPanel.Toggle()
-			} else {
-				m.explorerPanel.GoUp()
-			}
-			return m, nil, true
-		case tea.KeyRight:
-			// Expand directory
-			entry := m.explorerPanel.GetSelectedEntry()
-			if entry != nil && entry.Type == FileTypeDir && !entry.Expanded {
-				m.explorerPanel.Toggle()
-			}
-			return m, nil, true
-		case tea.KeyEnter:
-			// Enter directory or open file viewer
-			path := m.explorerPanel.Enter()
-			if path != "" {
-				// File selected - open in file viewer
-				if err := m.fileViewer.SetFile(path); err != nil {
-					m.logsPanel.AddError("explorer", "Cannot open: "+err.Error())
-				} else {
-					m.fileViewer.Show()
-				}
-			}
-			return m, nil, true
-		case tea.KeyTab:
-			// Insert selected path into chat with @ prefix and switch focus
-			relPath := m.explorerPanel.GetSelectedRelativePath()
-			if relPath != "" {
-				// Insert path reference with @ prefix into textarea
-				currentValue := m.textarea.Value()
-				pathRef := "@" + relPath
-				if currentValue != "" && !strings.HasSuffix(currentValue, " ") && !strings.HasSuffix(currentValue, "\n") {
-					pathRef = " " + pathRef
-				}
-				m.textarea.SetValue(currentValue + pathRef)
-				// Move cursor to end
-				m.textarea.CursorEnd()
-			}
-			m.explorerFocus = false
-			m.inputFocused = true
-			m.textarea.Focus()
-			m.explorerPanel.SetFocused(false)
-			return m, nil, true
+		if newModel, cmd, handled := m.handleExplorerKeys(msg); handled {
+			return newModel, cmd, handled
 		}
 	}
 
-	// Handle token panel scrolling when it has focus
-	if m.tokensFocus && m.showTokens {
-		switch msg.Type {
-		case tea.KeyUp:
-			m.tokenPanel.ScrollUp()
-			return m, nil, true
-		case tea.KeyDown:
-			m.tokenPanel.ScrollDown()
-			return m, nil, true
-		case tea.KeyPgUp:
-			m.tokenPanel.PageUp()
-			return m, nil, true
-		case tea.KeyPgDown:
-			m.tokenPanel.PageDown()
-			return m, nil, true
-		case tea.KeyHome:
-			m.tokenPanel.GotoTop()
-			return m, nil, true
-		case tea.KeyEnd:
-			m.tokenPanel.GotoBottom()
-			return m, nil, true
-		case tea.KeyTab:
-			// Switch focus back to input
-			m.tokensFocus = false
-			m.inputFocused = true
-			m.textarea.Focus()
-			return m, nil, true
-		}
-	}
-
-	// Handle stats panel scrolling when it has focus
-	if m.statsFocus && m.showStats {
-		switch msg.Type {
-		case tea.KeyUp:
-			m.statsPanel.ScrollUp()
-			return m, nil, true
-		case tea.KeyDown:
-			m.statsPanel.ScrollDown()
-			return m, nil, true
-		case tea.KeyPgUp:
-			m.statsPanel.PageUp()
-			return m, nil, true
-		case tea.KeyPgDown:
-			m.statsPanel.PageDown()
-			return m, nil, true
-		case tea.KeyHome:
-			m.statsPanel.GotoTop()
-			return m, nil, true
-		case tea.KeyEnd:
-			m.statsPanel.GotoBottom()
-			return m, nil, true
-		case tea.KeyTab:
-			// Switch focus back to input
-			m.statsFocus = false
-			m.inputFocused = true
-			m.textarea.Focus()
-			return m, nil, true
-		}
-	}
-
-	// Handle logs panel scrolling when it has focus
-	if m.logsFocus && m.showLogs {
-		switch msg.Type {
-		case tea.KeyUp:
-			m.logsPanel.ScrollUp()
-			return m, nil, true
-		case tea.KeyDown:
-			m.logsPanel.ScrollDown()
-			return m, nil, true
-		case tea.KeyPgUp:
-			m.logsPanel.PageUp()
-			return m, nil, true
-		case tea.KeyPgDown:
-			m.logsPanel.PageDown()
-			return m, nil, true
-		case tea.KeyHome:
-			m.logsPanel.GotoTop()
-			return m, nil, true
-		case tea.KeyEnd:
-			m.logsPanel.GotoBottom()
-			return m, nil, true
-		case tea.KeyTab:
-			// Switch focus back to input
-			m.logsFocus = false
-			m.inputFocused = true
-			m.textarea.Focus()
-			return m, nil, true
-		case tea.KeyRunes:
-			// 'c' or 'y' to copy logs when logs panel is focused
-			if len(msg.Runes) == 1 && (msg.Runes[0] == 'c' || msg.Runes[0] == 'y') {
-				return m.copyLogsToClipboard()
-			}
-		}
-	}
-
-	// Handle Ctrl+Shift+C for copy (some terminals)
-	if msg.String() == "ctrl+shift+c" {
-		return m.copyLastResponse()
+	// Focused panel scrolling (tokens, stats, logs) + copy
+	if newModel, cmd, handled := m.handleFocusedPanelKeys(msg); handled {
+		return newModel, cmd, handled
 	}
 
 	return m, nil, false
@@ -1685,140 +964,12 @@ func (m Model) handleMouseClick(x, y int) (tea.Model, tea.Cmd, bool) {
 
 	// Check if click is in left sidebar
 	if showLeftSidebar && x < leftSidebarWidth {
-		if m.showExplorer && m.showTokens {
-			explorerHeight := m.explorerPanel.Height()
-			if y < explorerHeight {
-				if !m.explorerFocus {
-					m.explorerFocus = true
-					m.tokensFocus = false
-					m.logsFocus = false
-					m.statsFocus = false
-					m.inputFocused = false
-					m.textarea.Blur()
-					m.explorerPanel.SetFocused(true)
-					return m, nil, true
-				}
-				return m, nil, false
-			}
-			// Token panel area
-			if !m.tokensFocus {
-				m.tokensFocus = true
-				m.explorerFocus = false
-				m.logsFocus = false
-				m.statsFocus = false
-				m.inputFocused = false
-				m.textarea.Blur()
-				m.explorerPanel.SetFocused(false)
-				return m, nil, true
-			}
-			// Already focused on tokens - clicking again returns to main
-			m.tokensFocus = false
-			m.inputFocused = true
-			m.textarea.Focus()
-			return m, nil, true
-		}
-		if m.showExplorer {
-			if !m.explorerFocus {
-				m.explorerFocus = true
-				m.tokensFocus = false
-				m.logsFocus = false
-				m.statsFocus = false
-				m.inputFocused = false
-				m.textarea.Blur()
-				m.explorerPanel.SetFocused(true)
-				return m, nil, true
-			}
-			return m, nil, false // Already focused, let it handle internally
-		}
-		if m.showTokens {
-			if !m.tokensFocus {
-				m.tokensFocus = true
-				m.explorerFocus = false
-				m.logsFocus = false
-				m.statsFocus = false
-				m.inputFocused = false
-				m.textarea.Blur()
-				m.explorerPanel.SetFocused(false)
-				return m, nil, true
-			}
-			m.tokensFocus = false
-			m.inputFocused = true
-			m.textarea.Focus()
-			return m, nil, true
-		}
+		return m.handleLeftSidebarClick(y)
 	}
 
 	// Check if click is in right sidebar (logs/stats)
 	if (m.showLogs || m.showStats) && x > mainEnd {
-		if m.showLogs && m.showStats {
-			logsHeight := m.logsPanel.Height()
-			if y < logsHeight {
-				// Logs area
-				if !m.logsFocus {
-					m.logsFocus = true
-					m.statsFocus = false
-					m.explorerFocus = false
-					m.tokensFocus = false
-					m.inputFocused = false
-					m.textarea.Blur()
-					m.explorerPanel.SetFocused(false)
-					return m, nil, true
-				}
-				m.logsFocus = false
-				m.inputFocused = true
-				m.textarea.Focus()
-				return m, nil, true
-			}
-			// Stats area
-			if !m.statsFocus {
-				m.statsFocus = true
-				m.logsFocus = false
-				m.explorerFocus = false
-				m.tokensFocus = false
-				m.inputFocused = false
-				m.textarea.Blur()
-				m.explorerPanel.SetFocused(false)
-				return m, nil, true
-			}
-			m.statsFocus = false
-			m.inputFocused = true
-			m.textarea.Focus()
-			return m, nil, true
-		}
-		if m.showLogs {
-			// Logs only
-			if !m.logsFocus {
-				m.logsFocus = true
-				m.statsFocus = false
-				m.explorerFocus = false
-				m.tokensFocus = false
-				m.inputFocused = false
-				m.textarea.Blur()
-				m.explorerPanel.SetFocused(false)
-				return m, nil, true
-			}
-			m.logsFocus = false
-			m.inputFocused = true
-			m.textarea.Focus()
-			return m, nil, true
-		}
-		if m.showStats {
-			// Stats only
-			if !m.statsFocus {
-				m.statsFocus = true
-				m.logsFocus = false
-				m.explorerFocus = false
-				m.tokensFocus = false
-				m.inputFocused = false
-				m.textarea.Blur()
-				m.explorerPanel.SetFocused(false)
-				return m, nil, true
-			}
-			m.statsFocus = false
-			m.inputFocused = true
-			m.textarea.Focus()
-			return m, nil, true
-		}
+		return m.handleRightSidebarClick(y)
 	}
 
 	// Click is in Main content area - return focus to chat input
@@ -2187,480 +1338,103 @@ func (m *Model) getWorkflowDescription(workflowID string) string {
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		newModel, cmd, handled := m.handleKeyMsg(msg)
-		if handled {
-			return newModel, cmd
-		}
-
-	case tea.MouseMsg:
-		// Handle mouse clicks for panel focus switching
-		if msg.Action == tea.MouseActionPress && msg.Button == tea.MouseButtonLeft {
-			newModel, cmd, handled := m.handleMouseClick(msg.X, msg.Y)
+	// Dispatch workflow-related messages first
+	if cmd, handled := m.handleWorkflowMsg(msg); handled {
+		cmds = append(cmds, cmd)
+	} else {
+		// Handle system/UI events
+		switch msg := msg.(type) {
+		case tea.KeyMsg:
+			newModel, cmd, handled := m.handleKeyMsg(msg)
 			if handled {
 				return newModel, cmd
 			}
-		}
 
-	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		m.height = msg.Height
-		m.recalculateLayout()
-
-	case spinner.TickMsg:
-		var cmd tea.Cmd
-		m.spinner, cmd = m.spinner.Update(msg)
-		cmds = append(cmds, cmd)
-
-	case InputRequestMsg:
-		m.pendingInputRequest = &msg.Request
-		m.history.Add(NewSystemMessage(msg.Request.Prompt))
-		if len(msg.Request.Options) > 0 {
-			m.history.Add(NewSystemMessage("Options: " + strings.Join(msg.Request.Options, ", ")))
-		}
-		m.updateViewport()
-		cmds = append(cmds, m.listenForInputRequests())
-
-	case ExplorerRefreshMsg:
-		// File system change detected - refresh explorer
-		_ = m.explorerPanel.Refresh()
-		// Continue listening for more changes
-		cmds = append(cmds, m.listenForExplorerChanges())
-
-	case ChatProgressTickMsg:
-		// Progress ticks are intentionally silent (avoid log noise)
-		if m.streaming {
-			cmds = append(cmds, m.chatProgressTick())
-		}
-
-	case StatsTickMsg:
-		// Update process statistics
-		m.statsWidget.Update()
-
-		// Get resource stats
-		stats := m.statsWidget.GetStats()
-		resourceStats := ResourceStats{
-			MemoryMB:      stats.MemoryMB,
-			CPUPercent:    stats.CPUPercent,
-			CPURawPercent: stats.CPURawPercent,
-			Uptime:        stats.Uptime,
-			Goroutines:    stats.Goroutines,
-		}
-
-		// Pass to LogsPanel footer
-		m.logsPanel.SetResourceStats(resourceStats)
-
-		// Pass to StatsPanel
-		m.statsPanel.SetResourceStats(resourceStats)
-
-		// Collect and pass machine stats
-		if m.machineCollector != nil {
-			machineStats := m.machineCollector.Collect()
-			m.logsPanel.SetMachineStats(machineStats)
-			m.statsPanel.SetMachineStats(machineStats)
-		}
-
-		// Pass token stats from agentInfos
-		m.updateLogsPanelTokenStats()
-		m.updateTokenPanelStats()
-
-		// Continue ticking
-		cmds = append(cmds, statsTickCmd())
-
-	case PanelNavTimeoutMsg:
-		if m.panelNavMode && msg.Seq == m.panelNavSeq {
-			if time.Now().After(m.panelNavTill) {
-				m.panelNavMode = false
-			}
-		}
-
-	case AgentResponseMsg:
-		elapsed := time.Since(m.chatStartedAt)
-		m.streaming = false
-		agentLower := strings.ToLower(msg.Agent)
-		if msg.Error != nil {
-			errMsg := msg.Error.Error()
-			// Check for timeout errors
-			if strings.Contains(errMsg, "context deadline exceeded") || strings.Contains(errMsg, "timed out") {
-				m.history.Add(NewSystemMessage(fmt.Sprintf("⏱ Request timed out after %s", formatDuration(elapsed))))
-				m.logsPanel.AddError(agentLower, fmt.Sprintf("⏱ Timeout after %s - consider using a faster model", formatDuration(elapsed)))
-			} else {
-				m.history.Add(NewSystemMessage("Error: " + errMsg))
-				m.logsPanel.AddError(agentLower, fmt.Sprintf("✗ Error after %s: %s", formatDuration(elapsed), errMsg))
-			}
-		} else {
-			m.history.Add(NewAgentMessage(msg.Agent, msg.Content))
-			// Update token counts for the agent (validate to avoid corrupted values)
-			// Cap matches the adapter-level cap (500k) to ensure consistency
-			const maxReasonableTokens = 500_000
-			for _, a := range m.agentInfos {
-				if strings.EqualFold(a.Name, msg.Agent) {
-					if m.chatModel != "" {
-						a.Model = m.chatModel
-					}
-					if msg.TokensIn > 0 && msg.TokensIn <= maxReasonableTokens {
-						a.TokensIn += msg.TokensIn
-					}
-					if msg.TokensOut > 0 && msg.TokensOut <= maxReasonableTokens {
-						a.TokensOut += msg.TokensOut
-					}
-					break
+		case tea.MouseMsg:
+			if msg.Action == tea.MouseActionPress && msg.Button == tea.MouseButtonLeft {
+				newModel, cmd, handled := m.handleMouseClick(msg.X, msg.Y)
+				if handled {
+					return newModel, cmd
 				}
 			}
-			// Build detailed completion log
-			stats := []string{fmt.Sprintf("%d chars", len(msg.Content))}
-			if msg.TokensIn > 0 || msg.TokensOut > 0 {
-				stats = append(stats, fmt.Sprintf("↑%d ↓%d tok", msg.TokensIn, msg.TokensOut))
+
+		case tea.WindowSizeMsg:
+			m.width = msg.Width
+			m.height = msg.Height
+			m.recalculateLayout()
+
+		case spinner.TickMsg:
+			var cmd tea.Cmd
+			m.spinner, cmd = m.spinner.Update(msg)
+			cmds = append(cmds, cmd)
+
+		case InputRequestMsg:
+			m.pendingInputRequest = &msg.Request
+			m.history.Add(NewSystemMessage(msg.Request.Prompt))
+			if len(msg.Request.Options) > 0 {
+				m.history.Add(NewSystemMessage("Options: " + strings.Join(msg.Request.Options, ", ")))
 			}
-			stats = append(stats, formatDuration(elapsed))
-			m.logsPanel.AddSuccess(agentLower, fmt.Sprintf("✓ Response [%s]", strings.Join(stats, " | ")))
-		}
-		m.updateViewport()
-		m.updateLogsPanelTokenStats()
-		m.updateTokenPanelStats()
-
-	case ShellOutputMsg:
-		// Handle shell command output
-		if msg.Error != "" {
-			m.history.Add(NewSystemMessage("Error executing command: " + msg.Error))
-			m.logsPanel.AddError("shell", "Command failed: "+msg.Error)
-		} else {
-			output := msg.Output
-			if output == "" {
-				output = "(no output)"
-			}
-			// Format output as code block
-			formattedOutput := fmt.Sprintf("```\n%s```", output)
-			if msg.ExitCode != 0 {
-				formattedOutput += fmt.Sprintf("\n*Exit code: %d*", msg.ExitCode)
-			}
-			m.history.Add(NewAgentMessage("Shell", formattedOutput))
-			m.logsPanel.AddSuccess("shell", fmt.Sprintf("Command completed (exit %d)", msg.ExitCode))
-		}
-		// Refresh explorer to show any new files created by shell command
-		if m.explorerPanel != nil {
-			_ = m.explorerPanel.Refresh()
-		}
-		m.updateViewport()
-
-	case editorFinishedMsg:
-		// Handle editor close - refresh explorer and log result
-		if msg.err != nil {
-			m.logsPanel.AddError("editor", fmt.Sprintf("Editor error: %v", msg.err))
-		} else {
-			m.logsPanel.AddSuccess("editor", fmt.Sprintf("Edited: %s", filepath.Base(msg.filePath)))
-		}
-		// Refresh explorer to show any changes
-		if m.explorerPanel != nil {
-			_ = m.explorerPanel.Refresh()
-		}
-
-	case WorkflowUpdateMsg:
-		m.workflowState = msg.State
-		m.tasksPanel.SetState(msg.State)
-		m.updateQuorumPanel(msg.State)
-
-	case TaskUpdateMsg:
-		// Update the task status in the workflow state
-		if m.workflowState != nil && m.workflowState.Tasks != nil {
-			if task, ok := m.workflowState.Tasks[msg.TaskID]; ok {
-				task.Status = msg.Status
-				m.tasksPanel.SetState(m.workflowState)
-				m.updateQuorumPanel(m.workflowState)
-				m.updateViewport() // Force re-render to show task status change
-			}
-		}
-
-	case PhaseUpdateMsg:
-		// Update the current phase in the workflow state
-		if m.workflowState != nil {
-			m.workflowState.CurrentPhase = msg.Phase
-			m.tasksPanel.SetState(m.workflowState)
-			m.updateQuorumPanel(m.workflowState)
-			m.updateViewport() // Force re-render to show phase change
-		}
-
-	case BatchedEventsMsg:
-		// Process multiple events collected within debounce window
-		for _, evt := range msg.Events {
-			// Recursively process each event through Update
-			// This ensures all event types are handled correctly
-			var innerCmd tea.Cmd
-			newModel, innerCmd := m.Update(evt)
-			m = newModel.(Model)
-			if innerCmd != nil {
-				cmds = append(cmds, innerCmd)
-			}
-		}
-		// Force a single viewport update after processing all batched events
-		m.updateViewport()
-
-	case ActiveWorkflowLoadMsg:
-		// Auto-loaded active workflow on startup
-		if msg.State != nil {
-			m.workflowState = msg.State
-			m.tasksPanel.SetState(msg.State)
-			m.updateQuorumPanel(msg.State)
-			// Show a brief notification
-			prompt := msg.State.Prompt
-			if len(prompt) > 50 {
-				prompt = prompt[:47] + "..."
-			}
-			m.history.Add(NewSystemBubbleMessage(fmt.Sprintf("Session restored: %s @%s\n%q",
-				strings.ToUpper(string(msg.State.Status)),
-				msg.State.CurrentPhase,
-				prompt)))
 			m.updateViewport()
-		}
+			cmds = append(cmds, m.listenForInputRequests())
 
-	case WorkflowStartedMsg:
-		m.workflowRunning = true
-		m.workflowStartedAt = time.Now()
-		m.workflowPhase = "running"
-		m.consensusPanel.ClearOutputs()
-		// Reset all agents to idle - actual agent events will set them to running
-		for _, a := range m.agentInfos {
-			if a.Status != AgentStatusDisabled {
-				a.Status = AgentStatusIdle
-			}
-		}
-		m.history.Add(NewSystemBubbleMessage("Starting workflow..."))
-		m.logsPanel.AddInfo("workflow", "Workflow started: "+msg.Prompt)
-		// Auto-show logs panel when workflow starts so user can see progress
-		if !m.showLogs {
-			m.showLogs = true
-			// Recalculate layout with logs panel visible
-			if m.width > 0 && m.height > 0 {
-				m.recalculateLayout()
-			}
-		}
-		m.updateViewport()
-		cmds = append(cmds, m.spinner.Tick)
+		case ExplorerRefreshMsg:
+			_ = m.explorerPanel.Refresh()
+			cmds = append(cmds, m.listenForExplorerChanges())
 
-	case WorkflowCompletedMsg:
-		elapsed := time.Since(m.workflowStartedAt)
-		m.workflowRunning = false
-		m.workflowPhase = "done"
-		m.workflowState = msg.State
-		m.tasksPanel.SetState(msg.State)
-		m.updateQuorumPanel(msg.State)
-		// Mark all running agents as done
-		for _, a := range m.agentInfos {
-			if a.Status == AgentStatusRunning {
-				a.Status = AgentStatusDone
-				m.logsPanel.AddSuccess(strings.ToLower(a.Name), "Agent completed")
-			}
-		}
-		if msg.State != nil && msg.State.Metrics != nil {
-			m.totalTokensIn = msg.State.Metrics.TotalTokensIn
-			m.totalTokensOut = msg.State.Metrics.TotalTokensOut
-		}
-		// Build a user-friendly completion summary
-		summaryParts := []string{fmt.Sprintf("✓ Workflow completed in %s", formatDuration(elapsed))}
-		if msg.State != nil && msg.State.Metrics != nil {
-			summaryParts = append(summaryParts, fmt.Sprintf("Tokens: %s in / %s out", formatTokens(m.totalTokensIn), formatTokens(m.totalTokensOut)))
-			if msg.State.Metrics.ConsensusScore > 0 {
-				summaryParts = append(summaryParts, fmt.Sprintf("Consensus: %.0f%%", msg.State.Metrics.ConsensusScore*100))
-			}
-		}
-		m.logsPanel.AddSuccess("workflow", strings.Join(summaryParts, " | "))
-		m.history.Add(NewSystemBubbleMessage(strings.Join(summaryParts, "\n")))
-		if msg.State != nil {
-			status := strings.TrimPrefix(formatWorkflowStatus(msg.State), "/status\n\n")
-			m.history.Add(NewSystemBubbleMessage(status))
-		}
-		m.updateViewport()
-
-	case WorkflowErrorMsg:
-		elapsed := time.Since(m.workflowStartedAt)
-		m.workflowRunning = false
-		m.workflowPhase = "idle"
-		// Mark running agent as error
-		for _, a := range m.agentInfos {
-			if a.Status == AgentStatusRunning {
-				a.Status = AgentStatusError
-				a.Error = msg.Error.Error()
-				m.logsPanel.AddError(strings.ToLower(a.Name), "Agent failed: "+msg.Error.Error())
-				break
-			}
-		}
-		m.logsPanel.AddError("workflow", fmt.Sprintf("Workflow failed after %s: %s", formatDuration(elapsed), msg.Error.Error()))
-		m.history.Add(NewSystemBubbleMessage(fmt.Sprintf("Workflow failed after %s: %v", formatDuration(elapsed), msg.Error)))
-		m.updateViewport()
-
-	case WorkflowLogMsg:
-		// Handle workflow log messages from the runner
-		switch msg.Level {
-		case "success":
-			m.logsPanel.AddSuccess(msg.Source, msg.Message)
-		case "error":
-			m.logsPanel.AddError(msg.Source, msg.Message)
-		case "warn":
-			m.logsPanel.AddWarn(msg.Source, msg.Message)
-		case "debug":
-			m.logsPanel.AddDebug(msg.Source, msg.Message)
-		default:
-			m.logsPanel.AddInfo(msg.Source, msg.Message)
-		}
-		// Continue listening for more log events
-		cmds = append(cmds, m.listenForLogEvents())
-
-	case AgentStreamMsg:
-		// Handle real-time agent streaming events
-		source := msg.Agent
-		if source == "" {
-			source = "agent"
-		}
-
-		switch msg.Kind {
-		case "started":
-			// Extract phase from event data
-			phase := ""
-			if p, ok := msg.Data["phase"].(string); ok {
-				phase = p
-			}
-			model := ""
-			if m, ok := msg.Data["model"].(string); ok {
-				model = m
-			}
-			// Extract timeout from event data (in seconds or as duration)
-			var maxTimeout time.Duration
-			if t, ok := msg.Data["timeout_seconds"].(float64); ok && t > 0 {
-				maxTimeout = time.Duration(t) * time.Second
-			} else if t, ok := msg.Data["timeout_seconds"].(int); ok && t > 0 {
-				maxTimeout = time.Duration(t) * time.Second
-			}
-			// Update agent to running state with start time
-			StartAgent(m.agentInfos, msg.Agent, phase, maxTimeout, model)
-
-			// Only log workflow-level started events (those with phase info)
-			// Skip CLI adapter events as they're redundant with progress bars
-			if phase != "" {
-				details := msg.Message
-				if model, ok := msg.Data["model"].(string); ok && model != "" {
-					details += fmt.Sprintf(" [%s]", model)
-				}
-				details = fmt.Sprintf("[%s] %s", phase, details)
-				m.logsPanel.AddInfo(source, "▶ "+details)
+		case ChatProgressTickMsg:
+			if m.streaming {
+				cmds = append(cmds, m.chatProgressTick())
 			}
 
-		case "tool_use":
-			// Update agent activity (shown in progress bar)
-			UpdateAgentActivity(m.agentInfos, msg.Agent, "🔧", msg.Message)
-			// Don't log tool_use - shown in progress bar instead
-
-		case "thinking":
-			// Update agent activity (shown in progress bar)
-			UpdateAgentActivity(m.agentInfos, msg.Agent, "💭", "thinking...")
-			// Don't log thinking - shown in progress bar instead
-
-		case "chunk":
-			// Skip chunk events - too noisy
-
-		case "progress":
-			// Update agent activity (shown in progress bar)
-			details := msg.Message
-			isRetry := false
-			if attempt, ok := msg.Data["attempt"].(int); ok && attempt > 0 {
-				isRetry = true
-				if errMsg, ok := msg.Data["error"].(string); ok {
-					details = fmt.Sprintf("retry #%d: %s", attempt, errMsg)
-				}
+		case StatsTickMsg:
+			m.statsWidget.Update()
+			stats := m.statsWidget.GetStats()
+			resourceStats := ResourceStats{
+				MemoryMB:      stats.MemoryMB,
+				CPUPercent:    stats.CPUPercent,
+				CPURawPercent: stats.CPURawPercent,
+				Uptime:        stats.Uptime,
+				Goroutines:    stats.Goroutines,
 			}
-			UpdateAgentActivity(m.agentInfos, msg.Agent, "⟳", details)
-			// Only log retries (important for debugging), skip streaming activity
-			if isRetry {
-				m.logsPanel.AddWarn(source, "⟳ "+details)
+			m.logsPanel.SetResourceStats(resourceStats)
+			m.statsPanel.SetResourceStats(resourceStats)
+			if m.machineCollector != nil {
+				machineStats := m.machineCollector.Collect()
+				m.logsPanel.SetMachineStats(machineStats)
+				m.statsPanel.SetMachineStats(machineStats)
 			}
-
-		case "completed":
-			// Extract token counts with flexible type handling
-			tokensIn := extractTokenValue(msg.Data, "tokens_in")
-			tokensOut := extractTokenValue(msg.Data, "tokens_out")
-			if model, ok := msg.Data["model"].(string); ok && model != "" {
-				for _, a := range m.agentInfos {
-					if strings.EqualFold(a.Name, msg.Agent) {
-						a.Model = model
-						break
-					}
-				}
-			}
-
-			// Update agent to completed state
-			found, rejectedIn, rejectedOut := CompleteAgent(m.agentInfos, msg.Agent, tokensIn, tokensOut)
-
-			// Debug: log when values are rejected as suspicious
-			if found && (rejectedIn > 0 || rejectedOut > 0) {
-				m.logsPanel.AddWarn(source, fmt.Sprintf("⚠ Rejected suspicious tokens: in=%d out=%d (raw types: %T / %T)",
-					rejectedIn, rejectedOut, msg.Data["tokens_in"], msg.Data["tokens_out"]))
-			}
-
-			// Log completed event (important - keep in logs)
-			details := msg.Message
-			var stats []string
-			if model, ok := msg.Data["model"].(string); ok && model != "" {
-				stats = append(stats, model)
-			}
-			if tokensIn > 0 || tokensOut > 0 {
-				stats = append(stats, fmt.Sprintf("↑%d ↓%d tok", tokensIn, tokensOut))
-			}
-			if durationMS, ok := msg.Data["duration_ms"].(int64); ok {
-				if durationMS >= 1000 {
-					stats = append(stats, fmt.Sprintf("%.1fs", float64(durationMS)/1000))
-				} else {
-					stats = append(stats, fmt.Sprintf("%dms", durationMS))
-				}
-			}
-			if toolCalls, ok := msg.Data["tool_calls"].(int); ok && toolCalls > 0 {
-				stats = append(stats, fmt.Sprintf("%d tools", toolCalls))
-			}
-			if len(stats) > 0 {
-				details += " [" + strings.Join(stats, " | ") + "]"
-			}
-			m.logsPanel.AddSuccess(source, "✓ "+details)
-
-			// Refresh stats panels after token update
 			m.updateLogsPanelTokenStats()
 			m.updateTokenPanelStats()
+			cmds = append(cmds, statsTickCmd())
 
-		case "error":
-			// Update agent to error state
-			FailAgent(m.agentInfos, msg.Agent, msg.Message)
+		case PanelNavTimeoutMsg:
+			if m.panelNavMode && msg.Seq == m.panelNavSeq {
+				if time.Now().After(m.panelNavTill) {
+					m.panelNavMode = false
+				}
+			}
 
-			// Log error event (important - keep in logs)
-			details := msg.Message
-			var errorInfo []string
-			if errType, ok := msg.Data["error_type"].(string); ok && errType != "" {
-				errorInfo = append(errorInfo, errType)
-			}
-			if model, ok := msg.Data["model"].(string); ok && model != "" {
-				errorInfo = append(errorInfo, model)
-			}
-			if phase, ok := msg.Data["phase"].(string); ok {
-				errorInfo = append(errorInfo, phase)
-			}
-			if durationMS, ok := msg.Data["duration_ms"].(int64); ok {
-				errorInfo = append(errorInfo, fmt.Sprintf("%dms", durationMS))
-			}
-			if retries, ok := msg.Data["retries"].(int); ok && retries > 0 {
-				errorInfo = append(errorInfo, fmt.Sprintf("%d retries", retries))
-			}
-			if len(errorInfo) > 0 {
-				details += " [" + strings.Join(errorInfo, " | ") + "]"
-			}
-			m.logsPanel.AddError(source, "✗ "+details)
+		case AgentResponseMsg:
+			m.handleAgentResponse(msg)
 
-		default:
-			// Skip unknown event types - don't log to reduce noise
+		case ShellOutputMsg:
+			m.handleShellOutput(msg)
+
+		case editorFinishedMsg:
+			if msg.err != nil {
+				m.logsPanel.AddError("editor", fmt.Sprintf("Editor error: %v", msg.err))
+			} else {
+				m.logsPanel.AddSuccess("editor", fmt.Sprintf("Edited: %s", filepath.Base(msg.filePath)))
+			}
+			if m.explorerPanel != nil {
+				_ = m.explorerPanel.Refresh()
+			}
+
+		case QuitMsg:
+			m.quitting = true
+			m.explorerPanel.Close()
+			return m, tea.Quit
 		}
-		// Continue listening for more events
-		cmds = append(cmds, m.listenForLogEvents())
-
-	case QuitMsg:
-		m.quitting = true
-		m.explorerPanel.Close() // Stop file watcher
-		return m, tea.Quit
 	}
 
 	// Update textarea
@@ -2812,7 +1586,7 @@ func (m Model) executeShellCommand(cmdStr string) (tea.Model, tea.Cmd) {
 				ExitCode: -1,
 			}
 		}
-		cmd := exec.Command(shPath, "-c", cmdStr)
+		cmd := exec.Command(shPath, "-c", cmdStr) // #nosec G204 -- shell path from environment
 
 		var stdout, stderr bytes.Buffer
 		cmd.Stdout = &stdout
@@ -2949,718 +1723,34 @@ func (m Model) handleCommand(cmd *Command, args []string) (tea.Model, tea.Cmd) {
 	}
 
 	switch cmd.Name {
-	case "help":
-		var helpText string
-		if len(args) > 0 {
-			helpText = m.commands.Help(args[0])
-		} else {
-			helpText = m.commands.Help("")
-		}
-		addSystem(helpText)
-		m.updateViewport()
-
-	case "clear":
-		m.history.Clear()
-		m.updateViewport()
-
+	case "load":
+		return m.handleCommandLoad(args, addSystem)
+	case "new":
+		return m.handleCommandNew(args, addSystem)
+	case "delete":
+		return m.handleCommandDelete(args, addSystem)
+	case "plan":
+		return m.handleCommandPlan(args, addSystem)
+	case "execute":
+		return m.handleCommandExecute(args, addSystem)
+	case "replan":
+		return m.handleCommandReplan(args, addSystem)
+	case "useplan", "up", "useplans":
+		return m.handleCommandUsePlan(args, addSystem)
 	case "quit":
 		m.quitting = true
-		m.explorerPanel.Close() // Stop file watcher
+		m.explorerPanel.Close()
 		return m, tea.Quit
+	}
 
-	case "model":
-		if len(args) > 0 {
-			m.currentModel = args[0]
-			addSystem("Model: " + m.currentModel)
-		} else {
-			modelInfo := m.currentModel
-			if modelInfo == "" {
-				// Get the default model for current agent
-				if models, ok := m.agentModels[m.currentAgent]; ok && len(models) > 0 {
-					modelInfo = models[0] + " (default)"
-				} else {
-					modelInfo = "(unknown)"
-				}
-			}
-			addSystem("Current model: " + modelInfo)
-		}
-		m.updateViewport()
+	// Dispatch to UI commands (help, clear, model, agent, copy, logs, explorer, theme)
+	if newModel, teaCmd, handled := m.handleCommandUI(cmd, args, addSystem); handled {
+		return newModel, teaCmd
+	}
 
-	case "agent":
-		if len(args) > 0 {
-			m.currentAgent = args[0]
-			// Reset model to empty so the agent uses its configured default
-			m.currentModel = ""
-			addSystem("Agent: " + m.currentAgent + " (using default model)")
-		} else {
-			modelInfo := m.currentModel
-			if modelInfo == "" {
-				modelInfo = "default"
-			}
-			addSystem(fmt.Sprintf("Current agent: %s (model: %s)", m.currentAgent, modelInfo))
-		}
-		m.updateViewport()
-
-	case "status":
-		if m.workflowState != nil {
-			status := strings.TrimPrefix(formatWorkflowStatus(m.workflowState), "/status\n\n")
-			addSystem(status)
-		} else {
-			// Check if there's an active workflow in state that could be loaded
-			var hint string
-			if m.runner != nil {
-				ctx := context.Background()
-				if workflows, err := m.runner.ListWorkflows(ctx); err == nil {
-					for _, wf := range workflows {
-						if wf.IsActive {
-							hint = fmt.Sprintf("\n\nTip: /load %s to continue your previous session", wf.WorkflowID)
-							break
-						}
-					}
-				}
-			}
-			addSystem("No workflow loaded in this session." + hint)
-		}
-		m.updateViewport()
-		return m, nil
-
-	case "workflows":
-		if m.runner == nil {
-			addSystem("Workflow runner not configured")
-			m.updateViewport()
-			return m, nil
-		}
-		// List workflows from runner
-		ctx := context.Background()
-		workflows, err := m.runner.ListWorkflows(ctx)
-		if err != nil {
-			addSystem(fmt.Sprintf("Error listing workflows: %v", err))
-			m.updateViewport()
-			return m, nil
-		}
-		if len(workflows) == 0 {
-			addSystem("No workflows found. Use '/analyze <prompt>' to start one.")
-			m.updateViewport()
-			return m, nil
-		}
-		var sb strings.Builder
-		for i, wf := range workflows {
-			marker := "  "
-			if wf.IsActive {
-				marker = "> "
-			}
-			prompt := wf.Prompt
-			if len(prompt) > 60 {
-				prompt = prompt[:57] + "..."
-			}
-			status := strings.ToUpper(string(wf.Status))
-			sb.WriteString(fmt.Sprintf("%s#%d  %-11s @%-8s  %s\n", marker, i+1, status, wf.CurrentPhase, wf.WorkflowID))
-			sb.WriteString(fmt.Sprintf("    %q\n\n", prompt))
-		}
-		sb.WriteString("> = active  |  /load <ID> to switch")
-		addSystem(sb.String())
-		m.updateViewport()
-
-	case "load":
-		if m.runner == nil {
-			addSystem("Workflow runner not configured")
-			m.updateViewport()
-			return m, nil
-		}
-		if m.workflowRunning {
-			addSystem("Workflow already running. Use /cancel first.")
-			m.updateViewport()
-			return m, nil
-		}
-
-		ctx := context.Background()
-
-		// If no args, show available workflows to select from
-		if len(args) == 0 {
-			workflows, err := m.runner.ListWorkflows(ctx)
-			if err != nil {
-				addSystem(fmt.Sprintf("Error listing workflows: %v", err))
-				m.updateViewport()
-				return m, nil
-			}
-			if len(workflows) == 0 {
-				addSystem("No workflows found. Use '/analyze <prompt>' to start one.")
-				m.updateViewport()
-				return m, nil
-			}
-			var sb strings.Builder
-			for i, wf := range workflows {
-				marker := "  "
-				if wf.IsActive {
-					marker = "> "
-				}
-				prompt := wf.Prompt
-				if len(prompt) > 60 {
-					prompt = prompt[:57] + "..."
-				}
-				status := strings.ToUpper(string(wf.Status))
-				sb.WriteString(fmt.Sprintf("%s#%d  %-11s @%-8s  %s\n", marker, i+1, status, wf.CurrentPhase, wf.WorkflowID))
-				sb.WriteString(fmt.Sprintf("    %q\n\n", prompt))
-			}
-			sb.WriteString("> = active  |  /load <ID> to switch")
-			addSystem(sb.String())
-			m.updateViewport()
-			return m, nil
-		}
-
-		// Load the specified workflow
-		workflowID := args[0]
-		state, err := m.runner.LoadWorkflow(ctx, workflowID)
-		if err != nil {
-			addSystem(fmt.Sprintf("Error loading workflow: %v", err))
-			m.updateViewport()
-			return m, nil
-		}
-
-		// Update internal state
-		m.workflowState = state
-		m.tasksPanel.SetState(state)
-		m.updateQuorumPanel(state)
-
-		// Show success message with workflow details
-		var sb strings.Builder
-
-		// Status with icon
-		statusIcon := "○"
-		switch state.Status {
-		case core.WorkflowStatusCompleted:
-			statusIcon = "●"
-		case core.WorkflowStatusRunning:
-			statusIcon = "◐"
-		case core.WorkflowStatusFailed:
-			statusIcon = "✗"
-		}
-		sb.WriteString(fmt.Sprintf("%s Loaded  |  %s @%s\n\n", statusIcon, strings.ToUpper(string(state.Status)), state.CurrentPhase))
-
-		// Prompt
-		if state.Prompt != "" {
-			prompt := state.Prompt
-			if len(prompt) > 70 {
-				prompt = prompt[:67] + "..."
-			}
-			sb.WriteString(fmt.Sprintf("%q\n\n", prompt))
-		}
-
-		// Metrics inline
-		var info []string
-		if state.Metrics != nil && state.Metrics.ConsensusScore > 0 {
-			info = append(info, fmt.Sprintf("Consensus: %.0f%%", state.Metrics.ConsensusScore*100))
-		}
-		if len(state.Tasks) > 0 {
-			info = append(info, fmt.Sprintf("Issues: %d", len(state.Tasks)))
-		}
-		if len(info) > 0 {
-			sb.WriteString(strings.Join(info, "  |  ") + "\n\n")
-		}
-
-		// Next action
-		sb.WriteString("Next: ")
-		switch state.CurrentPhase {
-		case core.PhaseAnalyze:
-			if state.Status == core.WorkflowStatusCompleted {
-				sb.WriteString("/plan")
-			} else {
-				sb.WriteString("/analyze")
-			}
-		case core.PhasePlan:
-			if state.Status == core.WorkflowStatusCompleted {
-				sb.WriteString("/execute")
-			} else {
-				sb.WriteString("/plan")
-			}
-		case core.PhaseExecute:
-			if state.Status == core.WorkflowStatusCompleted {
-				sb.WriteString("Done!")
-			} else {
-				sb.WriteString("/execute")
-			}
-		default:
-			sb.WriteString("/analyze <prompt>")
-		}
-		sb.WriteString("  |  /status for details")
-		addSystem(sb.String())
-		m.updateViewport()
-		return m, nil // Important: return modified m with workflowState set
-
-	case "new":
-		if m.runner == nil {
-			addSystem("Workflow runner not configured")
-			m.updateViewport()
-			return m, nil
-		}
-		if m.workflowRunning {
-			addSystem("Workflow is running. Use /cancel first.")
-			m.updateViewport()
-			return m, nil
-		}
-
-		ctx := context.Background()
-
-		// Parse flags from args
-		archive := false
-		purge := false
-		for _, arg := range args {
-			switch arg {
-			case "--archive", "-a":
-				archive = true
-			case "--purge", "-p":
-				purge = true
-			}
-		}
-
-		// Handle purge (most destructive)
-		if purge {
-			deleted, err := m.runner.PurgeAllWorkflows(ctx)
-			if err != nil {
-				addSystem(fmt.Sprintf("Error purging workflows: %v", err))
-				m.updateViewport()
-				return m, nil
-			}
-			m.workflowState = nil
-			m.tasksPanel.SetState(nil)
-			m.updateQuorumPanel(nil)
-			addSystem(fmt.Sprintf("Purged %d workflow(s). All state deleted.\nUse '/analyze <prompt>' to start fresh.", deleted))
-			m.updateViewport()
-			return m, nil
-		}
-
-		// Handle archive
-		if archive {
-			archived, err := m.runner.ArchiveWorkflows(ctx)
-			if err != nil {
-				addSystem(fmt.Sprintf("Error archiving workflows: %v", err))
-				m.updateViewport()
-				return m, nil
-			}
-			if err := m.runner.DeactivateWorkflow(ctx); err != nil {
-				addSystem(fmt.Sprintf("Error deactivating workflow: %v", err))
-				m.updateViewport()
-				return m, nil
-			}
-			m.workflowState = nil
-			m.tasksPanel.SetState(nil)
-			m.updateQuorumPanel(nil)
-			msg := "Ready for new task."
-			if archived > 0 {
-				msg = fmt.Sprintf("Archived %d completed workflow(s). %s", archived, msg)
-			}
-			addSystem(msg + "\nUse '/analyze <prompt>' to start a new workflow.")
-			m.updateViewport()
-			return m, nil
-		}
-
-		// Default: just deactivate
-		if err := m.runner.DeactivateWorkflow(ctx); err != nil {
-			addSystem(fmt.Sprintf("Error deactivating workflow: %v", err))
-			m.updateViewport()
-			return m, nil
-		}
-		m.workflowState = nil
-		m.tasksPanel.SetState(nil)
-		m.updateQuorumPanel(nil)
-		addSystem("Workflow deactivated. Ready for new task.\nUse '/analyze <prompt>' to start a new workflow.\nPrevious workflows available via '/workflows'.")
-		m.updateViewport()
-		return m, nil
-
-	case "delete":
-		if m.runner == nil {
-			addSystem("Workflow runner not configured")
-			m.updateViewport()
-			return m, nil
-		}
-		if m.workflowRunning {
-			addSystem("Cannot delete while workflow is running. Use /cancel first.")
-			m.updateViewport()
-			return m, nil
-		}
-		if len(args) == 0 {
-			addSystem("Usage: /delete <workflow-id>\nUse /workflows to see available IDs.")
-			m.updateViewport()
-			return m, nil
-		}
-
-		ctx := context.Background()
-		workflowID := args[0]
-
-		// Load workflow to verify it exists and check status
-		wf, err := m.runner.LoadWorkflow(ctx, workflowID)
-		if err != nil || wf == nil {
-			addSystem(fmt.Sprintf("Workflow not found: %s", workflowID))
-			m.updateViewport()
-			return m, nil
-		}
-
-		// Prevent deletion of running workflows
-		if wf.Status == core.WorkflowStatusRunning {
-			addSystem("Cannot delete running workflow. Use /cancel first.")
-			m.updateViewport()
-			return m, nil
-		}
-
-		// Delete the workflow
-		if err := m.runner.DeleteWorkflow(ctx, workflowID); err != nil {
-			addSystem(fmt.Sprintf("Error deleting workflow: %v", err))
-			m.updateViewport()
-			return m, nil
-		}
-
-		// Clear state if we just deleted the active workflow
-		if m.workflowState != nil && string(m.workflowState.WorkflowID) == workflowID {
-			m.workflowState = nil
-			m.tasksPanel.SetState(nil)
-			m.updateQuorumPanel(nil)
-		}
-
-		addSystem(fmt.Sprintf("Workflow %s deleted.", workflowID))
-		m.updateViewport()
-		return m, nil
-
-	case "cancel":
-		if m.controlPlane != nil && m.workflowRunning {
-			m.controlPlane.Cancel()
-			m.workflowRunning = false
-			addSystem("Workflow cancelled")
-		} else {
-			addSystem("No active workflow")
-		}
-		m.updateViewport()
-
-	case "analyze":
-		if m.runner == nil {
-			addSystem("Workflow runner not configured")
-			m.updateViewport()
-			return m, nil
-		}
-		if m.workflowRunning {
-			addSystem("Workflow already running. Use /cancel first.")
-			m.updateViewport()
-			return m, nil
-		}
-		if len(args) == 0 {
-			addSystem("Usage: /analyze <prompt>")
-			m.updateViewport()
-			return m, nil
-		}
-
-		prompt := strings.Join(args, " ")
-		m.updateViewport()
-		return m, m.runAnalyze(prompt)
-
-	case "plan":
-		if m.runner == nil {
-			addSystem("Workflow runner not configured")
-			m.updateViewport()
-			return m, nil
-		}
-		if m.workflowRunning {
-			addSystem("Workflow already running. Use /cancel first.")
-			m.updateViewport()
-			return m, nil
-		}
-
-		// If no args, continue from active workflow (after /analyze)
-		if len(args) == 0 {
-			// Try to load active workflow state if not in memory
-			if m.workflowState == nil {
-				if state, err := m.runner.GetState(context.Background()); err == nil && state != nil {
-					m.workflowState = state
-					m.tasksPanel.SetState(state)
-					m.updateQuorumPanel(state)
-				}
-			}
-
-			// Check if we can continue to plan phase:
-			// - Already in plan phase, OR
-			// - Analyze phase completed (status=completed with analyze as current phase)
-			canContinue := false
-			if m.workflowState != nil {
-				if m.workflowState.CurrentPhase == core.PhasePlan {
-					canContinue = true
-				} else if m.workflowState.CurrentPhase == core.PhaseAnalyze && m.workflowState.Status == core.WorkflowStatusCompleted {
-					// Analyze completed - can advance to plan
-					canContinue = true
-				}
-			}
-
-			if canContinue {
-				addSystem("Continuing to planning phase from active workflow...")
-				m.updateViewport()
-				return m, m.runPlanPhase()
-			}
-			addSystem("No active workflow to continue. Use '/plan <prompt>' to start new or '/analyze' first.")
-			m.updateViewport()
-			return m, nil
-		}
-
-		// With args, start new workflow
-		prompt := strings.Join(args, " ")
-		m.updateViewport()
-		return m, m.runWorkflow(prompt)
-
-	case "replan":
-		if m.runner == nil {
-			addSystem("Workflow runner not configured")
-			m.updateViewport()
-			return m, nil
-		}
-		if m.workflowRunning {
-			addSystem("Workflow already running. Use /cancel first.")
-			m.updateViewport()
-			return m, nil
-		}
-
-		// Try to load active workflow state if not in memory
-		if m.workflowState == nil {
-			if state, err := m.runner.GetState(context.Background()); err == nil && state != nil {
-				m.workflowState = state
-				m.tasksPanel.SetState(state)
-				m.updateQuorumPanel(state)
-			}
-		}
-
-		if m.workflowState == nil {
-			addSystem("No active workflow to replan. Use '/analyze' first.")
-			m.updateViewport()
-			return m, nil
-		}
-
-		// Get additional context if provided
-		additionalContext := ""
-		if len(args) > 0 {
-			additionalContext = strings.Join(args, " ")
-		}
-
-		if additionalContext != "" {
-			addSystem(fmt.Sprintf("Replanning with additional context (%d chars)...", len(additionalContext)))
-		} else {
-			addSystem("Replanning: clearing existing issues and regenerating...")
-		}
-		m.updateViewport()
-		return m, m.runReplanPhase(additionalContext)
-
-	case "useplan", "up", "useplans":
-		if m.runner == nil {
-			addSystem("Workflow runner not configured")
-			m.updateViewport()
-			return m, nil
-		}
-		if m.workflowRunning {
-			addSystem("Workflow already running. Use /cancel first.")
-			m.updateViewport()
-			return m, nil
-		}
-
-		// Try to load active workflow state if not in memory
-		if m.workflowState == nil {
-			if state, err := m.runner.GetState(context.Background()); err == nil && state != nil {
-				m.workflowState = state
-				m.tasksPanel.SetState(state)
-				m.updateQuorumPanel(state)
-			}
-		}
-
-		if m.workflowState == nil {
-			addSystem("No active workflow found. Use '/analyze' first.")
-			m.updateViewport()
-			return m, nil
-		}
-
-		addSystem("Loading existing task files from filesystem (skipping agent call)...")
-		m.updateViewport()
-		return m, m.runUsePlanPhase()
-
-	case "run":
-		if m.runner == nil {
-			addSystem("Workflow runner not configured")
-			m.updateViewport()
-			return m, nil
-		}
-		if m.workflowRunning {
-			addSystem("Workflow already running. Use /cancel first.")
-			m.updateViewport()
-			return m, nil
-		}
-		if len(args) == 0 {
-			addSystem("Usage: /run <prompt>")
-			m.updateViewport()
-			return m, nil
-		}
-
-		prompt := strings.Join(args, " ")
-		m.updateViewport()
-		return m, m.runWorkflow(prompt)
-
-	case "execute":
-		if m.runner == nil {
-			addSystem("Workflow runner not configured")
-			m.updateViewport()
-			return m, nil
-		}
-		if m.workflowRunning {
-			addSystem("Workflow already running. Use /cancel first.")
-			m.updateViewport()
-			return m, nil
-		}
-
-		// Try to load active workflow state if not in memory
-		if m.workflowState == nil {
-			if state, err := m.runner.GetState(context.Background()); err == nil && state != nil {
-				m.workflowState = state
-				m.tasksPanel.SetState(state)
-				m.updateQuorumPanel(state)
-			}
-		}
-
-		// Check if we can continue to execute phase:
-		// - Already in execute phase, OR
-		// - Plan phase completed (status=completed with plan as current phase), OR
-		// - Tasks exist (even if plan status is "failed" - tasks may have been created successfully)
-		canContinue := false
-		needsStateRepair := false
-		if m.workflowState != nil {
-			if m.workflowState.CurrentPhase == core.PhaseExecute {
-				canContinue = true
-			} else if m.workflowState.CurrentPhase == core.PhasePlan && m.workflowState.Status == core.WorkflowStatusCompleted {
-				// Plan completed - can advance to execute
-				canContinue = true
-			} else if len(m.workflowState.Tasks) > 0 {
-				// Tasks exist! Even if plan "failed", we can execute the existing tasks.
-				// This handles the case where task files were created but manifest parsing failed.
-				canContinue = true
-				needsStateRepair = true
-				addSystem(fmt.Sprintf("Found %d existing tasks. Recovering workflow state...", len(m.workflowState.Tasks)))
-			}
-		}
-
-		if canContinue {
-			if needsStateRepair {
-				// Repair the state before executing
-				m.workflowState.Status = core.WorkflowStatusRunning
-				m.workflowState.CurrentPhase = core.PhaseExecute
-				m.workflowState.UpdatedAt = time.Now()
-				// Add a checkpoint to indicate plan is complete
-				m.workflowState.Checkpoints = append(m.workflowState.Checkpoints, core.Checkpoint{
-					ID:        fmt.Sprintf("cp-repair-%d", time.Now().UnixNano()),
-					Type:      "phase_complete",
-					Phase:     core.PhasePlan,
-					Timestamp: time.Now(),
-				})
-				// Save the repaired state
-				if err := m.runner.SaveState(context.Background(), m.workflowState); err != nil {
-					addSystem(fmt.Sprintf("Warning: Failed to save repaired state: %v", err))
-				} else {
-					addSystem("Workflow state repaired successfully.")
-				}
-			}
-			addSystem("Continuing to execution phase from active workflow...")
-			m.updateViewport()
-			return m, m.runExecutePhase()
-		}
-		addSystem("No active workflow to execute. Use '/plan' first.")
-
-	case "retry":
-		if m.controlPlane == nil {
-			addSystem("No control plane")
-			m.updateViewport()
-			return m, nil
-		}
-		if len(args) > 0 {
-			m.controlPlane.RetryTask(core.TaskID(args[0]))
-			addSystem(fmt.Sprintf("Retrying: %s", args[0]))
-		} else {
-			addSystem("Usage: /retry <task_id>")
-		}
-		m.updateViewport()
-
-	case "copy":
-		// Copy last agent response (delegate to copyLastResponse)
-		newModel, _, _ := m.copyLastResponse()
-		return newModel.(Model), nil
-
-	case "copyall":
-		// Copy entire conversation (delegate to copyConversation)
-		newModel, _, _ := m.copyConversation()
-		return newModel.(Model), nil
-
-	case "logs":
-		// Toggle logs panel
-		m.showLogs = !m.showLogs
-		if m.width > 0 && m.height > 0 {
-			m.recalculateLayout()
-		}
-		m.updateViewport()
-
-	case "clearlogs":
-		// Clear logs
-		m.logsPanel.Clear()
-		addSystem("Logs cleared")
-		m.updateViewport()
-
-	case "copylogs":
-		// Copy logs to clipboard
-		newModel, _, _ := m.copyLogsToClipboard()
-		m = newModel.(Model)
-		m.updateViewport()
-
-	case "explorer":
-		// Toggle explorer panel
-		m.showExplorer = !m.showExplorer
-		if m.showExplorer {
-			m.explorerFocus = true
-			m.inputFocused = false
-			m.textarea.Blur()
-			m.explorerPanel.SetFocused(true)
-			addSystem("File explorer opened (arrows to navigate, Esc to return)")
-		} else {
-			m.explorerFocus = false
-			m.inputFocused = true
-			m.textarea.Focus()
-			m.explorerPanel.SetFocused(false)
-			addSystem("File explorer closed")
-		}
-		if m.width > 0 && m.height > 0 {
-			m.recalculateLayout()
-		}
-		m.updateViewport()
-
-	case "theme":
-		// Toggle or set theme
-		var themeName string
-		if len(args) > 0 {
-			themeName = strings.ToLower(args[0])
-		} else {
-			// Toggle: if currently dark, switch to light; if light, switch to dark
-			if m.darkTheme {
-				themeName = "light"
-			} else {
-				themeName = "dark"
-			}
-		}
-
-		switch themeName {
-		case "dark":
-			m.darkTheme = true
-			tui.SetColorScheme(tui.DarkScheme)
-			applyDarkTheme()
-			ApplyDarkThemeMessages()
-			m.messageStyles = NewMessageStyles(m.viewport.Width)
-			addSystem("Theme: dark")
-		case "light":
-			m.darkTheme = false
-			tui.SetColorScheme(tui.LightScheme)
-			applyLightTheme()
-			ApplyLightThemeMessages()
-			m.messageStyles = NewMessageStyles(m.viewport.Width)
-			addSystem("Theme: light")
-		default:
-			addSystem("Usage: /theme [dark|light]")
-		}
-		m.updateViewport()
+	// Dispatch to workflow operation commands (status, workflows, cancel, analyze, run, retry)
+	if newModel, teaCmd, handled := m.handleCommandWorkflowOps(cmd, args, addSystem); handled {
+		return newModel, teaCmd
 	}
 
 	return m, nil
@@ -3818,73 +1908,11 @@ func (m *Model) calculateInputLines() int {
 // recalculateLayout recalculates viewport and logs panel sizes
 // This ensures exact calculations by accounting for all borders, padding, and dynamic elements
 func (m *Model) recalculateLayout() {
-	// === EXACT WIDTH CALCULATIONS (must come first for textarea width) ===
-	// No outer margins - panels fill the entire width when joined with JoinHorizontal
-	leftSidebarWidth := 0
-	rightSidebarWidth := 0 // Shared by stats and logs panels
-	mainWidth := m.width
-
-	// Determine how many sidebars are open for dynamic sizing
-	showLeftSidebar := m.showExplorer || m.showTokens
-	showRightSidebar := m.showStats || m.showLogs
-	bothSidebarsOpen := showLeftSidebar && showRightSidebar
-	oneSidebarOpen := (showLeftSidebar || showRightSidebar) && !bothSidebarsOpen
-
-	// Left sidebar (explorer and/or tokens)
-	if showLeftSidebar {
-		if oneSidebarOpen {
-			// More space when only one sidebar is open (2/5 of width)
-			leftSidebarWidth = m.width * 2 / 5
-			if leftSidebarWidth < 35 {
-				leftSidebarWidth = 35
-			}
-			if leftSidebarWidth > 70 {
-				leftSidebarWidth = 70
-			}
-		} else {
-			// Less space when both sidebars are open (1/4 of width)
-			leftSidebarWidth = m.width / 4
-			if leftSidebarWidth < 30 {
-				leftSidebarWidth = 30
-			}
-			if leftSidebarWidth > 50 {
-				leftSidebarWidth = 50
-			}
-		}
-		mainWidth -= leftSidebarWidth
-	}
-
-	// Right sidebar (contains stats and/or logs)
-	if showRightSidebar {
-		if oneSidebarOpen {
-			// More space when only one sidebar is open (2/5 of width)
-			rightSidebarWidth = m.width * 2 / 5
-			if rightSidebarWidth < 40 {
-				rightSidebarWidth = 40
-			}
-			if rightSidebarWidth > 80 {
-				rightSidebarWidth = 80
-			}
-		} else {
-			// Less space when both sidebars are open (1/4 of width)
-			rightSidebarWidth = m.width / 4
-			if rightSidebarWidth < 35 {
-				rightSidebarWidth = 35
-			}
-			if rightSidebarWidth > 60 {
-				rightSidebarWidth = 60
-			}
-		}
-		mainWidth -= rightSidebarWidth
-	}
+	// === WIDTH CALCULATIONS ===
+	leftSidebarWidth, rightSidebarWidth, mainWidth := m.calculateSidebarWidths()
+	leftSidebarWidth, rightSidebarWidth, mainWidth = m.normalizePanelWidths(leftSidebarWidth, rightSidebarWidth, mainWidth)
 
 	// === SET TEXTAREA WIDTH FIRST (needed for accurate line calculation) ===
-	// The textarea width must match the available content area in renderInput:
-	// - renderMainContent receives mainWidth - 2 (for main panel borders)
-	// - renderInput uses style.Width(width - 4) for content area = mainWidth - 6
-	// - Prefix can be up to 3 chars (spinner + space)
-	// - So textarea width = mainWidth - 6 - 3 = mainWidth - 9
-	// Using mainWidth - 8 to be slightly generous while avoiding overflow
 	inputWidth := mainWidth - 8
 	if inputWidth < 20 {
 		inputWidth = 20
@@ -3892,26 +1920,16 @@ func (m *Model) recalculateLayout() {
 	m.textarea.SetWidth(inputWidth)
 
 	// === EXACT HEIGHT CALCULATIONS ===
-	// Header: logo line (1) + agents bar (1) + divider (1) = 3
 	headerHeight := 3
-
-	// Pipeline takes 2 lines when visible
 	if m.workflowRunning || m.workflowPhase == "done" {
 		headerHeight += 2
 	}
-
-	// Footer: keybindings line (1) + padding (1) = 2
 	footerHeight := 2
-
-	// Calculate dynamic input height based on content (uses textarea width set above)
 	inputLines := m.calculateInputLines()
-	// Input area: border top (1) + content lines + border bottom (1) + margin (1) = inputLines + 3
 	inputHeight := inputLines + 3
 
-	// Status line / progress bars height
 	statusHeight := 0
 	if m.workflowRunning {
-		// Progress bars: one line per agent
 		statusHeight = len(m.agentInfos)
 		if statusHeight < 1 {
 			statusHeight = 1
@@ -3920,125 +1938,18 @@ func (m *Model) recalculateLayout() {
 		statusHeight = 1
 	}
 
-	// NOTE: Dropdown suggestions are now rendered as an overlay in View(), not inline
-	// This prevents the layout from shifting when the dropdown appears
-
-	// Total fixed height (everything except viewport)
 	fixedHeight := headerHeight + footerHeight + inputHeight + statusHeight
-
-	// Viewport gets remaining height
-	// Subtract 2 for the main content box borders
 	viewportHeight := m.height - fixedHeight - 2
 	if viewportHeight < 3 {
 		viewportHeight = 3
 	}
 
-	// === NORMALIZATION OF WIDTHS TO PREVENT OVERFLOW ===
-	// Total must equal m.width exactly (no outer margins)
-	totalUsed := mainWidth
-	if showLeftSidebar {
-		totalUsed += leftSidebarWidth
-	}
-	if showRightSidebar {
-		totalUsed += rightSidebarWidth
-	}
-
-	if totalUsed > m.width {
-		excess := totalUsed - m.width
-
-		// Strategy: reduce mainWidth first (has more margin)
-		if mainWidth-excess >= 40 {
-			mainWidth -= excess
-		} else {
-			// If not enough, reduce sidebars proportionally
-			reduction := excess / 2
-			if showLeftSidebar && leftSidebarWidth-reduction >= 25 {
-				leftSidebarWidth -= reduction
-				excess -= reduction
-			}
-			if showRightSidebar && rightSidebarWidth-reduction >= 30 {
-				rightSidebarWidth -= reduction
-				excess -= reduction
-			}
-			// Any remaining excess goes to mainWidth
-			if excess > 0 && mainWidth-excess >= 40 {
-				mainWidth -= excess
-			}
-		}
-	}
-	// === END NORMALIZATION ===
-
-	// Ensure minimum main width
-	if mainWidth < 40 {
-		mainWidth = 40
-	}
-
-	// === FINAL OVERFLOW CHECK ===
-	// After applying minimums, recalculate total and force-reduce sidebars if needed
-	finalTotal := mainWidth
-	if showLeftSidebar {
-		finalTotal += leftSidebarWidth
-	}
-	if showRightSidebar {
-		finalTotal += rightSidebarWidth
-	}
-
-	// If still overflowing, aggressively reduce sidebar widths
-	for finalTotal > m.width && (leftSidebarWidth > 20 || rightSidebarWidth > 20) {
-		if showRightSidebar && rightSidebarWidth > 20 {
-			rightSidebarWidth--
-			finalTotal--
-		}
-		if finalTotal > m.width && showLeftSidebar && leftSidebarWidth > 20 {
-			leftSidebarWidth--
-			finalTotal--
-		}
-	}
-
-	// If still overflowing, reduce main width below minimum as last resort
-	if finalTotal > m.width {
-		excess := finalTotal - m.width
-		mainWidth -= excess
-		if mainWidth < 30 {
-			mainWidth = 30
-		}
-	}
-	// === END FINAL OVERFLOW CHECK ===
-
-	// === SIDEBAR HEIGHT ===
-	// All panels should have the same total rendered height = m.height
-	// Each panel's Render() uses Height(p.height - 2) + borders = p.height
+	// === SIDEBAR SIZES ===
 	sidebarHeight := m.height
 	if sidebarHeight < 10 {
 		sidebarHeight = 10
 	}
-
-	// Set sidebar sizes
-	if showLeftSidebar {
-		if m.showExplorer && m.showTokens {
-			explorerHeight := sidebarHeight / 2
-			tokenHeight := sidebarHeight - explorerHeight
-			m.explorerPanel.SetSize(leftSidebarWidth, explorerHeight)
-			m.tokenPanel.SetSize(leftSidebarWidth, tokenHeight)
-		} else if m.showExplorer {
-			m.explorerPanel.SetSize(leftSidebarWidth, sidebarHeight)
-		} else if m.showTokens {
-			m.tokenPanel.SetSize(leftSidebarWidth, sidebarHeight)
-		}
-	}
-
-	// Stats and Logs share the right sidebar space
-	// When both visible, split height (logs on top, stats on bottom)
-	if m.showStats && m.showLogs {
-		logsHeight := sidebarHeight / 2
-		statsHeight := sidebarHeight - logsHeight
-		m.logsPanel.SetSize(rightSidebarWidth, logsHeight)
-		m.statsPanel.SetSize(rightSidebarWidth, statsHeight)
-	} else if m.showStats {
-		m.statsPanel.SetSize(rightSidebarWidth, sidebarHeight)
-	} else if m.showLogs {
-		m.logsPanel.SetSize(rightSidebarWidth, sidebarHeight)
-	}
+	m.applySidebarSizes(leftSidebarWidth, rightSidebarWidth, sidebarHeight)
 
 	// === VIEWPORT SETUP ===
 	if !m.ready {
@@ -4050,18 +1961,9 @@ func (m *Model) recalculateLayout() {
 		m.viewport.Height = viewportHeight
 	}
 
-	// === TEXTAREA HEIGHT ===
-	// Width was set earlier in this function for accurate line calculation
-	// Now set the height based on the calculated inputLines
 	m.textarea.SetHeight(inputLines)
-
-	// === UPDATE MARKDOWN RENDERER WIDTH ===
-	// Update word wrap to match content viewport width
-	contentWidth := mainWidth - 4 // Subtract padding
+	contentWidth := mainWidth - 4
 	m.updateMarkdownRenderer(contentWidth)
-
-	// === UPDATE MESSAGE STYLES ===
-	// Recreate message styles with current viewport width for proper alignment
 	m.messageStyles = NewMessageStyles(m.viewport.Width)
 }
 

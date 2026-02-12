@@ -230,7 +230,7 @@ func (r *FileRegistry) save() error {
 	}
 
 	if err := os.Rename(tmpPath, r.configPath); err != nil {
-		os.Remove(tmpPath)
+		_ = os.Remove(tmpPath)
 		return NewRegistryError("save", err)
 	}
 

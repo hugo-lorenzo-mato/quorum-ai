@@ -2,6 +2,7 @@ package snapshot
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -283,7 +284,12 @@ func restoreProjectFiles(
 			return fmt.Errorf("creating target directory for %s: %w", targetFilePath, err)
 		}
 
-		mode := os.FileMode(archiveFile.Mode)
+		var mode os.FileMode
+		if archiveFile.Mode < 0 || archiveFile.Mode > math.MaxUint32 {
+			mode = 0o600
+		} else {
+			mode = os.FileMode(archiveFile.Mode)
+		}
 		if mode == 0 {
 			mode = 0o600
 		}
@@ -347,7 +353,12 @@ func applyGlobalConfigImport(opts *ImportOptions, cfgEntry archivedFile, report 
 		return fmt.Errorf("creating global config directory: %w", err)
 	}
 
-	mode := os.FileMode(cfgEntry.Mode)
+	var mode os.FileMode
+	if cfgEntry.Mode < 0 || cfgEntry.Mode > math.MaxUint32 {
+		mode = 0o600
+	} else {
+		mode = os.FileMode(cfgEntry.Mode)
+	}
 	if mode == 0 {
 		mode = 0o600
 	}
@@ -396,7 +407,7 @@ func projectFromManifestEntry(entry ProjectEntry, targetPath string) *project.Pr
 	}
 }
 
-func parseProjectArchivePath(p string) (sourceID string, relPath string, ok bool) {
+func parseProjectArchivePath(p string) (sourceID, relPath string, ok bool) {
 	prefix := projectsArchiveRoot + "/"
 	if !strings.HasPrefix(p, prefix) {
 		return "", "", false

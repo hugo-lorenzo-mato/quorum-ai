@@ -33,7 +33,7 @@ func (g *Generator) WriteIssuesToDisk(workflowID string, inputs []IssueInput) ([
 	if err != nil {
 		return nil, fmt.Errorf(errResolvingDraftDir, err)
 	}
-	if err := os.MkdirAll(draftDirAbs, 0o755); err != nil {
+	if err := os.MkdirAll(draftDirAbs, 0o750); err != nil {
 		return nil, fmt.Errorf("creating draft directory: %w", err)
 	}
 
@@ -441,7 +441,7 @@ func (g *Generator) readIssueFile(workflowID string, input IssueInput) (title, b
 		return "", "", "", fmt.Errorf(errIssueFileOutsideDir, absResolved)
 	}
 
-	content, err := os.ReadFile(absResolved)
+	content, err := os.ReadFile(absResolved) // #nosec G304 -- path resolved from project root
 	if err != nil {
 		return "", "", "", fmt.Errorf("reading issue file %s: %w", absPath, err)
 	}
@@ -484,7 +484,7 @@ func (g *Generator) writeIssueMappingFile(workflowID string, entries []IssueMapp
 	if err != nil {
 		return fmt.Errorf("resolving published directory: %w", err)
 	}
-	if err := os.MkdirAll(publishedDir, 0o755); err != nil {
+	if err := os.MkdirAll(publishedDir, 0o750); err != nil {
 		return fmt.Errorf("creating published directory: %w", err)
 	}
 

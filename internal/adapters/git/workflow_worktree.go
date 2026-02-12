@@ -36,7 +36,7 @@ func NewWorkflowWorktreeManager(repoPath, baseDir string, git *Client, logger *s
 		absBaseDir = filepath.Join(repoPath, baseDir)
 	}
 
-	if err := os.MkdirAll(absBaseDir, 0o755); err != nil {
+	if err := os.MkdirAll(absBaseDir, 0o750); err != nil {
 		return nil, fmt.Errorf("creating worktree base directory: %w", err)
 	}
 
@@ -107,7 +107,7 @@ func (m *WorkflowWorktreeManagerImpl) createMergeWorktree(ctx context.Context, w
 	}
 
 	// Ensure parent directory exists
-	if err := os.MkdirAll(filepath.Dir(mergeWorktreePath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(mergeWorktreePath), 0o750); err != nil {
 		return nil, nil, fmt.Errorf("creating merge worktree parent: %w", err)
 	}
 
@@ -172,7 +172,7 @@ func (m *WorkflowWorktreeManagerImpl) InitializeWorkflow(ctx context.Context, wo
 	}
 
 	// Create the workflow worktree root directory
-	if err := os.MkdirAll(worktreeRoot, 0o755); err != nil {
+	if err := os.MkdirAll(worktreeRoot, 0o750); err != nil {
 		return nil, fmt.Errorf("creating workflow worktree root: %w", err)
 	}
 
@@ -202,7 +202,7 @@ func (m *WorkflowWorktreeManagerImpl) CreateTaskWorktree(ctx context.Context, wo
 
 	// Ensure workflow worktree root exists
 	worktreeRoot := m.getWorkflowWorktreeRoot(workflowID)
-	if err := os.MkdirAll(worktreeRoot, 0o755); err != nil {
+	if err := os.MkdirAll(worktreeRoot, 0o750); err != nil {
 		return nil, fmt.Errorf("creating workflow worktree root: %w", err)
 	}
 

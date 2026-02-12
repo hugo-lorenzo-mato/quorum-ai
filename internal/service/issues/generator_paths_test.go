@@ -635,11 +635,9 @@ func TestSplitIntoBatches_MultipleBatches(t *testing.T) {
 // Generator: fuzzyMatchFilename
 // =============================================================================
 
-
 // =============================================================================
 // Generator: GenerationTracker
 // =============================================================================
-
 
 func TestGenerationTracker_NoExpectedFiles(t *testing.T) {
 	tracker := NewGenerationTracker("wf-test")
@@ -1086,11 +1084,9 @@ func TestParseIssueMarkdown_WithH1(t *testing.T) {
 // sanitizeFilename coverage (unique test name to avoid conflict with generator_test.go)
 // =============================================================================
 
-
 // =============================================================================
 // extractFileNumber coverage (unique test name to avoid conflict with files_test.go)
 // =============================================================================
-
 
 // =============================================================================
 // Helpers

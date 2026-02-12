@@ -158,6 +158,41 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.ready = true
 		return m, nil
 
+	case SpinnerTickMsg:
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
+		return m, cmd
+
+	case spinner.TickMsg:
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
+		return m, cmd
+
+	case DurationTickMsg:
+		return m, durationTick()
+
+	case ErrorMsg:
+		m.err = msg.Error
+		return m, nil
+
+	case QuitMsg:
+		return m, tea.Quit
+
+	case PausedMsg:
+		m.isPaused = true
+		return m, nil
+
+	case ResumedMsg:
+		m.isPaused = false
+		return m, nil
+	}
+
+	return m.handleWorkflowEvent(msg)
+}
+
+// handleWorkflowEvent handles workflow-related messages (state updates, logs, agent status).
+func (m Model) handleWorkflowEvent(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
 	case WorkflowUpdateMsg:
 		m.workflow = msg.State
 		m.tasks = m.buildTaskViews(msg.State)
@@ -189,7 +224,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			Level:   msg.Level,
 			Message: msg.Message,
 		})
-		// Keep last 100 logs
 		if len(m.logs) > 100 {
 			m.logs = m.logs[1:]
 		}
@@ -199,8 +233,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case MetricsUpdateMsg:
-		// Update metrics display (future implementation)
-		// For now, just re-subscribe for next event
 		if m.eventAdapter != nil {
 			return m, waitForEventBusUpdate(m.eventAdapter)
 		}
@@ -210,37 +242,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.droppedEvents = msg.Count
 		return m, nil
 
-	case SpinnerTickMsg:
-		var cmd tea.Cmd
-		m.spinner, cmd = m.spinner.Update(msg)
-		return m, cmd
-
-	case spinner.TickMsg:
-		// Update bubbles spinner for components
-		var cmd tea.Cmd
-		m.spinner, cmd = m.spinner.Update(msg)
-		return m, cmd
-
-	case DurationTickMsg:
-		return m, durationTick()
-
-	case ErrorMsg:
-		m.err = msg.Error
-		return m, nil
-
-	case QuitMsg:
-		return m, tea.Quit
-
-	case PausedMsg:
-		m.isPaused = true
-		return m, nil
-
-	case ResumedMsg:
-		m.isPaused = false
-		return m, nil
-
 	case TaskRetryQueuedMsg:
-		// Update task status to show retry queued
 		for i, task := range m.tasks {
 			if task.ID == msg.TaskID {
 				m.tasks[i].Status = core.TaskStatusPending
@@ -249,7 +251,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case AgentStatusUpdateMsg:
-		// Update agent status in the UI
 		if agent, ok := m.agentMap[msg.AgentID]; ok {
 			agent.Status = components.AgentStatus(msg.Status)
 			agent.Duration = msg.Duration

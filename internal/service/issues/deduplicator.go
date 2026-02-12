@@ -154,7 +154,7 @@ func (d *Deduplicator) Save(state *GenerationState) error {
 	statePath := d.getStatePath()
 
 	// Ensure directory exists
-	if err := os.MkdirAll(filepath.Dir(statePath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(statePath), 0o750); err != nil {
 		return fmt.Errorf("creating state directory: %w", err)
 	}
 
@@ -192,7 +192,7 @@ func (d *Deduplicator) getStatePath() string {
 
 // loadState loads state from a file.
 func (d *Deduplicator) loadState(path string) (*GenerationState, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 -- path constructed from internal project/report directory
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
@@ -237,7 +237,7 @@ func CalculateInputChecksum(consolidatedPath string, taskPaths []string) (string
 
 // hashFile adds a file's contents to a hash.
 func hashFile(h io.Writer, path string) error {
-	f, err := os.Open(path)
+	f, err := os.Open(path) // #nosec G304 -- path constructed from internal project/report directory
 	if err != nil {
 		return err
 	}

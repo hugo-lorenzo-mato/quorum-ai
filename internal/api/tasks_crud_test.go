@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -611,7 +612,7 @@ func TestLoadMutableTaskState_SaveError(t *testing.T) {
 	t.Parallel()
 	sm := newMockStateManager()
 	sm.workflows[core.WorkflowID("wf-1")] = newMutableWorkflowState("wf-1")
-	sm.saveErr = json.Unmarshal([]byte("bad"), nil) // any non-nil error
+	sm.saveErr = errors.New("synthetic store error") // any non-nil error
 	eb := events.New(100)
 	t.Cleanup(func() { eb.Close() })
 	srv := NewServer(sm, eb, WithLogger(slog.Default()))
@@ -629,7 +630,7 @@ func TestLoadMutableTaskState_SaveError(t *testing.T) {
 func TestLoadMutableTaskState_LoadError(t *testing.T) {
 	t.Parallel()
 	sm := newMockStateManager()
-	sm.loadErr = json.Unmarshal([]byte("bad"), nil) // any non-nil error
+	sm.loadErr = errors.New("synthetic store error") // any non-nil error
 	eb := events.New(100)
 	t.Cleanup(func() { eb.Close() })
 	srv := NewServer(sm, eb, WithLogger(slog.Default()))
@@ -890,7 +891,7 @@ func TestHandleReviewWorkflow_SaveError(t *testing.T) {
 	state := newReviewableWorkflowState("wf-1", core.PhasePlan)
 	sm := newMockStateManager()
 	sm.workflows[core.WorkflowID("wf-1")] = state
-	sm.saveErr = json.Unmarshal([]byte("bad"), nil)
+	sm.saveErr = errors.New("synthetic store error")
 	eb := events.New(100)
 	t.Cleanup(func() { eb.Close() })
 	srv := NewServer(sm, eb, WithLogger(slog.Default()))
@@ -910,7 +911,7 @@ func TestHandleReviewWorkflow_RejectSaveError(t *testing.T) {
 	state := newReviewableWorkflowState("wf-1", core.PhasePlan)
 	sm := newMockStateManager()
 	sm.workflows[core.WorkflowID("wf-1")] = state
-	sm.saveErr = json.Unmarshal([]byte("bad"), nil)
+	sm.saveErr = errors.New("synthetic store error")
 	eb := events.New(100)
 	t.Cleanup(func() { eb.Close() })
 	srv := NewServer(sm, eb, WithLogger(slog.Default()))
@@ -967,7 +968,7 @@ func TestHandleSwitchInteractive_SaveError(t *testing.T) {
 			Tasks:        map[core.TaskID]*core.TaskState{},
 		},
 	}
-	sm.saveErr = json.Unmarshal([]byte("bad"), nil)
+	sm.saveErr = errors.New("synthetic store error")
 	eb := events.New(100)
 	t.Cleanup(func() { eb.Close() })
 	srv := NewServer(sm, eb, WithLogger(slog.Default()))
@@ -984,7 +985,7 @@ func TestHandleSwitchInteractive_SaveError(t *testing.T) {
 func TestHandleSwitchInteractive_LoadError(t *testing.T) {
 	t.Parallel()
 	sm := newMockStateManager()
-	sm.loadErr = json.Unmarshal([]byte("bad"), nil)
+	sm.loadErr = errors.New("synthetic store error")
 	eb := events.New(100)
 	t.Cleanup(func() { eb.Close() })
 	srv := NewServer(sm, eb, WithLogger(slog.Default()))

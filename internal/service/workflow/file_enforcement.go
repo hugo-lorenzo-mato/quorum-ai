@@ -66,7 +66,7 @@ func (fe *FileEnforcement) VerifyOrWriteFallback(filePath, stdout string) (creat
 	}
 
 	// Write stdout as fallback
-	if err := os.WriteFile(filePath, []byte(stdout), 0o640); err != nil {
+	if err := os.WriteFile(filePath, []byte(stdout), 0o600); err != nil {
 		return false, fmt.Errorf("writing fallback file: %w", err)
 	}
 

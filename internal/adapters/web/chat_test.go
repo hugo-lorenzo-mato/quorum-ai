@@ -18,9 +18,10 @@ import (
 
 // mockAgent implements core.Agent for testing.
 type mockAgent struct {
-	name   string
-	result *core.ExecuteResult
-	err    error
+	name     string
+	result   *core.ExecuteResult
+	err      error
+	lastOpts *core.ExecuteOptions // captures the last ExecuteOptions passed
 }
 
 func (m *mockAgent) Name() string { return m.name }
@@ -29,6 +30,7 @@ func (m *mockAgent) Capabilities() core.Capabilities {
 }
 func (m *mockAgent) Ping(ctx context.Context) error { return nil }
 func (m *mockAgent) Execute(ctx context.Context, opts core.ExecuteOptions) (*core.ExecuteResult, error) {
+	m.lastOpts = &opts
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -481,6 +483,144 @@ func TestSetModel(t *testing.T) {
 	// Verify the model was set
 	if h.sessions["session-1"].model != "claude-opus-4-6" {
 		t.Errorf("got model %q, want %q", h.sessions["session-1"].model, "claude-opus-4-6")
+	}
+}
+
+func TestSendMessage_WorkDirFromProjectRoot(t *testing.T) {
+	t.Parallel()
+
+	projectRoot := "/home/testuser/projects/my-app"
+	agent := &mockAgent{name: "claude"}
+	registry := &mockAgentRegistry{
+		agents: map[string]core.Agent{"claude": agent},
+	}
+	eventBus := events.New(10)
+	defer eventBus.Close()
+
+	h := NewChatHandler(registry, eventBus, nil, nil,
+		WithProjectRootResolver(func(_ context.Context) string { return projectRoot }),
+	)
+	r := setupTestRouter(h)
+
+	// Create session (captures projectRoot)
+	createReq := httptest.NewRequest(http.MethodPost, "/chat/sessions", bytes.NewBufferString(`{"agent":"claude"}`))
+	createReq.Header.Set("Content-Type", "application/json")
+	createW := httptest.NewRecorder()
+	r.ServeHTTP(createW, createReq)
+
+	if createW.Code != http.StatusCreated {
+		t.Fatalf("CreateSession status=%d body=%s", createW.Code, createW.Body.String())
+	}
+
+	var session ChatSession
+	if err := json.NewDecoder(createW.Body).Decode(&session); err != nil {
+		t.Fatalf("failed to decode session: %v", err)
+	}
+
+	// Send a message
+	sendReq := httptest.NewRequest(http.MethodPost, "/chat/sessions/"+session.ID+"/messages",
+		bytes.NewBufferString(`{"content":"What files are in this project?"}`))
+	sendReq.Header.Set("Content-Type", "application/json")
+	sendW := httptest.NewRecorder()
+	r.ServeHTTP(sendW, sendReq)
+
+	if sendW.Code != http.StatusOK {
+		t.Fatalf("SendMessage status=%d body=%s", sendW.Code, sendW.Body.String())
+	}
+
+	// Verify the agent received WorkDir matching the project root
+	if agent.lastOpts == nil {
+		t.Fatal("agent.Execute was not called")
+	}
+	if agent.lastOpts.WorkDir != projectRoot {
+		t.Errorf("WorkDir = %q, want %q", agent.lastOpts.WorkDir, projectRoot)
+	}
+}
+
+func TestSendMessage_WorkDirFromSessionProjectRoot(t *testing.T) {
+	t.Parallel()
+
+	// Verify that sessions created with one projectRoot continue using that
+	// projectRoot even if the resolver changes (session-level persistence).
+	originalRoot := "/home/testuser/projects/original"
+	agent := &mockAgent{name: "claude"}
+	registry := &mockAgentRegistry{
+		agents: map[string]core.Agent{"claude": agent},
+	}
+	eventBus := events.New(10)
+	defer eventBus.Close()
+
+	h := NewChatHandler(registry, eventBus, nil, nil)
+
+	// Manually set up a session with a specific project root
+	h.sessions["test-session"] = &chatSessionState{
+		session:     ChatSession{ID: "test-session", Agent: "claude"},
+		messages:    make([]ChatMessage, 0),
+		agent:       "claude",
+		projectRoot: originalRoot,
+	}
+
+	r := setupTestRouter(h)
+
+	sendReq := httptest.NewRequest(http.MethodPost, "/chat/sessions/test-session/messages",
+		bytes.NewBufferString(`{"content":"hello"}`))
+	sendReq.Header.Set("Content-Type", "application/json")
+	sendW := httptest.NewRecorder()
+	r.ServeHTTP(sendW, sendReq)
+
+	if sendW.Code != http.StatusOK {
+		t.Fatalf("SendMessage status=%d body=%s", sendW.Code, sendW.Body.String())
+	}
+
+	if agent.lastOpts == nil {
+		t.Fatal("agent.Execute was not called")
+	}
+	if agent.lastOpts.WorkDir != originalRoot {
+		t.Errorf("WorkDir = %q, want %q", agent.lastOpts.WorkDir, originalRoot)
+	}
+}
+
+func TestSendMessage_WorkDirPerMessageAgent(t *testing.T) {
+	t.Parallel()
+
+	// When a message overrides the agent, WorkDir should still use the session's projectRoot.
+	projectRoot := "/home/testuser/projects/my-app"
+	geminiAgent := &mockAgent{name: "gemini"}
+	registry := &mockAgentRegistry{
+		agents: map[string]core.Agent{
+			"claude": &mockAgent{name: "claude"},
+			"gemini": geminiAgent,
+		},
+	}
+	eventBus := events.New(10)
+	defer eventBus.Close()
+
+	h := NewChatHandler(registry, eventBus, nil, nil)
+	h.sessions["test-session"] = &chatSessionState{
+		session:     ChatSession{ID: "test-session", Agent: "claude"},
+		messages:    make([]ChatMessage, 0),
+		agent:       "claude",
+		projectRoot: projectRoot,
+	}
+
+	r := setupTestRouter(h)
+
+	// Send message with agent override to gemini
+	sendReq := httptest.NewRequest(http.MethodPost, "/chat/sessions/test-session/messages",
+		bytes.NewBufferString(`{"content":"hello","agent":"gemini"}`))
+	sendReq.Header.Set("Content-Type", "application/json")
+	sendW := httptest.NewRecorder()
+	r.ServeHTTP(sendW, sendReq)
+
+	if sendW.Code != http.StatusOK {
+		t.Fatalf("SendMessage status=%d body=%s", sendW.Code, sendW.Body.String())
+	}
+
+	if geminiAgent.lastOpts == nil {
+		t.Fatal("gemini agent.Execute was not called")
+	}
+	if geminiAgent.lastOpts.WorkDir != projectRoot {
+		t.Errorf("WorkDir = %q, want %q", geminiAgent.lastOpts.WorkDir, projectRoot)
 	}
 }
 

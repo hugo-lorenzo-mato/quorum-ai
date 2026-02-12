@@ -109,8 +109,11 @@ func (s *Server) getProjectConfigMode(ctx context.Context) (string, error) {
 	}
 
 	p, err := s.projectRegistry.GetProject(ctx, projectID)
-	if err != nil || p == nil {
+	if err != nil {
 		// Fail closed to custom (project file) in case of lookup errors.
+		return project.ConfigModeCustom, nil //nolint:nilerr // graceful degradation: use project config on lookup failure
+	}
+	if p == nil {
 		return project.ConfigModeCustom, nil
 	}
 
@@ -128,7 +131,7 @@ func (s *Server) getProjectConfigMode(ctx context.Context) (string, error) {
 
 // effectiveConfigPath returns the config file path to use for the current request context,
 // plus scope/mode metadata for the frontend.
-func (s *Server) effectiveConfigPath(ctx context.Context) (path string, scope string, mode string, err error) {
+func (s *Server) effectiveConfigPath(ctx context.Context) (path, scope, mode string, err error) {
 	mode, _ = s.getProjectConfigMode(ctx)
 	if mode == project.ConfigModeInheritGlobal {
 		globalPath, gpErr := config.EnsureGlobalConfigFile()

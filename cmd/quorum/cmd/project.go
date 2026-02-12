@@ -236,7 +236,7 @@ func runListProjects(_ *cobra.Command, _ []string) error {
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
 			p.ID, p.Name, p.Path, status, isDefault)
 	}
-	w.Flush()
+	_ = w.Flush()
 
 	return nil
 }

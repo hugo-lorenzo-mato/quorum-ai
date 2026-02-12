@@ -174,10 +174,10 @@ func TestClaudeGetEffortLevel_Priority(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name   string
-		cfg    AgentConfig
-		opts   core.ExecuteOptions
-		want   string
+		name string
+		cfg  AgentConfig
+		opts core.ExecuteOptions
+		want string
 	}{
 		{
 			name: "per-message overrides everything",
@@ -420,15 +420,15 @@ func TestClaudeBuildArgs(t *testing.T) {
 		wantSysArg bool
 	}{
 		{
-			name: "default model from config",
-			cfg:  AgentConfig{Path: "claude", Model: "opus"},
-			opts: core.ExecuteOptions{},
+			name:      "default model from config",
+			cfg:       AgentConfig{Path: "claude", Model: "opus"},
+			opts:      core.ExecuteOptions{},
 			wantModel: "opus",
 		},
 		{
-			name: "model from opts overrides config",
-			cfg:  AgentConfig{Path: "claude", Model: "opus"},
-			opts: core.ExecuteOptions{Model: "sonnet"},
+			name:      "model from opts overrides config",
+			cfg:       AgentConfig{Path: "claude", Model: "opus"},
+			opts:      core.ExecuteOptions{Model: "sonnet"},
 			wantModel: "sonnet",
 		},
 		{
@@ -1728,7 +1728,7 @@ func TestExtractErrorFromOutput(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name string
+		name   string
 		stdout string
 		want   string
 	}{
@@ -1788,8 +1788,8 @@ func TestGetStreamConfig(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name   string
-		want   StreamMethod
+		name string
+		want StreamMethod
 	}{
 		{"claude", StreamMethodJSONStdout},
 		{"gemini", StreamMethodJSONStdout},

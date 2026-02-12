@@ -216,8 +216,8 @@ func TestWorkflowIsolationFinalizer_Finalize_AutoPR_NoGit(t *testing.T) {
 		},
 		GitIsolation:      &GitIsolationConfig{Enabled: true},
 		WorkflowWorktrees: wwtm,
-		Git:               nil,    // no git client
-		GitHub:            nil,    // no github client
+		Git:               nil, // no git client
+		GitHub:            nil, // no github client
 		Logger:            logging.NewNop(),
 	}
 
@@ -262,10 +262,10 @@ func TestPrepareExecution(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name      string
-		isResume  bool
+		name       string
+		isResume   bool
 		initExecID int
-		hasEvents bool
+		hasEvents  bool
 	}{
 		{
 			name:       "new execution clears events",
@@ -493,10 +493,10 @@ func TestHandleAbort(t *testing.T) {
 
 	sm := &mockStateManager{}
 	r := &Runner{
-		config: DefaultRunnerConfig(),
-		state:  sm,
-		logger: logging.NewNop(),
-		output: NopOutputNotifier{},
+		config:     DefaultRunnerConfig(),
+		state:      sm,
+		logger:     logging.NewNop(),
+		output:     NopOutputNotifier{},
 		checkpoint: &mockCheckpointCreator{},
 	}
 
@@ -899,11 +899,11 @@ func TestEnsureWorkflowGitIsolation(t *testing.T) {
 			wantChanged: false,
 		},
 		{
-			name:      "nil worktree manager",
-			config:    DefaultRunnerConfig(),
-			isolation: &GitIsolationConfig{Enabled: true},
-			wwtm:      nil,
-			state:     &core.WorkflowState{WorkflowDefinition: core.WorkflowDefinition{WorkflowID: "wf-1"}},
+			name:        "nil worktree manager",
+			config:      DefaultRunnerConfig(),
+			isolation:   &GitIsolationConfig{Enabled: true},
+			wwtm:        nil,
+			state:       &core.WorkflowState{WorkflowDefinition: core.WorkflowDefinition{WorkflowID: "wf-1"}},
 			wantChanged: false,
 		},
 		{
@@ -1070,10 +1070,10 @@ func TestBuildBlueprint(t *testing.T) {
 		{
 			name: "multi agent mode",
 			config: &RunnerConfig{
-				SingleAgent: SingleAgentConfig{Enabled: false},
-				Moderator:   ModeratorConfig{Enabled: true, Agent: "claude"},
-				Synthesizer: SynthesizerConfig{Agent: "claude"},
-				Refiner:     RefinerConfig{Enabled: true, Agent: "claude"},
+				SingleAgent:     SingleAgentConfig{Enabled: false},
+				Moderator:       ModeratorConfig{Enabled: true, Agent: "claude"},
+				Synthesizer:     SynthesizerConfig{Agent: "claude"},
+				Refiner:         RefinerConfig{Enabled: true, Agent: "claude"},
 				PlanSynthesizer: PlanSynthesizerConfig{Enabled: true, Agent: "claude"},
 				PhaseTimeouts: PhaseTimeouts{
 					Analyze: 1 * time.Hour,
@@ -1428,10 +1428,10 @@ func TestPrependToConsolidatedAnalysis(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name       string
-		state      *core.WorkflowState
-		context    string
-		wantErr    bool
+		name    string
+		state   *core.WorkflowState
+		context string
+		wantErr bool
 	}{
 		{
 			name: "no checkpoints",

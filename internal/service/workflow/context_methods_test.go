@@ -10,7 +10,6 @@ import (
 
 // Quick coverage tests for NopOutputNotifier
 
-
 // Quick coverage tests for Context methods
 
 func TestContext_ResolveFilePath(t *testing.T) {
@@ -128,9 +127,6 @@ func TestContext_UpdateMetrics(t *testing.T) {
 	}
 }
 
-
-
-
 func TestContext_GetContextString(t *testing.T) {
 	t.Parallel()
 
@@ -148,14 +144,4 @@ func TestContext_GetContextString(t *testing.T) {
 	if result == "" {
 		t.Error("GetContextString() returned empty string")
 	}
-}
-
-// Helper function from builder tests
-func builderContains(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }

@@ -119,31 +119,31 @@ func NewProjectContext(id, root string, opts ...ContextOption) (*ProjectContext,
 
 	// 1. Config Loader (critical for operations)
 	if initErr = pc.initConfigLoader(); initErr != nil {
-		pc.Close()
+		_ = pc.Close()
 		return nil, fmt.Errorf("initializing config loader: %w", initErr)
 	}
 
 	// 2. State Manager (critical - fail if unavailable)
 	if initErr = pc.initStateManager(options); initErr != nil {
-		pc.Close()
+		_ = pc.Close()
 		return nil, fmt.Errorf("initializing state manager: %w", initErr)
 	}
 
 	// 3. Event Bus (critical)
 	if initErr = pc.initEventBus(options); initErr != nil {
-		pc.Close()
+		_ = pc.Close()
 		return nil, fmt.Errorf("initializing event bus: %w", initErr)
 	}
 
 	// 4. Attachments (required for file handling)
 	if initErr = pc.initAttachments(); initErr != nil {
-		pc.Close()
+		_ = pc.Close()
 		return nil, fmt.Errorf("initializing attachments: %w", initErr)
 	}
 
 	// 5. Chat Store (for chat session persistence)
 	if initErr = pc.initChatStore(options); initErr != nil {
-		pc.Close()
+		_ = pc.Close()
 		return nil, fmt.Errorf("initializing chat store: %w", initErr)
 	}
 

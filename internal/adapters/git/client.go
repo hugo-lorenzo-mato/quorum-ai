@@ -528,29 +528,29 @@ func resolveGitBinaryPath(repoAbs string) (string, error) {
 		return "", fmt.Errorf("resolving git path: %w", err)
 	}
 
-	real := abs
+	resolved := abs
 	if rr, err := filepath.EvalSymlinks(abs); err == nil {
-		real = rr
+		resolved = rr
 	}
 
-	info, err := os.Stat(real)
+	info, err := os.Stat(resolved)
 	if err != nil {
 		return "", fmt.Errorf("stat git binary: %w", err)
 	}
 	if !info.Mode().IsRegular() {
-		return "", fmt.Errorf("git binary is not a regular file: %s", real)
+		return "", fmt.Errorf("git binary is not a regular file: %s", resolved)
 	}
 	if runtime.GOOS != "windows" && info.Mode()&0o111 == 0 {
-		return "", fmt.Errorf("git binary is not executable: %s", real)
+		return "", fmt.Errorf("git binary is not executable: %s", resolved)
 	}
 
 	// Defensive: avoid executing a "git" that lives inside the repository itself.
 	// This reduces risk if PATH is manipulated to include "." or repo directories.
-	if isPathWithinDir(repoAbs, real) {
-		return "", fmt.Errorf("refusing to execute git from within repository: %s", real)
+	if isPathWithinDir(repoAbs, resolved) {
+		return "", fmt.Errorf("refusing to execute git from within repository: %s", resolved)
 	}
 
-	return real, nil
+	return resolved, nil
 }
 
 func isPathWithinDir(root, path string) bool {
@@ -1238,7 +1238,7 @@ func (c *Client) findGitDir() string {
 	}
 
 	// If .git is a file, it's a worktree - read the path from it
-	content, err := os.ReadFile(gitPath)
+	content, err := os.ReadFile(gitPath) // #nosec G304 -- path from internal git discovery
 	if err != nil {
 		return gitPath
 	}

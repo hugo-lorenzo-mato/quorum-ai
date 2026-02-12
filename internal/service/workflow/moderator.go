@@ -193,12 +193,11 @@ func (m *SemanticModerator) buildAnalysisSummaries(wctx *Context, outputs []Anal
 }
 
 // prepareOutputPaths sets up output file paths for moderator execution.
-func (m *SemanticModerator) prepareOutputPaths(wctx *Context, round, attempt int, moderatorAgentName string) (string, string) {
-	var outputFilePath string
+func (m *SemanticModerator) prepareOutputPaths(wctx *Context, round, attempt int, moderatorAgentName string) (outputFilePath, absOutputPath string) {
 	if wctx.Report != nil && wctx.Report.IsEnabled() {
 		outputFilePath = wctx.Report.ModeratorAttemptPath(round, attempt, moderatorAgentName)
 	}
-	absOutputPath := wctx.ResolveFilePath(outputFilePath)
+	absOutputPath = wctx.ResolveFilePath(outputFilePath)
 
 	// Ensure output directory exists before execution (file enforcement)
 	if absOutputPath != "" {
@@ -237,7 +236,7 @@ func (m *SemanticModerator) emitStartedEvent(wctx *Context, moderatorAgentName s
 }
 
 // executeModerator executes the moderator evaluation with retry logic and watchdog.
-func (m *SemanticModerator) executeModerator(ctx context.Context, wctx *Context, agent core.Agent, prompt, model, absOutputPath, moderatorAgentName string, round, attempt int) (*core.ExecuteResult, error) {
+func (m *SemanticModerator) executeModerator(ctx context.Context, wctx *Context, agent core.Agent, prompt, model, absOutputPath, moderatorAgentName string, round, _ int) (*core.ExecuteResult, error) {
 	// Launch output file watchdog for recovery/reaping if agent hangs after writing
 	var watchdog *OutputWatchdog
 	if absOutputPath != "" {
@@ -256,7 +255,7 @@ func (m *SemanticModerator) executeModerator(ctx context.Context, wctx *Context,
 		// This recovers from the case where the agent wrote output but cmd.Wait() failed.
 		if absOutputPath != "" {
 			if info, statErr := os.Stat(absOutputPath); statErr == nil && info.Size() > 1024 {
-				content, readErr := os.ReadFile(absOutputPath)
+				content, readErr := os.ReadFile(absOutputPath) // #nosec G304 -- path constructed from internal report directory
 				if readErr == nil && len(strings.TrimSpace(string(content))) > 100 {
 					fileAge := time.Since(info.ModTime()).Truncate(time.Second)
 					wctx.Logger.Warn("reusing moderator output from previous attempt",
@@ -334,7 +333,8 @@ func (m *SemanticModerator) emitErrorEvent(wctx *Context, moderatorAgentName str
 func (m *SemanticModerator) handleFileEnforcement(wctx *Context, result *core.ExecuteResult, absOutputPath, moderatorAgentName string, round int, model string) *core.ExecuteResult {
 	// Some CLIs write to file but return empty stdout. Prefer the file content in that case.
 	if absOutputPath != "" && (result == nil || strings.TrimSpace(result.Output) == "") {
-		if content, readErr := os.ReadFile(absOutputPath); readErr == nil && strings.TrimSpace(string(content)) != "" {
+		content, readErr := os.ReadFile(absOutputPath) // #nosec G304 -- path constructed from internal report directory
+		if readErr == nil && strings.TrimSpace(string(content)) != "" {
 			if result == nil {
 				result = &core.ExecuteResult{}
 			}
@@ -352,7 +352,8 @@ func (m *SemanticModerator) handleFileEnforcement(wctx *Context, result *core.Ex
 	// while printing conversational text to stdout.
 	if result != nil && strings.TrimSpace(result.Output) != "" && !isValidModeratorOutput(result.Output) {
 		if absOutputPath != "" {
-			if content, readErr := os.ReadFile(absOutputPath); readErr == nil {
+			content, readErr := os.ReadFile(absOutputPath) // #nosec G304 -- path constructed from internal report directory
+			if readErr == nil {
 				fileRaw := string(content)
 				if strings.TrimSpace(fileRaw) != "" && isValidModeratorOutput(fileRaw) {
 					wctx.Logger.Warn("moderator stdout rejected; using structured output file content instead",
@@ -484,8 +485,6 @@ type moderatorFrontmatter struct {
 }
 
 // parseModeratorResponse parses the moderator's response to extract the consensus score and details.
-//
-//nolint:gocyclo // Parsing logic is intentionally explicit for robustness.
 func (m *SemanticModerator) parseModeratorResponse(output string) *ModeratorEvaluationResult {
 	result := &ModeratorEvaluationResult{
 		RawOutput:  output,
@@ -527,74 +526,9 @@ func (m *SemanticModerator) parseModeratorResponse(output string) *ModeratorEval
 
 	// 4. Fallback patterns (relaxed regexes)
 	if !result.ScoreFound {
-		// Pattern 1: Flexible key-value with optional percent
-		// Matches: "Consensus Score: 80", "Semantic Score = 85%", "Score: 90/100"
-		scorePattern := regexp.MustCompile(`(?im)(?:consensus|semantic|overall)\s*_?\s*score\s*[:=]\s*(\d+(?:\.\d+)?)(?:\s*%|\s*/\s*100)?`)
-		match := scorePattern.FindStringSubmatch(output)
-		if match != nil && len(match) > 1 {
-			if score, err := strconv.ParseFloat(match[1], 64); err == nil {
-				// Normalize: if > 1.0, assume percentage (0-100), otherwise assume ratio (0.0-1.0)
-				if score > 1.0 {
-					result.Score = score / 100.0
-				} else {
-					result.Score = score
-				}
-				result.ScoreFound = true
-			}
-		}
-	}
-
-	// Pattern 2: Look for score in markdown code blocks or bold format
-	// Matches: `CONSENSUS_SCORE: 78%`, **CONSENSUS_SCORE:** 78%
-	if !result.ScoreFound {
-		codeBlockPattern := regexp.MustCompile(`(?im)(?:\*\*)?CONSENSUS[_\s]?SCORE(?:\*\*)?[:\s*]+(\d+)(?:\s*%)?`)
-		match := codeBlockPattern.FindStringSubmatch(output)
-		if match != nil && len(match) > 1 {
-			if score, err := strconv.ParseFloat(match[1], 64); err == nil {
-				result.Score = score / 100.0
-				result.ScoreFound = true
-			}
-		}
-	}
-
-	// Pattern 3: Deep reasoning pattern (for extended thinking models)
-	// Matches: =-=-=-=75%=-=-=-=-=
-	if !result.ScoreFound {
-		deepPattern := regexp.MustCompile(`=-=-=-=(\d+)%?=-=-=-=-=`)
-		match := deepPattern.FindStringSubmatch(output)
-		if match != nil && len(match) > 1 {
-			if score, err := strconv.ParseFloat(match[1], 64); err == nil {
-				result.Score = score / 100.0
-				result.ScoreFound = true
-			}
-		}
-	}
-
-	// Pattern 4: "overall/semantic/consensus score is XX%" with 'is' keyword
-	if !result.ScoreFound {
-		isPattern := regexp.MustCompile(`(?i)(?:overall|semantic|consensus)\s+score\s+is\s+(\d+(?:\.\d+)?)\s*%?`)
-		match := isPattern.FindStringSubmatch(output)
-		if match != nil && len(match) > 1 {
-			if score, err := strconv.ParseFloat(match[1], 64); err == nil {
-				if score > 1.0 {
-					result.Score = score / 100.0
-				} else {
-					result.Score = score
-				}
-				result.ScoreFound = true
-			}
-		}
-	}
-
-	// Pattern 5: Decimal format "semantic score is 0.XX"
-	if !result.ScoreFound {
-		decimalPattern := regexp.MustCompile(`(?i)(?:semantic|consensus|overall)\s+score\s+(?:is\s+)?(0\.\d+)`)
-		match := decimalPattern.FindStringSubmatch(output)
-		if match != nil && len(match) > 1 {
-			if score, err := strconv.ParseFloat(match[1], 64); err == nil && score <= 1.0 {
-				result.Score = score
-				result.ScoreFound = true
-			}
+		if score, found := tryFallbackScorePatterns(output); found {
+			result.Score = score
+			result.ScoreFound = true
 		}
 	}
 
@@ -616,6 +550,53 @@ func (m *SemanticModerator) parseModeratorResponse(output string) *ModeratorEval
 	result.Recommendations = extractModeratorSection(output, "Recommendations for Next Round")
 
 	return result
+}
+
+// tryFallbackScorePatterns tries multiple regex patterns to extract a consensus score.
+// Returns the normalized score (0.0-1.0) and whether a score was found.
+func tryFallbackScorePatterns(output string) (float64, bool) {
+	type pattern struct {
+		re *regexp.Regexp
+		fn func(float64) (float64, bool)
+	}
+	autoNorm := func(s float64) (float64, bool) {
+		if s > 1.0 {
+			return s / 100.0, true
+		}
+		return s, true
+	}
+	pct := func(s float64) (float64, bool) { return s / 100.0, true }
+	decOnly := func(s float64) (float64, bool) {
+		if s <= 1.0 {
+			return s, true
+		}
+		return 0, false
+	}
+
+	patterns := []pattern{
+		// Pattern 1: Flexible key-value — "Consensus Score: 80", "Score = 85%", "Score: 90/100"
+		{regexp.MustCompile(`(?im)(?:consensus|semantic|overall)\s*_?\s*score\s*[:=]\s*(\d+(?:\.\d+)?)(?:\s*%|\s*/\s*100)?`), autoNorm},
+		// Pattern 2: Markdown/bold — `CONSENSUS_SCORE: 78%`, **CONSENSUS_SCORE:** 78%
+		{regexp.MustCompile(`(?im)(?:\*\*)?CONSENSUS[_\s]?SCORE(?:\*\*)?[:\s*]+(\d+)(?:\s*%)?`), pct},
+		// Pattern 3: Deep reasoning — =-=-=-=75%=-=-=-=-=
+		{regexp.MustCompile(`=-=-=-=(\d+)%?=-=-=-=-=`), pct},
+		// Pattern 4: Natural language — "overall score is 80%"
+		{regexp.MustCompile(`(?i)(?:overall|semantic|consensus)\s+score\s+is\s+(\d+(?:\.\d+)?)\s*%?`), autoNorm},
+		// Pattern 5: Decimal — "semantic score is 0.85"
+		{regexp.MustCompile(`(?i)(?:semantic|consensus|overall)\s+score\s+(?:is\s+)?(0\.\d+)`), decOnly},
+	}
+
+	for _, p := range patterns {
+		match := p.re.FindStringSubmatch(output)
+		if match != nil && len(match) > 1 {
+			if score, err := strconv.ParseFloat(match[1], 64); err == nil {
+				if normalized, ok := p.fn(score); ok {
+					return normalized, true
+				}
+			}
+		}
+	}
+	return 0, false
 }
 
 // sanitizeRawOutput removes markdown code blocks that might wrap YAML.

@@ -11,52 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/diagnostics"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/events"
-	"github.com/hugo-lorenzo-mato/quorum-ai/internal/project"
 )
-
-// stubChatStore is a minimal implementation of core.ChatStore for testing.
-type stubChatStore struct{}
-
-func (s *stubChatStore) SaveSession(_ context.Context, _ *core.ChatSessionState) error {
-	return nil
-}
-func (s *stubChatStore) LoadSession(_ context.Context, _ string) (*core.ChatSessionState, error) {
-	return nil, nil
-}
-func (s *stubChatStore) ListSessions(_ context.Context) ([]*core.ChatSessionState, error) {
-	return nil, nil
-}
-func (s *stubChatStore) DeleteSession(_ context.Context, _ string) error               { return nil }
-func (s *stubChatStore) SaveMessage(_ context.Context, _ *core.ChatMessageState) error { return nil }
-func (s *stubChatStore) LoadMessages(_ context.Context, _ string) ([]*core.ChatMessageState, error) {
-	return nil, nil
-}
-
-// stubProjectRegistry is a minimal implementation of project.Registry for testing.
-type stubProjectRegistry struct{}
-
-func (s *stubProjectRegistry) ListProjects(_ context.Context) ([]*project.Project, error) {
-	return nil, nil
-}
-func (s *stubProjectRegistry) GetProject(_ context.Context, _ string) (*project.Project, error) {
-	return nil, nil
-}
-func (s *stubProjectRegistry) GetProjectByPath(_ context.Context, _ string) (*project.Project, error) {
-	return nil, nil
-}
-func (s *stubProjectRegistry) AddProject(_ context.Context, _ string) (*project.Project, error) {
-	return nil, nil
-}
-func (s *stubProjectRegistry) RemoveProject(_ context.Context, _ string) error { return nil }
-func (s *stubProjectRegistry) SetActiveProject(_ context.Context, _ string) error {
-	return nil
-}
-func (s *stubProjectRegistry) GetActiveProject(_ context.Context) (*project.Project, error) {
-	return nil, nil
-}
 
 // --- DefaultConfig tests ---
 

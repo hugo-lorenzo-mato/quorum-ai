@@ -396,44 +396,11 @@ func (r *Runner) RunWithState(ctx context.Context, state *core.WorkflowState) er
 
 	// Use provided state - NO initializeState()
 	workflowState := state
-	if workflowState.Status != core.WorkflowStatusRunning {
-		workflowState.Status = core.WorkflowStatusRunning
-	}
-	if workflowState.CurrentPhase == "" {
-		workflowState.CurrentPhase = core.PhaseRefine
-	}
-	if workflowState.Tasks == nil {
-		workflowState.Tasks = make(map[core.TaskID]*core.TaskState)
-	}
-	if workflowState.TaskOrder == nil {
-		workflowState.TaskOrder = make([]core.TaskID, 0)
-	}
-	if workflowState.Checkpoints == nil {
-		workflowState.Checkpoints = make([]core.Checkpoint, 0)
-	}
-	if workflowState.Metrics == nil {
-		workflowState.Metrics = &core.StateMetrics{}
-	}
+	r.ensureStateDefaults(workflowState)
 
 	// Prepare new execution - increment ExecutionID and clear old events
 	r.prepareExecution(workflowState, false)
-
-	// Preserve execution mode from the API-created blueprint before overwriting.
-	// The runner config doesn't know about "interactive" mode, so we must keep it.
-	prevExecutionMode := ""
-	prevInteractiveReview := workflowState.InteractiveReview
-	if workflowState.Blueprint != nil {
-		prevExecutionMode = workflowState.Blueprint.ExecutionMode
-	}
-
-	// Sync blueprint with actual runner config (API-created workflows have minimal blueprint)
-	workflowState.Blueprint = r.buildBlueprint()
-
-	// Restore execution mode if it was set to "interactive" by the API
-	if prevExecutionMode == core.ExecutionModeInteractive {
-		workflowState.Blueprint.ExecutionMode = prevExecutionMode
-	}
-	workflowState.InteractiveReview = prevInteractiveReview
+	r.syncBlueprint(workflowState)
 
 	// Ensure workflow-level Git isolation (API-created state may not have it persisted).
 	if _, err := r.ensureWorkflowGitIsolation(ctx, workflowState); err != nil {
@@ -532,6 +499,44 @@ func (r *Runner) RunWithState(ctx context.Context, state *core.WorkflowState) er
 	}
 
 	return r.state.Save(ctx, workflowState)
+}
+
+// ensureStateDefaults fills in zero-value fields on a workflow state.
+func (r *Runner) ensureStateDefaults(s *core.WorkflowState) {
+	if s.Status != core.WorkflowStatusRunning {
+		s.Status = core.WorkflowStatusRunning
+	}
+	if s.CurrentPhase == "" {
+		s.CurrentPhase = core.PhaseRefine
+	}
+	if s.Tasks == nil {
+		s.Tasks = make(map[core.TaskID]*core.TaskState)
+	}
+	if s.TaskOrder == nil {
+		s.TaskOrder = make([]core.TaskID, 0)
+	}
+	if s.Checkpoints == nil {
+		s.Checkpoints = make([]core.Checkpoint, 0)
+	}
+	if s.Metrics == nil {
+		s.Metrics = &core.StateMetrics{}
+	}
+}
+
+// syncBlueprint rebuilds the blueprint from runner config, preserving interactive mode if set.
+func (r *Runner) syncBlueprint(s *core.WorkflowState) {
+	prevExecutionMode := ""
+	prevInteractiveReview := s.InteractiveReview
+	if s.Blueprint != nil {
+		prevExecutionMode = s.Blueprint.ExecutionMode
+	}
+
+	s.Blueprint = r.buildBlueprint()
+
+	if prevExecutionMode == core.ExecutionModeInteractive {
+		s.Blueprint.ExecutionMode = prevExecutionMode
+	}
+	s.InteractiveReview = prevInteractiveReview
 }
 
 // AnalyzeWithState executes refine (if enabled) and analyze phases using an existing workflow state.
@@ -2016,7 +2021,7 @@ func (r *Runner) findTasksDirectory(workflowID core.WorkflowID) (string, error) 
 		baseDir, _ = os.Getwd()
 	}
 
-	outputDir := filepath.Join(baseDir, ".quorum/runs")
+	outputDir := filepath.Join(baseDir, ".quorum", "runs")
 
 	// List directories in output
 	entries, err := os.ReadDir(outputDir)

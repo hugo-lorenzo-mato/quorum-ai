@@ -3,7 +3,6 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -185,10 +184,4 @@ func parsePathMapFlags(raw []string) (map[string]string, error) {
 		result[from] = to
 	}
 	return result, nil
-}
-
-// helper for tests
-func writeJSONToStdout(v interface{}) error {
-	enc := json.NewEncoder(os.Stdout)
-	return enc.Encode(v)
 }

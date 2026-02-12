@@ -728,7 +728,18 @@ func (b *BaseAdapter) executeWithJSONStreaming(
 		Duration: duration,
 	}
 
-	// Idle timeout: return explicit error instead of classifying partial output as an error message
+	return b.classifyStreamingResult(ctx, result, err, adapterName, killedByIdle, idleTimeout, duration)
+}
+
+// classifyStreamingResult interprets the outcome of a streaming command execution.
+func (b *BaseAdapter) classifyStreamingResult(
+	ctx context.Context,
+	result *CommandResult,
+	waitErr error,
+	adapterName string,
+	killedByIdle bool,
+	idleTimeout, duration time.Duration,
+) (*CommandResult, error) {
 	if killedByIdle {
 		idleErr := core.ErrExecution("IDLE_TIMEOUT",
 			fmt.Sprintf("no stdout/stderr activity for %v", idleTimeout))
@@ -740,7 +751,6 @@ func (b *BaseAdapter) executeWithJSONStreaming(
 		return result, idleErr
 	}
 
-	// Emit completed or error event
 	if ctx.Err() == context.DeadlineExceeded {
 		b.emitEvent(core.NewAgentEvent(core.AgentEventError, adapterName, "Execution timed out"))
 		return result, core.ErrTimeout(fmt.Sprintf("command timed out after %v", duration))
@@ -753,8 +763,8 @@ func (b *BaseAdapter) executeWithJSONStreaming(
 		return result, core.ErrState("CANCELLED", "workflow cancelled by user")
 	}
 
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
+	if waitErr != nil {
+		if exitErr, ok := waitErr.(*exec.ExitError); ok {
 			result.ExitCode = exitErr.ExitCode()
 			classifiedErr := b.classifyError(result)
 			b.emitEvent(core.NewAgentEvent(core.AgentEventError, adapterName,
@@ -766,9 +776,9 @@ func (b *BaseAdapter) executeWithJSONStreaming(
 			return result, classifiedErr
 		}
 		b.emitEvent(core.NewAgentEvent(core.AgentEventError, adapterName,
-			fmt.Sprintf("Execution failed: %s", err),
+			fmt.Sprintf("Execution failed: %s", waitErr),
 		))
-		return result, fmt.Errorf("executing command: %w", err)
+		return result, fmt.Errorf("executing command: %w", waitErr)
 	}
 
 	b.emitEvent(core.NewAgentEvent(core.AgentEventCompleted, adapterName, "Execution completed").WithData(map[string]any{
@@ -808,7 +818,7 @@ func (b *BaseAdapter) streamJSONOutput(pipe io.ReadCloser, buf *bytes.Buffer, _ 
 // streamJSONOutputWithSignal is like streamJSONOutput but signals logicalDone
 // when the parser emits an AgentEventCompleted event (result:success).
 // If activity is non-nil, it receives a signal for each JSON line read.
-func (b *BaseAdapter) streamJSONOutputWithSignal(pipe io.ReadCloser, buf *bytes.Buffer, _ string, parser StreamParser, logicalDone chan<- struct{}, activity chan<- struct{}) {
+func (b *BaseAdapter) streamJSONOutputWithSignal(pipe io.ReadCloser, buf *bytes.Buffer, _ string, parser StreamParser, logicalDone, activity chan<- struct{}) {
 	scanner := bufio.NewScanner(pipe)
 	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
 

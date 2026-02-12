@@ -101,13 +101,10 @@ func parseLogLevel(level string) slog.Level {
 	}
 }
 
-//nolint:gocyclo // Complexity is acceptable for CLI orchestration function
 func runWorkflow(_ *cobra.Command, args []string) error {
-	// Setup context with cancellation
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Handle signals
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
@@ -116,26 +113,16 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 		cancel()
 	}()
 
-	// Validate single-agent flags
 	if err := validateSingleAgentFlags(); err != nil {
 		return err
 	}
-
-	// Interactive mode: delegate to interactive workflow runner
 	if runInteractive {
 		return runInteractiveWorkflow(ctx, args)
 	}
 
-	// Detect output mode
-	detector := tui.NewDetector()
-	if runOutput != "" {
-		detector.ForceMode(tui.ParseOutputMode(runOutput))
-	}
-	outputMode := detector.Detect()
-	useColor := detector.ShouldUseColor()
+	output, outputMode, tuiLogHandler := setupRunOutput()
+	defer func() { _ = output.Close() }()
 
-	// Load unified configuration using global viper (includes flag bindings)
-	// Precedence: flags > env > project config > user config > defaults
 	loader := config.NewLoaderWithViper(viper.GetViper())
 	if cfgFile != "" {
 		loader.WithConfigFile(cfgFile)
@@ -144,88 +131,18 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("loading config: %w", err)
 	}
-
-	// Get the resolved project root directory for multi-project support.
-	// This ensures agent subprocesses and artifacts use the project directory
-	// even when quorum's CWD differs from the target project.
 	projectRoot := loader.ProjectDir()
-
-	// Validate configuration (catches invalid weights, thresholds, etc.)
 	if err := config.ValidateConfig(cfg); err != nil {
 		return fmt.Errorf("validating config: %w", err)
 	}
 
-	// Create logger - for TUI mode we'll set up a custom handler later
-	var logger *logging.Logger
-	var tuiLogHandler *tui.TUILogHandler
+	logger := createRunLogger(cfg, outputMode, tuiLogHandler)
 
-	if outputMode == tui.ModeTUI {
-		// Create a placeholder handler - we'll connect it to TUIOutput later
-		tuiLogHandler = tui.NewTUILogHandler(nil, parseLogLevel(cfg.Log.Level))
-		logger = logging.NewWithHandler(tuiLogHandler)
-	} else {
-		// Normal logging for non-TUI modes
-		logger = logging.New(logging.Config{
-			Level:  cfg.Log.Level,
-			Format: cfg.Log.Format,
-			Output: os.Stdout,
-		})
-	}
+	tuiOutput, tuiErrCh := setupRunTUI(output, outputMode, tuiLogHandler, projectRoot)
 
-	// Create output handler based on detected mode
-	// Verbose output is enabled when trace mode is set or log level is debug
-	verboseOutput := runTrace != ""
-	output := tui.NewOutput(outputMode, useColor, verboseOutput)
-	defer func() { _ = output.Close() }()
-
-	// For TUI mode, start the TUI in a goroutine and run workflow in background
-	var tuiOutput *tui.TUIOutput
-	var tuiErrCh chan error
-	if outputMode == tui.ModeTUI {
-		var ok bool
-		tuiOutput, ok = output.(*tui.TUIOutput)
-		if ok {
-			baseDir := filepath.Join(projectRoot, ".quorum")
-			tuiOutput.SetModel(tui.NewWithStateManager(baseDir))
-
-			// Connect TUILogHandler to TUIOutput so logs are routed directly
-			if tuiLogHandler != nil {
-				tuiLogHandler.SetOutput(tuiOutput)
-			}
-
-			tuiErrCh = make(chan error, 1)
-			go func() {
-				tuiErrCh <- tuiOutput.Start()
-			}()
-			// Give TUI time to initialize
-			defer func() {
-				if tuiOutput != nil {
-					_ = tuiOutput.Close()
-				}
-			}()
-		}
-	}
-
-	// Create state manager from unified config
-	statePath := cfg.State.Path
-	if statePath == "" {
-		statePath = ".quorum/state/state.db"
-	}
-
-	stateOpts := state.StateManagerOptions{
-		BackupPath: cfg.State.BackupPath,
-	}
-	if cfg.State.LockTTL != "" {
-		if lockTTL, err := time.ParseDuration(cfg.State.LockTTL); err == nil {
-			stateOpts.LockTTL = lockTTL
-		} else {
-			logger.Warn("invalid state.lock_ttl, using default", "value", cfg.State.LockTTL, "error", err)
-		}
-	}
-
-	stateManager, err := state.NewStateManagerWithOptions(statePath, stateOpts)
+	stateManager, err := createRunStateManager(cfg, logger)
 	if err != nil {
-		return fmt.Errorf("creating state manager: %w", err)
+		return err
 	}
 	defer func() {
 		if closeErr := state.CloseStateManager(stateManager); closeErr != nil {
@@ -233,239 +150,30 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 		}
 	}()
 
-	// Create agent registry and configure from unified config
 	registry := cli.NewRegistry()
 	if err := configureAgentsFromConfig(registry, cfg, loader); err != nil {
 		return fmt.Errorf("configuring agents: %w", err)
 	}
 
-	// Create prompt renderer
-	promptRenderer, err := service.NewPromptRenderer()
-	if err != nil {
-		return fmt.Errorf("creating prompt renderer: %w", err)
-	}
-
-	traceCfg, err := parseTraceConfig(cfg, runTrace)
+	runnerConfig, err := buildRunnerConfig(cfg)
 	if err != nil {
 		return err
 	}
 
-	gitCommit, gitDirty := loadGitInfo()
-
-	// Create workflow runner config from unified config
-	timeout, err := parseDurationDefault(cfg.Workflow.Timeout, defaultWorkflowTimeout)
-	if err != nil {
-		return fmt.Errorf("parsing workflow timeout %q: %w", cfg.Workflow.Timeout, err)
-	}
-	defaultAgent := cfg.Agents.Default
-	if defaultAgent == "" {
-		defaultAgent = "claude"
-	}
-	// Parse phase timeouts
-	analyzeTimeout, err := parseDurationDefault(cfg.Phases.Analyze.Timeout, defaultPhaseTimeout)
-	if err != nil {
-		return fmt.Errorf("parsing analyze phase timeout %q: %w", cfg.Phases.Analyze.Timeout, err)
-	}
-	planTimeout, err := parseDurationDefault(cfg.Phases.Plan.Timeout, defaultPhaseTimeout)
-	if err != nil {
-		return fmt.Errorf("parsing plan phase timeout %q: %w", cfg.Phases.Plan.Timeout, err)
-	}
-	executeTimeout, err := parseDurationDefault(cfg.Phases.Execute.Timeout, defaultPhaseTimeout)
-	if err != nil {
-		return fmt.Errorf("parsing execute phase timeout %q: %w", cfg.Phases.Execute.Timeout, err)
+	traceWriter, traceCleanup := setupRunTrace(ctx, cfg, logger)
+	if traceCleanup != nil {
+		defer traceCleanup()
 	}
 
-	// Refiner config: disabled if --skip-refine flag is set
-	refinerEnabled := cfg.Phases.Analyze.Refiner.Enabled && !runSkipOptimize
-	runnerConfig := &workflow.RunnerConfig{
-		Timeout:      timeout,
-		MaxRetries:   runMaxRetries,
-		DryRun:       runDryRun,
-		DenyTools:    cfg.Workflow.DenyTools,
-		DefaultAgent: defaultAgent,
-		AgentPhaseModels: map[string]map[string]string{
-			"claude":   cfg.Agents.Claude.PhaseModels,
-			"gemini":   cfg.Agents.Gemini.PhaseModels,
-			"codex":    cfg.Agents.Codex.PhaseModels,
-			"copilot":  cfg.Agents.Copilot.PhaseModels,
-			"opencode": cfg.Agents.OpenCode.PhaseModels,
-		},
-		WorktreeAutoClean: cfg.Git.Worktree.AutoClean,
-		WorktreeMode:      cfg.Git.Worktree.Mode,
-		Refiner: workflow.RefinerConfig{
-			Enabled:  refinerEnabled,
-			Agent:    cfg.Phases.Analyze.Refiner.Agent,
-			Template: cfg.Phases.Analyze.Refiner.Template,
-		},
-		Synthesizer: workflow.SynthesizerConfig{
-			Agent: cfg.Phases.Analyze.Synthesizer.Agent,
-		},
-		PlanSynthesizer: workflow.PlanSynthesizerConfig{
-			Enabled: cfg.Phases.Plan.Synthesizer.Enabled,
-			Agent:   cfg.Phases.Plan.Synthesizer.Agent,
-		},
-		Moderator: workflow.ModeratorConfig{
-			Enabled:             cfg.Phases.Analyze.Moderator.Enabled,
-			Agent:               cfg.Phases.Analyze.Moderator.Agent,
-			Threshold:           cfg.Phases.Analyze.Moderator.Threshold,
-			MinRounds:           cfg.Phases.Analyze.Moderator.MinRounds,
-			MaxRounds:           cfg.Phases.Analyze.Moderator.MaxRounds,
-			WarningThreshold:    cfg.Phases.Analyze.Moderator.WarningThreshold,
-			StagnationThreshold: cfg.Phases.Analyze.Moderator.StagnationThreshold,
-		},
-		SingleAgent: buildSingleAgentConfig(cfg),
-		PhaseTimeouts: workflow.PhaseTimeouts{
-			Analyze: analyzeTimeout,
-			Plan:    planTimeout,
-			Execute: executeTimeout,
-		},
-		Finalization: workflow.FinalizationConfig{
-			AutoCommit:    cfg.Git.Task.AutoCommit,
-			AutoPush:      cfg.Git.Finalization.AutoPush,
-			AutoPR:        cfg.Git.Finalization.AutoPR,
-			AutoMerge:     cfg.Git.Finalization.AutoMerge,
-			PRBaseBranch:  cfg.Git.Finalization.PRBaseBranch,
-			MergeStrategy: cfg.Git.Finalization.MergeStrategy,
-			Remote:        cfg.GitHub.Remote,
-		},
-		Report: report.Config{
-			Enabled:    cfg.Report.Enabled,
-			BaseDir:    cfg.Report.BaseDir,
-			UseUTC:     cfg.Report.UseUTC,
-			IncludeRaw: cfg.Report.IncludeRaw,
-		},
-	}
-
-	// Create trace writer if tracing is enabled
-	traceWriter := service.NewTraceWriter(traceCfg, logger)
-	if traceWriter.Enabled() {
-		// Generate workflow ID early for trace directory
-		traceRunID := fmt.Sprintf("run-%d", time.Now().UnixNano())
-		if err := traceWriter.StartRun(ctx, service.TraceRunInfo{
-			RunID:      traceRunID,
-			WorkflowID: traceRunID,
-			StartedAt:  time.Now(),
-			GitCommit:  gitCommit,
-			GitDirty:   gitDirty,
-		}); err != nil {
-			logger.Warn("failed to start trace run", "error", err)
-		} else {
-			logger.Info("trace enabled", "mode", traceCfg.Mode, "dir", traceWriter.Dir())
-			defer func() {
-				summary := traceWriter.EndRun(ctx)
-				if summary.TotalEvents > 0 {
-					logger.Info("trace completed",
-						"events", summary.TotalEvents,
-						"dir", summary.Dir,
-					)
-				}
-			}()
-		}
-	}
-
-	// Create service components needed by the modular runner
-	checkpointManager := service.NewCheckpointManager(stateManager, logger)
-	retryPolicy := service.NewRetryPolicy(service.WithMaxAttempts(runMaxRetries))
-	rateLimiterRegistry := service.GetGlobalRateLimiter()
-	dagBuilder := service.NewDAGBuilder()
-
-	// Create worktree manager for task isolation
-	gitClient, err := git.NewClient(projectRoot)
-	if err != nil {
-		logger.Warn("failed to create git client, worktree isolation disabled", "error", err)
-	}
-	var worktreeManager workflow.WorktreeManager
-	var workflowWorktrees core.WorkflowWorktreeManager
-	if gitClient != nil {
-		worktreeManager = git.NewTaskWorktreeManager(gitClient, cfg.Git.Worktree.Dir).WithLogger(logger)
-
-		repoRoot, rootErr := gitClient.RepoRoot(ctx)
-		if rootErr != nil {
-			logger.Warn("failed to detect repo root, workflow git isolation disabled", "error", rootErr)
-		} else {
-			wtMgr, wtErr := git.NewWorkflowWorktreeManager(repoRoot, cfg.Git.Worktree.Dir, gitClient, logger.Logger)
-			if wtErr != nil {
-				logger.Warn("failed to create workflow worktree manager, workflow git isolation disabled", "error", wtErr)
-			} else {
-				workflowWorktrees = wtMgr
-			}
-		}
-	}
-
-	// Create GitHub client for PR creation (only if auto_pr is enabled)
-	var githubClient core.GitHubClient
-	if cfg.Git.Finalization.AutoPR {
-		ghClient, ghErr := github.NewClientFromRepo()
-		if ghErr != nil {
-			logger.Warn("failed to create GitHub client, PR creation disabled", "error", ghErr)
-		} else {
-			githubClient = ghClient
-			logger.Info("GitHub client initialized for PR creation")
-		}
-	}
-
-	// Create adapters for modular runner interfaces
-	checkpointAdapter := workflow.NewCheckpointAdapter(checkpointManager, ctx)
-	retryAdapter := workflow.NewRetryAdapter(retryPolicy, ctx)
-	rateLimiterAdapter := workflow.NewRateLimiterRegistryAdapter(rateLimiterRegistry, ctx)
-	promptAdapter := workflow.NewPromptRendererAdapter(promptRenderer)
-	resumeAdapter := workflow.NewResumePointAdapter(checkpointManager)
-	dagAdapter := workflow.NewDAGAdapter(dagBuilder)
-
-	// core.StateManager satisfies workflow.StateManager interface
-	stateAdapter := stateManager
-
-	// Create output notifier adapter for real-time TUI updates
-	baseNotifier := tui.NewOutputNotifierAdapter(output)
-
-	// Wrap with trace notifier if tracing is enabled
-	var outputNotifier workflow.OutputNotifier
-	if traceWriter.Enabled() {
-		traceNotifier := service.NewTraceOutputNotifier(traceWriter)
-		outputNotifier = tui.NewTracingOutputNotifierAdapter(baseNotifier, traceNotifier)
-	} else {
-		outputNotifier = baseNotifier
-	}
-
-	// Create mode enforcer from config
-	modeEnforcer := service.NewModeEnforcer(service.ExecutionMode{
-		DryRun:      runnerConfig.DryRun,
-		DeniedTools: runnerConfig.DenyTools,
-	})
-	modeEnforcerAdapter := workflow.NewModeEnforcerAdapter(modeEnforcer)
-
-	// Create workflow runner using modular architecture (ADR-0005)
-	runner, err := workflow.NewRunner(workflow.RunnerDeps{
-		Config:            runnerConfig,
-		State:             stateAdapter,
-		Agents:            registry,
-		DAG:               dagAdapter,
-		Checkpoint:        checkpointAdapter,
-		ResumeProvider:    resumeAdapter,
-		Prompts:           promptAdapter,
-		Retry:             retryAdapter,
-		RateLimits:        rateLimiterAdapter,
-		Worktrees:         worktreeManager,
-		WorkflowWorktrees: workflowWorktrees,
-		GitIsolation:      workflow.DefaultGitIsolationConfig(),
-		GitClientFactory:  git.NewClientFactory(),
-		Git:               gitClient,
-		GitHub:            githubClient,
-		Logger:            logger,
-		Output:            outputNotifier,
-		ModeEnforcer:      modeEnforcerAdapter,
-		ProjectRoot:       projectRoot,
-	})
+	runner, outputNotifier, err := createRunnerWithDeps(ctx, cfg, runnerConfig, stateManager, registry, logger, output, traceWriter, projectRoot)
 	if err != nil {
 		return err
 	}
 
-	// Connect agent streaming events to the output notifier for real-time progress
 	registry.SetEventHandler(func(event core.AgentEvent) {
 		outputNotifier.AgentEvent(string(event.Type), event.Agent, event.Message, event.Data)
 	})
 
-	// Resume or run new workflow
 	if runResume {
 		logger.Info("resuming workflow from checkpoint")
 		output.WorkflowStarted("(resuming)")
@@ -473,14 +181,12 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 			output.WorkflowFailed(err)
 			return handleTUICompletion(tuiErrCh, err)
 		}
-		// Get state for completion notification
-		if state, err := runner.GetState(ctx); err == nil && state != nil {
-			output.WorkflowCompleted(state)
+		if st, err := runner.GetState(ctx); err == nil && st != nil {
+			output.WorkflowCompleted(st)
 		}
 		return handleTUICompletion(tuiErrCh, nil)
 	}
 
-	// Get prompt for new workflow
 	prompt, err := getPrompt(args, runFile)
 	if err != nil {
 		return err
@@ -492,12 +198,229 @@ func runWorkflow(_ *cobra.Command, args []string) error {
 		output.WorkflowFailed(err)
 		return handleTUICompletion(tuiErrCh, err)
 	}
-
-	// Get state for completion notification
-	if state, err := runner.GetState(ctx); err == nil && state != nil {
-		output.WorkflowCompleted(state)
+	if st, err := runner.GetState(ctx); err == nil && st != nil {
+		output.WorkflowCompleted(st)
 	}
+	_ = tuiOutput // keep reference alive for defers
 	return handleTUICompletion(tuiErrCh, nil)
+}
+
+func setupRunOutput() (tui.Output, tui.OutputMode, *tui.TUILogHandler) {
+	detector := tui.NewDetector()
+	if runOutput != "" {
+		detector.ForceMode(tui.ParseOutputMode(runOutput))
+	}
+	outputMode := detector.Detect()
+	useColor := detector.ShouldUseColor()
+	verboseOutput := runTrace != ""
+	output := tui.NewOutput(outputMode, useColor, verboseOutput)
+
+	var tuiLogHandler *tui.TUILogHandler
+	if outputMode == tui.ModeTUI {
+		tuiLogHandler = tui.NewTUILogHandler(nil, slog.LevelInfo) // replaced in createRunLogger
+	}
+	return output, outputMode, tuiLogHandler
+}
+
+func createRunLogger(cfg *config.Config, outputMode tui.OutputMode, tuiLogHandler *tui.TUILogHandler) *logging.Logger {
+	if outputMode == tui.ModeTUI {
+		handler := tui.NewTUILogHandler(nil, parseLogLevel(cfg.Log.Level))
+		*tuiLogHandler = *handler
+		return logging.NewWithHandler(tuiLogHandler)
+	}
+	return logging.New(logging.Config{Level: cfg.Log.Level, Format: cfg.Log.Format, Output: os.Stdout})
+}
+
+func setupRunTUI(output tui.Output, outputMode tui.OutputMode, tuiLogHandler *tui.TUILogHandler, projectRoot string) (*tui.TUIOutput, chan error) {
+	if outputMode != tui.ModeTUI {
+		return nil, nil
+	}
+	tuiOutput, ok := output.(*tui.TUIOutput)
+	if !ok {
+		return nil, nil
+	}
+	baseDir := filepath.Join(projectRoot, ".quorum")
+	tuiOutput.SetModel(tui.NewWithStateManager(baseDir))
+	if tuiLogHandler != nil {
+		tuiLogHandler.SetOutput(tuiOutput)
+	}
+	tuiErrCh := make(chan error, 1)
+	go func() { tuiErrCh <- tuiOutput.Start() }()
+	return tuiOutput, tuiErrCh
+}
+
+func createRunStateManager(cfg *config.Config, logger *logging.Logger) (core.StateManager, error) {
+	statePath := cfg.State.Path
+	if statePath == "" {
+		statePath = ".quorum/state/state.db"
+	}
+	stateOpts := state.StateManagerOptions{BackupPath: cfg.State.BackupPath}
+	if cfg.State.LockTTL != "" {
+		if lockTTL, err := time.ParseDuration(cfg.State.LockTTL); err == nil {
+			stateOpts.LockTTL = lockTTL
+		} else {
+			logger.Warn("invalid state.lock_ttl, using default", "value", cfg.State.LockTTL, "error", err)
+		}
+	}
+	sm, err := state.NewStateManagerWithOptions(statePath, stateOpts)
+	if err != nil {
+		return nil, fmt.Errorf("creating state manager: %w", err)
+	}
+	return sm, nil
+}
+
+func buildRunnerConfig(cfg *config.Config) (*workflow.RunnerConfig, error) {
+	timeout, err := parseDurationDefault(cfg.Workflow.Timeout, defaultWorkflowTimeout)
+	if err != nil {
+		return nil, fmt.Errorf("parsing workflow timeout %q: %w", cfg.Workflow.Timeout, err)
+	}
+	defaultAgent := cfg.Agents.Default
+	if defaultAgent == "" {
+		defaultAgent = "claude"
+	}
+	analyzeTimeout, err := parseDurationDefault(cfg.Phases.Analyze.Timeout, defaultPhaseTimeout)
+	if err != nil {
+		return nil, fmt.Errorf("parsing analyze phase timeout %q: %w", cfg.Phases.Analyze.Timeout, err)
+	}
+	planTimeout, err := parseDurationDefault(cfg.Phases.Plan.Timeout, defaultPhaseTimeout)
+	if err != nil {
+		return nil, fmt.Errorf("parsing plan phase timeout %q: %w", cfg.Phases.Plan.Timeout, err)
+	}
+	executeTimeout, err := parseDurationDefault(cfg.Phases.Execute.Timeout, defaultPhaseTimeout)
+	if err != nil {
+		return nil, fmt.Errorf("parsing execute phase timeout %q: %w", cfg.Phases.Execute.Timeout, err)
+	}
+
+	refinerEnabled := cfg.Phases.Analyze.Refiner.Enabled && !runSkipOptimize
+	return &workflow.RunnerConfig{
+		Timeout: timeout, MaxRetries: runMaxRetries, DryRun: runDryRun,
+		DenyTools: cfg.Workflow.DenyTools, DefaultAgent: defaultAgent,
+		AgentPhaseModels: map[string]map[string]string{
+			"claude": cfg.Agents.Claude.PhaseModels, "gemini": cfg.Agents.Gemini.PhaseModels,
+			"codex": cfg.Agents.Codex.PhaseModels, "copilot": cfg.Agents.Copilot.PhaseModels,
+			"opencode": cfg.Agents.OpenCode.PhaseModels,
+		},
+		WorktreeAutoClean: cfg.Git.Worktree.AutoClean, WorktreeMode: cfg.Git.Worktree.Mode,
+		Refiner: workflow.RefinerConfig{
+			Enabled: refinerEnabled, Agent: cfg.Phases.Analyze.Refiner.Agent, Template: cfg.Phases.Analyze.Refiner.Template,
+		},
+		Synthesizer:     workflow.SynthesizerConfig{Agent: cfg.Phases.Analyze.Synthesizer.Agent},
+		PlanSynthesizer: workflow.PlanSynthesizerConfig{Enabled: cfg.Phases.Plan.Synthesizer.Enabled, Agent: cfg.Phases.Plan.Synthesizer.Agent},
+		Moderator: workflow.ModeratorConfig{
+			Enabled: cfg.Phases.Analyze.Moderator.Enabled, Agent: cfg.Phases.Analyze.Moderator.Agent,
+			Threshold: cfg.Phases.Analyze.Moderator.Threshold, MinRounds: cfg.Phases.Analyze.Moderator.MinRounds,
+			MaxRounds: cfg.Phases.Analyze.Moderator.MaxRounds, WarningThreshold: cfg.Phases.Analyze.Moderator.WarningThreshold,
+			StagnationThreshold: cfg.Phases.Analyze.Moderator.StagnationThreshold,
+		},
+		SingleAgent:   buildSingleAgentConfig(cfg),
+		PhaseTimeouts: workflow.PhaseTimeouts{Analyze: analyzeTimeout, Plan: planTimeout, Execute: executeTimeout},
+		Finalization: workflow.FinalizationConfig{
+			AutoCommit: cfg.Git.Task.AutoCommit, AutoPush: cfg.Git.Finalization.AutoPush,
+			AutoPR: cfg.Git.Finalization.AutoPR, AutoMerge: cfg.Git.Finalization.AutoMerge,
+			PRBaseBranch: cfg.Git.Finalization.PRBaseBranch, MergeStrategy: cfg.Git.Finalization.MergeStrategy,
+			Remote: cfg.GitHub.Remote,
+		},
+		Report: report.Config{Enabled: cfg.Report.Enabled, BaseDir: cfg.Report.BaseDir, UseUTC: cfg.Report.UseUTC, IncludeRaw: cfg.Report.IncludeRaw},
+	}, nil
+}
+
+func setupRunTrace(ctx context.Context, cfg *config.Config, logger *logging.Logger) (service.TraceWriter, func()) {
+	traceCfg, err := parseTraceConfig(cfg, runTrace)
+	if err != nil {
+		return service.NewTraceWriter(service.TraceConfig{Mode: "off"}, logger), nil
+	}
+	gitCommit, gitDirty := loadGitInfo()
+	traceWriter := service.NewTraceWriter(traceCfg, logger)
+	if !traceWriter.Enabled() {
+		return traceWriter, nil
+	}
+	traceRunID := fmt.Sprintf("run-%d", time.Now().UnixNano())
+	if err := traceWriter.StartRun(ctx, service.TraceRunInfo{
+		RunID: traceRunID, WorkflowID: traceRunID, StartedAt: time.Now(),
+		GitCommit: gitCommit, GitDirty: gitDirty,
+	}); err != nil {
+		logger.Warn("failed to start trace run", "error", err)
+		return traceWriter, nil
+	}
+	logger.Info("trace enabled", "mode", traceCfg.Mode, "dir", traceWriter.Dir())
+	return traceWriter, func() {
+		summary := traceWriter.EndRun(ctx)
+		if summary.TotalEvents > 0 {
+			logger.Info("trace completed", "events", summary.TotalEvents, "dir", summary.Dir)
+		}
+	}
+}
+
+func createRunnerWithDeps(
+	ctx context.Context, cfg *config.Config, runnerConfig *workflow.RunnerConfig,
+	stateManager core.StateManager, registry *cli.Registry,
+	logger *logging.Logger, output tui.Output, traceWriter service.TraceWriter,
+	projectRoot string,
+) (*workflow.Runner, workflow.OutputNotifier, error) {
+	promptRenderer, err := service.NewPromptRenderer()
+	if err != nil {
+		return nil, nil, fmt.Errorf("creating prompt renderer: %w", err)
+	}
+
+	checkpointManager := service.NewCheckpointManager(stateManager, logger)
+	retryPolicy := service.NewRetryPolicy(service.WithMaxAttempts(runMaxRetries))
+	rateLimiterRegistry := service.GetGlobalRateLimiter()
+	dagBuilder := service.NewDAGBuilder()
+
+	gitClient, err := git.NewClient(projectRoot)
+	if err != nil {
+		logger.Warn("failed to create git client, worktree isolation disabled", "error", err)
+	}
+	var worktreeManager workflow.WorktreeManager
+	var workflowWorktrees core.WorkflowWorktreeManager
+	if gitClient != nil {
+		worktreeManager = git.NewTaskWorktreeManager(gitClient, cfg.Git.Worktree.Dir).WithLogger(logger)
+		if repoRoot, rootErr := gitClient.RepoRoot(ctx); rootErr != nil {
+			logger.Warn("failed to detect repo root, workflow git isolation disabled", "error", rootErr)
+		} else if wtMgr, wtErr := git.NewWorkflowWorktreeManager(repoRoot, cfg.Git.Worktree.Dir, gitClient, logger.Logger); wtErr != nil {
+			logger.Warn("failed to create workflow worktree manager, workflow git isolation disabled", "error", wtErr)
+		} else {
+			workflowWorktrees = wtMgr
+		}
+	}
+
+	var githubClient core.GitHubClient
+	if cfg.Git.Finalization.AutoPR {
+		if ghClient, ghErr := github.NewClientFromRepo(); ghErr != nil {
+			logger.Warn("failed to create GitHub client, PR creation disabled", "error", ghErr)
+		} else {
+			githubClient = ghClient
+			logger.Info("GitHub client initialized for PR creation")
+		}
+	}
+
+	baseNotifier := tui.NewOutputNotifierAdapter(output)
+	var outputNotifier workflow.OutputNotifier
+	if traceWriter.Enabled() {
+		traceNotifier := service.NewTraceOutputNotifier(traceWriter)
+		outputNotifier = tui.NewTracingOutputNotifierAdapter(baseNotifier, traceNotifier)
+	} else {
+		outputNotifier = baseNotifier
+	}
+
+	modeEnforcer := service.NewModeEnforcer(service.ExecutionMode{DryRun: runnerConfig.DryRun, DeniedTools: runnerConfig.DenyTools})
+
+	runner, err := workflow.NewRunner(workflow.RunnerDeps{
+		Config: runnerConfig, State: stateManager, Agents: registry,
+		DAG: workflow.NewDAGAdapter(dagBuilder), Checkpoint: workflow.NewCheckpointAdapter(checkpointManager, ctx),
+		ResumeProvider: workflow.NewResumePointAdapter(checkpointManager),
+		Prompts: workflow.NewPromptRendererAdapter(promptRenderer),
+		Retry: workflow.NewRetryAdapter(retryPolicy, ctx),
+		RateLimits: workflow.NewRateLimiterRegistryAdapter(rateLimiterRegistry, ctx),
+		Worktrees: worktreeManager, WorkflowWorktrees: workflowWorktrees,
+		GitIsolation: workflow.DefaultGitIsolationConfig(), GitClientFactory: git.NewClientFactory(),
+		Git: gitClient, GitHub: githubClient, Logger: logger, Output: outputNotifier,
+		ModeEnforcer: workflow.NewModeEnforcerAdapter(modeEnforcer), ProjectRoot: projectRoot,
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	return runner, outputNotifier, nil
 }
 
 // handleTUICompletion waits for TUI to finish if running.

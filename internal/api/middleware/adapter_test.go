@@ -6,45 +6,6 @@ import (
 	"testing"
 )
 
-// --- Mock project.Registry for adapter tests ---
-
-type _mockProjectForAdapter struct {
-	id   string
-	path string
-}
-
-type _mockProjectRegistryForAdapter struct {
-	projects       map[string]*_mockProjectForAdapter
-	defaultProject *_mockProjectForAdapter
-	defaultErr     error
-	getErr         error
-}
-
-func (m *_mockProjectRegistryForAdapter) _listProjects(_ context.Context) ([]*_mockProjectForAdapter, error) {
-	var result []*_mockProjectForAdapter
-	for _, p := range m.projects {
-		result = append(result, p)
-	}
-	return result, nil
-}
-
-func (m *_mockProjectRegistryForAdapter) _getProject(_ context.Context, id string) (*_mockProjectForAdapter, error) {
-	if m.getErr != nil {
-		return nil, m.getErr
-	}
-	if p, ok := m.projects[id]; ok {
-		return p, nil
-	}
-	return nil, errors.New("project not found")
-}
-
-func (m *_mockProjectRegistryForAdapter) _getDefaultProject(_ context.Context) (*_mockProjectForAdapter, error) {
-	if m.defaultErr != nil {
-		return nil, m.defaultErr
-	}
-	return m.defaultProject, nil
-}
-
 // --- RegistryAdapter tests ---
 
 // Since RegistryAdapter wraps a project.Registry, and we cannot easily create

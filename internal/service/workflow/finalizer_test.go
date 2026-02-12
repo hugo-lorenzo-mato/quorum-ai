@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 )
@@ -63,46 +62,6 @@ func (m *mockFinalizerGit) IsAncestor(_ context.Context, _, _ string) (bool, err
 	return false, nil
 }
 func (m *mockFinalizerGit) HasUncommittedChanges(_ context.Context) (bool, error) { return false, nil }
-
-type mockFinalizerGitHub struct {
-	defaultBranch    string
-	defaultBranchErr error
-	createPR         *core.PullRequest
-	createPRErr      error
-	mergePRErr       error
-}
-
-func (m *mockFinalizerGitHub) GetDefaultBranch(_ context.Context) (string, error) {
-	return m.defaultBranch, m.defaultBranchErr
-}
-func (m *mockFinalizerGitHub) CreatePR(_ context.Context, _ core.CreatePROptions) (*core.PullRequest, error) {
-	return m.createPR, m.createPRErr
-}
-func (m *mockFinalizerGitHub) MergePR(_ context.Context, _ int, _ core.MergePROptions) error {
-	return m.mergePRErr
-}
-
-// Stubs for unused interface methods
-func (m *mockFinalizerGitHub) GetRepo(_ context.Context) (*core.RepoInfo, error) { return nil, nil }
-func (m *mockFinalizerGitHub) GetPR(_ context.Context, _ int) (*core.PullRequest, error) {
-	return nil, nil
-}
-func (m *mockFinalizerGitHub) ListPRs(_ context.Context, _ core.ListPROptions) ([]*core.PullRequest, error) {
-	return nil, nil
-}
-func (m *mockFinalizerGitHub) UpdatePR(_ context.Context, _ int, _ core.UpdatePROptions) error {
-	return nil
-}
-func (m *mockFinalizerGitHub) ClosePR(_ context.Context, _ int) error                   { return nil }
-func (m *mockFinalizerGitHub) RequestReview(_ context.Context, _ int, _ []string) error { return nil }
-func (m *mockFinalizerGitHub) AddComment(_ context.Context, _ int, _ string) error      { return nil }
-func (m *mockFinalizerGitHub) GetCheckStatus(_ context.Context, _ string) (*core.CheckStatus, error) {
-	return nil, nil
-}
-
-func (m *mockFinalizerGitHub) WaitForChecks(_ context.Context, _ string, _ time.Duration) (*core.CheckStatus, error) {
-	return nil, nil
-}
 
 // --- Tests ---
 

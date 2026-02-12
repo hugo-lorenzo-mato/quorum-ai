@@ -479,7 +479,7 @@ func getSyntaxColor(ext string) lipgloss.Color {
 }
 
 // getFileIcon returns an icon based on filename
-func getFileIcon(name string) string {
+func getFileIcon(_ string) string {
 	// Icons are intentionally disabled for now (TUI font/width portability).
 	// Keep this as a single return to avoid a dead conditional tree.
 	return ""

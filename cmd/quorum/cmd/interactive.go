@@ -12,7 +12,7 @@ import (
 
 // promptPhaseReview prompts the user to review a completed phase.
 // Returns (action, feedback) where action is "continue", "rerun", or "abort".
-func promptPhaseReview(scanner *bufio.Scanner, phaseName string) (string, string) {
+func promptPhaseReview(scanner *bufio.Scanner, phaseName string) (action, feedback string) {
 	fmt.Printf("\n  [Enter] Continue to next phase\n")
 	fmt.Printf("  [f]     Add feedback to %s\n", phaseName)
 	fmt.Printf("  [r]     Re-run %s\n", phaseName)
@@ -48,7 +48,7 @@ func promptPhaseReview(scanner *bufio.Scanner, phaseName string) (string, string
 
 // promptPlanReview prompts the user to review the task plan.
 // Returns (action, feedback) where action is "continue", "edit", "replan", or "abort".
-func promptPlanReview(scanner *bufio.Scanner) (string, string) {
+func promptPlanReview(scanner *bufio.Scanner) (action, feedback string) {
 	fmt.Println("\n  [Enter] Execute plan")
 	fmt.Println("  [e]     Edit tasks")
 	fmt.Println("  [r]     Regenerate plan")

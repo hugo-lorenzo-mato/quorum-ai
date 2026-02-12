@@ -231,7 +231,7 @@ func queryNvidiaSMI() []GPUInfo {
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, path, "--query-gpu=name,utilization.gpu,memory.total,memory.used,temperature.gpu", "--format=csv,noheader,nounits")
+	cmd := exec.CommandContext(ctx, path, "--query-gpu=name,utilization.gpu,memory.total,memory.used,temperature.gpu", "--format=csv,noheader,nounits") // #nosec G204 -- binary path resolved via exec.LookPath
 	out, err := cmd.Output()
 	if err != nil {
 		return nil
@@ -456,7 +456,7 @@ func queryRocmSMI() []GPUInfo {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, path, "--showproductname", "--showuse", "--showmemuse", "--showtemp")
+	cmd := exec.CommandContext(ctx, path, "--showproductname", "--showuse", "--showmemuse", "--showtemp") // #nosec G204 -- binary path resolved via exec.LookPath
 	out, err := cmd.Output()
 	if err != nil {
 		return nil
@@ -581,7 +581,7 @@ func querySystemProfiler() []GPUInfo {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, path, "-json", "SPDisplaysDataType")
+	cmd := exec.CommandContext(ctx, path, "-json", "SPDisplaysDataType") // #nosec G204 -- binary path resolved via exec.LookPath
 	out, err := cmd.Output()
 	if err != nil {
 		return nil
@@ -629,7 +629,7 @@ func queryWindowsGPU() []GPUInfo {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, path, "-NoProfile", "-Command", "Get-CimInstance Win32_VideoController | Select-Object Name, AdapterRAM | ConvertTo-Json")
+	cmd := exec.CommandContext(ctx, path, "-NoProfile", "-Command", "Get-CimInstance Win32_VideoController | Select-Object Name, AdapterRAM | ConvertTo-Json") // #nosec G204 -- binary path resolved via exec.LookPath
 	out, err := cmd.Output()
 	if err != nil {
 		return nil

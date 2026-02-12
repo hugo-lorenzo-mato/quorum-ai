@@ -51,7 +51,7 @@ type Generator struct {
 	// after the most recent GenerateIssueFiles call. Empty when all files were generated.
 	LastMissingFiles []string
 
-	progress          ProgressReporter    // Optional: progress reporting for SSE/UI
+	progress          ProgressReporter       // Optional: progress reporting for SSE/UI
 	agentEventHandler core.AgentEventHandler // Optional: receives real-time agent streaming events
 }
 
@@ -691,14 +691,14 @@ type TaskInfo struct {
 func (g *Generator) readConsolidatedAnalysis() (string, error) {
 	// Try analyze-phase/consolidated.md first
 	path := filepath.Join(g.reportDir, "analyze-phase", "consolidated.md")
-	content, err := os.ReadFile(path)
+	content, err := os.ReadFile(path) // #nosec G304 -- path constructed from internal report directory
 	if err == nil {
 		return string(content), nil
 	}
 
 	// Fallback to consensus directory
 	consensusPath := filepath.Join(g.reportDir, "analyze-phase", "consensus", "consolidated.md")
-	content, err = os.ReadFile(consensusPath)
+	content, err = os.ReadFile(consensusPath) // #nosec G304 -- path constructed from internal report directory
 	if err != nil {
 		return "", fmt.Errorf("consolidated analysis not found at %s or %s", path, consensusPath)
 	}
@@ -749,7 +749,7 @@ func (g *Generator) readTaskFiles() ([]TaskInfo, error) {
 				continue // Skip duplicates
 			}
 
-			content, err := os.ReadFile(filepath.Join(tasksDir, entry.Name()))
+			content, err := os.ReadFile(filepath.Join(tasksDir, entry.Name())) // #nosec G304 -- path constructed from internal report directory
 			if err != nil {
 				continue
 			}
@@ -1000,35 +1000,31 @@ func (g *Generator) scanExistingDraftFiles(issuesDir string, tracker *Generation
 // is the practical maximum before hitting "Prompt is too long" errors.
 const maxTasksPerBatch = 8
 
-//nolint:gocyclo // Orchestrates prompt generation, file IO, and validations.
+// issueGenState holds mutable state shared between generation phases.
+type issueGenState struct {
+	workflowID        string
+	issuesDirRel      string
+	issuesDirAbs      string
+	cwd               string
+	consolidatedPath  string
+	expected          []expectedIssueFile
+	expectedByName    map[string]expectedIssueFile
+	tracker           *GenerationTracker
+	totalExpected     int
+	emitted           map[string]bool
+	estimatedProgress int
+	executor          *ResilientLLMExecutor
+	maxAttempts       int
+	prompts           *service.PromptRenderer
+	logger            *slog.Logger
+}
+
 func (g *Generator) GenerateIssueFiles(ctx context.Context, workflowID string) ([]string, error) {
-	if g.agents == nil {
-		return nil, fmt.Errorf("agent registry not available")
-	}
-
-	agent, err := g.agents.Get(g.config.Generator.Agent)
+	gs, closeLogger, err := g.initIssueGenState(workflowID)
 	if err != nil {
-		return nil, fmt.Errorf("getting agent %s: %w", g.config.Generator.Agent, err)
+		return nil, err
 	}
-
-	// Wire up real-time agent event streaming (thinking, tool_use, etc.) for UI visibility.
-	if g.agentEventHandler != nil {
-		if sc, ok := agent.(core.StreamingCapable); ok {
-			sc.SetEventHandler(g.agentEventHandler)
-			defer sc.SetEventHandler(nil) // restore when done
-		}
-	}
-
-	// Get prompt renderer
-	prompts, err := g.getPromptRenderer()
-	if err != nil {
-		return nil, fmt.Errorf("getting prompt renderer: %w", err)
-	}
-
-	logger, closeLogger, err := g.openIssuesLogger(workflowID)
-	if err != nil {
-		slog.Warn("failed to open issues log file", "error", err)
-	} else {
+	if closeLogger != nil {
 		defer func() {
 			if closeErr := closeLogger(); closeErr != nil {
 				slog.Warn("failed to close issues log file", "error", closeErr)
@@ -1036,36 +1032,73 @@ func (g *Generator) GenerateIssueFiles(ctx context.Context, workflowID string) (
 		}()
 	}
 
-	// Create output directory
+	g.emitIssuesGenerationProgress(workflowID, "started", 0, gs.totalExpected, nil, "issue generation started")
+
+	if gs.logger != nil {
+		deadline, hasDeadline := ctx.Deadline()
+		gs.logger.Info("issue generation started",
+			"workflow_id", workflowID, "agent", g.config.Generator.Agent, "model", g.config.Generator.Model,
+			"output_dir", gs.issuesDirRel, "max_attempts", gs.maxAttempts,
+			"has_deadline", hasDeadline, "deadline", deadline)
+	}
+
+	batchErrors, err := g.runGenerationLoop(ctx, gs)
+	if err != nil {
+		return nil, err
+	}
+
+	return g.finalizeGeneration(gs, batchErrors)
+}
+
+func (g *Generator) initIssueGenState(workflowID string) (*issueGenState, func() error, error) {
+	if g.agents == nil {
+		return nil, nil, fmt.Errorf("agent registry not available")
+	}
+
+	agent, err := g.agents.Get(g.config.Generator.Agent)
+	if err != nil {
+		return nil, nil, fmt.Errorf("getting agent %s: %w", g.config.Generator.Agent, err)
+	}
+
+	if g.agentEventHandler != nil {
+		if sc, ok := agent.(core.StreamingCapable); ok {
+			sc.SetEventHandler(g.agentEventHandler)
+			defer sc.SetEventHandler(nil)
+		}
+	}
+
+	prompts, err := g.getPromptRenderer()
+	if err != nil {
+		return nil, nil, fmt.Errorf("getting prompt renderer: %w", err)
+	}
+
+	logger, closeLogger, err := g.openIssuesLogger(workflowID)
+	if err != nil {
+		slog.Warn("failed to open issues log file", "error", err)
+	}
+
 	root, err := g.getProjectRoot()
 	if err != nil {
-		return nil, fmt.Errorf(errGettingProjectRoot, err)
+		return nil, nil, fmt.Errorf(errGettingProjectRoot, err)
 	}
-
 	draftDirAbs, err := g.resolveDraftDir(workflowID)
 	if err != nil {
-		return nil, fmt.Errorf(errResolvingDraftDir, err)
+		return nil, nil, fmt.Errorf(errResolvingDraftDir, err)
 	}
-	if err := os.MkdirAll(draftDirAbs, 0o755); err != nil {
-		return nil, fmt.Errorf("creating draft directory: %w", err)
+	if err := os.MkdirAll(draftDirAbs, 0o750); err != nil {
+		return nil, nil, fmt.Errorf("creating draft directory: %w", err)
 	}
 
-	// Use relative path for shorter prompt (Claude will resolve it from cwd)
 	baseDir := g.resolveIssuesBaseDir()
 	issuesDirRel := filepath.Join(baseDir, workflowID, "draft")
-	issuesDirAbs := draftDirAbs
-	cwd := root
 
-	// Get consolidated analysis path (not content)
 	consolidatedPath, err := g.getConsolidatedAnalysisPath()
 	if err != nil {
-		return nil, fmt.Errorf("finding consolidated analysis: %w", err)
+		return nil, nil, fmt.Errorf("finding consolidated analysis: %w", err)
 	}
-
-	// Get task file paths (not content)
 	taskFiles, err := g.getTaskFilePaths()
 	if err != nil {
-		return nil, fmt.Errorf("getting task file paths: %w", err)
+		return nil, nil, fmt.Errorf("getting task file paths: %w", err)
 	}
 
 	expected := g.buildExpectedIssueFiles(consolidatedPath, taskFiles)
@@ -1075,71 +1108,17 @@ func (g *Generator) GenerateIssueFiles(ctx context.Context, workflowID string) (
 		expectedByName[exp.FileName] = exp
 		tracker.AddExpected(exp.FileName, exp.TaskID)
 	}
-	totalExpected := len(tracker.ExpectedFiles)
-	emitted := make(map[string]bool, totalExpected)
+
+	emitted := make(map[string]bool, len(tracker.ExpectedFiles))
 	estimatedProgress := 0
 
-	// Pre-scan existing draft files to reuse them instead of regenerating.
-	// This enables retries to pick up where they left off.
-	existingCount := g.scanExistingDraftFiles(issuesDirAbs, tracker)
+	existingCount := g.scanExistingDraftFiles(draftDirAbs, tracker)
 	for name := range tracker.GeneratedFiles {
-		emitted[name] = true // don't re-emit SSE events for pre-existing files
+		emitted[name] = true
 	}
 	if existingCount > 0 {
 		slog.Info("reusing existing draft files", "count", existingCount, "workflow_id", workflowID)
 		estimatedProgress = existingCount
-	}
-
-	parseProgressIssue := func(fileName string) *ProgressIssue {
-		filePath := filepath.Join(issuesDirAbs, fileName)
-		content, err := os.ReadFile(filePath)
-		if err != nil {
-			return &ProgressIssue{Title: fileName, FileName: fileName}
-		}
-
-		if fm, _, fmErr := parseDraftContent(string(content)); fmErr == nil && fm != nil {
-			return &ProgressIssue{
-				Title:       fm.Title,
-				TaskID:      fm.TaskID,
-				FileName:    fileName,
-				IsMainIssue: fm.IsMainIssue,
-			}
-		}
-
-		title, _ := parseIssueMarkdown(string(content))
-		return &ProgressIssue{
-			Title:       title,
-			TaskID:      "",
-			FileName:    fileName,
-			IsMainIssue: strings.Contains(fileName, "consolidated") || strings.HasPrefix(fileName, "00-"),
-		}
-	}
-
-	emitNewFiles := func() {
-		names := make([]string, 0, len(tracker.GeneratedFiles))
-		for name := range tracker.GeneratedFiles {
-			names = append(names, name)
-		}
-		sort.Slice(names, func(i, j int) bool {
-			return extractFileNumber(names[i]) < extractFileNumber(names[j])
-		})
-		for _, name := range names {
-			if emitted[name] {
-				continue
-			}
-			emitted[name] = true
-			cur := len(emitted)
-			if estimatedProgress > cur {
-				cur = estimatedProgress
-			}
-			g.emitIssuesGenerationProgress(workflowID, "file_generated", cur, totalExpected, parseProgressIssue(name), "")
-		}
-		// Always emit an aggregate progress update (helps UIs that don't track per-file events).
-		cur := len(emitted)
-		if estimatedProgress > cur {
-			cur = estimatedProgress
-		}
-		g.emitIssuesGenerationProgress(workflowID, "progress", cur, totalExpected, nil, "")
 	}
 
 	resilienceCfg := g.buildLLMResilienceConfig(g.config.Generator.Resilience, logger)
@@ -1150,53 +1129,42 @@ func (g *Generator) GenerateIssueFiles(ctx context.Context, workflowID string) (
 	}
 
 	slog.Info("starting AI issue generation",
-		"agent", g.config.Generator.Agent,
-		"model", g.config.Generator.Model,
-		"output_dir", issuesDirRel,
-		"total_tasks", len(taskFiles),
-		"max_attempts", maxAttempts)
+		"agent", g.config.Generator.Agent, "model", g.config.Generator.Model,
+		"output_dir", issuesDirRel, "total_tasks", len(taskFiles), "max_attempts", maxAttempts)
 
-	g.emitIssuesGenerationProgress(workflowID, "started", 0, totalExpected, nil, "issue generation started")
+	return &issueGenState{
+		workflowID: workflowID, issuesDirRel: issuesDirRel, issuesDirAbs: draftDirAbs,
+		cwd: root, consolidatedPath: consolidatedPath, expected: expected,
+		expectedByName: expectedByName, tracker: tracker,
+		totalExpected: len(tracker.ExpectedFiles), emitted: emitted,
+		estimatedProgress: estimatedProgress, executor: executor, maxAttempts: maxAttempts,
+		prompts: prompts, logger: logger,
+	}, closeLogger, nil
+}
 
-	if logger != nil {
-		deadline, hasDeadline := ctx.Deadline()
-		logger.Info("issue generation started",
-			"workflow_id", workflowID,
-			"agent", g.config.Generator.Agent,
-			"model", g.config.Generator.Model,
-			"output_dir", issuesDirRel,
-			"total_tasks", len(taskFiles),
-			"max_attempts", maxAttempts,
-			"has_deadline", hasDeadline,
-			"deadline", deadline)
-	}
-
+func (g *Generator) runGenerationLoop(ctx context.Context, gs *issueGenState) ([]error, error) {
 	cfg := g.config.Prompt
 	batchSize := maxTasksPerBatch
-	// Filter out files already found by pre-scan so we don't regenerate them.
 	var missing []expectedIssueFile
-	for _, exp := range expected {
-		if _, exists := tracker.GeneratedFiles[exp.FileName]; !exists {
+	for _, exp := range gs.expected {
+		if _, exists := gs.tracker.GeneratedFiles[exp.FileName]; !exists {
 			missing = append(missing, exp)
 		}
 	}
 	var batchErrors []error
 
-	for attempt := 1; attempt <= maxAttempts; attempt++ {
+	for attempt := 1; attempt <= gs.maxAttempts; attempt++ {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
-
 		if len(missing) == 0 {
 			break
 		}
 
-		// Baseline estimate: everything not in "missing" is considered already generated.
-		// This helps keep progress monotonic across retries.
-		if totalExpected > 0 {
-			estimatedProgress = totalExpected - len(missing)
-			if estimatedProgress < 0 {
-				estimatedProgress = 0
+		if gs.totalExpected > 0 {
+			gs.estimatedProgress = gs.totalExpected - len(missing)
+			if gs.estimatedProgress < 0 {
+				gs.estimatedProgress = 0
 			}
 		}
 
@@ -1205,147 +1173,33 @@ func (g *Generator) GenerateIssueFiles(ctx context.Context, workflowID string) (
 		for _, exp := range missing {
 			if exp.IsMain {
 				includeMain = true
-				continue
-			}
-			if exp.Task != nil {
+			} else if exp.Task != nil {
 				tasksToGenerate = append(tasksToGenerate, *exp.Task)
 			}
 		}
 
 		batches := g.splitIntoBatches(tasksToGenerate, batchSize)
-		totalBatches := len(batches)
 
-		if logger != nil {
-			logger.Info("starting generation attempt",
-				"attempt", attempt,
-				"max_attempts", maxAttempts,
-				"batch_size", batchSize,
-				"tasks_to_generate", len(tasksToGenerate),
-				"include_main", includeMain,
-				"batches", totalBatches)
+		if gs.logger != nil {
+			gs.logger.Info("starting generation attempt",
+				"attempt", attempt, "max_attempts", gs.maxAttempts,
+				"batch_size", batchSize, "tasks_to_generate", len(tasksToGenerate),
+				"include_main", includeMain, "batches", len(batches))
 		}
 
 		for batchNum, batch := range batches {
-			var consolidatedForBatch string
-			if includeMain && batchNum == 0 {
-				consolidatedForBatch = consolidatedPath
+			bErr := g.executeBatch(ctx, gs, cfg, batch, batchNum, len(batches), attempt, includeMain)
+			if bErr != nil {
+				batchErrors = append(batchErrors, bErr)
 			}
-
-			params := service.IssueGenerateParams{
-				ConsolidatedAnalysisPath: consolidatedForBatch,
-				TaskFiles:                batch,
-				IssuesDir:                issuesDirRel,
-				Language:                 cfg.Language,
-				Tone:                     cfg.Tone,
-				Summarize:                g.config.Generator.Summarize,
-				IncludeDiagrams:          cfg.IncludeDiagrams,
-				IncludeTestingSection:    true,
-				CustomInstructions:       cfg.CustomInstructions,
-				Convention:               cfg.Convention,
-			}
-
-			prompt, err := prompts.RenderIssueGenerate(params)
-			if err != nil {
-				return nil, fmt.Errorf("rendering issue generation prompt (batch %d, attempt %d): %w", batchNum+1, attempt, err)
-			}
-
-			slog.Info("processing issue generation batch",
-				"batch", batchNum+1,
-				"total_batches", totalBatches,
-				"attempt", attempt,
-				"tasks_in_batch", len(batch),
-				"prompt_size", len(prompt),
-				"includes_consolidated", consolidatedForBatch != "")
-			cur := len(emitted)
-			if estimatedProgress > cur {
-				cur = estimatedProgress
-			}
-			g.emitIssuesGenerationProgress(workflowID, "batch_started", cur, totalExpected, nil,
-				fmt.Sprintf("batch %d/%d (attempt %d)", batchNum+1, totalBatches, attempt))
-
-			if logger != nil {
-				taskIDs := make([]string, 0, len(batch))
-				for _, task := range batch {
-					taskIDs = append(taskIDs, task.ID)
-				}
-				logger.Info("executing batch",
-					"attempt", attempt,
-					"batch", batchNum+1,
-					"total_batches", totalBatches,
-					"tasks", taskIDs,
-					"prompt_size", len(prompt),
-					"includes_consolidated", consolidatedForBatch != "")
-			}
-
-			deadline, hasDeadline := ctx.Deadline()
-			timeout := resolveExecuteTimeout(deadline, hasDeadline, 10*time.Minute)
-
-			result, err := executor.Execute(ctx, core.ExecuteOptions{
-				Prompt:          prompt,
-				Model:           g.config.Generator.Model,
-				Format:          core.OutputFormatText,
-				Timeout:         timeout,
-				WorkDir:         cwd,
-				ReasoningEffort: g.config.Generator.ReasoningEffort,
-			})
-			if err != nil {
-				batchErrors = append(batchErrors, fmt.Errorf("batch %d/%d attempt %d: %w", batchNum+1, totalBatches, attempt, err))
-				slog.Error("issue generation batch failed",
-					"attempt", attempt,
-					"batch", batchNum+1,
-					"total_batches", totalBatches,
-					"tasks_in_batch", len(batch),
-					"agent", g.config.Generator.Agent,
-					"model", g.config.Generator.Model,
-					"error", err)
-				if logger != nil {
-					logger.Error("batch failed",
-						"attempt", attempt,
-						"batch", batchNum+1,
-						"total_batches", totalBatches,
-						"tasks_in_batch", len(batch),
-						"agent", g.config.Generator.Agent,
-						"model", g.config.Generator.Model,
-						"error", err)
-				}
-				cur := len(emitted)
-				if estimatedProgress > cur {
-					cur = estimatedProgress
-				}
-				g.emitIssuesGenerationProgress(workflowID, "batch_failed", cur, totalExpected, nil,
-					fmt.Sprintf("batch %d/%d failed (attempt %d): %v", batchNum+1, totalBatches, attempt, err))
-				continue
-			}
-
-			slog.Info("batch completed",
-				"batch", batchNum+1,
-				"total_batches", totalBatches,
-				"attempt", attempt,
-				"output_length", len(result.Output))
-			if logger != nil {
-				logger.Info("batch completed",
-					"attempt", attempt,
-					"batch", batchNum+1,
-					"output_length", len(result.Output))
-			}
-			// Update an estimated progress count so the UI can show incremental movement even before we scan the filesystem.
-			estimatedProgress += len(batch)
-			if includeMain && batchNum == 0 {
-				estimatedProgress++
-			}
-			if estimatedProgress > totalExpected && totalExpected > 0 {
-				estimatedProgress = totalExpected
-			}
-			g.emitIssuesGenerationProgress(workflowID, "batch_completed", estimatedProgress, totalExpected, nil,
-				fmt.Sprintf("batch %d/%d completed (attempt %d)", batchNum+1, totalBatches, attempt))
 		}
 
-		if _, err := g.scanGeneratedIssueFilesWithTracker(issuesDirAbs, tracker); err != nil {
+		if _, err := g.scanGeneratedIssueFilesWithTracker(gs.issuesDirAbs, gs.tracker); err != nil {
 			return nil, fmt.Errorf("scanning generated issue files: %w", err)
 		}
-		emitNewFiles()
+		g.emitNewFiles(gs)
 
-		missingNames := tracker.GetMissingFiles()
+		missingNames := gs.tracker.GetMissingFiles()
 		sort.Strings(missingNames)
 		if len(missingNames) == 0 {
 			break
@@ -1353,60 +1207,178 @@ func (g *Generator) GenerateIssueFiles(ctx context.Context, workflowID string) (
 
 		missing = missing[:0]
 		for _, name := range missingNames {
-			if exp, ok := expectedByName[name]; ok {
+			if exp, ok := gs.expectedByName[name]; ok {
 				missing = append(missing, exp)
 			}
 		}
 
-		if logger != nil {
-			logger.Warn("missing issue files after attempt",
-				"attempt", attempt,
-				"missing", missingNames)
+		if gs.logger != nil {
+			gs.logger.Warn("missing issue files after attempt", "attempt", attempt, "missing", missingNames)
 		}
-
-		if attempt < maxAttempts && batchSize > 1 {
+		if attempt < gs.maxAttempts && batchSize > 1 {
 			batchSize = (batchSize + 1) / 2
 		}
 	}
 
-	files, err := g.scanGeneratedIssueFilesWithTracker(issuesDirAbs, tracker)
+	return batchErrors, nil
+}
+
+func (g *Generator) executeBatch(
+	ctx context.Context, gs *issueGenState, cfg config.IssuePromptConfig,
+	batch []service.IssueTaskFile, batchNum, totalBatches, attempt int, includeMain bool,
+) error {
+	var consolidatedForBatch string
+	if includeMain && batchNum == 0 {
+		consolidatedForBatch = gs.consolidatedPath
+	}
+
+	params := service.IssueGenerateParams{
+		ConsolidatedAnalysisPath: consolidatedForBatch, TaskFiles: batch,
+		IssuesDir: gs.issuesDirRel, Language: cfg.Language, Tone: cfg.Tone,
+		Summarize: g.config.Generator.Summarize, IncludeDiagrams: cfg.IncludeDiagrams,
+		IncludeTestingSection: true, CustomInstructions: cfg.CustomInstructions, Convention: cfg.Convention,
+	}
+
+	prompt, err := gs.prompts.RenderIssueGenerate(params)
+	if err != nil {
+		return fmt.Errorf("rendering issue generation prompt (batch %d, attempt %d): %w", batchNum+1, attempt, err)
+	}
+
+	slog.Info("processing issue generation batch",
+		"batch", batchNum+1, "total_batches", totalBatches, "attempt", attempt,
+		"tasks_in_batch", len(batch), "prompt_size", len(prompt),
+		"includes_consolidated", consolidatedForBatch != "")
+
+	cur := g.currentProgress(gs)
+	g.emitIssuesGenerationProgress(gs.workflowID, "batch_started", cur, gs.totalExpected, nil,
+		fmt.Sprintf("batch %d/%d (attempt %d)", batchNum+1, totalBatches, attempt))
+
+	if gs.logger != nil {
+		taskIDs := make([]string, 0, len(batch))
+		for _, task := range batch {
+			taskIDs = append(taskIDs, task.ID)
+		}
+		gs.logger.Info("executing batch",
+			"attempt", attempt, "batch", batchNum+1, "total_batches", totalBatches,
+			"tasks", taskIDs, "prompt_size", len(prompt), "includes_consolidated", consolidatedForBatch != "")
+	}
+
+	deadline, hasDeadline := ctx.Deadline()
+	timeout := resolveExecuteTimeout(deadline, hasDeadline, 10*time.Minute)
+
+	result, err := gs.executor.Execute(ctx, core.ExecuteOptions{
+		Prompt: prompt, Model: g.config.Generator.Model, Format: core.OutputFormatText,
+		Timeout: timeout, WorkDir: gs.cwd, ReasoningEffort: g.config.Generator.ReasoningEffort,
+	})
+	if err != nil {
+		slog.Error("issue generation batch failed",
+			"attempt", attempt, "batch", batchNum+1, "total_batches", totalBatches,
+			"tasks_in_batch", len(batch), "agent", g.config.Generator.Agent, "model", g.config.Generator.Model, "error", err)
+		if gs.logger != nil {
+			gs.logger.Error("batch failed",
+				"attempt", attempt, "batch", batchNum+1, "total_batches", totalBatches,
+				"tasks_in_batch", len(batch), "agent", g.config.Generator.Agent, "model", g.config.Generator.Model, "error", err)
+		}
+		cur = g.currentProgress(gs)
+		g.emitIssuesGenerationProgress(gs.workflowID, "batch_failed", cur, gs.totalExpected, nil,
+			fmt.Sprintf("batch %d/%d failed (attempt %d): %v", batchNum+1, totalBatches, attempt, err))
+		return fmt.Errorf("batch %d/%d attempt %d: %w", batchNum+1, totalBatches, attempt, err)
+	}
+
+	slog.Info("batch completed", "batch", batchNum+1, "total_batches", totalBatches,
+		"attempt", attempt, "output_length", len(result.Output))
+	if gs.logger != nil {
+		gs.logger.Info("batch completed", "attempt", attempt, "batch", batchNum+1, "output_length", len(result.Output))
+	}
+
+	gs.estimatedProgress += len(batch)
+	if includeMain && batchNum == 0 {
+		gs.estimatedProgress++
+	}
+	if gs.estimatedProgress > gs.totalExpected && gs.totalExpected > 0 {
+		gs.estimatedProgress = gs.totalExpected
+	}
+	g.emitIssuesGenerationProgress(gs.workflowID, "batch_completed", gs.estimatedProgress, gs.totalExpected, nil,
+		fmt.Sprintf("batch %d/%d completed (attempt %d)", batchNum+1, totalBatches, attempt))
+	return nil
+}
+
+func (g *Generator) currentProgress(gs *issueGenState) int {
+	cur := len(gs.emitted)
+	if gs.estimatedProgress > cur {
+		cur = gs.estimatedProgress
+	}
+	return cur
+}
+
+func (g *Generator) emitNewFiles(gs *issueGenState) {
+	names := make([]string, 0, len(gs.tracker.GeneratedFiles))
+	for name := range gs.tracker.GeneratedFiles {
+		names = append(names, name)
+	}
+	sort.Slice(names, func(i, j int) bool {
+		return extractFileNumber(names[i]) < extractFileNumber(names[j])
+	})
+	for _, name := range names {
+		if gs.emitted[name] {
+			continue
+		}
+		gs.emitted[name] = true
+		cur := g.currentProgress(gs)
+		g.emitIssuesGenerationProgress(gs.workflowID, "file_generated", cur, gs.totalExpected, g.parseProgressIssue(gs.issuesDirAbs, name), "")
+	}
+	cur := g.currentProgress(gs)
+	g.emitIssuesGenerationProgress(gs.workflowID, "progress", cur, gs.totalExpected, nil, "")
+}
+
+func (g *Generator) parseProgressIssue(issuesDirAbs, fileName string) *ProgressIssue {
+	filePath := filepath.Join(issuesDirAbs, fileName)
+	content, err := os.ReadFile(filePath) // #nosec G304 -- path constructed from internal report directory
+	if err != nil {
+		return &ProgressIssue{Title: fileName, FileName: fileName}
+	}
+	if fm, _, fmErr := parseDraftContent(string(content)); fmErr == nil && fm != nil {
+		return &ProgressIssue{Title: fm.Title, TaskID: fm.TaskID, FileName: fileName, IsMainIssue: fm.IsMainIssue}
+	}
+	title, _ := parseIssueMarkdown(string(content))
+	return &ProgressIssue{
+		Title: title, FileName: fileName,
+		IsMainIssue: strings.Contains(fileName, "consolidated") || strings.HasPrefix(fileName, "00-"),
+	}
+}
+
+func (g *Generator) finalizeGeneration(gs *issueGenState, batchErrors []error) ([]string, error) {
+	files, err := g.scanGeneratedIssueFilesWithTracker(gs.issuesDirAbs, gs.tracker)
 	if err != nil {
 		return nil, fmt.Errorf("scanning generated issue files: %w", err)
 	}
-	emitNewFiles()
+	g.emitNewFiles(gs)
 
 	if len(files) == 0 {
-		return nil, fmt.Errorf("AI did not generate any issue files (no files found in %s)", issuesDirAbs)
+		return nil, fmt.Errorf("AI did not generate any issue files (no files found in %s)", gs.issuesDirAbs)
 	}
 
-	// Track missing files for the caller (API layer can report them as warnings).
 	g.LastMissingFiles = nil
-	if missingNames := tracker.GetMissingFiles(); len(missingNames) > 0 {
+	if missingNames := gs.tracker.GetMissingFiles(); len(missingNames) > 0 {
 		sort.Strings(missingNames)
 		g.LastMissingFiles = missingNames
 		slog.Warn("expected files not found in generation output — returning partial results",
-			"missing", missingNames,
-			"generated", len(files),
-			"workflow_id", workflowID,
-			"batch_errors_count", len(batchErrors))
+			"missing", missingNames, "generated", len(files),
+			"workflow_id", gs.workflowID, "batch_errors_count", len(batchErrors))
 		for i, bErr := range batchErrors {
-			slog.Error("batch error detail",
-				"index", i+1,
-				"error", bErr)
+			slog.Error("batch error detail", "index", i+1, "error", bErr)
 		}
-		if logger != nil {
-			logger.Warn("returning partial results",
-				"missing", missingNames,
-				"generated", len(files))
+		if gs.logger != nil {
+			gs.logger.Warn("returning partial results", "missing", missingNames, "generated", len(files))
 		}
 	}
 
 	slog.Info("AI issue generation completed", "total_files", len(files))
-	if logger != nil {
-		logger.Info("issue generation completed", "total_files", len(files))
+	if gs.logger != nil {
+		gs.logger.Info("issue generation completed", "total_files", len(files))
 	}
 
-	g.emitIssuesGenerationProgress(workflowID, "completed", len(emitted), totalExpected, nil, "issue generation completed")
+	g.emitIssuesGenerationProgress(gs.workflowID, "completed", len(gs.emitted), gs.totalExpected, nil, "issue generation completed")
 	return files, nil
 }
 
@@ -1998,7 +1970,7 @@ func (g *Generator) ReadGeneratedIssues(workflowID string) ([]IssuePreview, erro
 
 	for _, entry := range files {
 		filePath := filepath.Join(issuesDir, entry.Name())
-		content, err := os.ReadFile(filePath)
+		content, err := os.ReadFile(filePath) // #nosec G304 -- path constructed from internal report directory
 		if err != nil {
 			continue
 		}
@@ -2027,43 +1999,7 @@ func (g *Generator) ReadGeneratedIssues(workflowID string) ([]IssuePreview, erro
 		// Fallback: plain markdown parsing
 		title, body := parseIssueMarkdown(string(content))
 
-		// Determine if it's the consolidated analysis (task_id will be empty)
-		taskID := ""
-		isMainIssue := false
-		if strings.Contains(entry.Name(), "consolidated") || strings.HasPrefix(entry.Name(), "00-") {
-			isMainIssue = true
-			taskID = "main"
-		} else {
-			// Extract task ID from filename pattern: XX-task-name.md or issue-N-task-name.md
-			re := regexp.MustCompile(`^(\d+)-(.+)\.md$`)
-			if match := re.FindStringSubmatch(entry.Name()); len(match) > 1 {
-				taskNum := match[1]
-				if taskNum != "00" {
-					if num, err := strconv.Atoi(taskNum); err == nil {
-						if mapped, ok := taskIndexMap[num]; ok {
-							taskID = mapped
-						} else {
-							taskID = fmt.Sprintf("task-%d", num)
-						}
-					} else {
-						taskID = "task-" + taskNum
-					}
-				}
-			} else {
-				re = regexp.MustCompile(`issue-(?:task-)?(\d+)`)
-				if match := re.FindStringSubmatch(entry.Name()); len(match) > 1 {
-					if num, err := strconv.Atoi(match[1]); err == nil {
-						if mapped, ok := taskIndexMap[num]; ok {
-							taskID = mapped
-						} else {
-							taskID = fmt.Sprintf("task-%d", num)
-						}
-					} else {
-						taskID = "task-" + match[1]
-					}
-				}
-			}
-		}
+		taskID, isMainIssue := resolveTaskIDFromFilename(entry.Name(), taskIndexMap)
 
 		// Deduplicate: skip if we've already seen this task ID
 		if taskID != "" && seen[taskID] {
@@ -2093,6 +2029,42 @@ func (g *Generator) ReadGeneratedIssues(workflowID string) ([]IssuePreview, erro
 		"duplicates_skipped", len(files)-len(previews))
 
 	return previews, nil
+}
+
+// resolveTaskIDFromFilename determines the task ID and main-issue flag from a legacy issue filename.
+func resolveTaskIDFromFilename(filename string, taskIndexMap map[int]string) (taskID string, isMainIssue bool) {
+	if strings.Contains(filename, "consolidated") || strings.HasPrefix(filename, "00-") {
+		return "main", true
+	}
+
+	// Try pattern: XX-task-name.md
+	re := regexp.MustCompile(`^(\d+)-(.+)\.md$`)
+	if match := re.FindStringSubmatch(filename); len(match) > 1 {
+		taskNum := match[1]
+		if taskNum != "00" {
+			return mapTaskNum(taskNum, taskIndexMap), false
+		}
+		return "", false
+	}
+
+	// Try pattern: issue-N-task-name.md or issue-task-N-...
+	re = regexp.MustCompile(`issue-(?:task-)?(\d+)`)
+	if match := re.FindStringSubmatch(filename); len(match) > 1 {
+		return mapTaskNum(match[1], taskIndexMap), false
+	}
+
+	return "", false
+}
+
+// mapTaskNum converts a numeric string to a task ID, using taskIndexMap if available.
+func mapTaskNum(numStr string, taskIndexMap map[int]string) string {
+	if num, err := strconv.Atoi(numStr); err == nil {
+		if mapped, ok := taskIndexMap[num]; ok {
+			return mapped
+		}
+		return fmt.Sprintf("task-%d", num)
+	}
+	return "task-" + numStr
 }
 
 // parseIssueMarkdown extracts title and body from a markdown file.

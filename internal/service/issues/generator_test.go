@@ -1645,7 +1645,7 @@ func TestGenerator_findIssueInCache(t *testing.T) {
 	}
 
 	// Find specific task
-	title, body, err = gen.findIssueInCache(issues, "task-1", false)
+	title, _, err = gen.findIssueInCache(issues, "task-1", false)
 	if err != nil {
 		t.Fatalf("findIssueInCache(task-1) error = %v", err)
 	}

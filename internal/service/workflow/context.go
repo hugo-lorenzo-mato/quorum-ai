@@ -404,7 +404,7 @@ func (c *Context) ResolveFilePath(path string) string {
 	}
 	// On Windows, filepath.IsAbs("/unix/path") returns false
 	// But such paths should be treated as absolute
-	if len(path) > 0 && (path[0] == '/' || path[0] == '\\') {
+	if path != "" && (path[0] == '/' || path[0] == '\\') {
 		return path
 	}
 	if c != nil && c.ProjectRoot != "" {

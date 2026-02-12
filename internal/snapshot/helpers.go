@@ -2,12 +2,10 @@ package snapshot
 
 import (
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -88,21 +86,6 @@ func normalizeExportOptions(opts *ExportOptions) error {
 		opts.GlobalConfigPath = path
 	}
 	return nil
-}
-
-func computeSHA256ForFile(path string) (string, int64, error) {
-	f, err := os.Open(path) // #nosec G304 -- path validated by callers
-	if err != nil {
-		return "", 0, err
-	}
-	defer f.Close()
-
-	hash := sha256.New()
-	n, err := io.Copy(hash, f)
-	if err != nil {
-		return "", 0, err
-	}
-	return hex.EncodeToString(hash.Sum(nil)), n, nil
 }
 
 func archivePathJoin(parts ...string) string {

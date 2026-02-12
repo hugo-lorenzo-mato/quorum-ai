@@ -49,11 +49,14 @@ func (r *Runner) reconcileAnalysisArtifacts(ctx context.Context, state *core.Wor
 	}
 
 	info, err := os.Stat(absConsolidatedPath)
-	if err != nil || info.IsDir() || info.Size() < minReconcileConsolidatedSizeBytes {
+	if err != nil {
+		return nil //nolint:nilerr // no consolidated file means nothing to reconcile
+	}
+	if info.IsDir() || info.Size() < minReconcileConsolidatedSizeBytes {
 		return nil
 	}
 
-	raw, err := os.ReadFile(absConsolidatedPath)
+	raw, err := os.ReadFile(absConsolidatedPath) // #nosec G304 -- path constructed from internal report directory
 	if err != nil {
 		if r.logger != nil {
 			r.logger.Warn("artifact reconcile: failed to read consolidated analysis",

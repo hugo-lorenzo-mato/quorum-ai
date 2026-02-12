@@ -136,99 +136,132 @@ type IssuePreviewResponse struct {
 	FilePath    string   `json:"file_path,omitempty"`
 }
 
+// issueGenContext holds validated inputs for issue generation.
+type issueGenContext struct {
+	workflowID   string
+	req          GenerateIssuesRequest
+	issuesCfg    config.IssuesConfig
+	generator    *issues.Generator
+	genCtx       context.Context
+	cancelFn     context.CancelFunc
+	labels       []string
+	assignees    []string
+	mode         string // effective generation mode
+}
+
 // handleGenerateIssues generates GitHub/GitLab issues from workflow artifacts.
 // POST /api/workflows/{workflowID}/issues
-//
-//nolint:gocyclo // Handler orchestrates many validation and IO steps.
 func (s *Server) handleGenerateIssues(w http.ResponseWriter, r *http.Request) {
+	igc, err := s.setupIssueGenContext(r)
+	if err != nil {
+		writeIssueSetupError(w, err)
+		return
+	}
+	if igc.cancelFn != nil {
+		defer igc.cancelFn()
+	}
+
+	result, err := s.executeIssueGeneration(igc)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	respondJSON(w, http.StatusOK, buildIssueGenerateResponse(igc.req, result))
+}
+
+// issueSetupError distinguishes validation errors (4xx) from internal errors (5xx).
+type issueSetupError struct {
+	status int
+	msg    string
+}
+
+func (e *issueSetupError) Error() string { return e.msg }
+
+func writeIssueSetupError(w http.ResponseWriter, err error) {
+	if se, ok := err.(*issueSetupError); ok {
+		respondError(w, se.status, se.msg)
+		return
+	}
+	respondError(w, http.StatusInternalServerError, err.Error())
+}
+
+// setupIssueGenContext validates the request and builds the generation context.
+func (s *Server) setupIssueGenContext(r *http.Request) (*issueGenContext, error) {
 	workflowID := chi.URLParam(r, "workflowID")
 	ctx := r.Context()
 
-	// Get workflow state
 	stateManager := s.getProjectStateManager(ctx)
 	state, err := stateManager.LoadByID(ctx, core.WorkflowID(workflowID))
 	if err != nil {
-		respondError(w, http.StatusNotFound, fmt.Sprintf("workflow not found: %v", err))
-		return
+		return nil, &issueSetupError{http.StatusNotFound, fmt.Sprintf("workflow not found: %v", err)}
 	}
 	if state == nil {
-		respondError(w, http.StatusNotFound, "workflow not found")
-		return
+		return nil, &issueSetupError{http.StatusNotFound, "workflow not found"}
 	}
 
-	// Parse request body
 	var req GenerateIssuesRequest
 	if r.Body != nil && r.ContentLength > 0 {
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			respondError(w, http.StatusBadRequest, fmt.Sprintf(errInvalidRequestBody, err.Error()))
-			return
+			return nil, &issueSetupError{http.StatusBadRequest, fmt.Sprintf(errInvalidRequestBody, err.Error())}
 		}
 	} else {
-		req = GenerateIssuesRequest{
-			CreateMainIssue: true,
-			CreateSubIssues: true,
-			LinkIssues:      true,
-		}
+		req = GenerateIssuesRequest{CreateMainIssue: true, CreateSubIssues: true, LinkIssues: true}
 	}
 
-	// Get issues config from loader
 	var issuesCfg config.IssuesConfig
-	configLoader := s.getProjectConfigLoader(ctx)
-	if configLoader != nil {
-		cfg, err := configLoader.Load()
-		if err == nil {
+	if configLoader := s.getProjectConfigLoader(ctx); configLoader != nil {
+		if cfg, err := configLoader.Load(); err == nil {
 			issuesCfg = cfg.Issues
 		}
 	}
-
-	// Check if issues are enabled
 	if !issuesCfg.Enabled {
-		respondError(w, http.StatusBadRequest, msgIssuesDisabled)
-		return
+		return nil, &issueSetupError{http.StatusBadRequest, msgIssuesDisabled}
 	}
 
-	// Determine report directory (cheap check before expensive client creation)
 	reportDir := state.ReportPath
 	if reportDir == "" {
-		respondError(w, http.StatusBadRequest, "workflow has no report directory")
-		return
+		return nil, &issueSetupError{http.StatusBadRequest, "workflow has no report directory"}
 	}
-
 	projectRoot := s.getProjectRootPath(ctx)
 	fullReportDir := reportDir
 	if projectRoot != "" && !filepath.IsAbs(reportDir) {
 		fullReportDir = filepath.Join(projectRoot, reportDir)
 	}
 
-	// Create issue client based on provider
 	issueClient, clientErr := createIssueClient(issuesCfg)
 	if clientErr != nil {
-		writeIssueClientError(w, clientErr)
-		return
+		// Reuse existing error classification
+		var domainErr *core.DomainError
+		status := http.StatusInternalServerError
+		if errors.As(clientErr, &domainErr) && domainErr.Code == "GH_NOT_AUTHENTICATED" {
+			status = http.StatusUnauthorized
+		} else if strings.Contains(clientErr.Error(), "not yet implemented") {
+			status = http.StatusNotImplemented
+		} else if strings.Contains(clientErr.Error(), "unknown provider") || strings.Contains(clientErr.Error(), "invalid repository format") {
+			status = http.StatusBadRequest
+		} else if strings.Contains(clientErr.Error(), "not authenticated") {
+			status = http.StatusUnauthorized
+		}
+		return nil, &issueSetupError{status, fmt.Sprintf("failed to create issue client: %v", clientErr)}
 	}
 
-	// Create generator with agent registry for LLM-based generation
 	eventBus := s.getProjectEventBus(ctx)
 	projectID := getProjectID(ctx)
 	generator := issues.NewGenerator(issueClient, issuesCfg, projectRoot, fullReportDir, s.agentRegistry)
 	generator.SetProgressReporter(newIssuesSSEProgressReporter(eventBus, projectID))
 	generator.SetAgentEventHandler(newIssuesAgentEventHandler(eventBus, workflowID, projectID))
 
-	// Apply timeout from config
 	genCtx := ctx
+	var cancelFn context.CancelFunc
 	if issuesCfg.Timeout != "" {
-		timeout, err := time.ParseDuration(issuesCfg.Timeout)
-		if err != nil {
+		if timeout, err := time.ParseDuration(issuesCfg.Timeout); err != nil {
 			slog.Warn("invalid issues.timeout in config, using request context",
 				"timeout", issuesCfg.Timeout, "error", err)
 		} else {
-			var cancel context.CancelFunc
-			genCtx, cancel = context.WithTimeout(ctx, timeout)
-			defer cancel()
+			genCtx, cancelFn = context.WithTimeout(ctx, timeout)
 		}
 	}
-
-	var result *issues.GenerateResult
 
 	labels := req.Labels
 	if len(labels) == 0 {
@@ -239,7 +272,6 @@ func (s *Server) handleGenerateIssues(w http.ResponseWriter, r *http.Request) {
 		assignees = issuesCfg.Assignees
 	}
 
-	// Resolve effective mode: use config Mode, falling back to Generator.Enabled for backward compat.
 	effectiveMode := issuesCfg.Mode
 	if effectiveMode == "" {
 		if issuesCfg.Generator.Enabled {
@@ -249,118 +281,126 @@ func (s *Server) handleGenerateIssues(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// If issues are provided in the request, write to disk then create from files
-	if len(req.Issues) > 0 {
-		slog.Info("creating issues from frontend input", "count", len(req.Issues))
+	return &issueGenContext{
+		workflowID: workflowID,
+		req:        req,
+		issuesCfg:  issuesCfg,
+		generator:  generator,
+		genCtx:     genCtx,
+		cancelFn:   cancelFn,
+		labels:     labels,
+		assignees:  assignees,
+		mode:       effectiveMode,
+	}, nil
+}
 
-		issueInputs := make([]issues.IssueInput, len(req.Issues))
-		for i, input := range req.Issues {
-			issueInputs[i] = issues.IssueInput{
-				Title:       input.Title,
-				Body:        input.Body,
-				Labels:      input.Labels,
-				Assignees:   input.Assignees,
-				IsMainIssue: input.IsMainIssue,
-				TaskID:      input.TaskID,
-				FilePath:    input.FilePath,
-			}
-		}
+// executeIssueGeneration runs the appropriate generation path based on context.
+func (s *Server) executeIssueGeneration(igc *issueGenContext) (*issues.GenerateResult, error) {
+	if len(igc.req.Issues) > 0 {
+		return s.executeFromFrontendInput(igc)
+	}
+	if igc.mode == core.IssueModeAgent {
+		return s.executeAgentGeneration(igc)
+	}
+	return s.executeDirectGeneration(igc)
+}
 
-		previews, err := generator.WriteIssuesToDisk(workflowID, issueInputs)
-		if err != nil {
-			respondError(w, http.StatusInternalServerError, fmt.Sprintf("saving issue files failed: %v", err))
-			return
-		}
-		for i := range issueInputs {
-			if i < len(previews) {
-				issueInputs[i].FilePath = previews[i].FilePath
-			}
-		}
+func (s *Server) executeFromFrontendInput(igc *issueGenContext) (*issues.GenerateResult, error) {
+	slog.Info("creating issues from frontend input", "count", len(igc.req.Issues))
+	issueInputs := convertAPIToIssueInputs(igc.req.Issues)
 
-		result, err = generator.CreateIssuesFromFiles(genCtx, workflowID, issueInputs, req.DryRun, req.LinkIssues, labels, assignees)
-		if err != nil {
-			respondError(w, http.StatusInternalServerError, fmt.Sprintf("issue creation failed: %v", err))
-			return
-		}
-	} else if effectiveMode == core.IssueModeAgent {
-		slog.Info("generating issues from filesystem artifacts using LLM", "mode", effectiveMode)
-		if _, err := generator.GenerateIssueFiles(genCtx, workflowID); err != nil {
-			respondError(w, http.StatusInternalServerError, fmt.Sprintf("issue generation failed: %v", err))
-			return
-		}
-
-		previews, err := generator.ReadGeneratedIssues(workflowID)
-		if err != nil {
-			slog.Error(msgReadIssuesFailed, "error", err, "workflow_id", workflowID)
-			respondError(w, http.StatusInternalServerError, msgReadIssuesFailed)
-			return
-		}
-
-		issueInputs := make([]issues.IssueInput, 0, len(previews))
-		for _, preview := range previews {
-			if preview.IsMainIssue && !req.CreateMainIssue {
-				continue
-			}
-			if !preview.IsMainIssue && !req.CreateSubIssues {
-				continue
-			}
-			issueInputs = append(issueInputs, issues.IssueInput{
-				Title:       preview.Title,
-				Body:        preview.Body,
-				Labels:      nil,
-				Assignees:   nil,
-				IsMainIssue: preview.IsMainIssue,
-				TaskID:      preview.TaskID,
-				FilePath:    preview.FilePath,
-			})
-		}
-
-		result, err = generator.CreateIssuesFromFiles(genCtx, workflowID, issueInputs, req.DryRun, req.LinkIssues, labels, assignees)
-		if err != nil {
-			respondError(w, http.StatusInternalServerError, fmt.Sprintf("issue creation failed: %v", err))
-			return
-		}
-
-		// Report any missing files as AI warnings
-		for _, name := range generator.LastMissingFiles {
-			result.AIErrors = append(result.AIErrors, fmt.Sprintf("expected file not generated: %s", name))
-		}
-	} else {
-		// Direct mode: read from filesystem (direct copy)
-		slog.Info("generating issues from filesystem artifacts (direct copy)", "mode", effectiveMode)
-		opts := issues.GenerateOptions{
-			WorkflowID:      workflowID,
-			DryRun:          req.DryRun,
-			CreateMainIssue: req.CreateMainIssue,
-			CreateSubIssues: req.CreateSubIssues,
-			LinkIssues:      req.LinkIssues,
-			CustomLabels:    labels,
-			CustomAssignees: assignees,
-		}
-
-		result, err = generator.Generate(genCtx, opts)
-		if err != nil {
-			respondError(w, http.StatusInternalServerError, fmt.Sprintf("issue generation failed: %v", err))
-			return
+	previews, err := igc.generator.WriteIssuesToDisk(igc.workflowID, issueInputs)
+	if err != nil {
+		return nil, fmt.Errorf("saving issue files failed: %v", err)
+	}
+	for i := range issueInputs {
+		if i < len(previews) {
+			issueInputs[i].FilePath = previews[i].FilePath
 		}
 	}
 
-	// Build response
-	response := GenerateIssuesResponse{
-		Success: true,
+	result, err := igc.generator.CreateIssuesFromFiles(igc.genCtx, igc.workflowID, issueInputs, igc.req.DryRun, igc.req.LinkIssues, igc.labels, igc.assignees)
+	if err != nil {
+		return nil, fmt.Errorf("issue creation failed: %v", err)
 	}
+	return result, nil
+}
+
+func (s *Server) executeAgentGeneration(igc *issueGenContext) (*issues.GenerateResult, error) {
+	slog.Info("generating issues from filesystem artifacts using LLM", "mode", igc.mode)
+	if _, err := igc.generator.GenerateIssueFiles(igc.genCtx, igc.workflowID); err != nil {
+		return nil, fmt.Errorf("issue generation failed: %v", err)
+	}
+
+	previews, err := igc.generator.ReadGeneratedIssues(igc.workflowID)
+	if err != nil {
+		slog.Error(msgReadIssuesFailed, "error", err, "workflow_id", igc.workflowID)
+		return nil, fmt.Errorf(msgReadIssuesFailed)
+	}
+
+	issueInputs := make([]issues.IssueInput, 0, len(previews))
+	for _, preview := range previews {
+		if preview.IsMainIssue && !igc.req.CreateMainIssue {
+			continue
+		}
+		if !preview.IsMainIssue && !igc.req.CreateSubIssues {
+			continue
+		}
+		issueInputs = append(issueInputs, issues.IssueInput{
+			Title: preview.Title, Body: preview.Body,
+			IsMainIssue: preview.IsMainIssue, TaskID: preview.TaskID, FilePath: preview.FilePath,
+		})
+	}
+
+	result, err := igc.generator.CreateIssuesFromFiles(igc.genCtx, igc.workflowID, issueInputs, igc.req.DryRun, igc.req.LinkIssues, igc.labels, igc.assignees)
+	if err != nil {
+		return nil, fmt.Errorf("issue creation failed: %v", err)
+	}
+
+	for _, name := range igc.generator.LastMissingFiles {
+		result.AIErrors = append(result.AIErrors, fmt.Sprintf("expected file not generated: %s", name))
+	}
+	return result, nil
+}
+
+func (s *Server) executeDirectGeneration(igc *issueGenContext) (*issues.GenerateResult, error) {
+	slog.Info("generating issues from filesystem artifacts (direct copy)", "mode", igc.mode)
+	opts := issues.GenerateOptions{
+		WorkflowID: igc.workflowID, DryRun: igc.req.DryRun,
+		CreateMainIssue: igc.req.CreateMainIssue, CreateSubIssues: igc.req.CreateSubIssues,
+		LinkIssues: igc.req.LinkIssues, CustomLabels: igc.labels, CustomAssignees: igc.assignees,
+	}
+	result, err := igc.generator.Generate(igc.genCtx, opts)
+	if err != nil {
+		return nil, fmt.Errorf("issue generation failed: %v", err)
+	}
+	return result, nil
+}
+
+// convertAPIToIssueInputs converts API issue inputs to the internal type.
+func convertAPIToIssueInputs(apiInputs []IssueInput) []issues.IssueInput {
+	inputs := make([]issues.IssueInput, len(apiInputs))
+	for i, input := range apiInputs {
+		inputs[i] = issues.IssueInput{
+			Title: input.Title, Body: input.Body, Labels: input.Labels,
+			Assignees: input.Assignees, IsMainIssue: input.IsMainIssue,
+			TaskID: input.TaskID, FilePath: input.FilePath,
+		}
+	}
+	return inputs
+}
+
+// buildIssueGenerateResponse builds the HTTP response from generation results.
+func buildIssueGenerateResponse(req GenerateIssuesRequest, result *issues.GenerateResult) GenerateIssuesResponse {
+	response := GenerateIssuesResponse{Success: true}
 
 	if req.DryRun {
 		response.Message = fmt.Sprintf("Preview: %d issues would be created", len(result.PreviewIssues))
 		for _, preview := range result.PreviewIssues {
 			response.PreviewIssues = append(response.PreviewIssues, IssuePreviewResponse{
-				Title:       preview.Title,
-				Body:        preview.Body,
-				Labels:      preview.Labels,
-				Assignees:   preview.Assignees,
-				IsMainIssue: preview.IsMainIssue,
-				TaskID:      preview.TaskID,
-				FilePath:    preview.FilePath,
+				Title: preview.Title, Body: preview.Body, Labels: preview.Labels,
+				Assignees: preview.Assignees, IsMainIssue: preview.IsMainIssue,
+				TaskID: preview.TaskID, FilePath: preview.FilePath,
 			})
 		}
 	} else {
@@ -369,36 +409,25 @@ func (s *Server) handleGenerateIssues(w http.ResponseWriter, r *http.Request) {
 
 		if result.IssueSet.MainIssue != nil {
 			response.MainIssue = &IssueResponse{
-				Number: result.IssueSet.MainIssue.Number,
-				Title:  result.IssueSet.MainIssue.Title,
-				URL:    result.IssueSet.MainIssue.URL,
-				State:  result.IssueSet.MainIssue.State,
+				Number: result.IssueSet.MainIssue.Number, Title: result.IssueSet.MainIssue.Title,
+				URL: result.IssueSet.MainIssue.URL, State: result.IssueSet.MainIssue.State,
 				Labels: result.IssueSet.MainIssue.Labels,
 			}
 		}
-
 		for _, sub := range result.IssueSet.SubIssues {
 			response.SubIssues = append(response.SubIssues, IssueResponse{
-				Number:      sub.Number,
-				Title:       sub.Title,
-				URL:         sub.URL,
-				State:       sub.State,
-				Labels:      sub.Labels,
-				ParentIssue: sub.ParentIssue,
+				Number: sub.Number, Title: sub.Title, URL: sub.URL,
+				State: sub.State, Labels: sub.Labels, ParentIssue: sub.ParentIssue,
 			})
 		}
 	}
 
-	// Add any non-fatal errors
 	for _, err := range result.Errors {
 		response.Errors = append(response.Errors, err.Error())
 	}
-
-	// Add AI generation info for debugging
 	response.AIUsed = result.AIUsed
 	response.AIErrors = result.AIErrors
-
-	respondJSON(w, http.StatusOK, response)
+	return response
 }
 
 // handleSaveIssuesFiles saves issues to markdown files on disk.

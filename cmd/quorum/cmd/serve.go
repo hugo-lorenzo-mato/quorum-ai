@@ -66,451 +66,436 @@ func init() {
 		"Disable CORS headers")
 }
 
-//nolint:gocyclo // CLI wiring handles many flags and dependencies.
+// serveInfra holds all server infrastructure components initialized during setup.
+type serveInfra struct {
+	logger           *logging.Logger
+	loader           *config.Loader
+	quorumCfg        *config.Config
+	registry         *cli.Registry
+	stateManager     core.StateManager
+	chatStore        core.ChatStore
+	eventBus         *events.EventBus
+	resourceMonitor  *diagnostics.ResourceMonitor
+	heartbeatManager *workflow.HeartbeatManager
+	unifiedTracker   *api.UnifiedTracker
+	workflowExecutor *api.WorkflowExecutor
+	projectRegistry  project.Registry
+	projectReg       *project.FileRegistry
+	statePool        *project.StatePool
+	kanbanEngine     *kanban.Engine
+}
+
 func runServe(_ *cobra.Command, _ []string) error {
-	// Create logger
 	logger := logging.New(logging.Config{
-		Level:  logLevel,
-		Format: logFormat,
-		Output: os.Stdout,
+		Level: logLevel, Format: logFormat, Output: os.Stdout,
 	})
 
-	// Load quorum configuration
-	loader := config.NewLoaderWithViper(viper.GetViper())
-	if cfgFile != "" {
-		loader.WithConfigFile(cfgFile)
-	}
-	quorumCfg, err := loader.Load()
-	if err != nil {
-		logger.Warn("failed to load quorum config, agents will not be available", slog.String("error", err.Error()))
-	}
+	infra := &serveInfra{logger: logger}
 
-	// Create agent registry
-	var registry *cli.Registry
-	if quorumCfg != nil {
-		registry = cli.NewRegistry()
-		if err := configureAgentsFromConfig(registry, quorumCfg, loader); err != nil {
-			logger.Warn("failed to configure agents", slog.String("error", err.Error()))
-			registry = nil
-		} else {
-			logger.Info("agents configured", slog.Any("available", registry.List()))
-		}
-	}
+	setupServeConfigAndAgents(infra)
+	setupServeStateAndChat(infra)
 
-	// Create state manager for workflow persistence
-	var stateManager core.StateManager
-	if quorumCfg != nil {
-		statePath := quorumCfg.State.Path
-		if statePath == "" {
-			statePath = ".quorum/state/state.db"
-		}
-
-		stateOpts := state.StateManagerOptions{
-			BackupPath: quorumCfg.State.BackupPath,
-		}
-		if quorumCfg.State.LockTTL != "" {
-			if lockTTL, err := time.ParseDuration(quorumCfg.State.LockTTL); err == nil {
-				stateOpts.LockTTL = lockTTL
-			} else {
-				logger.Warn("invalid state.lock_ttl, using default", slog.String("value", quorumCfg.State.LockTTL), slog.String("error", err.Error()))
-			}
-		}
-
-		sm, err := state.NewStateManagerWithOptions(statePath, stateOpts)
-		if err != nil {
-			logger.Warn("failed to create state manager", slog.String("error", err.Error()))
-		} else {
-			stateManager = sm
-			logger.Info("state manager initialized", slog.String("backend", "sqlite"), slog.String("path", statePath))
-		}
-	}
-
-	// Create chat store for chat session persistence (SQLite DB next to the state DB)
-	var chatStore core.ChatStore
-	if quorumCfg != nil {
-		statePath := quorumCfg.State.Path
-		if statePath == "" {
-			statePath = ".quorum/state/state.db"
-		}
-		chatPath := filepath.Join(filepath.Dir(statePath), "chat.db")
-
-		cs, err := chat.NewChatStore(chatPath)
-		if err != nil {
-			logger.Warn("failed to create chat store", slog.String("error", err.Error()))
-		} else {
-			chatStore = cs
-			logger.Info("chat store initialized", slog.String("backend", "sqlite"), slog.String("path", chatPath))
-		}
-	}
-
-	// Create server configuration
 	cfg := web.DefaultConfig()
 	cfg.Host = serveHost
 	cfg.Port = servePort
 	cfg.EnableCORS = !serveNoCORS
 
-	// Ensure state manager is closed on exit
-	if stateManager != nil {
+	if infra.stateManager != nil {
 		defer func() {
-			if closeErr := state.CloseStateManager(stateManager); closeErr != nil {
+			if closeErr := state.CloseStateManager(infra.stateManager); closeErr != nil {
 				logger.Warn("failed to close state manager", slog.String("error", closeErr.Error()))
 			}
 		}()
 	}
-
-	// Ensure chat store is closed on exit
-	if chatStore != nil {
+	if infra.chatStore != nil {
 		defer func() {
-			if closeErr := chat.CloseChatStore(chatStore); closeErr != nil {
+			if closeErr := chat.CloseChatStore(infra.chatStore); closeErr != nil {
 				logger.Warn("failed to close chat store", slog.String("error", closeErr.Error()))
 			}
 		}()
 	}
 
-	// Create event bus for SSE streaming
-	eventBus := events.New(100)
-	defer eventBus.Close()
+	infra.eventBus = events.New(100)
+	defer infra.eventBus.Close()
 
-	// Initialize diagnostics if enabled
-	var resourceMonitor *diagnostics.ResourceMonitor
 	ctx := context.Background()
+	setupServeDiagnostics(ctx, infra)
+	setupServeWorkflowInfra(infra)
+	setupServeProjectInfra(infra)
+	setupServeKanbanEngine(infra)
 
-	if quorumCfg != nil && quorumCfg.Diagnostics.Enabled {
-		// Parse monitoring interval
-		monitorInterval, err := time.ParseDuration(quorumCfg.Diagnostics.ResourceMonitoring.Interval)
-		if err != nil {
-			monitorInterval = 30 * time.Second
-		}
-
-		// Create resource monitor
-		resourceMonitor = diagnostics.NewResourceMonitor(
-			monitorInterval,
-			quorumCfg.Diagnostics.ResourceMonitoring.FDThresholdPercent,
-			quorumCfg.Diagnostics.ResourceMonitoring.GoroutineThreshold,
-			quorumCfg.Diagnostics.ResourceMonitoring.MemoryThresholdMB,
-			quorumCfg.Diagnostics.ResourceMonitoring.HistorySize,
-			logger.Logger,
-		)
-		resourceMonitor.Start(ctx)
-		defer resourceMonitor.Stop()
-
-		// Create crash dump writer
-		crashDumpWriter := diagnostics.NewCrashDumpWriter(
-			quorumCfg.Diagnostics.CrashDump.Dir,
-			quorumCfg.Diagnostics.CrashDump.MaxFiles,
-			quorumCfg.Diagnostics.CrashDump.IncludeStack,
-			quorumCfg.Diagnostics.CrashDump.IncludeEnv,
-			logger.Logger,
-			resourceMonitor,
-		)
-
-		// Create safe executor
-		safeExecutor := diagnostics.NewSafeExecutor(
-			resourceMonitor,
-			crashDumpWriter,
-			logger.Logger,
-			quorumCfg.Diagnostics.PreflightChecks.Enabled,
-			quorumCfg.Diagnostics.PreflightChecks.MinFreeFDPercent,
-			quorumCfg.Diagnostics.PreflightChecks.MinFreeMemoryMB,
-		)
-
-		// Inject diagnostics into agent registry if available
-		if registry != nil {
-			registry.SetDiagnostics(safeExecutor, crashDumpWriter)
-		}
-
-		logger.Info("diagnostics enabled",
-			slog.String("interval", monitorInterval.String()),
-			slog.Int("fd_threshold", quorumCfg.Diagnostics.ResourceMonitoring.FDThresholdPercent),
-		)
-	}
-
-	// Create heartbeat manager for zombie workflow detection (always active).
-	var heartbeatManager *workflow.HeartbeatManager
-	if quorumCfg != nil && stateManager != nil {
-		heartbeatCfg := buildHeartbeatConfig(quorumCfg.Workflow.Heartbeat)
-		heartbeatManager = workflow.NewHeartbeatManager(heartbeatCfg, stateManager, logger.Logger)
-		logger.Info("heartbeat manager initialized",
-			slog.Duration("interval", heartbeatCfg.Interval),
-			slog.Duration("stale_threshold", heartbeatCfg.StaleThreshold),
-			slog.Bool("auto_resume", heartbeatCfg.AutoResume))
-	}
-
-	// Create unified tracker for centralized workflow state synchronization
-	var unifiedTracker *api.UnifiedTracker
-	if stateManager != nil {
-		unifiedTracker = api.NewUnifiedTracker(stateManager, heartbeatManager, logger.Logger, api.DefaultUnifiedTrackerConfig())
-		logger.Info("unified tracker initialized")
-	}
-
-	// Create workflow executor for Kanban engine (needs agent registry and state manager)
-	var workflowExecutor *api.WorkflowExecutor
-	if registry != nil && stateManager != nil && quorumCfg != nil {
-		runnerFactory := api.NewRunnerFactory(stateManager, registry, eventBus, loader, logger)
-		workflowExecutor = api.NewWorkflowExecutor(runnerFactory, stateManager, eventBus, logger.Logger, unifiedTracker)
-		logger.Info("workflow executor initialized for Kanban engine")
-	}
-
-	// Create project registry for multi-project support
-	var projectRegistry project.Registry
-	projectReg, err := project.NewFileRegistry(project.WithLogger(logger.Logger))
-	if err != nil {
-		logger.Warn("failed to create project registry, multi-project support disabled", slog.String("error", err.Error()))
-	} else {
-		projectRegistry = projectReg
-		logger.Info("project registry initialized", slog.Int("project_count", projectReg.Count()))
-		defer projectReg.Close()
-	}
-
-	// Create state pool for multi-project context management
-	var statePool *project.StatePool
-	if projectRegistry != nil {
-		statePool = project.NewStatePool(
-			projectRegistry,
-			project.WithPoolLogger(logger.Logger),
-			project.WithMaxActiveContexts(10),
-			project.WithEvictionGracePeriod(30*time.Minute),
-		)
-		logger.Info("state pool initialized for multi-project support")
-		defer statePool.Close()
-	}
-
-	// Create Kanban engine if we have the required dependencies
-	// This must be after StatePool is created so we can use multi-project mode
-	var kanbanEngine *kanban.Engine
-	if workflowExecutor != nil {
-		engineCfg := kanban.EngineConfig{
-			Executor: workflowExecutor,
-			EventBus: eventBus,
-			Logger:   logger.Logger,
-		}
-
-		// Prefer multi-project mode if StatePool and Registry are available
-		if statePool != nil && projectRegistry != nil {
-			engineCfg.ProjectProvider = api.NewKanbanStatePoolProvider(statePool, projectRegistry)
-			logger.Info("Kanban engine using multi-project mode")
-		} else if stateManager != nil {
-			// Fall back to single-project mode (legacy)
-			if kanbanSM, ok := stateManager.(kanban.KanbanStateManager); ok {
-				engineCfg.StateManager = kanbanSM
-				logger.Info("Kanban engine using single-project mode (legacy)")
-			} else {
-				logger.Warn("state manager does not implement KanbanStateManager, Kanban engine disabled")
-			}
-		}
-
-		// Only create engine if we have a way to access state
-		if engineCfg.ProjectProvider != nil || engineCfg.StateManager != nil {
-			kanbanEngine = kanban.NewEngine(engineCfg)
-			logger.Info("Kanban engine initialized")
-		}
-	}
-
-	// Create server options
-	serverOpts := []web.ServerOption{web.WithEventBus(eventBus)}
-	if registry != nil {
-		serverOpts = append(serverOpts, web.WithAgentRegistry(registry))
-	}
-	if resourceMonitor != nil {
-		serverOpts = append(serverOpts, web.WithResourceMonitor(resourceMonitor))
-	}
-	if stateManager != nil {
-		serverOpts = append(serverOpts, web.WithStateManager(stateManager))
-	}
-	if chatStore != nil {
-		serverOpts = append(serverOpts, web.WithChatStore(chatStore))
-	}
-	if quorumCfg != nil {
-		serverOpts = append(serverOpts, web.WithConfigLoader(loader))
-	}
-	if heartbeatManager != nil {
-		serverOpts = append(serverOpts, web.WithHeartbeatManager(heartbeatManager))
-	}
-	if workflowExecutor != nil {
-		serverOpts = append(serverOpts, web.WithWorkflowExecutor(workflowExecutor))
-	}
-	if kanbanEngine != nil {
-		serverOpts = append(serverOpts, web.WithKanbanEngine(kanbanEngine))
-	}
-	if unifiedTracker != nil {
-		serverOpts = append(serverOpts, web.WithUnifiedTracker(unifiedTracker))
-	}
-	if projectRegistry != nil {
-		serverOpts = append(serverOpts, web.WithProjectRegistry(projectRegistry))
-	}
-	if statePool != nil {
-		serverOpts = append(serverOpts, web.WithStatePool(statePool))
-	}
-
-	// Create and start server with event bus and agent registry
+	serverOpts := buildServeServerOptions(infra)
 	server := web.New(cfg, logger.Logger, serverOpts...)
 
 	if err := server.Start(); err != nil {
 		return fmt.Errorf("starting server: %w", err)
 	}
 
-	// Recover zombie workflows (workflows stuck in "running" state from previous crash/restart)
-	if stateManager != nil {
-		if recovered, err := recoverZombieWorkflows(ctx, stateManager, logger.Logger); err != nil {
+	runServePostStart(ctx, infra)
+	startServeBackgroundServices(ctx, infra)
+
+	serverURL := fmt.Sprintf("http://%s", server.Addr())
+	fmt.Printf("\n  Quorum server running at: \033[1;36m%s\033[0m\n\n", serverURL)
+	logger.Info("server started",
+		slog.String("addr", server.Addr()), slog.String("url", serverURL), slog.Bool("cors", cfg.EnableCORS))
+
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	<-sigCh
+
+	logger.Info("shutting down server...")
+	shutdownCtx := context.Background()
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		return fmt.Errorf("server shutdown: %w", err)
+	}
+	logger.Info("server stopped")
+	return nil
+}
+
+func setupServeConfigAndAgents(infra *serveInfra) {
+	logger := infra.logger
+	infra.loader = config.NewLoaderWithViper(viper.GetViper())
+	if cfgFile != "" {
+		infra.loader.WithConfigFile(cfgFile)
+	}
+	quorumCfg, err := infra.loader.Load()
+	if err != nil {
+		logger.Warn("failed to load quorum config, agents will not be available", slog.String("error", err.Error()))
+	}
+	infra.quorumCfg = quorumCfg
+
+	if quorumCfg != nil {
+		registry := cli.NewRegistry()
+		if err := configureAgentsFromConfig(registry, quorumCfg, infra.loader); err != nil {
+			logger.Warn("failed to configure agents", slog.String("error", err.Error()))
+		} else {
+			infra.registry = registry
+			logger.Info("agents configured", slog.Any("available", registry.List()))
+		}
+	}
+}
+
+func setupServeStateAndChat(infra *serveInfra) {
+	logger := infra.logger
+	quorumCfg := infra.quorumCfg
+	if quorumCfg == nil {
+		return
+	}
+
+	statePath := quorumCfg.State.Path
+	if statePath == "" {
+		statePath = ".quorum/state/state.db"
+	}
+
+	stateOpts := state.StateManagerOptions{BackupPath: quorumCfg.State.BackupPath}
+	if quorumCfg.State.LockTTL != "" {
+		if lockTTL, err := time.ParseDuration(quorumCfg.State.LockTTL); err == nil {
+			stateOpts.LockTTL = lockTTL
+		} else {
+			logger.Warn("invalid state.lock_ttl, using default", slog.String("value", quorumCfg.State.LockTTL), slog.String("error", err.Error()))
+		}
+	}
+
+	sm, err := state.NewStateManagerWithOptions(statePath, stateOpts)
+	if err != nil {
+		logger.Warn("failed to create state manager", slog.String("error", err.Error()))
+	} else {
+		infra.stateManager = sm
+		logger.Info("state manager initialized", slog.String("backend", "sqlite"), slog.String("path", statePath))
+	}
+
+	chatPath := filepath.Join(filepath.Dir(statePath), "chat.db")
+	cs, err := chat.NewChatStore(chatPath)
+	if err != nil {
+		logger.Warn("failed to create chat store", slog.String("error", err.Error()))
+	} else {
+		infra.chatStore = cs
+		logger.Info("chat store initialized", slog.String("backend", "sqlite"), slog.String("path", chatPath))
+	}
+}
+
+func setupServeDiagnostics(ctx context.Context, infra *serveInfra) {
+	logger := infra.logger
+	quorumCfg := infra.quorumCfg
+	if quorumCfg == nil || !quorumCfg.Diagnostics.Enabled {
+		return
+	}
+
+	monitorInterval, err := time.ParseDuration(quorumCfg.Diagnostics.ResourceMonitoring.Interval)
+	if err != nil {
+		monitorInterval = 30 * time.Second
+	}
+
+	infra.resourceMonitor = diagnostics.NewResourceMonitor(
+		monitorInterval,
+		quorumCfg.Diagnostics.ResourceMonitoring.FDThresholdPercent,
+		quorumCfg.Diagnostics.ResourceMonitoring.GoroutineThreshold,
+		quorumCfg.Diagnostics.ResourceMonitoring.MemoryThresholdMB,
+		quorumCfg.Diagnostics.ResourceMonitoring.HistorySize,
+		logger.Logger,
+	)
+	infra.resourceMonitor.Start(ctx)
+
+	crashDumpWriter := diagnostics.NewCrashDumpWriter(
+		quorumCfg.Diagnostics.CrashDump.Dir, quorumCfg.Diagnostics.CrashDump.MaxFiles,
+		quorumCfg.Diagnostics.CrashDump.IncludeStack, quorumCfg.Diagnostics.CrashDump.IncludeEnv,
+		logger.Logger, infra.resourceMonitor,
+	)
+	safeExecutor := diagnostics.NewSafeExecutor(
+		infra.resourceMonitor, crashDumpWriter, logger.Logger,
+		quorumCfg.Diagnostics.PreflightChecks.Enabled,
+		quorumCfg.Diagnostics.PreflightChecks.MinFreeFDPercent,
+		quorumCfg.Diagnostics.PreflightChecks.MinFreeMemoryMB,
+	)
+
+	if infra.registry != nil {
+		infra.registry.SetDiagnostics(safeExecutor, crashDumpWriter)
+	}
+	logger.Info("diagnostics enabled",
+		slog.String("interval", monitorInterval.String()),
+		slog.Int("fd_threshold", quorumCfg.Diagnostics.ResourceMonitoring.FDThresholdPercent))
+}
+
+func setupServeWorkflowInfra(infra *serveInfra) {
+	logger := infra.logger
+	if infra.quorumCfg != nil && infra.stateManager != nil {
+		heartbeatCfg := buildHeartbeatConfig(infra.quorumCfg.Workflow.Heartbeat)
+		infra.heartbeatManager = workflow.NewHeartbeatManager(heartbeatCfg, infra.stateManager, logger.Logger)
+		logger.Info("heartbeat manager initialized",
+			slog.Duration("interval", heartbeatCfg.Interval),
+			slog.Duration("stale_threshold", heartbeatCfg.StaleThreshold),
+			slog.Bool("auto_resume", heartbeatCfg.AutoResume))
+	}
+
+	if infra.stateManager != nil {
+		infra.unifiedTracker = api.NewUnifiedTracker(infra.stateManager, infra.heartbeatManager, logger.Logger, api.DefaultUnifiedTrackerConfig())
+		logger.Info("unified tracker initialized")
+	}
+
+	if infra.registry != nil && infra.stateManager != nil && infra.quorumCfg != nil {
+		runnerFactory := api.NewRunnerFactory(infra.stateManager, infra.registry, infra.eventBus, infra.loader, logger)
+		infra.workflowExecutor = api.NewWorkflowExecutor(runnerFactory, infra.stateManager, infra.eventBus, logger.Logger, infra.unifiedTracker)
+		logger.Info("workflow executor initialized for Kanban engine")
+	}
+}
+
+func setupServeProjectInfra(infra *serveInfra) {
+	logger := infra.logger
+	projectReg, err := project.NewFileRegistry(project.WithLogger(logger.Logger))
+	if err != nil {
+		logger.Warn("failed to create project registry, multi-project support disabled", slog.String("error", err.Error()))
+	} else {
+		infra.projectReg = projectReg
+		infra.projectRegistry = projectReg
+		logger.Info("project registry initialized", slog.Int("project_count", projectReg.Count()))
+	}
+
+	if infra.projectRegistry != nil {
+		infra.statePool = project.NewStatePool(
+			infra.projectRegistry,
+			project.WithPoolLogger(logger.Logger),
+			project.WithMaxActiveContexts(10),
+			project.WithEvictionGracePeriod(30*time.Minute),
+		)
+		logger.Info("state pool initialized for multi-project support")
+	}
+}
+
+func setupServeKanbanEngine(infra *serveInfra) {
+	logger := infra.logger
+	if infra.workflowExecutor == nil {
+		return
+	}
+
+	engineCfg := kanban.EngineConfig{
+		Executor: infra.workflowExecutor, EventBus: infra.eventBus, Logger: logger.Logger,
+	}
+
+	if infra.statePool != nil && infra.projectRegistry != nil {
+		engineCfg.ProjectProvider = api.NewKanbanStatePoolProvider(infra.statePool, infra.projectRegistry)
+		logger.Info("Kanban engine using multi-project mode")
+	} else if infra.stateManager != nil {
+		if kanbanSM, ok := infra.stateManager.(kanban.KanbanStateManager); ok {
+			engineCfg.StateManager = kanbanSM
+			logger.Info("Kanban engine using single-project mode (legacy)")
+		} else {
+			logger.Warn("state manager does not implement KanbanStateManager, Kanban engine disabled")
+		}
+	}
+
+	if engineCfg.ProjectProvider != nil || engineCfg.StateManager != nil {
+		infra.kanbanEngine = kanban.NewEngine(engineCfg)
+		logger.Info("Kanban engine initialized")
+	}
+}
+
+func buildServeServerOptions(infra *serveInfra) []web.ServerOption {
+	opts := []web.ServerOption{web.WithEventBus(infra.eventBus)}
+	if infra.registry != nil {
+		opts = append(opts, web.WithAgentRegistry(infra.registry))
+	}
+	if infra.resourceMonitor != nil {
+		opts = append(opts, web.WithResourceMonitor(infra.resourceMonitor))
+	}
+	if infra.stateManager != nil {
+		opts = append(opts, web.WithStateManager(infra.stateManager))
+	}
+	if infra.chatStore != nil {
+		opts = append(opts, web.WithChatStore(infra.chatStore))
+	}
+	if infra.quorumCfg != nil {
+		opts = append(opts, web.WithConfigLoader(infra.loader))
+	}
+	if infra.heartbeatManager != nil {
+		opts = append(opts, web.WithHeartbeatManager(infra.heartbeatManager))
+	}
+	if infra.workflowExecutor != nil {
+		opts = append(opts, web.WithWorkflowExecutor(infra.workflowExecutor))
+	}
+	if infra.kanbanEngine != nil {
+		opts = append(opts, web.WithKanbanEngine(infra.kanbanEngine))
+	}
+	if infra.unifiedTracker != nil {
+		opts = append(opts, web.WithUnifiedTracker(infra.unifiedTracker))
+	}
+	if infra.projectRegistry != nil {
+		opts = append(opts, web.WithProjectRegistry(infra.projectRegistry))
+	}
+	if infra.statePool != nil {
+		opts = append(opts, web.WithStatePool(infra.statePool))
+	}
+	return opts
+}
+
+func runServePostStart(ctx context.Context, infra *serveInfra) {
+	logger := infra.logger
+
+	if infra.stateManager != nil {
+		if recovered, err := recoverZombieWorkflows(ctx, infra.stateManager, logger.Logger); err != nil {
 			logger.Warn("failed to recover zombie workflows", slog.String("error", err.Error()))
 		} else if recovered > 0 {
 			logger.Info("recovered zombie workflows", slog.Int("count", recovered))
 		}
 	}
 
-	// Also clean up any orphaned running_workflows entries (safety net).
-	// This is multi-project aware when project registry + state pool are available.
-	if unifiedTracker != nil {
-		const reconcilerInterval = 30 * time.Second
-
-		runCleanup := func() {
-			cleanupCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
-			defer cancel()
-
-			totalCleaned := 0
-
-			// Prefer multi-project mode.
-			if projectRegistry != nil && statePool != nil {
-				projects, err := projectRegistry.ListProjects(cleanupCtx)
-				if err != nil {
-					logger.Warn("failed to list projects for orphan cleanup", slog.String("error", err.Error()))
-				} else {
-					for _, p := range projects {
-						if p == nil || !p.IsAccessible() {
-							continue
-						}
-						pc, err := statePool.GetContext(cleanupCtx, p.ID)
-						if err != nil {
-							logger.Warn("failed to get project context for orphan cleanup",
-								slog.String("project_id", p.ID),
-								slog.String("error", err.Error()))
-							continue
-						}
-						projCtx := apimiddleware.WithProjectContext(cleanupCtx, pc)
-						cleaned, err := unifiedTracker.CleanupOrphanedWorkflows(projCtx)
-						if err != nil {
-							logger.Warn("failed to clean orphaned workflows for project",
-								slog.String("project_id", p.ID),
-								slog.String("error", err.Error()))
-							continue
-						}
-						totalCleaned += cleaned
-					}
-				}
-			} else {
-				// Single-project fallback.
-				cleaned, err := unifiedTracker.CleanupOrphanedWorkflows(cleanupCtx)
-				if err != nil {
-					logger.Warn("failed to clean up orphaned workflows", slog.String("error", err.Error()))
-					return
-				}
-				totalCleaned += cleaned
-			}
-
-			if totalCleaned > 0 {
-				logger.Info("cleaned up orphaned running_workflows entries", slog.Int("count", totalCleaned))
-			}
-		}
-
-		// Run once at startup.
-		runCleanup()
-
-		// Then reconcile periodically to avoid stale UI states and unkillable "running" markers.
-		go func() {
-			ticker := time.NewTicker(reconcilerInterval)
-			defer ticker.Stop()
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case <-ticker.C:
-					runCleanup()
-				}
-			}
-		}()
+	if infra.unifiedTracker != nil {
+		runOrphanCleanup(ctx, infra)
 	}
 
-	// Migrate existing workflows to Kanban board (assign to refinement column if not set)
-	if stateManager != nil {
-		if migrated, err := migrateWorkflowsToKanban(ctx, stateManager, logger.Logger); err != nil {
+	if infra.stateManager != nil {
+		if migrated, err := migrateWorkflowsToKanban(ctx, infra.stateManager, logger.Logger); err != nil {
 			logger.Warn("failed to migrate workflows to Kanban", slog.String("error", err.Error()))
 		} else if migrated > 0 {
 			logger.Info("migrated workflows to Kanban board", slog.Int("count", migrated))
 		}
 	}
+}
 
-	// Start Kanban engine (runs in background, processes workflows from todo column)
-	if kanbanEngine != nil {
-		if err := kanbanEngine.Start(ctx); err != nil {
+func runOrphanCleanup(ctx context.Context, infra *serveInfra) {
+	logger := infra.logger
+	const reconcilerInterval = 30 * time.Second
+
+	runCleanup := func() {
+		cleanupCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
+		defer cancel()
+
+		totalCleaned := 0
+		if infra.projectRegistry != nil && infra.statePool != nil {
+			projects, err := infra.projectRegistry.ListProjects(cleanupCtx)
+			if err != nil {
+				logger.Warn("failed to list projects for orphan cleanup", slog.String("error", err.Error()))
+			} else {
+				for _, p := range projects {
+					if p == nil || !p.IsAccessible() {
+						continue
+					}
+					pc, err := infra.statePool.GetContext(cleanupCtx, p.ID)
+					if err != nil {
+						logger.Warn("failed to get project context for orphan cleanup",
+							slog.String("project_id", p.ID), slog.String("error", err.Error()))
+						continue
+					}
+					projCtx := apimiddleware.WithProjectContext(cleanupCtx, pc)
+					cleaned, err := infra.unifiedTracker.CleanupOrphanedWorkflows(projCtx)
+					if err != nil {
+						logger.Warn("failed to clean orphaned workflows for project",
+							slog.String("project_id", p.ID), slog.String("error", err.Error()))
+						continue
+					}
+					totalCleaned += cleaned
+				}
+			}
+		} else {
+			cleaned, err := infra.unifiedTracker.CleanupOrphanedWorkflows(cleanupCtx)
+			if err != nil {
+				logger.Warn("failed to clean up orphaned workflows", slog.String("error", err.Error()))
+				return
+			}
+			totalCleaned += cleaned
+		}
+		if totalCleaned > 0 {
+			logger.Info("cleaned up orphaned running_workflows entries", slog.Int("count", totalCleaned))
+		}
+	}
+
+	runCleanup()
+	go func() {
+		ticker := time.NewTicker(reconcilerInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				runCleanup()
+			}
+		}
+	}()
+}
+
+func startServeBackgroundServices(ctx context.Context, infra *serveInfra) {
+	logger := infra.logger
+
+	if infra.kanbanEngine != nil {
+		if err := infra.kanbanEngine.Start(ctx); err != nil {
 			logger.Error("failed to start kanban engine", slog.String("error", err.Error()))
 		} else {
 			defer func() {
 				stopCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer cancel()
-				if err := kanbanEngine.Stop(stopCtx); err != nil {
+				if err := infra.kanbanEngine.Stop(stopCtx); err != nil {
 					logger.Warn("failed to stop kanban engine", slog.String("error", err.Error()))
 				}
 			}()
 		}
 	}
 
-	// Start zombie detector if heartbeat is enabled
-	if heartbeatManager != nil {
-		heartbeatManager.StartZombieDetector(func(state *core.WorkflowState) {
+	if infra.heartbeatManager != nil {
+		infra.heartbeatManager.StartZombieDetector(func(state *core.WorkflowState) {
 			logger.Warn("zombie workflow detected by heartbeat manager",
 				slog.String("workflow_id", string(state.WorkflowID)),
 				slog.String("phase", string(state.CurrentPhase)),
 				slog.Int("resume_count", state.ResumeCount),
 				slog.Int("max_resumes", state.MaxResumes))
 
-			// Use HandleZombie for proper auto-resume support when executor is available
-			if workflowExecutor != nil {
-				heartbeatManager.HandleZombie(state, workflowExecutor)
-			} else if unifiedTracker != nil {
-				// No executor available — use ForceStop for complete cleanup
-				if err := unifiedTracker.ForceStop(ctx, state.WorkflowID); err != nil {
+			if infra.workflowExecutor != nil {
+				infra.heartbeatManager.HandleZombie(state, infra.workflowExecutor)
+			} else if infra.unifiedTracker != nil {
+				if err := infra.unifiedTracker.ForceStop(ctx, state.WorkflowID); err != nil {
 					logger.Error("failed to force-stop zombie workflow",
-						slog.String("workflow_id", string(state.WorkflowID)),
-						slog.String("error", err.Error()))
+						slog.String("workflow_id", string(state.WorkflowID)), slog.String("error", err.Error()))
 				}
 			} else {
-				// Fallback: mark as failed when neither executor nor tracker is available
 				state.Status = core.WorkflowStatusFailed
 				state.Error = "Zombie workflow detected (stale heartbeat, no executor/tracker)"
 				state.UpdatedAt = time.Now()
-				if err := stateManager.Save(ctx, state); err != nil {
+				if err := infra.stateManager.Save(ctx, state); err != nil {
 					logger.Error("failed to save zombie state", slog.String("error", err.Error()))
 				}
 			}
 		})
-		defer heartbeatManager.Shutdown()
+		defer infra.heartbeatManager.Shutdown()
 	}
-
-	// Print clickable URL to terminal (most terminals auto-detect URLs)
-	serverURL := fmt.Sprintf("http://%s", server.Addr())
-	fmt.Printf("\n  Quorum server running at: \033[1;36m%s\033[0m\n\n", serverURL)
-
-	logger.Info("server started",
-		slog.String("addr", server.Addr()),
-		slog.String("url", serverURL),
-		slog.Bool("cors", cfg.EnableCORS),
-	)
-
-	// Wait for interrupt signal
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-	<-sigCh
-
-	logger.Info("shutting down server...")
-
-	// Graceful shutdown
-	shutdownCtx := context.Background()
-	if err := server.Shutdown(shutdownCtx); err != nil {
-		return fmt.Errorf("server shutdown: %w", err)
-	}
-
-	logger.Info("server stopped")
-	return nil
 }
 
 // recoverZombieWorkflows marks workflows stuck in "running" state as failed.

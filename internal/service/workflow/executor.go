@@ -1260,7 +1260,7 @@ func (e *Executor) saveTaskOutput(wctx *Context, taskID core.TaskID, output stri
 		outputPath = wctx.Report.TaskOutputPath(string(taskID))
 	} else {
 		// Fallback: create outputs directory under project root
-		outputDir := filepath.Join(wctx.ProjectRoot, ".quorum/outputs")
+		outputDir := filepath.Join(wctx.ProjectRoot, ".quorum", "outputs")
 		if err := os.MkdirAll(outputDir, 0o750); err != nil {
 			return ""
 		}

@@ -236,14 +236,14 @@ func resolvePathRelativeTo(path, baseDir string) string {
 	}
 	// On Windows, filepath.IsAbs("/unix/path") returns false
 	// But such paths should be treated as absolute
-	if len(path) > 0 && (path[0] == '/' || path[0] == '\\') {
+	if path != "" && (path[0] == '/' || path[0] == '\\') {
 		return path
 	}
 	return filepath.Join(baseDir, path)
 }
 
 func loadNormalizedConfigMap(path string) (map[string]interface{}, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 -- path from trusted config source
 	if err != nil {
 		return nil, err
 	}
@@ -451,8 +451,6 @@ func (l *Loader) AllSettings() map[string]interface{} {
 
 // Validate checks configuration consistency and returns an error if invalid.
 // This provides fail-fast validation for agent references and model configuration.
-//
-//nolint:gocyclo // Validation is intentionally explicit for clearer errors.
 func Validate(cfg *Config) error {
 	// Validate default agent
 	if cfg.Agents.Default == "" {
@@ -471,15 +469,8 @@ func Validate(cfg *Config) error {
 		if cfg.Phases.Analyze.Refiner.Agent == "" {
 			return fmt.Errorf("phases.analyze.refiner.agent is required when refiner is enabled")
 		}
-		agent := cfg.Agents.GetAgentConfig(cfg.Phases.Analyze.Refiner.Agent)
-		if agent == nil {
-			return fmt.Errorf("phases.analyze.refiner.agent references unknown agent %q", cfg.Phases.Analyze.Refiner.Agent)
-		}
-		if !agent.Enabled {
-			return fmt.Errorf("phases.analyze.refiner.agent references disabled agent %q", cfg.Phases.Analyze.Refiner.Agent)
-		}
-		if agent.GetModelForPhase("optimize") == "" {
-			return fmt.Errorf("phases.analyze.refiner.agent %q has no model configured for optimize phase", cfg.Phases.Analyze.Refiner.Agent)
+		if err := validateAgentForPhase(cfg, cfg.Phases.Analyze.Refiner.Agent, "phases.analyze.refiner.agent", "optimize"); err != nil {
+			return err
 		}
 	}
 
@@ -487,15 +478,8 @@ func Validate(cfg *Config) error {
 	if cfg.Phases.Analyze.Synthesizer.Agent == "" {
 		return fmt.Errorf("phases.analyze.synthesizer.agent is required")
 	}
-	synthAgent := cfg.Agents.GetAgentConfig(cfg.Phases.Analyze.Synthesizer.Agent)
-	if synthAgent == nil {
-		return fmt.Errorf("phases.analyze.synthesizer.agent references unknown agent %q", cfg.Phases.Analyze.Synthesizer.Agent)
-	}
-	if !synthAgent.Enabled {
-		return fmt.Errorf("phases.analyze.synthesizer.agent references disabled agent %q", cfg.Phases.Analyze.Synthesizer.Agent)
-	}
-	if synthAgent.GetModelForPhase("analyze") == "" {
-		return fmt.Errorf("phases.analyze.synthesizer.agent %q has no model configured for analyze phase", cfg.Phases.Analyze.Synthesizer.Agent)
+	if err := validateAgentForPhase(cfg, cfg.Phases.Analyze.Synthesizer.Agent, "phases.analyze.synthesizer.agent", "analyze"); err != nil {
+		return err
 	}
 
 	// Validate phases.analyze.moderator if enabled
@@ -503,15 +487,8 @@ func Validate(cfg *Config) error {
 		if cfg.Phases.Analyze.Moderator.Agent == "" {
 			return fmt.Errorf("phases.analyze.moderator.agent is required when moderator is enabled")
 		}
-		agent := cfg.Agents.GetAgentConfig(cfg.Phases.Analyze.Moderator.Agent)
-		if agent == nil {
-			return fmt.Errorf("phases.analyze.moderator.agent references unknown agent %q", cfg.Phases.Analyze.Moderator.Agent)
-		}
-		if !agent.Enabled {
-			return fmt.Errorf("phases.analyze.moderator.agent references disabled agent %q", cfg.Phases.Analyze.Moderator.Agent)
-		}
-		if agent.GetModelForPhase("analyze") == "" {
-			return fmt.Errorf("phases.analyze.moderator.agent %q has no model configured for analyze phase", cfg.Phases.Analyze.Moderator.Agent)
+		if err := validateAgentForPhase(cfg, cfg.Phases.Analyze.Moderator.Agent, "phases.analyze.moderator.agent", "analyze"); err != nil {
+			return err
 		}
 	}
 
@@ -526,15 +503,8 @@ func Validate(cfg *Config) error {
 		if cfg.Phases.Analyze.SingleAgent.Agent == "" {
 			return fmt.Errorf("phases.analyze.single_agent.agent is required when single_agent is enabled")
 		}
-		agent := cfg.Agents.GetAgentConfig(cfg.Phases.Analyze.SingleAgent.Agent)
-		if agent == nil {
-			return fmt.Errorf("phases.analyze.single_agent.agent references unknown agent %q", cfg.Phases.Analyze.SingleAgent.Agent)
-		}
-		if !agent.Enabled {
-			return fmt.Errorf("phases.analyze.single_agent.agent references disabled agent %q", cfg.Phases.Analyze.SingleAgent.Agent)
-		}
-		if agent.GetModelForPhase("analyze") == "" {
-			return fmt.Errorf("phases.analyze.single_agent.agent %q has no model configured for analyze phase", cfg.Phases.Analyze.SingleAgent.Agent)
+		if err := validateAgentForPhase(cfg, cfg.Phases.Analyze.SingleAgent.Agent, "phases.analyze.single_agent.agent", "analyze"); err != nil {
+			return err
 		}
 	}
 
@@ -543,15 +513,8 @@ func Validate(cfg *Config) error {
 		if cfg.Phases.Plan.Synthesizer.Agent == "" {
 			return fmt.Errorf("phases.plan.synthesizer.agent is required when synthesizer is enabled")
 		}
-		agent := cfg.Agents.GetAgentConfig(cfg.Phases.Plan.Synthesizer.Agent)
-		if agent == nil {
-			return fmt.Errorf("phases.plan.synthesizer.agent references unknown agent %q", cfg.Phases.Plan.Synthesizer.Agent)
-		}
-		if !agent.Enabled {
-			return fmt.Errorf("phases.plan.synthesizer.agent references disabled agent %q", cfg.Phases.Plan.Synthesizer.Agent)
-		}
-		if agent.GetModelForPhase("plan") == "" {
-			return fmt.Errorf("phases.plan.synthesizer.agent %q has no model configured for plan phase", cfg.Phases.Plan.Synthesizer.Agent)
+		if err := validateAgentForPhase(cfg, cfg.Phases.Plan.Synthesizer.Agent, "phases.plan.synthesizer.agent", "plan"); err != nil {
+			return err
 		}
 	}
 
@@ -560,5 +523,20 @@ func Validate(cfg *Config) error {
 		return err
 	}
 
+	return nil
+}
+
+// validateAgentForPhase checks that a named agent exists, is enabled, and has a model for the given phase.
+func validateAgentForPhase(cfg *Config, agentName, fieldPath, phase string) error {
+	agent := cfg.Agents.GetAgentConfig(agentName)
+	if agent == nil {
+		return fmt.Errorf("%s references unknown agent %q", fieldPath, agentName)
+	}
+	if !agent.Enabled {
+		return fmt.Errorf("%s references disabled agent %q", fieldPath, agentName)
+	}
+	if agent.GetModelForPhase(phase) == "" {
+		return fmt.Errorf("%s %q has no model configured for %s phase", fieldPath, agentName, phase)
+	}
 	return nil
 }

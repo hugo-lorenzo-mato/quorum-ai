@@ -338,7 +338,7 @@ func (s *Server) projectRootForRequest(ctx context.Context) (string, error) {
 	return os.Getwd()
 }
 
-func canonicalizeRoot(root string) (rootAbs string, rootReal string, err error) {
+func canonicalizeRoot(root string) (rootAbs, rootReal string, err error) {
 	rootAbs, err = filepath.Abs(root)
 	if err != nil {
 		return "", "", err
@@ -366,7 +366,7 @@ func validateProjectRelativePath(cleanPath string) error {
 	// Also reject Unix-style absolute paths on Windows (e.g., /etc/passwd)
 	// These are not considered absolute by filepath.IsAbs on Windows but are clearly external paths
 	// Note: filepath.Clean() on Windows converts / to \, so check both
-	if len(cleanPath) > 0 && (cleanPath[0] == '/' || cleanPath[0] == '\\') {
+	if cleanPath != "" && (cleanPath[0] == '/' || cleanPath[0] == '\\') {
 		return os.ErrPermission
 	}
 

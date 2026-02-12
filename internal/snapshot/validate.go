@@ -81,7 +81,7 @@ func readArchiveFiles(inputPath string) (map[string]archivedFile, error) {
 		switch header.Typeflag {
 		case tar.TypeDir:
 			continue
-		case tar.TypeReg, tar.TypeRegA:
+		case tar.TypeReg, tar.TypeRegA: //nolint:staticcheck // TypeRegA kept for backward compat with older archives
 			// Regular files are expected.
 		default:
 			return nil, fmt.Errorf("unsupported tar entry type %d for %s", header.Typeflag, header.Name)

@@ -417,9 +417,8 @@ func TestCrashDumpWriter_WriteCrashDump_WithMonitorAndHistory(t *testing.T) {
 	if len(dump.CommandArgs) != 2 {
 		t.Errorf("CommandArgs length = %d, want 2", len(dump.CommandArgs))
 	}
-	if !dump.ResourceState.Timestamp.IsZero() == false {
-		// ResourceState should be populated via monitor
-	}
+	// ResourceState should be populated via monitor (timestamp may be zero in edge cases)
+	_ = dump.ResourceState.Timestamp
 	if len(dump.ResourceHistory) < 3 {
 		t.Errorf("ResourceHistory length = %d, want >= 3", len(dump.ResourceHistory))
 	}
@@ -744,10 +743,10 @@ func TestLoadLatestCrashDump_IgnoresNonCrashFiles(t *testing.T) {
 	// Create files that should be ignored
 	nonCrashFiles := []string{
 		"not-a-crash.json",
-		"crash.txt",               // wrong suffix
-		"crash-.json",             // no timestamp
-		"other-crash-2024.json",   // wrong prefix
-		"something-else.json",     // unrelated
+		"crash.txt",             // wrong suffix
+		"crash-.json",           // no timestamp
+		"other-crash-2024.json", // wrong prefix
+		"something-else.json",   // unrelated
 	}
 	for _, name := range nonCrashFiles {
 		if err := os.WriteFile(filepath.Join(tempDir, name), []byte(`{}`), 0o600); err != nil {

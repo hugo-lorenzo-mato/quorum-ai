@@ -25,17 +25,6 @@ func newTestManager(t *testing.T) *SQLiteStateManager {
 	return m
 }
 
-// _newTestManagerWithPath creates a manager for a given path (unused but kept for reference).
-func _newTestManagerWithPath(t *testing.T, dbPath string) *SQLiteStateManager {
-	t.Helper()
-	m, err := NewSQLiteStateManager(dbPath)
-	if err != nil {
-		t.Fatalf("NewSQLiteStateManager(%s): %v", dbPath, err)
-	}
-	t.Cleanup(func() { _ = m.Close() })
-	return m
-}
-
 // makeWorkflow builds a minimal workflow state for testing.
 func makeWorkflow(id string, status core.WorkflowStatus) *core.WorkflowState {
 	now := time.Now().Truncate(time.Second)

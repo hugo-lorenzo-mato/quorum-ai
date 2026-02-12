@@ -43,7 +43,7 @@ func isLikelySkeleton(content string) bool {
 
 func isValidAnalysisOutput(content string) bool {
 	trimmed := strings.TrimSpace(content)
-	if len(trimmed) == 0 {
+	if trimmed == "" {
 		return false
 	}
 

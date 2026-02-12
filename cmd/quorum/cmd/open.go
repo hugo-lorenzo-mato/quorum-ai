@@ -60,31 +60,59 @@ func init() {
 func runOpen(_ *cobra.Command, args []string) error {
 	ctx := context.Background()
 
-	// Determine path
+	absPath, err := resolveOpenPath(args)
+	if err != nil {
+		return err
+	}
+
+	if err := ensureQuorumInit(absPath); err != nil {
+		return err
+	}
+
+	// Step 2: Register in the project registry
+	registry, err := project.NewFileRegistry()
+	if err != nil {
+		return fmt.Errorf("opening project registry: %w", err)
+	}
+	defer registry.Close()
+
+	// Check if already registered
+	existingProject, _ := registry.GetProjectByPath(ctx, absPath)
+	if existingProject != nil {
+		return handleExistingProject(ctx, registry, existingProject)
+	}
+
+	return registerNewProject(ctx, registry, absPath)
+}
+
+// resolveOpenPath validates and resolves the target directory path.
+func resolveOpenPath(args []string) (string, error) {
 	path := "."
 	if len(args) > 0 {
 		path = args[0]
 	}
 
-	// Convert to absolute path
 	absPath, err := filepath.Abs(path)
 	if err != nil {
-		return fmt.Errorf("invalid path: %w", err)
+		return "", fmt.Errorf("invalid path: %w", err)
 	}
 
-	// Check if path exists
 	info, err := os.Stat(absPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return fmt.Errorf("directory does not exist: %s", absPath)
+			return "", fmt.Errorf("directory does not exist: %s", absPath)
 		}
-		return fmt.Errorf("cannot access path: %w", err)
+		return "", fmt.Errorf("cannot access path: %w", err)
 	}
 	if !info.IsDir() {
-		return fmt.Errorf("path is not a directory: %s", absPath)
+		return "", fmt.Errorf("path is not a directory: %s", absPath)
 	}
 
-	// Step 1: Initialize .quorum if it doesn't exist
+	return absPath, nil
+}
+
+// ensureQuorumInit initializes the .quorum directory if needed and handles inherit-global mode.
+func ensureQuorumInit(absPath string) error {
 	quorumDir := filepath.Join(absPath, ".quorum")
 	configPath := filepath.Join(quorumDir, "config.yaml")
 
@@ -110,46 +138,40 @@ func runOpen(_ *cobra.Command, args []string) error {
 		if _, err := config.EnsureGlobalConfigFile(); err != nil {
 			return fmt.Errorf("ensuring global config: %w", err)
 		}
-		// In inherit_global mode, project config should be absent.
 		if err := os.Remove(configPath); err != nil && !os.IsNotExist(err) {
 			return fmt.Errorf("removing project config for inherit-global mode: %w", err)
 		}
 	}
 
-	// Step 2: Register in the project registry
-	registry, err := project.NewFileRegistry()
-	if err != nil {
-		return fmt.Errorf("opening project registry: %w", err)
-	}
-	defer registry.Close()
+	return nil
+}
 
-	// Check if already registered
-	existingProject, _ := registry.GetProjectByPath(ctx, absPath)
-	if existingProject != nil {
-		if openInheritGlobal && existingProject.ConfigMode != project.ConfigModeInheritGlobal {
-			existingProject.ConfigMode = project.ConfigModeInheritGlobal
-			if err := registry.UpdateProject(ctx, existingProject); err != nil {
-				return fmt.Errorf("updating project config mode: %w", err)
-			}
+// handleExistingProject updates an already-registered project if needed.
+func handleExistingProject(ctx context.Context, registry *project.FileRegistry, p *project.Project) error {
+	if openInheritGlobal && p.ConfigMode != project.ConfigModeInheritGlobal {
+		p.ConfigMode = project.ConfigModeInheritGlobal
+		if err := registry.UpdateProject(ctx, p); err != nil {
+			return fmt.Errorf("updating project config mode: %w", err)
 		}
+	}
 
+	if !quiet {
+		fmt.Printf("Project already registered: %s (%s)\n", p.Name, p.ID)
+	}
+
+	if openProjectDefault {
+		if err := registry.SetDefaultProject(ctx, p.ID); err != nil {
+			return fmt.Errorf("setting as default: %w", err)
+		}
 		if !quiet {
-			fmt.Printf("Project already registered: %s (%s)\n", existingProject.Name, existingProject.ID)
+			fmt.Printf("Set as default project\n")
 		}
-
-		// Still set as default if requested
-		if openProjectDefault {
-			if err := registry.SetDefaultProject(ctx, existingProject.ID); err != nil {
-				return fmt.Errorf("setting as default: %w", err)
-			}
-			if !quiet {
-				fmt.Printf("Set as default project\n")
-			}
-		}
-		return nil
 	}
+	return nil
+}
 
-	// Add project
+// registerNewProject adds a new project to the registry.
+func registerNewProject(ctx context.Context, registry *project.FileRegistry, absPath string) error {
 	opts := &project.AddProjectOptions{
 		Name:  openProjectName,
 		Color: openProjectColor,
@@ -167,7 +189,6 @@ func runOpen(_ *cobra.Command, args []string) error {
 		}
 	}
 
-	// Set as default if requested
 	if openProjectDefault {
 		if err := registry.SetDefaultProject(ctx, p.ID); err != nil {
 			return fmt.Errorf("setting as default: %w", err)
@@ -194,7 +215,7 @@ func runOpen(_ *cobra.Command, args []string) error {
 }
 
 // initializeProject creates the .quorum directory structure and config
-func initializeProjectWithMode(absPath string, force bool, createProjectConfig bool) error {
+func initializeProjectWithMode(absPath string, force, createProjectConfig bool) error {
 	quorumDir := filepath.Join(absPath, ".quorum")
 	configPath := filepath.Join(quorumDir, "config.yaml")
 
