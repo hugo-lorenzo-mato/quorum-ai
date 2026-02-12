@@ -365,7 +365,7 @@ func (l *Loader) setDefaults() {
 	l.v.SetDefault("github.remote", "origin")
 
 	// Chat defaults (TUI interactive chat)
-	l.v.SetDefault("chat.timeout", "3m")
+	l.v.SetDefault("chat.timeout", "20m")
 	l.v.SetDefault("chat.progress_interval", "15s")
 	l.v.SetDefault("chat.editor", "vim")
 

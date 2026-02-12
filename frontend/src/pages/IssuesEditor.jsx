@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { useWorkflowStore } from '../stores';
-import useIssuesStore from '../stores/issuesStore';
+import { useWorkflowStore, useIssuesStore } from '../stores';
 import {
   ArrowLeft,
   FileText,
@@ -24,6 +23,7 @@ import GenerationLoadingOverlay from '../components/issues/GenerationLoadingOver
 export default function IssuesEditor() {
   const { id: workflowId } = useParams();
   const navigate = useNavigate();
+  const [hasAttemptedFetch, setHasAttemptedFetch] = useState(false);
 
   // Workflow store
   const { workflows, fetchWorkflows } = useWorkflowStore();
@@ -55,10 +55,10 @@ export default function IssuesEditor() {
 
   // Load workflow data if not available
   useEffect(() => {
-    if (!workflow && workflowId) {
-      fetchWorkflows();
+    if (!workflow && workflowId && !hasAttemptedFetch) {
+      fetchWorkflows().finally(() => setHasAttemptedFetch(true));
     }
-  }, [workflow, workflowId, fetchWorkflows]);
+  }, [workflow, workflowId, fetchWorkflows, hasAttemptedFetch]);
 
   // Set workflow context in store
   useEffect(() => {
@@ -120,23 +120,8 @@ export default function IssuesEditor() {
   // Get selected issue
   const selectedIssue = editedIssues.find(i => i._localId === selectedIssueId);
 
-  // Show loading overlay if generating
-  if (generating) {
-    return (
-      <GenerationLoadingOverlay
-        progress={generationProgress}
-        total={generationTotal}
-        generatedIssues={generatedIssues}
-        onCancel={() => {
-          useIssuesStore.getState().cancelGeneration();
-          navigate(`/workflows/${workflowId}`);
-        }}
-      />
-    );
-  }
-
-  // If no issues loaded, show empty state or redirect
-  if (!editedIssues.length && !generating) {
+  // If no issues loaded and not generating, show empty state or redirect
+  if (!editedIssues.length && !generating && hasAttemptedFetch) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[calc(100vh-4rem)] gap-6 bg-background animate-fade-in">
         <div className="p-6 rounded-full bg-secondary/50">
@@ -160,9 +145,23 @@ export default function IssuesEditor() {
   }
 
   return (
-    <div className="flex flex-col md:h-[calc(100vh-4rem)] bg-background overflow-hidden z-0 pb-10">
+    <div className="flex flex-col h-[calc(100dvh-3.5rem)] w-full bg-background overflow-hidden relative border-0 m-0 p-0">
+      {/* Loading Overlay - Rendered on top of content when generating */}
+      {generating && (
+        <GenerationLoadingOverlay
+          workflowId={workflowId}
+          progress={generationProgress}
+          total={generationTotal}
+          generatedIssues={generatedIssues}
+          onCancel={() => {
+            useIssuesStore.getState().cancelGeneration();
+            navigate(`/workflows/${workflowId}`);
+          }}
+        />
+      )}
+
       {/* Header */}
-      <header className="flex items-center justify-between px-6 py-4 border-b border-border bg-card shadow-sm shrink-0 z-20">
+      <header className="flex items-center justify-between px-6 py-3 border-b border-border bg-card shrink-0 z-20">
         <div className="flex items-center gap-4">
           <button
             onClick={handleBack}
@@ -171,9 +170,9 @@ export default function IssuesEditor() {
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
-          <div>
-            <h1 className="text-xl font-bold text-foreground tracking-tight">Issues Editor</h1>
-            <p className="text-sm text-muted-foreground truncate max-w-[200px] md:max-w-md">
+          <div className="flex flex-col">
+            <h1 className="text-lg font-bold text-foreground tracking-tight leading-none">Issues Editor</h1>
+            <p className="text-xs text-muted-foreground truncate max-w-[200px] md:max-w-md mt-0.5">
               {workflow?.title || workflowId}
             </p>
           </div>
@@ -184,28 +183,28 @@ export default function IssuesEditor() {
           {/* AI Status */}
           {aiErrors && aiErrors.length > 0 ? (
             <span
-              className="hidden md:flex items-center gap-1.5 text-xs text-warning cursor-help bg-warning/10 px-2 py-1 rounded-full border border-warning/20"
+              className="hidden md:flex items-center gap-1.5 text-[10px] font-bold uppercase text-warning bg-warning/10 px-2 py-1 rounded-md border border-warning/20"
               title={`AI errors: ${aiErrors.join(', ')}`}
             >
-              <AlertCircle className="w-3.5 h-3.5" />
+              <AlertCircle className="w-3 h-3" />
               AI warnings
             </span>
           ) : aiUsed ? (
-            <span className="hidden md:flex items-center gap-1.5 text-xs text-success bg-success/10 px-2 py-1 rounded-full border border-success/20">
-              <CheckCircle2 className="w-3.5 h-3.5" />
+            <span className="hidden md:flex items-center gap-1.5 text-[10px] font-bold uppercase text-success bg-success/10 px-2 py-1 rounded-md border border-success/20">
+              <CheckCircle2 className="w-3 h-3" />
               AI Enhanced
             </span>
           ) : null}
 
           {/* Save status */}
           {hasAnyUnsavedChanges() ? (
-            <span className="flex items-center gap-1.5 text-sm text-warning font-medium">
-              <AlertCircle className="w-4 h-4" />
+            <span className="flex items-center gap-1.5 text-xs text-warning font-semibold">
+              <AlertCircle className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Unsaved changes</span>
             </span>
           ) : (
-            <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
-              <CheckCircle2 className="w-4 h-4" />
+            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <CheckCircle2 className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">All saved</span>
             </span>
           )}
@@ -234,7 +233,7 @@ export default function IssuesEditor() {
           {/* Background Pattern - Consistent across app */}
           <div className="absolute inset-0 bg-dot-pattern pointer-events-none" />
           
-          <div className="relative flex-1 flex flex-col min-h-0 z-0 h-full w-full">
+          <div className="relative flex-1 flex flex-col min-h-0 z-10 h-full w-full">
              <IssueEditorPanel
                issue={selectedIssue}
                viewMode={viewMode}

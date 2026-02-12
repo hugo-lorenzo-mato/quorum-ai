@@ -198,7 +198,8 @@ export default function Layout({ children }) {
     location.pathname === '/chat' ||
     location.pathname === '/settings' ||
     location.pathname === '/settings/global' ||
-    location.pathname === '/kanban';
+    location.pathname === '/kanban' ||
+    location.pathname.includes('/issues');
 
   // Close sidebar when resizing to mobile viewport (only triggers on actual resize)
   useEffect(() => {
@@ -228,7 +229,7 @@ export default function Layout({ children }) {
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-[55] md:hidden"
+          className="fixed inset-0 bg-black/50 z-[140] md:hidden"
           onClick={toggleSidebar}
           aria-hidden="true"
         />
@@ -236,7 +237,7 @@ export default function Layout({ children }) {
 
       {/* Sidebar - Hidden on mobile, visible on desktop */}
       <aside
-        className={`fixed inset-y-0 left-0 z-[60] flex flex-col border-r border-border bg-background/95 backdrop-blur-xl md:bg-card/50 md:glass transition-all duration-300 ease-in-out md:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-[150] flex flex-col border-r border-border bg-background/95 backdrop-blur-xl md:bg-card/50 md:glass transition-all duration-300 ease-in-out md:translate-x-0 ${
           sidebarOpen ? 'w-64 translate-x-0' : 'w-16 -translate-x-full md:translate-x-0'
         }`}
       >

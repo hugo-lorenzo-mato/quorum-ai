@@ -5,7 +5,7 @@ import { Button } from '../ui/Button';
 /**
  * Modal for selecting issue generation mode.
  * - Quorum Only: Fast mode, direct markdown copy (~12ms)
- * - AI Enhanced: Slow mode, LLM reformats content (~30-50s)
+ * - AI Enhanced: Slow mode, LLM reformats content (several minutes)
  */
 export default function GenerationOptionsModal({
   isOpen,
@@ -111,7 +111,7 @@ export default function GenerationOptionsModal({
                 </p>
                 <div className="flex items-center gap-1 mt-2 text-xs text-primary">
                   <Clock className="w-3 h-3" />
-                  <span>~30-50 seconds</span>
+                  <span>Several minutes</span>
                 </div>
               </div>
             </div>

@@ -342,7 +342,6 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
     setWorkflow: setIssuesWorkflow,
     loadIssues,
     startGeneration,
-    updateGenerationProgress,
     cancelGeneration,
   } = useIssuesStore();
 
@@ -375,8 +374,8 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
         setIssuesGenerating(false);
       }
     } else {
-      // AI mode: show loading, start generation with streaming effect
-      startGeneration('ai', 10);
+      // AI mode: show loading and rely on SSE progress events
+      startGeneration('ai', 0);
       navigate(`/workflows/${workflow.id}/issues`);
 
       // Generate in background with AI
@@ -388,11 +387,7 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
           console.warn('AI generation errors:', response.ai_errors);
         }
 
-        for (let i = 0; i < issues.length; i++) {
-          await new Promise(resolve => setTimeout(resolve, 200));
-          updateGenerationProgress(i + 1, issues[i]);
-        }
-
+        // Finalize with the full issue set (SSE handles incremental progress).
         loadIssues(issues, {
           ai_used: response.ai_used,
           ai_errors: response.ai_errors,
@@ -403,7 +398,7 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
         navigate(`/workflows/${workflow.id}`);
       }
     }
-  }, [workflow.id, workflow.title, setIssuesWorkflow, loadIssues, startGeneration, updateGenerationProgress, cancelGeneration, navigate, notifyError]);
+  }, [workflow.id, workflow.title, setIssuesWorkflow, loadIssues, startGeneration, cancelGeneration, navigate, notifyError]);
 
   const handleDelete = useCallback(async () => {
     const success = await deleteWorkflow(workflow.id);

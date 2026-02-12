@@ -109,8 +109,8 @@ func TestModel_WithChatConfig_Defaults(t *testing.T) {
 	m := NewModel(nil, nil, "claude", "default")
 	cleanupModel(t, &m)
 	m = m.WithChatConfig(0, 0)
-	if m.chatTimeout != 3*time.Minute {
-		t.Errorf("expected default timeout 3m, got %v", m.chatTimeout)
+	if m.chatTimeout != 20*time.Minute {
+		t.Errorf("expected default timeout 20m, got %v", m.chatTimeout)
 	}
 	if m.chatProgressInterval != 15*time.Second {
 		t.Errorf("expected default progress 15s, got %v", m.chatProgressInterval)

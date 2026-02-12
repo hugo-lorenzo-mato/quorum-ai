@@ -327,7 +327,7 @@ func (b *BaseAdapter) ExecuteCommand(ctx context.Context, args []string, stdin, 
 			"stderr_length", len(result.Stderr),
 			"stderr_preview", truncateForLog(result.Stderr, 1000),
 		)
-		return result, core.ErrTimeout(fmt.Sprintf("command timed out after %v", timeout))
+		return result, core.ErrTimeout(fmt.Sprintf("command timed out after %v", duration))
 	}
 	if ctx.Err() == context.Canceled {
 		b.logger.Info("cli: command cancelled",
@@ -743,7 +743,7 @@ func (b *BaseAdapter) executeWithJSONStreaming(
 	// Emit completed or error event
 	if ctx.Err() == context.DeadlineExceeded {
 		b.emitEvent(core.NewAgentEvent(core.AgentEventError, adapterName, "Execution timed out"))
-		return result, core.ErrTimeout(fmt.Sprintf("command timed out after %v", timeout))
+		return result, core.ErrTimeout(fmt.Sprintf("command timed out after %v", duration))
 	}
 	if ctx.Err() == context.Canceled {
 		b.emitEvent(core.NewAgentEvent(core.AgentEventError, adapterName, "Execution cancelled"))
@@ -1042,7 +1042,7 @@ func (b *BaseAdapter) executeWithLogFileStreaming(
 
 	if ctx.Err() == context.DeadlineExceeded {
 		b.emitEvent(core.NewAgentEvent(core.AgentEventError, adapterName, "Execution timed out"))
-		return result, core.ErrTimeout(fmt.Sprintf("command timed out after %v", timeout))
+		return result, core.ErrTimeout(fmt.Sprintf("command timed out after %v", duration))
 	}
 	if ctx.Err() == context.Canceled {
 		b.emitEvent(core.NewAgentEvent(core.AgentEventError, adapterName, "Execution cancelled"))

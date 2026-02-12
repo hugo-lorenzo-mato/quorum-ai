@@ -1941,3 +1941,479 @@ func TestGenerator_GenerateIssueFiles_AgentNotFound(t *testing.T) {
 func containsSubstr(s, substr string) bool {
 	return strings.Contains(s, substr)
 }
+
+// =============================================================================
+// Tests for pre-scan, partial results, and resilient generation features
+// =============================================================================
+
+func TestGenerator_ScanExistingDraftFiles_MatchesExpected(t *testing.T) {
+	t.Parallel()
+	draftDir := t.TempDir()
+
+	// Create some draft files
+	os.WriteFile(filepath.Join(draftDir, "00-consolidated-analysis.md"), []byte("# Main Issue\nContent here"), 0o644)
+	os.WriteFile(filepath.Join(draftDir, "01-implement-auth.md"), []byte("# Auth\nDetails"), 0o644)
+	os.WriteFile(filepath.Join(draftDir, "02-add-logging.md"), []byte("# Logging\nDetails"), 0o644)
+
+	tracker := NewGenerationTracker("wf-test")
+	tracker.AddExpected("00-consolidated-analysis.md", "main")
+	tracker.AddExpected("01-implement-auth.md", "task-1")
+	tracker.AddExpected("02-add-logging.md", "task-2")
+
+	gen := NewGenerator(nil, config.IssuesConfig{}, t.TempDir(), t.TempDir(), nil)
+	count := gen.scanExistingDraftFiles(draftDir, tracker)
+
+	if count != 3 {
+		t.Errorf("scanExistingDraftFiles() = %d, want 3", count)
+	}
+	if len(tracker.GeneratedFiles) != 3 {
+		t.Errorf("tracker.GeneratedFiles has %d entries, want 3", len(tracker.GeneratedFiles))
+	}
+	for _, name := range []string{"00-consolidated-analysis.md", "01-implement-auth.md", "02-add-logging.md"} {
+		if _, ok := tracker.GeneratedFiles[name]; !ok {
+			t.Errorf("expected %q in GeneratedFiles", name)
+		}
+	}
+	// All expected files should be marked as generated
+	missing := tracker.GetMissingFiles()
+	if len(missing) != 0 {
+		t.Errorf("expected 0 missing files, got %d: %v", len(missing), missing)
+	}
+}
+
+func TestGenerator_ScanExistingDraftFiles_PartialMatch(t *testing.T) {
+	t.Parallel()
+	draftDir := t.TempDir()
+
+	// Only 2 of 3 expected files exist on disk
+	os.WriteFile(filepath.Join(draftDir, "00-consolidated-analysis.md"), []byte("# Main"), 0o644)
+	os.WriteFile(filepath.Join(draftDir, "01-implement-auth.md"), []byte("# Auth"), 0o644)
+
+	tracker := NewGenerationTracker("wf-test")
+	tracker.AddExpected("00-consolidated-analysis.md", "main")
+	tracker.AddExpected("01-implement-auth.md", "task-1")
+	tracker.AddExpected("02-add-logging.md", "task-2")
+
+	gen := NewGenerator(nil, config.IssuesConfig{}, t.TempDir(), t.TempDir(), nil)
+	count := gen.scanExistingDraftFiles(draftDir, tracker)
+
+	if count != 2 {
+		t.Errorf("scanExistingDraftFiles() = %d, want 2", count)
+	}
+	missing := tracker.GetMissingFiles()
+	if len(missing) != 1 {
+		t.Fatalf("expected 1 missing file, got %d: %v", len(missing), missing)
+	}
+	if missing[0] != "02-add-logging.md" {
+		t.Errorf("missing file = %q, want '02-add-logging.md'", missing[0])
+	}
+}
+
+func TestGenerator_ScanExistingDraftFiles_SkipsEmptyFiles(t *testing.T) {
+	t.Parallel()
+	draftDir := t.TempDir()
+
+	// Create an empty file and a valid file
+	os.WriteFile(filepath.Join(draftDir, "01-implement-auth.md"), []byte(""), 0o644) // empty
+	os.WriteFile(filepath.Join(draftDir, "02-add-logging.md"), []byte("# Logging"), 0o644)
+
+	tracker := NewGenerationTracker("wf-test")
+	tracker.AddExpected("01-implement-auth.md", "task-1")
+	tracker.AddExpected("02-add-logging.md", "task-2")
+
+	gen := NewGenerator(nil, config.IssuesConfig{}, t.TempDir(), t.TempDir(), nil)
+	count := gen.scanExistingDraftFiles(draftDir, tracker)
+
+	if count != 1 {
+		t.Errorf("scanExistingDraftFiles() = %d, want 1 (empty file should be skipped)", count)
+	}
+	if _, ok := tracker.GeneratedFiles["01-implement-auth.md"]; ok {
+		t.Error("empty file should not be in GeneratedFiles")
+	}
+}
+
+func TestGenerator_ScanExistingDraftFiles_SkipsDirectories(t *testing.T) {
+	t.Parallel()
+	draftDir := t.TempDir()
+
+	// Create a subdirectory and a valid file
+	os.MkdirAll(filepath.Join(draftDir, "subdir.md"), 0o755) // dir with .md suffix
+	os.WriteFile(filepath.Join(draftDir, "01-task.md"), []byte("# Task"), 0o644)
+
+	tracker := NewGenerationTracker("wf-test")
+	tracker.AddExpected("01-task.md", "task-1")
+
+	gen := NewGenerator(nil, config.IssuesConfig{}, t.TempDir(), t.TempDir(), nil)
+	count := gen.scanExistingDraftFiles(draftDir, tracker)
+
+	if count != 1 {
+		t.Errorf("scanExistingDraftFiles() = %d, want 1", count)
+	}
+}
+
+func TestGenerator_ScanExistingDraftFiles_IgnoresNonMdFiles(t *testing.T) {
+	t.Parallel()
+	draftDir := t.TempDir()
+
+	os.WriteFile(filepath.Join(draftDir, "notes.txt"), []byte("some notes"), 0o644)
+	os.WriteFile(filepath.Join(draftDir, "data.json"), []byte("{}"), 0o644)
+	os.WriteFile(filepath.Join(draftDir, "01-task.md"), []byte("# Task"), 0o644)
+
+	tracker := NewGenerationTracker("wf-test")
+	tracker.AddExpected("01-task.md", "task-1")
+
+	gen := NewGenerator(nil, config.IssuesConfig{}, t.TempDir(), t.TempDir(), nil)
+	count := gen.scanExistingDraftFiles(draftDir, tracker)
+
+	if count != 1 {
+		t.Errorf("scanExistingDraftFiles() = %d, want 1", count)
+	}
+}
+
+func TestGenerator_ScanExistingDraftFiles_IgnoresUnexpectedFiles(t *testing.T) {
+	t.Parallel()
+	draftDir := t.TempDir()
+
+	// File exists but is not in expected list
+	os.WriteFile(filepath.Join(draftDir, "99-unknown.md"), []byte("# Unknown"), 0o644)
+	os.WriteFile(filepath.Join(draftDir, "01-task.md"), []byte("# Task"), 0o644)
+
+	tracker := NewGenerationTracker("wf-test")
+	tracker.AddExpected("01-task.md", "task-1")
+
+	gen := NewGenerator(nil, config.IssuesConfig{}, t.TempDir(), t.TempDir(), nil)
+	count := gen.scanExistingDraftFiles(draftDir, tracker)
+
+	if count != 1 {
+		t.Errorf("scanExistingDraftFiles() = %d, want 1 (unexpected file should be ignored)", count)
+	}
+	if _, ok := tracker.GeneratedFiles["99-unknown.md"]; ok {
+		t.Error("unexpected file should not be in GeneratedFiles")
+	}
+}
+
+func TestGenerator_ScanExistingDraftFiles_FuzzyMatch(t *testing.T) {
+	t.Parallel()
+	draftDir := t.TempDir()
+
+	// File has slight name variation that fuzzy match should catch
+	os.WriteFile(filepath.Join(draftDir, "1-implement-auth.md"), []byte("# Auth"), 0o644)
+
+	tracker := NewGenerationTracker("wf-test")
+	tracker.AddExpected("01-implement-auth.md", "task-1")
+
+	gen := NewGenerator(nil, config.IssuesConfig{}, t.TempDir(), t.TempDir(), nil)
+	count := gen.scanExistingDraftFiles(draftDir, tracker)
+
+	if count != 1 {
+		t.Errorf("scanExistingDraftFiles() = %d, want 1 (fuzzy match should work)", count)
+	}
+}
+
+func TestGenerator_ScanExistingDraftFiles_NonExistentDir(t *testing.T) {
+	t.Parallel()
+	gen := NewGenerator(nil, config.IssuesConfig{}, t.TempDir(), t.TempDir(), nil)
+	tracker := NewGenerationTracker("wf-test")
+	tracker.AddExpected("01-task.md", "task-1")
+
+	count := gen.scanExistingDraftFiles("/nonexistent/path", tracker)
+	if count != 0 {
+		t.Errorf("scanExistingDraftFiles() on non-existent dir = %d, want 0", count)
+	}
+}
+
+func TestGenerator_ScanGeneratedFilesWithTracker_AcceptsPreScannedFiles(t *testing.T) {
+	t.Parallel()
+	draftDir := t.TempDir()
+
+	// Create files with OLD timestamps (before tracker.StartTime)
+	oldTime := time.Now().Add(-2 * time.Hour)
+	for _, name := range []string{"00-consolidated-analysis.md", "01-implement-auth.md", "02-add-logging.md"} {
+		fpath := filepath.Join(draftDir, name)
+		os.WriteFile(fpath, []byte("# "+name), 0o644)
+		os.Chtimes(fpath, oldTime, oldTime)
+	}
+
+	tracker := NewGenerationTracker("wf-test")
+	tracker.AddExpected("00-consolidated-analysis.md", "main")
+	tracker.AddExpected("01-implement-auth.md", "task-1")
+	tracker.AddExpected("02-add-logging.md", "task-2")
+
+	// Pre-scan marks files as generated (simulates scanExistingDraftFiles)
+	gen := NewGenerator(nil, config.IssuesConfig{}, t.TempDir(), t.TempDir(), nil)
+	preScanCount := gen.scanExistingDraftFiles(draftDir, tracker)
+	if preScanCount != 3 {
+		t.Fatalf("pre-scan found %d files, want 3", preScanCount)
+	}
+
+	// Now scanGeneratedIssueFilesWithTracker should accept these old files
+	// because they are already in tracker.GeneratedFiles
+	files, err := gen.scanGeneratedIssueFilesWithTracker(draftDir, tracker)
+	if err != nil {
+		t.Fatalf("scanGeneratedIssueFilesWithTracker() error: %v", err)
+	}
+	if len(files) != 3 {
+		t.Errorf("scanGeneratedIssueFilesWithTracker() returned %d files, want 3", len(files))
+	}
+}
+
+func TestGenerator_ScanGeneratedFilesWithTracker_RejectsOldFilesWithoutPreScan(t *testing.T) {
+	t.Parallel()
+	draftDir := t.TempDir()
+
+	// Create file with OLD timestamp, NOT pre-scanned
+	oldTime := time.Now().Add(-2 * time.Hour)
+	fpath := filepath.Join(draftDir, "01-task.md")
+	os.WriteFile(fpath, []byte("# Task"), 0o644)
+	os.Chtimes(fpath, oldTime, oldTime)
+
+	tracker := NewGenerationTracker("wf-test")
+	tracker.AddExpected("01-task.md", "task-1")
+	// Deliberately NOT calling scanExistingDraftFiles
+
+	gen := NewGenerator(nil, config.IssuesConfig{}, t.TempDir(), t.TempDir(), nil)
+	files, err := gen.scanGeneratedIssueFilesWithTracker(draftDir, tracker)
+	if err != nil {
+		t.Fatalf("scanGeneratedIssueFilesWithTracker() error: %v", err)
+	}
+	if len(files) != 0 {
+		t.Errorf("old files without pre-scan should be rejected, got %d files", len(files))
+	}
+}
+
+func TestGenerator_ScanGeneratedFilesWithTracker_MixedPreScannedAndNew(t *testing.T) {
+	t.Parallel()
+	draftDir := t.TempDir()
+
+	// File 1: old timestamp, will be pre-scanned
+	oldTime := time.Now().Add(-2 * time.Hour)
+	fpath1 := filepath.Join(draftDir, "01-implement-auth.md")
+	os.WriteFile(fpath1, []byte("# Auth"), 0o644)
+	os.Chtimes(fpath1, oldTime, oldTime)
+
+	// File 2: new timestamp, generated in current run
+	fpath2 := filepath.Join(draftDir, "02-add-logging.md")
+	os.WriteFile(fpath2, []byte("# Logging"), 0o644)
+
+	tracker := NewGenerationTracker("wf-test")
+	tracker.AddExpected("01-implement-auth.md", "task-1")
+	tracker.AddExpected("02-add-logging.md", "task-2")
+
+	// Pre-scan only file 1
+	gen := NewGenerator(nil, config.IssuesConfig{}, t.TempDir(), t.TempDir(), nil)
+	gen.scanExistingDraftFiles(draftDir, tracker)
+
+	// Both should be accepted: file 1 via pre-scan, file 2 via IsValidFile
+	files, err := gen.scanGeneratedIssueFilesWithTracker(draftDir, tracker)
+	if err != nil {
+		t.Fatalf("error: %v", err)
+	}
+	if len(files) != 2 {
+		t.Errorf("expected 2 files (1 pre-scanned + 1 new), got %d", len(files))
+	}
+}
+
+func TestGenerator_MissingFilterExcludesPreScannedFiles(t *testing.T) {
+	t.Parallel()
+
+	// Simulate the filtering logic from GenerateIssueFiles
+	expected := []expectedIssueFile{
+		{FileName: "00-consolidated-analysis.md", IsMain: true},
+		{FileName: "01-implement-auth.md", TaskID: "task-1"},
+		{FileName: "02-add-logging.md", TaskID: "task-2"},
+		{FileName: "03-add-tests.md", TaskID: "task-3"},
+	}
+
+	tracker := NewGenerationTracker("wf-test")
+	for _, exp := range expected {
+		tracker.AddExpected(exp.FileName, exp.TaskID)
+	}
+
+	// Pre-scan found 2 of 4 files
+	tracker.MarkGenerated("00-consolidated-analysis.md", time.Now().Add(-1*time.Hour))
+	tracker.MarkGenerated("01-implement-auth.md", time.Now().Add(-1*time.Hour))
+
+	// Apply the same filter as GenerateIssueFiles
+	var missing []expectedIssueFile
+	for _, exp := range expected {
+		if _, exists := tracker.GeneratedFiles[exp.FileName]; !exists {
+			missing = append(missing, exp)
+		}
+	}
+
+	if len(missing) != 2 {
+		t.Fatalf("expected 2 missing files, got %d", len(missing))
+	}
+	if missing[0].FileName != "02-add-logging.md" {
+		t.Errorf("missing[0] = %q, want '02-add-logging.md'", missing[0].FileName)
+	}
+	if missing[1].FileName != "03-add-tests.md" {
+		t.Errorf("missing[1] = %q, want '03-add-tests.md'", missing[1].FileName)
+	}
+}
+
+func TestGenerator_MissingFilterAllPreScanned(t *testing.T) {
+	t.Parallel()
+
+	expected := []expectedIssueFile{
+		{FileName: "00-consolidated-analysis.md", IsMain: true},
+		{FileName: "01-implement-auth.md", TaskID: "task-1"},
+	}
+
+	tracker := NewGenerationTracker("wf-test")
+	for _, exp := range expected {
+		tracker.AddExpected(exp.FileName, exp.TaskID)
+	}
+
+	// All files pre-scanned
+	tracker.MarkGenerated("00-consolidated-analysis.md", time.Now().Add(-1*time.Hour))
+	tracker.MarkGenerated("01-implement-auth.md", time.Now().Add(-1*time.Hour))
+
+	var missing []expectedIssueFile
+	for _, exp := range expected {
+		if _, exists := tracker.GeneratedFiles[exp.FileName]; !exists {
+			missing = append(missing, exp)
+		}
+	}
+
+	if len(missing) != 0 {
+		t.Errorf("expected 0 missing files when all pre-scanned, got %d", len(missing))
+	}
+}
+
+func TestGenerator_LastMissingFiles_SetOnPartialResults(t *testing.T) {
+	t.Parallel()
+	gen := NewGenerator(nil, config.IssuesConfig{}, t.TempDir(), t.TempDir(), nil)
+
+	// Initially nil
+	if gen.LastMissingFiles != nil {
+		t.Error("LastMissingFiles should be nil initially")
+	}
+
+	// Simulate setting it (as GenerateIssueFiles does)
+	gen.LastMissingFiles = []string{"03-missing-task.md", "04-another-missing.md"}
+	if len(gen.LastMissingFiles) != 2 {
+		t.Errorf("LastMissingFiles has %d entries, want 2", len(gen.LastMissingFiles))
+	}
+
+	// Simulate reset on next successful run
+	gen.LastMissingFiles = nil
+	if gen.LastMissingFiles != nil {
+		t.Error("LastMissingFiles should be nil after reset")
+	}
+}
+
+func TestGenerator_ScanExistingDraftFiles_AllExpectedPresent(t *testing.T) {
+	t.Parallel()
+	draftDir := t.TempDir()
+
+	// Simulate a complete previous run: all 23 expected files exist
+	fileNames := make([]string, 23)
+	fileNames[0] = "00-consolidated-analysis.md"
+	for i := 1; i < 23; i++ {
+		fileNames[i] = fmt.Sprintf("%02d-task-%d.md", i, i)
+	}
+
+	tracker := NewGenerationTracker("wf-test")
+	for i, name := range fileNames {
+		os.WriteFile(filepath.Join(draftDir, name), []byte(fmt.Sprintf("# Issue %d\nContent", i)), 0o644)
+		taskID := fmt.Sprintf("task-%d", i)
+		if i == 0 {
+			taskID = "main"
+		}
+		tracker.AddExpected(name, taskID)
+	}
+
+	gen := NewGenerator(nil, config.IssuesConfig{}, t.TempDir(), t.TempDir(), nil)
+	count := gen.scanExistingDraftFiles(draftDir, tracker)
+
+	if count != 23 {
+		t.Errorf("scanExistingDraftFiles() = %d, want 23", count)
+	}
+	missing := tracker.GetMissingFiles()
+	if len(missing) != 0 {
+		t.Errorf("expected 0 missing files, got %d: %v", len(missing), missing)
+	}
+
+	// Verify scanGeneratedIssueFilesWithTracker also returns all 23
+	files, err := gen.scanGeneratedIssueFilesWithTracker(draftDir, tracker)
+	if err != nil {
+		t.Fatalf("error: %v", err)
+	}
+	if len(files) != 23 {
+		t.Errorf("scanGeneratedIssueFilesWithTracker() returned %d files, want 23", len(files))
+	}
+}
+
+func TestGenerator_ScanGeneratedFilesWithTracker_SkipsEmptyFiles(t *testing.T) {
+	t.Parallel()
+	draftDir := t.TempDir()
+
+	// Create an empty file that was pre-scanned would skip, but let's verify
+	// scanGeneratedIssueFilesWithTracker also handles it
+	fpath := filepath.Join(draftDir, "01-task.md")
+	os.WriteFile(fpath, []byte(""), 0o644) // empty
+
+	tracker := NewGenerationTracker("wf-test")
+	tracker.AddExpected("01-task.md", "task-1")
+
+	gen := NewGenerator(nil, config.IssuesConfig{}, t.TempDir(), t.TempDir(), nil)
+	files, err := gen.scanGeneratedIssueFilesWithTracker(draftDir, tracker)
+	if err != nil {
+		t.Fatalf("error: %v", err)
+	}
+	if len(files) != 0 {
+		t.Errorf("empty files should be skipped, got %d files", len(files))
+	}
+}
+
+func TestGenerator_ScanGeneratedFilesWithTracker_NonExistentDir(t *testing.T) {
+	t.Parallel()
+	gen := NewGenerator(nil, config.IssuesConfig{}, t.TempDir(), t.TempDir(), nil)
+	tracker := NewGenerationTracker("wf-test")
+
+	files, err := gen.scanGeneratedIssueFilesWithTracker("/nonexistent/dir", tracker)
+	if err != nil {
+		t.Errorf("non-existent dir should return nil, nil; got error: %v", err)
+	}
+	if files != nil {
+		t.Errorf("expected nil files for non-existent dir, got %d", len(files))
+	}
+}
+
+func TestGenerator_ScanGeneratedFilesWithTracker_NilTracker(t *testing.T) {
+	t.Parallel()
+	draftDir := t.TempDir()
+
+	// Recent file should be accepted by the 30-minute fallback
+	os.WriteFile(filepath.Join(draftDir, "01-task.md"), []byte("# Task"), 0o644)
+
+	gen := NewGenerator(nil, config.IssuesConfig{}, t.TempDir(), t.TempDir(), nil)
+	files, err := gen.scanGeneratedIssueFilesWithTracker(draftDir, nil)
+	if err != nil {
+		t.Fatalf("error: %v", err)
+	}
+	if len(files) != 1 {
+		t.Errorf("recent file with nil tracker should be accepted, got %d files", len(files))
+	}
+}
+
+func TestGenerator_ScanGeneratedFilesWithTracker_NilTrackerOldFile(t *testing.T) {
+	t.Parallel()
+	draftDir := t.TempDir()
+
+	// Old file should be rejected by the 30-minute fallback
+	oldTime := time.Now().Add(-2 * time.Hour)
+	fpath := filepath.Join(draftDir, "01-task.md")
+	os.WriteFile(fpath, []byte("# Task"), 0o644)
+	os.Chtimes(fpath, oldTime, oldTime)
+
+	gen := NewGenerator(nil, config.IssuesConfig{}, t.TempDir(), t.TempDir(), nil)
+	files, err := gen.scanGeneratedIssueFilesWithTracker(draftDir, nil)
+	if err != nil {
+		t.Fatalf("error: %v", err)
+	}
+	if len(files) != 0 {
+		t.Errorf("old file with nil tracker should be rejected, got %d files", len(files))
+	}
+}

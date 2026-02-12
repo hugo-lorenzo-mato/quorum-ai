@@ -74,15 +74,22 @@ export default function IssuesSidebar({
                   </div>
 
                   <div className="flex-1 min-w-0 py-0.5">
-                    {/* Task ID + modified indicator */}
+                    {/* Type badge + Task ID + modified indicator */}
                     <div className="flex items-center justify-between mb-1.5">
-                      {issue.task_id ? (
-                        <span className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-secondary/80 text-secondary-foreground font-mono tracking-tight">
-                          {issue.task_id}
+                      <div className="flex items-center gap-1.5">
+                        <span className={`px-1.5 py-0.5 text-[10px] font-bold rounded ${
+                          issue.is_main_issue
+                            ? 'bg-primary/15 text-primary'
+                            : 'bg-secondary/80 text-secondary-foreground'
+                        }`}>
+                          {issue.is_main_issue ? 'MAIN' : 'SUB'}
                         </span>
-                      ) : (
-                         <span className="text-[10px] text-muted-foreground italic">Draft</span>
-                      )}
+                        {issue.task_id && (
+                          <span className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-secondary/80 text-secondary-foreground font-mono tracking-tight">
+                            {issue.task_id}
+                          </span>
+                        )}
+                      </div>
 
                       {isModified && (
                         <span className="flex h-2 w-2 relative" title="Unsaved changes">

@@ -74,27 +74,32 @@ You MUST read these files to understand the work:
 
 ## Issue Format Requirements
 
-Each issue file MUST have this structure:
+Each issue file MUST be a **near-exact replica** of the original task specification file. Your job is NOT to rewrite or summarize — it is to **clean up and polish** the original content.
 
-```markdown
-# [Descriptive Title of the Objective]
+**What you MUST preserve from the source file:**
+- ALL step-by-step instructions exactly as written
+- ALL code examples, snippets, and code blocks
+- ALL technical context, rationale, and explanations
+- ALL acceptance criteria, edge cases, and constraints
+- ALL architecture decisions and implementation notes
+- The original section structure (keep the same headings when possible)
 
-## Summary
-[Brief description of what this issue addresses]
+**What you MUST change:**
+- **Title**: Rewrite the `# ` H1 heading to be clean and descriptive (see Title Requirements below)
+- **Remove metadata**: Strip YAML frontmatter, internal IDs, task IDs, file paths, and any meta-information blocks
+- **Remove AI/agent references**: Strip model names, agent names, generation timestamps, workflow IDs
+- **Fix formatting**: Clean up any broken markdown, inconsistent indentation, or rendering issues
 
-## Details
-[Detailed technical content from the source file]
-
-## Acceptance Criteria
-- [ ] [Specific, verifiable criterion 1]
-- [ ] [Specific, verifiable criterion 2]
-...
+**What you MAY do (only if it clearly improves readability):**
+- Add a brief one-line `## Summary` at the top if the original lacks one
+- Convert loose text into a checklist under `## Acceptance Criteria` if the original has criteria scattered in prose
+- Fix typos or grammatically broken sentences
 
 {{if .IncludeTestingSection}}
-## Testing Requirements
-[How to verify this issue is resolved]
+If the source file includes testing information, preserve it under a `## Testing Requirements` section.
 {{end}}
-```
+
+**The resulting issue should contain ALL the information a developer needs to complete the task without referring back to the original file.**
 
 ### Title Requirements (CRITICAL)
 
@@ -144,9 +149,9 @@ The issue title (the `# ` H1 heading) must be:
 {{end}}
 
 {{if .Summarize}}
-- Summarize content concisely while keeping key technical details
+- You may condense repeated or redundant paragraphs, but NEVER remove step-by-step instructions, code examples, or technical details
 {{else}}
-- Preserve all technical details from the source files
+- Preserve ALL content from the source files — do not omit, shorten, or paraphrase technical details, code examples, or implementation steps
 {{end}}
 
 {{if .IncludeDiagrams}}
@@ -173,14 +178,16 @@ The issue title (the `# ` H1 heading) must be:
 2. **READ** each task specification file
 3. **WRITE** one issue markdown file for each source file to the issues directory
 4. **USE EXACT FILENAMES** specified above - do not create variations
-5. Ensure each issue is self-contained and actionable
+5. Each issue must be a **cleaned-up version** of its source file — same content, better presentation
 
-**IMPORTANT**: 
+**IMPORTANT**:
 - Use your Read tool to read the source files
 - Use your Write tool to create the issue files
 - Do NOT output the content in your response - write it directly to files
 - Do NOT create multiple files for the same task
 - Follow the exact naming convention specified above
+- Do NOT summarize, shorten, or omit content — the issue should be as complete as the original
+- Think of yourself as an editor, not a rewriter: clean the metadata, improve the title, fix formatting, keep everything else
 
 ---
 

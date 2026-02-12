@@ -509,7 +509,7 @@ func (m Model) WithChatConfig(timeout, progressInterval time.Duration) Model {
 	if timeout > 0 {
 		m.chatTimeout = timeout
 	} else {
-		m.chatTimeout = 3 * time.Minute // Default 3 min
+		m.chatTimeout = 20 * time.Minute // Default 20 min
 	}
 	if progressInterval > 0 {
 		m.chatProgressInterval = progressInterval
@@ -2742,10 +2742,10 @@ func (m Model) handleSubmit() (tea.Model, tea.Cmd) {
 		m.chatStartedAt = time.Now()
 		m.chatAgent = agent
 
-		// Determine timeout (use configured value or default to 3 min)
+		// Determine timeout (use configured value or default to 20 min)
 		timeout := m.chatTimeout
 		if timeout == 0 {
-			timeout = 3 * time.Minute
+			timeout = 20 * time.Minute
 		}
 
 		// Create cancellable context with timeout

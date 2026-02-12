@@ -1,6 +1,7 @@
 package api
 
 import (
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/events"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service/issues"
 )
@@ -68,4 +69,22 @@ func (r *issuesSSEProgressReporter) OnIssuesPublishingProgress(p issues.Publishi
 		IssueNumber: p.IssueNumber,
 		DryRun:      p.DryRun,
 	}))
+}
+
+// newIssuesAgentEventHandler creates an AgentEventHandler that publishes agent streaming
+// events (thinking, tool_use, etc.) to the EventBus scoped to a specific workflow.
+func newIssuesAgentEventHandler(bus *events.EventBus, workflowID, projectID string) core.AgentEventHandler {
+	if bus == nil {
+		return nil
+	}
+	return func(event core.AgentEvent) {
+		evt := events.NewAgentStreamEvent(
+			workflowID,
+			projectID,
+			events.AgentEventType(event.Type),
+			event.Agent,
+			event.Message,
+		).WithData(event.Data)
+		bus.Publish(evt)
+	}
 }

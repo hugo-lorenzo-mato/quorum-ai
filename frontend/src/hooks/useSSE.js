@@ -126,6 +126,34 @@ export default function useSSE() {
     const total = typeof data?.total === 'number' ? data.total : null;
     const current = typeof data?.current === 'number' ? data.current : st.generationProgress;
 
+    // Clear stale agent activity on first event so the overlay starts fresh.
+    if (data?.stage === 'started') {
+      useAgentStore.getState().clearActivity(data.workflow_id);
+    }
+
+    // Inject into agent activity feed so the overlay's Agent Telemetry section
+    // shows issue generation progress (not just agent_event SSE events).
+    const stageMessages = {
+      started: `Issue generation started (${total ?? '?'} issues)`,
+      batch_started: data?.message || 'Processing batch...',
+      batch_completed: data?.message || 'Batch completed',
+      batch_failed: data?.message || 'Batch failed',
+      file_generated: data?.title || data?.file_name || 'Issue generated',
+      progress: data?.message || `Progress: ${current}/${total ?? '?'}`,
+      completed: `Issue generation completed (${current} issues)`,
+    };
+    const msg = stageMessages[data?.stage] || data?.message || data?.stage;
+    const kind = data?.stage === 'batch_failed' ? 'error'
+      : data?.stage === 'completed' ? 'completed'
+      : 'progress';
+    handleAgentEvent({
+      workflow_id: data.workflow_id,
+      agent: 'issues',
+      event_kind: kind,
+      message: msg,
+      timestamp: data?.timestamp || new Date().toISOString(),
+    });
+
     if (data?.stage === 'file_generated') {
       const issue = {
         title: data?.title || data?.file_name || 'Generated issue',
@@ -140,7 +168,7 @@ export default function useSSE() {
     } else {
       updateGenerationProgress(current, null, total);
     }
-  }, [updateGenerationProgress]);
+  }, [updateGenerationProgress, handleAgentEvent]);
 
   const handleIssuesPublishingProgress = useCallback((data) => {
     const st = useIssuesStore.getState();

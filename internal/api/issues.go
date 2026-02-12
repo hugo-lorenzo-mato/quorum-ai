@@ -208,8 +208,11 @@ func (s *Server) handleGenerateIssues(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create generator with agent registry for LLM-based generation
+	eventBus := s.getProjectEventBus(ctx)
+	projectID := getProjectID(ctx)
 	generator := issues.NewGenerator(issueClient, issuesCfg, projectRoot, fullReportDir, s.agentRegistry)
-	generator.SetProgressReporter(newIssuesSSEProgressReporter(s.getProjectEventBus(ctx), getProjectID(ctx)))
+	generator.SetProgressReporter(newIssuesSSEProgressReporter(eventBus, projectID))
+	generator.SetAgentEventHandler(newIssuesAgentEventHandler(eventBus, workflowID, projectID))
 
 	// Apply timeout from config
 	genCtx := ctx
@@ -316,6 +319,11 @@ func (s *Server) handleGenerateIssues(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			respondError(w, http.StatusInternalServerError, fmt.Sprintf("issue creation failed: %v", err))
 			return
+		}
+
+		// Report any missing files as AI warnings
+		for _, name := range generator.LastMissingFiles {
+			result.AIErrors = append(result.AIErrors, fmt.Sprintf("expected file not generated: %s", name))
 		}
 	} else {
 		// Direct mode: read from filesystem (direct copy)
@@ -621,8 +629,11 @@ func (s *Server) handlePreviewIssues(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		previewBus := s.getProjectEventBus(ctx)
+		previewProjectID := getProjectID(ctx)
 		generator := issues.NewGenerator(nil, issuesCfg, projectRoot, fullReportDir, s.agentRegistry)
-		generator.SetProgressReporter(newIssuesSSEProgressReporter(s.getProjectEventBus(ctx), getProjectID(ctx)))
+		generator.SetProgressReporter(newIssuesSSEProgressReporter(previewBus, previewProjectID))
+		generator.SetAgentEventHandler(newIssuesAgentEventHandler(previewBus, workflowID, previewProjectID))
 
 		// Apply timeout from config (same as handleGenerateIssues)
 		genCtx := ctx
@@ -666,6 +677,11 @@ func (s *Server) handlePreviewIssues(w http.ResponseWriter, r *http.Request) {
 				TaskID:      preview.TaskID,
 				FilePath:    preview.FilePath,
 			})
+		}
+
+		// Report any missing files as AI warnings
+		for _, name := range generator.LastMissingFiles {
+			response.AIErrors = append(response.AIErrors, fmt.Sprintf("expected file not generated: %s", name))
 		}
 
 		// Log generated files

@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { workflowApi, configApi } from '../../lib/api';
-import { useUIStore } from '../../stores';
+import { useUIStore, useAgentStore } from '../../stores';
 import useIssuesStore from '../../stores/issuesStore';
 import {
   FileText,
@@ -81,6 +81,8 @@ export default function IssuesPanel({ workflow }) {
       }
     } else {
       // AI mode: show loading and rely on SSE progress events
+      // Clear stale agent activity from previous workflow execution
+      useAgentStore.getState().clearActivity(workflow.id);
       startGeneration('ai', 0);
       navigate(`/workflows/${workflow.id}/issues`);
 

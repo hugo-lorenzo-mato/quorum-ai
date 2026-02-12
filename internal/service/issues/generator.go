@@ -47,7 +47,12 @@ type Generator struct {
 	// LLM generation cache - prevents regenerating files within same workflow
 	llmGenerationCache map[string][]IssuePreview // workflowID -> generated issues
 
-	progress ProgressReporter // Optional: progress reporting for SSE/UI
+	// LastMissingFiles tracks file names that were expected but not generated
+	// after the most recent GenerateIssueFiles call. Empty when all files were generated.
+	LastMissingFiles []string
+
+	progress          ProgressReporter    // Optional: progress reporting for SSE/UI
+	agentEventHandler core.AgentEventHandler // Optional: receives real-time agent streaming events
 }
 
 // NewGenerator creates a new issue generator.
@@ -67,6 +72,12 @@ func NewGenerator(client core.IssueClient, cfg config.IssuesConfig, projectRoot,
 // SetProgressReporter sets an optional progress reporter for generation/publishing progress.
 func (g *Generator) SetProgressReporter(r ProgressReporter) {
 	g.progress = r
+}
+
+// SetAgentEventHandler sets an optional handler for real-time agent streaming events
+// (thinking, tool_use, progress, etc.) during issue generation.
+func (g *Generator) SetAgentEventHandler(h core.AgentEventHandler) {
+	g.agentEventHandler = h
 }
 
 func (g *Generator) emitIssuesGenerationProgress(workflowID, stage string, current, total int, issue *ProgressIssue, message string) {
@@ -940,6 +951,41 @@ func (g *Generator) cleanIssuesDirectory(workflowID string) error {
 	return nil
 }
 
+// scanExistingDraftFiles scans the draft directory for .md files that match expected filenames
+// and pre-populates the tracker so they won't be regenerated.
+// Returns the number of existing files found.
+func (g *Generator) scanExistingDraftFiles(issuesDir string, tracker *GenerationTracker) int {
+	entries, err := os.ReadDir(issuesDir)
+	if err != nil {
+		return 0
+	}
+
+	count := 0
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
+			continue
+		}
+		info, err := os.Stat(filepath.Join(issuesDir, entry.Name()))
+		if err != nil || info.Size() == 0 {
+			continue
+		}
+		// Check if this file matches an expected filename (direct or fuzzy)
+		if _, ok := tracker.ExpectedFiles[entry.Name()]; ok {
+			tracker.MarkGenerated(entry.Name(), info.ModTime())
+			count++
+			continue
+		}
+		for expected := range tracker.ExpectedFiles {
+			if fuzzyMatchFilename(entry.Name(), expected) {
+				tracker.MarkGenerated(entry.Name(), info.ModTime())
+				count++
+				break
+			}
+		}
+	}
+	return count
+}
+
 // =============================================================================
 // LLM-based Issue Generation (Path-Based Approach)
 // =============================================================================
@@ -965,6 +1011,14 @@ func (g *Generator) GenerateIssueFiles(ctx context.Context, workflowID string) (
 		return nil, fmt.Errorf("getting agent %s: %w", g.config.Generator.Agent, err)
 	}
 
+	// Wire up real-time agent event streaming (thinking, tool_use, etc.) for UI visibility.
+	if g.agentEventHandler != nil {
+		if sc, ok := agent.(core.StreamingCapable); ok {
+			sc.SetEventHandler(g.agentEventHandler)
+			defer sc.SetEventHandler(nil) // restore when done
+		}
+	}
+
 	// Get prompt renderer
 	prompts, err := g.getPromptRenderer()
 	if err != nil {
@@ -986,11 +1040,6 @@ func (g *Generator) GenerateIssueFiles(ctx context.Context, workflowID string) (
 	root, err := g.getProjectRoot()
 	if err != nil {
 		return nil, fmt.Errorf(errGettingProjectRoot, err)
-	}
-
-	// Clean the draft directory before generation to avoid duplicates
-	if err := g.cleanIssuesDirectory(workflowID); err != nil {
-		return nil, fmt.Errorf("cleaning draft directory: %w", err)
 	}
 
 	draftDirAbs, err := g.resolveDraftDir(workflowID)
@@ -1029,6 +1078,17 @@ func (g *Generator) GenerateIssueFiles(ctx context.Context, workflowID string) (
 	totalExpected := len(tracker.ExpectedFiles)
 	emitted := make(map[string]bool, totalExpected)
 	estimatedProgress := 0
+
+	// Pre-scan existing draft files to reuse them instead of regenerating.
+	// This enables retries to pick up where they left off.
+	existingCount := g.scanExistingDraftFiles(issuesDirAbs, tracker)
+	for name := range tracker.GeneratedFiles {
+		emitted[name] = true // don't re-emit SSE events for pre-existing files
+	}
+	if existingCount > 0 {
+		slog.Info("reusing existing draft files", "count", existingCount, "workflow_id", workflowID)
+		estimatedProgress = existingCount
+	}
 
 	parseProgressIssue := func(fileName string) *ProgressIssue {
 		filePath := filepath.Join(issuesDirAbs, fileName)
@@ -1113,7 +1173,13 @@ func (g *Generator) GenerateIssueFiles(ctx context.Context, workflowID string) (
 
 	cfg := g.config.Prompt
 	batchSize := maxTasksPerBatch
-	missing := expected
+	// Filter out files already found by pre-scan so we don't regenerate them.
+	var missing []expectedIssueFile
+	for _, exp := range expected {
+		if _, exists := tracker.GeneratedFiles[exp.FileName]; !exists {
+			missing = append(missing, exp)
+		}
+	}
 	var batchErrors []error
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
@@ -1313,10 +1379,14 @@ func (g *Generator) GenerateIssueFiles(ctx context.Context, workflowID string) (
 		return nil, fmt.Errorf("AI did not generate any issue files (no files found in %s)", issuesDirAbs)
 	}
 
+	// Track missing files for the caller (API layer can report them as warnings).
+	g.LastMissingFiles = nil
 	if missingNames := tracker.GetMissingFiles(); len(missingNames) > 0 {
 		sort.Strings(missingNames)
-		slog.Warn("expected files not found in generation output",
+		g.LastMissingFiles = missingNames
+		slog.Warn("expected files not found in generation output — returning partial results",
 			"missing", missingNames,
+			"generated", len(files),
 			"workflow_id", workflowID,
 			"batch_errors_count", len(batchErrors))
 		for i, bErr := range batchErrors {
@@ -1324,11 +1394,11 @@ func (g *Generator) GenerateIssueFiles(ctx context.Context, workflowID string) (
 				"index", i+1,
 				"error", bErr)
 		}
-		errMsg := fmt.Sprintf("issue generation incomplete: missing %d file(s): %s", len(missingNames), strings.Join(missingNames, ", "))
-		if len(batchErrors) > 0 {
-			errMsg = fmt.Sprintf("%s; batch errors: %v", errMsg, batchErrors)
+		if logger != nil {
+			logger.Warn("returning partial results",
+				"missing", missingNames,
+				"generated", len(files))
 		}
-		return nil, fmt.Errorf("%s", errMsg)
 	}
 
 	slog.Info("AI issue generation completed", "total_files", len(files))
@@ -1526,7 +1596,10 @@ func (g *Generator) scanGeneratedIssueFilesWithTracker(issuesDir string, tracker
 
 		// Use tracker if available for more accurate detection
 		if tracker != nil {
-			if tracker.IsValidFile(entry.Name(), info.ModTime()) {
+			if _, alreadyGenerated := tracker.GeneratedFiles[entry.Name()]; alreadyGenerated {
+				// File was already marked (e.g., from pre-scan of existing drafts)
+				files = append(files, filePath)
+			} else if tracker.IsValidFile(entry.Name(), info.ModTime()) {
 				files = append(files, filePath)
 				tracker.MarkGenerated(entry.Name(), info.ModTime())
 			}

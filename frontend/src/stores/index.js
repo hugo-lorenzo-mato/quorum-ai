@@ -6,4 +6,5 @@ export { default as useAgentStore } from './agentStore';
 export { default as useExecutionStore } from './executionStore';
 export { default as useKanbanStore, KANBAN_COLUMNS } from './kanbanStore';
 export { default as useProjectStore } from './projectStore';
+export { default as useIssuesStore } from './issuesStore';
 export { useConfigStore, selectConfig, selectIsDirty, selectIsLoading, selectIsSaving, selectError, selectValidationErrors, selectHasConflict, selectSchema, selectEnums, selectAgents, selectFieldValue, selectFieldError, selectIsFieldDirty } from './configStore';

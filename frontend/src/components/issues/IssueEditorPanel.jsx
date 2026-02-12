@@ -203,42 +203,44 @@ export default function IssueEditorPanel({
       <div className="flex-1 overflow-hidden flex flex-col min-h-0 w-full">
         {isEditMode ? (
           <div className="flex-1 flex flex-col min-h-0 h-full">
-            {/* Meta Data Section (Scrollable on small screens if needed, but keeping fixed for editor access) */}
-            <div className="flex-none p-4 sm:p-6 space-y-4 sm:space-y-5 border-b border-border/50 bg-background z-10">
-              {/* Title */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  Issue Title
-                </label>
-                <Input
-                  value={issue.title || ''}
-                  onChange={handleTitleChange}
-                  placeholder="Enter a descriptive title"
-                  className="text-base sm:text-lg font-medium border-transparent hover:border-border focus:border-ring bg-transparent hover:bg-secondary/30 focus:bg-background px-3 transition-all h-10"
-                />
-              </div>
+            {/* Meta Data Section - Ultra Compact */}
+            <div className="flex-none px-6 py-4 border-b border-border bg-background z-10 space-y-3">
+              {/* Title - Clean & Prominent */}
+              <Input
+                value={issue.title || ''}
+                onChange={handleTitleChange}
+                placeholder="Issue title..."
+                className="text-xl sm:text-2xl font-bold border-none shadow-none bg-transparent p-0 focus-visible:ring-0 placeholder:opacity-20 h-auto"
+              />
 
-              {/* Labels and Assignees */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
-                <LabelsEditor
-                  labels={issue.labels || []}
-                  onChange={handleLabelsChange}
-                />
-                <AssigneesEditor
-                  assignees={issue.assignees || []}
-                  onChange={handleAssigneesChange}
-                />
+              {/* Compact Meta Row */}
+              <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+                <div className="flex-none">
+                  <LabelsEditor
+                    labels={issue.labels || []}
+                    onChange={handleLabelsChange}
+                    compact
+                  />
+                </div>
+                <div className="hidden sm:block w-px h-4 bg-border/60" />
+                <div className="flex-none">
+                  <AssigneesEditor
+                    assignees={issue.assignees || []}
+                    onChange={handleAssigneesChange}
+                    compact
+                  />
+                </div>
               </div>
             </div>
 
-            {/* Editor Section (Full Height) */}
+            {/* Editor Section */}
             <div className="flex-1 flex flex-col min-h-0 relative">
-              <div className="px-4 sm:px-6 py-2 flex items-center justify-between bg-muted/30 border-b border-border/50 shrink-0">
-                 <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    Description (Markdown)
-                 </label>
-                 <span className="text-[10px] sm:text-xs text-muted-foreground">
-                    GitHub Flavored Markdown supported
+              <div className="px-6 py-1 flex items-center justify-between bg-muted/10 border-b border-border/40 shrink-0">
+                 <span className="text-[9px] font-bold text-muted-foreground/60 uppercase tracking-widest">
+                    Markdown Description
+                 </span>
+                 <span className="text-[9px] text-muted-foreground/40 italic">
+                    GFM Enabled
                  </span>
               </div>
               <div className="flex-1 relative min-h-0">
