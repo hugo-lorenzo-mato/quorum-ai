@@ -512,6 +512,9 @@ function ActiveWorkflowBanner({ workflow }) {
     </div>
   );
 }
+
+const TECH_STACK_BADGES = ['Go', 'React', 'Vite', 'Tailwind CSS', 'SQLite'];
+
 // Empty State with Large Logo
 function EmptyState() {
   return (
@@ -542,6 +545,51 @@ function EmptyState() {
           Browse Prompts
         </Link>
       </div>
+
+      <div className="mt-8 w-full max-w-xl">
+        <p className="text-xs font-medium tracking-wide uppercase text-muted-foreground mb-3">
+          Tech Stack
+        </p>
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          {TECH_STACK_BADGES.map((badge) => (
+            <span
+              key={badge}
+              className="inline-flex items-center rounded-full border border-border bg-card px-3 py-1 text-xs text-foreground"
+            >
+              {badge}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <footer className="mt-8 flex flex-wrap items-center justify-center gap-2 text-xs text-muted-foreground">
+        <a
+          href="https://github.com/hugo-lorenzo-mato/quorum-ai"
+          target="_blank"
+          rel="noreferrer"
+          className="hover:text-foreground transition-colors"
+        >
+          GitHub
+        </a>
+        <span aria-hidden="true">•</span>
+        <a
+          href="https://github.com/hugo-lorenzo-mato/quorum-ai/blob/main/README.md"
+          target="_blank"
+          rel="noreferrer"
+          className="hover:text-foreground transition-colors"
+        >
+          Documentation
+        </a>
+        <span aria-hidden="true">•</span>
+        <a
+          href="https://github.com/hugo-lorenzo-mato/quorum-ai/blob/main/LICENSE"
+          target="_blank"
+          rel="noreferrer"
+          className="hover:text-foreground transition-colors"
+        >
+          MIT License
+        </a>
+      </footer>
     </div>
   );
 }
