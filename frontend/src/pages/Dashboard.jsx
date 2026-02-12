@@ -6,6 +6,7 @@ import { systemPromptsApi } from '../lib/api';
 import { getStatusColor } from '../lib/theme';
 import FAB from '../components/FAB';
 import Logo from '../components/Logo';
+import HeroSection from '../components/HeroSection';
 import {
   GitBranch,
   CheckCircle2,
@@ -756,6 +757,9 @@ export default function Dashboard() {
           </Link>
         </div>
       </div>
+
+      {/* Hero Section with Animated Flow Diagram */}
+      {workflows.length === 0 && <HeroSection />}
 
       {/* Active Workflow Banner */}
       {activeWorkflow && activeWorkflow.status === 'running' && (
