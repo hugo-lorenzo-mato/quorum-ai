@@ -28,7 +28,7 @@ import {
 } from 'lucide-react';
 
 const navItems = [
-  { path: '/', label: 'Dashboard', icon: LayoutDashboard },
+  { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/workflows', label: 'Workflows', icon: GitBranch },
   { path: '/kanban', label: 'Kanban', icon: KanbanSquare },
   { path: '/chat', label: 'Chat', icon: MessageSquare },
@@ -243,7 +243,7 @@ export default function Layout({ children }) {
       >
         {/* Logo */}
         <div className={`flex items-center h-14 border-b border-border ${sidebarOpen ? 'justify-between px-4' : 'justify-center px-2'}`}>
-          <Link to="/" className="flex items-center gap-3 group">
+          <Link to="/dashboard" className="flex items-center gap-3 group">
             <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-br from-primary/10 to-primary/5 shadow-sm transition-transform group-hover:scale-105 border border-primary/20">
               <Logo className="w-5 h-5" />
             </div>

@@ -7,6 +7,7 @@ import { useConfigStore } from './stores/configStore';
 import { loadEnums } from './lib/agents';
 
 // Lazy load page components
+const Landing = lazy(() => import('./pages/Landing'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Workflows = lazy(() => import('./pages/Workflows'));
 const Prompts = lazy(() => import('./pages/Prompts'));
@@ -52,7 +53,8 @@ function AppContent() {
     <Layout>
       <Suspense fallback={<PageLoader />}>
         <Routes>
-          <Route path="/" element={<Dashboard />} />
+          <Route path="/" element={<Landing />} />
+          <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/workflows" element={<Workflows />} />
           <Route path="/workflows/:id" element={<Workflows />} />
           <Route path="/workflows/:id/issues" element={<IssuesEditor />} />
