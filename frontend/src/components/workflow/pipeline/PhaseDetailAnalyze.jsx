@@ -2,6 +2,7 @@ import { CheckCircle2, Loader2, Circle } from 'lucide-react';
 import MiniFlowNode from './MiniFlowNode';
 import FlowConnector from './FlowConnector';
 import LoopArrow from './LoopArrow';
+import AgentConstellation from '../AgentConstellation';
 
 function ConfigBadge({ label, value }) {
   return (
@@ -150,6 +151,31 @@ export default function PhaseDetailAnalyze({ analyze }) {
           </div>
         )}
       </div>
+
+      {/* Agent constellation */}
+      {consensusEnabled && currentRound > 0 && (() => {
+        const currentRoundData = rounds.find(r => r.round === currentRound);
+        const constellationAgents = currentRoundData
+          ? currentRoundData.agents.map(name => ({
+              name,
+              status: currentRoundData.status === 'completed' ? 'completed' : 'started',
+            }))
+          : [];
+        if (constellationAgents.length === 0) return null;
+        return (
+          <div className="flex justify-center py-2">
+            <AgentConstellation
+              agents={moderatorAgent
+                ? [...constellationAgents, { name: moderatorAgent, status: currentRoundData?.score != null ? 'completed' : 'started' }]
+                : constellationAgents
+              }
+              moderator={moderatorAgent || null}
+              consensusScore={currentRoundData?.score ?? null}
+              round={currentRound}
+            />
+          </div>
+        );
+      })()}
 
       {/* Rounds table */}
       <RoundsTable rounds={rounds} threshold={threshold} />
