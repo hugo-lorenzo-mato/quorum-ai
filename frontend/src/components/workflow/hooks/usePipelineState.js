@@ -18,7 +18,7 @@ function derivePhaseStatus(phaseId, currentPhase, workflowStatus, enabled) {
 }
 
 function extractRoundsFromTimeline(timeline) {
-  if (!timeline || timeline.length === 0) return { rounds: [], currentRound: 0, lastScore: null };
+  if (!timeline || timeline.length === 0) return { rounds: [], currentRound: 0, lastScore: null, singleAgent: null };
 
   const chronological = [...timeline]
     .filter((e) => e.kind === 'agent')
@@ -27,10 +27,27 @@ function extractRoundsFromTimeline(timeline) {
   const roundsMap = {};
   let currentRound = 0;
   let lastScore = null;
+  let singleAgent = null;
 
   for (const e of chronological) {
     const phase = e.phase || e.data?.phase || '';
     const round = e.data?.round;
+
+    // Single-agent mode detection
+    if (phase === 'analyze_single') {
+      const agent = e.agent || e.data?.agent || '';
+      const model = e.data?.model || '';
+      if (!singleAgent) {
+        singleAgent = { agent, model, status: 'pending' };
+      }
+      if (e.event === 'started') {
+        singleAgent = { agent: agent || singleAgent.agent, model: model || singleAgent.model, status: 'running' };
+      }
+      if (e.event === 'completed') {
+        singleAgent = { agent: agent || singleAgent.agent, model: model || singleAgent.model, status: 'completed' };
+      }
+      continue;
+    }
 
     // Moderator completed events carry round + consensus_score
     if (phase === 'moderator' && e.event === 'completed' && round != null) {
@@ -66,7 +83,7 @@ function extractRoundsFromTimeline(timeline) {
   }
 
   const rounds = Object.values(roundsMap).sort((a, b) => a.round - b.round);
-  return { rounds, currentRound, lastScore };
+  return { rounds, currentRound, lastScore, singleAgent };
 }
 
 function extractSynthesisStatus(timeline) {
@@ -114,7 +131,7 @@ export default function usePipelineState(workflow, workflowKey) {
 
     // Analyze
     const analyzeStatus = derivePhaseStatus('analyze', currentPhase, wfStatus, true);
-    const { rounds, currentRound, lastScore } = extractRoundsFromTimeline(timeline);
+    const { rounds, currentRound, lastScore, singleAgent } = extractRoundsFromTimeline(timeline);
     const consensusScore = lastScore ?? metrics.consensus_score ?? null;
     const synthesisStatus = extractSynthesisStatus(timeline);
 
@@ -145,6 +162,7 @@ export default function usePipelineState(workflow, workflowKey) {
         moderatorAgent: consensus.agent || '',
         rounds,
         synthesisStatus,
+        singleAgent,
       },
       plan: {
         status: planStatus,

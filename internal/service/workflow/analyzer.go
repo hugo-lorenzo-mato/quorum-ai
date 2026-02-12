@@ -15,6 +15,7 @@ import (
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service/report"
 )
 
 // DocsConfigURL is the URL to the configuration documentation.
@@ -266,6 +267,23 @@ func (a *Analyzer) runSingleAgentAnalysis(ctx context.Context, wctx *Context) er
 
 	if result != nil {
 		enforceOutputFile(wctx, absOutputPath, result.Output)
+	}
+
+	// Also write consolidated.md for downstream consumers (issue generation, artifact reconciliation).
+	// Single-agent analysis IS the consolidated analysis — no synthesis needed.
+	if result != nil && wctx.Report != nil && wctx.Report.IsEnabled() {
+		if writeErr := wctx.Report.WriteConsolidatedAnalysis(report.ConsolidationData{
+			Agent:          agentName,
+			Model:          result.Model,
+			Content:        result.Output,
+			AnalysesCount:  1,
+			Synthesized:    false,
+			TotalTokensIn:  result.TokensIn,
+			TotalTokensOut: result.TokensOut,
+		}); writeErr != nil {
+			wctx.Logger.Warn("failed to write consolidated.md for single-agent analysis", "error", writeErr)
+			// Non-fatal: checkpoint still has the content
+		}
 	}
 
 	// Emit completed event

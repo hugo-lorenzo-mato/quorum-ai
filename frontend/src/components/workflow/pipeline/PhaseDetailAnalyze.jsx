@@ -60,7 +60,35 @@ export default function PhaseDetailAnalyze({ analyze }) {
   const {
     threshold, minRounds, maxRounds, stagnationThreshold,
     consensusEnabled, moderatorAgent, rounds, currentRound, synthesisStatus,
+    singleAgent,
   } = analyze;
+
+  // Single-agent mode: simplified display
+  if (singleAgent) {
+    const statusIcon = singleAgent.status === 'completed'
+      ? <CheckCircle2 className="w-4 h-4 text-status-success" />
+      : singleAgent.status === 'running'
+        ? <Loader2 className="w-4 h-4 text-status-running animate-spin" />
+        : <Circle className="w-4 h-4 text-muted-foreground" />;
+
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Analyze Phase</h4>
+          <ConfigBadge label="Mode" value="Single Agent" />
+        </div>
+        <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 border border-border/50">
+          {statusIcon}
+          <div>
+            <p className="text-sm font-medium text-foreground capitalize">{singleAgent.agent}</p>
+            {singleAgent.model && (
+              <p className="text-xs text-muted-foreground">{singleAgent.model}</p>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // Build the flow diagram nodes from rounds
   const flowNodes = [];

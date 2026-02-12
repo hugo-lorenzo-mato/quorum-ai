@@ -50,7 +50,30 @@ func (r *Runner) reconcileAnalysisArtifacts(ctx context.Context, state *core.Wor
 
 	info, err := os.Stat(absConsolidatedPath)
 	if err != nil {
-		return nil //nolint:nilerr // no consolidated file means nothing to reconcile
+		// Try single-agent fallback: look for any .md file in single-agent directory
+		singleAgentDir := filepath.Join(reportPath, "analyze-phase", "single-agent")
+		absSingleAgentDir := singleAgentDir
+		if !filepath.IsAbs(absSingleAgentDir) && r.projectRoot != "" {
+			absSingleAgentDir = filepath.Join(r.projectRoot, absSingleAgentDir)
+		}
+		entries, dirErr := os.ReadDir(absSingleAgentDir)
+		if dirErr != nil {
+			return nil // no consolidated file and no single-agent files
+		}
+		for _, e := range entries {
+			if !e.IsDir() && strings.HasSuffix(e.Name(), ".md") {
+				p := filepath.Join(absSingleAgentDir, e.Name())
+				fi, statErr := os.Stat(p)
+				if statErr == nil && !fi.IsDir() && fi.Size() >= minReconcileConsolidatedSizeBytes {
+					info = fi
+					absConsolidatedPath = p
+					break
+				}
+			}
+		}
+		if info == nil {
+			return nil
+		}
 	}
 	if info.IsDir() || info.Size() < minReconcileConsolidatedSizeBytes {
 		return nil

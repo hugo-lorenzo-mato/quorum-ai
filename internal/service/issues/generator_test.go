@@ -2417,3 +2417,58 @@ func TestGenerator_ScanGeneratedFilesWithTracker_NilTrackerOldFile(t *testing.T)
 		t.Errorf("old file with nil tracker should be rejected, got %d files", len(files))
 	}
 }
+
+func TestReadConsolidatedAnalysis_SingleAgentFallback(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+
+	// Create single-agent directory with analysis file (NO consolidated.md)
+	singleAgentDir := filepath.Join(tmpDir, "analyze-phase", "single-agent")
+	if err := os.MkdirAll(singleAgentDir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	expected := "# Analysis from claude\n\nThis is the analysis content."
+	if err := os.WriteFile(filepath.Join(singleAgentDir, "claude-opus.md"), []byte(expected), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	gen := &Generator{reportDir: tmpDir}
+	content, err := gen.readConsolidatedAnalysis()
+	if err != nil {
+		t.Fatalf("readConsolidatedAnalysis() error = %v", err)
+	}
+	if content != expected {
+		t.Errorf("content mismatch: got %q, want %q", content, expected)
+	}
+}
+
+func TestReadConsolidatedAnalysis_PrefersConsolidatedOverSingleAgent(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+
+	// Create both consolidated.md AND single-agent
+	analyzeDir := filepath.Join(tmpDir, "analyze-phase")
+	if err := os.MkdirAll(analyzeDir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(analyzeDir, "consolidated.md"), []byte("consolidated content"), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	singleAgentDir := filepath.Join(analyzeDir, "single-agent")
+	if err := os.MkdirAll(singleAgentDir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(singleAgentDir, "claude.md"), []byte("single-agent content"), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	gen := &Generator{reportDir: tmpDir}
+	content, err := gen.readConsolidatedAnalysis()
+	if err != nil {
+		t.Fatalf("readConsolidatedAnalysis() error = %v", err)
+	}
+	if content != "consolidated content" {
+		t.Errorf("should prefer consolidated.md, got %q", content)
+	}
+}

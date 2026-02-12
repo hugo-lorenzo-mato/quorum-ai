@@ -174,3 +174,59 @@ func reportConfigForTest(baseDir string) report.Config {
 		IncludeRaw: true,
 	}
 }
+
+func TestRunner_ReconcileAnalysisArtifacts_SingleAgentFallback(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	tmpDir := t.TempDir()
+
+	workflowID := core.WorkflowID("wf-reconcile-single")
+
+	// Create single-agent analysis (NO consolidated.md)
+	singleAgentDir := filepath.Join(tmpDir, string(workflowID), "analyze-phase", "single-agent")
+	if err := os.MkdirAll(singleAgentDir, 0o750); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	analysisContent := "## Single Agent Analysis\n\n" + strings.Repeat("Single-agent analysis content. ", 30) // >512 bytes
+	if err := os.WriteFile(filepath.Join(singleAgentDir, "claude-opus.md"), []byte(analysisContent), 0o640); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	state := &core.WorkflowState{
+		WorkflowDefinition: core.WorkflowDefinition{
+			WorkflowID: workflowID,
+			Prompt:     "test",
+			CreatedAt:  time.Now(),
+		},
+		WorkflowRun: core.WorkflowRun{
+			Status:       core.WorkflowStatusRunning,
+			CurrentPhase: core.PhaseAnalyze,
+			Checkpoints:  nil,
+			ReportPath:   "",
+			UpdatedAt:    time.Now(),
+		},
+	}
+
+	r := &Runner{
+		config:      &RunnerConfig{Report: reportConfigForTest(tmpDir)},
+		state:       nil,
+		checkpoint:  memCheckpointCreator{},
+		output:      NopOutputNotifier{},
+		projectRoot: "",
+	}
+
+	if err := r.reconcileAnalysisArtifacts(ctx, state); err != nil {
+		t.Fatalf("reconcileAnalysisArtifacts() error = %v", err)
+	}
+
+	got := strings.TrimSpace(GetConsolidatedAnalysis(state))
+	if got == "" {
+		t.Error("expected consolidated analysis from single-agent fallback")
+	}
+	if !strings.Contains(got, "Single-agent analysis content") {
+		t.Errorf("content should contain single-agent analysis, got: %s", got[:min(len(got), 100)])
+	}
+	if !isPhaseCompleted(state, core.PhaseAnalyze) {
+		t.Fatal("expected analyze phase to be marked complete after reconciliation")
+	}
+}

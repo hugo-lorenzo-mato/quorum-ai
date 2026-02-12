@@ -699,11 +699,26 @@ func (g *Generator) readConsolidatedAnalysis() (string, error) {
 	// Fallback to consensus directory
 	consensusPath := filepath.Join(g.reportDir, "analyze-phase", "consensus", "consolidated.md")
 	content, err = os.ReadFile(consensusPath) // #nosec G304 -- path constructed from internal report directory
-	if err != nil {
-		return "", fmt.Errorf("consolidated analysis not found at %s or %s", path, consensusPath)
+	if err == nil {
+		return string(content), nil
 	}
 
-	return string(content), nil
+	// Fallback to single-agent analysis (for workflows executed before consolidated.md bridge was added)
+	singleAgentDir := filepath.Join(g.reportDir, "analyze-phase", "single-agent")
+	entries, dirErr := os.ReadDir(singleAgentDir)
+	if dirErr == nil {
+		for _, e := range entries {
+			if !e.IsDir() && strings.HasSuffix(e.Name(), ".md") {
+				saPath := filepath.Join(singleAgentDir, e.Name())
+				content, readErr := os.ReadFile(saPath) // #nosec G304 -- path constructed from internal report directory
+				if readErr == nil && len(content) > 0 {
+					return string(content), nil
+				}
+			}
+		}
+	}
+
+	return "", fmt.Errorf("consolidated analysis not found at %s or %s", path, consensusPath)
 }
 
 // readTaskFiles reads all task files from multiple locations.

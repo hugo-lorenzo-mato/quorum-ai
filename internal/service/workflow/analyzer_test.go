@@ -2,6 +2,8 @@ package workflow
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -9,6 +11,7 @@ import (
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/core"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/logging"
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/service/report"
 )
 
 // mockAgentRegistry implements core.AgentRegistry for testing.
@@ -1002,4 +1005,94 @@ func (m *modelCapturingAgent) Ping(ctx context.Context) error {
 func (m *modelCapturingAgent) Execute(ctx context.Context, opts core.ExecuteOptions) (*core.ExecuteResult, error) {
 	*m.capturedModel = opts.Model
 	return m.agent.Execute(ctx, opts)
+}
+
+func TestAnalyzer_Run_SingleAgentMode_WritesConsolidatedMd(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+
+	// Setup report writer with temp directory
+	reportWriter := report.NewWorkflowReportWriter(report.Config{
+		BaseDir: tmpDir,
+		Enabled: true,
+	}, "wf-test-consolidated")
+
+	config := ModeratorConfig{
+		Enabled: false,
+	}
+	analyzer, err := NewAnalyzer(config)
+	if err != nil {
+		t.Fatalf("NewAnalyzer() error = %v", err)
+	}
+
+	registry := &mockAgentRegistry{}
+	agent := &mockAgent{
+		name: "claude",
+		result: &core.ExecuteResult{
+			Output:    `{"claims":["claim1"],"risks":["risk1"],"recommendations":["rec1"]}`,
+			TokensIn:  100,
+			TokensOut: 50,
+			Model:     "claude-3-sonnet",
+		},
+	}
+	registry.Register("claude", agent)
+
+	checkpoint := &mockCheckpointCreator{}
+
+	wctx := &Context{
+		State: &core.WorkflowState{
+			WorkflowDefinition: core.WorkflowDefinition{
+				WorkflowID: "wf-test-consolidated",
+				Prompt:     "test prompt",
+			},
+			WorkflowRun: core.WorkflowRun{
+				CurrentPhase: core.PhaseRefine,
+				Tasks:        make(map[core.TaskID]*core.TaskState),
+				TaskOrder:    []core.TaskID{},
+				Checkpoints:  []core.Checkpoint{},
+				Metrics:      &core.StateMetrics{},
+			},
+		},
+		Agents:     registry,
+		Prompts:    &mockPromptRenderer{},
+		Checkpoint: checkpoint,
+		Retry:      &mockRetryExecutor{},
+		RateLimits: &mockRateLimiterGetter{},
+		Logger:     logging.NewNop(),
+		Report:     reportWriter,
+		Config: &Config{
+			DryRun:       false,
+			DefaultAgent: "claude",
+			SingleAgent: SingleAgentConfig{
+				Enabled: true,
+				Agent:   "claude",
+				Model:   "",
+			},
+		},
+	}
+
+	err = analyzer.Run(context.Background(), wctx)
+	if err != nil {
+		t.Fatalf("Analyzer.Run() error = %v", err)
+	}
+
+	// Verify consolidated.md was written
+	consolidatedPath := filepath.Join(tmpDir, "wf-test-consolidated", "analyze-phase", "consolidated.md")
+	content, err := os.ReadFile(consolidatedPath)
+	if err != nil {
+		t.Fatalf("consolidated.md not created: %v", err)
+	}
+	if len(content) == 0 {
+		t.Error("consolidated.md is empty")
+	}
+
+	// Verify single-agent file also exists
+	singleAgentDir := filepath.Join(tmpDir, "wf-test-consolidated", "analyze-phase", "single-agent")
+	entries, err := os.ReadDir(singleAgentDir)
+	if err != nil {
+		t.Fatalf("single-agent dir not found: %v", err)
+	}
+	if len(entries) == 0 {
+		t.Error("no single-agent analysis files")
+	}
 }
