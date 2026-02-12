@@ -344,6 +344,15 @@ func (s *Server) setupRouter() chi.Router {
 			r.Get("/issues", s.handleGetIssuesConfig)
 		})
 
+		// Snapshot endpoints (backup/restore of registry and project state)
+		r.Route("/snapshots", func(r chi.Router) {
+			r.Use(chimiddleware.Timeout(60 * time.Second))
+			r.Post("/export", s.handleSnapshotExport)
+			r.Post("/import", s.handleSnapshotImport)
+			r.Post("/validate", s.handleSnapshotValidate)
+			r.Post("/import/validate", s.handleSnapshotValidate)
+		})
+
 		// Kanban board endpoints
 		kanbanServer := NewKanbanServer(s, s.kanbanEngine, s.eventBus)
 		kanbanServer.RegisterRoutes(r)
@@ -477,7 +486,7 @@ func (s *Server) ListenAndServe(ctx context.Context, addr string) error {
 		Handler:           s.router,
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       120 * time.Second, // Allow long reads for file uploads
-		WriteTimeout:      0, // Disabled: per-route chi middleware timeouts handle this
+		WriteTimeout:      0,                 // Disabled: per-route chi middleware timeouts handle this
 		IdleTimeout:       120 * time.Second,
 	}
 

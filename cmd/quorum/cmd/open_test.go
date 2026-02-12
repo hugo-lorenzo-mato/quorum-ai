@@ -10,10 +10,12 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/hugo-lorenzo-mato/quorum-ai/internal/config"
+	"github.com/hugo-lorenzo-mato/quorum-ai/internal/project"
 )
 
 func TestRunOpen(t *testing.T) {
 	tmpDir := t.TempDir()
+	t.Setenv("HOME", t.TempDir())
 
 	t.Run("open current directory", func(t *testing.T) {
 		// Create test directory
@@ -28,6 +30,7 @@ func TestRunOpen(t *testing.T) {
 		require.NoError(t, err)
 
 		openForce = false
+		openInheritGlobal = false
 		quiet = false
 		defer func() {
 			quiet = false
@@ -63,6 +66,7 @@ func TestRunOpen(t *testing.T) {
 		require.NoError(t, err)
 
 		openForce = false
+		openInheritGlobal = false
 		quiet = false
 
 		// Capture stdout
@@ -112,9 +116,11 @@ func TestRunOpen(t *testing.T) {
 
 		openProjectName = "My Custom Project"
 		openForce = false
+		openInheritGlobal = false
 		quiet = true
 		defer func() {
 			openProjectName = ""
+			openInheritGlobal = false
 			quiet = false
 		}()
 
@@ -149,6 +155,7 @@ func TestRunOpen(t *testing.T) {
 		require.NoError(t, err)
 
 		openForce = false
+		openInheritGlobal = false
 		quiet = false
 		defer func() {
 			quiet = false
@@ -170,6 +177,44 @@ func TestRunOpen(t *testing.T) {
 
 		assert.NoError(t, err)
 		assert.Contains(t, output, "already initialized")
+	})
+
+	t.Run("open with inherit-global", func(t *testing.T) {
+		testDir := filepath.Join(tmpDir, "inherit-global")
+		err := os.MkdirAll(testDir, 0o755)
+		require.NoError(t, err)
+
+		openInheritGlobal = true
+		openForce = true
+		quiet = true
+		defer func() {
+			openInheritGlobal = false
+			openForce = false
+			quiet = false
+		}()
+
+		err = runOpen(openCmd, []string{testDir})
+		require.NoError(t, err)
+
+		_, err = os.Stat(filepath.Join(testDir, ".quorum"))
+		require.NoError(t, err)
+
+		_, err = os.Stat(filepath.Join(testDir, ".quorum", "config.yaml"))
+		assert.Error(t, err)
+		assert.True(t, os.IsNotExist(err))
+
+		globalPath, err := config.GlobalConfigPath()
+		require.NoError(t, err)
+		_, err = os.Stat(globalPath)
+		require.NoError(t, err)
+
+		registry, err := project.NewFileRegistry()
+		require.NoError(t, err)
+		defer registry.Close()
+
+		p, err := registry.GetProjectByPath(t.Context(), testDir)
+		require.NoError(t, err)
+		assert.Equal(t, project.ConfigModeInheritGlobal, p.ConfigMode)
 	})
 }
 
@@ -247,7 +292,7 @@ func TestOpenCommand(t *testing.T) {
 	assert.Equal(t, "open [path]", openCmd.Use)
 
 	// Verify flags
-	flags := []string{"name", "color", "default", "force"}
+	flags := []string{"name", "color", "default", "force", "inherit-global"}
 	for _, flagName := range flags {
 		flag := openCmd.Flags().Lookup(flagName)
 		assert.NotNil(t, flag, "flag %s should exist", flagName)

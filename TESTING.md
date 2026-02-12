@@ -166,6 +166,17 @@ quorum-ai/
     └── e2e/*.spec.ts           # Playwright E2E tests
 ```
 
+### Snapshot/Registry Migration Coverage
+
+The snapshot/export-import feature and inherit-global project onboarding are covered by:
+
+- `internal/snapshot/snapshot_test.go` (archive roundtrip, dry-run, conflict policies, validation failures)
+- `internal/api/snapshots_test.go` (REST endpoints for export/import/validate)
+- `cmd/quorum/cmd/snapshot_test.go` (CLI command wiring and path-map parsing)
+- `cmd/quorum/cmd/open_test.go` (`open --inherit-global` behavior)
+- `frontend/src/components/config/tabs/__tests__/SnapshotsTab.test.jsx` (Settings UI workflow)
+- `frontend/src/lib/__tests__/snapshotApi.test.js` (frontend API client contract)
+
 ## Go Tests
 
 ### Unit Tests

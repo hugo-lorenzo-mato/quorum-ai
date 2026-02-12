@@ -1,6 +1,22 @@
 import useProjectStore from '../stores/projectStore';
+import { projectConfigStore } from '../stores/configStore';
 
 const API_BASE = '/api/v1';
+
+/**
+ * Parse a Go-style duration string (e.g., "30m", "1h", "5s") to milliseconds.
+ * Returns null if the string is invalid or empty.
+ */
+function parseDurationMs(str) {
+  if (!str) return null;
+  const match = String(str).match(/^(\d+(?:\.\d+)?)([hms])$/i);
+  if (!match) return null;
+  const value = parseFloat(match[1]);
+  const unit = match[2].toLowerCase();
+  if (!Number.isFinite(value) || value < 0) return null;
+  const multipliers = { h: 3600000, m: 60000, s: 1000 };
+  return Math.round(value * (multipliers[unit] || 1));
+}
 
 /**
  * Build URL with project query parameter if a project is selected.
@@ -251,11 +267,24 @@ export const workflowApi = {
    * @param {string} id - Workflow ID
    * @param {boolean} fast - Use fast mode (skip LLM generation for instant response)
    * @param {Object} options - Additional options
-   * @param {number} [options.timeout] - Request timeout in ms (default: 30s for fast, 180s for AI)
+   * @param {number} [options.timeout] - Request timeout in ms
    */
   previewIssues: (id, fast = true, options = {}) => {
-    // AI mode can take 60-120 seconds, so use 3 minute timeout
-    const timeout = options.timeout ?? (fast ? 30000 : 180000);
+    let timeout = options.timeout;
+    if (timeout == null) {
+      if (fast) {
+        timeout = 30000;
+      } else {
+        // Read issues.timeout from config store (e.g., "30m") and add a 1-min buffer
+        // so the backend's context.WithTimeout fires first and returns a proper error.
+        let configMs = null;
+        try {
+          const timeoutStr = projectConfigStore.getState().getFieldValue('issues.timeout');
+          configMs = parseDurationMs(timeoutStr);
+        } catch { /* config not loaded yet */ }
+        timeout = configMs ? configMs + 60000 : 35 * 60 * 1000;
+      }
+    }
     // Always pass fast=true/false explicitly so the backend can force the mode.
     // This aligns with docs/ISSUES_WORKFLOW.md and prevents "AI mode" silently falling back to direct mode.
     return request(`/workflows/${id}/issues/preview?fast=${fast ? 'true' : 'false'}`, { timeout });
@@ -312,7 +341,14 @@ export const workflowApi = {
       link_issues: options.linkIssues ?? true,
       task_ids: options.taskIds || [],
     }),
-    timeout: 180000,
+    timeout: (() => {
+      let configMs = null;
+      try {
+        const timeoutStr = projectConfigStore.getState().getFieldValue('issues.timeout');
+        configMs = parseDurationMs(timeoutStr);
+      } catch { /* config not loaded yet */ }
+      return configMs ? configMs + 60000 : 35 * 60 * 1000;
+    })(),
   }),
 
   /**
@@ -481,6 +517,27 @@ export const projectApi = {
   }),
 };
 
+// Snapshot API (global operations, not scoped to a project)
+export const snapshotApi = {
+  export: (payload) => request('/snapshots/export', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    skipProject: true,
+  }),
+
+  import: (payload) => request('/snapshots/import', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    skipProject: true,
+  }),
+
+  validate: (inputPath) => request('/snapshots/validate', {
+    method: 'POST',
+    body: JSON.stringify({ input_path: inputPath }),
+    skipProject: true,
+  }),
+};
+
 // Kanban API
 export const kanbanApi = {
   // Get full board state
@@ -510,5 +567,6 @@ export default {
   files: fileApi,
   health: healthApi,
   project: projectApi,
+  snapshot: snapshotApi,
   kanban: kanbanApi,
 };

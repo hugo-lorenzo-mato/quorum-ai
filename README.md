@@ -245,6 +245,30 @@ quorum new --purge        # Delete all workflow data permanently
 quorum new --purge --force # Skip confirmation prompt
 ```
 
+### Project Onboarding and Snapshot Migration
+
+```bash
+# Initialize and register current repository using global config inheritance
+quorum open --inherit-global
+
+# Export full registry + project snapshots
+quorum snapshot export -o /tmp/quorum-snapshot.tar.gz
+
+# Validate a snapshot archive before import
+quorum snapshot validate -i /tmp/quorum-snapshot.tar.gz
+
+# Preview import without mutating registry/projects
+quorum snapshot import -i /tmp/quorum-snapshot.tar.gz --mode merge --dry-run
+
+# Import with conflict overwrite policy
+quorum snapshot import -i /tmp/quorum-snapshot.tar.gz --mode replace --conflict-policy overwrite
+```
+
+Web UI also exposes these operations in `Settings -> Snapshots & Restore`:
+- Export snapshot (`/api/v1/snapshots/export`)
+- Validate snapshot (`/api/v1/snapshots/validate`)
+- Import snapshot (`/api/v1/snapshots/import`)
+
 ### Trace artifacts
 
 When trace mode is enabled, artifacts are written to `.quorum/traces/<run_id>/`:

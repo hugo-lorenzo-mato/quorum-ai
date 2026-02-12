@@ -164,6 +164,11 @@ func getRegistryPath() (string, error) {
 	return filepath.Join(quorumRegistryDir, "projects.yaml"), nil
 }
 
+// DefaultRegistryPath returns the default on-disk path for the global project registry.
+func DefaultRegistryPath() (string, error) {
+	return getRegistryPath()
+}
+
 // load reads the registry from disk
 func (r *FileRegistry) load() error {
 	r.mu.Lock()

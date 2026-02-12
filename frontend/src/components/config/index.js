@@ -31,3 +31,4 @@ export { default as PhasesTab } from './tabs/PhasesTab';
 export { default as GitTab } from './tabs/GitTab';
 export { default as IssuesTab } from './tabs/IssuesTab';
 export { default as AdvancedTab } from './tabs/AdvancedTab';
+export { default as SnapshotsTab } from './tabs/SnapshotsTab';

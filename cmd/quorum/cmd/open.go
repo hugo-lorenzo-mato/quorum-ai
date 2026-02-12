@@ -44,6 +44,7 @@ var (
 	openProjectColor   string
 	openProjectDefault bool
 	openForce          bool
+	openInheritGlobal  bool
 )
 
 func init() {
@@ -53,6 +54,7 @@ func init() {
 	openCmd.Flags().StringVar(&openProjectColor, "color", "", "Custom color for the project (hex format)")
 	openCmd.Flags().BoolVar(&openProjectDefault, "default", false, "Set as default project")
 	openCmd.Flags().BoolVar(&openForce, "force", false, "Overwrite existing configuration during init")
+	openCmd.Flags().BoolVar(&openInheritGlobal, "inherit-global", false, "Initialize/register project using global config (no project config.yaml)")
 }
 
 func runOpen(_ *cobra.Command, args []string) error {
@@ -94,7 +96,7 @@ func runOpen(_ *cobra.Command, args []string) error {
 	}
 
 	if needsInit {
-		if err := initializeProject(absPath, openForce); err != nil {
+		if err := initializeProjectWithMode(absPath, openForce, !openInheritGlobal); err != nil {
 			return fmt.Errorf("initializing project: %w", err)
 		}
 		if !quiet {
@@ -102,6 +104,16 @@ func runOpen(_ *cobra.Command, args []string) error {
 		}
 	} else if !quiet {
 		fmt.Printf("Project already initialized at %s\n", absPath)
+	}
+
+	if openInheritGlobal {
+		if _, err := config.EnsureGlobalConfigFile(); err != nil {
+			return fmt.Errorf("ensuring global config: %w", err)
+		}
+		// In inherit_global mode, project config should be absent.
+		if err := os.Remove(configPath); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("removing project config for inherit-global mode: %w", err)
+		}
 	}
 
 	// Step 2: Register in the project registry
@@ -114,6 +126,13 @@ func runOpen(_ *cobra.Command, args []string) error {
 	// Check if already registered
 	existingProject, _ := registry.GetProjectByPath(ctx, absPath)
 	if existingProject != nil {
+		if openInheritGlobal && existingProject.ConfigMode != project.ConfigModeInheritGlobal {
+			existingProject.ConfigMode = project.ConfigModeInheritGlobal
+			if err := registry.UpdateProject(ctx, existingProject); err != nil {
+				return fmt.Errorf("updating project config mode: %w", err)
+			}
+		}
+
 		if !quiet {
 			fmt.Printf("Project already registered: %s (%s)\n", existingProject.Name, existingProject.ID)
 		}
@@ -141,6 +160,13 @@ func runOpen(_ *cobra.Command, args []string) error {
 		return fmt.Errorf("registering project: %w", err)
 	}
 
+	if openInheritGlobal && p.ConfigMode != project.ConfigModeInheritGlobal {
+		p.ConfigMode = project.ConfigModeInheritGlobal
+		if err := registry.UpdateProject(ctx, p); err != nil {
+			return fmt.Errorf("setting inherit-global mode: %w", err)
+		}
+	}
+
 	// Set as default if requested
 	if openProjectDefault {
 		if err := registry.SetDefaultProject(ctx, p.ID); err != nil {
@@ -160,18 +186,23 @@ func runOpen(_ *cobra.Command, args []string) error {
 	if openProjectDefault {
 		fmt.Printf("  Default: yes\n")
 	}
+	if openInheritGlobal {
+		fmt.Printf("  Config Mode: inherit_global\n")
+	}
 
 	return nil
 }
 
 // initializeProject creates the .quorum directory structure and config
-func initializeProject(absPath string, force bool) error {
+func initializeProjectWithMode(absPath string, force bool, createProjectConfig bool) error {
 	quorumDir := filepath.Join(absPath, ".quorum")
 	configPath := filepath.Join(quorumDir, "config.yaml")
 
-	// Check for existing config
-	if _, err := os.Stat(configPath); err == nil && !force {
-		return nil // Already initialized
+	// Check for existing config when creating project-scoped config.
+	if createProjectConfig {
+		if _, err := os.Stat(configPath); err == nil && !force {
+			return nil // Already initialized
+		}
 	}
 
 	// Create .quorum directory
@@ -179,9 +210,16 @@ func initializeProject(absPath string, force bool) error {
 		return fmt.Errorf("creating .quorum directory: %w", err)
 	}
 
-	// Create default config
-	if err := os.WriteFile(configPath, []byte(config.DefaultConfigYAML), 0o600); err != nil {
-		return fmt.Errorf("writing config: %w", err)
+	if createProjectConfig {
+		// Create default config
+		if err := os.WriteFile(configPath, []byte(config.DefaultConfigYAML), 0o600); err != nil {
+			return fmt.Errorf("writing config: %w", err)
+		}
+	} else if force {
+		// Explicitly force inheriting global config by removing project config.
+		if err := os.Remove(configPath); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("removing project config: %w", err)
+		}
 	}
 
 	// Create subdirectories
@@ -199,4 +237,8 @@ func initializeProject(absPath string, force bool) error {
 	}
 
 	return nil
+}
+
+func initializeProject(absPath string, force bool) error {
+	return initializeProjectWithMode(absPath, force, true)
 }

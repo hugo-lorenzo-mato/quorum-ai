@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useConfigStore } from '../stores/configStore';
 import useProjectStore from '../stores/projectStore';
-import { Search, ArrowLeft, ChevronRight, X, Settings as SettingsIcon, GitBranch as GitIcon, Terminal as AdvancedIcon, Workflow as WorkflowIcon, Bot as AgentsIcon, ListOrdered as PhasesIcon, Ticket as IssuesIcon } from 'lucide-react';
+import { Search, ArrowLeft, ChevronRight, X, Settings as SettingsIcon, GitBranch as GitIcon, Terminal as AdvancedIcon, Archive as SnapshotsIcon, Workflow as WorkflowIcon, Bot as AgentsIcon, ListOrdered as PhasesIcon, Ticket as IssuesIcon } from 'lucide-react';
 import { ConfirmDialog } from '../components/config/ConfirmDialog';
 import {
   SettingsToolbar,
@@ -14,6 +14,7 @@ import {
   GitTab,
   IssuesTab,
   AdvancedTab,
+  SnapshotsTab,
 } from '../components/config';
 
 const TABS = [
@@ -41,6 +42,14 @@ const TABS = [
     icon: AdvancedIcon,
     component: AdvancedTab,
     keywords: ['trace', 'debug', 'server', 'port', 'host', 'reset', 'danger']
+  },
+  {
+    id: 'snapshots',
+    label: 'Snapshots & Restore',
+    group: 'System',
+    icon: SnapshotsIcon,
+    component: SnapshotsTab,
+    keywords: ['snapshot', 'backup', 'restore', 'import', 'export', 'validate', 'registry']
   },
   // Project Group
   { 
@@ -90,6 +99,7 @@ const getTabDirty = (tabId, localChanges) => {
     git: ['git', 'github'],
     issues: ['issues'],
     advanced: ['trace', 'server'],
+    snapshots: [],
   };
 
   const relevantKeys = tabMappings[tabId] || [];

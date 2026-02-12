@@ -72,6 +72,7 @@ describe('Settings', () => {
     expect(screen.getAllByText('Git Integration').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Issue Generation').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Advanced').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Snapshots & Restore').length).toBeGreaterThan(0);
   });
 
   it('loads config on mount', () => {
