@@ -17,12 +17,19 @@ This document covers common issues and their solutions when using quorum-ai.
   - [OpenCode Connection Refused](#opencode-connection-refused)
   - [Model Not Found](#model-not-found)
   - [Slow OpenCode Response](#slow-opencode-response)
+- [WebUI / Server Issues](#webui--server-issues)
+  - [Server Fails to Start](#server-fails-to-start)
+  - [Chat Session Errors](#chat-session-errors)
+- [Snapshot Issues](#snapshot-issues)
+  - [Snapshot Export Fails](#snapshot-export-fails)
+  - [Snapshot Import Conflicts](#snapshot-import-conflicts)
 - [Issue Generation Issues](#issue-generation-issues)
   - [More Issues Created Than Tasks](#more-issues-created-than-tasks)
   - [Issue Edits Not Applied](#issue-edits-not-applied)
   - [Duplicate Issues Warning in Logs](#duplicate-issues-warning-in-logs)
   - [AI Generation Timeout](#ai-generation-timeout)
   - [Issues Missing Task Information](#issues-missing-task-information)
+- [Getting Help](#getting-help)
 
 ---
 
@@ -111,7 +118,9 @@ This error occurs when quorum cannot find any working agents for the requested p
 quorum doctor
 
 # Check which agents are configured
-cat .quorum.yaml | grep -A5 "agents:"
+# Primary location: .quorum/config.yaml
+# Legacy fallback: .quorum.yaml (supported for backward compatibility)
+cat .quorum/config.yaml | grep -A10 "agents:"
 ```
 
 **Solution:**
@@ -125,16 +134,28 @@ cat .quorum.yaml | grep -A5 "agents:"
    which gemini && gemini --version
    ```
 
-2. Verify agent configuration in `.quorum.yaml`:
+2. Verify agent configuration in `.quorum/config.yaml`:
    ```yaml
    agents:
      claude:
        enabled: true
        path: claude  # or full path: /usr/local/bin/claude
+       model: claude-opus-4-6
+       phases:
+         analyze: true
+         plan: true
+         execute: true
      gemini:
        enabled: true
        path: gemini
+       model: gemini-2.5-pro
+       phases:
+         analyze: true
+         plan: true
+         execute: true
    ```
+
+   Note: The `phases` map is required. Without it, agents are enabled for no phases due to the strict opt-in model. The `model` field specifies which model variant the agent should use.
 
 3. Test agent connectivity manually:
    ```bash
@@ -177,7 +198,6 @@ This can happen when:
 # Check workflow status via API (if server is running)
 curl -s http://localhost:8080/api/v1/workflows | jq '.[] | select(.status == "running")'
 
-# Or check state file directly
 # Or check the state DB directly (requires sqlite3)
 sqlite3 .quorum/state/state.db "select id,status,current_phase,updated_at from workflows where status = 'running';"
 ```
@@ -334,23 +354,132 @@ sudo systemctl edit ollama.service
 
 ---
 
-## Getting Help
+## WebUI / Server Issues
 
-If you encounter an issue not covered here:
+### Server Fails to Start
 
-1. Check the [GitHub Issues](https://github.com/hugo-lorenzo-mato/quorum-ai/issues) for similar problems
-2. Run `quorum doctor` to diagnose common configuration issues
-3. Enable debug logging for more details:
+**Symptoms:**
+
+```
+Error: listen tcp :8080: bind: address already in use
+```
+
+**Cause:**
+
+Another process is already bound to the configured port, or a previous `quorum serve` instance was not fully terminated.
+
+**Diagnosis:**
+
+```bash
+# Check which process is using port 8080
+lsof -i :8080
+
+# Check for running quorum processes
+pgrep -af quorum
+```
+
+**Solution:**
+
+1. Stop the conflicting process, or use a different port:
    ```yaml
-   log:
-     level: debug
+   server:
+     port: 9090  # Use a different port
    ```
-4. Open a new issue with:
-   - quorum version (`quorum version`)
-   - Operating system and architecture
-   - Relevant configuration (redact sensitive data)
-   - Full error message and stack trace if available
-   - Steps to reproduce the issue
+
+2. If a previous quorum server is still running:
+   ```bash
+   pkill -f "quorum serve"
+   ```
+
+3. Restart the server:
+   ```bash
+   quorum serve
+   ```
+
+### Chat Session Errors
+
+**Symptoms:**
+
+- Chat messages fail to send with HTTP 500 errors
+- Agent selection does not persist between messages
+- Attachments fail to upload
+
+**Cause:**
+
+Chat sessions depend on the server event bus and agent registry being correctly initialized. Common causes include:
+
+1. Selected agent is not enabled or not installed
+2. Session state was lost after server restart
+3. File attachments exceed configured limits
+
+**Solution:**
+
+1. Verify agent availability:
+   ```bash
+   quorum doctor
+   ```
+
+2. Create a new chat session if the current one is in an invalid state. Chat sessions do not persist across server restarts.
+
+3. For attachment issues, verify that the file exists and is readable by the quorum process.
+
+---
+
+## Snapshot Issues
+
+### Snapshot Export Fails
+
+**Symptoms:**
+
+```
+Error: snapshot export failed: archive creation error
+```
+
+**Cause:**
+
+1. Insufficient disk space for the archive
+2. Corrupted state database
+3. Stale lock file preventing state access
+
+**Solution:**
+
+1. Ensure sufficient disk space:
+   ```bash
+   df -h .
+   ```
+
+2. Remove stale locks before export:
+   ```bash
+   rm -f .quorum/state/state.db.lock
+   ```
+
+3. Validate state before export:
+   ```bash
+   quorum snapshot validate
+   ```
+
+### Snapshot Import Conflicts
+
+**Symptoms:**
+
+```
+Error: snapshot import failed: project already exists
+```
+
+**Cause:**
+
+The snapshot contains projects or workflows that conflict with existing data in the target environment.
+
+**Solution:**
+
+1. Use the validate command to preview what would be imported:
+   ```bash
+   quorum snapshot validate --file snapshot.tar.gz
+   ```
+
+2. If conflicts are expected, back up existing state before importing.
+
+3. Import the snapshot into a clean environment if possible.
 
 ---
 
@@ -366,13 +495,13 @@ Expected 12 issues, but 15 were created in GitHub
 
 **Cause:**
 
-In versions prior to v1.1.0, issue generation files accumulated in `.quorum/issues/{workflowID}/` without cleanup, causing duplicates when regenerating issues.
+In older versions without auto-cleanup, issue generation files accumulated in `.quorum/issues/{workflowID}/draft/` without cleanup, causing duplicates when regenerating issues.
 
 **Solution:**
 
-**v1.1.0+:** Fixed automatically. The system now cleans the directory before each generation.
+In current versions, this is fixed automatically. The system cleans the draft directory before each generation.
 
-**v1.0.x:** Manually clean the directory:
+If you encounter this on an older installation, manually clean the directory:
 
 ```bash
 rm -rf .quorum/issues/{workflowID}/
@@ -390,18 +519,18 @@ Edited issue titles/bodies in the UI, but created issues have original content
 
 **Cause:**
 
-In versions prior to v1.1.0, the backend ignored the edited issues sent from the frontend and re-read files from disk.
+In older versions, the backend ignored the edited issues sent from the frontend and re-read files from disk.
 
 **Solution:**
 
-**v1.1.0+:** Fixed automatically. Backend now uses edited content from frontend.
+In current versions, this is fixed automatically. The backend now uses edited content from the frontend.
 
 **Verification:** Check backend logs for:
 ```
 INFO creating issues from frontend input count=12
 ```
 
-**v1.0.x:** Upgrade to v1.1.0+ or edit the generated markdown files directly in `.quorum/issues/{workflowID}/`.
+For older installations, upgrade to the latest version, or edit the generated markdown files directly in `.quorum/issues/{workflowID}/draft/`.
 
 ### Duplicate Issues Warning in Logs
 
@@ -421,7 +550,7 @@ This is informational only. The system automatically deduplicates and uses the f
 
 To prevent in future:
 1. Ensure AI generation completes successfully (no partial runs)
-2. System auto-cleans before generation in v1.1.0+
+2. The system auto-cleans the draft directory before generation
 
 ### AI Generation Timeout
 
@@ -443,9 +572,9 @@ issues:
   timeout: "10m"  # Increase from default 5m
 ```
 
-**Option 2:** Use fast mode (no AI processing):
+**Option 2:** Use fast mode (no AI processing) via the API:
 ```bash
-quorum issues preview --workflow-id $WF_ID --fast
+curl http://localhost:8080/api/v1/workflows/$WF_ID/issues/preview?fast=true
 ```
 
 **Option 3:** Process tasks in smaller batches by splitting the workflow.
@@ -467,10 +596,30 @@ Fast mode was used (direct copy) instead of AI mode.
 Use AI generation for better quality:
 
 1. In UI: Select "AI Generation" instead of "Fast Preview"
-2. Via API: Call `/issues/preview` without `?fast=true`
+2. Via API: Call `/api/v1/workflows/{workflowID}/issues/preview` without `?fast=true`
 3. Ensure `generator.enabled: true` in config
 
 **Trade-off:** AI mode takes 60-120s vs instant for fast mode.
+
+---
+
+## Getting Help
+
+If you encounter an issue not covered here:
+
+1. Check the [GitHub Issues](https://github.com/hugo-lorenzo-mato/quorum-ai/issues) for similar problems
+2. Run `quorum doctor` to diagnose common configuration issues
+3. Enable debug logging for more details:
+   ```yaml
+   log:
+     level: debug
+   ```
+4. Open a new issue with:
+   - quorum version (`quorum version`)
+   - Operating system and architecture
+   - Relevant configuration (redact sensitive data)
+   - Full error message and stack trace if available
+   - Steps to reproduce the issue
 
 ---
 

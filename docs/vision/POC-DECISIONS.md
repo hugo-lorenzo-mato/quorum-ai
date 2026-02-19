@@ -1,3 +1,7 @@
+> **Status: HISTORICAL**
+>
+> This POC decision summary reflects early project scoping. Notable changes since: state persistence migrated from JSON to SQLite-only (ADR-0009), "arbiter" was renamed to "moderator" in the implementation, and the project now includes a full WebUI beyond the original CLI scope. See the [ADR index](../adr/README.md) for the complete list of architectural decisions.
+
 # QUORUM-AI: POC Decision Summary
 
 ## Purpose

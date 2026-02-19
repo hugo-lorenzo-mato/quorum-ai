@@ -26,29 +26,14 @@ Comprehensive guide for integrating quorum-ai with Ollama for local LLM inferenc
 
 Ollama provides local LLM inference capabilities that quorum-ai can leverage through the OpenCode agent. This enables fully offline, privacy-preserving AI-assisted development workflows.
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                        quorum-ai                            │
-│                            │                                │
-│                            ▼                                │
-│                   OpenCode Adapter                          │
-│                            │                                │
-│              ┌─────────────┴─────────────┐                  │
-│              ▼                           ▼                  │
-│     OPENAI_BASE_URL              OPENAI_API_KEY             │
-│              │                           │                  │
-│              └─────────────┬─────────────┘                  │
-│                            ▼                                │
-│                     OpenCode CLI                            │
-│                            │                                │
-│                            ▼                                │
-│              Ollama API (localhost:11434)                   │
-│                            │                                │
-│              ┌─────────────┴─────────────┐                  │
-│              ▼                           ▼                  │
-│       qwen2.5-coder              deepseek-r1                │
-│        (coding)                  (reasoning)                │
-└─────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    Q[quorum-ai] --> OA[OpenCode Adapter]
+    OA --> ENV["OPENAI_BASE_URL<br/>OPENAI_API_KEY"]
+    ENV --> CLI[OpenCode CLI]
+    CLI --> OLLAMA["Ollama API<br/>localhost:11434"]
+    OLLAMA --> CODER["qwen2.5-coder:32b<br/>(coding)"]
+    OLLAMA --> REASON["deepseek-r1:32b<br/>(reasoning)"]
 ```
 
 ---
@@ -57,41 +42,26 @@ Ollama provides local LLM inference capabilities that quorum-ai can leverage thr
 
 The integration follows this execution flow:
 
-```
-quorum run "implement feature X"
-       │
-       ▼
-┌──────────────────┐
-│  OpenCode Agent  │
-│  (profile detect)│
-└────────┬─────────┘
-         │
-         │  prompt contains "implement" → coder profile
-         │  prompt contains "analyze"   → architect profile
-         ▼
-┌──────────────────┐
-│  Model Selection │
-│                  │
-│  coder:          │
-│    qwen2.5-coder │
-│    deepseek-v2   │
-│                  │
-│  architect:      │
-│    llama3.1      │
-│    deepseek-r1   │
-└────────┬─────────┘
-         │
-         ▼
-┌──────────────────┐
-│   opencode run   │
-│  --model <model> │
-└────────┬─────────┘
-         │
-         ▼
-┌──────────────────┐
-│  Ollama Server   │
-│  localhost:11434 │
-└──────────────────┘
+```mermaid
+flowchart TD
+    CMD["quorum run 'implement feature X'"] --> AGENT["OpenCode Agent<br/>(profile detection)"]
+    AGENT -->|"coding task"| CODER["Coder Profile"]
+    AGENT -->|"analysis task"| ARCH["Architect Profile"]
+
+    CODER --> CM1["Primary: qwen2.5-coder:32b"]
+    CODER --> CM2["Fallback: qwen3-coder:30b"]
+    CODER --> CM3["Fallback: codestral:22b"]
+
+    ARCH --> AM1["Primary: deepseek-r1:32b"]
+    ARCH --> AM2["Fallback: gpt-oss:20b"]
+
+    CM1 --> RUN["opencode run --model MODEL"]
+    CM2 --> RUN
+    CM3 --> RUN
+    AM1 --> RUN
+    AM2 --> RUN
+
+    RUN --> OLLAMA["Ollama Server<br/>localhost:11434"]
 ```
 
 ---
@@ -121,10 +91,12 @@ ollama --version
 ### Models
 
 ```bash
-# Recommended models for quorum-ai
-ollama pull qwen2.5-coder:32b    # Coding tasks
-ollama pull deepseek-r1:32b      # Reasoning/analysis
-ollama pull llama3.1:70b         # Architecture review (if VRAM permits)
+# Supported models for quorum-ai (from core.AgentModels)
+ollama pull qwen2.5-coder:32b    # Primary coding model
+ollama pull qwen3-coder:30b      # Latest Qwen coder (fallback)
+ollama pull deepseek-r1:32b      # Primary reasoning/analysis model
+ollama pull codestral:22b        # Mistral code model (fallback)
+ollama pull gpt-oss:20b          # Open source GPT (fallback)
 
 # Verify models
 ollama list
@@ -133,11 +105,9 @@ ollama list
 ### OpenCode
 
 ```bash
-# Install via npm
-npm install -g @anthropics/opencode
-
-# Or via bun
-bun install -g @anthropics/opencode
+# Install OpenCode CLI
+# See https://opencode.ai/docs/cli/ for latest instructions
+npm install -g opencode
 
 # Verify
 opencode --version
@@ -282,22 +252,26 @@ Base model load:     ~19 GB
 
 ## Model Recommendations
 
-### For Coding Tasks
+The following models are registered in `core.AgentModels` and supported by the OpenCode adapter.
 
-| Model | Size | Context | Best For |
-|-------|------|---------|----------|
-| `qwen2.5-coder:32b` | 19 GB | 32K | General coding, refactoring |
-| `qwen3-coder:30b` | 18 GB | 262K | Large file analysis |
-| `deepseek-coder-v2:16b` | 9 GB | 128K | Resource-constrained setups |
-| `codestral:22b` | 12 GB | 32K | Multi-language support |
+### Supported Models (in `constants.go`)
 
-### For Analysis/Architecture
+| Model | Profile | Role | Size | Context |
+|-------|---------|------|------|---------|
+| `qwen2.5-coder:32b` | Coder (primary) | Code generation, refactoring | 19 GB | 32K |
+| `qwen3-coder:30b` | Coder (fallback) | Large file analysis | 18 GB | 262K |
+| `codestral:22b` | Coder (fallback) | Multi-language code support | 12 GB | 32K |
+| `deepseek-r1:32b` | Architect (primary) | Deep reasoning, planning | 19 GB | 131K |
+| `gpt-oss:20b` | Architect (fallback) | General analysis | 12 GB | 32K |
 
-| Model | Size | Context | Best For |
-|-------|------|---------|----------|
-| `deepseek-r1:32b` | 19 GB | 131K | Deep reasoning, planning |
-| `llama3.1:70b` | 40 GB | 128K | Comprehensive analysis |
-| `qwen2.5:32b` | 19 GB | 32K | Balanced reasoning |
+### Profile Selection
+
+The adapter selects a profile based on the task type:
+
+| Profile | Primary Model | Fallbacks | Typical Tasks |
+|---------|---------------|-----------|---------------|
+| Coder | `qwen2.5-coder:32b` | `qwen3-coder:30b`, `codestral:22b` | Code generation, execution, editing |
+| Architect | `deepseek-r1:32b` | `gpt-oss:20b` | Analysis, planning, architecture review |
 
 ---
 

@@ -1,3 +1,7 @@
+> **Estado: HISTORICO -- PARCIALMENTE IMPLEMENTADO** / **Status: HISTORICAL -- PARTIALLY IMPLEMENTED**
+>
+> This analysis (in Spanish) informed the implementation of workflow-level Git isolation and the RunnerBuilder pattern. The implementation diverged from the proposal: `WorkflowWorktreeManager` replaced the proposed `WorkflowBranchManager`, and `WorkflowOrchestrator` was not implemented as a separate component. See `internal/adapters/git/workflow_worktree.go` and `internal/service/workflow/builder.go`. Line references are stale.
+
 # Análisis Arquitectónico: Aislamiento Git a Nivel de Workflow
 
 **Documento:** V3 - Análisis Definitivo

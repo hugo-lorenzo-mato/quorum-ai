@@ -1,3 +1,7 @@
+> **Status: HISTORICAL -- PARTIALLY IMPLEMENTED**
+>
+> This analysis informed the implementation of workflow-level Git isolation. The actual implementation uses `WorkflowWorktreeManager` (in `internal/adapters/git/workflow_worktree.go`) with a different interface than proposed here. Superseded by V3 analysis. Line references are stale.
+
 # Workflow-Level Git Branch Isolation: Architectural Analysis V2
 
 **Document Version**: 2.0

@@ -1,81 +1,140 @@
-# Workflow Reports - Generación de Reportes Markdown
+# Workflow Reports
 
-Este documento describe el sistema de generación automática de reportes Markdown que documenta cada ejecución del workflow de análisis multi-agente de Quorum AI.
+This document describes the automated Markdown report generation system that documents each execution of the Quorum AI multi-agent analysis workflow.
 
-## Tabla de Contenidos
+## Table of Contents
 
-- [Visión General](#visión-general)
-- [Estructura de Directorios](#estructura-de-directorios)
-- [Fases del Análisis](#fases-del-análisis)
-  - [Análisis V1 - Análisis Inicial](#análisis-v1---análisis-inicial)
-  - [V(n) Refinamiento Iterativo](#vn-refinamiento-iterativo)
-  - [Evaluación del Árbitro](#evaluación-del-árbitro)
-  - [Análisis Consolidado](#análisis-consolidado)
-- [Configuración](#configuración)
-- [Formato de los Reportes](#formato-de-los-reportes)
-- [Principios del Análisis](#principios-del-análisis)
+- [Overview](#overview)
+- [Report Generation Process](#report-generation-process)
+- [Directory Structure](#directory-structure)
+  - [Multi-Agent Mode](#multi-agent-mode-default)
+  - [Single-Agent Mode](#single-agent-mode)
+  - [Multi-Agent vs Single-Agent Comparison](#multi-agent-vs-single-agent-comparison)
+- [Analysis Phases](#analysis-phases)
+  - [V1 Analysis -- Initial Analysis](#v1-analysis----initial-analysis)
+  - [V(n) Iterative Refinement](#vn-iterative-refinement)
+  - [Moderator Evaluation](#moderator-evaluation)
+  - [Consolidated Analysis](#consolidated-analysis)
+- [Report Types Reference](#report-types-reference)
+  - [Analyze Phase Reports](#analyze-phase-reports)
+  - [Plan Phase Reports](#plan-phase-reports)
+  - [Execute Phase Reports](#execute-phase-reports)
+  - [Workflow-Level Reports](#workflow-level-reports)
+- [Configuration](#configuration)
+- [Report Format](#report-format)
+- [Analysis Principles](#analysis-principles)
+- [Known Limitations](#known-limitations)
+- [Contributing](#contributing)
+- [See Also](#see-also)
 
-## Visión General
+## Overview
 
-Quorum AI genera automáticamente reportes Markdown estructurados para cada ejecución del workflow. Estos reportes documentan:
+Quorum AI automatically generates structured Markdown reports for each workflow execution. These reports document:
 
-- El prompt original y optimizado
-- Los análisis independientes de cada agente (V1)
-- Los refinamientos iterativos V(n) entre agentes
-- Las evaluaciones de consenso del árbitro semántico
-- El análisis consolidado final
-- Los resultados de planificación y ejecución
+- The original and refined user prompt
+- Independent analyses from each agent (V1)
+- Iterative refinements V(n) between agents
+- Semantic consensus evaluations from the moderator
+- The consolidated final analysis
+- Planning and execution results
 
-## Estructura de Directorios
+## Report Generation Process
 
-### Modo Multi-Agente (por defecto)
+The following diagram illustrates how reports are generated throughout a workflow execution.
+
+```mermaid
+flowchart TD
+    A[User Prompt] --> B[Write 00-original-prompt.md]
+    B --> C{Refiner Enabled?}
+    C -- Yes --> D[Write 01-refined-prompt.md]
+    C -- No --> E[Write 01-optimized-prompt.md]
+    D --> F[V1 Analysis: Each Agent]
+    E --> F
+    F --> G["Write v1/{agent}-{model}.md per agent"]
+    G --> H[Moderator Evaluates Consensus]
+    H --> I["Write consensus/round-2.md"]
+    I --> J{Score >= Threshold?}
+    J -- No --> K["V(n) Refinement: Each Agent"]
+    K --> L["Write v{n}/{agent}-{model}.md"]
+    L --> H
+    J -- Yes --> M[Synthesizer Consolidates]
+    M --> N[Write consolidated.md]
+    N --> O{Plan Phase Enabled?}
+    O -- Yes --> P["Write plan-phase/v1/{agent}-plan.md"]
+    P --> Q[Write consolidated-plan.md]
+    Q --> R[Write final-plan.md]
+    R --> S[Write task plans + execution-graph.md]
+    S --> T{Execute Phase Enabled?}
+    O -- No --> U[Write metadata.md + workflow-summary.md]
+    T -- Yes --> V["Write execute-phase/tasks/{taskID}-{name}.md"]
+    V --> W[Write execution-summary.md]
+    W --> U
+    T -- No --> U
+```
+
+## Directory Structure
+
+### Multi-Agent Mode (default)
 
 ```
 .quorum/runs/
-└── {workflow-id}/                       # Ej: wf-1705329052-1
-    ├── metadata.md                      # Metadatos de la ejecución
-    ├── workflow-summary.md              # Resumen final del workflow
+└── {workflow-id}/                           # e.g., wf-20250121-153045-k7m9p
+    ├── metadata.md                          # Workflow execution metadata
+    ├── workflow-summary.md                  # Final workflow summary
     │
-    ├── analyze-phase/                   # Fase de análisis
-    │   ├── 00-original-prompt.md        # Prompt original del usuario
-    │   ├── 01-optimized-prompt.md       # Prompt tras optimización
+    ├── analyze-phase/                       # Analysis phase
+    │   ├── 00-original-prompt.md            # Original user prompt
+    │   ├── 01-optimized-prompt.md           # Prompt after optimization
+    │   ├── 01-refined-prompt.md             # Prompt after refiner (if enabled)
     │   │
-    │   ├── v1/                          # Análisis V1 (independientes)
-    │   │   ├── claude-claude-3-5-sonnet.md
-    │   │   ├── gemini-gemini-2.0-flash.md
+    │   ├── v1/                              # V1 analyses (independent)
+    │   │   ├── claude-claude-opus-4-6.md
+    │   │   ├── gemini-gemini-3-pro-preview.md
     │   │   └── ...
     │   │
-    │   ├── v2/                          # Refinamiento V2
-    │   │   ├── claude-refinement.md
-    │   │   ├── gemini-refinement.md
+    │   ├── v2/                              # V2 refinement
+    │   │   ├── claude-claude-opus-4-6.md
+    │   │   ├── gemini-gemini-3-pro-preview.md
     │   │   └── ...
     │   │
-    │   ├── v3/                          # Refinamiento V3 (si necesario)
+    │   ├── v3/                              # V3 refinement (if needed)
     │   │   └── ...
     │   │
-    │   ├── consensus/                   # Evaluaciones del árbitro
-    │   │   ├── arbiter-round-2.md
-    │   │   ├── arbiter-round-3.md
-    │   │   └── ...
+    │   ├── consensus/                       # Moderator evaluations
+    │   │   ├── round-2.md                   # Moderator report after round 2
+    │   │   ├── round-3.md                   # Moderator report after round 3
+    │   │   ├── after-{phase}.md             # Consensus report after a phase
+    │   │   └── attempts/                    # Individual moderator attempts
+    │   │       └── round-2/
+    │   │           ├── attempt-1-copilot.md
+    │   │           └── attempt-2-claude.md  # Fallback attempt
     │   │
-    │   └── consolidated.md              # Análisis consolidado final
+    │   └── consolidated.md                  # Final consolidated analysis
     │
-    ├── plan-phase/                      # Fase de planificación
+    ├── plan-phase/                          # Planning phase
     │   ├── v1/
-    │   │   └── {agent}-plan.md
+    │   │   └── {agent}-plan.md              # Per-agent plan proposals
     │   ├── consensus/
-    │   └── final-plan.md
+    │   ├── consolidated-plan.md             # Multi-agent plan synthesis
+    │   ├── final-plan.md                    # Approved final plan
+    │   ├── tasks/
+    │   │   ├── {taskID}-{name}.md           # Individual task plan files
+    │   │   └── ...
+    │   └── execution-graph.md               # Task dependency graph visualization
     │
-    └── execute-phase/                   # Fase de ejecución
+    └── execute-phase/                       # Execution phase
         ├── tasks/
-        │   ├── task-001-nombre.md
+        │   ├── {taskID}-{name}.md           # Task execution results
         │   └── ...
-        └── execution-summary.md
+        ├── outputs/
+        │   ├── {taskID}.md                  # Large task output files
+        │   └── ...
+        └── execution-summary.md             # Execution summary with metrics
 ```
 
-### Modo Single-Agent
+### Single-Agent Mode
 
-Cuando se activa el modo single-agent (`--single-agent` o `single_agent.enabled: true`), la estructura se simplifica:
+When single-agent mode is active (`--single-agent` or `single_agent.enabled: true`), the structure is simplified:
 
 ```
 .quorum/runs/
@@ -87,10 +146,10 @@ Cuando se activa el modo single-agent (`--single-agent` o `single_agent.enabled:
     │   ├── 00-original-prompt.md
     │   ├── 01-optimized-prompt.md
     │   │
-    │   ├── single-agent/                # Análisis de un solo agente
-    │   │   └── {agent}-{model}.md       # Ej: claude-claude-opus-4-6.md
+    │   ├── single-agent/                    # Single-agent analysis
+    │   │   └── {agent}-{model}.md           # e.g., claude-claude-opus-4-6.md
     │   │
-    │   └── consolidated.md              # Igual formato, metadata indica mode: "single_agent"
+    │   └── consolidated.md                  # Same format; metadata indicates mode: "single_agent"
     │
     ├── plan-phase/
     │   └── ...
@@ -99,185 +158,276 @@ Cuando se activa el modo single-agent (`--single-agent` o `single_agent.enabled:
         └── ...
 ```
 
-**Diferencias clave en modo single-agent:**
+### Multi-Agent vs Single-Agent Comparison
 
-- No hay subdirectorios `v1/`, `v2/`, `v3/` (no hay refinamiento iterativo)
-- No hay subdirectorio `consensus/` (no hay evaluación del moderador)
-- El análisis se guarda en `single-agent/{agent}-{model}.md`
-- El `consolidated.md` tiene metadata `mode: "single_agent"` en lugar de métricas de consenso
+| Feature | Multi-Agent | Single-Agent |
+|---------|-------------|--------------|
+| Analysis directory | `v1/`, `v2/`, `v3/`, ... | `single-agent/` |
+| Consensus directory | `consensus/` with `round-X.md` files | Not present |
+| Moderator evaluation | Yes, after each refinement round | Not applicable |
+| Iterative refinement | V2, V3, ... rounds until consensus | Not applicable |
+| Consolidated analysis | Synthesized from multiple agents | Direct output from single agent |
+| `consolidated.md` metadata | Contains consensus metrics | Contains `mode: "single_agent"` |
+| Plan synthesis | `consolidated-plan.md` from multiple proposals | Single agent produces plan directly |
+| Typical file count | 15-30+ files per workflow | 5-10 files per workflow |
 
-## Fases del Análisis
+## Analysis Phases
 
-### Análisis V1 - Análisis Inicial
+### V1 Analysis -- Initial Analysis
 
-El análisis V1 es el análisis inicial realizado **independientemente por cada agente**. Se caracteriza por:
+V1 analysis is the initial analysis performed **independently by each agent**. It is characterized by the following principles:
 
-#### Principios Fundamentales
+1. **Code-based**: Direct review of source code and project structure
+2. **Best practices**: Evaluation against recognized industry design patterns and practices
+3. **Official documentation**: Verification against official documentation of frameworks and libraries used
+4. **Version-aware**: Adjusted to the specific versions of languages and tools employed
+5. **Unrestricted**: Complete analysis without artificial depth or scope limitations
 
-1. **Basado en código**: Revisión directa del código fuente y estructura del proyecto
-2. **Buenas prácticas**: Evaluación contra patrones de diseño y prácticas reconocidas de la industria
-3. **Documentación oficial**: Verificación con la documentación oficial de frameworks y librerías utilizadas
-4. **Versiones y estándares**: Ajustado a las versiones específicas de los lenguajes y herramientas empleadas
-5. **Sin limitaciones**: Análisis completo sin restricciones de profundidad o alcance
+Each V1 analysis includes:
 
-#### Contenido del Análisis V1
+- **Claims**: Technical assertions backed by evidence from code and official documentation
+- **Risks**: Technical, security, performance, and maintainability risks identified
+- **Recommendations**: Specific, actionable recommendations aligned with ecosystem conventions and standards
 
-Cada análisis V1 incluye:
+V1 analyses are written as raw LLM output without YAML frontmatter.
 
-- **Claims (Afirmaciones Fundamentadas)**: Afirmaciones técnicas respaldadas por evidencia del código y documentación oficial
-- **Risks (Riesgos Identificados)**: Riesgos técnicos, de seguridad, rendimiento y mantenibilidad detectados
-- **Recommendations (Recomendaciones Accionables)**: Recomendaciones específicas alineadas con convenciones y estándares del ecosistema
+### V(n) Iterative Refinement
 
-### V(n) Refinamiento Iterativo
+V(n) rounds (V2, V3, etc.) represent **iterative refinements** where each agent reviews and improves upon the analysis from the previous round.
 
-Los rounds V(n) (V2, V3, etc.) representan **refinamientos iterativos** donde cada agente revisa y mejora el análisis de la ronda anterior.
+#### Refinement Characteristics
 
-#### Características del Refinamiento V(n)
+1. **Evaluates the previous round**: Each V(n+1) reviews only the outputs of V(n)
+2. **Identifies inconsistencies**: Detects contradictions and gaps in the analyses
+3. **Challenges foundations**: Verifies that each claim is backed by concrete evidence
+4. **Validates against documentation**: Checks recommendations against current official documentation
+5. **Evaluates completeness**: Identifies aspects not covered in previous analyses
+6. **Applies critical perspective**: Actively seeks weaknesses and blind spots
 
-1. **Evalúa la ronda anterior**: Cada V(n+1) revisa solo los outputs de V(n)
-2. **Identifica inconsistencias**: Detecta contradicciones y gaps en los análisis
-3. **Cuestiona fundamentación**: Verifica que cada afirmación esté respaldada por evidencia concreta
-4. **Valida contra documentación**: Comprueba las recomendaciones contra documentación oficial actualizada
-5. **Evalúa completitud**: Identifica aspectos no cubiertos en los análisis anteriores
-6. **Perspectiva crítica**: Busca activamente debilidades y puntos ciegos
+#### Refinement Content
 
-#### Contenido del Refinamiento V(n)
+- **Validated Agreement Points**: Conclusions from the previous analysis considered correct and well-founded
+- **Disagreement Points / Corrections**: Aspects where the previous analysis is incorrect, incomplete, or poorly supported
+- **Additional Unidentified Risks**: Risks that the previous analysis overlooked or underestimated
 
-- **Puntos de Acuerdo Validados**: Conclusiones del análisis anterior que se consideran correctas y bien fundamentadas
-- **Puntos de Desacuerdo / Correcciones**: Aspectos donde el análisis anterior es incorrecto, incompleto o mal fundamentado
-- **Riesgos Adicionales No Identificados**: Riesgos que el análisis anterior pasó por alto o subestimó
+V(n) refinements are written as raw LLM output without YAML frontmatter.
 
-### Evaluación del Árbitro
+### Moderator Evaluation
 
-El árbitro semántico evalúa el consenso entre los agentes después de cada ronda de refinamiento.
+The semantic moderator evaluates consensus among agents after each refinement round.
 
-#### Proceso de Evaluación
+```mermaid
+flowchart LR
+    A["V(n) Outputs from All Agents"] --> B[Semantic Moderator]
+    B --> C{Consensus Score}
+    C -- ">= Threshold (80%)" --> D[Proceed to Consolidation]
+    C -- "< Threshold" --> E{Max Rounds Reached?}
+    E -- No --> F{Stagnation Detected?}
+    F -- No --> G["Trigger V(n+1) Refinement"]
+    F -- "Yes (< 2% improvement)" --> D
+    E -- Yes --> D
+```
 
-1. **Análisis semántico**: El árbitro evalúa el acuerdo semántico entre los outputs de los agentes
-2. **Puntuación de consenso**: Genera un porcentaje de consenso (0-100%)
-3. **Identificación de divergencias**: Documenta los puntos de desacuerdo significativos
-4. **Recomendación**: Indica si continuar con más rounds o proceder a consolidación
+#### Evaluation Process
 
-#### Criterios del Árbitro
+1. **Semantic analysis**: The moderator evaluates semantic agreement among agent outputs, comparing meaning rather than exact text
+2. **Consensus scoring**: Generates a consensus percentage (0-100%) with per-category breakdowns (claims, risks, recommendations)
+3. **Divergence identification**: Documents significant points of disagreement between agents
+4. **Recommendation**: Indicates whether to continue with more rounds or proceed to consolidation
 
-- **Threshold de consenso**: Por defecto 90% para proceder
-- **Rounds mínimos**: Al menos 2 rounds antes de declarar consenso
-- **Rounds máximos**: Máximo 5 rounds antes de abortar o consolidar
-- **Detección de estancamiento**: Si la mejora entre rounds es < 2%, se considera estancado
+#### Moderator Criteria
 
-### Análisis Consolidado
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `threshold` | 0.80 (80%) | Consensus score required to proceed |
+| `min_rounds` | 2 | Minimum refinement rounds before accepting consensus |
+| `max_rounds` | 3 | Maximum refinement rounds before forced consolidation |
+| `stagnation_threshold` | 0.02 (2%) | If improvement between rounds is below this, considered stagnated |
+| `warning_threshold` | 0.30 (30%) | Logs a warning if consensus score drops below this |
+| `min_successful_agents` | 2 | Minimum agents that must succeed per round |
 
-El documento final que integra todas las perspectivas:
+#### Moderator Attempt Tracing
 
-1. **Análisis V1 independientes**: Cada agente realizó un análisis profundo y exhaustivo
-2. **Refinamientos V(n)**: Los agentes refinaron iterativamente sus análisis
-3. **Evaluaciones del árbitro**: El árbitro semántico validó el consenso
-4. **Consolidación final**: Se integran todas las perspectivas en un documento unificado
+The moderator system supports fallback agents. Each attempt (primary or fallback) is written to its own file under `consensus/attempts/round-X/attempt-Y-{agent}.md` for traceability. Only the successful attempt is promoted to the official `consensus/round-X.md` location.
 
-## Configuración
+### Consolidated Analysis
 
-La generación de reportes se configura en el archivo de configuración de Quorum:
+The final document integrates all perspectives from the workflow:
+
+1. **Independent V1 analyses**: Each agent performed a deep, exhaustive analysis
+2. **V(n) refinements**: Agents iteratively refined their analyses
+3. **Moderator evaluations**: The semantic moderator validated consensus
+4. **Final consolidation**: All perspectives are integrated into a unified document
+
+The consolidated analysis is written as raw LLM output without YAML frontmatter.
+
+## Report Types Reference
+
+### Analyze Phase Reports
+
+| Report | Path | Frontmatter | Description |
+|--------|------|-------------|-------------|
+| Original Prompt | `00-original-prompt.md` | Yes (`type: original_prompt`, char/word counts) | The original user prompt |
+| Optimized Prompt | `01-optimized-prompt.md` | No (raw content) | Prompt after optimization |
+| Refined Prompt | `01-refined-prompt.md` | No (raw content) | Prompt after refiner processing |
+| V1 Analysis | `v1/{agent}-{model}.md` | No (raw LLM output) | Independent initial analysis per agent |
+| V(n) Refinement | `v{n}/{agent}-{model}.md` | No (raw LLM output) | Iterative refinement per agent |
+| Consensus Report | `consensus/after-{phase}.md` | Yes (`type: consensus`, score, threshold) | Consensus evaluation after a phase |
+| Moderator Report | `consensus/round-{n}.md` | Yes (`type: moderator_evaluation`, score, metrics) | Semantic moderator evaluation per round |
+| Moderator Attempt | `consensus/attempts/round-{n}/attempt-{y}-{agent}.md` | Varies | Individual moderator attempt for traceability |
+| Consolidated Analysis | `consolidated.md` | No (raw LLM output) | Final synthesized analysis |
+
+### Plan Phase Reports
+
+| Report | Path | Frontmatter | Description |
+|--------|------|-------------|-------------|
+| Agent Plan | `v1/{agent}-plan.md` | Yes (`type: plan`, agent, model, metrics) | Per-agent plan proposal |
+| Consolidated Plan | `consolidated-plan.md` | Yes (`type: consolidated_plan`) | Multi-agent plan synthesis |
+| Final Plan | `final-plan.md` | Yes (`type: final_plan`) | Approved final plan |
+| Task Plan | `tasks/{taskID}-{name}.md` | Yes (`type: task_plan`, agent assignment, batch, dependencies) | Individual task specification |
+| Execution Graph | `execution-graph.md` | Yes (`type: execution_graph`, total tasks/batches) | Task dependency graph and parallel batch visualization |
+
+### Execute Phase Reports
+
+| Report | Path | Frontmatter | Description |
+|--------|------|-------------|-------------|
+| Task Result | `tasks/{taskID}-{name}.md` | Yes (`type: task_result`, status, agent, metrics) | Individual task execution result |
+| Task Output | `outputs/{taskID}.md` | No | Large task output stored separately |
+| Execution Summary | `execution-summary.md` | Yes (`type: execution_summary`, task counts, duration) | Aggregate execution summary with per-task breakdown |
+
+### Workflow-Level Reports
+
+| Report | Path | Frontmatter | Description |
+|--------|------|-------------|-------------|
+| Metadata | `metadata.md` | Yes (`workflow_id`, timestamps, status, consensus score) | Workflow execution metadata |
+| Workflow Summary | `workflow-summary.md` | Yes (`type: workflow_summary`) | Final workflow summary with phase breakdown and metrics |
+
+## Configuration
+
+Report generation is configured in the Quorum configuration file:
 
 ```yaml
 report:
-  # Directorio base para los reportes (relativo al directorio del proyecto)
+  # Base directory for reports (relative to the project directory)
   base_dir: ".quorum/runs"
 
-  # Usar timestamps en UTC (recomendado para equipos distribuidos)
+  # Use UTC timestamps (recommended for distributed teams)
   use_utc: true
 
-  # Incluir el JSON raw de las respuestas de los agentes
+  # Include raw JSON output from agent responses
   include_raw: true
 
-  # Habilitar/deshabilitar generación de reportes
+  # Enable/disable report generation
   enabled: true
 ```
 
-### Opciones de Configuración
+### Configuration Options
 
-| Opción | Tipo | Default | Descripción |
+| Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `base_dir` | string | `.quorum/runs` | Directorio donde se guardan los reportes |
-| `use_utc` | bool | `true` | Usar UTC para timestamps (recomendado) |
-| `include_raw` | bool | `true` | Incluir JSON raw en los reportes |
-| `enabled` | bool | `true` | Habilitar generación de reportes |
+| `base_dir` | string | `.quorum/runs` | Directory where reports are stored |
+| `use_utc` | bool | `true` | Use UTC for timestamps (recommended) |
+| `include_raw` | bool | `true` | Include raw JSON in reports |
+| `enabled` | bool | `true` | Enable report generation |
 
-## Formato de los Reportes
-
-Cada reporte Markdown incluye:
+## Report Format
 
 ### YAML Frontmatter
 
-Metadatos estructurados al inicio del archivo:
+Structured metadata at the beginning of each file. The specific fields vary by report type. Not all report types include frontmatter; V1/V(n) analyses and consolidated analyses are written as raw LLM output.
+
+Example frontmatter for a moderator evaluation report:
 
 ```yaml
 ---
-type: analysis
-version: v1
-agent: claude
-model: claude-3-5-sonnet-20241022
-timestamp: 2024-01-15T14:30:52Z
-workflow_id: wf-1705329052-1
+type: moderator_evaluation
+round: 2
+agent: copilot
+model: gpt-4o
+timestamp: 2025-06-15T14:30:52Z
+workflow_id: wf-20250615-143052-a1b2c
+consensus_score: 0.8500
+agreements_count: 12
+divergences_count: 3
 tokens_in: 5432
 tokens_out: 2341
 duration_ms: 12543
 ---
 ```
 
-### Secciones Estándar
-
-- **Metodología**: Descripción del enfoque utilizado para el análisis
-- **Contenido Principal**: El análisis, refinamiento o evaluación
-- **Métricas**: Tokens y duración de la operación
-- **Raw Output** (opcional): JSON completo de la respuesta del agente
-
-## Principios del Análisis
-
-### Para Análisis V1
-
-El análisis debe ser:
-
-- **Exhaustivo**: Sin límites artificiales de profundidad
-- **Fundamentado**: Basado en evidencia del código y documentación
-- **Actualizado**: Alineado con las versiones actuales de frameworks/librerías
-- **Práctico**: Con recomendaciones accionables y específicas
-- **Objetivo**: Sin sesgos hacia tecnologías o patrones específicos
-
-### Para Refinamientos V(n)
-
-El refinamiento debe ser:
-
-- **Iterativo**: Revisar solo la ronda anterior, no rounds anteriores
-- **Riguroso**: No aceptar afirmaciones sin evidencia sólida
-- **Constructivo**: Identificar mejoras, no solo criticar
-- **Crítico**: Buscar activamente puntos débiles
-- **Documentado**: Con referencias a documentación oficial
-
-### Para Evaluación del Árbitro
-
-El árbitro debe:
-
-- **Evaluar semánticamente**: Entender el significado, no solo comparar texto
-- **Ser objetivo**: Aplicar criterios consistentes
-- **Documentar divergencias**: Explicar los puntos de desacuerdo
-- **Fundamentar**: Justificar la puntuación de consenso
-
-## Uso de los Reportes
-
-Los reportes generados sirven para:
-
-1. **Auditoría**: Trazabilidad completa de decisiones técnicas
-2. **Documentación**: Registro de análisis para referencia futura
-3. **Aprendizaje**: Comparación de perspectivas entre diferentes agentes
-4. **Mejora continua**: Identificación de patrones en análisis
-5. **Cumplimiento**: Evidencia de procesos de revisión técnica
-
-## Integración con CI/CD
-
-Los reportes pueden integrarse en pipelines de CI/CD:
+Example frontmatter for a task result:
 
 ```yaml
-# Ejemplo para GitHub Actions
+---
+type: task_result
+task_id: task-001
+task_name: refactor-auth-module
+agent: claude
+model: claude-opus-4-6
+status: completed
+timestamp: 2025-06-15T15:10:22Z
+workflow_id: wf-20250615-143052-a1b2c
+tokens_in: 8200
+tokens_out: 4100
+duration_ms: 25000
+---
+```
+
+### Standard Sections
+
+Reports that include rendered content (consensus, moderator, plan, task results, metadata, summary) typically contain:
+
+- **Status/Metrics Table**: Key metrics in a Markdown table
+- **Main Content**: The analysis, evaluation, or result body
+- **Raw Output** (optional): Complete LLM response when `include_raw: true`
+
+## Analysis Principles
+
+### For V1 Analyses
+
+The analysis should be:
+
+- **Exhaustive**: Without artificial depth limitations
+- **Evidence-based**: Grounded in code evidence and documentation
+- **Current**: Aligned with current framework/library versions
+- **Practical**: With actionable and specific recommendations
+- **Objective**: Without bias toward specific technologies or patterns
+
+### For V(n) Refinements
+
+The refinement should be:
+
+- **Iterative**: Review only the previous round, not earlier rounds
+- **Rigorous**: Do not accept claims without solid evidence
+- **Constructive**: Identify improvements, not just criticisms
+- **Critical**: Actively seek weak points
+- **Documented**: With references to official documentation
+
+### For Moderator Evaluation
+
+The moderator should:
+
+- **Evaluate semantically**: Understand meaning, not just compare text
+- **Be objective**: Apply consistent criteria
+- **Document divergences**: Explain points of disagreement
+- **Justify scoring**: Support the consensus score with evidence
+
+## Uses for Reports
+
+Generated reports serve the following purposes:
+
+1. **Audit trail**: Complete traceability of technical decisions
+2. **Documentation**: Record of analyses for future reference
+3. **Learning**: Comparison of perspectives between different agents
+4. **Continuous improvement**: Identification of patterns across analyses
+5. **Compliance**: Evidence of technical review processes
+
+## Integration with CI/CD
+
+Reports can be integrated into CI/CD pipelines:
+
+```yaml
+# Example for GitHub Actions
 - name: Run Quorum Analysis
   run: quorum analyze --report-dir=./reports
 
@@ -288,21 +438,21 @@ Los reportes pueden integrarse en pipelines de CI/CD:
     path: .quorum/runs/
 ```
 
-## Limitaciones Conocidas
+## Known Limitations
 
-- Los reportes se generan en español por defecto
-- El formato es Markdown estático (no HTML interactivo)
-- Los archivos grandes pueden exceder límites de algunos visualizadores
+- **Mixed-language report content**: The report renderers generate headings and labels in Spanish (e.g., "Evaluacion del Moderador Semantico", "Resumen de Ejecucion", "Metricas Globales") while some sections (task plans, execution graph) use English. There is no configurable language option in `ReportConfig`; the language is hardcoded in the renderer functions.
+- **Static format**: Reports are Markdown files (not interactive HTML).
+- **Large files**: Very large analyses may exceed display limits in some Markdown viewers.
 
-## Contribución
+## Contributing
 
-Para mejorar el sistema de reportes:
+The report system is implemented in three main files:
 
-1. Los renderizadores están en `internal/service/report/renderers.go`
-2. La lógica de escritura en `internal/service/report/writer.go`
-3. El frontmatter YAML en `internal/service/report/frontmatter.go`
+1. **Renderers**: `internal/service/report/renderers.go` -- Functions that generate Markdown content for each report type
+2. **Writer**: `internal/service/report/writer.go` -- File I/O, path management, directory initialization, and frontmatter attachment
+3. **Frontmatter**: `internal/service/report/frontmatter.go` -- YAML frontmatter generation and formatting
 
-## Ver También
+## See Also
 
-- [ARCHITECTURE.md](./ARCHITECTURE.md) - Arquitectura general de Quorum
-- [CONFIGURATION.md](./CONFIGURATION.md) - Guía de configuración completa
+- [ARCHITECTURE.md](./ARCHITECTURE.md) -- General Quorum architecture
+- [CONFIGURATION.md](./CONFIGURATION.md) -- Complete configuration guide

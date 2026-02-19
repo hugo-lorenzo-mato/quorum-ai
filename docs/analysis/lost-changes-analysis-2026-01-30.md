@@ -1,3 +1,7 @@
+> **Estado: RESUELTO** / **Status: RESOLVED**
+>
+> All issues documented in this post-mortem have been fixed (AgentEvents persistence restored in commit 897ba5a, RunnerBuilder config bug fixed in commit 00ac672). This document is preserved as a historical post-mortem reference.
+
 # ANÁLISIS EXHAUSTIVO: Cambios Perdidos en PR Consolidado
 
 ## Metodología

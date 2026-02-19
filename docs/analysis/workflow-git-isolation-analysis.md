@@ -1,3 +1,7 @@
+> **Status: HISTORICAL -- PARTIALLY IMPLEMENTED**
+>
+> This is the definitive English-language analysis of workflow-level Git isolation. Core proposals (workflow branches, task merging, database migration 006) were implemented in `internal/adapters/git/workflow_worktree.go`. Unimplemented: `GlobalRateLimiterRegistry`, sparse checkout, `WorkflowMetrics` struct. Line references are stale.
+
 # Definitive Architectural Analysis: Workflow-Level Git Isolation for Quorum
 
 ## Document Overview

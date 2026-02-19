@@ -1,3 +1,7 @@
+> **Status: HISTORICAL -- SUPERSEDED**
+>
+> This proposal has been implemented. The actual implementation uses `.quorum/runs/` (not `.quorum-output/` as proposed) and is documented in [WORKFLOW_REPORTS.md](WORKFLOW_REPORTS.md). The report service lives in `internal/service/report/`. This document is preserved as a historical design reference.
+
 # Propuesta: Exportación de Análisis a Markdown
 
 ## 1. Resumen Ejecutivo

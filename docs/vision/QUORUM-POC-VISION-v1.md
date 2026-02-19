@@ -1,3 +1,7 @@
+> **Status: HISTORICAL**
+>
+> The project has evolved significantly beyond the POC scope described here. Key differences from current reality: 5 agents (not 4; OpenCode added), 4 workflow phases (not 3; Refine phase added), SQLite persistence (not JSON), web dashboard is built (was listed as out of scope), consensus uses a semantic moderator (not "arbiter"), default threshold is 0.80 (not 0.90), default max_rounds is 3 (not 5). See [ARCHITECTURE.md](../ARCHITECTURE.md) for the current reference.
+
 # QUORUM-AI: POC Vision Document v1
 
 ## Document Metadata
@@ -6,7 +10,7 @@
 |-------|-------|
 | **Version** | v1.0 |
 | **Date** | 2026-01-11 |
-| **Status** | Active |
+| **Status** | Historical |
 | **Scope** | Proof of Concept (POC) |
 
 ---

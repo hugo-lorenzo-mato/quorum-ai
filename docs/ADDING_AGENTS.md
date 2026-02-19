@@ -14,23 +14,24 @@ Each section lists every file you need to touch, in the order you should touch t
 
 Agent data flows through seven layers. Every change starts at the top and works its way down:
 
-```
-constants.go          (source of truth: agents, models, reasoning)
-    |
-reasoning.go          (normalization between agent effort scales)
-    |
-config.go + validator (YAML config struct, validation rules)
-    |
-registry.go           (factory that creates adapter instances)
-    |
-adapter (e.g. claude.go)  (CLI wrapper: builds args, runs command, parses output)
-    |
-config_enums.go       (API: exposes all enums to the frontend)
-    |
-agents.js             (frontend: fallback data, display labels, selectors)
+```mermaid
+flowchart TD
+    A["constants.go\n(source of truth: agents, models, reasoning)"]
+    B["reasoning.go\n(normalization between agent effort scales)"]
+    C["config.go + validator\n(YAML config struct, validation rules)"]
+    D["registry.go + configure_from_config.go\n(factory and runtime configuration)"]
+    E["adapter (e.g. claude.go)\n(CLI wrapper: builds args, runs command, parses output)"]
+    F["config_enums.go\n(API: exposes all enums to the frontend)"]
+    G["agents.js\n(frontend: fallback data, display labels, selectors)"]
+    H["chat.go + model.go\n(CLI/TUI: hardcoded model lists, agent flag)"]
+
+    A --> B --> C --> D --> E --> F --> G
+    F --> H
 ```
 
 If you only add a model, you skip the adapter and registry layers. If you add reasoning support to an agent that already exists, you skip the adapter layer. The full path is only needed for brand-new agents.
+
+> **Known issue -- hardcoded model lists.** Both `cmd/quorum/cmd/chat.go` and `internal/tui/chat/model.go` maintain their own model lists independently from `core.AgentModels` in `constants.go`. These lists are currently out of sync with the canonical source of truth. Until this duplication is resolved in code, you must manually keep all three locations consistent when adding or removing models.
 
 ---
 
@@ -102,11 +103,12 @@ type AgentsConfig struct {
 }
 ```
 
-Then update three methods in the same file:
+Then update four methods in the same file:
 
 - `GetAgentConfig()` -- add a case to the switch
 - `ListEnabledForPhase()` -- add to the agents map
 - `EnabledAgentNames()` -- add to the agents map
+- `ExtractAgentPhases()` -- add to the agents map (if this method is not updated, the new agent's phase configuration will be silently ignored during workflow setup)
 
 ### 4. Add validation
 
@@ -124,6 +126,8 @@ v.validateAgent("agents.newtool", &cfg.NewTool)
 ```
 
 No other validation changes are needed -- the existing `validateAgent` function handles path, phases, models, and reasoning for any agent.
+
+> **Edge case:** If the new agent can serve as a refiner, moderator, or synthesizer, also check `validateRefiner`, `validateModerator`, `validateSynthesizer`, and `validateSingleAgent` in the same file. These functions contain hardcoded agent-enabled lookups that must include the new agent.
 
 ### 5. Write the CLI adapter
 
@@ -171,15 +175,25 @@ var StreamConfigs = map[string]StreamConfig{
 
 **File:** `internal/adapters/cli/parsers.go`
 
-Create a `NewToolStreamParser` that implements `StreamParser`. Register it in an `init()` function:
+Create a `NewToolStreamParser` that implements `StreamParser`. Register it in the existing `init()` function in `parsers.go`, which is where all parsers are registered centrally:
 
 ```go
 func init() {
+    // Register all parsers at package initialization
+    RegisterStreamParser("claude", &ClaudeStreamParser{})
+    // ...existing parsers...
     RegisterStreamParser("newtool", &NewToolStreamParser{})
 }
 ```
 
-### 7. Register the factory
+### 7. Register the factory and configure the runtime
+
+There are two configuration functions that must both be updated. They serve different purposes:
+
+- `ConfigureRegistry()` in `registry.go` -- takes `*config.AgentsConfig` (agents sub-config only), sets `Timeout: 0`. Used in tests and as a legacy entry point.
+- `ConfigureRegistryFromConfig()` in `configure_from_config.go` -- takes full `*config.Config`, sets `Timeout: 5*time.Minute`, includes `IdleTimeout`. **This is the function called at runtime** by `chat.go`, `run.go`, and `serve.go`.
+
+A new agent must be added to both functions.
 
 **File:** `internal/adapters/cli/registry.go`
 
@@ -215,6 +229,28 @@ if cfg.NewTool.Enabled {
 }
 ```
 
+**File:** `internal/adapters/cli/configure_from_config.go`
+
+In `ConfigureRegistryFromConfig()`, add a block matching the runtime pattern (note the additional fields):
+
+```go
+if cfg.Agents.NewTool.Enabled {
+    registry.Configure("newtool", AgentConfig{
+        Name:                      "newtool",
+        Path:                      cfg.Agents.NewTool.Path,
+        Model:                     cfg.Agents.NewTool.Model,
+        Timeout:                   5 * time.Minute,
+        Phases:                    cfg.Agents.NewTool.Phases,
+        ReasoningEffort:           cfg.Agents.NewTool.ReasoningEffort,
+        ReasoningEffortPhases:     cfg.Agents.NewTool.ReasoningEffortPhases,
+        TokenDiscrepancyThreshold: getTokenDiscrepancyThreshold(cfg.Agents.NewTool.TokenDiscrepancyThreshold),
+        IdleTimeout:               parseIdleTimeout(cfg.Agents.NewTool.IdleTimeout),
+    })
+}
+```
+
+The `cli.AgentConfig` struct (defined in `base.go`) also includes `GracePeriod` and `EnableStreaming` fields. These are not set in the current configuration functions and use zero-value defaults, but you should be aware they exist if the new agent needs non-default values.
+
 ### 8. Add the default YAML config
 
 **File:** `configs/default.yaml`
@@ -243,12 +279,12 @@ Make sure the embedded default config includes the new agent section.
 
 The enums endpoint already returns `core.Agents`, `core.AgentModels`, `core.AgentDefaultModels`, etc. Since those collections were updated in step 1, the API picks up the changes automatically.
 
-If the agent supports reasoning, also add its efforts to `AgentReasoningEfforts`:
+If the agent supports reasoning, also add its efforts to `AgentReasoningEfforts`. This map is **hardcoded** (not auto-derived from `core.Agents`), so it requires a manual addition:
 
 ```go
 AgentReasoningEfforts: map[string][]string{
-    "claude": core.ClaudeReasoningEfforts,
-    "codex":  core.CodexReasoningEfforts,
+    "claude":  core.ClaudeReasoningEfforts,
+    "codex":   core.CodexReasoningEfforts,
     "newtool": core.NewToolReasoningEfforts, // add if applicable
 },
 ```
@@ -290,15 +326,35 @@ case strings.Contains(agent, "newtool"):
     return "newtool"
 ```
 
+> **Known gap:** The current `normalizeAgentID` function is missing explicit cases for `copilot` and `opencode`. They fall through to the `default` branch, which returns the lowercased agent string unchanged. This works only when the agent name is already lowercase. A new agent **must** be added here with an explicit case to ensure reliable matching.
+
 **File:** `internal/tui/chat/model.go`
 
-Add a fallback model list for the chat TUI.
+Add a fallback model list for the chat TUI in `suggestModels()`. Keep this list in sync with `core.AgentModels` from `constants.go`.
+
+> **Known gap:** The `suggestModels()` function is currently missing a case for `opencode`, which falls through to `default` and returns only the current model. New agents should always include an explicit case.
 
 ### 12. Update the CLI chat command
 
 **File:** `cmd/quorum/cmd/chat.go`
 
-Add the agent name to the `--agent` flag description so users know it exists.
+Two changes are needed:
+
+1. **Update the `--agent` flag description** to include the new agent name. The current description lists `claude, gemini, codex, copilot` but is missing `opencode`.
+
+2. **Add a model list block** for the new agent. The chat command builds its own hardcoded model lists (around lines 217-275). Add a block for the new agent:
+
+```go
+if cfg.Agents.NewTool.Enabled {
+    availableAgents = append(availableAgents, "newtool")
+    agentModels["newtool"] = []string{
+        "newtool-large",
+        "newtool-small",
+    }
+}
+```
+
+Keep these model lists consistent with `core.AgentModels` in `constants.go`. The same model lists also appear as fallbacks in `internal/tui/chat/model.go` (see step 11) and must be kept in sync across all three locations.
 
 ### 13. Update tests
 
@@ -377,9 +433,15 @@ Update `phase_models` entries if the new model should be the default for any pha
 
 **File:** `internal/tui/chat/model.go`
 
-Add the model to the TUI's fallback model list for that agent.
+Add the model to the TUI's fallback model list for that agent in `suggestModels()`.
 
-### 7. Verify
+### 7. Update the CLI chat model list
+
+**File:** `cmd/quorum/cmd/chat.go`
+
+Add the model to the hardcoded model list for the corresponding agent (around lines 217-275). Without this update, the new model will be available in workflow mode and the web frontend but **not** in the CLI chat session.
+
+### 8. Verify
 
 ```bash
 go build ./...
@@ -434,7 +496,7 @@ Add mapping rules so the new level can be converted to/from other agent scales. 
 
 The validation uses `core.IsValidReasoningEffort()` which checks the `ValidReasoningEfforts` map. If you added the level there in step 1, validation works automatically.
 
-Update the error message strings if they list valid values explicitly (search for `"invalid reasoning effort"` in the file).
+Update the `msgInvalidReasoningEffort` string constant if it lists valid values explicitly (currently defined as `"invalid reasoning effort (valid: none, minimal, low, medium, high, xhigh, max)"`). Search for this constant in the file and add the new level to the parenthetical list.
 
 ### 5. Update the frontend
 
@@ -476,7 +538,7 @@ The system validates agent/model/reasoning combinations at three points:
 
 1. **Config loading** (`internal/config/validator.go`): Checks that agent names, models, and reasoning efforts are valid when reading YAML config. Uses the union set (`ValidReasoningEfforts`) so any agent config can use any effort value. This is intentional -- the normalization layer handles cross-agent mapping at runtime.
 
-2. **API layer** (`internal/api/config_enums.go`): Exposes per-agent and per-model effort lists so the frontend can show only valid options for the selected combination. No server-side validation of effort-per-model happens here -- it's purely informational.
+2. **API layer** (`internal/api/config_enums.go`): Exposes per-agent and per-model effort lists so the frontend can show only valid options for the selected combination. The `AgentReasoningEfforts` map in this file is hardcoded (not auto-derived from constants), so it must be updated manually when adding reasoning support to a new agent. No server-side validation of effort-per-model happens here -- it is purely informational.
 
 3. **Runtime normalization** (`internal/core/reasoning.go`): When an adapter is about to execute, it normalizes the effort value to the agent's native scale. For example, if a user sets `"max"` in config but the agent is Codex, it gets mapped to `"xhigh"`.
 
@@ -486,8 +548,8 @@ The rule of thumb: config validation is permissive (accepts any known effort val
 
 ## Quick reference: files to touch
 
-| Change | constants.go | reasoning.go | config.go | validator.go | registry.go | adapter file | streaming.go | config_enums.go | agents.js | default.yaml |
-|--------|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| New agent | x | maybe | x | x | x | new | maybe | maybe | x | x |
-| New model | x | maybe | - | - | - | - | - | - | maybe | maybe |
-| New effort level | x | x | - | maybe | - | maybe | - | - | x | - |
+| Change | constants.go | reasoning.go | config.go | validator.go | registry.go | configure\_from\_config.go | adapter file | streaming.go | config\_enums.go | agents.js | default.yaml | chat.go | model.go |
+|--------|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| New agent | x | maybe | x | x | x | x | new | maybe | maybe | x | x | x | x |
+| New model | x | maybe | - | - | - | - | - | - | maybe | maybe | maybe | x | x |
+| New effort level | x | x | - | maybe | - | - | maybe | - | - | x | - | - | - |

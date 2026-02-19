@@ -1,3 +1,7 @@
+> **Status: HISTORICAL -- IMPLEMENTED**
+>
+> This proposal has been fully implemented and exceeded. The WebUI configuration editor includes ETag-based concurrency control, config schema API for dynamic UI generation, enum endpoints, multi-project config scoping, and 6 settings tabs. See [CONFIGURATION.md](CONFIGURATION.md) for the current reference. The implementation lives in `internal/api/config.go`, `internal/api/config_enums.go`, and `frontend/src/pages/GlobalSettings.jsx`.
+
 # Analysis: Configuration Management via Web UI
 
 ## 1. Executive Summary
