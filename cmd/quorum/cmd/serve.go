@@ -297,7 +297,7 @@ func setupServeProjectInfra(infra *serveInfra) {
 		infra.statePool = project.NewStatePool(
 			infra.projectRegistry,
 			project.WithPoolLogger(logger.Logger),
-			project.WithMaxActiveContexts(10),
+			project.WithMaxActiveContexts(20),
 			project.WithEvictionGracePeriod(30*time.Minute),
 		)
 		logger.Info("state pool initialized for multi-project support")
