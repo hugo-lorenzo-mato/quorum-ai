@@ -3,6 +3,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -164,12 +165,12 @@ func (h *ProjectsHandler) handleCreateProject(w http.ResponseWriter, r *http.Req
 
 	p, err := h.registry.AddProject(ctx, req.Path, opts)
 	if err != nil {
-		switch err {
-		case project.ErrProjectAlreadyExists:
+		switch {
+		case errors.Is(err, project.ErrProjectAlreadyExists):
 			respondError(w, http.StatusConflict, "project already exists")
-		case project.ErrNotQuorumProject:
+		case errors.Is(err, project.ErrNotQuorumProject):
 			respondError(w, http.StatusBadRequest, "path is not a valid Quorum project (missing .quorum directory)")
-		case project.ErrInvalidPath:
+		case errors.Is(err, project.ErrInvalidPath):
 			respondError(w, http.StatusBadRequest, "invalid path")
 		default:
 			respondError(w, http.StatusInternalServerError, "failed to add project")
