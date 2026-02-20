@@ -334,8 +334,10 @@ func (r *FileRegistry) AddProject(_ context.Context, path string, opts *AddProje
 	}
 	absPath = filepath.Clean(absPath)
 
-	// Validate the project path
-	if err := ValidateProjectPath(absPath); err != nil {
+	// Validate the path is a valid, accessible directory.
+	// A missing .quorum directory is NOT an error — the project will
+	// inherit the global config (ConfigModeInheritGlobal).
+	if err := ValidateDirectoryPath(absPath); err != nil {
 		return nil, NewRegistryError("add", err)
 	}
 
@@ -728,7 +730,32 @@ func (r *FileRegistry) Count() int {
 	return len(r.config.Projects)
 }
 
-// validateProjectPath validates that a path is a valid Quorum project
+// ValidateDirectoryPath checks that a path is absolute, clean, and points to an accessible directory.
+// It does NOT require a .quorum directory — use ValidateProjectPath for that.
+func ValidateDirectoryPath(path string) error {
+	if !filepath.IsAbs(path) {
+		return fmt.Errorf("%w: path must be absolute", ErrInvalidPath)
+	}
+
+	cleanPath := filepath.Clean(path)
+	if cleanPath != path {
+		return fmt.Errorf("%w: path contains invalid sequences", ErrInvalidPath)
+	}
+
+	info, err := os.Stat(cleanPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("%w: directory not found at %s", ErrInvalidPath, path)
+		}
+		return fmt.Errorf("%w: cannot access directory: %v", ErrProjectOffline, err)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("%w: path is not a directory", ErrInvalidPath)
+	}
+
+	return nil
+}
+
 // ValidateProjectPath checks that a path is absolute, clean, and contains a .quorum directory.
 func ValidateProjectPath(path string) error {
 	if !filepath.IsAbs(path) {

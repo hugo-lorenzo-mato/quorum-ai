@@ -153,16 +153,19 @@ func TestAddProjectNotQuorum(t *testing.T) {
 	registry, tmpDir, cleanup := setupTestRegistry(t)
 	defer cleanup()
 
-	// Create directory without .quorum
+	// Create directory without .quorum — should still register with inherited global config
 	projectDir := filepath.Join(tmpDir, "not-quorum")
 	if err := os.MkdirAll(projectDir, 0o750); err != nil {
 		t.Fatalf("failed to create dir: %v", err)
 	}
 
 	ctx := context.Background()
-	_, err := registry.AddProject(ctx, projectDir, nil)
-	if err == nil {
-		t.Error("expected error for non-quorum project")
+	p, err := registry.AddProject(ctx, projectDir, &AddProjectOptions{Name: "Not quorum"})
+	if err != nil {
+		t.Fatalf("unexpected error adding project without .quorum: %v", err)
+	}
+	if p.ConfigMode != ConfigModeInheritGlobal {
+		t.Errorf("expected config mode %q, got %q", ConfigModeInheritGlobal, p.ConfigMode)
 	}
 }
 
