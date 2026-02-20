@@ -211,8 +211,16 @@ func (p *StatePool) GetContext(ctx context.Context, projectID string) (*ProjectC
 	// Evict if at capacity
 	if len(p.contexts) >= p.opts.maxActiveContexts {
 		if err := p.evictLRULocked(); err != nil {
-			p.logger.Warn("eviction failed", "error", err)
-			// Continue anyway - we might still have room or can exceed temporarily
+			p.logger.Warn("eviction failed",
+				"component", "state_pool",
+				"error", err,
+				"active", len(p.contexts),
+				"max", p.opts.maxActiveContexts)
+		}
+		// If still at or above capacity after eviction attempt, reject
+		if len(p.contexts) >= p.opts.maxActiveContexts {
+			atomic.AddInt64(&p.errors, 1)
+			return nil, fmt.Errorf("state pool at capacity (%d/%d): eviction failed", len(p.contexts), p.opts.maxActiveContexts)
 		}
 	}
 
