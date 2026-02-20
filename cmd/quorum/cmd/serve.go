@@ -144,6 +144,9 @@ func runServe(_ *cobra.Command, _ []string) error {
 	<-sigCh
 
 	logger.Info("shutting down server...")
+
+	stopServeBackgroundServices(infra)
+
 	shutdownCtx := context.Background()
 	if err := server.Shutdown(shutdownCtx); err != nil {
 		return fmt.Errorf("server shutdown: %w", err)
@@ -459,14 +462,6 @@ func startServeBackgroundServices(ctx context.Context, infra *serveInfra) {
 	if infra.kanbanEngine != nil {
 		if err := infra.kanbanEngine.Start(ctx); err != nil {
 			logger.Error("failed to start kanban engine", slog.String("error", err.Error()))
-		} else {
-			defer func() {
-				stopCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-				defer cancel()
-				if err := infra.kanbanEngine.Stop(stopCtx); err != nil {
-					logger.Warn("failed to stop kanban engine", slog.String("error", err.Error()))
-				}
-			}()
 		}
 	}
 
@@ -494,7 +489,20 @@ func startServeBackgroundServices(ctx context.Context, infra *serveInfra) {
 				}
 			}
 		})
-		defer infra.heartbeatManager.Shutdown()
+	}
+}
+
+func stopServeBackgroundServices(infra *serveInfra) {
+	if infra.heartbeatManager != nil {
+		infra.heartbeatManager.Shutdown()
+	}
+
+	if infra.kanbanEngine != nil {
+		stopCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := infra.kanbanEngine.Stop(stopCtx); err != nil {
+			infra.logger.Warn("failed to stop kanban engine", slog.String("error", err.Error()))
+		}
 	}
 }
 
