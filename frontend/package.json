@@ -50,6 +50,7 @@
     "yaml": "^2.8.2"
   },
   "overrides": {
-    "prismjs": "1.30.0"
+    "prismjs": "1.30.0",
+    "minimatch": "^10.2.1"
   }
 }
