@@ -387,6 +387,7 @@ func (r *FileRegistry) AddProject(_ context.Context, path string, opts *AddProje
 	statusMsg := ""
 
 	now := time.Now()
+	enabled := true
 	project := &Project{
 		ID:            id,
 		Path:          absPath,
@@ -397,6 +398,7 @@ func (r *FileRegistry) AddProject(_ context.Context, path string, opts *AddProje
 		Color:         color,
 		CreatedAt:     now,
 		ConfigMode:    configMode,
+		Enabled:       &enabled,
 	}
 
 	r.config.Projects = append(r.config.Projects, project)
@@ -556,13 +558,23 @@ func (r *FileRegistry) ValidateProject(_ context.Context, id string) error {
 	// Check .quorum directory
 	quorumDir := filepath.Join(project.Path, ".quorum")
 	if _, err := os.Stat(quorumDir); err != nil {
-		project.Status = StatusOffline
-		project.StatusMessage = ".quorum directory not found"
+		if project.ConfigMode != ConfigModeInheritGlobal {
+			project.Status = StatusOffline
+			project.StatusMessage = ".quorum directory not found"
+			r.config.Projects[index] = project
+			if r.autoSave {
+				_ = r.save()
+			}
+			return NewValidationError(id, project.Path, project.StatusMessage, err)
+		}
+		// inherit_global projects don't need .quorum — mark healthy and skip config check
+		project.Status = StatusHealthy
+		project.StatusMessage = ""
 		r.config.Projects[index] = project
 		if r.autoSave {
 			_ = r.save()
 		}
-		return NewValidationError(id, project.Path, project.StatusMessage, err)
+		return nil
 	}
 
 	// Check config file

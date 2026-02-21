@@ -30,7 +30,8 @@ var addProjectCmd = &cobra.Command{
 	Short: "Register a new project",
 	Long: `Register a directory as a Quorum project.
 
-The directory must contain a .quorum directory to be registered as a project.
+If the directory contains a .quorum directory, the project uses its own config.
+Otherwise, it inherits the global configuration.
 If no path is specified, the current directory is used.
 
 Examples:
@@ -91,6 +92,25 @@ If no ID is specified, validates all projects.`,
 	RunE: runValidateProject,
 }
 
+var enableProjectCmd = &cobra.Command{
+	Use:   "enable <id>",
+	Short: "Enable a project",
+	Long:  `Enable a previously disabled project so it participates in the state pool, kanban engine, and orphan cleanup.`,
+	Args:  cobra.ExactArgs(1),
+	RunE:  runEnableProject,
+}
+
+var disableProjectCmd = &cobra.Command{
+	Use:   "disable <id>",
+	Short: "Disable a project",
+	Long: `Disable a project without removing it from the registry.
+
+Disabled projects are skipped by the state pool, kanban engine, and orphan cleanup.
+Use 'quorum project enable <id>' to re-enable.`,
+	Args: cobra.ExactArgs(1),
+	RunE: runDisableProject,
+}
+
 var (
 	addProjectName    string
 	addProjectColor   string
@@ -106,6 +126,8 @@ func init() {
 	projectCmd.AddCommand(removeProjectCmd)
 	projectCmd.AddCommand(setDefaultCmd)
 	projectCmd.AddCommand(validateProjectCmd)
+	projectCmd.AddCommand(enableProjectCmd)
+	projectCmd.AddCommand(disableProjectCmd)
 
 	// Also add 'add' as a top-level shortcut
 	rootCmd.AddCommand(&cobra.Command{
@@ -137,14 +159,9 @@ func runAddProject(_ *cobra.Command, args []string) error {
 		return fmt.Errorf("invalid path: %w", err)
 	}
 
-	// Check if .quorum directory exists
-	quorumDir := filepath.Join(absPath, ".quorum")
-	if _, err := os.Stat(quorumDir); err != nil {
-		if os.IsNotExist(err) {
-			return fmt.Errorf("not a Quorum project: %s (missing .quorum directory)\n"+
-				"Initialize with 'quorum init' first", absPath)
-		}
-		return fmt.Errorf("cannot access .quorum directory: %w", err)
+	// Validate the path is an accessible directory
+	if err := project.ValidateDirectoryPath(absPath); err != nil {
+		return fmt.Errorf("invalid project path: %w", err)
 	}
 
 	// Create registry
@@ -221,8 +238,8 @@ func runListProjects(_ *cobra.Command, _ []string) error {
 
 	// Print as table
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "ID\tNAME\tPATH\tSTATUS\tDEFAULT")
-	fmt.Fprintln(w, "──\t────\t────\t──────\t───────")
+	fmt.Fprintln(w, "ID\tNAME\tPATH\tSTATUS\tENABLED\tDEFAULT")
+	fmt.Fprintln(w, "──\t────\t────\t──────\t───────\t───────")
 
 	for _, p := range projects {
 		isDefault := ""
@@ -233,8 +250,12 @@ func runListProjects(_ *cobra.Command, _ []string) error {
 		if p.StatusMessage != "" {
 			status = fmt.Sprintf("%s (%s)", p.Status, p.StatusMessage)
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
-			p.ID, p.Name, p.Path, status, isDefault)
+		enabled := "yes"
+		if !p.IsEnabled() {
+			enabled = "no"
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
+			p.ID, p.Name, p.Path, status, enabled, isDefault)
 	}
 	_ = w.Flush()
 
@@ -333,6 +354,47 @@ func runValidateProject(_ *cobra.Command, args []string) error {
 
 	if !quiet {
 		fmt.Printf("Project %s validated successfully\n", id)
+	}
+
+	return nil
+}
+
+func runEnableProject(_ *cobra.Command, args []string) error {
+	return setProjectEnabled(args[0], true)
+}
+
+func runDisableProject(_ *cobra.Command, args []string) error {
+	return setProjectEnabled(args[0], false)
+}
+
+func setProjectEnabled(id string, enabled bool) error {
+	ctx := context.Background()
+
+	registry, err := project.NewFileRegistry()
+	if err != nil {
+		return fmt.Errorf("opening project registry: %w", err)
+	}
+	defer registry.Close()
+
+	p, err := registry.GetProject(ctx, id)
+	if err != nil {
+		if err == project.ErrProjectNotFound {
+			return fmt.Errorf("project not found: %s", id)
+		}
+		return fmt.Errorf("getting project: %w", err)
+	}
+
+	p.Enabled = &enabled
+	if err := registry.UpdateProject(ctx, p); err != nil {
+		return fmt.Errorf("updating project: %w", err)
+	}
+
+	if !quiet {
+		action := "enabled"
+		if !enabled {
+			action = "disabled"
+		}
+		fmt.Printf("Project '%s' (%s) %s.\n", p.Name, p.Path, action)
 	}
 
 	return nil

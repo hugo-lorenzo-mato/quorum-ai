@@ -28,6 +28,7 @@ type ProjectResponse struct {
 	CreatedAt     time.Time `json:"created_at"`
 	IsDefault     bool      `json:"is_default"`
 	ConfigMode    string    `json:"config_mode,omitempty"`
+	Enabled       bool      `json:"enabled"`
 }
 
 // CreateProjectRequest is the request body for creating a project.
@@ -45,6 +46,8 @@ type UpdateProjectRequest struct {
 	// ConfigMode controls whether this project uses the global config (inherit_global)
 	// or a project-specific config file (custom).
 	ConfigMode *string `json:"config_mode,omitempty"`
+	// Enabled toggles whether the project is active.
+	Enabled *bool `json:"enabled,omitempty"`
 }
 
 // SetDefaultProjectRequest is the request body for setting the default project.
@@ -237,8 +240,8 @@ func (h *ProjectsHandler) handleUpdateProject(w http.ResponseWriter, r *http.Req
 			return
 		}
 
-		// Validate it is an existing directory containing a .quorum project
-		if err := project.ValidateProjectPath(absPath); err != nil {
+		// Validate it is an existing, accessible directory
+		if err := project.ValidateDirectoryPath(absPath); err != nil {
 			respondError(w, http.StatusBadRequest, fmt.Sprintf("invalid project path: %v", err))
 			return
 		}
@@ -253,6 +256,11 @@ func (h *ProjectsHandler) handleUpdateProject(w http.ResponseWriter, r *http.Req
 		}
 
 		p.Path = absPath
+		updated = true
+	}
+
+	if req.Enabled != nil {
+		p.Enabled = req.Enabled
 		updated = true
 	}
 
@@ -460,5 +468,6 @@ func projectToResponse(p *project.Project, defaultID string) ProjectResponse {
 		CreatedAt:     p.CreatedAt,
 		IsDefault:     p.ID == defaultID,
 		ConfigMode:    p.ConfigMode,
+		Enabled:       p.IsEnabled(),
 	}
 }

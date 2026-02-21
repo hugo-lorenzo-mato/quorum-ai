@@ -99,10 +99,12 @@ func NewProjectContext(id, root string, opts ...ContextOption) (*ProjectContext,
 		return nil, fmt.Errorf("invalid root path: %w", err)
 	}
 
-	// Validate project directory
-	quorumDir := filepath.Join(absRoot, ".quorum")
-	if _, err := os.Stat(quorumDir); os.IsNotExist(err) {
-		return nil, fmt.Errorf("not a valid quorum project (no .quorum directory): %s", absRoot)
+	// Validate project directory — only require .quorum for custom-config projects
+	if options.configMode != ConfigModeInheritGlobal {
+		quorumDir := filepath.Join(absRoot, ".quorum")
+		if _, err := os.Stat(quorumDir); os.IsNotExist(err) {
+			return nil, fmt.Errorf("not a valid quorum project (no .quorum directory): %s", absRoot)
+		}
 	}
 
 	pc := &ProjectContext{
@@ -338,10 +340,12 @@ func (pc *ProjectContext) Validate(_ context.Context) error {
 		return fmt.Errorf("project directory not accessible: %w", err)
 	}
 
-	// Check .quorum directory
-	quorumDir := filepath.Join(pc.Root, ".quorum")
-	if _, err := os.Stat(quorumDir); err != nil {
-		return fmt.Errorf(".quorum directory not accessible: %w", err)
+	// Check .quorum directory (not required for inherit_global projects)
+	if pc.ConfigMode != ConfigModeInheritGlobal {
+		quorumDir := filepath.Join(pc.Root, ".quorum")
+		if _, err := os.Stat(quorumDir); err != nil {
+			return fmt.Errorf(".quorum directory not accessible: %w", err)
+		}
 	}
 
 	// Check state manager
