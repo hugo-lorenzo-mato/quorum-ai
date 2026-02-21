@@ -29,6 +29,22 @@ Currently supports Claude Code, Gemini CLI, Codex, and GitHub Copilot, with more
   <img src="docs/screenshots/chat.png" width="345" alt="Chat">
 </p>
 
+<details>
+<summary><strong>More screenshots</strong></summary>
+<br>
+<p align="center">
+  <img src="docs/screenshots/workflow-detail.png" width="700" alt="Workflow Detail">
+</p>
+<p align="center">
+  <img src="docs/screenshots/multi-agent-plan.png" width="345" alt="Multi-Agent Plan">&nbsp;
+  <img src="docs/screenshots/execution-timeline.png" width="345" alt="Execution Timeline">
+</p>
+<p align="center">
+  <img src="docs/screenshots/generate-issues.png" width="345" alt="Generate Issues">&nbsp;
+  <img src="docs/screenshots/refine-prompt.png" width="345" alt="Refine Prompt">
+</p>
+</details>
+
 ---
 
 ## Features
