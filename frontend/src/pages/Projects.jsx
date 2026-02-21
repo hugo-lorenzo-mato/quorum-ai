@@ -9,6 +9,7 @@ import {
   FolderOpen,
   Check,
   X,
+  Power,
 } from 'lucide-react';
 import { useProjectStore } from '../stores';
 import ColorPicker, { PROJECT_COLORS } from '../components/ui/ColorPicker';
@@ -101,11 +102,11 @@ function InlineEdit({ value, onSave, placeholder, className = '', inputClassName
   return (
     <button
       onClick={() => setIsEditing(true)}
-      className={`text-left hover:bg-accent/50 rounded-md px-2 py-1 -mx-2 -my-1 transition-colors group max-w-full truncate min-w-0 ${className}`}
+      className={`text-left hover:bg-accent/50 rounded-md px-2 py-1 -mx-2 -my-1 transition-colors group/inline max-w-full truncate min-w-0 ${className}`}
       title="Click to edit"
     >
       {value || <span className="text-muted-foreground italic">{placeholder}</span>}
-      <span className="ml-2 text-xs text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity hidden sm:inline">
+      <span className="ml-2 text-xs text-muted-foreground opacity-0 group-hover/inline:opacity-100 transition-opacity hidden sm:inline">
         (click to edit)
       </span>
     </button>
@@ -144,9 +145,17 @@ function ProjectCard({
     }
   };
 
+  const handleToggleEnabled = () => {
+    onUpdate(project.id, { enabled: !project.enabled });
+  };
+
+  const isDisabled = project.enabled === false;
+
   return (
     <div
       className={`group flex flex-col rounded-xl border transition-all duration-200 shadow-sm hover:shadow-md ${
+        isDisabled ? 'opacity-50' : ''
+      } ${
         isSelected
           ? 'border-primary/50 bg-primary/5 ring-1 ring-primary/10'
           : 'border-border bg-card hover:border-foreground/30'
@@ -227,6 +236,19 @@ function ProjectCard({
             title="Validate Project"
           >
              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+
+          <button
+            onClick={handleToggleEnabled}
+            disabled={loading}
+            className={`p-1.5 rounded-md transition-colors ${
+              isDisabled
+                ? 'text-muted-foreground/70 hover:text-green-600 hover:bg-green-500/10'
+                : 'text-green-600 hover:text-muted-foreground/70 hover:bg-background'
+            }`}
+            title={isDisabled ? 'Enable Project' : 'Disable Project'}
+          >
+            <Power className="w-3.5 h-3.5" />
           </button>
 
           <button
@@ -534,7 +556,7 @@ export default function Projects() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {projects.map((project) => (
+            {[...projects].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })).map((project) => (
               <ProjectCard
                 key={project.id}
                 project={project}
