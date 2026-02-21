@@ -202,6 +202,11 @@ func (p *StatePool) GetContext(ctx context.Context, projectID string) (*ProjectC
 		return nil, fmt.Errorf("project not found in registry: %w", err)
 	}
 
+	if !project.IsEnabled() {
+		atomic.AddInt64(&p.errors, 1)
+		return nil, fmt.Errorf("project %s is disabled", projectID)
+	}
+
 	// Validate project before creating context
 	if err := p.registry.ValidateProject(ctx, projectID); err != nil {
 		p.logger.Warn("project validation failed, attempting to create anyway",

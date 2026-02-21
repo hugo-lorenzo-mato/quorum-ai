@@ -37,8 +37,8 @@ func (p *KanbanStatePoolProvider) ListActiveProjects(ctx context.Context) ([]kan
 
 	result := make([]kanban.ProjectInfo, 0, len(projects))
 	for _, proj := range projects {
-		// Only include healthy or degraded projects (skip offline)
-		if proj.Status == project.StatusOffline {
+		// Skip disabled or offline projects
+		if !proj.IsEnabled() || proj.Status == project.StatusOffline {
 			continue
 		}
 
@@ -66,7 +66,7 @@ func (p *KanbanStatePoolProvider) ListLoadedProjects(ctx context.Context) ([]kan
 		if err != nil || proj == nil {
 			continue
 		}
-		if proj.Status == project.StatusOffline {
+		if !proj.IsEnabled() || proj.Status == project.StatusOffline {
 			continue
 		}
 		result = append(result, kanban.ProjectInfo{

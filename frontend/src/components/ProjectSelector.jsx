@@ -14,14 +14,16 @@ function ProjectList({
   onSelectProject,
   onSetDefault,
 }) {
+  const enabledProjects = projects.filter((p) => p.enabled !== false);
+
   return (
     <div className="max-h-[280px] overflow-y-auto custom-scrollbar">
-      {projects.length === 0 && !loading ? (
+      {enabledProjects.length === 0 && !loading ? (
         <div className="px-3 py-4 text-sm text-muted-foreground text-center">
           No projects registered
         </div>
       ) : (
-        projects.map((project) => (
+        enabledProjects.map((project) => (
           <div
             key={project.id}
             className="group/item flex items-center gap-1 px-1 mb-0.5 last:mb-0"

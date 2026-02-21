@@ -409,7 +409,7 @@ func runOrphanCleanup(ctx context.Context, infra *serveInfra) {
 				logger.Warn("failed to list projects for orphan cleanup", slog.String("error", err.Error()))
 			} else {
 				for _, p := range projects {
-					if p == nil || !p.IsAccessible() {
+					if p == nil || !p.IsEnabled() || !p.IsAccessible() {
 						continue
 					}
 					pc, err := infra.statePool.GetContext(cleanupCtx, p.ID)

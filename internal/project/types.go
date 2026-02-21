@@ -69,6 +69,10 @@ type Project struct {
 	//
 	// If empty, callers should infer a default (e.g., custom if project config exists).
 	ConfigMode string `yaml:"config_mode,omitempty" json:"config_mode,omitempty"`
+	// Enabled controls whether the project is active. Disabled projects are skipped
+	// by the state pool, kanban engine, and orphan cleanup. Pointer type so that
+	// nil (missing from YAML) defaults to enabled for backward compatibility.
+	Enabled *bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
 }
 
 // Clone creates a deep copy of the project
@@ -76,7 +80,7 @@ func (p *Project) Clone() *Project {
 	if p == nil {
 		return nil
 	}
-	return &Project{
+	clone := &Project{
 		ID:            p.ID,
 		Path:          p.Path,
 		Name:          p.Name,
@@ -87,6 +91,20 @@ func (p *Project) Clone() *Project {
 		CreatedAt:     p.CreatedAt,
 		ConfigMode:    p.ConfigMode,
 	}
+	if p.Enabled != nil {
+		v := *p.Enabled
+		clone.Enabled = &v
+	}
+	return clone
+}
+
+// IsEnabled returns true if the project is enabled.
+// A nil Enabled field (missing from YAML) is treated as enabled for backward compatibility.
+func (p *Project) IsEnabled() bool {
+	if p == nil {
+		return false
+	}
+	return p.Enabled == nil || *p.Enabled
 }
 
 // IsHealthy returns true if the project status is healthy
