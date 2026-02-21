@@ -17,6 +17,34 @@ quorum-ai orchestrates locally installed CLI agents without managing API keys or
 
 Currently supports Claude Code, Gemini CLI, Codex, and GitHub Copilot, with more agents planned.
 
+<p align="center">
+  <img src="docs/screenshots/dashboard.png" width="700" alt="Dashboard">
+</p>
+<p align="center">
+  <img src="docs/screenshots/create-workflow.png" width="345" alt="Create Workflow">&nbsp;
+  <img src="docs/screenshots/workflows-kanban.png" width="345" alt="Workflows Kanban">
+</p>
+<p align="center">
+  <img src="docs/screenshots/projects.png" width="345" alt="Projects">&nbsp;
+  <img src="docs/screenshots/chat.png" width="345" alt="Chat">
+</p>
+
+<details>
+<summary><strong>More screenshots</strong></summary>
+<br>
+<p align="center">
+  <img src="docs/screenshots/workflow-detail.png" width="700" alt="Workflow Detail">
+</p>
+<p align="center">
+  <img src="docs/screenshots/multi-agent-plan.png" width="345" alt="Multi-Agent Plan">&nbsp;
+  <img src="docs/screenshots/execution-timeline.png" width="345" alt="Execution Timeline">
+</p>
+<p align="center">
+  <img src="docs/screenshots/generate-issues.png" width="345" alt="Generate Issues">&nbsp;
+  <img src="docs/screenshots/refine-prompt.png" width="345" alt="Refine Prompt">
+</p>
+</details>
+
 ---
 
 ## Features
@@ -29,7 +57,7 @@ Currently supports Claude Code, Gemini CLI, Codex, and GitHub Copilot, with more
 - **Git Worktree Isolation**: Each task executes in isolated worktrees to prevent conflicts
 - **Multi-Workflow Management**: Run multiple workflows concurrently and resume by ID
 - **Resume from Checkpoint**: Recover from failures without re-running completed work
-- **Multiple Interfaces**: CLI for scripts, TUI for interactive use, web panel coming soon
+- **Multiple Interfaces**: CLI for scripts, TUI for interactive use, Web UI for visual management
 - **Token Monitor**: Track token usage across all agents during workflow execution
 - **Trace Mode**: Optional file-based traces for prompts, outputs, and consensus decisions
 
