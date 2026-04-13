@@ -31,7 +31,7 @@ flowchart TD
 
 If you only add a model, you skip the adapter and registry layers. If you add reasoning support to an agent that already exists, you skip the adapter layer. The full path is only needed for brand-new agents.
 
-> **Known issue -- hardcoded model lists.** Both `cmd/quorum/cmd/chat.go` and `internal/tui/chat/model.go` maintain their own model lists independently from `core.AgentModels` in `constants.go`. These lists are currently out of sync with the canonical source of truth. Until this duplication is resolved in code, you must manually keep all three locations consistent when adding or removing models.
+> **Single source of truth for models.** `core.AgentModels` in `constants.go` is the only place where model lists are defined. `chat.go`, `model.go`, and the API all derive from it via `core.GetSupportedModels()`. When adding a model, you only need to edit `constants.go`.
 
 ---
 
@@ -387,26 +387,14 @@ Add the model ID to the agent's entry in `AgentModels`:
 
 ```go
 AgentCodex: {
-    "gpt-6-codex",  // new model
+    "gpt-5.4-codex",  // new model
+    "gpt-5.4",
     "gpt-5.3-codex",
     // ...rest
 },
 ```
 
 If this model becomes the new default, also update `AgentDefaultModels`.
-
-### 2. Add per-model reasoning efforts (if applicable)
-
-**File:** `internal/core/constants.go`
-
-If the model supports reasoning and has a different set of levels than existing models, add it to `AgentModelReasoningEfforts`:
-
-```go
-AgentCodex: {
-    "gpt-6-codex": {"low", "medium", "high", "xhigh"},
-    // ...existing models
-},
-```
 
 ### 3. Update normalization (if needed)
 
@@ -459,46 +447,24 @@ This applies when a CLI tool introduces a new effort level (e.g., Codex adds `"u
 
 **File:** `internal/core/constants.go`
 
-```go
-var CodexReasoningEfforts = []string{"none", "minimal", "low", "medium", "high", "xhigh", "ultra"}
-```
-
-Add it to the validation map too:
+Add the new level to the agent's entry in `AgentReasoningEfforts`:
 
 ```go
-var ValidCodexReasoningEfforts = map[string]bool{
-    // ...existing...
-    "ultra": true,
+var AgentReasoningEfforts = map[string][]string{
+    AgentClaude: {"low", "medium", "high", "max"},
+    AgentCodex:  {"none", "minimal", "low", "medium", "high", "xhigh", "ultra"}, // added "ultra"
 }
 ```
 
-If this is a level that no other agent uses, also add it to `AllReasoningEfforts` and `ValidReasoningEfforts`.
+If no other agent uses this level, also add it to the global union `ReasoningEfforts` and `ValidReasoningEfforts`.
 
-### 2. Add per-model mappings
-
-**File:** `internal/core/constants.go`
-
-Update the models that support this level in `AgentModelReasoningEfforts`:
-
-```go
-"gpt-5.3-codex": {"none", "minimal", "low", "medium", "high", "xhigh", "ultra"},
-```
-
-### 3. Update normalization
-
-**File:** `internal/core/reasoning.go`
-
-Add mapping rules so the new level can be converted to/from other agent scales. For example, if Codex's `"ultra"` should map to Claude's `"max"`, update `NormalizeClaudeEffort` and `NormalizeReasoningEffortForModel`.
-
-### 4. Update validation messages
+### 2. Update validation
 
 **File:** `internal/config/validator.go`
 
-The validation uses `core.IsValidReasoningEffort()` which checks the `ValidReasoningEfforts` map. If you added the level there in step 1, validation works automatically.
+Validation is automatic. The validator calls `core.IsValidReasoningEffortForAgent(agent, effort)` which reads from `AgentReasoningEfforts`. No manual changes needed unless you added a new agent.
 
-Update the `msgInvalidReasoningEffort` string constant if it lists valid values explicitly (currently defined as `"invalid reasoning effort (valid: none, minimal, low, medium, high, xhigh, max)"`). Search for this constant in the file and add the new level to the parenthetical list.
-
-### 5. Update the frontend
+### 3. Update the frontend
 
 **File:** `frontend/src/lib/agents.js`
 
@@ -512,21 +478,20 @@ const REASONING_LABELS = {
 ```
 
 Update fallback data:
-- `FALLBACK_REASONING_EFFORTS`
-- `FALLBACK_AGENT_REASONING_EFFORTS`
-- `FALLBACK_AGENT_MODEL_REASONING_EFFORTS`
+- `FALLBACK_REASONING_EFFORTS` (global union)
+- `FALLBACK_AGENT_REASONING_EFFORTS` (per-agent map)
 
-### 6. Update the adapter
+### 4. Update the adapter (if needed)
 
 **File:** The adapter file for the agent (e.g., `internal/adapters/cli/codex.go`)
 
-Make sure the adapter passes the new level to the CLI correctly. Most adapters pass the configured value directly, so no change is needed unless the level requires special handling.
+Most adapters pass the effort value directly to the CLI, so no change is needed unless the new level requires special handling (see the `minimal` workaround in `codex.go` that disables `web_search`).
 
-### 7. Verify
+### 5. Verify
 
 ```bash
 go build ./...
-go test ./internal/core/... ./internal/config/...
+go test ./internal/core/... ./internal/config/... ./internal/api/...
 cd frontend && npm run build
 ```
 

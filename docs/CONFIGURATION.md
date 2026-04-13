@@ -394,16 +394,15 @@ reasoning effort configuration.
 
 | Agent | Valid Values | Mechanism |
 |-------|-------------|-----------|
-| Claude | `low`, `medium`, `high`, `max` | `CLAUDE_CODE_EFFORT_LEVEL` env var (Opus 4.6 only) |
+| Claude | `low`, `medium`, `high`, `max` | `--effort` CLI flag (v2.1.50+) |
 | Codex | `none`, `minimal`, `low`, `medium`, `high`, `xhigh` | `-c model_reasoning_effort` CLI flag |
-| Copilot | Not supported | No CLI flag or env var available |
+| Copilot | Not supported | No CLI flag available |
 | Gemini | Not supported | No CLI flag exposed |
 | OpenCode | Not supported | `--variant` flag not yet implemented in adapter |
 
-Configuration validation accepts the union of all values (`none`, `minimal`, `low`,
-`medium`, `high`, `xhigh`, `max`) for any agent. At runtime, the adapter normalizes
-values between agent-specific formats (e.g., `xhigh` maps to `max` for Claude,
-`max` maps to `xhigh` for Codex).
+Configuration validation is **per-agent**: setting `reasoning_effort: max` on a Codex
+agent, or `reasoning_effort: xhigh` on a Claude agent, will be rejected by the
+validator. Each agent only accepts the values listed in its row above.
 
 #### OpenCode Agent
 
@@ -1056,7 +1055,7 @@ produce actionable error messages.
 - `agents.default` must reference a known, enabled agent
 - Each enabled agent must have a non-empty `path` and at least 1 phase set to `true`
 - `phase_models` keys must be valid: `refine`, `analyze`, `moderate`, `synthesize`, `plan`, `execute`
-- `reasoning_effort` values must be in the union set: `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`
+- `reasoning_effort` values are validated per-agent: Claude accepts `low`, `medium`, `high`, `max`; Codex accepts `none`, `minimal`, `low`, `medium`, `high`, `xhigh`
 
 **Phases:**
 - Phase timeouts must be valid Go durations

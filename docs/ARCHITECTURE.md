@@ -243,7 +243,7 @@ Implement ports by wrapping external systems.
 
 | Adapter | CLI Tool | Description |
 |---------|----------|-------------|
-| `claude` | `claude` | Full analysis, planning, code generation. Reasoning effort via `CLAUDE_CODE_EFFORT_LEVEL` env var. |
+| `claude` | `claude` | Full analysis, planning, code generation. Reasoning effort via `--effort` flag (low/medium/high/max). |
 | `gemini` | `gemini` | Analysis, validation, code generation. ThinkingLevel via API (no CLI flag). |
 | `codex` | `codex` | Code-focused tasks. Reasoning effort via `-c model_reasoning_effort`. |
 | `copilot` | `copilot` | GitHub Copilot CLI (standalone `@github/copilot` npm package, replaces deprecated `gh copilot`). Prompt via stdin pipe. |
