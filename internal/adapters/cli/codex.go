@@ -108,7 +108,6 @@ func (c *CodexAdapter) buildArgs(opts core.ExecuteOptions) []string {
 
 	// Determine reasoning effort: opts (per-message) > config > phase-based defaults
 	reasoningEffort := c.getReasoningEffort(opts)
-	reasoningEffort = core.NormalizeReasoningEffortForModel(model, reasoningEffort)
 
 	// Headless approvals via config overrides
 	args = append(args,

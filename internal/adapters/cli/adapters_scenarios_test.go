@@ -190,8 +190,8 @@ func TestGeminiAdapter_BuildArgsExtended(t *testing.T) {
 		},
 		{
 			name: "with custom model",
-			opts: core.ExecuteOptions{Model: "gemini-3-pro-preview"},
-			want: []string{"--model", "gemini-3-pro-preview", "--approval-mode", "yolo"},
+			opts: core.ExecuteOptions{Model: "gemini-3.1-pro-preview"},
+			want: []string{"--model", "gemini-3.1-pro-preview", "--approval-mode", "yolo"},
 		},
 	}
 

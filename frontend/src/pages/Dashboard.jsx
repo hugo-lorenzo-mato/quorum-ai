@@ -14,6 +14,8 @@ import {
   Clock,
   ArrowUpRight,
   Activity,
+  StopCircle,
+  Pause,
   Cpu,
   HardDrive,
   Timer,
@@ -23,7 +25,7 @@ import {
   Gauge,
   Box,
   Layers,
-  MonitorDot,
+  Monitor,
   Thermometer,
   ChevronDown,
   ChevronUp,
@@ -339,7 +341,7 @@ function SystemResources({ data, loading, onRefresh, timeAgo }) {
           {/* Machine Section */}
           <div className="space-y-3">
             <h4 className="text-xs font-semibold text-warning flex items-center gap-1.5 uppercase tracking-wide">
-              <MonitorDot className="w-3 h-3" />
+              <Monitor className="w-3 h-3" />
               Machine
             </h4>
 
@@ -395,7 +397,7 @@ function SystemResources({ data, loading, onRefresh, timeAgo }) {
             {gpus.length > 0 ? (
               gpus.map((gpu, i) => (
                 <div key={i} className="flex items-center gap-2 text-muted-foreground md:col-span-2">
-                  <MonitorDot className="w-3 h-3" />
+                  <Monitor className="w-3 h-3" />
                   <span className="truncate" title={gpu.name}>
                     {gpu.name}
                     {gpu.util_valid && ` · ${gpu.util_percent?.toFixed(0)}%`}
@@ -411,7 +413,7 @@ function SystemResources({ data, loading, onRefresh, timeAgo }) {
               ))
             ) : (
               <div className="flex items-center gap-2 text-muted-foreground">
-                <MonitorDot className="w-3 h-3" />
+                <Monitor className="w-3 h-3" />
                 <span>No GPU detected</span>
               </div>
             )}
@@ -441,8 +443,11 @@ function WorkflowItem({ workflow }) {
   const statusConfig = {
     pending: { icon: Clock },
     running: { icon: Activity },
+    cancelling: { icon: StopCircle },
+    aborted: { icon: StopCircle },
     completed: { icon: CheckCircle2 },
     failed: { icon: XCircle },
+    paused: { icon: Pause },
   };
 
   const config = statusConfig[workflow.status] || statusConfig.pending;
@@ -454,23 +459,23 @@ function WorkflowItem({ workflow }) {
       to={`/workflows/${workflow.id}`}
       className="group flex items-center gap-3 p-2.5 -mx-2.5 rounded-lg transition-colors hover:bg-accent"
     >
-      <div className={`p-1.5 rounded-lg ${statusColor.bg}`}>
-        <StatusIcon className={`w-3.5 h-3.5 ${statusColor.text}`} />
+      <div className={`p-2 rounded-lg ${statusColor.bg} ${statusColor.border} border shadow-sm`}>
+        <StatusIcon className={`w-3.5 h-3.5 ${statusColor.text}`} strokeWidth={3} />
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-foreground truncate">
+        <p className="text-sm font-medium text-foreground truncate group-hover:text-primary transition-colors">
           {getWorkflowTitle(workflow)}
         </p>
         <div className="flex items-center gap-2 mt-0.5">
-          <span className="text-xs text-muted-foreground font-mono bg-muted/50 px-1.5 rounded">
+          <span className="text-[10px] text-muted-foreground font-mono bg-muted/50 px-1.5 py-0.5 rounded uppercase tracking-tighter">
             {workflow.id.substring(0, 8)}
           </span>
-          <span className="text-xs text-muted-foreground">
+          <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">
             · {workflow.task_count || 0} tasks
           </span>
         </div>
       </div>
-      <div className={`text-xs font-medium px-2 py-0.5 rounded-full ${statusColor.bg} ${statusColor.text}`}>
+      <div className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider border shadow-sm ${statusColor.bg} ${statusColor.text} ${statusColor.border}`}>
         {workflow.status}
       </div>
     </Link>

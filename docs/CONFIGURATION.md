@@ -963,7 +963,7 @@ agents:
       execute: true
   gemini:
     enabled: true
-    model: gemini-3-flash-preview
+    model: gemini-3-flash
     phases:
       analyze: true
       execute: true

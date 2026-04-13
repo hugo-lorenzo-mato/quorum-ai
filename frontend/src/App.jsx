@@ -6,9 +6,8 @@ import { useUIStore } from './stores';
 import { useConfigStore } from './stores/configStore';
 import { loadEnums } from './lib/agents';
 
-// Lazy load page components
-const Dashboard = lazy(() => import('./pages/Dashboard'));
-const Workflows = lazy(() => import('./pages/Workflows'));
+import Dashboard from './pages/Dashboard';
+import Workflows from './pages/Workflows';
 const Prompts = lazy(() => import('./pages/Prompts'));
 const SystemPrompts = lazy(() => import('./pages/SystemPrompts'));
 const IssuesEditor = lazy(() => import('./pages/IssuesEditor'));
@@ -53,9 +52,11 @@ function AppContent() {
       <Suspense fallback={<PageLoader />}>
         <Routes>
           <Route path="/" element={<Dashboard />} />
+          
           <Route path="/workflows" element={<Workflows />} />
           <Route path="/workflows/:id" element={<Workflows />} />
           <Route path="/workflows/:id/issues" element={<IssuesEditor />} />
+          
           <Route path="/prompts" element={<Prompts />} />
           <Route path="/system-prompts" element={<SystemPrompts />} />
           <Route path="/kanban" element={<Kanban />} />

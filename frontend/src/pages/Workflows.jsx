@@ -127,9 +127,7 @@ function deriveWorkflowTitle(workflow, tasks = []) {
 }
 
 function StatusBadge({ status }) {
-  const { bg, text } = getStatusColor(status);
-  // Map icon based on status since getStatusColor returns generic props
-  // We can override the icon from the theme if we want, but for now we'll just use the status string to pick icon
+  const { bg, text, border, dot } = getStatusColor(status);
   
   const iconMap = {
     pending: Clock,
@@ -144,8 +142,8 @@ function StatusBadge({ status }) {
   const StatusIcon = iconMap[status] || Clock;
 
   return (
-    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${bg} ${text}`}>
-      <StatusIcon className="w-3 h-3" />
+    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border ${bg} ${text} ${border} shadow-sm transition-all`}>
+      <StatusIcon className="w-3 h-3" strokeWidth={3} />
       {status}
     </span>
   );
@@ -1310,8 +1308,8 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
       </div>
 
       {/* Inspector */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className={`space-y-6 ${activeMobileTab === 'tasks' ? 'block' : 'hidden'} md:block`}>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+        <div className={`space-y-6 ${activeMobileTab === 'tasks' ? 'block' : 'hidden'} md:block h-full`}>
           {/* Attachments */}
           <div className="p-4 rounded-xl border border-border bg-card">
             <div className="flex items-center justify-between mb-3">
@@ -1428,7 +1426,7 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
             
             {taskView === 'list' ? (
               tasks.length > 0 ? (
-                <div className="space-y-2 max-h-[45vh] overflow-y-auto pr-1">
+                <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-1">
                   {tasks.map((task) => (
                     <TaskItem
                       key={task.id}
@@ -1469,7 +1467,7 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
                   <FolderTree className="w-3 h-3" />
                   {artifactIndex.reportPath}
                 </p>
-                <div className="space-y-4 max-h-[45vh] overflow-y-auto pr-1">
+                <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
                   <FileTree
                     items={docGroups.flatMap(g => g.docs.map(d => ({
                       ...d,
@@ -1485,7 +1483,7 @@ function WorkflowDetail({ workflow, tasks, onBack }) {
         </div>
 
         {/* Preview */}
-        <div className={`lg:col-span-2 p-6 rounded-xl border border-border bg-card flex flex-col max-h-[80vh] ${activeMobileTab === 'preview' ? 'block' : 'hidden'} md:flex`}>
+        <div className={`lg:col-span-2 p-6 rounded-xl border border-border bg-card flex flex-col h-full ${activeMobileTab === 'preview' ? 'block' : 'hidden'} md:flex`}>
           <div className="flex items-start justify-between gap-4 mb-4 flex-none">
             <div className="min-w-0">
               <h3 className="text-lg font-semibold text-foreground truncate">

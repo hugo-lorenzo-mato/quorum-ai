@@ -377,7 +377,7 @@ func TestCodexAdapter_BuildArgs(t *testing.T) {
 	}
 }
 
-func TestCodexAdapter_BuildArgs_NormalizesReasoningEffort(t *testing.T) {
+func TestCodexAdapter_BuildArgs_PassesEffortDirectly(t *testing.T) {
 	t.Parallel()
 	cfg := AgentConfig{
 		Model: "gpt-5.2-codex",
@@ -386,14 +386,14 @@ func TestCodexAdapter_BuildArgs_NormalizesReasoningEffort(t *testing.T) {
 	codex := adapter.(*CodexAdapter)
 
 	opts := core.ExecuteOptions{
-		ReasoningEffort: "minimal", // not directly supported by gpt-5.2-codex, normalizes to low
+		ReasoningEffort: "minimal", // passed directly to CLI, no normalization
 	}
 
 	args := codex.buildArgs(opts)
 
-	// gpt-5.2-codex supports low/medium/high/xhigh; minimal should normalize to low.
-	if !containsString(args, `model_reasoning_effort="low"`) {
-		t.Fatalf("expected model_reasoning_effort to normalize to low, args=%v", args)
+	// Effort values are passed directly — no cross-agent mapping.
+	if !containsString(args, `model_reasoning_effort="minimal"`) {
+		t.Fatalf("expected model_reasoning_effort to be passed directly as minimal, args=%v", args)
 	}
 }
 

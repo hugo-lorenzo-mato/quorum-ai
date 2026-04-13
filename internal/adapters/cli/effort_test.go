@@ -13,10 +13,21 @@ import (
 )
 
 // =============================================================================
-// Claude: applyEffortEnv
+// Claude: buildArgs --effort flag
 // =============================================================================
 
-func TestClaudeApplyEffortEnv_PerMessageOverride(t *testing.T) {
+// findEffortArg extracts the --effort value from a buildArgs result.
+// Returns the effort value and true if found, or ("", false) if not present.
+func findEffortArg(args []string) (string, bool) {
+	for i, a := range args {
+		if a == "--effort" && i+1 < len(args) {
+			return args[i+1], true
+		}
+	}
+	return "", false
+}
+
+func TestClaudeBuildArgs_PerMessageEffortOverride(t *testing.T) {
 	t.Parallel()
 	adapter, _ := NewClaudeAdapter(AgentConfig{
 		Path:            "claude",
@@ -29,15 +40,18 @@ func TestClaudeApplyEffortEnv_PerMessageOverride(t *testing.T) {
 		ReasoningEffort: "max",
 		Model:           "claude-opus-4-6",
 	}
-	claude.applyEffortEnv(opts)
+	args := claude.buildArgs(opts)
 
-	got := claude.ExtraEnv["CLAUDE_CODE_EFFORT_LEVEL"]
+	got, ok := findEffortArg(args)
+	if !ok {
+		t.Fatal("expected --effort flag in args")
+	}
 	if got != "max" {
-		t.Errorf("applyEffortEnv() set CLAUDE_CODE_EFFORT_LEVEL = %q, want %q", got, "max")
+		t.Errorf("--effort = %q, want %q", got, "max")
 	}
 }
 
-func TestClaudeApplyEffortEnv_ConfigDefault(t *testing.T) {
+func TestClaudeBuildArgs_ConfigDefaultEffort(t *testing.T) {
 	t.Parallel()
 	adapter, _ := NewClaudeAdapter(AgentConfig{
 		Path:            "claude",
@@ -49,15 +63,18 @@ func TestClaudeApplyEffortEnv_ConfigDefault(t *testing.T) {
 	opts := core.ExecuteOptions{
 		Model: "claude-opus-4-6",
 	}
-	claude.applyEffortEnv(opts)
+	args := claude.buildArgs(opts)
 
-	got := claude.ExtraEnv["CLAUDE_CODE_EFFORT_LEVEL"]
+	got, ok := findEffortArg(args)
+	if !ok {
+		t.Fatal("expected --effort flag in args")
+	}
 	if got != "high" {
-		t.Errorf("applyEffortEnv() set CLAUDE_CODE_EFFORT_LEVEL = %q, want %q", got, "high")
+		t.Errorf("--effort = %q, want %q", got, "high")
 	}
 }
 
-func TestClaudeApplyEffortEnv_PhaseSpecific(t *testing.T) {
+func TestClaudeBuildArgs_PhaseSpecificEffort(t *testing.T) {
 	t.Parallel()
 	adapter, _ := NewClaudeAdapter(AgentConfig{
 		Path:            "claude",
@@ -73,15 +90,18 @@ func TestClaudeApplyEffortEnv_PhaseSpecific(t *testing.T) {
 		Phase: core.PhaseAnalyze,
 		Model: "claude-opus-4-6",
 	}
-	claude.applyEffortEnv(opts)
+	args := claude.buildArgs(opts)
 
-	got := claude.ExtraEnv["CLAUDE_CODE_EFFORT_LEVEL"]
+	got, ok := findEffortArg(args)
+	if !ok {
+		t.Fatal("expected --effort flag in args")
+	}
 	if got != "max" {
-		t.Errorf("applyEffortEnv() set CLAUDE_CODE_EFFORT_LEVEL = %q, want %q", got, "max")
+		t.Errorf("--effort = %q, want %q", got, "max")
 	}
 }
 
-func TestClaudeApplyEffortEnv_EmptyEffort(t *testing.T) {
+func TestClaudeBuildArgs_EmptyEffort(t *testing.T) {
 	t.Parallel()
 	adapter, _ := NewClaudeAdapter(AgentConfig{
 		Path:  "claude",
@@ -93,19 +113,16 @@ func TestClaudeApplyEffortEnv_EmptyEffort(t *testing.T) {
 	opts := core.ExecuteOptions{
 		Model: "claude-opus-4-6",
 	}
-	claude.applyEffortEnv(opts)
+	args := claude.buildArgs(opts)
 
-	// ExtraEnv should be nil or not contain the key
-	if claude.ExtraEnv != nil {
-		if _, ok := claude.ExtraEnv["CLAUDE_CODE_EFFORT_LEVEL"]; ok {
-			t.Error("applyEffortEnv() should not set env var when effort is empty")
-		}
+	if _, ok := findEffortArg(args); ok {
+		t.Error("should not include --effort flag when effort is empty")
 	}
 }
 
-func TestClaudeApplyEffortEnv_CrossAgentNormalization(t *testing.T) {
+func TestClaudeBuildArgs_EffortPassedDirectly(t *testing.T) {
 	t.Parallel()
-	// Codex-style "xhigh" should be normalized to Claude "max"
+	// Effort values are passed directly to CLI — no cross-agent normalization
 	adapter, _ := NewClaudeAdapter(AgentConfig{
 		Path:            "claude",
 		Model:           "claude-opus-4-6",
@@ -113,39 +130,18 @@ func TestClaudeApplyEffortEnv_CrossAgentNormalization(t *testing.T) {
 	})
 	claude := adapter.(*ClaudeAdapter)
 
-	opts := core.ExecuteOptions{
-		Model: "claude-opus-4-6",
+	args := claude.buildArgs(core.ExecuteOptions{Model: "claude-opus-4-6"})
+
+	got, ok := findEffortArg(args)
+	if !ok {
+		t.Fatal("expected --effort flag in args")
 	}
-	claude.applyEffortEnv(opts)
-
-	got := claude.ExtraEnv["CLAUDE_CODE_EFFORT_LEVEL"]
-	if got != "max" {
-		t.Errorf("applyEffortEnv() set CLAUDE_CODE_EFFORT_LEVEL = %q, want %q (xhigh -> max)", got, "max")
-	}
-}
-
-func TestClaudeApplyEffortEnv_NoneMinimalNormalization(t *testing.T) {
-	t.Parallel()
-	// Codex-style "minimal" should be normalized to Claude "low"
-	adapter, _ := NewClaudeAdapter(AgentConfig{
-		Path:            "claude",
-		Model:           "claude-opus-4-6",
-		ReasoningEffort: "minimal",
-	})
-	claude := adapter.(*ClaudeAdapter)
-
-	opts := core.ExecuteOptions{
-		Model: "claude-opus-4-6",
-	}
-	claude.applyEffortEnv(opts)
-
-	got := claude.ExtraEnv["CLAUDE_CODE_EFFORT_LEVEL"]
-	if got != "low" {
-		t.Errorf("applyEffortEnv() set CLAUDE_CODE_EFFORT_LEVEL = %q, want %q (minimal -> low)", got, "low")
+	if got != "xhigh" {
+		t.Errorf("--effort = %q, want %q (passed directly, no mapping)", got, "xhigh")
 	}
 }
 
-func TestClaudeApplyEffortEnv_ModelFromConfig(t *testing.T) {
+func TestClaudeBuildArgs_ModelFromConfigEffort(t *testing.T) {
 	t.Parallel()
 	// When opts.Model is empty, the config model should be used for normalization
 	adapter, _ := NewClaudeAdapter(AgentConfig{
@@ -158,11 +154,147 @@ func TestClaudeApplyEffortEnv_ModelFromConfig(t *testing.T) {
 	opts := core.ExecuteOptions{
 		// No Model specified in opts
 	}
-	claude.applyEffortEnv(opts)
+	args := claude.buildArgs(opts)
 
-	got := claude.ExtraEnv["CLAUDE_CODE_EFFORT_LEVEL"]
+	got, ok := findEffortArg(args)
+	if !ok {
+		t.Fatal("expected --effort flag in args")
+	}
 	if got != "high" {
-		t.Errorf("applyEffortEnv() set CLAUDE_CODE_EFFORT_LEVEL = %q, want %q", got, "high")
+		t.Errorf("--effort = %q, want %q", got, "high")
+	}
+}
+
+// =============================================================================
+// Claude: opus-fast virtual model
+// =============================================================================
+
+func TestClaudeBuildArgs_OpusFastModel(t *testing.T) {
+	t.Parallel()
+	adapter, _ := NewClaudeAdapter(AgentConfig{
+		Path:  "claude",
+		Model: "opus-fast",
+	})
+	claude := adapter.(*ClaudeAdapter)
+
+	args := claude.buildArgs(core.ExecuteOptions{})
+
+	// Should resolve to real model
+	foundModel := false
+	for i, a := range args {
+		if a == "--model" && i+1 < len(args) && args[i+1] == "claude-opus-4-6" {
+			foundModel = true
+			break
+		}
+	}
+	if !foundModel {
+		t.Errorf("expected --model claude-opus-4-6 (resolved from opus-fast), got args: %v", args)
+	}
+
+	// Should have --settings for fast mode
+	foundSettings := false
+	for i, a := range args {
+		if a == "--settings" && i+1 < len(args) && args[i+1] == `{"fastMode":true}` {
+			foundSettings = true
+			break
+		}
+	}
+	if !foundSettings {
+		t.Errorf("expected --settings '{\"fastMode\":true}' for opus-fast, got args: %v", args)
+	}
+}
+
+func TestClaudeBuildArgs_OpusFastFromOpts(t *testing.T) {
+	t.Parallel()
+	adapter, _ := NewClaudeAdapter(AgentConfig{
+		Path:  "claude",
+		Model: "opus", // normal default
+	})
+	claude := adapter.(*ClaudeAdapter)
+
+	// Override with opus-fast at execution time
+	args := claude.buildArgs(core.ExecuteOptions{Model: "opus-fast"})
+
+	foundModel := false
+	for i, a := range args {
+		if a == "--model" && i+1 < len(args) && args[i+1] == "claude-opus-4-6" {
+			foundModel = true
+			break
+		}
+	}
+	if !foundModel {
+		t.Errorf("expected --model claude-opus-4-6, got args: %v", args)
+	}
+
+	foundSettings := false
+	for i, a := range args {
+		if a == "--settings" && i+1 < len(args) {
+			foundSettings = true
+			break
+		}
+	}
+	if !foundSettings {
+		t.Errorf("expected --settings flag for opus-fast, got args: %v", args)
+	}
+}
+
+func TestClaudeBuildArgs_RegularModelNoFastMode(t *testing.T) {
+	t.Parallel()
+	adapter, _ := NewClaudeAdapter(AgentConfig{
+		Path:  "claude",
+		Model: "opus",
+	})
+	claude := adapter.(*ClaudeAdapter)
+
+	args := claude.buildArgs(core.ExecuteOptions{})
+
+	// Should pass "opus" directly
+	foundModel := false
+	for i, a := range args {
+		if a == "--model" && i+1 < len(args) && args[i+1] == "opus" {
+			foundModel = true
+			break
+		}
+	}
+	if !foundModel {
+		t.Errorf("expected --model opus, got args: %v", args)
+	}
+
+	// Should NOT have --settings
+	for _, a := range args {
+		if a == "--settings" {
+			t.Errorf("regular model should not include --settings, got args: %v", args)
+			break
+		}
+	}
+}
+
+func TestResolveClaudeModel(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		input    string
+		wantReal string
+		wantFast bool
+	}{
+		{"opus-fast", "claude-opus-4-6", true},
+		{"opus", "opus", false},
+		{"claude-opus-4-6", "claude-opus-4-6", false},
+		{"sonnet", "sonnet", false},
+		{"", "", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			t.Parallel()
+			real, fast := resolveClaudeModel(tt.input)
+			if real != tt.wantReal {
+				t.Errorf("resolveClaudeModel(%q) model = %q, want %q", tt.input, real, tt.wantReal)
+			}
+			if fast != tt.wantFast {
+				t.Errorf("resolveClaudeModel(%q) fast = %v, want %v", tt.input, fast, tt.wantFast)
+			}
+		})
 	}
 }
 

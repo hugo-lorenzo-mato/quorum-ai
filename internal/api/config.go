@@ -504,127 +504,30 @@ func (s *Server) handleResetGlobalConfig(w http.ResponseWriter, _ *http.Request)
 }
 
 // handleGetAgents returns available agents and their status.
-// Models are synced with internal/adapters/cli/*.go SupportedModels.
-// Reasoning efforts synced with internal/core/constants.go.
+// Models and reasoning efforts are derived from core.AgentModels and
+// core.AgentReasoningEfforts (single source of truth).
 func (s *Server) handleGetAgents(w http.ResponseWriter, _ *http.Request) {
-	// Codex reasoning efforts
-	codexReasoningEfforts := core.CodexReasoningEfforts
+	displayNames := map[string]string{
+		core.AgentClaude:   "Claude",
+		core.AgentGemini:   "Gemini",
+		core.AgentCodex:    "Codex",
+		core.AgentCopilot:  "Copilot",
+		core.AgentOpenCode: "OpenCode",
+	}
 
-	agents := []map[string]interface{}{
-		{
-			"name":        "claude",
-			"displayName": "Claude",
-			// Synced with internal/adapters/cli/claude.go
-			// Aliases (recommended): opus, sonnet, haiku
-			// Full names for explicit version control
-			"models": []string{
-				// Aliases (map to latest version)
-				"opus",
-				"sonnet",
-				"haiku",
-				// Claude 4.6 (latest opus)
-				"claude-opus-4-6",
-				// Claude 4.5 family
-				"claude-sonnet-4-5-20250929",
-				"claude-haiku-4-5-20251001",
-				// Claude 4 family
-				"claude-opus-4-20250514",
-				"claude-opus-4-1-20250805",
-				"claude-sonnet-4-20250514",
-			},
-			"hasReasoningEffort": true,
-			"reasoningEfforts":   []string{"low", "medium", "high", "max"},
-			"available":          true,
-		},
-		{
-			"name":        "gemini",
-			"displayName": "Gemini",
-			// Synced with internal/adapters/cli/gemini.go
-			"models": []string{
-				// Gemini 2.5 family (stable, recommended)
-				"gemini-2.5-pro",
-				"gemini-2.5-flash",
-				"gemini-2.5-flash-lite",
-				// Gemini 2.0 family (retiring March 2026)
-				"gemini-2.0-flash",
-				"gemini-2.0-flash-lite",
-				// Gemini 3 preview
-				"gemini-3-pro-preview",
-				"gemini-3-flash-preview",
-			},
-			"available": true,
-		},
-		{
-			"name":        "codex",
-			"displayName": "Codex",
-			// Synced with internal/adapters/cli/codex.go
-			// Note: o3, o4-mini, gpt-4.1, gpt-5-mini require API key (not ChatGPT account)
-			"models": []string{
-				// GPT-5.3 family (latest)
-				"gpt-5.3-codex",
-				// GPT-5.2 family
-				"gpt-5.2-codex",
-				"gpt-5.2",
-				// GPT-5.1 family
-				"gpt-5.1-codex-max",
-				"gpt-5.1-codex",
-				"gpt-5.1-codex-mini",
-				"gpt-5.1",
-				// GPT-5 family
-				"gpt-5",
-				// Reasoning models (require API key)
-				"o3",
-				"o4-mini",
-				// Legacy (require API key)
-				"gpt-5-mini",
-				"gpt-4.1",
-			},
-			"hasReasoningEffort": true,
-			"reasoningEfforts":   codexReasoningEfforts,
-			"available":          true,
-		},
-		{
-			"name":        "copilot",
-			"displayName": "Copilot",
-			// Synced with internal/adapters/cli/copilot.go
-			// Copilot supports multiple providers via GitHub subscription
-			// Note: Copilot CLI has no reasoning effort flag/env var/config
-			"models": []string{
-				// Anthropic Claude (via Copilot)
-				"claude-sonnet-4.5",
-				"claude-opus-4.6",
-				"claude-haiku-4.5",
-				"claude-sonnet-4",
-				// OpenAI GPT (via Copilot)
-				"gpt-5.2-codex",
-				"gpt-5.2",
-				"gpt-5.1-codex-max",
-				"gpt-5.1-codex",
-				"gpt-5.1",
-				"gpt-5",
-				"gpt-5.1-codex-mini",
-				"gpt-5-mini",
-				"gpt-4.1",
-				// Google Gemini (via Copilot)
-				"gemini-3-pro-preview",
-			},
-			"available": true,
-		},
-		{
-			"name":        "opencode",
-			"displayName": "OpenCode",
-			// Synced with internal/adapters/cli/opencode.go
-			// Requires local Ollama server with these models installed
-			"models": []string{
-				// Local Ollama models (from `ollama list`)
-				"qwen2.5-coder:32b", // Best local coding model
-				"qwen3-coder:30b",   // Latest Qwen coder
-				"deepseek-r1:32b",   // Reasoning model
-				"codestral:22b",     // Mistral code model
-				"gpt-oss:20b",       // Open source GPT
-			},
-			"available": true,
-		},
+	agents := make([]map[string]interface{}, 0, len(core.Agents))
+	for _, name := range core.Agents {
+		entry := map[string]interface{}{
+			"name":        name,
+			"displayName": displayNames[name],
+			"models":      core.GetSupportedModels(name),
+			"available":   true,
+		}
+		if core.SupportsReasoning(name) {
+			entry["hasReasoningEffort"] = true
+			entry["reasoningEfforts"] = core.GetReasoningEfforts(name)
+		}
+		agents = append(agents, entry)
 	}
 
 	respondJSON(w, http.StatusOK, agents)

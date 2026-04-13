@@ -45,7 +45,7 @@ type AgentConfig struct {
 	Phases map[string]bool
 	// ReasoningEffort is the default reasoning effort for all phases.
 	// Codex: minimal, low, medium, high, xhigh.
-	// Claude: low, medium, high, max (via CLAUDE_CODE_EFFORT_LEVEL env var, Opus 4.6 only).
+	// Claude: low, medium, high, max (via --effort CLI flag, Opus 4.6 only).
 	ReasoningEffort string
 	// ReasoningEffortPhases allows per-phase overrides of reasoning effort.
 	ReasoningEffortPhases map[string]string

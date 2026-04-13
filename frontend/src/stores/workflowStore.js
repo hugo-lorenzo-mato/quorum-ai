@@ -409,6 +409,25 @@ const useWorkflowStore = create((set, get) => ({
     }
   },
 
+  fetchArtifact: async (workflowId, path) => {
+    try {
+      return await workflowApi.getArtifact(workflowId, path);
+    } catch (error) {
+      set({ error: error.message });
+      throw error;
+    }
+  },
+
+  downloadArtifacts: async (workflowId) => {
+    try {
+      await workflowApi.downloadArtifacts(workflowId);
+      return true;
+    } catch (error) {
+      set({ error: error.message });
+      throw error;
+    }
+  },
+
   // SSE event handlers
   handleWorkflowStarted: (data) => {
     const { workflows } = get();

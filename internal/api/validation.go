@@ -344,11 +344,12 @@ func validateSingleAgentBlueprint(bp *BlueprintDTO, agents config.AgentsConfig) 
 				Code:    ErrCodeInvalidEnum,
 			}
 		}
-		if !core.IsValidReasoningEffort(effort) {
+		if !core.IsValidReasoningEffortForAgent(agentName, effort) {
+			validEfforts := strings.Join(core.GetReasoningEfforts(agentName), ", ")
 			return &ValidationFieldError{
 				Field:   "single_agent_reasoning_effort",
 				Value:   effort,
-				Message: "invalid value: must be none, minimal, low, medium, high, or xhigh",
+				Message: "invalid value for " + agentName + ": must be one of: " + validEfforts,
 				Code:    ErrCodeInvalidEnum,
 			}
 		}

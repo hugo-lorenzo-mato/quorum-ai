@@ -194,7 +194,7 @@ agents:
     enabled: true
     path: gemini
     phase_models:
-      analyze: gemini-3-pro-preview
+      analyze: gemini-3.1-pro-preview
 
 phases:
   analyze:

@@ -64,6 +64,74 @@ func TestSupportsReasoning(t *testing.T) {
 	}
 }
 
+func TestGetReasoningEfforts(t *testing.T) {
+	tests := []struct {
+		agent string
+		want  []string
+	}{
+		{"claude", []string{"low", "medium", "high", "max"}},
+		{"codex", []string{"none", "minimal", "low", "medium", "high", "xhigh"}},
+		{"gemini", ReasoningEfforts},  // fallback to global union
+		{"unknown", ReasoningEfforts}, // fallback to global union
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.agent, func(t *testing.T) {
+			got := GetReasoningEfforts(tt.agent)
+			if len(got) != len(tt.want) {
+				t.Fatalf("GetReasoningEfforts(%q) returned %d items, want %d: %v", tt.agent, len(got), len(tt.want), got)
+			}
+			for i, v := range got {
+				if v != tt.want[i] {
+					t.Errorf("GetReasoningEfforts(%q)[%d] = %q, want %q", tt.agent, i, v, tt.want[i])
+				}
+			}
+		})
+	}
+}
+
+func TestIsValidReasoningEffortForAgent(t *testing.T) {
+	tests := []struct {
+		agent  string
+		effort string
+		want   bool
+	}{
+		// Claude accepts low/medium/high/max
+		{"claude", "low", true},
+		{"claude", "medium", true},
+		{"claude", "high", true},
+		{"claude", "max", true},
+		{"claude", "none", false},
+		{"claude", "minimal", false},
+		{"claude", "xhigh", false},
+		// Codex accepts none/minimal/low/medium/high/xhigh
+		{"codex", "none", true},
+		{"codex", "minimal", true},
+		{"codex", "low", true},
+		{"codex", "medium", true},
+		{"codex", "high", true},
+		{"codex", "xhigh", true},
+		{"codex", "max", false},
+		// Unknown agent falls back to global union
+		{"gemini", "max", true},
+		{"gemini", "none", true},
+		{"unknown", "high", true},
+		// Invalid for all
+		{"claude", "ultra", false},
+		{"codex", "ultra", false},
+		{"unknown", "ultra", false},
+	}
+
+	for _, tt := range tests {
+		name := tt.agent + "/" + tt.effort
+		t.Run(name, func(t *testing.T) {
+			if got := IsValidReasoningEffortForAgent(tt.agent, tt.effort); got != tt.want {
+				t.Errorf("IsValidReasoningEffortForAgent(%q, %q) = %v, want %v", tt.agent, tt.effort, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestGetSupportedModels(t *testing.T) {
 	for _, agent := range Agents {
 		models := GetSupportedModels(agent)

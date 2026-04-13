@@ -38,7 +38,7 @@ func (e ValidationErrors) HasErrors() bool {
 }
 
 // Validation message constants for duplicated strings (S1192).
-const msgInvalidReasoningEffort = "invalid reasoning effort (valid: none, minimal, low, medium, high, xhigh, max)"
+// msgInvalidReasoningEffort removed — per-agent messages generated dynamically.
 
 // Validator validates configuration.
 type Validator struct {
@@ -208,8 +208,14 @@ func (v *Validator) validateAgent(prefix string, cfg *AgentConfig) {
 	}
 
 	v.validatePhaseModels(prefix+".phase_models", cfg.PhaseModels)
-	v.validateReasoningEffortDefault(prefix+".reasoning_effort", cfg.ReasoningEffort)
-	v.validateReasoningEffortPhases(prefix+".reasoning_effort_phases", cfg.ReasoningEffortPhases)
+
+	// Extract agent name from prefix (e.g., "agents.claude" → "claude")
+	agentName := prefix
+	if idx := strings.LastIndex(prefix, "."); idx >= 0 {
+		agentName = prefix[idx+1:]
+	}
+	v.validateReasoningEffortDefault(prefix+".reasoning_effort", agentName, cfg.ReasoningEffort)
+	v.validateReasoningEffortPhases(prefix+".reasoning_effort_phases", agentName, cfg.ReasoningEffortPhases)
 }
 
 func (v *Validator) validatePhaseModels(prefix string, phaseModels map[string]string) {
@@ -228,17 +234,18 @@ func (v *Validator) validatePhaseModels(prefix string, phaseModels map[string]st
 	}
 }
 
-func (v *Validator) validateReasoningEffortDefault(prefix, effort string) {
+func (v *Validator) validateReasoningEffortDefault(prefix, agent, effort string) {
 	if effort == "" {
 		return
 	}
 
-	if !core.IsValidReasoningEffort(effort) {
-		v.addError(prefix, effort, msgInvalidReasoningEffort)
+	if !core.IsValidReasoningEffortForAgent(agent, effort) {
+		valid := strings.Join(core.GetReasoningEfforts(agent), ", ")
+		v.addError(prefix, effort, "invalid reasoning_effort for "+agent+" (valid: "+valid+")")
 	}
 }
 
-func (v *Validator) validateReasoningEffortPhases(prefix string, phases map[string]string) {
+func (v *Validator) validateReasoningEffortPhases(prefix, agent string, phases map[string]string) {
 	if len(phases) == 0 {
 		return
 	}
@@ -248,8 +255,9 @@ func (v *Validator) validateReasoningEffortPhases(prefix string, phases map[stri
 			v.addError(prefix, key, "unknown phase (valid: refine, analyze, moderate, synthesize, plan, execute)")
 			continue
 		}
-		if !core.IsValidReasoningEffort(effort) {
-			v.addError(prefix+"."+key, effort, msgInvalidReasoningEffort)
+		if !core.IsValidReasoningEffortForAgent(agent, effort) {
+			valid := strings.Join(core.GetReasoningEfforts(agent), ", ")
+			v.addError(prefix+"."+key, effort, "invalid reasoning_effort for "+agent+" (valid: "+valid+")")
 		}
 	}
 }
@@ -379,9 +387,16 @@ func (v *Validator) validateIssueGenerator(cfg *IssueGeneratorConfig) {
 		v.addError("issues.generator.agent", cfg.Agent, "unknown agent")
 	}
 
-	if cfg.ReasoningEffort != "" && !core.IsValidReasoningEffort(cfg.ReasoningEffort) {
-		v.addError("issues.generator.reasoning_effort", cfg.ReasoningEffort,
-			msgInvalidReasoningEffort)
+	if cfg.ReasoningEffort != "" {
+		issueAgent := cfg.Agent
+		if issueAgent == "" {
+			issueAgent = "claude" // default agent for issues
+		}
+		if !core.IsValidReasoningEffortForAgent(issueAgent, cfg.ReasoningEffort) {
+			valid := strings.Join(core.GetReasoningEfforts(issueAgent), ", ")
+			v.addError("issues.generator.reasoning_effort", cfg.ReasoningEffort,
+				"invalid reasoning_effort for "+issueAgent+" (valid: "+valid+")")
+		}
 	}
 
 	if cfg.MaxBodyLength < 0 {

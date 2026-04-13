@@ -34,7 +34,7 @@ func NewClaudeAdapter(cfg AgentConfig) (core.Agent, error) {
 			SupportsImages:    true,
 			SupportsTools:     true,
 			MaxContextTokens:  200000,
-			MaxOutputTokens:   8192,
+			MaxOutputTokens:   128000,
 			SupportedModels:   core.GetSupportedModels(core.AgentClaude),
 			DefaultModel:      core.GetDefaultModel(core.AgentClaude),
 		},
@@ -76,10 +76,6 @@ func (c *ClaudeAdapter) Ping(ctx context.Context) error {
 // Execute runs a prompt through Claude CLI.
 func (c *ClaudeAdapter) Execute(ctx context.Context, opts core.ExecuteOptions) (*core.ExecuteResult, error) {
 	args := c.buildArgs(opts)
-
-	// Set Claude effort level via env var if reasoning effort is configured.
-	// Claude CLI uses CLAUDE_CODE_EFFORT_LEVEL env var (low/medium/high/max).
-	c.applyEffortEnv(opts)
 
 	// Build the full prompt, including conversation history if provided
 	// Pass via stdin for robustness with long prompts and special characters
@@ -141,13 +137,27 @@ func (c *ClaudeAdapter) buildArgs(opts core.ExecuteOptions) []string {
 	// Print mode for non-interactive
 	args = append(args, "--print")
 
-	// Model selection
+	// Model selection — resolve virtual models (e.g. "opus-fast" → real model + fast mode)
 	model := opts.Model
 	if model == "" {
 		model = c.config.Model
 	}
+	fastMode := false
+	if resolved, isFast := resolveClaudeModel(model); isFast {
+		model = resolved
+		fastMode = true
+	}
 	if model != "" {
 		args = append(args, "--model", model)
+	}
+	if fastMode {
+		args = append(args, "--settings", `{"fastMode":true}`)
+	}
+
+	// Reasoning effort via --effort flag (Claude CLI v2.1.50+)
+	// Opus 4.6: low, medium, high, max | Sonnet 4.6: low, medium, high (max falls back to high)
+	if effort := c.getEffortLevel(opts); effort != "" {
+		args = append(args, "--effort", effort)
 	}
 
 	// System prompt (append to default system prompt for customizing assistant behavior)
@@ -244,32 +254,6 @@ func (c *ClaudeAdapter) extractUsage(result *CommandResult, execResult *core.Exe
 
 }
 
-// applyEffortEnv sets the CLAUDE_CODE_EFFORT_LEVEL env var based on reasoning effort config.
-// Priority: per-message opts > phase-specific config > default config.
-func (c *ClaudeAdapter) applyEffortEnv(opts core.ExecuteOptions) {
-	effort := c.getEffortLevel(opts)
-	if effort == "" {
-		return
-	}
-
-	// Resolve the model to normalize effort
-	model := opts.Model
-	if model == "" {
-		model = c.config.Model
-	}
-
-	// Normalize to Claude-supported effort level
-	effort = core.NormalizeClaudeEffort(model, effort)
-	if effort == "" {
-		return
-	}
-
-	if c.ExtraEnv == nil {
-		c.ExtraEnv = make(map[string]string)
-	}
-	c.ExtraEnv["CLAUDE_CODE_EFFORT_LEVEL"] = effort
-}
-
 // getEffortLevel determines the effort level from options and config.
 // Priority: per-message > phase-specific > default config.
 func (c *ClaudeAdapter) getEffortLevel(opts core.ExecuteOptions) string {
@@ -287,6 +271,19 @@ func (c *ClaudeAdapter) getEffortLevel(opts core.ExecuteOptions) string {
 
 	// Default reasoning effort from config
 	return c.config.ReasoningEffort
+}
+
+// resolveClaudeModel maps virtual fast-mode model names to their real model + fast flag.
+// Returns (realModel, true) for fast models, or (model, false) for regular models.
+var claudeFastModels = map[string]string{
+	"opus-fast": "claude-opus-4-6",
+}
+
+func resolveClaudeModel(model string) (string, bool) {
+	if real, ok := claudeFastModels[model]; ok {
+		return real, true
+	}
+	return model, false
 }
 
 // Ensure ClaudeAdapter implements core.Agent and core.StreamingCapable

@@ -18,11 +18,10 @@ type EnumsResponse struct {
 	Phases           []string `json:"phases"`
 	PhaseModelKeys   []string `json:"phase_model_keys"`
 	// Model configuration (centralized source of truth)
-	AgentModels                map[string][]string            `json:"agent_models"`
-	AgentDefaultModels         map[string]string              `json:"agent_default_models"`
-	AgentsWithReasoning        []string                       `json:"agents_with_reasoning"`
-	AgentReasoningEfforts      map[string][]string            `json:"agent_reasoning_efforts"`
-	AgentModelReasoningEfforts map[string]map[string][]string `json:"agent_model_reasoning_efforts"`
+	AgentModels            map[string][]string `json:"agent_models"`
+	AgentDefaultModels     map[string]string   `json:"agent_default_models"`
+	AgentsWithReasoning    []string            `json:"agents_with_reasoning"`
+	AgentReasoningEfforts  map[string][]string `json:"agent_reasoning_efforts"`
 	// Issue configuration enums
 	IssueProviders       []string `json:"issue_providers"`
 	IssuePromptLanguages []string `json:"issue_prompt_languages"`
@@ -39,18 +38,14 @@ func (s *Server) handleGetEnums(w http.ResponseWriter, _ *http.Request) {
 		TraceModes:          core.TraceModes,
 		WorktreeModes:       core.WorktreeModes,
 		MergeStrategies:     core.MergeStrategies,
-		ReasoningEfforts:    core.AllReasoningEfforts,
+		ReasoningEfforts:    core.ReasoningEfforts,
 		Agents:              core.Agents,
 		Phases:              core.Phases,
 		PhaseModelKeys:      core.PhaseModelKeys,
-		AgentModels:         core.AgentModels,
-		AgentDefaultModels:  core.AgentDefaultModels,
-		AgentsWithReasoning: core.AgentsWithReasoning,
-		AgentReasoningEfforts: map[string][]string{
-			"claude": core.ClaudeReasoningEfforts,
-			"codex":  core.CodexReasoningEfforts,
-		},
-		AgentModelReasoningEfforts: core.AgentModelReasoningEfforts,
+		AgentModels:           core.AgentModels,
+		AgentDefaultModels:    core.AgentDefaultModels,
+		AgentsWithReasoning:   core.AgentsWithReasoning,
+		AgentReasoningEfforts: core.AgentReasoningEfforts,
 		IssueProviders:             core.IssueProviders,
 		IssuePromptLanguages:       core.IssueLanguages,
 		IssuePromptTones:           core.IssueTones,

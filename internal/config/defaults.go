@@ -54,7 +54,7 @@ agents:
   gemini:
     enabled: true
     path: gemini
-    model: gemini-3-pro-preview
+    model: gemini-3.1-pro-preview
     idle_timeout: "15m"
     # Use faster model for execution
     phase_models:
@@ -84,7 +84,7 @@ agents:
   copilot:
     enabled: true
     path: copilot
-    model: claude-sonnet-4-5
+    model: claude-sonnet-4.6
     idle_timeout: "15m"
     phases:
       moderate: true

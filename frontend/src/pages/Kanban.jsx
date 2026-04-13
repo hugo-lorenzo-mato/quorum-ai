@@ -13,7 +13,11 @@ import {
   CheckCircle2,
   Clock,
   AlertCircle,
-  Sparkles
+  Sparkles,
+  Activity,
+  StopCircle,
+  Pause,
+  XCircle
 } from 'lucide-react';
 
 // Bottom Sheet Component for Mobile Actions
@@ -322,7 +326,20 @@ function KanbanCard({ workflow, isExecuting, columnAccent, onDragStart, onDragEn
         </div>
 
         {/* Status Badge */}
-        <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold uppercase tracking-wide border ${statusColor.bg} ${statusColor.text} ${statusColor.border}`}>
+        <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider border shadow-sm ${statusColor.bg} ${statusColor.text} ${statusColor.border}`}>
+            {(() => {
+                const iconMap = {
+                    pending: Clock,
+                    running: Activity,
+                    cancelling: StopCircle,
+                    aborted: StopCircle,
+                    completed: CheckCircle2,
+                    failed: XCircle,
+                    paused: Pause,
+                };
+                const StatusIcon = iconMap[workflow.status] || Clock;
+                return <StatusIcon className="w-3 h-3" strokeWidth={3} />;
+            })()}
             {workflow.status || 'pending'}
         </div>
       </div>

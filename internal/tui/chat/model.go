@@ -1200,52 +1200,10 @@ func (m *Model) suggestModels(partial string) []string {
 		models = m.agentModels[agent]
 	}
 
-	// Fallback to default models if none configured
+	// Fallback to core.AgentModels (single source of truth) if none configured
 	if len(models) == 0 {
-		switch agent {
-		case "claude":
-			models = []string{
-				"claude-opus-4-6",
-				"claude-sonnet-4-5-20250929",
-				"claude-haiku-4-5-20251001",
-				"claude-sonnet-4-20250514",
-				"claude-opus-4-20250514",
-			}
-		case "gemini":
-			models = []string{
-				"gemini-2.5-pro",
-				"gemini-2.5-flash",
-				"gemini-2.5-flash-lite",
-				"gemini-3-pro-preview",
-				"gemini-3-flash-preview",
-			}
-		case "codex":
-			models = []string{
-				"gpt-5.3-codex",
-				"gpt-5.2-codex",
-				"gpt-5.2",
-				"gpt-5.1-codex-max",
-				"gpt-5.1-codex",
-				"gpt-5.1-codex-mini",
-				"gpt-5.1",
-				"gpt-5-codex",
-				"gpt-5-codex-mini",
-				"gpt-5",
-				"gpt-5-mini",
-				"gpt-4.1",
-			}
-		case "copilot":
-			models = []string{
-				"claude-sonnet-4.5",
-				"claude-opus-4.6",
-				"claude-haiku-4.5",
-				"claude-sonnet-4",
-				"gpt-5.2-codex",
-				"gpt-5.1-codex-max",
-				"gpt-5.1-codex",
-				"gemini-3-pro-preview",
-			}
-		default:
+		models = core.GetSupportedModels(agent)
+		if len(models) == 0 {
 			models = []string{m.currentModel}
 		}
 	}

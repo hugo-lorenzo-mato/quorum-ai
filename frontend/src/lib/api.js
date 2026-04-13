@@ -385,6 +385,15 @@ export const workflowApi = {
   deleteAttachment: (id, attachmentId) => request(`/workflows/${id}/attachments/${attachmentId}`, {
     method: 'DELETE',
   }),
+
+  // Artifacts
+  getArtifact: (workflowId, path) => request(`/workflows/${workflowId}/artifacts/content?path=${encodeURIComponent(path)}`),
+
+  downloadArtifacts: (workflowId) => {
+    const url = buildUrlWithProject(`${API_BASE}/workflows/${workflowId}/artifacts/download`);
+    window.location.href = url;
+    return Promise.resolve();
+  },
 };
 
 // Chat API

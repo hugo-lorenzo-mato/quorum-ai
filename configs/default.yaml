@@ -130,7 +130,7 @@ agents:
     path: claude
     # Default model
     model: claude-opus-4-6
-    # Claude-specific: effort level (low/medium/high/max). Only supported on Opus 4.6.
+    # Claude-specific: effort level (low/medium/high/max). Opus 4.6 supports all; Sonnet 4.6 supports low/medium/high.
     reasoning_effort: high
     # Max duration without stdout activity before killing the process. Default: 5m.
     idle_timeout: "15m"
@@ -164,11 +164,11 @@ agents:
     model: gemini-3-flash-preview
     idle_timeout: "15m"
     phase_models:
-      refine: gemini-3-pro-preview
-      analyze: gemini-3-pro-preview
-      moderate: gemini-3-pro-preview
-      synthesize: gemini-3-pro-preview
-      plan: gemini-3-pro-preview
+      refine: gemini-3.1-pro-preview
+      analyze: gemini-3.1-pro-preview
+      moderate: gemini-3.1-pro-preview
+      synthesize: gemini-3.1-pro-preview
+      plan: gemini-3.1-pro-preview
       execute: gemini-3-flash-preview
     phases:
       refine: true
@@ -212,16 +212,17 @@ agents:
   copilot:
     enabled: false
     path: copilot
-    model: claude-sonnet-4-5
+    model: claude-sonnet-4.6
     idle_timeout: "15m"
-    # Available models: claude-sonnet-4-5 (default), claude-opus-4.6, claude-haiku-4.5, claude-sonnet-4, gpt-5
+    # Available models: claude-sonnet-4.6, claude-opus-4.6, claude-sonnet-4.5 (CLI default),
+    # claude-opus-4.5, claude-haiku-4.5, gpt-5.4, gpt-5.3-codex, gemini-3.1-pro
     phase_models:
-      refine: claude-sonnet-4-5
-      analyze: claude-sonnet-4-5
-      moderate: claude-sonnet-4-5
-      synthesize: claude-sonnet-4-5
-      plan: claude-sonnet-4-5
-      execute: claude-sonnet-4-5
+      refine: claude-sonnet-4.6
+      analyze: claude-sonnet-4.6
+      moderate: claude-sonnet-4.6
+      synthesize: claude-sonnet-4.6
+      plan: claude-sonnet-4.6
+      execute: claude-sonnet-4.6
     phases:
       refine: true
       analyze: true

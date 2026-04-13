@@ -999,9 +999,6 @@ func TestHandleGetEnums_AllFields(t *testing.T) {
 	if len(enums.AgentsWithReasoning) == 0 {
 		t.Error("expected agents_with_reasoning to be populated")
 	}
-	if len(enums.AgentReasoningEfforts) == 0 {
-		t.Error("expected agent_reasoning_efforts to be populated")
-	}
 	// Verify phase model keys.
 	if len(enums.PhaseModelKeys) == 0 {
 		t.Error("expected phase_model_keys to be populated")

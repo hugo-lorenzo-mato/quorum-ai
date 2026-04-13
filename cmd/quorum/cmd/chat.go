@@ -210,67 +210,25 @@ func runChat(_ *cobra.Command, _ []string) error {
 	chatTimeout, _ := time.ParseDuration(cfg.Chat.Timeout)
 	chatProgressInterval, _ := time.ParseDuration(cfg.Chat.ProgressInterval)
 
-	// Build list of available agents and their models
+	// Build list of available agents and their models from core.AgentModels (single source of truth)
 	availableAgents := []string{}
 	agentModels := make(map[string][]string)
 
-	if cfg.Agents.Claude.Enabled {
-		availableAgents = append(availableAgents, "claude")
-		agentModels["claude"] = []string{
-			"claude-opus-4-6",
-			"claude-sonnet-4-5-20250929",
-			"claude-haiku-4-5-20251001",
-			"claude-sonnet-4-20250514",
-			"claude-opus-4-20250514",
-		}
+	type agentEnabledPair struct {
+		name    string
+		enabled bool
 	}
-	if cfg.Agents.Gemini.Enabled {
-		availableAgents = append(availableAgents, "gemini")
-		agentModels["gemini"] = []string{
-			"gemini-2.5-pro",
-			"gemini-2.5-flash",
-			"gemini-2.5-flash-lite",
-			"gemini-3-pro-preview",
-			"gemini-3-flash-preview",
-		}
+	agentChecks := []agentEnabledPair{
+		{core.AgentClaude, cfg.Agents.Claude.Enabled},
+		{core.AgentGemini, cfg.Agents.Gemini.Enabled},
+		{core.AgentCodex, cfg.Agents.Codex.Enabled},
+		{core.AgentCopilot, cfg.Agents.Copilot.Enabled},
+		{core.AgentOpenCode, cfg.Agents.OpenCode.Enabled},
 	}
-	if cfg.Agents.Codex.Enabled {
-		availableAgents = append(availableAgents, "codex")
-		agentModels["codex"] = []string{
-			"gpt-5.3-codex",
-			"gpt-5.2-codex",
-			"gpt-5.2",
-			"gpt-5.1-codex-max",
-			"gpt-5.1-codex",
-			"gpt-5.1-codex-mini",
-			"gpt-5.1",
-			"gpt-5-codex",
-			"gpt-5-codex-mini",
-			"gpt-5",
-			"gpt-5-mini",
-			"gpt-4.1",
-		}
-	}
-	if cfg.Agents.Copilot.Enabled {
-		availableAgents = append(availableAgents, "copilot")
-		agentModels["copilot"] = []string{
-			"claude-sonnet-4.5",
-			"claude-opus-4.6",
-			"claude-haiku-4.5",
-			"claude-sonnet-4",
-			"gpt-5.2-codex",
-			"gpt-5.1-codex-max",
-			"gpt-5.1-codex",
-			"gemini-3-pro-preview",
-		}
-	}
-	if cfg.Agents.OpenCode.Enabled {
-		availableAgents = append(availableAgents, "opencode")
-		agentModels["opencode"] = []string{
-			"qwen2.5-coder",
-			"deepseek-coder-v2",
-			"llama3.1",
-			"deepseek-r1",
+	for _, ac := range agentChecks {
+		if ac.enabled {
+			availableAgents = append(availableAgents, ac.name)
+			agentModels[ac.name] = core.GetSupportedModels(ac.name)
 		}
 	}
 

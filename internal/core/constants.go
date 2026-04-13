@@ -34,44 +34,19 @@ func IsValidAgent(agent string) bool {
 	return ValidAgents[agent]
 }
 
-// Codex reasoning effort levels (via -c model_reasoning_effort="level")
-// Official values: none, minimal, low, medium, high, xhigh
-// See: https://developers.openai.com/codex/config-reference/
-var CodexReasoningEfforts = []string{"none", "minimal", "low", "medium", "high", "xhigh"}
+// ReasoningEfforts is the global union of all valid reasoning effort levels.
+// For per-agent subsets, use AgentReasoningEfforts.
+var ReasoningEfforts = []string{"none", "minimal", "low", "medium", "high", "xhigh", "max"}
 
-var ValidCodexReasoningEfforts = map[string]bool{
-	"none":    true,
-	"minimal": true,
-	"low":     true,
-	"medium":  true,
-	"high":    true,
-	"xhigh":   true,
-}
-
-// Claude effort levels (via CLAUDE_CODE_EFFORT_LEVEL env var)
-// Official values: low, medium, high, max (Opus 4.6 only)
-// See: https://platform.claude.com/docs/en/build-with-claude/effort
-var ClaudeReasoningEfforts = []string{"low", "medium", "high", "max"}
-
-var ValidClaudeReasoningEfforts = map[string]bool{
-	"low":    true,
-	"medium": true,
-	"high":   true,
-	"max":    true,
-}
-
-// AllReasoningEfforts is the union of all valid effort values across agents.
-// Used only for config validation (any agent config can use any of these).
-var AllReasoningEfforts = []string{"none", "minimal", "low", "medium", "high", "xhigh", "max"}
-
+// ValidReasoningEfforts is a map for O(1) effort validation (global union).
 var ValidReasoningEfforts = map[string]bool{
 	"none":    true,
 	"minimal": true,
 	"low":     true,
 	"medium":  true,
 	"high":    true,
-	"xhigh":   true,
-	"max":     true,
+	"xhigh":  true,
+	"max":    true,
 }
 
 // IsValidReasoningEffort checks if the given reasoning effort is valid for any agent.
@@ -79,9 +54,40 @@ func IsValidReasoningEffort(effort string) bool {
 	return ValidReasoningEfforts[effort]
 }
 
+// AgentReasoningEfforts maps each reasoning-capable agent to the effort levels
+// its CLI actually accepts (validated April 2026).
+//   - Claude CLI v2.1.104: --effort low|medium|high|max
+//   - Codex CLI v0.118.0:  -c model_reasoning_effort="none|minimal|low|medium|high|xhigh"
+var AgentReasoningEfforts = map[string][]string{
+	AgentClaude: {"low", "medium", "high", "max"},
+	AgentCodex:  {"none", "minimal", "low", "medium", "high", "xhigh"},
+}
+
+// GetReasoningEfforts returns the valid effort levels for a specific agent.
+// Returns the global union if the agent has no per-agent list.
+func GetReasoningEfforts(agent string) []string {
+	if efforts, ok := AgentReasoningEfforts[agent]; ok {
+		return efforts
+	}
+	return ReasoningEfforts
+}
+
+// IsValidReasoningEffortForAgent checks if an effort level is valid for a specific agent.
+func IsValidReasoningEffortForAgent(agent, effort string) bool {
+	efforts := GetReasoningEfforts(agent)
+	for _, e := range efforts {
+		if e == effort {
+			return true
+		}
+	}
+	return false
+}
+
 // AgentsWithReasoning lists agents that support extended thinking/reasoning effort.
-// - Codex CLI: via -c model_reasoning_effort="level"
-// - Claude CLI: via CLAUDE_CODE_EFFORT_LEVEL env var (low/medium/high/max)
+// Per-agent valid levels are in AgentReasoningEfforts.
+// - Claude CLI v2.1.104: --effort low|medium|high|max
+// - Codex CLI v0.118.0:  -c model_reasoning_effort="none|minimal|low|medium|high|xhigh"
+// Note: Gemini CLI supports thinking via config.json thinkingConfig but not via CLI flag yet.
 var AgentsWithReasoning = []string{
 	AgentClaude,
 	AgentCodex,
@@ -95,56 +101,6 @@ func SupportsReasoning(agent string) bool {
 		}
 	}
 	return false
-}
-
-// AgentModelReasoningEfforts is the single source of truth for which reasoning effort
-// levels each agent+model combination supports. Used by the API, frontend, and adapters.
-var AgentModelReasoningEfforts = map[string]map[string][]string{
-	AgentClaude: {
-		"claude-opus-4-6": {"low", "medium", "high", "max"},
-		"opus":            {"low", "medium", "high", "max"},
-	},
-	AgentCodex: {
-		"gpt-5.3-codex":      {"none", "minimal", "low", "medium", "high", "xhigh"},
-		"gpt-5.2-codex":      {"low", "medium", "high", "xhigh"},
-		"gpt-5.2":            {"low", "medium", "high", "xhigh"},
-		"gpt-5.1-codex-max":  {"low", "medium", "high", "xhigh"},
-		"gpt-5.1-codex":      {"low", "medium", "high"},
-		"gpt-5.1-codex-mini": {"low", "medium", "high"},
-		"gpt-5.1":            {"low", "medium", "high"},
-		"gpt-5-codex":        {"minimal", "low", "medium", "high"},
-		"gpt-5-codex-mini":   {"minimal", "low", "medium", "high"},
-		"gpt-5":              {"minimal", "low", "medium", "high"},
-	},
-}
-
-// GetModelReasoningEfforts returns the supported reasoning effort levels for an agent+model pair.
-// Returns nil if the agent or model is not found in the map.
-func GetModelReasoningEfforts(agent, model string) []string {
-	if models, ok := AgentModelReasoningEfforts[agent]; ok {
-		if efforts, ok := models[model]; ok {
-			return efforts
-		}
-	}
-	return nil
-}
-
-// GetMaxReasoningEffort returns the maximum reasoning effort supported by a Codex model.
-// Derived from AgentModelReasoningEfforts (last element). Returns "high" if model is unknown.
-func GetMaxReasoningEffort(model string) string {
-	if efforts := GetModelReasoningEfforts(AgentCodex, model); len(efforts) > 0 {
-		return efforts[len(efforts)-1]
-	}
-	return "high"
-}
-
-// GetMaxClaudeEffort returns the maximum effort level supported by a Claude model.
-// Derived from AgentModelReasoningEfforts (last element). Returns "" if model is unknown.
-func GetMaxClaudeEffort(model string) string {
-	if efforts := GetModelReasoningEfforts(AgentClaude, model); len(efforts) > 0 {
-		return efforts[len(efforts)-1]
-	}
-	return ""
 }
 
 // Task/role identifiers (not workflow phases, but config keys for models/reasoning)
@@ -161,10 +117,12 @@ const (
 // This is the single source of truth for model availability.
 var AgentModels = map[string][]string{
 	AgentClaude: {
-		// Claude 4.6 (latest opus)
-		"claude-opus-4-6", // Most powerful model, supports effort (low/medium/high/max)
+		// Claude 4.6 (latest)
+		"claude-opus-4-6",   // Most powerful, 128K output, supports effort
+		"claude-sonnet-4-6", // Best balance of speed and intelligence, 64K output
 		// Claude 4.5 family
-		"claude-sonnet-4-5-20250929", // Best balance of intelligence, speed, and cost
+		"claude-opus-4-5-20251101",  // Previous opus generation
+		"claude-sonnet-4-5-20250929", // Previous sonnet generation
 		"claude-haiku-4-5-20251001",  // Fastest model with near-frontier performance
 		// Claude 4 family
 		"claude-opus-4-20250514",
@@ -172,55 +130,61 @@ var AgentModels = map[string][]string{
 		"claude-sonnet-4-20250514",
 		// Aliases (shortcuts accepted by claude CLI)
 		"opus",   // Maps to latest opus model (currently Opus 4.6)
-		"sonnet", // Maps to latest sonnet model
+		"sonnet", // Maps to latest sonnet model (currently Sonnet 4.6)
 		"haiku",  // Maps to latest haiku model
+		// Virtual models (resolved by adapter, not by CLI)
+		"opus-fast", // Opus 4.6 with fast mode (2.5x faster, higher cost)
 	},
 	AgentGemini: {
+		// Gemini 3 family (CLI uses -preview suffix for 3.x models)
+		"gemini-3.1-pro-preview",  // Advanced reasoning and agentic capabilities
+		"gemini-3-flash-preview",  // Frontier-class performance at lower cost
 		// Gemini 2.5 family (stable, recommended)
-		"gemini-2.5-pro",        // Most powerful, best for coding and agentic tasks
+		"gemini-2.5-pro",        // Most powerful 2.5, best for complex tasks
 		"gemini-2.5-flash",      // Best price/performance balance with thinking
 		"gemini-2.5-flash-lite", // Fast, low-cost, 1M context
-		// Gemini 2.0 family (retiring March 2026)
-		"gemini-2.0-flash",
-		"gemini-2.0-flash-lite",
-		// Gemini 3 preview models
-		"gemini-3-pro-preview",
-		"gemini-3-flash-preview",
 	},
 	AgentCodex: {
-		// GPT-5.3 family (latest, recommended)
-		"gpt-5.3-codex", // Most advanced agentic coding model (default for Codex CLI)
-		// GPT-5.2 family - supports xhigh reasoning
-		"gpt-5.2-codex",
-		"gpt-5.2", // Base GPT-5.2 model
-		// GPT-5.1 family
+		// GPT-5.4 family (latest flagship, reasoning: none/minimal/low/medium/high/xhigh)
+		"gpt-5.4",       // Flagship frontier model for professional coding work
+		"gpt-5.4-codex", // Code-optimized 5.4 for agentic coding tasks
+		"gpt-5.4-mini",  // Fast, efficient mini for responsive tasks and subagents
+		// GPT-5.3 family (agentic coding specialist)
+		"gpt-5.3-codex",       // Agentic coding model (Codex CLI migrates this → gpt-5.4)
+		"gpt-5.3-codex-spark", // Real-time coding iteration, text-only (Pro only)
+		// GPT-5.2 family
+		"gpt-5.2", // General-purpose model for coding and agentic tasks
+		// GPT-5.1 family (retiring April 2026)
 		"gpt-5.1-codex-max",  // Maximum capability for extended tasks (xhigh reasoning)
-		"gpt-5.1-codex",      // Code-optimized GPT-5.1 (max: high reasoning)
-		"gpt-5.1-codex-mini", // Cost-effective codex (max: high reasoning)
-		"gpt-5.1",            // Base GPT-5.1 model (max: high reasoning)
-		// GPT-5 family
-		"gpt-5-codex",      // GPT-5 codex version (max: high reasoning)
-		"gpt-5-codex-mini", // GPT-5 codex mini (max: high reasoning)
-		"gpt-5",            // Base GPT-5 model (max: high reasoning)
+		"gpt-5.1-codex",      // Code-optimized GPT-5.1
+		"gpt-5.1-codex-mini", // Cost-effective codex
+		"gpt-5.1",            // Base GPT-5.1 model
+		// GPT-5 family (legacy)
+		"gpt-5-codex",      // GPT-5 codex version
+		"gpt-5-codex-mini", // GPT-5 codex mini
+		"gpt-5",            // Base GPT-5 model
 	},
 	AgentCopilot: {
-		// Anthropic Claude models (via Copilot) - from copilot --help
-		"claude-sonnet-4.5", // Best balance, strong reasoning (default)
-		"claude-opus-4.6",   // Latest opus - most powerful Claude, supports effort
+		// Anthropic Claude models (via Copilot) - from docs.github.com/copilot/reference
+		"claude-sonnet-4.6", // Latest sonnet — adaptive thinking support
+		"claude-opus-4.6",   // Most powerful Claude, supports effort
+		"claude-opus-4.5",   // Previous opus generation
+		"claude-sonnet-4.5", // Strong reasoning (CLI default)
 		"claude-haiku-4.5",  // Fast, efficient
 		"claude-sonnet-4",   // Previous gen sonnet
-		// OpenAI GPT models (via Copilot) - from copilot --help
-		"gpt-5.2-codex",      // Advanced agentic coding
-		"gpt-5.2",            // Latest GPT-5.2
-		"gpt-5.1-codex-max",  // Maximum capability codex
-		"gpt-5.1-codex",      // Code-optimized GPT-5.1
-		"gpt-5.1-codex-mini", // Small codex
-		"gpt-5.1",            // Base GPT-5.1
-		"gpt-5",              // Base GPT-5
-		"gpt-5-mini",         // Small, fast GPT-5
-		"gpt-4.1",            // Previous generation
-		// Google Gemini models (via Copilot) - from copilot --help
-		"gemini-3-pro-preview", // Gemini 3 Pro preview
+		// OpenAI GPT models (via Copilot)
+		"gpt-5.4",       // Latest flagship model
+		"gpt-5.4-mini",  // Fast, efficient mini
+		"gpt-5.3-codex", // Advanced agentic coding
+		"gpt-5.2-codex", // Agentic coding
+		"gpt-5.2",       // General-purpose
+		"gpt-5",         // Base GPT-5
+		"gpt-5-mini",    // Included in subscription (no premium requests)
+		"gpt-4.1",       // Included in subscription (no premium requests)
+		// Google Gemini models (via Copilot)
+		"gemini-3.1-pro", // Gemini 3.1 Pro (preview)
+		"gemini-3-flash", // Gemini 3 Flash (preview)
+		"gemini-2.5-pro", // Gemini 2.5 Pro (stable)
 	},
 	AgentOpenCode: {
 		// Local Ollama models

@@ -211,18 +211,21 @@ export function CardBadge({
   ...props 
 }) {
   const variantStyles = {
-    default: 'bg-muted/50 text-muted-foreground border-border/40',
-    primary: 'bg-primary/10 text-primary border-primary/20',
-    success: 'bg-status-success-bg text-status-success border-status-success/20',
-    warning: 'bg-status-warning-bg text-status-warning border-status-warning/20',
-    error: 'bg-status-error-bg text-status-error border-status-error/20',
-    info: 'bg-status-running-bg text-status-running border-status-running/20',
+    default: 'bg-muted/80 text-muted-foreground border-muted-foreground/30 shadow-sm',
+    primary: 'bg-primary/10 text-primary border-primary/20 shadow-sm',
+    success: 'bg-status-success/15 text-status-success border-status-success/40 shadow-sm',
+    warning: 'bg-status-warning/15 text-status-warning border-status-warning/40 shadow-sm',
+    error: 'bg-status-error/15 text-status-error border-status-error/40 shadow-sm',
+    info: 'bg-status-running/15 text-status-running border-status-running/40 shadow-sm',
+    executing: 'bg-status-running/15 text-status-running border-status-running/40 shadow-sm animate-pulse',
+    completed: 'bg-status-success/15 text-status-success border-status-success/40 shadow-sm',
+    failed: 'bg-status-error/15 text-status-error border-status-error/40 shadow-sm',
   };
 
   return (
     <span 
       className={cn(
-        'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold uppercase tracking-wide border',
+        'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider border transition-all',
         variantStyles[variant],
         className
       )}
@@ -271,12 +274,12 @@ export function CardAction({
  */
 export function CardIcon({ icon: Icon, className, color = 'default', ...props }) {
   const colorStyles = {
-    default: 'bg-muted/50 border-border/50 text-muted-foreground',
+    default: 'bg-muted/80 border-muted-foreground/30 text-muted-foreground',
     primary: 'bg-primary/10 border-primary/20 text-primary',
-    blue: 'bg-status-running-bg border-status-running/20 text-status-running',
-    emerald: 'bg-status-success-bg border-status-success/20 text-status-success',
-    rose: 'bg-status-error-bg border-status-error/20 text-status-error',
-    amber: 'bg-status-warning-bg border-status-warning/20 text-status-warning',
+    blue: 'bg-status-running/15 border-status-running/40 text-status-running',
+    emerald: 'bg-status-success/15 border-status-success/40 text-status-success',
+    rose: 'bg-status-error/15 border-status-error/40 text-status-error',
+    amber: 'bg-status-warning/15 border-status-warning/40 text-status-warning',
     violet: 'bg-violet-500/10 border-violet-500/20 text-violet-500',
   };
 
